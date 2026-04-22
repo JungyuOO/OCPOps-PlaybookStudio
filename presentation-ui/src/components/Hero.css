@@ -1,0 +1,225 @@
+.hero-container {
+  width: 100vw;
+  height: 120vh;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--bg-color);
+  padding-bottom: 20vh; /* Optical lift: shifts visual center upward */
+}
+
+.hero-nav {
+  position: absolute;
+  top: 2rem;
+  right: 2rem;
+  z-index: 100;
+}
+
+.lang-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  padding: 0.5rem 1rem;
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.lang-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.hero-bg-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(200, 200, 200, 0.02) 0%, transparent 60%);
+  clip-path: circle(0% at 50% 50%);
+  z-index: 2;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 10;
+  text-align: center;
+  will-change: transform, opacity, filter;
+}
+
+.hero-title {
+  margin-bottom: 2rem;
+  color: #fff;
+  line-height: 1.05;
+}
+
+.hero-subtitle {
+  color: var(--text-muted);
+  max-width: 600px;
+  margin: 0 auto 3rem;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  padding: 0.5rem 1rem;
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--accent-cyan);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2rem;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.primary-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #fff;
+  color: #000;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+  box-shadow: 0 10px 30px rgba(0, 209, 255, 0.2);
+}
+
+.primary-cta:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(0, 209, 255, 0.4);
+}
+
+.secondary-cta {
+  background: transparent;
+  color: #fff;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.secondary-cta:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.hero-bokeh {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  z-index: 1;
+  opacity: 0.25;
+  mix-blend-mode: screen;
+}
+
+.bokeh-cyan {
+  width: 50vw;
+  height: 50vw;
+  background: var(--accent-cyan);
+  top: -20%;
+  left: -10%;
+  animation: float-c 25s ease-in-out infinite alternate;
+}
+
+.bokeh-purple {
+  width: 40vw;
+  height: 40vw;
+  background: var(--accent-purple);
+  bottom: -10%;
+  right: -10%;
+  animation: float-p 20s ease-in-out infinite alternate-reverse;
+}
+
+.hero-scroll-indicator {
+  position: absolute;
+  bottom: 8vh;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  z-index: 20;
+}
+
+.mouse-icon {
+  width: 30px;
+  height: 50px;
+  border: 2px solid var(--text-muted);
+  border-radius: 20px;
+  position: relative;
+}
+
+.mouse-wheel {
+  width: 4px;
+  height: 10px;
+  background: var(--accent-cyan);
+  border-radius: 2px;
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  animation: wheelScroll 2s infinite ease-in-out;
+}
+
+@keyframes float-c {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  100% {
+    transform: translate(100px, 100px) scale(1.2);
+  }
+}
+
+@keyframes float-p {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  100% {
+    transform: translate(-80px, -50px) scale(1.1);
+  }
+}
+
+@keyframes wheelScroll {
+  0% {
+    top: 10px;
+    opacity: 1;
+  }
+
+  100% {
+    top: 25px;
+    opacity: 0;
+  }
+}

@@ -1,0 +1,1576 @@
+{
+  "advanced_networking": {
+    "entities": [
+      {
+        "label": "Cluster Wide Proxy",
+        "href": "/wiki/entities/cluster-wide-proxy/index.html"
+      },
+      {
+        "label": "Networking and Connectivity",
+        "href": "/wiki/entities/networking/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "네트워킹 개요",
+        "href": "/playbooks/wiki-runtime/active/networking_overview/index.html",
+        "summary": "고급 네트워킹 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "Ingress 및 로드 밸런싱",
+        "href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html",
+        "summary": "고급 네트워킹 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "고급 네트워킹 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "고급 네트워킹 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "고급 네트워킹 다음 경로로 설치 후 구성를 본다."
+      },
+      {
+        "label": "2. 설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "고급 네트워킹 다음 경로로 설치 개요를 본다."
+      },
+      {
+        "label": "3. 네트워킹 개요",
+        "href": "/playbooks/wiki-runtime/active/networking_overview/index.html",
+        "summary": "고급 네트워킹 다음 경로로 네트워킹 개요를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Networking and Connectivity",
+      "href": "/wiki/entities/networking/index.html",
+      "summary": "네트워킹, 프록시, ingress, disconnected 환경의 연결 허브다."
+    },
+    "siblings": [
+      {
+        "label": "네트워킹 개요",
+        "href": "/playbooks/wiki-runtime/active/networking_overview/index.html",
+        "summary": "고급 네트워킹와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "Ingress 및 로드 밸런싱",
+        "href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html",
+        "summary": "고급 네트워킹와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "architecture": {
+    "entities": [
+      {
+        "label": "Platform Foundation",
+        "href": "/wiki/entities/platform-foundation/index.html"
+      },
+      {
+        "label": "Control Plane Nodes",
+        "href": "/wiki/entities/control-plane-nodes/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "개요",
+        "href": "/playbooks/wiki-runtime/active/overview/index.html",
+        "summary": "아키텍처 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "아키텍처 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "플랫폼 비종속 설치 플레이북",
+        "href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html",
+        "summary": "아키텍처 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "네트워킹 개요",
+        "href": "/playbooks/wiki-runtime/active/networking_overview/index.html",
+        "summary": "아키텍처 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 플랫폼 비종속 설치 플레이북",
+        "href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html",
+        "summary": "아키텍처 다음 경로로 플랫폼 비종속 설치 플레이북를 본다."
+      },
+      {
+        "label": "2. 네트워킹 개요",
+        "href": "/playbooks/wiki-runtime/active/networking_overview/index.html",
+        "summary": "아키텍처 다음 경로로 네트워킹 개요를 본다."
+      },
+      {
+        "label": "3. 개요",
+        "href": "/playbooks/wiki-runtime/active/overview/index.html",
+        "summary": "아키텍처 다음 경로로 개요를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Platform Foundation",
+      "href": "/wiki/entities/platform-foundation/index.html",
+      "summary": "OpenShift 전체 구조와 핵심 개념을 이해하는 출발 허브다."
+    },
+    "siblings": [
+      {
+        "label": "개요",
+        "href": "/playbooks/wiki-runtime/active/overview/index.html",
+        "summary": "아키텍처와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "아키텍처와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "authentication_and_authorization": {
+    "entities": [
+      {
+        "label": "Security and Access",
+        "href": "/wiki/entities/security-and-auth/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "보안 및 컴플라이언스",
+        "href": "/playbooks/wiki-runtime/active/security_and_compliance/index.html",
+        "summary": "인증 및 권한 부여 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 보안 및 컴플라이언스",
+        "href": "/playbooks/wiki-runtime/active/security_and_compliance/index.html",
+        "summary": "인증 및 권한 부여 다음 경로로 보안 및 컴플라이언스를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Security and Access",
+      "href": "/wiki/entities/security-and-auth/index.html",
+      "summary": "인증, 권한, 보안, 컴플라이언스 문서를 묶는 보안 허브다."
+    },
+    "siblings": [
+      {
+        "label": "보안 및 컴플라이언스",
+        "href": "/playbooks/wiki-runtime/active/security_and_compliance/index.html",
+        "summary": "인증 및 권한 부여와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "backup_and_restore": {
+    "entities": [
+      {
+        "label": "Etcd",
+        "href": "/wiki/entities/etcd/index.html"
+      },
+      {
+        "label": "Control Plane Nodes",
+        "href": "/wiki/entities/control-plane-nodes/index.html"
+      },
+      {
+        "label": "Cluster Wide Proxy",
+        "href": "/wiki/entities/cluster-wide-proxy/index.html"
+      },
+      {
+        "label": "Control Plane and Node Operations",
+        "href": "/wiki/entities/control-plane-ops/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "etcd 백업 및 복구 플레이북",
+        "href": "/playbooks/wiki-runtime/active/etcd/index.html",
+        "summary": "백업 및 복구 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "백업 및 복구 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "백업 및 복구 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "백업 및 복구 운영 플레이북 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "백업 및 복구 운영 플레이북 다음 경로로 클러스터 모니터링 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "백업 및 복구 운영 플레이북 다음 경로로 설치 후 구성를 본다."
+      },
+      {
+        "label": "3. etcd 백업 및 복구 플레이북",
+        "href": "/playbooks/wiki-runtime/active/etcd/index.html",
+        "summary": "백업 및 복구 운영 플레이북 다음 경로로 etcd 백업 및 복구 플레이북를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Control Plane and Node Operations",
+      "href": "/wiki/entities/control-plane-ops/index.html",
+      "summary": "control plane, node, 복구, MCO 수렴 같은 핵심 운영 작업의 허브다."
+    },
+    "siblings": [
+      {
+        "label": "etcd 백업 및 복구 플레이북",
+        "href": "/playbooks/wiki-runtime/active/etcd/index.html",
+        "summary": "백업 및 복구 운영 플레이북와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "백업 및 복구 운영 플레이북와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "머신 관리",
+        "href": "/playbooks/wiki-runtime/active/machine_management/index.html",
+        "summary": "백업 및 복구 운영 플레이북와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "cli_tools": {
+    "entities": [],
+    "related_docs": [],
+    "next_reading_path": [],
+    "parent_topic": {},
+    "siblings": []
+  },
+  "disconnected_environments": {
+    "entities": [],
+    "related_docs": [],
+    "next_reading_path": [],
+    "parent_topic": {},
+    "siblings": []
+  },
+  "etcd": {
+    "entities": [
+      {
+        "label": "Etcd",
+        "href": "/wiki/entities/etcd/index.html"
+      },
+      {
+        "label": "Control Plane Nodes",
+        "href": "/wiki/entities/control-plane-nodes/index.html"
+      },
+      {
+        "label": "Control Plane and Node Operations",
+        "href": "/wiki/entities/control-plane-ops/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "etcd 백업 및 복구 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "etcd 백업 및 복구 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "etcd 백업 및 복구 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "etcd 백업 및 복구 플레이북 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "etcd 백업 및 복구 플레이북 다음 경로로 클러스터 모니터링 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "etcd 백업 및 복구 플레이북 다음 경로로 설치 후 구성를 본다."
+      },
+      {
+        "label": "3. 백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "etcd 백업 및 복구 플레이북 다음 경로로 백업 및 복구 운영 플레이북를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Control Plane and Node Operations",
+      "href": "/wiki/entities/control-plane-ops/index.html",
+      "summary": "control plane, node, 복구, MCO 수렴 같은 핵심 운영 작업의 허브다."
+    },
+    "siblings": [
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "etcd 백업 및 복구 플레이북와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "etcd 백업 및 복구 플레이북와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "머신 관리",
+        "href": "/playbooks/wiki-runtime/active/machine_management/index.html",
+        "summary": "etcd 백업 및 복구 플레이북와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "images": {
+    "entities": [
+      {
+        "label": "Storage, Registry, and Images",
+        "href": "/wiki/entities/storage-and-content/index.html"
+      },
+      {
+        "label": "Operators and Tooling",
+        "href": "/wiki/entities/operators-and-tooling/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "스토리지",
+        "href": "/playbooks/wiki-runtime/active/storage/index.html",
+        "summary": "이미지 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "레지스트리",
+        "href": "/playbooks/wiki-runtime/active/registry/index.html",
+        "summary": "이미지 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "Operator 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/operators/index.html",
+        "summary": "이미지 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. Operator 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/operators/index.html",
+        "summary": "이미지 다음 경로로 Operator 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 스토리지",
+        "href": "/playbooks/wiki-runtime/active/storage/index.html",
+        "summary": "이미지 다음 경로로 스토리지를 본다."
+      },
+      {
+        "label": "3. 레지스트리",
+        "href": "/playbooks/wiki-runtime/active/registry/index.html",
+        "summary": "이미지 다음 경로로 레지스트리를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Storage, Registry, and Images",
+      "href": "/wiki/entities/storage-and-content/index.html",
+      "summary": "스토리지, 레지스트리, 이미지 운영을 묶는 데이터 보관 허브다."
+    },
+    "siblings": [
+      {
+        "label": "스토리지",
+        "href": "/playbooks/wiki-runtime/active/storage/index.html",
+        "summary": "이미지와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "레지스트리",
+        "href": "/playbooks/wiki-runtime/active/registry/index.html",
+        "summary": "이미지와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "ingress_and_load_balancing": {
+    "entities": [
+      {
+        "label": "Cluster Wide Proxy",
+        "href": "/wiki/entities/cluster-wide-proxy/index.html"
+      },
+      {
+        "label": "Networking and Connectivity",
+        "href": "/wiki/entities/networking/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "네트워킹 개요",
+        "href": "/playbooks/wiki-runtime/active/networking_overview/index.html",
+        "summary": "Ingress 및 로드 밸런싱 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "고급 네트워킹",
+        "href": "/playbooks/wiki-runtime/active/advanced_networking/index.html",
+        "summary": "Ingress 및 로드 밸런싱 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "Ingress 및 로드 밸런싱 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "Ingress 및 로드 밸런싱 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "Ingress 및 로드 밸런싱 다음 경로로 설치 후 구성를 본다."
+      },
+      {
+        "label": "2. 설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "Ingress 및 로드 밸런싱 다음 경로로 설치 개요를 본다."
+      },
+      {
+        "label": "3. 네트워킹 개요",
+        "href": "/playbooks/wiki-runtime/active/networking_overview/index.html",
+        "summary": "Ingress 및 로드 밸런싱 다음 경로로 네트워킹 개요를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Networking and Connectivity",
+      "href": "/wiki/entities/networking/index.html",
+      "summary": "네트워킹, 프록시, ingress, disconnected 환경의 연결 허브다."
+    },
+    "siblings": [
+      {
+        "label": "네트워킹 개요",
+        "href": "/playbooks/wiki-runtime/active/networking_overview/index.html",
+        "summary": "Ingress 및 로드 밸런싱와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "고급 네트워킹",
+        "href": "/playbooks/wiki-runtime/active/advanced_networking/index.html",
+        "summary": "Ingress 및 로드 밸런싱와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "installation_overview": {
+    "entities": [
+      {
+        "label": "Platform Foundation",
+        "href": "/wiki/entities/platform-foundation/index.html"
+      },
+      {
+        "label": "Installation and Day-2",
+        "href": "/wiki/entities/installation-day2/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "플랫폼 비종속 설치 플레이북",
+        "href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html",
+        "summary": "설치 개요 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "설치 개요 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "설치 개요 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "설치 개요 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "설치 개요 다음 경로로 머신 구성 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "설치 개요 다음 경로로 백업 및 복구 운영 플레이북를 본다."
+      },
+      {
+        "label": "3. 플랫폼 비종속 설치 플레이북",
+        "href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html",
+        "summary": "설치 개요 다음 경로로 플랫폼 비종속 설치 플레이북를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Installation and Day-2",
+      "href": "/wiki/entities/installation-day2/index.html",
+      "summary": "설치, 설치 직후 안정화, 설치 후 설정과 day-2 운영 변화의 허브다."
+    },
+    "siblings": [
+      {
+        "label": "플랫폼 비종속 설치 플레이북",
+        "href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html",
+        "summary": "설치 개요와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "설치 개요와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "클러스터 업데이트",
+        "href": "/playbooks/wiki-runtime/active/updating_clusters/index.html",
+        "summary": "설치 개요와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "installing_on_any_platform": {
+    "entities": [
+      {
+        "label": "Cluster Wide Proxy",
+        "href": "/wiki/entities/cluster-wide-proxy/index.html"
+      },
+      {
+        "label": "Machine Config Operator",
+        "href": "/wiki/entities/machine-config-operator/index.html"
+      },
+      {
+        "label": "Installation and Day-2",
+        "href": "/wiki/entities/installation-day2/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "플랫폼 비종속 설치 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "플랫폼 비종속 설치 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "플랫폼 비종속 설치 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "플랫폼 비종속 설치 플레이북 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "플랫폼 비종속 설치 플레이북 다음 경로로 머신 구성 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "플랫폼 비종속 설치 플레이북 다음 경로로 백업 및 복구 운영 플레이북를 본다."
+      },
+      {
+        "label": "3. 설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "플랫폼 비종속 설치 플레이북 다음 경로로 설치 개요를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Installation and Day-2",
+      "href": "/wiki/entities/installation-day2/index.html",
+      "summary": "설치, 설치 직후 안정화, 설치 후 설정과 day-2 운영 변화의 허브다."
+    },
+    "siblings": [
+      {
+        "label": "설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "플랫폼 비종속 설치 플레이북와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "플랫폼 비종속 설치 플레이북와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "클러스터 업데이트",
+        "href": "/playbooks/wiki-runtime/active/updating_clusters/index.html",
+        "summary": "플랫폼 비종속 설치 플레이북와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "logging": {
+    "entities": [
+      {
+        "label": "Prometheus",
+        "href": "/wiki/entities/prometheus/index.html"
+      },
+      {
+        "label": "Observability and Troubleshooting",
+        "href": "/wiki/entities/observability/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "클러스터 로깅 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "관찰 기능 개요",
+        "href": "/playbooks/wiki-runtime/active/observability_overview/index.html",
+        "summary": "클러스터 로깅 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "클러스터 로깅 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "클러스터 로깅 운영 플레이북 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "클러스터 로깅 운영 플레이북 다음 경로로 백업 및 복구 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "클러스터 로깅 운영 플레이북 다음 경로로 머신 구성 운영 플레이북를 본다."
+      },
+      {
+        "label": "3. 클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "클러스터 로깅 운영 플레이북 다음 경로로 클러스터 모니터링 운영 플레이북를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Observability and Troubleshooting",
+      "href": "/wiki/entities/observability/index.html",
+      "summary": "monitoring, logging, validation, troubleshooting을 묶는 관측 허브다."
+    },
+    "siblings": [
+      {
+        "label": "클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "클러스터 로깅 운영 플레이북와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "관찰 기능 개요",
+        "href": "/playbooks/wiki-runtime/active/observability_overview/index.html",
+        "summary": "클러스터 로깅 운영 플레이북와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "machine_configuration": {
+    "entities": [
+      {
+        "label": "Machine Config Operator",
+        "href": "/wiki/entities/machine-config-operator/index.html"
+      },
+      {
+        "label": "Control Plane Nodes",
+        "href": "/wiki/entities/control-plane-nodes/index.html"
+      },
+      {
+        "label": "Control Plane and Node Operations",
+        "href": "/wiki/entities/control-plane-ops/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "머신 구성 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "etcd 백업 및 복구 플레이북",
+        "href": "/playbooks/wiki-runtime/active/etcd/index.html",
+        "summary": "머신 구성 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "머신 구성 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "머신 구성 운영 플레이북 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "머신 구성 운영 플레이북 다음 경로로 클러스터 모니터링 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "머신 구성 운영 플레이북 다음 경로로 설치 후 구성를 본다."
+      },
+      {
+        "label": "3. 백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "머신 구성 운영 플레이북 다음 경로로 백업 및 복구 운영 플레이북를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Control Plane and Node Operations",
+      "href": "/wiki/entities/control-plane-ops/index.html",
+      "summary": "control plane, node, 복구, MCO 수렴 같은 핵심 운영 작업의 허브다."
+    },
+    "siblings": [
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "머신 구성 운영 플레이북와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "etcd 백업 및 복구 플레이북",
+        "href": "/playbooks/wiki-runtime/active/etcd/index.html",
+        "summary": "머신 구성 운영 플레이북와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "머신 관리",
+        "href": "/playbooks/wiki-runtime/active/machine_management/index.html",
+        "summary": "머신 구성 운영 플레이북와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "machine_management": {
+    "entities": [
+      {
+        "label": "Machine Config Operator",
+        "href": "/wiki/entities/machine-config-operator/index.html"
+      },
+      {
+        "label": "Control Plane Nodes",
+        "href": "/wiki/entities/control-plane-nodes/index.html"
+      },
+      {
+        "label": "Control Plane and Node Operations",
+        "href": "/wiki/entities/control-plane-ops/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "머신 관리 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "etcd 백업 및 복구 플레이북",
+        "href": "/playbooks/wiki-runtime/active/etcd/index.html",
+        "summary": "머신 관리 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "머신 관리 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "머신 관리 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "머신 관리 다음 경로로 클러스터 모니터링 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "머신 관리 다음 경로로 설치 후 구성를 본다."
+      },
+      {
+        "label": "3. 백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "머신 관리 다음 경로로 백업 및 복구 운영 플레이북를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Control Plane and Node Operations",
+      "href": "/wiki/entities/control-plane-ops/index.html",
+      "summary": "control plane, node, 복구, MCO 수렴 같은 핵심 운영 작업의 허브다."
+    },
+    "siblings": [
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "머신 관리와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "etcd 백업 및 복구 플레이북",
+        "href": "/playbooks/wiki-runtime/active/etcd/index.html",
+        "summary": "머신 관리와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "머신 관리와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "monitoring": {
+    "entities": [
+      {
+        "label": "Prometheus",
+        "href": "/wiki/entities/prometheus/index.html"
+      },
+      {
+        "label": "Observability and Troubleshooting",
+        "href": "/wiki/entities/observability/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "관찰 기능 개요",
+        "href": "/playbooks/wiki-runtime/active/observability_overview/index.html",
+        "summary": "클러스터 모니터링 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "클러스터 로깅 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/logging/index.html",
+        "summary": "클러스터 모니터링 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "클러스터 모니터링 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "클러스터 모니터링 운영 플레이북 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "클러스터 모니터링 운영 플레이북 다음 경로로 백업 및 복구 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "클러스터 모니터링 운영 플레이북 다음 경로로 머신 구성 운영 플레이북를 본다."
+      },
+      {
+        "label": "3. 관찰 기능 개요",
+        "href": "/playbooks/wiki-runtime/active/observability_overview/index.html",
+        "summary": "클러스터 모니터링 운영 플레이북 다음 경로로 관찰 기능 개요를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Observability and Troubleshooting",
+      "href": "/wiki/entities/observability/index.html",
+      "summary": "monitoring, logging, validation, troubleshooting을 묶는 관측 허브다."
+    },
+    "siblings": [
+      {
+        "label": "관찰 기능 개요",
+        "href": "/playbooks/wiki-runtime/active/observability_overview/index.html",
+        "summary": "클러스터 모니터링 운영 플레이북와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "클러스터 로깅 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/logging/index.html",
+        "summary": "클러스터 모니터링 운영 플레이북와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "networking_overview": {
+    "entities": [
+      {
+        "label": "Cluster Wide Proxy",
+        "href": "/wiki/entities/cluster-wide-proxy/index.html"
+      },
+      {
+        "label": "Networking and Connectivity",
+        "href": "/wiki/entities/networking/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "고급 네트워킹",
+        "href": "/playbooks/wiki-runtime/active/advanced_networking/index.html",
+        "summary": "네트워킹 개요 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "Ingress 및 로드 밸런싱",
+        "href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html",
+        "summary": "네트워킹 개요 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "네트워킹 개요 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "네트워킹 개요 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "네트워킹 개요 다음 경로로 설치 후 구성를 본다."
+      },
+      {
+        "label": "2. 설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "네트워킹 개요 다음 경로로 설치 개요를 본다."
+      },
+      {
+        "label": "3. 고급 네트워킹",
+        "href": "/playbooks/wiki-runtime/active/advanced_networking/index.html",
+        "summary": "네트워킹 개요 다음 경로로 고급 네트워킹를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Networking and Connectivity",
+      "href": "/wiki/entities/networking/index.html",
+      "summary": "네트워킹, 프록시, ingress, disconnected 환경의 연결 허브다."
+    },
+    "siblings": [
+      {
+        "label": "고급 네트워킹",
+        "href": "/playbooks/wiki-runtime/active/advanced_networking/index.html",
+        "summary": "네트워킹 개요와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "Ingress 및 로드 밸런싱",
+        "href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html",
+        "summary": "네트워킹 개요와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "nodes": {
+    "entities": [
+      {
+        "label": "Control Plane Nodes",
+        "href": "/wiki/entities/control-plane-nodes/index.html"
+      },
+      {
+        "label": "Machine Config Operator",
+        "href": "/wiki/entities/machine-config-operator/index.html"
+      },
+      {
+        "label": "Control Plane and Node Operations",
+        "href": "/wiki/entities/control-plane-ops/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "노드 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "etcd 백업 및 복구 플레이북",
+        "href": "/playbooks/wiki-runtime/active/etcd/index.html",
+        "summary": "노드 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "노드 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "노드 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "노드 다음 경로로 클러스터 모니터링 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 설치 후 구성",
+        "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+        "summary": "노드 다음 경로로 설치 후 구성를 본다."
+      },
+      {
+        "label": "3. 백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "노드 다음 경로로 백업 및 복구 운영 플레이북를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Control Plane and Node Operations",
+      "href": "/wiki/entities/control-plane-ops/index.html",
+      "summary": "control plane, node, 복구, MCO 수렴 같은 핵심 운영 작업의 허브다."
+    },
+    "siblings": [
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "노드와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "etcd 백업 및 복구 플레이북",
+        "href": "/playbooks/wiki-runtime/active/etcd/index.html",
+        "summary": "노드와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "노드와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "observability_overview": {
+    "entities": [
+      {
+        "label": "Prometheus",
+        "href": "/wiki/entities/prometheus/index.html"
+      },
+      {
+        "label": "Observability and Troubleshooting",
+        "href": "/wiki/entities/observability/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "관찰 기능 개요 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "클러스터 로깅 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/logging/index.html",
+        "summary": "관찰 기능 개요 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "관찰 기능 개요 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "관찰 기능 개요 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "관찰 기능 개요 다음 경로로 백업 및 복구 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "관찰 기능 개요 다음 경로로 머신 구성 운영 플레이북를 본다."
+      },
+      {
+        "label": "3. 클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "관찰 기능 개요 다음 경로로 클러스터 모니터링 운영 플레이북를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Observability and Troubleshooting",
+      "href": "/wiki/entities/observability/index.html",
+      "summary": "monitoring, logging, validation, troubleshooting을 묶는 관측 허브다."
+    },
+    "siblings": [
+      {
+        "label": "클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "관찰 기능 개요와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "클러스터 로깅 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/logging/index.html",
+        "summary": "관찰 기능 개요와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "operators": {
+    "entities": [
+      {
+        "label": "Operators and Tooling",
+        "href": "/wiki/entities/operators-and-tooling/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "웹 콘솔",
+        "href": "/playbooks/wiki-runtime/active/web_console/index.html",
+        "summary": "Operator 운영 플레이북 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "스토리지",
+        "href": "/playbooks/wiki-runtime/active/storage/index.html",
+        "summary": "Operator 운영 플레이북 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 스토리지",
+        "href": "/playbooks/wiki-runtime/active/storage/index.html",
+        "summary": "Operator 운영 플레이북 다음 경로로 스토리지를 본다."
+      },
+      {
+        "label": "2. 웹 콘솔",
+        "href": "/playbooks/wiki-runtime/active/web_console/index.html",
+        "summary": "Operator 운영 플레이북 다음 경로로 웹 콘솔를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Operators and Tooling",
+      "href": "/wiki/entities/operators-and-tooling/index.html",
+      "summary": "Operators, CLI, 웹 콘솔처럼 실제 조작 표면을 묶는 도구 허브다."
+    },
+    "siblings": [
+      {
+        "label": "웹 콘솔",
+        "href": "/playbooks/wiki-runtime/active/web_console/index.html",
+        "summary": "Operator 운영 플레이북와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "overview": {
+    "entities": [
+      {
+        "label": "Platform Foundation",
+        "href": "/wiki/entities/platform-foundation/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "아키텍처",
+        "href": "/playbooks/wiki-runtime/active/architecture/index.html",
+        "summary": "개요 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "개요 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "플랫폼 비종속 설치 플레이북",
+        "href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html",
+        "summary": "개요 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "네트워킹 개요",
+        "href": "/playbooks/wiki-runtime/active/networking_overview/index.html",
+        "summary": "개요 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 플랫폼 비종속 설치 플레이북",
+        "href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html",
+        "summary": "개요 다음 경로로 플랫폼 비종속 설치 플레이북를 본다."
+      },
+      {
+        "label": "2. 네트워킹 개요",
+        "href": "/playbooks/wiki-runtime/active/networking_overview/index.html",
+        "summary": "개요 다음 경로로 네트워킹 개요를 본다."
+      },
+      {
+        "label": "3. 아키텍처",
+        "href": "/playbooks/wiki-runtime/active/architecture/index.html",
+        "summary": "개요 다음 경로로 아키텍처를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Platform Foundation",
+      "href": "/wiki/entities/platform-foundation/index.html",
+      "summary": "OpenShift 전체 구조와 핵심 개념을 이해하는 출발 허브다."
+    },
+    "siblings": [
+      {
+        "label": "아키텍처",
+        "href": "/playbooks/wiki-runtime/active/architecture/index.html",
+        "summary": "개요와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "개요와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "postinstallation_configuration": {
+    "entities": [
+      {
+        "label": "Cluster Wide Proxy",
+        "href": "/wiki/entities/cluster-wide-proxy/index.html"
+      },
+      {
+        "label": "Machine Config Operator",
+        "href": "/wiki/entities/machine-config-operator/index.html"
+      },
+      {
+        "label": "Installation and Day-2",
+        "href": "/wiki/entities/installation-day2/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "설치 후 구성 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "플랫폼 비종속 설치 플레이북",
+        "href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html",
+        "summary": "설치 후 구성 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "설치 후 구성 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "설치 후 구성 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 머신 구성 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+        "summary": "설치 후 구성 다음 경로로 머신 구성 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "설치 후 구성 다음 경로로 백업 및 복구 운영 플레이북를 본다."
+      },
+      {
+        "label": "3. 설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "설치 후 구성 다음 경로로 설치 개요를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Installation and Day-2",
+      "href": "/wiki/entities/installation-day2/index.html",
+      "summary": "설치, 설치 직후 안정화, 설치 후 설정과 day-2 운영 변화의 허브다."
+    },
+    "siblings": [
+      {
+        "label": "설치 개요",
+        "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+        "summary": "설치 후 구성와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "플랫폼 비종속 설치 플레이북",
+        "href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html",
+        "summary": "설치 후 구성와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "클러스터 업데이트",
+        "href": "/playbooks/wiki-runtime/active/updating_clusters/index.html",
+        "summary": "설치 후 구성와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "registry": {
+    "entities": [
+      {
+        "label": "Storage, Registry, and Images",
+        "href": "/wiki/entities/storage-and-content/index.html"
+      },
+      {
+        "label": "Operators and Tooling",
+        "href": "/wiki/entities/operators-and-tooling/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "스토리지",
+        "href": "/playbooks/wiki-runtime/active/storage/index.html",
+        "summary": "레지스트리 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "이미지",
+        "href": "/playbooks/wiki-runtime/active/images/index.html",
+        "summary": "레지스트리 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "Operator 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/operators/index.html",
+        "summary": "레지스트리 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. Operator 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/operators/index.html",
+        "summary": "레지스트리 다음 경로로 Operator 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 스토리지",
+        "href": "/playbooks/wiki-runtime/active/storage/index.html",
+        "summary": "레지스트리 다음 경로로 스토리지를 본다."
+      },
+      {
+        "label": "3. 이미지",
+        "href": "/playbooks/wiki-runtime/active/images/index.html",
+        "summary": "레지스트리 다음 경로로 이미지를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Storage, Registry, and Images",
+      "href": "/wiki/entities/storage-and-content/index.html",
+      "summary": "스토리지, 레지스트리, 이미지 운영을 묶는 데이터 보관 허브다."
+    },
+    "siblings": [
+      {
+        "label": "스토리지",
+        "href": "/playbooks/wiki-runtime/active/storage/index.html",
+        "summary": "레지스트리와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "이미지",
+        "href": "/playbooks/wiki-runtime/active/images/index.html",
+        "summary": "레지스트리와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "release_notes": {
+    "entities": [],
+    "related_docs": [],
+    "next_reading_path": [],
+    "parent_topic": {},
+    "siblings": []
+  },
+  "security_and_compliance": {
+    "entities": [
+      {
+        "label": "Security and Access",
+        "href": "/wiki/entities/security-and-auth/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "인증 및 권한 부여",
+        "href": "/playbooks/wiki-runtime/active/authentication_and_authorization/index.html",
+        "summary": "보안 및 컴플라이언스 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 인증 및 권한 부여",
+        "href": "/playbooks/wiki-runtime/active/authentication_and_authorization/index.html",
+        "summary": "보안 및 컴플라이언스 다음 경로로 인증 및 권한 부여를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Security and Access",
+      "href": "/wiki/entities/security-and-auth/index.html",
+      "summary": "인증, 권한, 보안, 컴플라이언스 문서를 묶는 보안 허브다."
+    },
+    "siblings": [
+      {
+        "label": "인증 및 권한 부여",
+        "href": "/playbooks/wiki-runtime/active/authentication_and_authorization/index.html",
+        "summary": "보안 및 컴플라이언스와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "storage": {
+    "entities": [
+      {
+        "label": "Storage, Registry, and Images",
+        "href": "/wiki/entities/storage-and-content/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "레지스트리",
+        "href": "/playbooks/wiki-runtime/active/registry/index.html",
+        "summary": "스토리지 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "이미지",
+        "href": "/playbooks/wiki-runtime/active/images/index.html",
+        "summary": "스토리지 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "Operator 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/operators/index.html",
+        "summary": "스토리지 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. Operator 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/operators/index.html",
+        "summary": "스토리지 다음 경로로 Operator 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 레지스트리",
+        "href": "/playbooks/wiki-runtime/active/registry/index.html",
+        "summary": "스토리지 다음 경로로 레지스트리를 본다."
+      },
+      {
+        "label": "3. 이미지",
+        "href": "/playbooks/wiki-runtime/active/images/index.html",
+        "summary": "스토리지 다음 경로로 이미지를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Storage, Registry, and Images",
+      "href": "/wiki/entities/storage-and-content/index.html",
+      "summary": "스토리지, 레지스트리, 이미지 운영을 묶는 데이터 보관 허브다."
+    },
+    "siblings": [
+      {
+        "label": "레지스트리",
+        "href": "/playbooks/wiki-runtime/active/registry/index.html",
+        "summary": "스토리지와 같은 작업군에 속한 문서다."
+      },
+      {
+        "label": "이미지",
+        "href": "/playbooks/wiki-runtime/active/images/index.html",
+        "summary": "스토리지와 같은 작업군에 속한 문서다."
+      }
+    ]
+  },
+  "support": {
+    "entities": [],
+    "related_docs": [],
+    "next_reading_path": [],
+    "parent_topic": {},
+    "siblings": []
+  },
+  "updating_clusters": {
+    "entities": [
+      {
+        "label": "Installation and Day-2",
+        "href": "/wiki/entities/installation-day2/index.html"
+      },
+      {
+        "label": "Control Plane Nodes",
+        "href": "/wiki/entities/control-plane-nodes/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "클러스터 업데이트 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "클러스터 업데이트 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 백업 및 복구 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+        "summary": "클러스터 업데이트 다음 경로로 백업 및 복구 운영 플레이북를 본다."
+      },
+      {
+        "label": "2. 클러스터 모니터링 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+        "summary": "클러스터 업데이트 다음 경로로 클러스터 모니터링 운영 플레이북를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Lifecycle and Support",
+      "href": "/wiki/entities/lifecycle-and-support/index.html",
+      "summary": "업데이트, 릴리스 노트, 지원 절차를 묶는 운영 lifecycle 허브다."
+    },
+    "siblings": []
+  },
+  "validation_and_troubleshooting": {
+    "entities": [],
+    "related_docs": [],
+    "next_reading_path": [],
+    "parent_topic": {},
+    "siblings": []
+  },
+  "web_console": {
+    "entities": [
+      {
+        "label": "Operators and Tooling",
+        "href": "/wiki/entities/operators-and-tooling/index.html"
+      }
+    ],
+    "related_docs": [
+      {
+        "label": "Operator 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/operators/index.html",
+        "summary": "웹 콘솔 이후 함께 봐야 하는 문서다."
+      },
+      {
+        "label": "스토리지",
+        "href": "/playbooks/wiki-runtime/active/storage/index.html",
+        "summary": "웹 콘솔 이후 함께 봐야 하는 문서다."
+      }
+    ],
+    "next_reading_path": [
+      {
+        "label": "1. 스토리지",
+        "href": "/playbooks/wiki-runtime/active/storage/index.html",
+        "summary": "웹 콘솔 다음 경로로 스토리지를 본다."
+      },
+      {
+        "label": "2. Operator 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/operators/index.html",
+        "summary": "웹 콘솔 다음 경로로 Operator 운영 플레이북를 본다."
+      }
+    ],
+    "parent_topic": {
+      "label": "Operators and Tooling",
+      "href": "/wiki/entities/operators-and-tooling/index.html",
+      "summary": "Operators, CLI, 웹 콘솔처럼 실제 조작 표면을 묶는 도구 허브다."
+    },
+    "siblings": [
+      {
+        "label": "Operator 운영 플레이북",
+        "href": "/playbooks/wiki-runtime/active/operators/index.html",
+        "summary": "웹 콘솔와 같은 작업군에 속한 문서다."
+      }
+    ]
+  }
+}

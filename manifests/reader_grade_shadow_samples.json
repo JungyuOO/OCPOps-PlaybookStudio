@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "purpose": "reader-grade shadow pipeline sample set",
+  "product_slug": "openshift_container_platform",
+  "ocp_version": "4.20",
+  "selection_reason": "translation_failed_or_reader_grade_gap",
+  "entries": [
+    {
+      "book_slug": "backup_and_restore",
+      "title": "Backup and restore",
+      "sample_role": "operations_runbook",
+      "why_selected": [
+        "번역 누락이 확인된 영문 페이지다",
+        "절차, 명령어, 검증, 주의사항이 모두 들어 있어 reader-grade runbook 실험에 적합하다"
+      ],
+      "current_catalog_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/backup_and_restore/index",
+      "reference_source_url": "https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html-single/backup_and_restore/index"
+    },
+    {
+      "book_slug": "installing_on_any_platform",
+      "title": "Installing on any platform",
+      "sample_role": "installation_manual",
+      "why_selected": [
+        "번역 누락이 확인된 영문 페이지다",
+        "설치 절차 문서라서 section shaping, prerequisite, procedure, verify 구조 실험에 적합하다"
+      ],
+      "current_catalog_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_any_platform/index",
+      "reference_source_url": "https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html-single/installing_on_any_platform/index"
+    }
+  ]
+}

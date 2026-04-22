@@ -1,0 +1,27 @@
+{
+  "book_slug": "logging",
+  "doc_id": "logging:4.20:ko:source_repo",
+  "source_fingerprint": "2c48d048c4234bd771b802ffe64f36ea6dbc23b780323b881d835d2421adafea",
+  "translation_source_url": "https://github.com/openshift/openshift-docs/blob/enterprise-4.20/observability/logging/about-logging.adoc",
+  "item_count": 8,
+  "items": {
+    "doc.title": "로그에 대한 정보",
+    "s0.heading": "로그에 대한 정보",
+    "s0.path.0": "로그에 대한 정보",
+    "s0.b0.paragraph": "클러스터 관리자로써, OpenShift Container Platform 클러스터에 로그를 배포하고 노드 시스템 감사 로그, 애플리케이션 컨테이너 로그, 인프라 로그를 수집 및 집계할 수 있습니다.",
+    "s0.b1.paragraph": "로그를 사용하여 다음 작업을 수행할 수 있습니다:",
+    "s0.b2.paragraph": "* 선택한 로그 출력 (클러스터 내 또는 Red Hat 관리 로그 저장소) 으로 로그를 전달합니다.\n* OpenShift Container Platform 웹 콘솔에서 로그 데이터를 시각화합니다.",
+    "s0.b3.note.title": "참고",
+    "s0.b3.note.text": "로그 릴리스는 OpenShift Container Platform 과 다른 주기로 제공되므로, 로그 문서는 [Red Hat OpenShift Logging](https://docs.redhat.com/en/documentation/red_hat_openshift_logging/) 에서 별도의 문서 집합으로 제공됩니다."
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 8,
+    "total_unit_count": 8,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 8
+  }
+}

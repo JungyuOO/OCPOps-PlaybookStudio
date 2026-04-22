@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "play-book-studio"
+version = "0.1.0"
+description = "Play Book Studio for grounded document ingestion, retrieval, and answering"
+readme = "PROJECT.md"
+requires-python = ">=3.11"
+dependencies = [
+  "beautifulsoup4>=4.12",
+  "docling>=2.84.0",
+  "jsonschema>=4.26",
+  "markitdown[docx,pdf,pptx,xlsx]>=0.1.5",
+  "neo4j>=5.28",
+  "networkx>=3.5",
+  "onnxruntime>=1.20",
+  "pypdf>=6.0",
+  "pypdfium2>=4.30",
+  "rapidocr>=3.7.0",
+  "requests>=2.31",
+  "sentence-transformers==5.3.0",
+]
+
+[project.optional-dependencies]
+eval = [
+  "ragas>=0.4.3",
+  "datasets>=4.8.4",
+]
+
+[project.scripts]
+play-book-studio = "play_book_studio.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["tmp", ".venv", "__pycache__"]

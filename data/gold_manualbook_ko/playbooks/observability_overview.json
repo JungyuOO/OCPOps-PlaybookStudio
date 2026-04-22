@@ -1,0 +1,402 @@
+{
+  "canonical_model": "playbook_document_v1",
+  "source_view_strategy": "playbook_ast_v1",
+  "book_slug": "observability_overview",
+  "title": "관찰 기능 개요",
+  "version": "4.20",
+  "locale": "ko",
+  "source_uri": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/observability_overview/index",
+  "source_language": "ko",
+  "language_hint": "ko",
+  "translation_status": "approved_ko",
+  "translation_stage": "approved_ko",
+  "translation_source_uri": "https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html-single/observability_overview/index",
+  "translation_source_language": "en",
+  "translation_source_fingerprint": "6f3337e2cb4eb3bd27b5ccdb2b2d151ddd64a9c4405e2cf2d7cbe222ae7aa76f",
+  "legal_notice_url": "https://docs.redhat.com/documentation/openshift_container_platform/4.20/html/observability_overview/legal-notice",
+  "review_status": "approved",
+  "pack_id": "openshift-4-20-core",
+  "inferred_version": "4.20",
+  "section_count": 8,
+  "source_metadata": {
+    "source_id": "translated_gold_manual_synthesis:observability_overview",
+    "source_type": "manual_synthesis",
+    "source_lane": "applied_playbook",
+    "source_collection": "core",
+    "primary_input_kind": "",
+    "source_repo": "",
+    "source_branch": "",
+    "source_binding_kind": "",
+    "source_relative_path": "",
+    "source_relative_paths": [],
+    "source_mirror_root": "",
+    "fallback_input_kind": "",
+    "fallback_source_url": "",
+    "fallback_viewer_path": "",
+    "product": "openshift",
+    "version": "4.20",
+    "trust_score": 1.0,
+    "original_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/observability_overview/index",
+    "original_title": "관찰 기능 개요",
+    "legal_notice_url": "https://docs.redhat.com/documentation/openshift_container_platform/4.20/html/observability_overview/legal-notice",
+    "license_or_terms": "Modified versions must remove all Red Hat trademarks.",
+    "review_status": "approved",
+    "verifiability": "anchor_backed",
+    "updated_at": "2026-04-18T18:17:18Z",
+    "translation_source_language": "en",
+    "parsed_artifact_id": "parsed:translated_gold_manual_synthesis:observability_overview",
+    "tenant_id": "public",
+    "workspace_id": "core",
+    "pack_id": "openshift_container_platform-4.20-core",
+    "pack_version": "4.20",
+    "bundle_scope": "official",
+    "classification": "public",
+    "access_groups": [
+      "public"
+    ],
+    "provider_egress_policy": "unspecified",
+    "approval_state": "approved",
+    "publication_state": "published",
+    "redaction_state": "not_required",
+    "citation_eligible": true,
+    "citation_block_reason": ""
+  },
+  "anchor_map": {
+    "openshift-container-platform의-관찰-기능에-대한-정보-포함": "/docs/ocp/4.20/ko/observability_overview/index.html#openshift-container-platform의-관찰-기능에-대한-정보-포함",
+    "observability-overview": "/docs/ocp/4.20/ko/observability_overview/index.html#observability-overview",
+    "monitoring-overview-index_observability-overview": "/docs/ocp/4.20/ko/observability_overview/index.html#monitoring-overview-index_observability-overview",
+    "cluster-logging-index_observability-overview": "/docs/ocp/4.20/ko/observability_overview/index.html#cluster-logging-index_observability-overview",
+    "distr-tracing-architecture-index_observability-overview": "/docs/ocp/4.20/ko/observability_overview/index.html#distr-tracing-architecture-index_observability-overview",
+    "otel-release-notes-index_observability-overview": "/docs/ocp/4.20/ko/observability_overview/index.html#otel-release-notes-index_observability-overview",
+    "network-observability-overview-index_observability-overview": "/docs/ocp/4.20/ko/observability_overview/index.html#network-observability-overview-index_observability-overview",
+    "power-monitoring-overview-index_observability-overview": "/docs/ocp/4.20/ko/observability_overview/index.html#power-monitoring-overview-index_observability-overview"
+  },
+  "sections": [
+    {
+      "section_id": "observability_overview:openshift-container-platform의-관찰-기능에-대한-정보-포함",
+      "section_key": "observability_overview:openshift-container-platform의-관찰-기능에-대한-정보-포함",
+      "ordinal": 1,
+      "heading": "OpenShift Container Platform의 관찰 기능에 대한 정보 포함",
+      "level": 2,
+      "path": [
+        "OpenShift Container Platform의 관찰 기능에 대한 정보 포함"
+      ],
+      "section_path": [
+        "OpenShift Container Platform의 관찰 기능에 대한 정보 포함"
+      ],
+      "section_path_label": "OpenShift Container Platform의 관찰 기능에 대한 정보 포함",
+      "anchor": "openshift-container-platform의-관찰-기능에-대한-정보-포함",
+      "anchor_id": "openshift-container-platform의-관찰-기능에-대한-정보-포함",
+      "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#openshift-container-platform의-관찰-기능에-대한-정보-포함",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Red Hat OpenShift Observability는 다양한 시스템 지표, 로그, 추적 및 이벤트에 대한 실시간 가시성, 모니터링 및 분석을 제공하여 사용자가 시스템 또는 애플리케이션에 영향을 미치기 전에 문제를 신속하게 진단하고 해결할 수 있도록 지원합니다."
+        }
+      ]
+    },
+    {
+      "section_id": "observability_overview:observability-overview",
+      "section_key": "observability_overview:observability-overview",
+      "ordinal": 2,
+      "heading": "1장. Observability 정보",
+      "level": 2,
+      "path": [
+        "1장. Observability 정보"
+      ],
+      "section_path": [
+        "1장. Observability 정보"
+      ],
+      "section_path_label": "1장. Observability 정보",
+      "anchor": "observability-overview",
+      "anchor_id": "observability-overview",
+      "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#observability-overview",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Red Hat OpenShift Observability는 다양한 시스템 지표, 로그, 추적 및 이벤트에 대한 실시간 가시성, 모니터링 및 분석을 제공하여 사용자가 시스템 또는 애플리케이션에 영향을 미치기 전에 문제를 신속하게 진단하고 해결할 수 있도록 지원합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform은 애플리케이션 및 인프라의 안정성, 성능 및 보안을 보장하기 위해 다음과 같은 Observability 구성 요소를 제공합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "모니터링"
+        },
+        {
+          "kind": "paragraph",
+          "text": "로깅"
+        },
+        {
+          "kind": "paragraph",
+          "text": "분산 추적"
+        },
+        {
+          "kind": "paragraph",
+          "text": "Red Hat build of OpenTelemetry"
+        },
+        {
+          "kind": "paragraph",
+          "text": "네트워크 관찰 기능"
+        },
+        {
+          "kind": "paragraph",
+          "text": "전원 모니터링"
+        },
+        {
+          "kind": "paragraph",
+          "text": "Red Hat OpenShift Observability는 오픈 소스 관찰 툴 및 기술을 연결하여 통합된 Observability 솔루션을 생성합니다. Red Hat OpenShift Observability의 구성 요소는 함께 협력하여 데이터를 수집, 저장, 제공, 분석 및 시각화할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "참고"
+        },
+        {
+          "kind": "paragraph",
+          "text": "모니터링을 제외하고 Red Hat OpenShift Observability 구성 요소에는 코어 OpenShift Container Platform 릴리스 사이클과는 별도로 별도의 릴리스 사이클이 있습니다. 릴리스 호환성은 Red Hat OpenShift Operator 라이프 사이클 페이지를 참조하십시오."
+        }
+      ]
+    },
+    {
+      "section_id": "observability_overview:monitoring-overview-index_observability-overview",
+      "section_key": "observability_overview:monitoring-overview-index_observability-overview",
+      "ordinal": 3,
+      "heading": "1.1. 모니터링",
+      "level": 3,
+      "path": [
+        "1장. Observability 정보",
+        "1.1. 모니터링"
+      ],
+      "section_path": [
+        "1장. Observability 정보",
+        "1.1. 모니터링"
+      ],
+      "section_path_label": "1장. Observability 정보 > 1.1. 모니터링",
+      "anchor": "monitoring-overview-index_observability-overview",
+      "anchor_id": "monitoring-overview-index_observability-overview",
+      "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#monitoring-overview-index_observability-overview",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "CPU 및 메모리 사용량, 네트워크 연결 및 기타 리소스 사용에 대한 메트릭 및 사용자 지정 경고를 사용하여 OpenShift Container Platform에서 실행되는 애플리케이션의 클러스터 내 상태 및 성능을 모니터링합니다. 모니터링 스택 구성 요소는 Cluster Monitoring Operator에 의해 배포 및 관리됩니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "모니터링 스택 구성 요소는 기본적으로 모든 OpenShift Container Platform 설치에 배포되며 CCMO(Cluster Monitoring Operator)에서 관리합니다. 이러한 구성 요소에는 Prometheus, Alertmanager, Thanos Querier 등이 포함됩니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "CMO는 플랫폼 Prometheus 인스턴스에서 Red Hat으로 데이터의 하위 집합을 전송하여 클러스터의 원격 상태 모니터링을 용이하게 하는 Telemeter Client도 배포합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "자세한 내용은 OpenShift Container Platform 모니터링"
+        },
+        {
+          "kind": "paragraph",
+          "text": "정보 및 원격 상태 모니터링 정보를 참조하십시오."
+        }
+      ]
+    },
+    {
+      "section_id": "observability_overview:cluster-logging-index_observability-overview",
+      "section_key": "observability_overview:cluster-logging-index_observability-overview",
+      "ordinal": 4,
+      "heading": "1.2. 로깅",
+      "level": 3,
+      "path": [
+        "1장. Observability 정보",
+        "1.2. 로깅"
+      ],
+      "section_path": [
+        "1장. Observability 정보",
+        "1.2. 로깅"
+      ],
+      "section_path_label": "1장. Observability 정보 > 1.2. 로깅",
+      "anchor": "cluster-logging-index_observability-overview",
+      "anchor_id": "cluster-logging-index_observability-overview",
+      "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#cluster-logging-index_observability-overview",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "로그 데이터를 수집, 시각화, 전달 및 저장하여 문제를 해결하고 성능 병목 현상을 식별하고 보안 위협을 감지합니다. 5.7 이상 버전을 로깅할 때 사용자는 사용자 지정 경고 및 기록된 메트릭을 생성하도록 LokiStack 배포를 구성할 수 있습니다."
+        }
+      ]
+    },
+    {
+      "section_id": "observability_overview:distr-tracing-architecture-index_observability-overview",
+      "section_key": "observability_overview:distr-tracing-architecture-index_observability-overview",
+      "ordinal": 5,
+      "heading": "1.3. 분산 추적",
+      "level": 3,
+      "path": [
+        "1장. Observability 정보",
+        "1.3. 분산 추적"
+      ],
+      "section_path": [
+        "1장. Observability 정보",
+        "1.3. 분산 추적"
+      ],
+      "section_path_label": "1장. Observability 정보 > 1.3. 분산 추적",
+      "anchor": "distr-tracing-architecture-index_observability-overview",
+      "anchor_id": "distr-tracing-architecture-index_observability-overview",
+      "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#distr-tracing-architecture-index_observability-overview",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "분산 시스템을 통해 전달되는 대량의 요청, 전체 마이크로 서비스 스택, 많은 부하에서 발생하는 대량의 요청을 저장하고 시각화합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "분산 트랜잭션을 모니터링하고, 조정된 서비스, 네트워크 프로파일링, 성능 및 대기 시간 최적화, 근본 원인 분석, 최신 클라우드 네이티브 마이크로 서비스 기반 애플리케이션의 구성 요소 간 상호 작용 문제 해결에 대한 인사이트를 수집하는 데 사용합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "자세한 내용은 분산 추적 아키텍처를 참조하십시오."
+        }
+      ]
+    },
+    {
+      "section_id": "observability_overview:otel-release-notes-index_observability-overview",
+      "section_key": "observability_overview:otel-release-notes-index_observability-overview",
+      "ordinal": 6,
+      "heading": "1.4. Red Hat build of OpenTelemetry",
+      "level": 3,
+      "path": [
+        "1장. Observability 정보",
+        "1.4. Red Hat build of OpenTelemetry"
+      ],
+      "section_path": [
+        "1장. Observability 정보",
+        "1.4. Red Hat build of OpenTelemetry"
+      ],
+      "section_path_label": "1장. Observability 정보 > 1.4. Red Hat build of OpenTelemetry",
+      "anchor": "otel-release-notes-index_observability-overview",
+      "anchor_id": "otel-release-notes-index_observability-overview",
+      "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#otel-release-notes-index_observability-overview",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "소프트웨어의 성능 및 동작을 분석하고 이해하기 위해 원격 분석 추적, 메트릭 및 로그를 측정, 생성, 수집 및 내보냅니다. Tempo 또는 Prometheus와 같은 오픈 소스 백엔드를 사용하거나 상용 제품을 사용합니다. 단일 API 및 규칙 세트를 알아보고 사용자가 생성하는 데이터를 소유합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "자세한 내용은 Red Hat build of OpenTelemetry 에서 참조하십시오."
+        }
+      ]
+    },
+    {
+      "section_id": "observability_overview:network-observability-overview-index_observability-overview",
+      "section_key": "observability_overview:network-observability-overview-index_observability-overview",
+      "ordinal": 7,
+      "heading": "1.5. 네트워크 관찰 기능",
+      "level": 3,
+      "path": [
+        "1장. Observability 정보",
+        "1.5. 네트워크 관찰 기능"
+      ],
+      "section_path": [
+        "1장. Observability 정보",
+        "1.5. 네트워크 관찰 기능"
+      ],
+      "section_path_label": "1장. Observability 정보 > 1.5. 네트워크 관찰 기능",
+      "anchor": "network-observability-overview-index_observability-overview",
+      "anchor_id": "network-observability-overview-index_observability-overview",
+      "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#network-observability-overview-index_observability-overview",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform 클러스터의 네트워크 트래픽을 관찰하고 Network Observability Operator를 사용하여 네트워크 흐름을 생성합니다. 자세한 정보 및 문제 해결을 위해 OpenShift Container Platform 콘솔에서 저장된 네트워크 흐름 정보를 보고 분석합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "자세한 내용은 Network Observability 개요 를 참조하십시오."
+        }
+      ]
+    },
+    {
+      "section_id": "observability_overview:power-monitoring-overview-index_observability-overview",
+      "section_key": "observability_overview:power-monitoring-overview-index_observability-overview",
+      "ordinal": 8,
+      "heading": "1.6. 전원 모니터링",
+      "level": 3,
+      "path": [
+        "1장. Observability 정보",
+        "1.6. 전원 모니터링"
+      ],
+      "section_path": [
+        "1장. Observability 정보",
+        "1.6. 전원 모니터링"
+      ],
+      "section_path_label": "1장. Observability 정보 > 1.6. 전원 모니터링",
+      "anchor": "power-monitoring-overview-index_observability-overview",
+      "anchor_id": "power-monitoring-overview-index_observability-overview",
+      "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#power-monitoring-overview-index_observability-overview",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "워크로드의 전력 사용량을 모니터링하고 컨테이너 수준에서 측정된 CPU 또는 DRAM과 같이 주요 전력 소비 메트릭을 사용하여 클러스터에서 실행되는 가장 많은 전력 소비 네임스페이스를 식별합니다. Power Monitoring Operator를 통해 전원 관련 시스템 통계를 시각화하세요."
+        },
+        {
+          "kind": "paragraph",
+          "text": "자세한 내용은 전원 모니터링 개요 를 참조하십시오."
+        }
+      ]
+    }
+  ],
+  "quality_status": "ready",
+  "quality_score": 0.0,
+  "quality_flags": []
+}

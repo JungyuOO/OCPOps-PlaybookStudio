@@ -1,0 +1,505 @@
+{
+  "advanced_networking": [
+    {
+      "label": "Cluster Wide Proxy",
+      "href": "/wiki/entities/cluster-wide-proxy/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Networking and Connectivity",
+      "href": "/wiki/entities/networking/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "네트워킹 개요",
+      "href": "/playbooks/wiki-runtime/active/networking_overview/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "Ingress 및 로드 밸런싱",
+      "href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html",
+      "kind": "book"
+    }
+  ],
+  "architecture": [
+    {
+      "label": "Platform Foundation",
+      "href": "/wiki/entities/platform-foundation/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Control Plane Nodes",
+      "href": "/wiki/entities/control-plane-nodes/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "개요",
+      "href": "/playbooks/wiki-runtime/active/overview/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "설치 개요",
+      "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+      "kind": "book"
+    }
+  ],
+  "authentication_and_authorization": [
+    {
+      "label": "Security and Access",
+      "href": "/wiki/entities/security-and-auth/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "보안 및 컴플라이언스",
+      "href": "/playbooks/wiki-runtime/active/security_and_compliance/index.html",
+      "kind": "book"
+    }
+  ],
+  "backup_and_restore": [
+    {
+      "label": "Etcd",
+      "href": "/wiki/entities/etcd/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Control Plane Nodes",
+      "href": "/wiki/entities/control-plane-nodes/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Cluster Wide Proxy",
+      "href": "/wiki/entities/cluster-wide-proxy/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Control Plane and Node Operations",
+      "href": "/wiki/entities/control-plane-ops/index.html",
+      "kind": "entity"
+    }
+  ],
+  "cli_tools": [],
+  "disconnected_environments": [],
+  "etcd": [
+    {
+      "label": "Etcd",
+      "href": "/wiki/entities/etcd/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Control Plane Nodes",
+      "href": "/wiki/entities/control-plane-nodes/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Control Plane and Node Operations",
+      "href": "/wiki/entities/control-plane-ops/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "백업 및 복구 운영 플레이북",
+      "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+      "kind": "book"
+    }
+  ],
+  "images": [
+    {
+      "label": "Storage, Registry, and Images",
+      "href": "/wiki/entities/storage-and-content/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Operators and Tooling",
+      "href": "/wiki/entities/operators-and-tooling/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "스토리지",
+      "href": "/playbooks/wiki-runtime/active/storage/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "레지스트리",
+      "href": "/playbooks/wiki-runtime/active/registry/index.html",
+      "kind": "book"
+    }
+  ],
+  "ingress_and_load_balancing": [
+    {
+      "label": "Cluster Wide Proxy",
+      "href": "/wiki/entities/cluster-wide-proxy/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Networking and Connectivity",
+      "href": "/wiki/entities/networking/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "네트워킹 개요",
+      "href": "/playbooks/wiki-runtime/active/networking_overview/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "고급 네트워킹",
+      "href": "/playbooks/wiki-runtime/active/advanced_networking/index.html",
+      "kind": "book"
+    }
+  ],
+  "installation_overview": [
+    {
+      "label": "Platform Foundation",
+      "href": "/wiki/entities/platform-foundation/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Installation and Day-2",
+      "href": "/wiki/entities/installation-day2/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "플랫폼 비종속 설치 플레이북",
+      "href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "설치 후 구성",
+      "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html",
+      "kind": "book"
+    }
+  ],
+  "installing_on_any_platform": [
+    {
+      "label": "Cluster Wide Proxy",
+      "href": "/wiki/entities/cluster-wide-proxy/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Machine Config Operator",
+      "href": "/wiki/entities/machine-config-operator/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Installation and Day-2",
+      "href": "/wiki/entities/installation-day2/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "설치 개요",
+      "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+      "kind": "book"
+    }
+  ],
+  "logging": [
+    {
+      "label": "Prometheus",
+      "href": "/wiki/entities/prometheus/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Observability and Troubleshooting",
+      "href": "/wiki/entities/observability/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "클러스터 모니터링 운영 플레이북",
+      "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "관찰 기능 개요",
+      "href": "/playbooks/wiki-runtime/active/observability_overview/index.html",
+      "kind": "book"
+    }
+  ],
+  "machine_configuration": [
+    {
+      "label": "Machine Config Operator",
+      "href": "/wiki/entities/machine-config-operator/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Control Plane Nodes",
+      "href": "/wiki/entities/control-plane-nodes/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Control Plane and Node Operations",
+      "href": "/wiki/entities/control-plane-ops/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "백업 및 복구 운영 플레이북",
+      "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+      "kind": "book"
+    }
+  ],
+  "machine_management": [
+    {
+      "label": "Machine Config Operator",
+      "href": "/wiki/entities/machine-config-operator/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Control Plane Nodes",
+      "href": "/wiki/entities/control-plane-nodes/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Control Plane and Node Operations",
+      "href": "/wiki/entities/control-plane-ops/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "백업 및 복구 운영 플레이북",
+      "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+      "kind": "book"
+    }
+  ],
+  "monitoring": [
+    {
+      "label": "Prometheus",
+      "href": "/wiki/entities/prometheus/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Observability and Troubleshooting",
+      "href": "/wiki/entities/observability/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "관찰 기능 개요",
+      "href": "/playbooks/wiki-runtime/active/observability_overview/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "클러스터 로깅 운영 플레이북",
+      "href": "/playbooks/wiki-runtime/active/logging/index.html",
+      "kind": "book"
+    }
+  ],
+  "networking_overview": [
+    {
+      "label": "Cluster Wide Proxy",
+      "href": "/wiki/entities/cluster-wide-proxy/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Networking and Connectivity",
+      "href": "/wiki/entities/networking/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "고급 네트워킹",
+      "href": "/playbooks/wiki-runtime/active/advanced_networking/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "Ingress 및 로드 밸런싱",
+      "href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html",
+      "kind": "book"
+    }
+  ],
+  "nodes": [
+    {
+      "label": "Control Plane Nodes",
+      "href": "/wiki/entities/control-plane-nodes/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Machine Config Operator",
+      "href": "/wiki/entities/machine-config-operator/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Control Plane and Node Operations",
+      "href": "/wiki/entities/control-plane-ops/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "백업 및 복구 운영 플레이북",
+      "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+      "kind": "book"
+    }
+  ],
+  "observability_overview": [
+    {
+      "label": "Prometheus",
+      "href": "/wiki/entities/prometheus/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Observability and Troubleshooting",
+      "href": "/wiki/entities/observability/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "클러스터 모니터링 운영 플레이북",
+      "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "클러스터 로깅 운영 플레이북",
+      "href": "/playbooks/wiki-runtime/active/logging/index.html",
+      "kind": "book"
+    }
+  ],
+  "operators": [
+    {
+      "label": "Operators and Tooling",
+      "href": "/wiki/entities/operators-and-tooling/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "웹 콘솔",
+      "href": "/playbooks/wiki-runtime/active/web_console/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "스토리지",
+      "href": "/playbooks/wiki-runtime/active/storage/index.html",
+      "kind": "book"
+    }
+  ],
+  "overview": [
+    {
+      "label": "Platform Foundation",
+      "href": "/wiki/entities/platform-foundation/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "아키텍처",
+      "href": "/playbooks/wiki-runtime/active/architecture/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "설치 개요",
+      "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "플랫폼 비종속 설치 플레이북",
+      "href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html",
+      "kind": "book"
+    }
+  ],
+  "postinstallation_configuration": [
+    {
+      "label": "Cluster Wide Proxy",
+      "href": "/wiki/entities/cluster-wide-proxy/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Machine Config Operator",
+      "href": "/wiki/entities/machine-config-operator/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Installation and Day-2",
+      "href": "/wiki/entities/installation-day2/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "설치 개요",
+      "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+      "kind": "book"
+    }
+  ],
+  "registry": [
+    {
+      "label": "Storage, Registry, and Images",
+      "href": "/wiki/entities/storage-and-content/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Operators and Tooling",
+      "href": "/wiki/entities/operators-and-tooling/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "스토리지",
+      "href": "/playbooks/wiki-runtime/active/storage/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "이미지",
+      "href": "/playbooks/wiki-runtime/active/images/index.html",
+      "kind": "book"
+    }
+  ],
+  "release_notes": [],
+  "security_and_compliance": [
+    {
+      "label": "Security and Access",
+      "href": "/wiki/entities/security-and-auth/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "인증 및 권한 부여",
+      "href": "/playbooks/wiki-runtime/active/authentication_and_authorization/index.html",
+      "kind": "book"
+    }
+  ],
+  "storage": [
+    {
+      "label": "Storage, Registry, and Images",
+      "href": "/wiki/entities/storage-and-content/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "레지스트리",
+      "href": "/playbooks/wiki-runtime/active/registry/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "이미지",
+      "href": "/playbooks/wiki-runtime/active/images/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "Operator 운영 플레이북",
+      "href": "/playbooks/wiki-runtime/active/operators/index.html",
+      "kind": "book"
+    }
+  ],
+  "support": [],
+  "updating_clusters": [
+    {
+      "label": "Installation and Day-2",
+      "href": "/wiki/entities/installation-day2/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Control Plane Nodes",
+      "href": "/wiki/entities/control-plane-nodes/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "백업 및 복구 운영 플레이북",
+      "href": "/playbooks/wiki-runtime/active/backup_and_restore/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "클러스터 모니터링 운영 플레이북",
+      "href": "/playbooks/wiki-runtime/active/monitoring/index.html",
+      "kind": "book"
+    }
+  ],
+  "validation_and_troubleshooting": [],
+  "web_console": [
+    {
+      "label": "Operators and Tooling",
+      "href": "/wiki/entities/operators-and-tooling/index.html",
+      "kind": "entity"
+    },
+    {
+      "label": "Operator 운영 플레이북",
+      "href": "/playbooks/wiki-runtime/active/operators/index.html",
+      "kind": "book"
+    },
+    {
+      "label": "스토리지",
+      "href": "/playbooks/wiki-runtime/active/storage/index.html",
+      "kind": "book"
+    }
+  ]
+}

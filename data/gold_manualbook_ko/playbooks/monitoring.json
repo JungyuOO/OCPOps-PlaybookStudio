@@ -1,0 +1,154 @@
+{
+  "canonical_model": "playbook_document_v1",
+  "source_view_strategy": "playbook_ast_v1",
+  "book_slug": "monitoring",
+  "title": "Monitoring",
+  "version": "4.20",
+  "locale": "ko",
+  "source_uri": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/monitoring/index",
+  "source_language": "ko",
+  "language_hint": "ko",
+  "translation_status": "original",
+  "translation_stage": "en_only",
+  "translation_source_uri": "https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html-single/monitoring/index",
+  "translation_source_language": "en",
+  "translation_source_fingerprint": "a082fe3df564624e9045986f0dc1821f683d0d71903fe1624141d8f0fa41905b",
+  "legal_notice_url": "https://docs.redhat.com/documentation/openshift_container_platform/4.20/html/monitoring/legal-notice",
+  "review_status": "needs_review",
+  "pack_id": "openshift-4-20-core",
+  "inferred_version": "4.20",
+  "section_count": 2,
+  "source_metadata": {
+    "source_id": "openshift_container_platform:4.20:ko:monitoring:curated_gold_v1",
+    "source_type": "manual_synthesis",
+    "source_lane": "applied_playbook",
+    "source_collection": "core",
+    "primary_input_kind": "",
+    "source_repo": "",
+    "source_branch": "",
+    "source_binding_kind": "",
+    "source_relative_path": "",
+    "source_relative_paths": [],
+    "source_mirror_root": "",
+    "fallback_input_kind": "",
+    "fallback_source_url": "",
+    "fallback_viewer_path": "",
+    "product": "openshift",
+    "version": "4.20",
+    "trust_score": 0.97,
+    "original_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/monitoring/index",
+    "original_title": "Monitoring",
+    "legal_notice_url": "https://docs.redhat.com/documentation/openshift_container_platform/4.20/html/monitoring/legal-notice",
+    "license_or_terms": "Modified versions must remove all Red Hat trademarks.",
+    "review_status": "needs_review",
+    "verifiability": "anchor_backed",
+    "updated_at": "2026-04-18T18:16:57Z",
+    "translation_source_language": "en",
+    "parsed_artifact_id": "parsed:openshift_container_platform:4.20:ko:monitoring:curated_gold_v1",
+    "tenant_id": "public",
+    "workspace_id": "core",
+    "pack_id": "openshift_container_platform-4.20-core",
+    "pack_version": "4.20",
+    "bundle_scope": "official",
+    "classification": "public",
+    "access_groups": [
+      "public"
+    ],
+    "provider_egress_policy": "unspecified",
+    "approval_state": "approved",
+    "publication_state": "published",
+    "redaction_state": "not_required",
+    "citation_eligible": false,
+    "citation_block_reason": "vendor page reports selected-language fallback"
+  },
+  "anchor_map": {
+    "configuring-and-using-the-monitoring-stack-in-openshift-container-platform": "/docs/ocp/4.20/ko/monitoring/index.html#configuring-and-using-the-monitoring-stack-in-openshift-container-platform",
+    "about-ocp-monitoring": "/docs/ocp/4.20/ko/monitoring/index.html#about-ocp-monitoring"
+  },
+  "sections": [
+    {
+      "section_id": "monitoring:configuring-and-using-the-monitoring-stack-in-openshift-container-platform",
+      "section_key": "monitoring:configuring-and-using-the-monitoring-stack-in-openshift-container-platform",
+      "ordinal": 2,
+      "heading": "Configuring and using the monitoring stack in OpenShift Container Platform",
+      "level": 2,
+      "path": [
+        "Configuring and using the monitoring stack in OpenShift Container Platform"
+      ],
+      "section_path": [
+        "Configuring and using the monitoring stack in OpenShift Container Platform"
+      ],
+      "section_path_label": "Configuring and using the monitoring stack in OpenShift Container Platform",
+      "anchor": "configuring-and-using-the-monitoring-stack-in-openshift-container-platform",
+      "anchor_id": "configuring-and-using-the-monitoring-stack-in-openshift-container-platform",
+      "viewer_path": "/docs/ocp/4.20/ko/monitoring/index.html#configuring-and-using-the-monitoring-stack-in-openshift-container-platform",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Red Hat OpenShift Documentation Team Legal Notice Abstract"
+        },
+        {
+          "kind": "paragraph",
+          "text": "Use metrics and customized alerts provided by the monitoring stack to track the health and performance of your applications running on OpenShift Container Platform clusters."
+        }
+      ]
+    },
+    {
+      "section_id": "monitoring:about-ocp-monitoring",
+      "section_key": "monitoring:about-ocp-monitoring",
+      "ordinal": 3,
+      "heading": "Chapter 1. About OpenShift Container Platform monitoring",
+      "level": 2,
+      "path": [
+        "Chapter 1. About OpenShift Container Platform monitoring"
+      ],
+      "section_path": [
+        "Chapter 1. About OpenShift Container Platform monitoring"
+      ],
+      "section_path_label": "Chapter 1. About OpenShift Container Platform monitoring",
+      "anchor": "about-ocp-monitoring",
+      "anchor_id": "about-ocp-monitoring",
+      "viewer_path": "/docs/ocp/4.20/ko/monitoring/index.html#about-ocp-monitoring",
+      "semantic_role": "overview",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform includes a preconfigured, preinstalled, and self-updating monitoring stack that provides monitoring for core platform components."
+        },
+        {
+          "kind": "paragraph",
+          "text": "After installing OpenShift Container Platform, cluster administrators can optionally enable monitoring for user-defined projects."
+        },
+        {
+          "kind": "paragraph",
+          "text": "By using this feature, cluster administrators, developers, and other users can specify how services and pods are monitored in their own projects."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Note"
+        },
+        {
+          "kind": "paragraph",
+          "text": "The monitoring stack documentation is available as a separate documentation set at Monitoring stack for Red Hat OpenShift."
+        }
+      ]
+    }
+  ],
+  "quality_status": "translation_required",
+  "quality_score": 0.0,
+  "quality_flags": [
+    "original"
+  ]
+}

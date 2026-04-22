@@ -1,0 +1,301 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://play-book-studio.local/schemas/chunk.schema.json",
+  "title": "Play Book Studio Retrieval Chunk",
+  "description": "Retrieval-ready unit projected from canonical documents.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "chunk_id",
+    "source_id",
+    "book_slug",
+    "version",
+    "locale",
+    "section_path",
+    "anchor_id",
+    "text",
+    "chunk_type",
+    "trust_score",
+    "source_type",
+    "translation_status",
+    "token_count",
+    "error_strings",
+    "k8s_objects",
+    "operator_names",
+    "verification_hints"
+  ],
+  "properties": {
+    "chunk_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "book_slug": {
+      "type": "string",
+      "minLength": 1
+    },
+    "book_title": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^4\\.[0-9]+$"
+    },
+    "locale": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(?:-[a-z]{2})?$"
+    },
+    "section_path": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "section_id": {
+      "type": "string"
+    },
+    "anchor_id": {
+      "type": "string"
+    },
+    "anchor": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "text_en_sidecar": {
+      "type": "string"
+    },
+    "chunk_type": {
+      "type": "string",
+      "enum": [
+        "concept",
+        "procedure",
+        "troubleshooting",
+        "reference",
+        "command",
+        "warning"
+      ]
+    },
+    "trust_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "product": {
+      "type": "string"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "official_doc",
+        "official_issue",
+        "official_pr",
+        "community_issue",
+        "community_blog",
+        "internal_runbook",
+        "manual_synthesis"
+      ]
+    },
+    "source_lane": {
+      "type": "string"
+    },
+    "source_collection": {
+      "type": "string"
+    },
+    "source_url": {
+      "type": "string",
+      "minLength": 1
+    },
+    "viewer_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "chapter": {
+      "type": "string"
+    },
+    "section": {
+      "type": "string"
+    },
+    "source_language": {
+      "type": "string"
+    },
+    "display_language": {
+      "type": "string"
+    },
+    "translation_status": {
+      "type": "string",
+      "enum": [
+        "approved_ko",
+        "translated_ko_draft",
+        "review_required",
+        "original",
+        "blocked"
+      ]
+    },
+    "translation_stage": {
+      "type": "string"
+    },
+    "translation_source_language": {
+      "type": "string"
+    },
+    "translation_source_url": {
+      "type": "string"
+    },
+    "translation_source_fingerprint": {
+      "type": "string"
+    },
+    "token_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "ordinal": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cli_commands": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error_strings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "k8s_objects": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "operator_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "original_title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "legal_notice_url": {
+      "type": "string",
+      "minLength": 1
+    },
+    "license_or_terms": {
+      "type": "string",
+      "minLength": 1
+    },
+    "review_status": {
+      "type": "string",
+      "enum": [
+        "unreviewed",
+        "needs_review",
+        "approved",
+        "rejected"
+      ]
+    },
+    "verifiability": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "parsed_artifact_id": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "workspace_id": {
+      "type": "string"
+    },
+    "parent_pack_id": {
+      "type": "string"
+    },
+    "pack_version": {
+      "type": "string"
+    },
+    "bundle_scope": {
+      "type": "string"
+    },
+    "classification": {
+      "type": "string"
+    },
+    "access_groups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "provider_egress_policy": {
+      "type": "string"
+    },
+    "approval_state": {
+      "type": "string"
+    },
+    "publication_state": {
+      "type": "string"
+    },
+    "redaction_state": {
+      "type": "string"
+    },
+    "citation_eligible": {
+      "type": "boolean"
+    },
+    "citation_block_reason": {
+      "type": "string"
+    },
+    "verification_hints": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "#/$defs/verificationHint"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "verificationHint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "text"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "command",
+            "event",
+            "metric",
+            "yaml_field",
+            "ui_check"
+          ]
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

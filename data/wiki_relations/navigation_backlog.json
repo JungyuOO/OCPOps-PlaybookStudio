@@ -1,0 +1,176 @@
+{
+  "status": "ok",
+  "generated_at": "2026-04-19T00:10:29+09:00",
+  "source_report_path": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\reports\\build_logs\\chat_navigation_backlog_report.json",
+  "entry_count": 21,
+  "entries": [
+    {
+      "signal_id": "query:권한이-제대로-들어갔는지-확인하는-명령도-알려줘",
+      "label": "권한이 제대로 들어갔는지 확인하는 명령도 알려줘",
+      "signal_type": "suggested_query",
+      "count": 60,
+      "href": "",
+      "kind": "query"
+    },
+    {
+      "signal_id": "query:권한이-너무-넓게-들어갔을-때-회수하는-방법도-알려줘",
+      "label": "권한이 너무 넓게 들어갔을 때 회수하는 방법도 알려줘",
+      "signal_type": "suggested_query",
+      "count": 60,
+      "href": "",
+      "kind": "query"
+    },
+    {
+      "signal_id": "query:같은-권한을-rolebinding-yaml로-적용하는-예시도-보여줘",
+      "label": "같은 권한을 RoleBinding YAML로 적용하는 예시도 보여줘",
+      "signal_type": "suggested_query",
+      "count": 55,
+      "href": "",
+      "kind": "query"
+    },
+    {
+      "signal_id": "query:운영-입문-기준으로-먼저-봐야-할-플레이북-3개를-알려줘",
+      "label": "운영 입문 기준으로 먼저 봐야 할 플레이북 3개를 알려줘",
+      "signal_type": "suggested_query",
+      "count": 39,
+      "href": "",
+      "kind": "query"
+    },
+    {
+      "signal_id": "query:문제가-생기면-위키-안에서-어떤-순서로-이동해야-하는지-알려줘",
+      "label": "문제가 생기면 위키 안에서 어떤 순서로 이동해야 하는지 알려줘",
+      "signal_type": "suggested_query",
+      "count": 39,
+      "href": "",
+      "kind": "query"
+    },
+    {
+      "signal_id": "query:기본-상태-확인-뒤-어떤-허브로-들어가야-하는지-알려줘",
+      "label": "기본 상태 확인 뒤 어떤 허브로 들어가야 하는지 알려줘",
+      "signal_type": "suggested_query",
+      "count": 39,
+      "href": "",
+      "kind": "query"
+    },
+    {
+      "signal_id": "query:복원-후-machine-configuration은-왜-같이-봐야-하는지-알려줘",
+      "label": "복원 후 Machine Configuration은 왜 같이 봐야 하는지 알려줘",
+      "signal_type": "suggested_query",
+      "count": 36,
+      "href": "",
+      "kind": "query"
+    },
+    {
+      "signal_id": "query:백업-후-monitoring에서는-어떤-신호를-먼저-확인해야-해?",
+      "label": "백업 후 Monitoring에서는 어떤 신호를 먼저 확인해야 해?",
+      "signal_type": "suggested_query",
+      "count": 36,
+      "href": "",
+      "kind": "query"
+    },
+    {
+      "signal_id": "query:etcd-허브에서-같이-봐야-할-운영-문서를-보여줘",
+      "label": "etcd 허브에서 같이 봐야 할 운영 문서를 보여줘",
+      "signal_type": "suggested_query",
+      "count": 36,
+      "href": "",
+      "kind": "query"
+    },
+    {
+      "signal_id": "query:프로젝트가-terminating에서-안-지워질-때-어떻게-해?",
+      "label": "프로젝트가 Terminating에서 안 지워질 때 어떻게 해?",
+      "signal_type": "suggested_query",
+      "count": 33,
+      "href": "",
+      "kind": "query"
+    },
+    {
+      "signal_id": "query:특정-namespace에-admin-권한-주는-법-알려줘",
+      "label": "특정 namespace에 admin 권한 주는 법 알려줘",
+      "signal_type": "suggested_query",
+      "count": 33,
+      "href": "",
+      "kind": "query"
+    },
+    {
+      "signal_id": "query:오픈시프트가-뭐야?",
+      "label": "오픈시프트가 뭐야?",
+      "signal_type": "suggested_query",
+      "count": 33,
+      "href": "",
+      "kind": "query"
+    },
+    {
+      "signal_id": "book:설치-후-구성",
+      "label": "설치 후 구성",
+      "signal_type": "related_book",
+      "count": 27,
+      "href": "/playbooks/wiki-runtime/active/postinstallation_configuration/index.html#adding-roles_post-install-preparing-for-users",
+      "kind": "book"
+    },
+    {
+      "signal_id": "book:아키텍처",
+      "label": "아키텍처",
+      "signal_type": "related_book",
+      "count": 25,
+      "href": "/playbooks/wiki-runtime/active/architecture/index.html#architecture-overview",
+      "kind": "book"
+    },
+    {
+      "signal_id": "book:인증-및-권한-부여",
+      "label": "인증 및 권한 부여",
+      "signal_type": "related_book",
+      "count": 22,
+      "href": "/playbooks/wiki-runtime/active/authentication_and_authorization/index.html#adding-roles_using-rbac",
+      "kind": "book"
+    },
+    {
+      "signal_id": "book:cli-툴",
+      "label": "CLI 툴",
+      "signal_type": "related_book",
+      "count": 22,
+      "href": "/playbooks/wiki-runtime/active/cli_tools/index.html#oc-scale",
+      "kind": "book"
+    },
+    {
+      "signal_id": "book:개요",
+      "label": "개요",
+      "signal_type": "related_book",
+      "count": 21,
+      "href": "/playbooks/wiki-runtime/active/overview/index.html#kubernetes-conceptual-guidelines_kubernetes-overview",
+      "kind": "book"
+    },
+    {
+      "signal_id": "book:operator",
+      "label": "Operator",
+      "signal_type": "related_book",
+      "count": 15,
+      "href": "/playbooks/wiki-runtime/active/operators/index.html#machine-config-operator_operator-reference",
+      "kind": "book"
+    },
+    {
+      "signal_id": "book:설치-개요",
+      "label": "설치 개요",
+      "signal_type": "related_book",
+      "count": 13,
+      "href": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+      "kind": "book"
+    },
+    {
+      "signal_id": "book:machine-configuration",
+      "label": "Machine configuration",
+      "signal_type": "related_book",
+      "count": 11,
+      "href": "/playbooks/wiki-runtime/active/machine_configuration/index.html#about-machine-config-operator_machine-config-overview",
+      "kind": "book"
+    },
+    {
+      "signal_id": "book:etcd-백업-및-복구-플레이북",
+      "label": "etcd 백업 및 복구 플레이북",
+      "signal_type": "related_book",
+      "count": 6,
+      "href": "/playbooks/wiki-runtime/active/etcd/index.html",
+      "kind": "book"
+    }
+  ]
+}

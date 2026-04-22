@@ -1,0 +1,558 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://playbookstudio.local/schemas/wiki_ast_v2.schema.json",
+  "title": "PBS Wiki AST v2",
+  "type": "object",
+  "required": [
+    "ast_version",
+    "document",
+    "pages",
+    "sections",
+    "blocks",
+    "relations",
+    "validation",
+    "derivations"
+  ],
+  "properties": {
+    "ast_version": {
+      "type": "string",
+      "const": "wiki_ast_v2"
+    },
+    "document": {
+      "$ref": "#/$defs/document"
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/page"
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/section"
+      }
+    },
+    "blocks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/block"
+      }
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relation"
+      }
+    },
+    "validation": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/validationIssue"
+      }
+    },
+    "derivations": {
+      "$ref": "#/$defs/derivations"
+    }
+  },
+  "$defs": {
+    "document": {
+      "type": "object",
+      "required": [
+        "document_id",
+        "book_slug",
+        "title",
+        "source_type",
+        "source_uri",
+        "source_lane",
+        "source_fingerprint",
+        "parsed_artifact_id",
+        "parser_route",
+        "parser_backend",
+        "parser_version",
+        "translation_status",
+        "review_status",
+        "tenant_id",
+        "workspace_id",
+        "pack_id"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string"
+        },
+        "book_slug": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "source_uri": {
+          "type": "string"
+        },
+        "source_lane": {
+          "type": "string"
+        },
+        "source_fingerprint": {
+          "type": "string"
+        },
+        "parsed_artifact_id": {
+          "type": "string"
+        },
+        "parser_route": {
+          "type": "string"
+        },
+        "parser_backend": {
+          "type": "string"
+        },
+        "parser_version": {
+          "type": "string"
+        },
+        "translation_status": {
+          "type": "string"
+        },
+        "review_status": {
+          "type": "string"
+        },
+        "tenant_id": {
+          "type": "string"
+        },
+        "workspace_id": {
+          "type": "string"
+        },
+        "pack_id": {
+          "type": "string"
+        },
+        "pack_version": {
+          "type": "string"
+        },
+        "inferred_product": {
+          "type": "string"
+        },
+        "inferred_version": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "page": {
+      "type": "object",
+      "required": [
+        "page_id",
+        "page_kind",
+        "ordinal",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "page_id": {
+          "type": "string"
+        },
+        "page_kind": {
+          "type": "string",
+          "enum": [
+            "page",
+            "slide",
+            "sheet",
+            "canvas"
+          ]
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "image_path": {
+          "type": "string"
+        },
+        "thumbnail_path": {
+          "type": "string"
+        },
+        "speaker_notes": {
+          "type": "string"
+        },
+        "ocr_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "section": {
+      "type": "object",
+      "required": [
+        "section_id",
+        "heading",
+        "level",
+        "ordinal",
+        "path",
+        "anchor",
+        "page_span",
+        "semantic_role"
+      ],
+      "properties": {
+        "section_id": {
+          "type": "string"
+        },
+        "heading": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "anchor": {
+          "type": "string"
+        },
+        "page_span": {
+          "$ref": "#/$defs/pageSpan"
+        },
+        "semantic_role": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        }
+      }
+    },
+    "block": {
+      "type": "object",
+      "required": [
+        "block_id",
+        "block_type",
+        "section_id",
+        "page_id",
+        "order",
+        "reading_order",
+        "source_trace"
+      ],
+      "properties": {
+        "block_id": {
+          "type": "string"
+        },
+        "block_type": {
+          "type": "string",
+          "enum": [
+            "heading",
+            "paragraph",
+            "list",
+            "procedure_step",
+            "code",
+            "table",
+            "figure",
+            "callout",
+            "quote",
+            "xref",
+            "anchor",
+            "slide_summary",
+            "speaker_note",
+            "diagram_summary"
+          ]
+        },
+        "section_id": {
+          "type": "string"
+        },
+        "page_id": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reading_order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bbox": {
+          "$ref": "#/$defs/bbox"
+        },
+        "text": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "code": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "headers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "caption": {
+          "type": "string"
+        },
+        "figure_asset_id": {
+          "type": "string"
+        },
+        "parser_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "ocr_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "render_hints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "corpus_hints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_trace": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sourceTrace"
+          }
+        }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "required": [
+        "relation_id",
+        "relation_type",
+        "from_id",
+        "to_id"
+      ],
+      "properties": {
+        "relation_id": {
+          "type": "string"
+        },
+        "relation_type": {
+          "type": "string",
+          "enum": [
+            "caption_of",
+            "child_of",
+            "next_of",
+            "refers_to",
+            "duplicate_of",
+            "prerequisite_of",
+            "derived_from",
+            "visual_source_of"
+          ]
+        },
+        "from_id": {
+          "type": "string"
+        },
+        "to_id": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "validationIssue": {
+      "type": "object",
+      "required": [
+        "issue_id",
+        "issue_type",
+        "severity",
+        "target_kind",
+        "target_id",
+        "message",
+        "status"
+      ],
+      "properties": {
+        "issue_id": {
+          "type": "string"
+        },
+        "issue_type": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "target_kind": {
+          "type": "string",
+          "enum": [
+            "document",
+            "page",
+            "section",
+            "block",
+            "relation"
+          ]
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "accepted",
+            "fixed",
+            "waived"
+          ]
+        }
+      }
+    },
+    "derivations": {
+      "type": "object",
+      "properties": {
+        "render_targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "corpus_targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "knowledge_object_targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "sourceTrace": {
+      "type": "object",
+      "required": [
+        "source_id",
+        "source_kind",
+        "page_number",
+        "source_locator",
+        "confidence"
+      ],
+      "properties": {
+        "source_id": {
+          "type": "string"
+        },
+        "source_kind": {
+          "type": "string"
+        },
+        "page_number": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_locator": {
+          "type": "string"
+        },
+        "excerpt": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "bbox": {
+          "$ref": "#/$defs/bbox"
+        },
+        "z_index": {
+          "type": "integer"
+        },
+        "rendered_image_path": {
+          "type": "string"
+        }
+      }
+    },
+    "pageSpan": {
+      "type": "object",
+      "required": [
+        "start_page_id",
+        "end_page_id"
+      ],
+      "properties": {
+        "start_page_id": {
+          "type": "string"
+        },
+        "end_page_id": {
+          "type": "string"
+        }
+      }
+    },
+    "bbox": {
+      "type": "object",
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

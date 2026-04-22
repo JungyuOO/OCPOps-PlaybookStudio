@@ -1,0 +1,29 @@
+{
+  "book_slug": "disconnected_environments",
+  "doc_id": "disconnected_environments:4.20:ko:source_repo",
+  "source_fingerprint": "3d4d1530ebcf65db2c1df9e474ccfde9520a28ecbec55c745bcd2aebd10d9c2b",
+  "translation_source_url": "https://github.com/openshift/openshift-docs/blob/enterprise-4.20/disconnected/index.adoc",
+  "item_count": 10,
+  "items": {
+    "doc.title": "연결되지 않은 설치 거울에 대한 정보",
+    "s0.heading": "연결되지 않은 설치 거울에 대한 정보",
+    "s0.path.0": "연결되지 않은 설치 거울에 대한 정보",
+    "s0.b0.paragraph": "클러스터 관리자로, 조직의 외부 콘텐츠에 대한 통제를 충족하는 컨테이너 이미지만 클러스터가 사용할 수 있도록 거울 레지스트리를 사용할 수 있습니다.",
+    "s1.heading": "연결되지 않은 환경에서 클러스터 설치용 거울 레지스트리",
+    "s1.path.0": "연결되지 않은 환경에서 클러스터 설치용 거울 레지스트리",
+    "s1.b0.paragraph": "클러스터를 설치하고 프로비저닝하려면 먼저 필요한 컨테이너 이미지를 연결되지 않은 환경으로 거울로 복사해야 합니다. 이러한 컨테이너 이미지를 거울로 복사하려면 거울 레지스트리가 필요합니다. 거울 레지스트리를 생성하고 사용하는 방법에 대한 다음 옵션을 고려하세요:",
+    "s1.b1.paragraph": "* 이미 Red Hat Quay와 같은 컨테이너 이미지 레지스트리가 있는 경우 이를 거울 레지스트리로 사용할 수 있습니다. 레지스트리가 이미 없는 경우 반드시 하나를 생성해야 합니다.",
+    "s1.b2.paragraph": "* 레지스트리를 설정한 후에는 거울 복사 도구가 필요합니다. 연결되지 않은 환경의 거울 레지스트리로 OpenShift Container Platform 이미지 저장소를 거울로 복사하려면 oc-mirror 플러그인(pass:quotes[OpenShift CLI ()])을 사용할 수 있습니다. oc-mirror 플러그인은 모든 필요한 OpenShift Container Platform 콘텐츠 및 기타 이미지를 거울 레지스트리로 복사하는 단일 도구입니다. 거울 복사에는 oc-mirror 플러그인이 권장됩니다.",
+    "s1.b4.paragraph": "* 대안으로, OpenShift Container Platform 의 릴리스 및 카탈로그 이미지만 거울로 복사하는 명령을 사용할 수 있습니다."
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 10,
+    "total_unit_count": 10,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 10
+  }
+}

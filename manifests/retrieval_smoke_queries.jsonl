@@ -1,0 +1,5 @@
+{"query":"etcd 백업은 어떻게 하나?", "expected_book_slugs":["backup_and_restore","etcd","postinstallation_configuration"]}
+{"query":"Route와 Ingress 차이가 뭐야?", "expected_book_slugs":["ingress_and_load_balancing","networking_overview"]}
+{"query":"클러스터 업데이트 전에 확인할 사항은?", "expected_book_slugs":["updating_clusters","release_notes"]}
+{"query":"머신 설정은 어떤 Operator가 관리해?", "expected_book_slugs":["machine_configuration","operators"]}
+{"query":"이미지 레지스트리 저장소를 구성하려면?", "expected_book_slugs":["registry","images"]}

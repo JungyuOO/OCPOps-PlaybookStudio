@@ -1,0 +1,64 @@
+name: ocpops-playbookstudio
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+    ports:
+      - "6335:6333"
+      - "6336:6334"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/src
+      QDRANT_URL: http://qdrant:6333
+      GRAPH_URI: bolt://host.docker.internal:7687
+    depends_on:
+      - qdrant
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./src:/app/src
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./manifests:/app/manifests
+      - ./reports:/app/reports
+      - ./tmp:/app/tmp
+      - ./tmp_source:/app/tmp_source
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 60s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  qdrant_storage:
+    name: ocp-rag-chatbot_qdrant_storage

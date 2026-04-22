@@ -1,0 +1,152 @@
+{
+  "canonical_model": "playbook_document_v1",
+  "source_view_strategy": "playbook_ast_v1",
+  "book_slug": "logging",
+  "title": "로깅",
+  "version": "4.20",
+  "locale": "ko",
+  "source_uri": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/logging/index",
+  "source_language": "ko",
+  "language_hint": "ko",
+  "translation_status": "approved_ko",
+  "translation_stage": "approved_ko",
+  "translation_source_uri": "https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html-single/logging/index",
+  "translation_source_language": "en",
+  "translation_source_fingerprint": "42572f5a9bd399dbd66de50b0498d3e13d246515bf0c7965a654d6c1755e7546",
+  "legal_notice_url": "https://docs.redhat.com/documentation/openshift_container_platform/4.20/html/logging/legal-notice",
+  "review_status": "approved",
+  "pack_id": "openshift-4-20-core",
+  "inferred_version": "4.20",
+  "section_count": 2,
+  "source_metadata": {
+    "source_id": "openshift_container_platform:4.20:ko:logging:curated_gold_v1",
+    "source_type": "manual_synthesis",
+    "source_lane": "applied_playbook",
+    "source_collection": "core",
+    "primary_input_kind": "",
+    "source_repo": "",
+    "source_branch": "",
+    "source_binding_kind": "",
+    "source_relative_path": "",
+    "source_relative_paths": [],
+    "source_mirror_root": "",
+    "fallback_input_kind": "",
+    "fallback_source_url": "",
+    "fallback_viewer_path": "",
+    "product": "openshift",
+    "version": "4.20",
+    "trust_score": 0.97,
+    "original_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/logging/index",
+    "original_title": "Logging",
+    "legal_notice_url": "https://docs.redhat.com/documentation/openshift_container_platform/4.20/html/logging/legal-notice",
+    "license_or_terms": "Modified versions must remove all Red Hat trademarks.",
+    "review_status": "approved",
+    "verifiability": "anchor_backed",
+    "updated_at": "2026-04-18T18:16:40Z",
+    "translation_source_language": "en",
+    "parsed_artifact_id": "parsed:openshift_container_platform:4.20:ko:logging:curated_gold_v1",
+    "tenant_id": "public",
+    "workspace_id": "core",
+    "pack_id": "openshift_container_platform-4.20-core",
+    "pack_version": "4.20",
+    "bundle_scope": "official",
+    "classification": "public",
+    "access_groups": [
+      "public"
+    ],
+    "provider_egress_policy": "unspecified",
+    "approval_state": "approved",
+    "publication_state": "published",
+    "redaction_state": "not_required",
+    "citation_eligible": true,
+    "citation_block_reason": ""
+  },
+  "anchor_map": {
+    "openshift-container-platform에서-로깅-구성-및-사용": "/docs/ocp/4.20/ko/logging/index.html#openshift-container-platform에서-로깅-구성-및-사용",
+    "about-logging": "/docs/ocp/4.20/ko/logging/index.html#about-logging"
+  },
+  "sections": [
+    {
+      "section_id": "logging:openshift-container-platform에서-로깅-구성-및-사용",
+      "section_key": "logging:openshift-container-platform에서-로깅-구성-및-사용",
+      "ordinal": 1,
+      "heading": "OpenShift Container Platform에서 로깅 구성 및 사용",
+      "level": 2,
+      "path": [
+        "OpenShift Container Platform에서 로깅 구성 및 사용"
+      ],
+      "section_path": [
+        "OpenShift Container Platform에서 로깅 구성 및 사용"
+      ],
+      "section_path_label": "OpenShift Container Platform에서 로깅 구성 및 사용",
+      "anchor": "openshift-container-platform에서-로깅-구성-및-사용",
+      "anchor_id": "openshift-container-platform에서-로깅-구성-및-사용",
+      "viewer_path": "/docs/ocp/4.20/ko/logging/index.html#openshift-container-platform에서-로깅-구성-및-사용",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "로깅을 사용하여 로그 데이터를 수집, 시각화, 전달 및 저장하여 문제를 해결하고 성능 병목 현상을 식별하고 OpenShift Container Platform에서 보안 위협을 감지합니다."
+        }
+      ]
+    },
+    {
+      "section_id": "logging:about-logging",
+      "section_key": "logging:about-logging",
+      "ordinal": 2,
+      "heading": "1장. 로깅 정보",
+      "level": 2,
+      "path": [
+        "1장. 로깅 정보"
+      ],
+      "section_path": [
+        "1장. 로깅 정보"
+      ],
+      "section_path_label": "1장. 로깅 정보",
+      "anchor": "about-logging",
+      "anchor_id": "about-logging",
+      "viewer_path": "/docs/ocp/4.20/ko/logging/index.html#about-logging",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "클러스터 관리자는 OpenShift Container Platform 클러스터에 로깅을 배포하고, 이를 사용하여 노드 시스템 감사 로그, 애플리케이션 컨테이너 로그, 인프라 로그를 수집하고 집계할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "로깅을 사용하여 다음 작업을 수행할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "클러스터 내 Red Hat 관리 로그 저장소를 포함하여 선택한 로그 출력으로 로그를 전달합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform 웹 콘솔에서 로그 데이터를 시각화합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "참고"
+        },
+        {
+          "kind": "paragraph",
+          "text": "로깅은 OpenShift Container Platform과 다른 주기로 릴리스되므로 로깅 설명서는 Red Hat OpenShift Logging 에서 별도의 설명서 세트로 제공됩니다."
+        }
+      ]
+    }
+  ],
+  "quality_status": "ready",
+  "quality_score": 0.0,
+  "quality_flags": []
+}

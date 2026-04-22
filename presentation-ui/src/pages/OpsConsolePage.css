@@ -1,0 +1,405 @@
+.ops-console-page {
+  min-height: 100vh;
+  padding: 32px;
+  color: #10243e;
+  background:
+    radial-gradient(circle at top right, rgba(27, 150, 122, 0.18), transparent 30%),
+    radial-gradient(circle at top left, rgba(14, 89, 145, 0.18), transparent 28%),
+    linear-gradient(180deg, #f2f6fb 0%, #e8eef6 100%);
+}
+
+.ops-console-hero {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+  align-items: end;
+  margin-bottom: 24px;
+}
+
+.ops-console-kicker {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #0f8479;
+}
+
+.ops-console-return-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+
+.ops-return-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 36, 62, 0.1);
+  background: rgba(255, 255, 255, 0.78);
+  color: inherit;
+  text-decoration: none;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(16, 36, 62, 0.06);
+}
+
+.ops-console-hero h1 {
+  margin: 8px 0;
+  font-size: clamp(2rem, 4vw, 3rem);
+}
+
+.ops-console-hero p {
+  margin: 0;
+  max-width: 56rem;
+  color: #465c78;
+}
+
+.ops-console-context-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.ops-context-card,
+.ops-panel,
+.ops-banner,
+.ops-record-card,
+.ops-metric-card,
+.ops-chat-bubble,
+.ops-list-row,
+.ops-nav-pill {
+  border: 1px solid rgba(16, 36, 62, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 18px 40px rgba(16, 36, 62, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+.ops-context-card {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 16px;
+}
+
+.ops-context-card span {
+  font-size: 0.78rem;
+  color: #647a95;
+}
+
+.ops-console-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.ops-nav-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.ops-nav-pill.active {
+  background: linear-gradient(135deg, #0f8479, #1167ac);
+  color: #fff;
+}
+
+.ops-banner {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+}
+
+.ops-banner.success {
+  border-color: rgba(15, 132, 121, 0.25);
+}
+
+.ops-banner.error {
+  border-color: rgba(184, 59, 59, 0.25);
+  color: #7c2222;
+}
+
+.ops-console-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.ops-sidebar,
+.ops-main {
+  display: grid;
+  gap: 18px;
+}
+
+.ops-panel {
+  border-radius: 24px;
+  padding: 20px;
+}
+
+.ops-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ops-panel-header h2,
+.ops-panel-header h3 {
+  margin: 0;
+}
+
+.ops-muted {
+  margin: 0;
+  color: #62758d;
+}
+
+.ops-compact-list {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: #41556e;
+}
+
+.ops-form-grid {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.ops-form-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ops-form-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ops-form-grid.four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ops-field {
+  display: grid;
+  gap: 8px;
+}
+
+.ops-field label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #4d627d;
+}
+
+.ops-field input,
+.ops-field select,
+.ops-chat-composer input,
+.ops-editor-column textarea,
+.ops-field textarea {
+  width: 100%;
+  border: 1px solid rgba(16, 36, 62, 0.12);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(248, 250, 252, 0.92);
+  color: inherit;
+}
+
+.ops-editor-column textarea {
+  min-height: 360px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.84rem;
+}
+
+.ops-actions-row,
+.ops-inline-actions,
+.ops-chip-group,
+.ops-chat-composer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ops-primary-btn,
+.ops-secondary-btn,
+.ops-inline-actions button,
+.ops-list-row,
+.ops-record-card,
+.ops-chip {
+  border: 0;
+  cursor: pointer;
+}
+
+.ops-primary-btn,
+.ops-secondary-btn,
+.ops-inline-actions button,
+.ops-chip {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #eef3f8;
+  color: inherit;
+}
+
+.ops-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #0f8479, #1167ac);
+  color: #fff;
+}
+
+.ops-card-grid,
+.ops-metric-grid,
+.ops-detail-grid,
+.ops-split-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.ops-card-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.ops-record-card,
+.ops-metric-card,
+.ops-chat-bubble,
+.ops-list-row {
+  border-radius: 18px;
+  padding: 14px;
+  text-align: left;
+}
+
+.ops-record-card {
+  display: grid;
+  gap: 6px;
+}
+
+.ops-record-card.selected,
+.ops-list-row.selected,
+.ops-chip.active {
+  outline: 2px solid rgba(17, 103, 172, 0.24);
+}
+
+.ops-record-card.static {
+  cursor: default;
+}
+
+.ops-metric-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.ops-metric-card span {
+  display: block;
+  color: #62758d;
+}
+
+.ops-metric-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1.7rem;
+}
+
+.ops-detail-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ops-detail-grid pre,
+.ops-panel pre {
+  margin: 0;
+  padding: 14px;
+  border-radius: 16px;
+  background: #0f1a2a;
+  color: #d9e5f8;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.82rem;
+}
+
+.ops-split-grid {
+  grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.3fr);
+}
+
+.ops-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ops-list-row {
+  display: grid;
+  gap: 4px;
+}
+
+.ops-table {
+  display: grid;
+  gap: 10px;
+}
+
+.ops-table-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(16, 36, 62, 0.08);
+}
+
+.ops-table-row strong,
+.ops-list-row strong,
+.ops-record-card strong {
+  display: block;
+}
+
+.ops-chat-transcript {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ops-chat-bubble.user {
+  background: rgba(17, 103, 172, 0.12);
+}
+
+.ops-chat-bubble.assistant {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.ops-chat-bubble p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+
+.ops-chat-composer {
+  align-items: center;
+}
+
+.ops-chat-composer input {
+  flex: 1;
+}
+
+@media (max-width: 1180px) {
+  .ops-console-hero,
+  .ops-console-layout,
+  .ops-detail-grid,
+  .ops-split-grid,
+  .ops-form-grid.two,
+  .ops-form-grid.three,
+  .ops-form-grid.four {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .ops-console-page {
+    padding: 18px;
+  }
+
+  .ops-table-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

@@ -1,0 +1,111 @@
+.metrics-footer {
+  min-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: var(--bg-color);
+  position: relative;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.metrics-content {
+  text-align: center;
+  width: 100%;
+  padding: 5rem 10vw;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.metrics-content h2 {
+  font-size: 3rem;
+  margin-bottom: 4rem;
+  background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-purple) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.metrics-grid {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4rem;
+  margin-bottom: 5rem;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.metric-number {
+  font-size: 5rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 1rem;
+}
+
+.metric-label {
+  font-size: 1.2rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.footer-cta {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+}
+
+.btn-primary {
+  display: inline-block;
+  padding: 1.2rem 3rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+  border: none;
+  border-radius: 50px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.3s, box-shadow 0.3s;
+  box-shadow: 0 10px 20px rgba(140, 82, 255, 0.4);
+}
+
+.btn-primary:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 15px 30px rgba(0, 209, 255, 0.6);
+}
+
+.btn-secondary {
+  display: inline-block;
+  padding: 1.2rem 3rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  border-radius: 50px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.3s, background 0.3s;
+}
+
+.btn-secondary:hover {
+  transform: translateY(-5px);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.footer-bottom {
+  width: 100%;
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.02);
+}

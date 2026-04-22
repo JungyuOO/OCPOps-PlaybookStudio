@@ -1,0 +1,12 @@
+{"id":"rc-concept-001","category":"concept","query":"OpenShift 아키텍처를 처음 설명해줘","expected_book_slugs":["architecture","overview"]}
+{"id":"rc-concept-002","category":"concept","query":"Operator가 뭐고 왜 필요한가?","expected_book_slugs":["extensions","overview"]}
+{"id":"rc-concept-003","category":"concept","query":"Machine Config Operator가 뭐 하는 거야?","expected_book_slugs":["architecture","overview"]}
+{"id":"rc-concept-004","category":"concept","query":"Ingress와 Route 차이를 설명해줘","expected_book_slugs":["ingress_and_load_balancing","networking_overview"]}
+{"id":"rc-concept-005","category":"concept","query":"Pod lifecycle 개념을 초보자 관점에서 설명해줘","expected_book_slugs":["nodes","workloads"]}
+{"id":"rc-ops-001","category":"ops","query":"etcd 백업은 어떻게 해?","expected_book_slugs":["etcd","backup_and_restore","postinstallation_configuration"]}
+{"id":"rc-ops-002","category":"ops","query":"클러스터 업그레이드 전에 뭘 확인해야 해?","expected_book_slugs":["updating_clusters","release_notes"]}
+{"id":"rc-ops-003","category":"ops","query":"노드 드레인은 어떻게 동작해?","expected_book_slugs":["nodes","machine_management"]}
+{"id":"rc-ops-004","category":"ops","query":"이미지 레지스트리 저장소는 어떻게 구성해?","expected_book_slugs":["registry","images"]}
+{"id":"rc-mixed-001","category":"mixed","query":"그 복구는 어떻게 해?","context":{"mode":"chat","current_topic":"etcd 백업","unresolved_question":"etcd 백업 이후 복구 절차","ocp_version":"4.20"},"expected_book_slugs":["etcd","backup_and_restore","postinstallation_configuration"]}
+{"id":"rc-mixed-002","category":"mixed","query":"오픈시프트에 대해 신입한테 설명하듯 짧게 요약해봐","context":{"mode":"chat","current_topic":"2.1.3. 클러스터 업데이트 전 etcd 백업","open_entities":["etcd"],"ocp_version":"4.20"},"expected_book_slugs":["architecture","overview"]}
+{"id":"rc-mixed-003","category":"mixed","query":"업데이트 관련 문서는 뭐부터 보면 돼?","expected_book_slugs":["updating_clusters","release_notes","overview"]}

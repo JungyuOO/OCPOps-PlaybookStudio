@@ -1,0 +1,7 @@
+{"id":"demo-001","mode":"ops","query_type":"ops","query":"etcd 백업은 어떻게 하나?","expected_book_slugs":["etcd","backup_and_restore","postinstallation_configuration"],"reason":"ops benchmark/answer eval 통과"}
+{"id":"demo-002","mode":"ops","query_type":"ops","query":"oc adm top nodes는 언제 써?","expected_book_slugs":["nodes","cli_tools"],"reason":"runtime demo bm25-safe 질문"}
+{"id":"demo-003","mode":"ops","query_type":"ops","query":"Route와 Ingress 차이가 뭐야?","expected_book_slugs":["ingress_and_load_balancing","networking_overview"],"reason":"ops benchmark/answer eval 통과"}
+{"id":"demo-004","mode":"ops","query_type":"ops","query":"특정 namespace에 admin 권한 주는 법 알려줘","expected_book_slugs":["authentication_and_authorization"],"reason":"runtime demo 안전 질문"}
+{"id":"demo-005","mode":"ops","query_type":"ops","query":"프로젝트가 Terminating에서 안 지워질 때 어떻게 해?","expected_book_slugs":["cli_tools","postinstallation_configuration"],"reason":"runtime demo bm25-safe 질문"}
+{"id":"demo-006","mode":"learn","query_type":"learn","query":"OpenShift 아키텍처를 처음 설명해줘","expected_book_slugs":["architecture","overview"],"reason":"learn answer eval 통과"}
+{"id":"demo-008","mode":"learn","query_type":"learn","query":"Operator가 뭐고 왜 필요한가?","expected_book_slugs":["extensions","architecture","overview"],"reason":"learn answer eval 통과"}

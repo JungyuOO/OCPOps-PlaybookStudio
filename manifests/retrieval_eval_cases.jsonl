@@ -1,0 +1,18 @@
+{"id":"ops-001","category":"ops","query":"etcd 백업은 어떻게 하나?","expected_book_slugs":["backup_and_restore","etcd","postinstallation_configuration"],"expected_landing_terms":["backup"]}
+{"id":"ops-002","category":"ops","query":"클러스터 업데이트 전에 확인할 사항은?","expected_book_slugs":["updating_clusters","release_notes"]}
+{"id":"ops-003","category":"ops","query":"이미지 레지스트리 저장소를 구성하려면?","expected_book_slugs":["registry","images"]}
+{"id":"ops-004","category":"ops","query":"Route와 Ingress 차이가 뭐야?","expected_book_slugs":["ingress_and_load_balancing","networking_overview"]}
+{"id":"ops-005","category":"ops","query":"연결이 끊긴 환경에서 이미지 미러링은 어떻게 준비해?","expected_book_slugs":["disconnected_environments","images"]}
+{"id":"ops-006","category":"ops","query":"노드 드레이닝은 어떻게 동작해?","expected_book_slugs":["nodes","machine_management"]}
+{"id":"ops-007","category":"ops","query":"노드 CPU랑 메모리 사용량은 어떻게 확인해?","expected_book_slugs":["nodes","support"],"expected_landing_terms":["사용량"]}
+{"id":"ops-008","category":"ops","query":"API 서버 인증서 만료 여부는 어떻게 확인해?","expected_book_slugs":["cli_tools","security_and_compliance"],"expected_landing_terms":["monitor-certificates","expiry"]}
+{"id":"learn-001","category":"learn","query":"OpenShift 아키텍처를 처음 설명해줘","expected_book_slugs":["architecture","overview"]}
+{"id":"learn-002","category":"learn","query":"Operator가 뭐고 왜 필요한가?","expected_book_slugs":["operators","overview"]}
+{"id":"learn-003","category":"learn","query":"observability와 monitoring은 어떻게 달라?","expected_book_slugs":["observability_overview","monitoring"]}
+{"id":"learn-004","category":"learn","query":"Machine Config Operator는 뭐야?","expected_book_slugs":["machine_configuration","operators"],"expected_landing_terms":["machine-config-operator"]}
+{"id":"follow-up-001","category":"follow-up","query":"그거 복구는?","context":{"mode":"ops","current_topic":"etcd 백업","ocp_version":"4.20","unresolved_question":"etcd 백업 이후 복원 절차"},"expected_book_slugs":["backup_and_restore","etcd","postinstallation_configuration"]}
+{"id":"follow-up-002","category":"follow-up","query":"그 설정은 어디서 바꿔?","context":{"mode":"ops","current_topic":"Machine Config Operator가 노드를 업데이트하는 방법","open_entities":["Machine Config Operator","machine config"],"ocp_version":"4.20"},"expected_book_slugs":["machine_configuration","updating_clusters","operators"]}
+{"id":"follow-up-003","category":"follow-up","query":"아까 말한 이미지 저장소는?","context":{"mode":"ops","current_topic":"내부 이미지 레지스트리 구성","open_entities":["registry","image registry"],"ocp_version":"4.20"},"expected_book_slugs":["registry","images"]}
+{"id":"ambiguous-001","category":"ambiguous","query":"로그는 어디서 봐?","expected_book_slugs":["logging","monitoring","observability_overview"]}
+{"id":"ambiguous-002","category":"ambiguous","query":"설치 후에 뭘 먼저 해야 해?","expected_book_slugs":["postinstallation_configuration","installation_overview"]}
+{"id":"ambiguous-003","category":"ambiguous","query":"보안 관련 기본 문서는 뭐가 중심이야?","expected_book_slugs":["security_and_compliance","authentication_and_authorization"]}

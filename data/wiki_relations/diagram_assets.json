@@ -1,0 +1,158 @@
+{
+  "generated_at_utc": "2026-04-18T15:10:31+00:00",
+  "book_count": 2,
+  "diagram_count": 7,
+  "entries": {
+    "advanced_networking": [
+      {
+        "caption": "Diagram showing a PTP grandmaster clock",
+        "alt": "Diagram showing a PTP grandmaster clock",
+        "asset_kind": "diagram",
+        "diagram_type": "semantic_diagram",
+        "asset_url": "/playbooks/wiki-assets/full_rebuild/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_1123_PTP_network.png",
+        "viewer_path": "/wiki/figures/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_1123_PTP_network.png/index.html",
+        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-ptp-introduction.adoc",
+        "source_asset_ref": "319_OpenShift_PTP_bare-metal_OCP_nodes_1123_PTP_network.png",
+        "section_hint": "About PTP in OpenShift cluster nodes",
+        "related_entities": [
+          {
+            "label": "Cluster Wide Proxy",
+            "href": "/wiki/entities/cluster-wide-proxy/index.html"
+          },
+          {
+            "label": "Networking and Connectivity",
+            "href": "/wiki/entities/networking/index.html"
+          }
+        ]
+      },
+      {
+        "caption": "GNSS and T-GM system architecture",
+        "alt": "GNSS and T-GM system architecture",
+        "asset_kind": "diagram",
+        "diagram_type": "semantic_diagram",
+        "asset_url": "/playbooks/wiki-assets/full_rebuild/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_1023_PTP.png",
+        "viewer_path": "/wiki/figures/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_1023_PTP.png/index.html",
+        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\ptp-overview-of-gnss-grandmaster-clock.adoc",
+        "source_asset_ref": "319_OpenShift_PTP_bare-metal_OCP_nodes_1023_PTP.png",
+        "section_hint": "About PTP in OpenShift cluster nodes",
+        "related_entities": [
+          {
+            "label": "Cluster Wide Proxy",
+            "href": "/wiki/entities/cluster-wide-proxy/index.html"
+          },
+          {
+            "label": "Networking and Connectivity",
+            "href": "/wiki/entities/networking/index.html"
+          }
+        ]
+      }
+    ],
+    "ingress_and_load_balancing": [
+      {
+        "caption": "A diagram showing multiple Ingress Controllers with different route selectors serving any route containing a label that matches a given route selector regardless of the namespace a route belongs to",
+        "alt": "A diagram showing multiple Ingress Controllers with different route selectors serving any route containing a label that matches a given route selector regardless of the namespace a route belongs to",
+        "asset_kind": "diagram",
+        "diagram_type": "semantic_diagram",
+        "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/nw-sharding-route-labels.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/nw-sharding-route-labels.png/index.html",
+        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-ingress-sharding-route-labels.adoc",
+        "source_asset_ref": "nw-sharding-route-labels.png",
+        "section_hint": "Configuring ingress cluster traffic by using an Ingress Controller",
+        "related_entities": [
+          {
+            "label": "Cluster Wide Proxy",
+            "href": "/wiki/entities/cluster-wide-proxy/index.html"
+          },
+          {
+            "label": "Networking and Connectivity",
+            "href": "/wiki/entities/networking/index.html"
+          }
+        ]
+      },
+      {
+        "caption": "A diagram showing multiple Ingress Controllers with different namespace selectors serving routes that belong to the namespace containing a label that matches a given namespace selector",
+        "alt": "A diagram showing multiple Ingress Controllers with different namespace selectors serving routes that belong to the namespace containing a label that matches a given namespace selector",
+        "asset_kind": "diagram",
+        "diagram_type": "semantic_diagram",
+        "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/nw-sharding-namespace-labels.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/nw-sharding-namespace-labels.png/index.html",
+        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-ingress-sharding-namespace-labels.adoc",
+        "source_asset_ref": "nw-sharding-namespace-labels.png",
+        "section_hint": "Configuring ingress cluster traffic by using an Ingress Controller",
+        "related_entities": [
+          {
+            "label": "Cluster Wide Proxy",
+            "href": "/wiki/entities/cluster-wide-proxy/index.html"
+          },
+          {
+            "label": "Networking and Connectivity",
+            "href": "/wiki/entities/networking/index.html"
+          }
+        ]
+      },
+      {
+        "caption": "An image that shows an example network workflow of an Ingress Controller operating in an OpenShift Container Platform environment.",
+        "alt": "An image that shows an example network workflow of an Ingress Controller operating in an OpenShift Container Platform environment.",
+        "asset_kind": "diagram",
+        "diagram_type": "semantic_diagram",
+        "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/external-load-balancer-default.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/external-load-balancer-default.png/index.html",
+        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-osp-services-external-load-balancer.adoc",
+        "source_asset_ref": "external-load-balancer-default.png",
+        "section_hint": "Load balancing on {rh-openstack}",
+        "related_entities": [
+          {
+            "label": "Cluster Wide Proxy",
+            "href": "/wiki/entities/cluster-wide-proxy/index.html"
+          },
+          {
+            "label": "Networking and Connectivity",
+            "href": "/wiki/entities/networking/index.html"
+          }
+        ]
+      },
+      {
+        "caption": "An image that shows an example network workflow of an OpenShift API operating in an OpenShift Container Platform environment.",
+        "alt": "An image that shows an example network workflow of an OpenShift API operating in an OpenShift Container Platform environment.",
+        "asset_kind": "diagram",
+        "diagram_type": "semantic_diagram",
+        "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/external-load-balancer-openshift-api.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/external-load-balancer-openshift-api.png/index.html",
+        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-osp-services-external-load-balancer.adoc",
+        "source_asset_ref": "external-load-balancer-openshift-api.png",
+        "section_hint": "Load balancing on {rh-openstack}",
+        "related_entities": [
+          {
+            "label": "Cluster Wide Proxy",
+            "href": "/wiki/entities/cluster-wide-proxy/index.html"
+          },
+          {
+            "label": "Networking and Connectivity",
+            "href": "/wiki/entities/networking/index.html"
+          }
+        ]
+      },
+      {
+        "caption": "An image that shows an example network workflow of an OpenShift MachineConfig API operating in an OpenShift Container Platform environment.",
+        "alt": "An image that shows an example network workflow of an OpenShift MachineConfig API operating in an OpenShift Container Platform environment.",
+        "asset_kind": "diagram",
+        "diagram_type": "semantic_diagram",
+        "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/external-load-balancer-machine-config-api.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/external-load-balancer-machine-config-api.png/index.html",
+        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-osp-services-external-load-balancer.adoc",
+        "source_asset_ref": "external-load-balancer-machine-config-api.png",
+        "section_hint": "Load balancing on {rh-openstack}",
+        "related_entities": [
+          {
+            "label": "Cluster Wide Proxy",
+            "href": "/wiki/entities/cluster-wide-proxy/index.html"
+          },
+          {
+            "label": "Networking and Connectivity",
+            "href": "/wiki/entities/networking/index.html"
+          }
+        ]
+      }
+    ]
+  }
+}

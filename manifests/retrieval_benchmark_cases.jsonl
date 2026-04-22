@@ -1,0 +1,30 @@
+{"id":"ops-001","mode":"ops","query_type":"ops","query":"etcd 백업은 어떻게 하나?","expected_book_slugs":["etcd","backup_and_restore","postinstallation_configuration"]}
+{"id":"ops-002","mode":"ops","query_type":"ops","query":"클러스터 업데이트 전에 확인할 사항은?","expected_book_slugs":["updating_clusters","release_notes"]}
+{"id":"ops-003","mode":"ops","query_type":"ops","query":"Route와 Ingress 차이가 뭐야?","expected_book_slugs":["ingress_and_load_balancing","networking_overview"]}
+{"id":"ops-004","mode":"ops","query_type":"ops","query":"연결이 끊긴 환경에서 이미지 미러링은 어떻게 준비해?","expected_book_slugs":["disconnected_environments","images"]}
+{"id":"ops-005","mode":"ops","query_type":"ops","query":"이미지 레지스트리 저장소를 구성하려면?","expected_book_slugs":["registry","images"]}
+{"id":"ops-006","mode":"ops","query_type":"ops","query":"노드 드레인은 어떻게 동작해?","expected_book_slugs":["nodes","machine_configuration"]}
+{"id":"ops-007","mode":"ops","query_type":"ops","query":"워커 노드를 드레이닝하려면 뭘 봐야 해?","expected_book_slugs":["nodes"]}
+{"id":"ops-008","mode":"ops","query_type":"ops","query":"연결이 끊긴 환경에서 이미지 미러링은 어디 문서를 봐야 해?","expected_book_slugs":["disconnected_environments","registry","images"]}
+{"id":"ops-009","mode":"ops","query_type":"ops","query":"외부로 서비스 노출할 때 Route와 Ingress 설정은 어디서 봐?","expected_book_slugs":["ingress_and_load_balancing","networking_overview"]}
+{"id":"ops-010","mode":"ops","query_type":"ops","query":"머신 설정 변경이 적용될 때 노드 재부팅은 왜 일어나?","expected_book_slugs":["machine_management","updating_clusters","support","postinstallation_configuration","advanced_networking"]}
+{"id":"learn-001","mode":"learn","query_type":"learn","query":"OpenShift 아키텍처를 간단히 설명해줘","expected_book_slugs":["architecture","overview"]}
+{"id":"learn-002","mode":"learn","query_type":"learn","query":"Operator가 뭐야?","expected_book_slugs":["operators","overview"]}
+{"id":"learn-003","mode":"learn","query_type":"learn","query":"관찰 기능하고 모니터링은 어떻게 달라?","expected_book_slugs":["observability_overview","monitoring"]}
+{"id":"learn-004","mode":"learn","query_type":"learn","query":"Machine Config Operator는 뭘 해?","expected_book_slugs":["architecture","postinstallation_configuration","machine_management"]}
+{"id":"learn-005","mode":"learn","query_type":"learn","query":"OpenShift 아키텍처에서 control plane과 etcd 관계를 설명한 문서는?","expected_book_slugs":["architecture","etcd"]}
+{"id":"learn-006","mode":"learn","query_type":"learn","query":"Operator가 뭔지 처음부터 설명한 문서는?","expected_book_slugs":["operators","overview"]}
+{"id":"learn-007","mode":"learn","query_type":"learn","query":"관찰 기능에는 어떤 구성 요소가 있어?","expected_book_slugs":["observability_overview","monitoring","logging"]}
+{"id":"learn-008","mode":"learn","query_type":"learn","query":"인증과 권한 부여 차이를 어디서 배우면 돼?","expected_book_slugs":["authentication_and_authorization","security_and_compliance"]}
+{"id":"followup-001","mode":"ops","query_type":"follow_up","query":"그거 복구는?","context":{"current_topic":"etcd 백업","unresolved_question":"etcd 백업 이후 복구 절차","ocp_version":"4.20"},"expected_book_slugs":["etcd","backup_and_restore","postinstallation_configuration"]}
+{"id":"followup-002","mode":"learn","query_type":"follow_up","query":"그 Operator는 뭘 관리해?","context":{"current_topic":"머신 설정","open_entities":["Machine Config Operator"],"ocp_version":"4.20"},"expected_book_slugs":["architecture","postinstallation_configuration","machine_management"]}
+{"id":"followup-003","mode":"ops","query_type":"follow_up","query":"그럼 외부로 공개할 땐 뭘 봐야 해?","context":{"current_topic":"Route와 Ingress 차이","open_entities":["Route","Ingress"],"unresolved_question":"외부 노출 관련 설정"},"expected_book_slugs":["ingress_and_load_balancing","networking_overview"]}
+{"id":"followup-004","mode":"learn","query_type":"follow_up","query":"그거 재부팅은 왜 일어나?","context":{"current_topic":"Machine Config Operator","open_entities":["Machine Config Operator","MCO"],"ocp_version":"4.20","unresolved_question":"노드 재부팅 이유"},"expected_book_slugs":["updating_clusters","support","postinstallation_configuration"]}
+{"id":"followup-005","mode":"ops","query_type":"follow_up","query":"그 복원 순서는?","context":{"current_topic":"etcd 백업","open_entities":["etcd"],"unresolved_question":"복원 절차"},"expected_book_slugs":["backup_and_restore","etcd","postinstallation_configuration"]}
+{"id":"followup-006","mode":"learn","query_type":"follow_up","query":"아까 말한 그 보안 설정은 어디서 봐?","context":{"current_topic":"인증 및 권한 부여","open_entities":["OAuth","RBAC"],"unresolved_question":"보안 설정 시작점"},"expected_book_slugs":["authentication_and_authorization","security_and_compliance"]}
+{"id":"ambiguous-001","mode":"ops","query_type":"ambiguous","query":"웹 콘솔에서 할 수 있는 건?","expected_book_slugs":["web_console","overview"]}
+{"id":"ambiguous-002","mode":"ops","query_type":"ambiguous","query":"스토리지는 어떻게 붙여?","expected_book_slugs":["storage"]}
+{"id":"ambiguous-003","mode":"ops","query_type":"ambiguous","query":"로그는 어디서 봐?","expected_book_slugs":["logging","monitoring","observability_overview"]}
+{"id":"ambiguous-004","mode":"ops","query_type":"ambiguous","query":"보안 설정은 어디 문서부터 보면 돼?","expected_book_slugs":["security_and_compliance","authentication_and_authorization"]}
+{"id":"ambiguous-005","mode":"ops","query_type":"ambiguous","query":"설치 후 기본 작업은 어디에 정리돼 있어?","expected_book_slugs":["postinstallation_configuration","installation_overview"]}
+{"id":"ambiguous-006","mode":"ops","query_type":"ambiguous","query":"CLI로 자주 하는 작업은 어디 문서를 보면 돼?","expected_book_slugs":["cli_tools"]}

@@ -1,0 +1,424 @@
+{
+  "generated_at_utc": "2026-04-18T15:10:33+00:00",
+  "book_count": 8,
+  "figure_count": 40,
+  "matched_section_count": 40,
+  "by_slug": {
+    "advanced_networking": [
+      {
+        "asset_name": "552_OpenShift_slb_mode_0625.png",
+        "viewer_path": "/wiki/figures/advanced_networking/552_OpenShift_slb_mode_0625.png/index.html",
+        "caption": "OVS `balance-slb` mode ` operating on a localnet with two NADs",
+        "section_hint": "Network bonding considerations",
+        "section_heading": "Network bonding considerations",
+        "section_anchor": "network-bonding-considerations",
+        "section_path": "고급 네트워킹 > Network bonding considerations",
+        "section_href": "/playbooks/wiki-runtime/active/advanced_networking/index.html#network-bonding-considerations"
+      },
+      {
+        "asset_name": "524-openshift-bgp-ovn-k8s-no-vpn-0325.png",
+        "viewer_path": "/wiki/figures/advanced_networking/524-openshift-bgp-ovn-k8s-no-vpn-0325.png/index.html",
+        "caption": "Advertising pod IPs from a cluster user-defined network over BGP",
+        "section_hint": "About route advertisements",
+        "section_heading": "About route advertisements",
+        "section_anchor": "about-route-advertisements",
+        "section_path": "고급 네트워킹 > About route advertisements",
+        "section_href": "/playbooks/wiki-runtime/active/advanced_networking/index.html#about-route-advertisements"
+      },
+      {
+        "asset_name": "524-openshift-bgp-ovn-k8s-vrf-lite-0325.png",
+        "viewer_path": "/wiki/figures/advanced_networking/524-openshift-bgp-ovn-k8s-vrf-lite-0325.png/index.html",
+        "caption": "Advertising pod IPs from a cluster user-defined network over BGP with VPN",
+        "section_hint": "About route advertisements",
+        "section_heading": "About route advertisements",
+        "section_anchor": "about-route-advertisements",
+        "section_path": "고급 네트워킹 > About route advertisements",
+        "section_href": "/playbooks/wiki-runtime/active/advanced_networking/index.html#about-route-advertisements"
+      },
+      {
+        "asset_name": "319_OpenShift_PTP_bare-metal_OCP_nodes_1123_PTP_network.png",
+        "viewer_path": "/wiki/figures/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_1123_PTP_network.png/index.html",
+        "caption": "Diagram showing a PTP grandmaster clock",
+        "section_hint": "About PTP in OpenShift cluster nodes",
+        "section_heading": "About PTP in OpenShift cluster nodes",
+        "section_anchor": "about-ptp-in-openshift-cluster-nodes",
+        "section_path": "고급 네트워킹 > About PTP in OpenShift cluster nodes",
+        "section_href": "/playbooks/wiki-runtime/active/advanced_networking/index.html#about-ptp-in-openshift-cluster-nodes"
+      },
+      {
+        "asset_name": "319_OpenShift_PTP_bare-metal_OCP_nodes_1023_PTP.png",
+        "viewer_path": "/wiki/figures/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_1023_PTP.png/index.html",
+        "caption": "GNSS and T-GM system architecture",
+        "section_hint": "About PTP in OpenShift cluster nodes",
+        "section_heading": "About PTP in OpenShift cluster nodes",
+        "section_anchor": "about-ptp-in-openshift-cluster-nodes",
+        "section_path": "고급 네트워킹 > About PTP in OpenShift cluster nodes",
+        "section_href": "/playbooks/wiki-runtime/active/advanced_networking/index.html#about-ptp-in-openshift-cluster-nodes"
+      },
+      {
+        "asset_name": "openshift-ptp-using-dual-nic-ptp.png",
+        "viewer_path": "/wiki/figures/advanced_networking/openshift-ptp-using-dual-nic-ptp.png/index.html",
+        "caption": "Dual NIC PTP grandmaster clock connected to GNSS timing source and downstream PTP boundary and ordinary clocks",
+        "section_hint": "About PTP in OpenShift cluster nodes",
+        "section_heading": "About PTP in OpenShift cluster nodes",
+        "section_anchor": "about-ptp-in-openshift-cluster-nodes",
+        "section_path": "고급 네트워킹 > About PTP in OpenShift cluster nodes",
+        "section_href": "/playbooks/wiki-runtime/active/advanced_networking/index.html#about-ptp-in-openshift-cluster-nodes"
+      },
+      {
+        "asset_name": "openshift-ptp-3-card-grandmaster.png",
+        "viewer_path": "/wiki/figures/advanced_networking/openshift-ptp-3-card-grandmaster.png/index.html",
+        "caption": "3-card PTP grandmaster clock connected to GNSS timing source and downstream PTP boundary and ordinary clocks",
+        "section_hint": "About PTP in OpenShift cluster nodes",
+        "section_heading": "About PTP in OpenShift cluster nodes",
+        "section_anchor": "about-ptp-in-openshift-cluster-nodes",
+        "section_path": "고급 네트워킹 > About PTP in OpenShift cluster nodes",
+        "section_href": "/playbooks/wiki-runtime/active/advanced_networking/index.html#about-ptp-in-openshift-cluster-nodes"
+      },
+      {
+        "asset_name": "openshift-ptp-holdover-tgm-clock-with-gnss.png",
+        "viewer_path": "/wiki/figures/advanced_networking/openshift-ptp-holdover-tgm-clock-with-gnss.png/index.html",
+        "caption": "Holdover in a T-GM clock with GNSS as the source",
+        "section_hint": "Configuring PTP devices",
+        "section_heading": "Configuring PTP devices",
+        "section_anchor": "configuring-ptp-devices",
+        "section_path": "고급 네트워킹 > Configuring PTP devices",
+        "section_href": "/playbooks/wiki-runtime/active/advanced_networking/index.html#configuring-ptp-devices"
+      },
+      {
+        "asset_name": "319_OpenShift_PTP_bare-metal_OCP_nodes_0323_4.17.png",
+        "viewer_path": "/wiki/figures/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_0323_4.17.png/index.html",
+        "caption": "Overview of consuming PTP fast events from the PTP event producer REST API",
+        "section_hint": "Developing PTP events consumer applications with the REST API v2",
+        "section_heading": "Developing PTP events consumer applications with the REST API v2",
+        "section_anchor": "developing-ptp-events-consumer-applications-with-the-rest-api-v2",
+        "section_path": "고급 네트워킹 > Developing PTP events consumer applications with the REST API v2",
+        "section_href": "/playbooks/wiki-runtime/active/advanced_networking/index.html#developing-ptp-events-consumer-applications-with-the-rest-api-v2"
+      }
+    ],
+    "ingress_and_load_balancing": [
+      {
+        "asset_name": "nw-sharding-route-labels.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/nw-sharding-route-labels.png/index.html",
+        "caption": "A diagram showing multiple Ingress Controllers with different route selectors serving any route containing a label that matches a given route selector regardless of the namespace a route belongs to",
+        "section_hint": "Configuring ingress cluster traffic by using an Ingress Controller",
+        "section_heading": "Configuring ingress cluster traffic by using an Ingress Controller",
+        "section_anchor": "configuring-ingress-cluster-traffic-by-using-an-ingress-controller",
+        "section_path": "Ingress 및 로드 밸런싱 > Configuring ingress cluster traffic by using an Ingress Controller",
+        "section_href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html#configuring-ingress-cluster-traffic-by-using-an-ingress-controller"
+      },
+      {
+        "asset_name": "nw-sharding-namespace-labels.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/nw-sharding-namespace-labels.png/index.html",
+        "caption": "A diagram showing multiple Ingress Controllers with different namespace selectors serving routes that belong to the namespace containing a label that matches a given namespace selector",
+        "section_hint": "Configuring ingress cluster traffic by using an Ingress Controller",
+        "section_heading": "Configuring ingress cluster traffic by using an Ingress Controller",
+        "section_anchor": "configuring-ingress-cluster-traffic-by-using-an-ingress-controller",
+        "section_path": "Ingress 및 로드 밸런싱 > Configuring ingress cluster traffic by using an Ingress Controller",
+        "section_href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html#configuring-ingress-cluster-traffic-by-using-an-ingress-controller"
+      },
+      {
+        "asset_name": "202_OpenShift_Ingress_0222_node_port.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/202_OpenShift_Ingress_0222_node_port.png/index.html",
+        "caption": "OpenShift Container Platform Ingress NodePort endpoint publishing strategy",
+        "section_hint": "Configuring the Ingress Controller endpoint publishing strategy",
+        "section_heading": "Configuring the Ingress Controller endpoint publishing strategy",
+        "section_anchor": "configuring-the-ingress-controller-endpoint-publishing-strategy",
+        "section_path": "Ingress 및 로드 밸런싱 > Configuring the Ingress Controller endpoint publishing strategy",
+        "section_href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html#configuring-the-ingress-controller-endpoint-publishing-strategy"
+      },
+      {
+        "asset_name": "external-load-balancer-default.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/external-load-balancer-default.png/index.html",
+        "caption": "An image that shows an example network workflow of an Ingress Controller operating in an OpenShift Container Platform environment.",
+        "section_hint": "Load balancing on {rh-openstack}",
+        "section_heading": "Load balancing on {rh-openstack}",
+        "section_anchor": "load-balancing-on-rh-openstack",
+        "section_path": "Ingress 및 로드 밸런싱 > Load balancing on {rh-openstack}",
+        "section_href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html#load-balancing-on-rh-openstack"
+      },
+      {
+        "asset_name": "external-load-balancer-openshift-api.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/external-load-balancer-openshift-api.png/index.html",
+        "caption": "An image that shows an example network workflow of an OpenShift API operating in an OpenShift Container Platform environment.",
+        "section_hint": "Load balancing on {rh-openstack}",
+        "section_heading": "Load balancing on {rh-openstack}",
+        "section_anchor": "load-balancing-on-rh-openstack",
+        "section_path": "Ingress 및 로드 밸런싱 > Load balancing on {rh-openstack}",
+        "section_href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html#load-balancing-on-rh-openstack"
+      },
+      {
+        "asset_name": "external-load-balancer-machine-config-api.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/external-load-balancer-machine-config-api.png/index.html",
+        "caption": "An image that shows an example network workflow of an OpenShift MachineConfig API operating in an OpenShift Container Platform environment.",
+        "section_hint": "Load balancing on {rh-openstack}",
+        "section_heading": "Load balancing on {rh-openstack}",
+        "section_anchor": "load-balancing-on-rh-openstack",
+        "section_path": "Ingress 및 로드 밸런싱 > Load balancing on {rh-openstack}",
+        "section_href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html#load-balancing-on-rh-openstack"
+      },
+      {
+        "asset_name": "357_OpenShift_MetalLB_VRF_0823.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/357_OpenShift_MetalLB_VRF_0823.png/index.html",
+        "caption": "Network overview of managing symmetric routing by using VRFs with MetalLB",
+        "section_hint": "Managing symmetric routing with MetalLB",
+        "section_heading": "Managing symmetric routing with MetalLB",
+        "section_anchor": "managing-symmetric-routing-with-metallb",
+        "section_path": "Ingress 및 로드 밸런싱 > Managing symmetric routing with MetalLB",
+        "section_href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html#managing-symmetric-routing-with-metallb"
+      },
+      {
+        "asset_name": "695_OpenShift_MetalLB_FRRK8s_integration_0624.png",
+        "viewer_path": "/wiki/figures/ingress_and_load_balancing/695_OpenShift_MetalLB_FRRK8s_integration_0624.png/index.html",
+        "caption": "MetalLB integration with FRR",
+        "section_hint": "Configuring the integration of MetalLB and FRR-K8s",
+        "section_heading": "Configuring the integration of MetalLB and FRR-K8s",
+        "section_anchor": "configuring-the-integration-of-metallb-and-frr-k8s",
+        "section_path": "Ingress 및 로드 밸런싱 > Configuring the integration of MetalLB and FRR-K8s",
+        "section_href": "/playbooks/wiki-runtime/active/ingress_and_load_balancing/index.html#configuring-the-integration-of-metallb-and-frr-k8s"
+      }
+    ],
+    "installation_overview": [
+      {
+        "asset_name": "targets-and-dependencies.png",
+        "viewer_path": "/wiki/figures/installation_overview/targets-and-dependencies.png/index.html",
+        "caption": "OpenShift Container Platform installation targets and dependencies",
+        "section_hint": "OpenShift Container Platform installation overview",
+        "section_heading": "Figure 1. OpenShift Container Platform installation targets and dependencies",
+        "section_anchor": "figure-1-openshift-container-platform-installation-targets-and-dependencies",
+        "section_path": "설치 개요 > Figures > Figure 1. OpenShift Container Platform installation targets and dependencies",
+        "section_href": "/playbooks/wiki-runtime/active/installation_overview/index.html#figure-1-openshift-container-platform-installation-targets-and-dependencies"
+      },
+      {
+        "asset_name": "create-nodes.png",
+        "viewer_path": "/wiki/figures/installation_overview/create-nodes.png/index.html",
+        "caption": "Creating bootstrap",
+        "section_hint": "OpenShift Container Platform installation overview",
+        "section_heading": "Figure 1. OpenShift Container Platform installation targets and dependencies",
+        "section_anchor": "figure-1-openshift-container-platform-installation-targets-and-dependencies",
+        "section_path": "설치 개요 > Figures > Figure 1. OpenShift Container Platform installation targets and dependencies",
+        "section_href": "/playbooks/wiki-runtime/active/installation_overview/index.html#figure-1-openshift-container-platform-installation-targets-and-dependencies"
+      },
+      {
+        "asset_name": "150_OpenShift_VMware_on_AWS_1021_installer_FCOS.png",
+        "viewer_path": "/wiki/figures/installation_overview/150_OpenShift_VMware_on_AWS_1021_installer_FCOS.png/index.html",
+        "caption": "Creating bootstrap",
+        "section_hint": "OpenShift Container Platform installation overview",
+        "section_heading": "Figure 1. OpenShift Container Platform installation targets and dependencies",
+        "section_anchor": "figure-1-openshift-container-platform-installation-targets-and-dependencies",
+        "section_path": "설치 개요 > Figures > Figure 1. OpenShift Container Platform installation targets and dependencies",
+        "section_href": "/playbooks/wiki-runtime/active/installation_overview/index.html#figure-1-openshift-container-platform-installation-targets-and-dependencies"
+      }
+    ],
+    "installing_on_any_platform": [
+      {
+        "asset_name": "targets-and-dependencies.png",
+        "viewer_path": "/wiki/figures/installing_on_any_platform/targets-and-dependencies.png/index.html",
+        "caption": "OpenShift Container Platform installation targets and dependencies",
+        "section_hint": "OpenShift Container Platform installation overview",
+        "section_heading": "Figure 1. OpenShift Container Platform installation targets and dependencies",
+        "section_anchor": "figure-1-openshift-container-platform-installation-targets-and-dependencies",
+        "section_path": "플랫폼 비종속 설치 플레이북 > Figures > Figure 1. OpenShift Container Platform installation targets and dependencies",
+        "section_href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html#figure-1-openshift-container-platform-installation-targets-and-dependencies"
+      },
+      {
+        "asset_name": "create-nodes.png",
+        "viewer_path": "/wiki/figures/installing_on_any_platform/create-nodes.png/index.html",
+        "caption": "Creating bootstrap",
+        "section_hint": "OpenShift Container Platform installation overview",
+        "section_heading": "Figure 1. OpenShift Container Platform installation targets and dependencies",
+        "section_anchor": "figure-1-openshift-container-platform-installation-targets-and-dependencies",
+        "section_path": "플랫폼 비종속 설치 플레이북 > Figures > Figure 1. OpenShift Container Platform installation targets and dependencies",
+        "section_href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html#figure-1-openshift-container-platform-installation-targets-and-dependencies"
+      },
+      {
+        "asset_name": "150_OpenShift_VMware_on_AWS_1021_installer_FCOS.png",
+        "viewer_path": "/wiki/figures/installing_on_any_platform/150_OpenShift_VMware_on_AWS_1021_installer_FCOS.png/index.html",
+        "caption": "Creating bootstrap",
+        "section_hint": "OpenShift Container Platform installation overview",
+        "section_heading": "Figure 1. OpenShift Container Platform installation targets and dependencies",
+        "section_anchor": "figure-1-openshift-container-platform-installation-targets-and-dependencies",
+        "section_path": "플랫폼 비종속 설치 플레이북 > Figures > Figure 1. OpenShift Container Platform installation targets and dependencies",
+        "section_href": "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html#figure-1-openshift-container-platform-installation-targets-and-dependencies"
+      }
+    ],
+    "nodes": [
+      {
+        "asset_name": "295_OpenShift_Nodes_Overview_1222.png",
+        "viewer_path": "/wiki/figures/nodes/295_OpenShift_Nodes_Overview_1222.png/index.html",
+        "caption": "Overview of control plane and worker node",
+        "section_hint": "Overview of nodes",
+        "section_heading": "Glossary of common terms for OpenShift Container Platform nodes",
+        "section_anchor": "glossary-of-common-terms-for-openshift-container-platform-nodes",
+        "section_path": "노드 > About nodes > Glossary of common terms for OpenShift Container Platform nodes",
+        "section_href": "/playbooks/wiki-runtime/active/nodes/index.html#glossary-of-common-terms-for-openshift-container-platform-nodes"
+      },
+      {
+        "asset_name": "ROSA-HCP-overview-of-nodes-487.png",
+        "viewer_path": "/wiki/figures/nodes/ROSA-HCP-overview-of-nodes-487.png/index.html",
+        "caption": "Overview of control plane and worker node",
+        "section_hint": "Overview of nodes",
+        "section_heading": "Glossary of common terms for OpenShift Container Platform nodes",
+        "section_anchor": "glossary-of-common-terms-for-openshift-container-platform-nodes",
+        "section_path": "노드 > About nodes > Glossary of common terms for OpenShift Container Platform nodes",
+        "section_href": "/playbooks/wiki-runtime/active/nodes/index.html#glossary-of-common-terms-for-openshift-container-platform-nodes"
+      }
+    ],
+    "overview": [
+      {
+        "asset_name": "291_OpenShift_on_AWS_Intro_1122_docs.png",
+        "viewer_path": "/wiki/figures/overview/291_OpenShift_on_AWS_Intro_1122_docs.png/index.html",
+        "caption": "OpenShift Container Platform",
+        "section_hint": "OpenShift Container Platform 4.20 Documentation",
+        "section_heading": "OpenShift Container Platform 4.20 Documentation",
+        "section_anchor": "openshift-container-platform-420-documentation",
+        "section_path": "개요 > OpenShift Container Platform 4.20 Documentation",
+        "section_href": "/playbooks/wiki-runtime/active/overview/index.html#openshift-container-platform-420-documentation"
+      },
+      {
+        "asset_name": "oke-about-ocp-stack-image.png",
+        "viewer_path": "/wiki/figures/overview/oke-about-ocp-stack-image.png/index.html",
+        "caption": "Red Hat OpenShift Kubernetes Engine",
+        "section_hint": "Introduction to OpenShift Container Platform",
+        "section_heading": "Introduction to OpenShift Container Platform",
+        "section_anchor": "introduction-to-openshift-container-platform",
+        "section_path": "개요 > Introduction to OpenShift Container Platform",
+        "section_href": "/playbooks/wiki-runtime/active/overview/index.html#introduction-to-openshift-container-platform"
+      },
+      {
+        "asset_name": "247-OpenShift-Kubernetes-Overview.png",
+        "viewer_path": "/wiki/figures/overview/247-OpenShift-Kubernetes-Overview.png/index.html",
+        "caption": "247-OpenShift-Kubernetes-Overview",
+        "section_hint": "Kubernetes overview",
+        "section_heading": "Kubernetes overview",
+        "section_anchor": "kubernetes-overview",
+        "section_path": "개요 > Kubernetes overview",
+        "section_href": "/playbooks/wiki-runtime/active/overview/index.html#kubernetes-overview"
+      },
+      {
+        "asset_name": "247_OpenShift_Kubernetes_Overview-2.png",
+        "viewer_path": "/wiki/figures/overview/247_OpenShift_Kubernetes_Overview-2.png/index.html",
+        "caption": "247 OpenShift Kubernetes Overview-2",
+        "section_hint": "Kubernetes overview",
+        "section_heading": "Kubernetes overview",
+        "section_anchor": "kubernetes-overview",
+        "section_path": "개요 > Kubernetes overview",
+        "section_href": "/playbooks/wiki-runtime/active/overview/index.html#kubernetes-overview"
+      },
+      {
+        "asset_name": "247_OpenShift_Kubernetes_Overview-1.png",
+        "viewer_path": "/wiki/figures/overview/247_OpenShift_Kubernetes_Overview-1.png/index.html",
+        "caption": "247 OpenShift Kubernetes Overview-1",
+        "section_hint": "Kubernetes overview",
+        "section_heading": "Kubernetes overview",
+        "section_anchor": "kubernetes-overview",
+        "section_path": "개요 > Kubernetes overview",
+        "section_href": "/playbooks/wiki-runtime/active/overview/index.html#kubernetes-overview"
+      }
+    ],
+    "validation_and_troubleshooting": [
+      {
+        "asset_name": "monitoring-dashboard-compute-resources.png",
+        "viewer_path": "/wiki/figures/validation_and_troubleshooting/monitoring-dashboard-compute-resources.png/index.html",
+        "caption": "monitoring-dashboard-compute-resources",
+        "section_hint": "Validating an installation",
+        "section_heading": "Validating an installation",
+        "section_anchor": "validating-an-installation",
+        "section_path": "검증 및 문제 해결 > Validating an installation",
+        "section_href": "/playbooks/wiki-runtime/active/validation_and_troubleshooting/index.html#validating-an-installation"
+      }
+    ],
+    "web_console": [
+      {
+        "asset_name": "cluster-settings-console.png",
+        "viewer_path": "/wiki/figures/web_console/cluster-settings-console.png/index.html",
+        "caption": "Image of the Configuration page showing the correct Console configuration resource to select",
+        "section_hint": "Configuring the web console in OpenShift Container Platform",
+        "section_heading": "Configuring the web console in OpenShift Container Platform",
+        "section_anchor": "configuring-the-web-console-in-openshift-container-platform",
+        "section_path": "웹 콘솔 > Configuring the web console in OpenShift Container Platform",
+        "section_href": "/playbooks/wiki-runtime/active/web_console/index.html#configuring-the-web-console-in-openshift-container-platform"
+      },
+      {
+        "asset_name": "customizing-user-perspective.png",
+        "viewer_path": "/wiki/figures/web_console/customizing-user-perspective.png/index.html",
+        "caption": "customizing-user-perspective",
+        "section_hint": "Customizing the web console in OpenShift Container Platform",
+        "section_heading": "Customizing the web console in OpenShift Container Platform",
+        "section_anchor": "customizing-the-web-console-in-openshift-container-platform",
+        "section_path": "웹 콘솔 > Customizing the web console in OpenShift Container Platform",
+        "section_href": "/playbooks/wiki-runtime/active/web_console/index.html#customizing-the-web-console-in-openshift-container-platform"
+      },
+      {
+        "asset_name": "odc_customizing_developer_catalog.png",
+        "viewer_path": "/wiki/figures/web_console/odc_customizing_developer_catalog.png/index.html",
+        "caption": "odc customizing developer catalog",
+        "section_hint": "Customizing the web console in OpenShift Container Platform",
+        "section_heading": "Customizing the web console in OpenShift Container Platform",
+        "section_anchor": "customizing-the-web-console-in-openshift-container-platform",
+        "section_path": "웹 콘솔 > Customizing the web console in OpenShift Container Platform",
+        "section_href": "/playbooks/wiki-runtime/active/web_console/index.html#customizing-the-web-console-in-openshift-container-platform"
+      },
+      {
+        "asset_name": "quick-start-conclusion.png",
+        "viewer_path": "/wiki/figures/web_console/quick-start-conclusion.png/index.html",
+        "caption": "quick start conclusion in the web console",
+        "section_hint": "Creating quick start tutorials in the web console",
+        "section_heading": "Creating quick start tutorials in the web console",
+        "section_anchor": "creating-quick-start-tutorials-in-the-web-console",
+        "section_path": "웹 콘솔 > Creating quick start tutorials in the web console",
+        "section_href": "/playbooks/wiki-runtime/active/web_console/index.html#creating-quick-start-tutorials-in-the-web-console"
+      },
+      {
+        "asset_name": "quick-start-description.png",
+        "viewer_path": "/wiki/figures/web_console/quick-start-description.png/index.html",
+        "caption": "quick start description in the web console",
+        "section_hint": "Creating quick start tutorials in the web console",
+        "section_heading": "Creating quick start tutorials in the web console",
+        "section_anchor": "creating-quick-start-tutorials-in-the-web-console",
+        "section_path": "웹 콘솔 > Creating quick start tutorials in the web console",
+        "section_href": "/playbooks/wiki-runtime/active/web_console/index.html#creating-quick-start-tutorials-in-the-web-console"
+      },
+      {
+        "asset_name": "quick-start-display-name.png",
+        "viewer_path": "/wiki/figures/web_console/quick-start-display-name.png/index.html",
+        "caption": "quick start display name in the web console",
+        "section_hint": "Creating quick start tutorials in the web console",
+        "section_heading": "Creating quick start tutorials in the web console",
+        "section_anchor": "creating-quick-start-tutorials-in-the-web-console",
+        "section_path": "웹 콘솔 > Creating quick start tutorials in the web console",
+        "section_href": "/playbooks/wiki-runtime/active/web_console/index.html#creating-quick-start-tutorials-in-the-web-console"
+      },
+      {
+        "asset_name": "quick-start-duration.png",
+        "viewer_path": "/wiki/figures/web_console/quick-start-duration.png/index.html",
+        "caption": "quick start durationMinutes element in the web console",
+        "section_hint": "Creating quick start tutorials in the web console",
+        "section_heading": "Creating quick start tutorials in the web console",
+        "section_anchor": "creating-quick-start-tutorials-in-the-web-console",
+        "section_path": "웹 콘솔 > Creating quick start tutorials in the web console",
+        "section_href": "/playbooks/wiki-runtime/active/web_console/index.html#creating-quick-start-tutorials-in-the-web-console"
+      },
+      {
+        "asset_name": "quick-start-icon.png",
+        "viewer_path": "/wiki/figures/web_console/quick-start-icon.png/index.html",
+        "caption": "quick start icon element in the web console",
+        "section_hint": "Creating quick start tutorials in the web console",
+        "section_heading": "Creating quick start tutorials in the web console",
+        "section_anchor": "creating-quick-start-tutorials-in-the-web-console",
+        "section_path": "웹 콘솔 > Creating quick start tutorials in the web console",
+        "section_href": "/playbooks/wiki-runtime/active/web_console/index.html#creating-quick-start-tutorials-in-the-web-console"
+      },
+      {
+        "asset_name": "quick-start-introduction.png",
+        "viewer_path": "/wiki/figures/web_console/quick-start-introduction.png/index.html",
+        "caption": "quick start introduction element in the web console",
+        "section_hint": "Creating quick start tutorials in the web console",
+        "section_heading": "Creating quick start tutorials in the web console",
+        "section_anchor": "creating-quick-start-tutorials-in-the-web-console",
+        "section_path": "웹 콘솔 > Creating quick start tutorials in the web console",
+        "section_href": "/playbooks/wiki-runtime/active/web_console/index.html#creating-quick-start-tutorials-in-the-web-console"
+      }
+    ]
+  }
+}

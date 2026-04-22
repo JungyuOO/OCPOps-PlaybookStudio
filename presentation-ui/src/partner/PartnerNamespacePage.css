@@ -1,0 +1,85 @@
+.partner-namespace-page {
+  min-height: 100vh;
+  padding: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(140, 82, 255, 0.18), transparent 22%),
+    radial-gradient(circle at top right, rgba(0, 209, 255, 0.12), transparent 18%),
+    var(--bg-color);
+}
+
+.partner-namespace-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  gap: 18px;
+}
+
+.partner-namespace-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-main);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.partner-namespace-card {
+  padding: 28px;
+}
+
+.partner-namespace-eyebrow {
+  display: inline-block;
+  color: var(--accent-purple);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.partner-namespace-title {
+  margin-top: 12px;
+  font-size: clamp(2rem, 5vw, 4.4rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+}
+
+.partner-namespace-description {
+  margin-top: 14px;
+  max-width: 760px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.partner-namespace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.partner-namespace-grid .glass-panel {
+  padding: 24px;
+}
+
+.partner-namespace-grid h3 {
+  font-size: 1.05rem;
+}
+
+.partner-namespace-grid p {
+  margin-top: 10px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .partner-namespace-page {
+    padding: 16px;
+  }
+
+  .partner-namespace-card {
+    padding: 20px;
+  }
+
+  .partner-namespace-grid {
+    grid-template-columns: 1fr;
+  }
+}

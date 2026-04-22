@@ -1,0 +1,1299 @@
+{
+  "canonical_model": "playbook_document_v1",
+  "source_view_strategy": "playbook_ast_v1",
+  "book_slug": "networking_overview",
+  "title": "네트워킹 개요",
+  "version": "4.20",
+  "locale": "ko",
+  "source_uri": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/networking_overview/index",
+  "source_language": "ko",
+  "language_hint": "ko",
+  "translation_status": "approved_ko",
+  "translation_stage": "approved_ko",
+  "translation_source_uri": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/networking_overview/index",
+  "translation_source_language": "ko",
+  "translation_source_fingerprint": "8020dfa0b2dd54617e2d5602a5aa6f796e7369d7fc06cbdce24fbd98310185f7",
+  "legal_notice_url": "https://docs.redhat.com/documentation/openshift_container_platform/4.20/html/networking_overview/legal-notice",
+  "review_status": "approved",
+  "pack_id": "openshift-4-20-core",
+  "inferred_version": "4.20",
+  "section_count": 27,
+  "source_metadata": {
+    "source_id": "openshift_container_platform:4.20:ko:networking_overview",
+    "source_type": "official_doc",
+    "source_lane": "official_ko",
+    "source_collection": "core",
+    "primary_input_kind": "",
+    "source_repo": "",
+    "source_branch": "",
+    "source_binding_kind": "",
+    "source_relative_path": "",
+    "source_relative_paths": [],
+    "source_mirror_root": "",
+    "fallback_input_kind": "",
+    "fallback_source_url": "",
+    "fallback_viewer_path": "",
+    "product": "openshift",
+    "version": "4.20",
+    "trust_score": 1.0,
+    "original_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/networking_overview/index",
+    "original_title": "네트워킹 개요",
+    "legal_notice_url": "https://docs.redhat.com/documentation/openshift_container_platform/4.20/html/networking_overview/legal-notice",
+    "license_or_terms": "Modified versions must remove all Red Hat trademarks.",
+    "review_status": "approved",
+    "verifiability": "anchor_backed",
+    "updated_at": "2026-04-18T18:17:00Z",
+    "translation_source_language": "ko",
+    "parsed_artifact_id": "parsed:openshift_container_platform:4.20:ko:networking_overview",
+    "tenant_id": "public",
+    "workspace_id": "core",
+    "pack_id": "openshift_container_platform-4.20-core",
+    "pack_version": "4.20",
+    "bundle_scope": "official",
+    "classification": "public",
+    "access_groups": [
+      "public"
+    ],
+    "provider_egress_policy": "unspecified",
+    "approval_state": "approved",
+    "publication_state": "published",
+    "redaction_state": "not_required",
+    "citation_eligible": true,
+    "citation_block_reason": ""
+  },
+  "anchor_map": {
+    "openshift-container-platform의-기본-네트워킹-개념-및-일반-작업-이해": "/docs/ocp/4.20/ko/networking_overview/index.html#openshift-container-platform의-기본-네트워킹-개념-및-일반-작업-이해",
+    "understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#understanding-networking",
+    "nw-understanding-networking-core-layers-and-components_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#nw-understanding-networking-core-layers-and-components_understanding-networking",
+    "the-pod-network_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#the-pod-network_understanding-networking",
+    "the-service-network_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#the-service-network_understanding-networking",
+    "nw-understanding-networking-managing-traffic-within_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#nw-understanding-networking-managing-traffic-within_understanding-networking",
+    "pod-to-pod-communication_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#pod-to-pod-communication_understanding-networking",
+    "service-discovery-with-dns_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#service-discovery-with-dns_understanding-networking",
+    "nw-understanding-networking-managing-traffic-entering-leaving_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#nw-understanding-networking-managing-traffic-entering-leaving_understanding-networking",
+    "exposing-applications-with-ingress-and-route-objects_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#exposing-applications-with-ingress-and-route-objects_understanding-networking",
+    "distributing-traffic-with-load-balancers_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#distributing-traffic-with-load-balancers_understanding-networking",
+    "controlling-egress-traffic_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#controlling-egress-traffic_understanding-networking",
+    "nw-understanding-networking-securing-network-traffic_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#nw-understanding-networking-securing-network-traffic_understanding-networking",
+    "network-policies_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#network-policies_understanding-networking",
+    "administrative-network-policies_understanding-networking": "/docs/ocp/4.20/ko/networking_overview/index.html#administrative-network-policies_understanding-networking",
+    "accessing-hosts": "/docs/ocp/4.20/ko/networking_overview/index.html#accessing-hosts",
+    "accessing-hosts-on-aws_accessing-hosts": "/docs/ocp/4.20/ko/networking_overview/index.html#accessing-hosts-on-aws_accessing-hosts",
+    "networking-dashboards_accessing-hosts": "/docs/ocp/4.20/ko/networking_overview/index.html#networking-dashboards_accessing-hosts",
+    "network-observability-operator-operator-dashboards": "/docs/ocp/4.20/ko/networking_overview/index.html#network-observability-operator-operator-dashboards",
+    "general-networking-ovnk-dashboards": "/docs/ocp/4.20/ko/networking_overview/index.html#general-networking-ovnk-dashboards",
+    "ingress-dashboards": "/docs/ocp/4.20/ko/networking_overview/index.html#ingress-dashboards",
+    "cidr-range-definitions": "/docs/ocp/4.20/ko/networking_overview/index.html#cidr-range-definitions",
+    "machine-cidr-description": "/docs/ocp/4.20/ko/networking_overview/index.html#machine-cidr-description",
+    "service-cidr-description": "/docs/ocp/4.20/ko/networking_overview/index.html#service-cidr-description",
+    "pod-cidr-description": "/docs/ocp/4.20/ko/networking_overview/index.html#pod-cidr-description",
+    "host-prefix-description": "/docs/ocp/4.20/ko/networking_overview/index.html#host-prefix-description",
+    "hcp-cidr-ranges_cidr-range-definitions": "/docs/ocp/4.20/ko/networking_overview/index.html#hcp-cidr-ranges_cidr-range-definitions"
+  },
+  "sections": [
+    {
+      "section_id": "networking_overview:openshift-container-platform의-기본-네트워킹-개념-및-일반-작업-이해",
+      "section_key": "networking_overview:openshift-container-platform의-기본-네트워킹-개념-및-일반-작업-이해",
+      "ordinal": 1,
+      "heading": "OpenShift Container Platform의 기본 네트워킹 개념 및 일반 작업 이해",
+      "level": 2,
+      "path": [
+        "OpenShift Container Platform의 기본 네트워킹 개념 및 일반 작업 이해"
+      ],
+      "section_path": [
+        "OpenShift Container Platform의 기본 네트워킹 개념 및 일반 작업 이해"
+      ],
+      "section_path_label": "OpenShift Container Platform의 기본 네트워킹 개념 및 일반 작업 이해",
+      "anchor": "openshift-container-platform의-기본-네트워킹-개념-및-일반-작업-이해",
+      "anchor_id": "openshift-container-platform의-기본-네트워킹-개념-및-일반-작업-이해",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#openshift-container-platform의-기본-네트워킹-개념-및-일반-작업-이해",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "이 문서에서는 OpenShift Container Platform 내의 핵심 네트워킹 개념, 기본 아키텍처 및 일반 네트워킹 작업을 소개합니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:understanding-networking",
+      "section_key": "networking_overview:understanding-networking",
+      "ordinal": 2,
+      "heading": "1장. 네트워킹 이해",
+      "level": 2,
+      "path": [
+        "1장. 네트워킹 이해"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해"
+      ],
+      "section_path_label": "1장. 네트워킹 이해",
+      "anchor": "understanding-networking",
+      "anchor_id": "understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#understanding-networking",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform에서 탄력적이고 안전하며 확장 가능한 애플리케이션을 빌드하는 데 네트워킹을 이해하는 것이 중요합니다. 기본 pod-to-pod 통신에서 복잡한 트래픽 라우팅 및 보안 규칙에 이르기까지 애플리케이션의 모든 구성 요소는 네트워크를 기반으로 올바르게 작동합니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:nw-understanding-networking-core-layers-and-components_understanding-networking",
+      "section_key": "networking_overview:nw-understanding-networking-core-layers-and-components_understanding-networking",
+      "ordinal": 3,
+      "heading": "1.1. 핵심 네트워크 계층 및 구성 요소",
+      "level": 3,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.1. 핵심 네트워크 계층 및 구성 요소"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.1. 핵심 네트워크 계층 및 구성 요소"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.1. 핵심 네트워크 계층 및 구성 요소",
+      "anchor": "nw-understanding-networking-core-layers-and-components_understanding-networking",
+      "anchor_id": "nw-understanding-networking-core-layers-and-components_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#nw-understanding-networking-core-layers-and-components_understanding-networking",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Red Hat OpenShift Networking은 `포드 네트워크와 서비스 네트워크` 라는 두 가지 기본 계층을 기반으로 합니다. Pod 네트워크는 애플리케이션이 있는 위치입니다. 서비스 네트워크를 사용하면 애플리케이션에 안정적으로 액세스할 수 있습니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:the-pod-network_understanding-networking",
+      "section_key": "networking_overview:the-pod-network_understanding-networking",
+      "ordinal": 4,
+      "heading": "1.1.1. Pod 네트워크",
+      "level": 4,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.1. 핵심 네트워크 계층 및 구성 요소",
+        "1.1.1. Pod 네트워크"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.1. 핵심 네트워크 계층 및 구성 요소",
+        "1.1.1. Pod 네트워크"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.1. 핵심 네트워크 계층 및 구성 요소 > 1.1.1. Pod 네트워크",
+      "anchor": "the-pod-network_understanding-networking",
+      "anchor_id": "the-pod-network_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#the-pod-network_understanding-networking",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "pod 네트워크는 클러스터의 모든 pod가 고유한 IP 주소를 수신하는 플랫 네트워크 공간입니다. 이 네트워크는 CNI(Container Network Interface) 플러그인에서 관리합니다. CNI 플러그인은 각 pod를 클러스터 네트워크로 연결합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "이 설계를 사용하면 실행 중인 노드에 관계없이 포드가 IP 주소를 사용하여 서로 직접 통신할 수 있습니다. 그러나 이러한 Pod IP는 임시입니다. 즉, Pod가 삭제될 때 IP가 삭제되고 새 Pod가 생성될 때 새 IP 주소가 할당됩니다. 이로 인해 장기 통신을 위해 Pod IP 주소에 직접 의존해서는 안 됩니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:the-service-network_understanding-networking",
+      "section_key": "networking_overview:the-service-network_understanding-networking",
+      "ordinal": 5,
+      "heading": "1.1.2. 서비스 네트워크",
+      "level": 4,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.1. 핵심 네트워크 계층 및 구성 요소",
+        "1.1.2. 서비스 네트워크"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.1. 핵심 네트워크 계층 및 구성 요소",
+        "1.1.2. 서비스 네트워크"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.1. 핵심 네트워크 계층 및 구성 요소 > 1.1.2. 서비스 네트워크",
+      "anchor": "the-service-network_understanding-networking",
+      "anchor_id": "the-service-network_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#the-service-network_understanding-networking",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "서비스는 ClusterIP라는 단일 안정적인 가상 IP 주소와 Pod 논리 그룹에 대한 DNS 이름을 제공하는 네트워킹 오브젝트입니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "요청이 서비스의 ClusterIP로 전송되면 OpenShift Container Platform은 해당 서비스를 지원하는 정상 pod 중 하나로 트래픽을 자동으로 로드 밸런싱합니다. Kubernetes 레이블과 선택기를 사용하여 어떤 Pod가 어떤 서비스에 속하는지 추적합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "이 추상화를 사용하면 애플리케이션에 도달하려는 애플리케이션에 영향을 주지 않고 개별 Pod를 생성하거나 삭제할 수 있기 때문에 애플리케이션의 복원력을 높일 수 있습니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:nw-understanding-networking-managing-traffic-within_understanding-networking",
+      "section_key": "networking_overview:nw-understanding-networking-managing-traffic-within_understanding-networking",
+      "ordinal": 6,
+      "heading": "1.2. 클러스터 내에서 트래픽 관리",
+      "level": 3,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.2. 클러스터 내에서 트래픽 관리"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.2. 클러스터 내에서 트래픽 관리"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.2. 클러스터 내에서 트래픽 관리",
+      "anchor": "nw-understanding-networking-managing-traffic-within_understanding-networking",
+      "anchor_id": "nw-understanding-networking-managing-traffic-within_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#nw-understanding-networking-managing-traffic-within_understanding-networking",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "애플리케이션은 클러스터 내에서 서로 통신해야 합니다. OpenShift Container Platform은 내부 트래픽을 위한 두 가지 기본 메커니즘을 제공합니다. 안정적인 연결을 위한 간단한 교환 및 강력한 서비스 검색을 위한 직접 pod-to-pod 통신입니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:pod-to-pod-communication_understanding-networking",
+      "section_key": "networking_overview:pod-to-pod-communication_understanding-networking",
+      "ordinal": 7,
+      "heading": "1.2.1. pod-to-pod 통신",
+      "level": 4,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.2. 클러스터 내에서 트래픽 관리",
+        "1.2.1. pod-to-pod 통신"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.2. 클러스터 내에서 트래픽 관리",
+        "1.2.1. pod-to-pod 통신"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.2. 클러스터 내에서 트래픽 관리 > 1.2.1. pod-to-pod 통신",
+      "anchor": "pod-to-pod-communication_understanding-networking",
+      "anchor_id": "pod-to-pod-communication_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#pod-to-pod-communication_understanding-networking",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Pod는 Pod 네트워크에서 할당한 고유 IP 주소를 사용하여 직접 통신합니다. 한 노드의 Pod는 NAT(네트워크 주소 변환) 없이 트래픽을 다른 노드의 Pod로 직접 보낼 수 있습니다. 이러한 직접 통신 모델은 데이터를 신속하게 교환해야 하는 서비스에 효율적입니다. 애플리케이션은 다른 Pod의 IP 주소를 대상으로 지정하여 연결을 설정할 수 있습니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:service-discovery-with-dns_understanding-networking",
+      "section_key": "networking_overview:service-discovery-with-dns_understanding-networking",
+      "ordinal": 8,
+      "heading": "1.2.2. DNS를 사용한 서비스 검색",
+      "level": 4,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.2. 클러스터 내에서 트래픽 관리",
+        "1.2.2. DNS를 사용한 서비스 검색"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.2. 클러스터 내에서 트래픽 관리",
+        "1.2.2. DNS를 사용한 서비스 검색"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.2. 클러스터 내에서 트래픽 관리 > 1.2.2. DNS를 사용한 서비스 검색",
+      "anchor": "service-discovery-with-dns_understanding-networking",
+      "anchor_id": "service-discovery-with-dns_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#service-discovery-with-dns_understanding-networking",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Pod IP 주소는 임시이므로 Pod에 안정적인 방법이 필요합니다. OpenShift Container Platform은 기본 제공 DNS 서버인 `CoreDNS` 를 사용하여 이 서비스 검색을 제공합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "생성하는 모든 서비스는 안정적인 DNS 이름을 자동으로 수신합니다. 포드는 이 DNS 이름을 사용하여 서비스에 연결할 수 있습니다. DNS 시스템은 이름을 서비스의 안정적인 `ClusterIP` 주소로 확인합니다. 이 프로세스는 개별 Pod IP가 변경되는 경우에도 안정적인 통신을 보장합니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:nw-understanding-networking-managing-traffic-entering-leaving_understanding-networking",
+      "section_key": "networking_overview:nw-understanding-networking-managing-traffic-entering-leaving_understanding-networking",
+      "ordinal": 9,
+      "heading": "1.3. 클러스터로 들어오고 나가는 트래픽 관리",
+      "level": 3,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.3. 클러스터로 들어오고 나가는 트래픽 관리"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.3. 클러스터로 들어오고 나가는 트래픽 관리"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.3. 클러스터로 들어오고 나가는 트래픽 관리",
+      "anchor": "nw-understanding-networking-managing-traffic-entering-leaving_understanding-networking",
+      "anchor_id": "nw-understanding-networking-managing-traffic-entering-leaving_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#nw-understanding-networking-managing-traffic-entering-leaving_understanding-networking",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "외부 사용자가 애플리케이션에 액세스하고 애플리케이션이 외부 서비스에 안전하게 액세스할 수 있는 방법이 필요합니다. OpenShift Container Platform에서는 이러한 트래픽 흐름을 클러스터 내외로 관리하는 몇 가지 툴을 제공합니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:exposing-applications-with-ingress-and-route-objects_understanding-networking",
+      "section_key": "networking_overview:exposing-applications-with-ingress-and-route-objects_understanding-networking",
+      "ordinal": 10,
+      "heading": "1.3.1. Ingress 및 Route 오브젝트를 사용하여 애플리케이션 노출",
+      "level": 4,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.3. 클러스터로 들어오고 나가는 트래픽 관리",
+        "1.3.1. Ingress 및 Route 오브젝트를 사용하여 애플리케이션 노출"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.3. 클러스터로 들어오고 나가는 트래픽 관리",
+        "1.3.1. Ingress 및 Route 오브젝트를 사용하여 애플리케이션 노출"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.3. 클러스터로 들어오고 나가는 트래픽 관리 > 1.3.1. Ingress 및 Route 오브젝트를 사용하여 애플리케이션 노출",
+      "anchor": "exposing-applications-with-ingress-and-route-objects_understanding-networking",
+      "anchor_id": "exposing-applications-with-ingress-and-route-objects_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#exposing-applications-with-ingress-and-route-objects_understanding-networking",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "외부 트래픽이 클러스터 내부의 서비스에 도달하도록 허용하려면 Ingress 컨트롤러를 사용합니다. 이 구성 요소는 들어오는 요청을 올바른 애플리케이션으로 보내는 프런트문 역할을 합니다. 두 개의 기본 리소스 중 하나를 사용하여 트래픽 규칙을 정의합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Ingress: 일반적으로 HTTP 및 HTTPS 트래픽용 서비스에 대한 외부 액세스를 관리하기 위한 표준 Kubernetes 리소스입니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "`경로` 오브젝트: Ingress와 동일한 기능을 제공하지만 고급 TLS 종료 옵션 및 트래픽 분할과 같은 추가 기능을 포함하는 리소스입니다. `Route` 오브젝트는 OpenShift Container Platform에 고유합니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:distributing-traffic-with-load-balancers_understanding-networking",
+      "section_key": "networking_overview:distributing-traffic-with-load-balancers_understanding-networking",
+      "ordinal": 11,
+      "heading": "1.3.2. 로드 밸런서를 사용하여 트래픽 분산",
+      "level": 4,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.3. 클러스터로 들어오고 나가는 트래픽 관리",
+        "1.3.2. 로드 밸런서를 사용하여 트래픽 분산"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.3. 클러스터로 들어오고 나가는 트래픽 관리",
+        "1.3.2. 로드 밸런서를 사용하여 트래픽 분산"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.3. 클러스터로 들어오고 나가는 트래픽 관리 > 1.3.2. 로드 밸런서를 사용하여 트래픽 분산",
+      "anchor": "distributing-traffic-with-load-balancers_understanding-networking",
+      "anchor_id": "distributing-traffic-with-load-balancers_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#distributing-traffic-with-load-balancers_understanding-networking",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "로드 밸런서는 트래픽을 클러스터로 전달하기 위한 고가용성 단일 IP 주소를 제공합니다. 일반적으로 클라우드 공급자의 클러스터 외부에서 실행되거나 베어 메탈 인프라에서 MetalLB를 사용하여 Ingress 컨트롤러를 실행하는 여러 노드에 수신되는 요청을 배포합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "이렇게 하면 단일 노드가 병목 현상이 발생하거나 오류가 발생하여 애플리케이션에 계속 액세스할 수 있습니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:controlling-egress-traffic_understanding-networking",
+      "section_key": "networking_overview:controlling-egress-traffic_understanding-networking",
+      "ordinal": 12,
+      "heading": "1.3.3. Egress 트래픽 제어",
+      "level": 4,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.3. 클러스터로 들어오고 나가는 트래픽 관리",
+        "1.3.3. Egress 트래픽 제어"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.3. 클러스터로 들어오고 나가는 트래픽 관리",
+        "1.3.3. Egress 트래픽 제어"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.3. 클러스터로 들어오고 나가는 트래픽 관리 > 1.3.3. Egress 트래픽 제어",
+      "anchor": "controlling-egress-traffic_understanding-networking",
+      "anchor_id": "controlling-egress-traffic_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#controlling-egress-traffic_understanding-networking",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "egress는 클러스터 내부의 Pod에서 발생되고 외부 시스템을 대상으로 하는 아웃바운드 트래픽을 나타냅니다. OpenShift Container Platform은 이를 관리하기 위한 몇 가지 메커니즘을 제공합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "EgressIP: 지정된 프로젝트의 모든 아웃바운드 트래픽에 예측 가능한 특정 소스 IP 주소를 할당할 수 있습니다. 이 기능은 특정 소스 IP를 허용해야 하는 방화벽이 있는 데이터베이스와 같은 외부 서비스에 액세스해야 하는 경우에 유용합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "송신 라우터: 아웃바운드 트래픽의 게이트웨이 역할을 하는 전용 포드입니다. 제어되는 단일 종료 지점을 통해 연결을 라우팅할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "송신 방화벽: 모든 아웃바운드 트래픽에 대한 클러스터 수준 방화벽 역할을 합니다. Pod의 연결을 특정 외부 대상으로 명시적으로 허용하거나 거부하는 규칙을 생성할 수 있으므로 보안 상태가 향상됩니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:nw-understanding-networking-securing-network-traffic_understanding-networking",
+      "section_key": "networking_overview:nw-understanding-networking-securing-network-traffic_understanding-networking",
+      "ordinal": 13,
+      "heading": "1.4. 네트워크 트래픽 보안",
+      "level": 3,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.4. 네트워크 트래픽 보안"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.4. 네트워크 트래픽 보안"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.4. 네트워크 트래픽 보안",
+      "anchor": "nw-understanding-networking-securing-network-traffic_understanding-networking",
+      "anchor_id": "nw-understanding-networking-securing-network-traffic_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#nw-understanding-networking-securing-network-traffic_understanding-networking",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform은 통신할 수 있는 구성 요소를 제어하는 규칙을 생성하여 네트워크를 보호하는 툴을 제공합니다. 이는 주로 네트워크 정책 및 관리 네트워크 정책의 두 가지 유형의 정책 리소스를 통해 관리됩니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:network-policies_understanding-networking",
+      "section_key": "networking_overview:network-policies_understanding-networking",
+      "ordinal": 14,
+      "heading": "1.4.1. 네트워크 정책",
+      "level": 4,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.4. 네트워크 트래픽 보안",
+        "1.4.1. 네트워크 정책"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.4. 네트워크 트래픽 보안",
+        "1.4.1. 네트워크 정책"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.4. 네트워크 트래픽 보안 > 1.4.1. 네트워크 정책",
+      "anchor": "network-policies_understanding-networking",
+      "anchor_id": "network-policies_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#network-policies_understanding-networking",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "네트워크 정책은 IP 주소 또는 포트 수준에서 트래픽 흐름을 제어할 수 있는 리소스입니다. 이러한 정책은 네임스페이스(프로젝트) 수준에서 작동합니다. 즉, 일반적으로 개발자 또는 프로젝트 관리자가 특정 애플리케이션을 보호하도록 관리합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "기본적으로 프로젝트의 모든 pod는 서로 자유롭게 통신할 수 있습니다. 그러나 `NetworkPolicy` 를 Pod에 적용하면 \"default-deny\" stance가 적용됩니다. 즉, 정책 규칙에서 명시적으로 허용하지 않는 모든 연결을 거부합니다. 레이블과 선택기를 사용하여 정책이 적용되는 Pod와 수신 및 송신 트래픽이 허용되는 포드를 정의합니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:administrative-network-policies_understanding-networking",
+      "section_key": "networking_overview:administrative-network-policies_understanding-networking",
+      "ordinal": 15,
+      "heading": "1.4.2. 관리 네트워크 정책",
+      "level": 4,
+      "path": [
+        "1장. 네트워킹 이해",
+        "1.4. 네트워크 트래픽 보안",
+        "1.4.2. 관리 네트워크 정책"
+      ],
+      "section_path": [
+        "1장. 네트워킹 이해",
+        "1.4. 네트워크 트래픽 보안",
+        "1.4.2. 관리 네트워크 정책"
+      ],
+      "section_path_label": "1장. 네트워킹 이해 > 1.4. 네트워크 트래픽 보안 > 1.4.2. 관리 네트워크 정책",
+      "anchor": "administrative-network-policies_understanding-networking",
+      "anchor_id": "administrative-network-policies_understanding-networking",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#administrative-network-policies_understanding-networking",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "`AdminNetworkPolicy` 오브젝트는 더 강력한 클러스터 범위 버전의 `NetworkPolicy` 오브젝트입니다. 클러스터 관리자만 생성하고 관리할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "관리 네트워크 정책은 표준 `NetworkPolicy` 오브젝트보다 우선 순위가 높습니다. 이를 통해 관리자는 자체 프로젝트의 사용자가 재정의할 수 없는 클러스터 전체 보안 규칙을 적용할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "예를 들어 관리자는 `AdminNetworkPolicy` 를 사용하여 개발 네임스페이스와 프로덕션 네임스페이스 간의 모든 트래픽을 차단하거나 전체 클러스터에 대한 기본 보안 규칙을 적용할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "추가 리소스"
+        },
+        {
+          "kind": "paragraph",
+          "text": "네트워크 정책 정의"
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:accessing-hosts",
+      "section_key": "networking_overview:accessing-hosts",
+      "ordinal": 16,
+      "heading": "2장. 호스트에 액세스",
+      "level": 2,
+      "path": [
+        "2장. 호스트에 액세스"
+      ],
+      "section_path": [
+        "2장. 호스트에 액세스"
+      ],
+      "section_path_label": "2장. 호스트에 액세스",
+      "anchor": "accessing-hosts",
+      "anchor_id": "accessing-hosts",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#accessing-hosts",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "배스천 호스트(Bastion Host)를 생성하여 OpenShift Container Platform 인스턴스에 액세스하고 SSH(Secure Shell) 액세스 권한으로 컨트롤 플레인 노드에 액세스하는 방법을 알아봅니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:accessing-hosts-on-aws_accessing-hosts",
+      "section_key": "networking_overview:accessing-hosts-on-aws_accessing-hosts",
+      "ordinal": 17,
+      "heading": "2.1. 설치 관리자 프로비저닝 인프라 클러스터에서 Amazon Web Services의 호스트에 액세스",
+      "level": 3,
+      "path": [
+        "2장. 호스트에 액세스",
+        "2.1. 설치 관리자 프로비저닝 인프라 클러스터에서 Amazon Web Services의 호스트에 액세스"
+      ],
+      "section_path": [
+        "2장. 호스트에 액세스",
+        "2.1. 설치 관리자 프로비저닝 인프라 클러스터에서 Amazon Web Services의 호스트에 액세스"
+      ],
+      "section_path_label": "2장. 호스트에 액세스 > 2.1. 설치 관리자 프로비저닝 인프라 클러스터에서 Amazon Web Services의 호스트에 액세스",
+      "anchor": "accessing-hosts-on-aws_accessing-hosts",
+      "anchor_id": "accessing-hosts-on-aws_accessing-hosts",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#accessing-hosts-on-aws_accessing-hosts",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "code",
+        "paragraph",
+        "code"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform 설치 관리자는 OpenShift Container Platform 클러스터에 프로비저닝된 Amazon EC2(Amazon Elastic Compute Cloud) 인스턴스에 대한 퍼블릭 IP 주소를 생성하지 않습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform 호스트에 SSH를 사용하려면 다음 절차를 따라야 합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "프로세스"
+        },
+        {
+          "kind": "paragraph",
+          "text": "`openshift-install` 명령으로 생성된 가상 프라이빗 클라우드(VPC)에 SSH로 액세스할 수 있는 보안 그룹을 만듭니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "설치 관리자가 생성한 퍼블릭 서브넷 중 하나에 Amazon EC2 인스턴스를 생성합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "생성한 Amazon EC2 인스턴스와 퍼블릭 IP 주소를 연결합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform 설치와는 달리, 생성한 Amazon EC2 인스턴스를 SSH 키 쌍과 연결해야 합니다. 이 인스턴스에서 사용되는 운영 체제는 중요하지 않습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "그저 인터넷을 OpenShift Container Platform 클러스터의 VPC에 연결하는 SSH 베스천의 역할을 수행하기 때문입니다. 사용하는 AMI(Amazon 머신 이미지)는 중요합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "예를 들어 RHCOS(Red Hat Enterprise Linux CoreOS)를 사용하면 설치 프로그램과 같이 Ignition을 통해 키를 제공할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Amazon EC2 인스턴스를 프로비저닝한 후 SSH로 연결할 수 있는 경우 OpenShift Container Platform 설치와 연결된 SSH 키를 추가해야 합니다. 이 키는 베스천 인스턴스의 키와 다를 수 있지만 반드시 달라야 하는 것은 아닙니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "참고"
+        },
+        {
+          "kind": "paragraph",
+          "text": "SSH 직접 액세스는 재해 복구 시에만 권장됩니다. Kubernetes API가 응답할 때는 권한 있는 Pod를 대신 실행합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "다음 명령을 실행하고 출력을 확인한 후 마스터 노드 중 하나를 선택합니다. 호스트 이름은 `ip-10-0-1-163.ec2.internal` 과 유사합니다."
+        },
+        {
+          "kind": "code",
+          "language": "shell",
+          "code": "oc get nodes",
+          "copy_text": "oc get nodes",
+          "wrap_hint": true,
+          "overflow_hint": "toggle",
+          "caption": ""
+        },
+        {
+          "kind": "paragraph",
+          "text": "Amazon EC2에 수동으로 배포한 베스천 SSH 호스트에서 해당 컨트롤 플레인 호스트에 SSH로 연결합니다. 설치 중 지정한 것과 동일한 SSH 키를 사용해야 합니다."
+        },
+        {
+          "kind": "code",
+          "language": "shell-session",
+          "code": "$ ssh -i <ssh-key-path> core@<master-hostname>",
+          "copy_text": "$ ssh -i <ssh-key-path> core@<master-hostname>",
+          "wrap_hint": true,
+          "overflow_hint": "toggle",
+          "caption": ""
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:networking-dashboards_accessing-hosts",
+      "section_key": "networking_overview:networking-dashboards_accessing-hosts",
+      "ordinal": 18,
+      "heading": "3장. 네트워킹 대시보드",
+      "level": 2,
+      "path": [
+        "3장. 네트워킹 대시보드"
+      ],
+      "section_path": [
+        "3장. 네트워킹 대시보드"
+      ],
+      "section_path_label": "3장. 네트워킹 대시보드",
+      "anchor": "networking-dashboards_accessing-hosts",
+      "anchor_id": "networking-dashboards_accessing-hosts",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#networking-dashboards_accessing-hosts",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "네트워킹 메트릭은 OpenShift Container Platform 웹 콘솔의 모니터링 → 대시보드의 대시보드에서 볼 수 있습니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:network-observability-operator-operator-dashboards",
+      "section_key": "networking_overview:network-observability-operator-operator-dashboards",
+      "ordinal": 19,
+      "heading": "3.1. Network Observability Operator",
+      "level": 3,
+      "path": [
+        "3장. 네트워킹 대시보드",
+        "3.1. Network Observability Operator"
+      ],
+      "section_path": [
+        "3장. 네트워킹 대시보드",
+        "3.1. Network Observability Operator"
+      ],
+      "section_path_label": "3장. 네트워킹 대시보드 > 3.1. Network Observability Operator",
+      "anchor": "network-observability-operator-operator-dashboards",
+      "anchor_id": "network-observability-operator-operator-dashboards",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#network-observability-operator-operator-dashboards",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Network Observability Operator가 설치된 경우 Dashboards 드롭다운 목록에서 Netobserv 대시보드를 선택하여 네트워크 트래픽 지표 대시보드를 볼 수 있습니다. 이 대시보드에서 사용할 수 있는 메트릭에 대한 자세한 내용은 Network Observability 지표 대시보드를 참조하십시오."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:general-networking-ovnk-dashboards",
+      "section_key": "networking_overview:general-networking-ovnk-dashboards",
+      "ordinal": 20,
+      "heading": "3.2. 네트워킹 및 OVN-Kubernetes 대시보드",
+      "level": 3,
+      "path": [
+        "3장. 네트워킹 대시보드",
+        "3.2. 네트워킹 및 OVN-Kubernetes 대시보드"
+      ],
+      "section_path": [
+        "3장. 네트워킹 대시보드",
+        "3.2. 네트워킹 및 OVN-Kubernetes 대시보드"
+      ],
+      "section_path_label": "3장. 네트워킹 대시보드 > 3.2. 네트워킹 및 OVN-Kubernetes 대시보드",
+      "anchor": "general-networking-ovnk-dashboards",
+      "anchor_id": "general-networking-ovnk-dashboards",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#general-networking-ovnk-dashboards",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "대시보드에서 일반 네트워킹 메트릭과 OVN-Kubernetes 지표를 모두 볼 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "일반 네트워킹 메트릭을 보려면 대시보드 드롭다운 목록에서 네트워킹/Linux Cryostat 통계 를 선택합니다. 대시보드에서 Network Utilization, Network Saturation,"
+        },
+        {
+          "kind": "paragraph",
+          "text": "Network Saturation) 의 다음 네트워킹 메트릭을 볼 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "OVN-Kubernetes 지표를 보려면 대시보드 드롭다운 목록에서 네트워킹/인프라 를 선택합니다. 네트워킹 구성, TCP Latency Probes, 컨트롤 플레인 리소스, 작업자 리소스 등 OVN-Kuberenetes 메트릭을 볼 수 있습니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:ingress-dashboards",
+      "section_key": "networking_overview:ingress-dashboards",
+      "ordinal": 21,
+      "heading": "3.3. Ingress Operator 대시보드",
+      "level": 3,
+      "path": [
+        "3장. 네트워킹 대시보드",
+        "3.3. Ingress Operator 대시보드"
+      ],
+      "section_path": [
+        "3장. 네트워킹 대시보드",
+        "3.3. Ingress Operator 대시보드"
+      ],
+      "section_path_label": "3장. 네트워킹 대시보드 > 3.3. Ingress Operator 대시보드",
+      "anchor": "ingress-dashboards",
+      "anchor_id": "ingress-dashboards",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#ingress-dashboards",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "대시보드에서 Ingress Operator가 처리하는 네트워킹 메트릭을 볼 수 있습니다. 여기에는 다음과 같은 메트릭이 포함됩니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "들어오고 나가는 대역폭"
+        },
+        {
+          "kind": "paragraph",
+          "text": "HTTP 오류율"
+        },
+        {
+          "kind": "paragraph",
+          "text": "HTTP 서버 응답 대기 시간"
+        },
+        {
+          "kind": "paragraph",
+          "text": "이러한 Ingress 지표를 보려면 대시보드 드롭다운 목록에서 네트워킹/Ingress 를 선택합니다. 다음 카테고리에 대한 Ingress 메트릭을 볼 수 있습니다. 경로당 상위 10 개, 네임스페이스당 상위 10 개, 하드 당 상위 10개."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:cidr-range-definitions",
+      "section_key": "networking_overview:cidr-range-definitions",
+      "ordinal": 22,
+      "heading": "4장. CIDR 범위 정의",
+      "level": 2,
+      "path": [
+        "4장. CIDR 범위 정의"
+      ],
+      "section_path": [
+        "4장. CIDR 범위 정의"
+      ],
+      "section_path_label": "4장. CIDR 범위 정의",
+      "anchor": "cidr-range-definitions",
+      "anchor_id": "cidr-range-definitions",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#cidr-range-definitions",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "클러스터에서 OVN-Kubernetes를 사용하는 경우 CIDR(Classless Inter-Domain Routing) 서브넷에 대해 겹치지 않는 범위를 지정해야 합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "중요"
+        },
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform 4.17 이상 버전의 경우 클러스터는 IPv4에 `169.254.0.0/17` 을 사용하고 IPv6의 경우 `fd69::/112` 를 기본 masquerade 서브넷으로 사용합니다. 사용자는 이러한 범위를 피해야 합니다. 업그레이드된 클러스터의 경우 기본 masquerade 서브넷이 변경되지 않습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "작은 정보"
+        },
+        {
+          "kind": "paragraph",
+          "text": "Red Hat OpenShift Network 계산기 를 사용하여 클러스터 생성 중에 CIDR 범위를 설정하기 전에 네트워킹 요구 사항을 결정할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "계산기를 사용하려면 Red Hat 계정이 있어야 합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "다음 서브넷 유형 및 OVN-Kubernetes를 사용하는 클러스터에는 필수입니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "join: 조인 스위치를 사용하여 게이트웨이 라우터를 분산 라우터에 연결합니다. 조인 스위치는 분산 라우터의 IP 주소 수를 줄입니다. OVN-Kubernetes 플러그인을 사용하는 클러스터의 경우 전용 서브넷의 IP 주소가 조인 스위치에 연결된 논리 포트에 할당됩니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "masquerade: 로드 밸런서가 라우팅 결정을 내린 후 노드에서 hairpin 트래픽이 동일한 노드로 전송되는 동일한 소스 및 대상 IP 주소에 대한 충돌을 방지합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "전송 스위치는 클러스터의 모든 노드에 걸쳐 있는 분산 스위치 유형입니다. 전송 스위치는 다른 영역 간에 트래픽을 라우팅합니다. OVN-Kubernetes 플러그인을 사용하는 클러스터의 경우 전용 서브넷의 IP 주소가 전송 스위치에 연결된 논리 포트에 할당됩니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "참고"
+        },
+        {
+          "kind": "paragraph",
+          "text": "설치 후 작업으로 클러스터의 조인, 마스커레이드 및 전송 CIDR 범위를 변경할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform 4.14 이상 버전의 기본 네트워크 공급자인 OVN-Kubernetes는 내부적으로 다음 IP 주소 서브넷 범위를 사용합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "`V4JoinSubnet`: `100.64.0.0/16`"
+        },
+        {
+          "kind": "paragraph",
+          "text": "`V6JoinSubnet`: `fd98::/64`"
+        },
+        {
+          "kind": "paragraph",
+          "text": "`V4TransitSwitchSubnet`: `100.88.0.0/16`"
+        },
+        {
+          "kind": "paragraph",
+          "text": "`V6TransitSwitchSubnet`: `fd97::/64`"
+        },
+        {
+          "kind": "paragraph",
+          "text": "`defaultV4MasqueradeSubnet`: `169.254.0.0/17`"
+        },
+        {
+          "kind": "paragraph",
+          "text": "`defaultV6MasqueradeSubnet`: `fd69::/112`"
+        },
+        {
+          "kind": "paragraph",
+          "text": "중요"
+        },
+        {
+          "kind": "paragraph",
+          "text": "이전 목록에는 조인, 전송, 마스커레이드 IPv4 및 IPv6 주소 서브넷이 포함됩니다. 클러스터에서 OVN-Kubernetes를 사용하는 경우 클러스터 또는 인프라의 다른 CIDR 정의에 이러한 IP 주소 서브넷 범위를 포함하지 마십시오."
+        },
+        {
+          "kind": "paragraph",
+          "text": "추가 리소스"
+        },
+        {
+          "kind": "paragraph",
+          "text": "조인 서브넷 또는 전송 서브넷 구성에 대한 자세한 내용은 OVN-Kubernetes 내부 IP 주소 서브넷 구성을 참조하십시오."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:machine-cidr-description",
+      "section_key": "networking_overview:machine-cidr-description",
+      "ordinal": 23,
+      "heading": "4.1. 머신 CIDR",
+      "level": 3,
+      "path": [
+        "4장. CIDR 범위 정의",
+        "4.1. 머신 CIDR"
+      ],
+      "section_path": [
+        "4장. CIDR 범위 정의",
+        "4.1. 머신 CIDR"
+      ],
+      "section_path_label": "4장. CIDR 범위 정의 > 4.1. 머신 CIDR",
+      "anchor": "machine-cidr-description",
+      "anchor_id": "machine-cidr-description",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#machine-cidr-description",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "CIDR(Machine classless inter-domain routing) 필드에서 시스템 또는 클러스터 노드의 IP 주소 범위를 지정해야 합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "참고"
+        },
+        {
+          "kind": "paragraph",
+          "text": "클러스터를 생성한 후에는 머신 CIDR 범위를 변경할 수 없습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "기본값은 `10.0.0.0/16` 입니다. 이 범위는 연결된 네트워크와 충돌해서는 안 됩니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "추가 리소스"
+        },
+        {
+          "kind": "paragraph",
+          "text": "CNO(Cluster Network Operator) 구성"
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:service-cidr-description",
+      "section_key": "networking_overview:service-cidr-description",
+      "ordinal": 24,
+      "heading": "4.2. 서비스 CIDR",
+      "level": 3,
+      "path": [
+        "4장. CIDR 범위 정의",
+        "4.2. 서비스 CIDR"
+      ],
+      "section_path": [
+        "4장. CIDR 범위 정의",
+        "4.2. 서비스 CIDR"
+      ],
+      "section_path_label": "4장. CIDR 범위 정의 > 4.2. 서비스 CIDR",
+      "anchor": "service-cidr-description",
+      "anchor_id": "service-cidr-description",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#service-cidr-description",
+      "semantic_role": "concept",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Service CIDR 필드에서 서비스의 IP 주소 범위를 지정해야 합니다. 범위는 워크로드를 수용할 수 있을 만큼 커야 합니다. 주소 블록은 클러스터 내에서 액세스한 외부 서비스와 겹치지 않아야 합니다. 기본값은 `172.30.0.0/16` 입니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:pod-cidr-description",
+      "section_key": "networking_overview:pod-cidr-description",
+      "ordinal": 25,
+      "heading": "4.3. Pod CIDR",
+      "level": 3,
+      "path": [
+        "4장. CIDR 범위 정의",
+        "4.3. Pod CIDR"
+      ],
+      "section_path": [
+        "4장. CIDR 범위 정의",
+        "4.3. Pod CIDR"
+      ],
+      "section_path_label": "4장. CIDR 범위 정의 > 4.3. Pod CIDR",
+      "anchor": "pod-cidr-description",
+      "anchor_id": "pod-cidr-description",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#pod-cidr-description",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Pod CIDR 필드에서 Pod의 IP 주소 범위를 지정해야 합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Pod CIDR은 `clusterNetwork` CIDR 및 클러스터 CIDR과 동일합니다. 범위는 워크로드를 수용할 수 있을 만큼 커야 합니다. 주소 블록은 클러스터 내에서 액세스한 외부 서비스와 겹치지 않아야 합니다. 기본값은 `10.128.0.0/14` 입니다. 클러스터 설치 후 범위를 확장할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "추가 리소스"
+        },
+        {
+          "kind": "paragraph",
+          "text": "CNO(Cluster Network Operator) 구성"
+        },
+        {
+          "kind": "paragraph",
+          "text": "클러스터 네트워크 범위 구성"
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:host-prefix-description",
+      "section_key": "networking_overview:host-prefix-description",
+      "ordinal": 26,
+      "heading": "4.4. 호스트 접두사",
+      "level": 3,
+      "path": [
+        "4장. CIDR 범위 정의",
+        "4.4. 호스트 접두사"
+      ],
+      "section_path": [
+        "4장. CIDR 범위 정의",
+        "4.4. 호스트 접두사"
+      ],
+      "section_path_label": "4장. CIDR 범위 정의 > 4.4. 호스트 접두사",
+      "anchor": "host-prefix-description",
+      "anchor_id": "host-prefix-description",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#host-prefix-description",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "code",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "`hostPrefix` 매개변수에서는 개별 머신에 예약된 Pod에 할당된 서브넷 접두사 길이를 지정해야 합니다. 호스트 접두사는 각 시스템의 Pod IP 주소 풀을 결정합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "예를 들어 호스트 접두사가 `/23` 으로 설정된 경우 각 시스템에는 Pod CIDR 주소 범위의 `/23` 서브넷이 할당됩니다. 기본값은 `/23` 으로, 노드당 510 클러스터 노드 및 510 Pod IP 주소를 허용합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "`clusterNetwork.cidr` 매개변수를 `10.128.0.0/16` 으로 설정하는 다른 예를 살펴보겠습니다. 클러스터의 전체 주소 공간을 정의합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "이렇게 하면 클러스터에 65536 IP 주소 풀이 할당됩니다. 그런 다음 `hostPrefix` 매개변수를 `/23` 로 설정하면 클러스터의 각 노드에 서브넷 슬라이스를 정의합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "여기서 `/23` 슬라이스는 `/16` 서브넷 네트워크의 서브넷이 됩니다. 이렇게 하면 각 노드에 512 IP 주소를 할당합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "여기서 네트워킹 및 브로드캐스트 목적으로 2개의 IP 주소가 예약되어 있습니다. 다음 예제 계산에서는 이러한 IP 주소 수를 사용하여 클러스터에 대해 생성할 수 있는 최대 노드 수를 결정합니다."
+        },
+        {
+          "kind": "code",
+          "language": "plaintext",
+          "code": "65536 / 512 = 128",
+          "copy_text": "65536 / 512 = 128",
+          "wrap_hint": true,
+          "overflow_hint": "toggle",
+          "caption": ""
+        },
+        {
+          "kind": "paragraph",
+          "text": "Red Hat OpenShift Network 계산기 를 사용하여 클러스터의 최대 노드 수를 계산할 수 있습니다."
+        }
+      ]
+    },
+    {
+      "section_id": "networking_overview:hcp-cidr-ranges_cidr-range-definitions",
+      "section_key": "networking_overview:hcp-cidr-ranges_cidr-range-definitions",
+      "ordinal": 27,
+      "heading": "4.5. 호스팅된 컨트롤 플레인의 CIDR 범위",
+      "level": 3,
+      "path": [
+        "4장. CIDR 범위 정의",
+        "4.5. 호스팅된 컨트롤 플레인의 CIDR 범위"
+      ],
+      "section_path": [
+        "4장. CIDR 범위 정의",
+        "4.5. 호스팅된 컨트롤 플레인의 CIDR 범위"
+      ],
+      "section_path_label": "4장. CIDR 범위 정의 > 4.5. 호스팅된 컨트롤 플레인의 CIDR 범위",
+      "anchor": "hcp-cidr-ranges_cidr-range-definitions",
+      "anchor_id": "hcp-cidr-ranges_cidr-range-definitions",
+      "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#hcp-cidr-ranges_cidr-range-definitions",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform에 호스팅되는 컨트롤 플레인을 배포하려면 다음과 같은 필수 Classless Inter-Domain Routing (CIDR) 서브넷 범위를 사용합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "`v4InternalSubnet`: 100.65.0.0/16 (OVN-Kubernetes)"
+        },
+        {
+          "kind": "paragraph",
+          "text": "`clusterNetwork`: 10.132.0.0/14 (pod 네트워크)"
+        },
+        {
+          "kind": "paragraph",
+          "text": "`serviceNetwork`: 172.31.0.0/16"
+        },
+        {
+          "kind": "paragraph",
+          "text": "OpenShift Container Platform CIDR 범위 정의에 대한 자세한 내용은 \"CIDR 범위 정의\"를 참조하십시오."
+        }
+      ]
+    }
+  ],
+  "quality_status": "ready",
+  "quality_score": 0.0,
+  "quality_flags": []
+}

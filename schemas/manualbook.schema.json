@@ -1,0 +1,369 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://play-book-studio.local/schemas/manualbook.schema.json",
+  "title": "Play Book Studio Manualbook",
+  "description": "Reader-facing Korean manualbook artifact built from canonical document data.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "book_slug",
+    "title",
+    "version",
+    "locale",
+    "source_uri",
+    "legal_notice_url",
+    "translation_status",
+    "quality_status",
+    "review_status",
+    "source_metadata",
+    "quality_flags",
+    "sections"
+  ],
+  "properties": {
+    "canonical_model": {
+      "type": "string"
+    },
+    "source_view_strategy": {
+      "type": "string"
+    },
+    "book_slug": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^4\\.[0-9]+$"
+    },
+    "locale": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(?:-[a-z]{2})?$"
+    },
+    "source_uri": {
+      "type": "string",
+      "format": "uri"
+    },
+    "source_language": {
+      "type": "string"
+    },
+    "language_hint": {
+      "type": "string"
+    },
+    "legal_notice_url": {
+      "type": "string",
+      "format": "uri",
+      "minLength": 1
+    },
+    "translation_status": {
+      "type": "string",
+      "enum": [
+        "approved_ko",
+        "translated_ko_draft",
+        "review_required",
+        "original",
+        "blocked"
+      ]
+    },
+    "translation_stage": {
+      "type": "string"
+    },
+    "translation_source_uri": {
+      "type": "string"
+    },
+    "translation_source_language": {
+      "type": "string"
+    },
+    "translation_source_fingerprint": {
+      "type": "string"
+    },
+    "quality_status": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "review_required",
+        "translation_required",
+        "draft",
+        "blocked"
+      ]
+    },
+    "review_status": {
+      "type": "string",
+      "enum": [
+        "unreviewed",
+        "needs_review",
+        "approved",
+        "rejected"
+      ]
+    },
+    "pack_id": {
+      "type": "string"
+    },
+    "inferred_version": {
+      "type": "string"
+    },
+    "section_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "source_metadata": {
+      "$ref": "#/$defs/sourceMetadata"
+    },
+    "quality_flags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "quality_score": {
+      "type": "number"
+    },
+    "anchor_map": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/section"
+      }
+    }
+  },
+  "$defs": {
+    "sourceMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "source_type",
+        "source_lane",
+        "source_collection",
+        "product",
+        "version",
+        "trust_score",
+        "original_url",
+        "original_title",
+        "legal_notice_url",
+        "license_or_terms",
+        "review_status",
+        "verifiability",
+        "updated_at"
+      ],
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "source_lane": {
+          "type": "string"
+        },
+        "product": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "trust_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "original_url": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1
+        },
+        "original_title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_collection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "legal_notice_url": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1
+        },
+        "license_or_terms": {
+          "type": "string",
+          "minLength": 1
+        },
+        "review_status": {
+          "type": "string",
+          "enum": [
+            "unreviewed",
+            "needs_review",
+            "approved",
+            "rejected"
+          ]
+        },
+        "verifiability": {
+          "type": "string",
+          "minLength": 1
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "minLength": 1
+        },
+        "parsed_artifact_id": {
+          "type": "string"
+        },
+        "tenant_id": {
+          "type": "string"
+        },
+        "workspace_id": {
+          "type": "string"
+        },
+        "pack_id": {
+          "type": "string"
+        },
+        "pack_version": {
+          "type": "string"
+        },
+        "bundle_scope": {
+          "type": "string"
+        },
+        "classification": {
+          "type": "string"
+        },
+        "access_groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provider_egress_policy": {
+          "type": "string"
+        },
+        "approval_state": {
+          "type": "string"
+        },
+        "publication_state": {
+          "type": "string"
+        },
+        "redaction_state": {
+          "type": "string"
+        },
+        "citation_eligible": {
+          "type": "boolean"
+        },
+        "citation_block_reason": {
+          "type": "string"
+        },
+        "translation_source_language": {
+          "type": "string"
+        }
+      }
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "section_id",
+        "ordinal",
+        "heading",
+        "level",
+        "section_path",
+        "anchor_id",
+        "blocks"
+      ],
+      "properties": {
+        "section_id": {
+          "type": "string"
+        },
+        "section_key": {
+          "type": "string"
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "heading": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "section_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "section_path_label": {
+          "type": "string"
+        },
+        "anchor": {
+          "type": "string"
+        },
+        "anchor_id": {
+          "type": "string"
+        },
+        "viewer_path": {
+          "type": "string"
+        },
+        "semantic_role": {
+          "type": "string",
+          "enum": [
+            "overview",
+            "procedure",
+            "reference",
+            "concept",
+            "appendix",
+            "unknown"
+          ]
+        },
+        "block_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/block"
+          }
+        }
+      }
+    },
+    "block": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "paragraph",
+            "prerequisite",
+            "procedure",
+            "code",
+            "note",
+            "table",
+            "anchor"
+          ]
+        }
+      }
+    }
+  }
+}

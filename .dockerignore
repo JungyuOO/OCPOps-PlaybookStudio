@@ -1,0 +1,16 @@
+.git
+.gitignore
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+artifacts
+data
+reports
+tmp
+tmp_source
+presentation-ui/node_modules
+presentation-ui/dist
+

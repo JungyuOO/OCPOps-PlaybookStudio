@@ -1,0 +1,113 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
+
+:root {
+  /* --- Semantic Palette (Dark Mode - Default) --- */
+  --pbs-bg-main: #0d0d0f;
+  --pbs-bg-surface: #151518;
+  --pbs-bg-panel: rgba(21, 21, 24, 0.9);
+  --pbs-bg-card: rgba(255, 255, 255, 0.02);
+
+  --pbs-text-main: #ffffff;
+  --pbs-text-muted: #888899;
+  --pbs-text-dim: #444455;
+
+  --pbs-accent-cyan: #00d1ff;
+  --pbs-accent-purple: #8c52ff;
+  --pbs-accent-glow: rgba(0, 209, 255, 0.4);
+
+  --pbs-glass-bg: rgba(21, 21, 24, 0.6);
+  --pbs-glass-border: rgba(255, 255, 255, 0.05);
+
+  /* --- Legacy Compatibility (To be phased out) --- */
+  --bg-color: var(--pbs-bg-main);
+  --bg-surface: var(--pbs-bg-surface);
+  --text-main: var(--pbs-text-main);
+  --text-muted: var(--pbs-text-muted);
+  --text-dim: var(--pbs-text-dim);
+  --accent-cyan: var(--pbs-accent-cyan);
+  --accent-purple: var(--pbs-accent-purple);
+  --accent-glow: var(--pbs-accent-glow);
+  --glass-bg: var(--pbs-glass-bg);
+  --glass-border: var(--pbs-glass-border);
+
+  /* Transitions */
+  --pbs-theme-transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme='light'] {
+  /* --- Semantic Palette (Light Mode Override) --- */
+  --pbs-bg-main: #fcfcfd;
+  --pbs-bg-surface: #f2f2f7;
+  --pbs-bg-panel: rgba(255, 255, 255, 0.9);
+  --pbs-bg-card: rgba(0, 0, 0, 0.02);
+
+  --pbs-text-main: #141416;
+  --pbs-text-muted: #666675;
+  --pbs-text-dim: #9ca3af;
+
+  --pbs-accent-cyan: #00a3cc;
+  --pbs-accent-purple: #7236ff;
+  --pbs-accent-glow: rgba(0, 163, 204, 0.2);
+
+  --pbs-glass-bg: rgba(255, 255, 255, 0.75);
+  --pbs-glass-border: rgba(0, 0, 0, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  transition: var(--pbs-theme-transition);
+}
+
+html,
+body {
+  width: 100%;
+  min-height: 100vh;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+
+/* Aesthetic Utility Classes */
+.text-giant {
+  font-size: clamp(4rem, 12vw, 14rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1.05;
+}
+
+.text-hero {
+  font-size: clamp(3rem, 6vw, 7rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.text-subtitle {
+  font-size: clamp(1.2rem, 3vw, 1.8rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--text-muted);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-purple) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  border-radius: 32px;
+}

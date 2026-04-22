@@ -1,0 +1,74 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+presentation-ui/dist/
+presentation-ui/node_modules/
+artifacts/
+/archive/
+/_quarantine/
+data/bronze/raw_html/
+data/bronze/source_bundles/
+data/silver/normalized_docs.jsonl
+# incorporation baseline keeps the three curated datasets below in Git:
+# - data/silver_ko
+# - data/gold_corpus_ko
+# - data/gold_manualbook_ko
+reports/build_logs/
+reports/build_logs/ui_server_stdout.log
+reports/build_logs/ui_server_stderr.log
+reports/build_logs/*.out.log
+reports/build_logs/*.err.log
+reports/build_logs/task_scheduler/
+reports/demo_simulator/
+reports/execution_harness/
+reports/multiturn/
+reports/technical_notes/
+reports/execution_harness/**/chrome-headless-profile*/
+validation_report.json
+tmp_customer_pack_live/
+#
+# local source mirrors for rebuild/materialization are intentionally unmanaged
+# in the top-level PBS repository.
+/tmp_source/
+.DS_Store
+env
+.claude/
+.internal/
+materialization
+reports/eval_reports/
+reports/tmp_repo_hygiene_audit.json
+!AGENTS.md
+study.md
+src/ocp_rag_v2.egg-info/
+C:/
+tmp/
+tmp_qdrant_smoke_chunks.jsonl
+PRD.md
+CANONICAL_AST_DESIGN.md
+CODE_READING_GUIDE.md
+ENTRYPOINTS.md
+EVALS.md
+MULTIVERSION_CRAWLER_DESIGN.md
+PACK_BOUNDARY_AUDIT.md
+PRODUCTIZATION_TODO.md
+RESTRUCTURE_DRAFT.md
+RETRIEVAL_ROOT_CAUSE_AUDIT.md
+STRUCTURE_REFACTOR_BACKLOG.md
+SYSTEM_ROOT_CAUSE_AUDIT.md
+TEAM_OPS.md
+VENDOR_NOTES.md
+docs/playbook_wiki/
+docs/arrange_26.04.18*.md
+docs/ocp420_assignment_*.md
+docs/pipeline_toolchain_detail.md
+docs/retrieval_flow.md
+
+.omx
+.venv
+__pycache__
+

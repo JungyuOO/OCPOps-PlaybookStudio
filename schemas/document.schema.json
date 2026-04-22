@@ -1,0 +1,313 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://play-book-studio.local/schemas/document.schema.json",
+  "title": "Play Book Studio Silver Document Row",
+  "description": "Normalized section row emitted into data/silver/normalized_docs.jsonl.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "book_slug",
+    "book_title",
+    "heading",
+    "section_level",
+    "section_path",
+    "anchor",
+    "anchor_id",
+    "source_url",
+    "viewer_path",
+    "text",
+    "section_id",
+    "semantic_role",
+    "block_kinds",
+    "source_language",
+    "display_language",
+    "translation_status",
+    "translation_stage",
+    "translation_source_language",
+    "translation_source_url",
+    "translation_source_fingerprint",
+    "source_id",
+    "source_lane",
+    "source_type",
+    "source_collection",
+    "product",
+    "version",
+    "locale",
+    "original_title",
+    "legal_notice_url",
+    "license_or_terms",
+    "review_status",
+    "trust_score",
+    "verifiability",
+    "updated_at",
+    "cli_commands",
+    "error_strings",
+    "k8s_objects",
+    "operator_names",
+    "verification_hints"
+  ],
+  "properties": {
+    "book_slug": {
+      "type": "string",
+      "minLength": 1
+    },
+    "book_title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "heading": {
+      "type": "string",
+      "minLength": 1
+    },
+    "section_level": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "section_path": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "anchor": {
+      "type": "string",
+      "minLength": 1
+    },
+    "anchor_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "viewer_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "section_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "semantic_role": {
+      "type": "string",
+      "enum": [
+        "overview",
+        "procedure",
+        "reference",
+        "concept",
+        "appendix",
+        "unknown"
+      ]
+    },
+    "block_kinds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "paragraph",
+          "prerequisite",
+          "procedure",
+          "code",
+          "note",
+          "table",
+          "anchor"
+        ]
+      }
+    },
+    "source_language": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(?:-[a-z]{2})?$"
+    },
+    "display_language": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(?:-[a-z]{2})?$"
+    },
+    "translation_status": {
+      "type": "string",
+      "enum": [
+        "original",
+        "approved_ko",
+        "translated_ko_draft",
+        "review_required",
+        "blocked"
+      ]
+    },
+    "translation_stage": {
+      "type": "string"
+    },
+    "translation_source_language": {
+      "type": "string"
+    },
+    "translation_source_url": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri"
+        },
+        {
+          "const": ""
+        }
+      ]
+    },
+    "translation_source_fingerprint": {
+      "type": "string"
+    },
+    "source_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_lane": {
+      "type": "string",
+      "enum": [
+        "official_ko",
+        "official_en_fallback",
+        "github_raw_troubleshooting",
+        "applied_playbook",
+        "internal_runbook"
+      ]
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "official_doc",
+        "official_issue",
+        "official_pr",
+        "community_issue",
+        "community_blog",
+        "internal_runbook",
+        "manual_synthesis"
+      ]
+    },
+    "source_collection": {
+      "type": "string"
+    },
+    "product": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^4\\.[0-9]+$"
+    },
+    "locale": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(?:-[a-z]{2})?$"
+    },
+    "original_title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "legal_notice_url": {
+      "type": "string",
+      "format": "uri",
+      "minLength": 1
+    },
+    "license_or_terms": {
+      "type": "string",
+      "minLength": 1
+    },
+    "review_status": {
+      "type": "string",
+      "enum": [
+        "unreviewed",
+        "needs_review",
+        "approved",
+        "rejected"
+      ]
+    },
+    "trust_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "verifiability": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 1
+    },
+    "parsed_artifact_id": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "workspace_id": {
+      "type": "string"
+    },
+    "parent_pack_id": {
+      "type": "string"
+    },
+    "pack_version": {
+      "type": "string"
+    },
+    "bundle_scope": {
+      "type": "string"
+    },
+    "classification": {
+      "type": "string"
+    },
+    "access_groups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "provider_egress_policy": {
+      "type": "string"
+    },
+    "approval_state": {
+      "type": "string"
+    },
+    "publication_state": {
+      "type": "string"
+    },
+    "redaction_state": {
+      "type": "string"
+    },
+    "citation_eligible": {
+      "type": "boolean"
+    },
+    "citation_block_reason": {
+      "type": "string"
+    },
+    "cli_commands": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error_strings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "k8s_objects": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "operator_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "verification_hints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

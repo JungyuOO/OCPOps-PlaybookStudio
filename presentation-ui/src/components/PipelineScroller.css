@@ -1,0 +1,219 @@
+.pipeline-wrapper {
+  overflow: hidden;
+  height: 100vh;
+  position: relative;
+  background: var(--bg-color);
+  display: flex;
+  flex-direction: column;
+}
+
+.pipeline-wrapper .pipeline-header {
+  padding: 8rem 10vw 2rem 10vw;
+  z-index: 10;
+}
+
+.pipeline-wrapper .pipeline-header h2 {
+  margin-bottom: 1rem;
+}
+
+.pipeline-wrapper .pipeline-track-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  isolation: isolate;
+  /* Create a boundary for z-index calculation */
+  /* overflow:hidden removed — it was creating a GPU compositing layer that
+     let Chrome ignore z-index, putting the nerve line above cards.
+     Clipping is handled by pipeline-wrapper's overflow:hidden instead. */
+}
+
+.pipeline-wrapper .nerve-path {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100vw;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  z-index: 1;
+  /* Stay behind steps-inner (20) */
+  pointer-events: none;
+  /* pipeline-track-container is z-index:2, so nerve-path(1) is behind it */
+  will-change: transform;
+}
+
+.pipeline-wrapper .nerve-progress {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+  box-shadow: 0 0 20px var(--accent-cyan), 0 0 40px var(--accent-purple);
+}
+
+.pipeline-wrapper .pipeline-track {
+  display: flex;
+  width: 280vw;
+  /* (70vw * 4 steps) Adjusted for tighter rhythm */
+  height: 60vh;
+  padding: 0 15vw;
+  /* Centering buffer */
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.pipeline-wrapper .pipeline-steps-inner {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  z-index: 20;
+  /* High enough to stay above nerve-path (1) */
+  /* Synchronize GPU layer promotion with the nerve path sibling */
+  will-change: transform;
+  transform: translateZ(10px);
+  /* Aggressively force 3D stacking context above nerve-path */
+}
+
+.pipeline-wrapper .pipeline-step {
+  flex: 0 0 70vw;
+  /* Tighter rhythm: 100vw -> 70vw */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  z-index: 10;
+  /* Ensure steps are above the nerve path */
+  /* Force a stacking context if transform doesn't exist */
+  transform: translateZ(0);
+}
+
+/* step-node: 완전히 제거하여 레이아웃 및 시각적 간섭 방지 */
+.pipeline-wrapper .step-node {
+  display: none;
+}
+
+.pipeline-wrapper .step-card {
+  width: 500px;
+  aspect-ratio: 1 / 1;
+  padding: 3.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  z-index: 5;
+
+  /* Solid background so the nerve line is fully hidden behind the card.
+     backdrop-filter removed: it forces GPU compositing layers that break z-index
+     ordering against sibling elements (known Chrome bug). */
+  background: rgb(18, 18, 22);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 32px;
+
+  transition: all 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Border Scan Beam Effect */
+.pipeline-wrapper .step-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg,
+      transparent,
+      rgba(0, 209, 255, 0.2),
+      rgba(140, 82, 255, 0.2),
+      transparent);
+  transform: skewX(-20deg);
+  transition: none;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* Ignition Glow State — lit when the nerve line reaches the card */
+.pipeline-wrapper .step-card.active-glow {
+  border-color: rgba(0, 209, 255, 0.85);
+  /* Use multiple backgrounds: gradient for the cyan glow, solid base to block the nerve line */
+  background: linear-gradient(0deg, rgba(0, 209, 255, 0.08), rgba(0, 209, 255, 0.08)), rgb(18, 18, 22);
+  box-shadow:
+    0 0 0 1px rgba(0, 209, 255, 0.55),
+    0 0 28px rgba(0, 209, 255, 0.55),
+    0 0 60px rgba(140, 82, 255, 0.35),
+    inset 0 0 30px rgba(0, 209, 255, 0.12);
+}
+
+.pipeline-wrapper .step-card.active-glow::after {
+  left: 200%;
+  transition: left 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Subtle pulsing while lit so the "arrival" reads even if user stops scrolling */
+@keyframes pipelineCardPulse {
+
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(0, 209, 255, 0.55),
+      0 0 28px rgba(0, 209, 255, 0.55),
+      0 0 60px rgba(140, 82, 255, 0.35),
+      inset 0 0 30px rgba(0, 209, 255, 0.12);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(0, 209, 255, 0.75),
+      0 0 38px rgba(0, 209, 255, 0.7),
+      0 0 80px rgba(140, 82, 255, 0.5),
+      inset 0 0 38px rgba(0, 209, 255, 0.18);
+  }
+}
+
+.pipeline-wrapper .step-card.active-glow {
+  animation: pipelineCardPulse 2.4s ease-in-out infinite;
+}
+
+.pipeline-wrapper .step-number {
+  font-size: 2.5rem;
+  font-weight: 800;
+  font-family: var(--font-mono, monospace);
+  margin-bottom: 1.5rem;
+  opacity: 0.8;
+  transition: color 0.6s, opacity 0.6s, text-shadow 0.6s;
+}
+
+.pipeline-wrapper .step-card.active-glow .step-number {
+  color: var(--accent-cyan, #00d1ff);
+  opacity: 1;
+  text-shadow: 0 0 16px rgba(0, 209, 255, 0.8), 0 0 32px rgba(0, 209, 255, 0.4);
+}
+
+.pipeline-wrapper .step-title {
+  font-size: 2rem;
+  margin-bottom: 1.2rem;
+  color: var(--text-main);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.pipeline-wrapper .step-desc {
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 100%;
+}
+
+.pipeline-wrapper .highlight-card {
+  border: 1px solid rgba(140, 82, 255, 0.3);
+  box-shadow: 0 0 40px rgba(140, 82, 255, 0.1) inset;
+}
