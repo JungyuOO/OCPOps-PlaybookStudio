@@ -91,7 +91,8 @@
   border: 1px solid var(--glass-border);
 }
 
-.view-toggle button {
+.view-toggle button,
+.view-toggle-link {
   padding: 8px 20px;
   border-radius: 8px;
   border: none;
@@ -104,25 +105,14 @@
   gap: 8px;
   cursor: pointer;
   transition: all 0.3s;
+  text-decoration: none;
 }
 
-.view-toggle button.active {
+.view-toggle button.active,
+.view-toggle-link:hover {
   background: rgba(0, 209, 255, 0.15);
   color: var(--pbs-accent-cyan);
   box-shadow: 0 4px 12px rgba(0, 209, 255, 0.1);
-}
-
-.library-ops-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 16px;
-  border-radius: 12px;
-  text-decoration: none;
-  font-weight: 700;
-  color: #041118;
-  background: linear-gradient(135deg, #8ef7db, #48d3f5);
 }
 
 /* Main Content */
