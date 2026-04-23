@@ -2,14 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Activity,
+  ArrowRight,
   BookOpen,
   Bot,
   Cable,
   Database,
   GitBranch,
   Layers3,
-  Play,
+  Send,
   ShieldCheck,
+  Sparkles,
   Workflow,
 } from 'lucide-react';
 import './OpsConsolePage.css';
@@ -110,6 +112,12 @@ const ROUTE_SECTIONS: Array<{
 
 const RESOURCE_OPTIONS = ['pods', 'deployments', 'services', 'routes', 'events'] as const;
 const ACTION_OPTIONS = ['scale_deployment', 'rollout_restart', 'log_bundle', 'yaml_apply'] as const;
+const OPS_CHAT_STARTERS = [
+  'demo namespace 배포 상태를 먼저 점검해줘',
+  'payments-api가 왜 ready replicas가 부족한지 확인 순서를 알려줘',
+  'Route와 Service 연결을 볼 때 어떤 리소스를 같이 봐야 하는지 정리해줘',
+  '현재 문서 라이브러리 기준으로 OpenShift 운영 입문 순서를 추천해줘',
+] as const;
 
 function sectionFromPath(pathname: string): OpsRouteKey {
   return ROUTE_SECTIONS.find((item) => item.path === pathname)?.key ?? 'workspaces';
@@ -1096,33 +1104,91 @@ export default function OpsConsolePage() {
               <div className="ops-panel-header">
                 <h2>Copilot Chat</h2>
               </div>
-              <div className="ops-chat-transcript">
-                {messages.map((message) => (
-                  <article key={message.id} className={`ops-chat-bubble ${message.role}`}>
-                    <strong>{message.role === 'user' ? 'User' : 'Assistant'}</strong>
-                    <p>{message.content}</p>
-                    {message.sources?.length ? (
-                      <div className="ops-inline-actions">
-                        {message.sources.map((source) => (
-                          <button key={`${message.id}-${source.index}`} type="button" onClick={() => { void handleOpenSnippet(source.source_path, source.chunk_id); }}>
-                            {source.title}
+              <div className="ops-chat-shell">
+                <div className="ops-chat-transcript">
+                  {messages.length === 0 && (
+                    <div className="ops-chat-welcome">
+                      <div className="ops-chat-welcome-icon">
+                        <Sparkles size={30} />
+                      </div>
+                      <h3>Ask the OCP Console</h3>
+                      <p>
+                        PBS 채팅처럼 운영 흐름 중심으로 질문을 시작할 수 있게 구성했습니다.
+                        문서 기반 질문과 현재 연결된 클러스터 확인을 한 화면에서 이어갈 수 있습니다.
+                      </p>
+                      <div className="ops-chat-starter-grid">
+                        {OPS_CHAT_STARTERS.map((starter, index) => (
+                          <button
+                            key={`ops-starter-${index}`}
+                            type="button"
+                            className="ops-chat-starter-card"
+                            onClick={() => setChatDraft(starter)}
+                          >
+                            <span className="ops-chat-starter-index">Step {index + 1}</span>
+                            <strong>{starter}</strong>
+                            <span className="ops-chat-starter-arrow">
+                              <ArrowRight size={14} />
+                            </span>
                           </button>
                         ))}
                       </div>
-                    ) : null}
-                    {message.artifacts?.length ? <pre>{formatJson(message.artifacts)}</pre> : null}
-                  </article>
-                ))}
+                    </div>
+                  )}
+                  {messages.map((message) => (
+                    <div key={message.id} className={`ops-chat-row ${message.role}`}>
+                      <article className={`ops-chat-bubble ${message.role}`}>
+                        <div className="ops-chat-bubble-label">{message.role === 'user' ? 'User' : 'Assistant'}</div>
+                        <p>{message.content}</p>
+                        {message.sources?.length ? (
+                          <div className="ops-chat-chip-row">
+                            {message.sources.map((source) => (
+                              <button
+                                key={`${message.id}-${source.index}`}
+                                type="button"
+                                className="ops-chat-chip"
+                                onClick={() => { void handleOpenSnippet(source.source_path, source.chunk_id); }}
+                              >
+                                {source.title}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        {message.artifacts?.length ? (
+                          <div className="ops-chat-artifact-panel">
+                            <div className="ops-chat-artifact-title">Artifacts</div>
+                            <pre>{formatJson(message.artifacts)}</pre>
+                          </div>
+                        ) : null}
+                      </article>
+                    </div>
+                  ))}
+                </div>
+                {chatStages.length ? (
+                  <div className="ops-chat-stage-strip">
+                    {chatStages.map((stage, index) => (
+                      <div key={`${stage.label}-${index}`} className={`ops-chat-stage-card ${stage.status}`}>
+                        <strong>{stage.label}</strong>
+                        <span>{stage.detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
-              {chatStages.length ? <pre>{formatJson(chatStages)}</pre> : null}
-              <div className="ops-chat-composer">
-                <input value={chatDraft} onChange={(event) => setChatDraft(event.target.value)} placeholder="문서나 리소스 상태를 질문하세요" />
-                <button type="button" className="ops-primary-btn" disabled={chatSending} onClick={() => { void handleSendChat(); }}>
-                  <Play size={14} />
-                  <span>{chatSending ? 'Running' : 'Send'}</span>
-                </button>
+              <div className="ops-chat-composer-wrap">
+                <div className="ops-chat-composer">
+                  <input value={chatDraft} onChange={(event) => setChatDraft(event.target.value)} placeholder="문서나 리소스 상태를 질문하세요" />
+                  <button type="button" className="ops-chat-send-btn" disabled={chatSending} onClick={() => { void handleSendChat(); }}>
+                    <Send size={16} />
+                    <span>{chatSending ? 'Running' : 'Send'}</span>
+                  </button>
+                </div>
               </div>
-              {snippet ? <pre>{snippet.snippet}</pre> : null}
+              {snippet ? (
+                <div className="ops-chat-snippet-panel">
+                  <div className="ops-chat-artifact-title">Snippet</div>
+                  <pre>{snippet.snippet}</pre>
+                </div>
+              ) : null}
             </section>
           )}
 
