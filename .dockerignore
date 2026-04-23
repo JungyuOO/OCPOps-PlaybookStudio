@@ -13,4 +13,5 @@ tmp
 tmp_source
 presentation-ui/node_modules
 presentation-ui/dist
-
+.playwright-cli
+output/*

@@ -72,3 +72,5 @@ docs/retrieval_flow.md
 .venv
 __pycache__
 
+.playwright-cli
+output/*
