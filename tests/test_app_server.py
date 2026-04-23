@@ -122,7 +122,6 @@ def test_spa_deep_links_return_index_html_for_pbs_surfaces() -> None:
         "/playbook-library/repository",
         "/workspaces",
         "/connections",
-        "/models",
         "/overview",
         "/resources",
         "/library",

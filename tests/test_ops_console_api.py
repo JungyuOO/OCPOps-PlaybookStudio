@@ -47,7 +47,7 @@ def _test_server(root: Path):
         thread.join(timeout=5)
 
 
-def test_ops_console_workspaces_and_models_roundtrip() -> None:
+def test_ops_console_workspaces_create_roundtrip() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
         with _test_server(root) as base_url:
@@ -65,31 +65,11 @@ def test_ops_console_workspaces_and_models_roundtrip() -> None:
             create_response.raise_for_status()
             created = create_response.json()
 
-            update_response = requests.put(
-                f"{base_url}/api/v1/workspaces/{created['workspace_id']}/models/default",
-                json={
-                    "chat_provider": "openai-compatible",
-                    "chat_base_url": "http://llm.internal/v1",
-                    "chat_model": "gpt-4o-mini",
-                    "chat_api_key_mode": "managed",
-                    "embedding_provider": "tei",
-                    "embedding_base_url": "http://tei.internal",
-                    "embedding_model": "bge-m3",
-                    "embedding_api_key_mode": "managed",
-                },
-                timeout=10,
-            )
-            update_response.raise_for_status()
+            reload_response = requests.get(f"{base_url}/api/v1/workspaces", timeout=10)
+            reload_response.raise_for_status()
+            reload_payload = reload_response.json()
 
-            load_response = requests.get(
-                f"{base_url}/api/v1/workspaces/{created['workspace_id']}/models/default",
-                timeout=10,
-            )
-            load_response.raise_for_status()
-            model_payload = load_response.json()
-
-            assert model_payload["chat_model"] == "gpt-4o-mini"
-            assert model_payload["embedding_model"] == "bge-m3"
+            assert any(item["workspace_id"] == created["workspace_id"] for item in reload_payload["items"])
 
 
 def test_ops_console_connection_recommendations_and_resources_flow() -> None:
