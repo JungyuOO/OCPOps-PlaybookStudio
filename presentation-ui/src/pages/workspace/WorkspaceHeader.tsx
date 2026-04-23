@@ -85,7 +85,7 @@ export default function WorkspaceHeader({
         >
           TEST
         </button>
-        <Link to={ROUTES.opsWorkspaces} className="nav-btn nav-link-btn">Ops Console</Link>
+        <Link to={ROUTES.opsOverview} className="nav-btn nav-link-btn">Ops Console</Link>
         <button className="nav-btn" onClick={onOpenLibrary} type="button">Playbook Library</button>
         <button className="nav-btn lang-btn" type="button">
           <Languages size={18} />
