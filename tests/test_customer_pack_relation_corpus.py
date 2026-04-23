@@ -151,6 +151,7 @@ class CustomerPackRelationCorpusTests(unittest.TestCase):
 
             self.assertEqual("hybrid", manifest["origin_method"])
             self.assertEqual("applied", manifest["ocr_status"])
+            self.assertEqual(["surya"], list(manifest.get("ocr_backends") or []))
             self.assertGreater(int(manifest["ocr_row_count"]), 0)
             self.assertGreater(int(manifest["ocr_applied_count"]), 0)
             self.assertTrue(ocr_rows)

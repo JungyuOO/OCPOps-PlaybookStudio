@@ -922,6 +922,7 @@ def materialize_customer_pack_private_corpus(
         or _payload_origin_method(canonical_payload),
         "ocr_status": str((slide_packets_payload or {}).get("ocr_status") or _payload_ocr_status(canonical_payload)).strip()
         or _payload_ocr_status(canonical_payload),
+        "ocr_backends": list((slide_packets_payload or {}).get("ocr_backends") or []),
         "canonical_book_slug": str(canonical_payload.get("book_slug") or draft_id).strip() or draft_id,
         "canonical_title": str(canonical_payload.get("title") or draft_id).strip() or draft_id,
         "asset_slugs": [

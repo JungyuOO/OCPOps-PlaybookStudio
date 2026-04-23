@@ -197,6 +197,7 @@ PPT 승급 기준:
 - `source_unit_anchor`
 - `origin_method`
 - `ocr_status`
+- `ocr_backends`
 - `lineage_viewer_path`
 - `graph_relations`
 
@@ -206,6 +207,14 @@ PPT 승급 기준:
 - `relation chunk`
 - `table chunk`
 - `visual/ocr chunk`
+
+OCR policy note:
+- 기본 전략은 `native-first + OCR augment`
+- 원격 OCR backend는 `Surya`와 `Qwen(OpenAI-compatible vision)` 둘 다 허용
+- 기본 backend는 `Surya`
+- `Qwen`은 `PBS_CUSTOMER_PACK_PDF_FALLBACK_BACKEND=qwen`일 때만 explicit opt-in
+- manifest/slide packet에는 `origin_method`, `ocr_status`, `ocr_backends`를 남긴다
+- 현재 residual risk: `Qwen`은 low-signal image에서 hallucinated OCR text 가능성이 있어 운영 기본값으로는 두지 않는다
 
 ## Acceptance Criteria
 

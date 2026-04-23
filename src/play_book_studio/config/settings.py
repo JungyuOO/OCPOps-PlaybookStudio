@@ -137,6 +137,10 @@ class Settings(SettingsPathMixin):
     surya_ocr_endpoint: str = ""
     surya_health_endpoint: str = ""
     surya_timeout_seconds: float = 30.0
+    qwen_ocr_endpoint: str = ""
+    qwen_ocr_api_key: str = ""
+    qwen_ocr_model: str = ""
+    qwen_ocr_timeout_seconds: float = 120.0
     unhwp_bin: str = ""
     unhwp_timeout_seconds: float = 30.0
     ocp_api_base_url: str = ""
@@ -355,6 +359,10 @@ def load_settings(root_dir: str | Path) -> Settings:
         surya_ocr_endpoint=effective_env.get("SURYA_OCR", "").strip().rstrip("/"),
         surya_health_endpoint=effective_env.get("SURYA_HEALTH", "").strip().rstrip("/"),
         surya_timeout_seconds=float(effective_env.get("SURYA_TIMEOUT_SECONDS", "30")),
+        qwen_ocr_endpoint=effective_env.get("QWEN_OCR_ENDPOINT", "").strip().rstrip("/"),
+        qwen_ocr_api_key=effective_env.get("QWEN_OCR_API_KEY", "").strip(),
+        qwen_ocr_model=effective_env.get("QWEN_OCR_MODEL", "").strip(),
+        qwen_ocr_timeout_seconds=float(effective_env.get("QWEN_OCR_TIMEOUT_SECONDS", "120")),
         unhwp_bin=effective_env.get("UNHWP_BIN", "").strip(),
         unhwp_timeout_seconds=float(effective_env.get("UNHWP_TIMEOUT_SECONDS", "30")),
         ocp_api_base_url=effective_env.get("OCP_API_BASE_URL", "").strip().rstrip("/"),

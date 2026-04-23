@@ -27,6 +27,7 @@ PRIVATE_RUNTIME_PLACEHOLDER_VALUES = {
 PRIVATE_RUNTIME_PLACEHOLDER_ACCESS_GROUPS = {"default-tenant", "default-workspace"}
 PRIVATE_REMOTE_OCR_ALLOWED_PROVIDER_EGRESS_POLICIES = {
     "allow_remote_ocr",
+    "qwen_remote_ocr",
     "surya_remote_ocr",
     "trusted_private_ocr",
 }

@@ -21,6 +21,7 @@ def augment_slide_packets_with_optional_ocr(
     blocked_count = 0
     failed_count = 0
     not_configured_count = 0
+    used_backends: list[str] = []
 
     for slide in slides:
         ocr_entries: list[dict[str, Any]] = []
@@ -50,6 +51,8 @@ def augment_slide_packets_with_optional_ocr(
             asset["ocr_low_confidence"] = low_confidence
             if ocr_text:
                 applied_count += 1
+                if str(attempt.backend or "").strip() and str(attempt.backend or "").strip() not in used_backends:
+                    used_backends.append(str(attempt.backend or "").strip())
                 ocr_texts.append(ocr_text)
                 ocr_entries.append(
                     {
@@ -74,6 +77,14 @@ def augment_slide_packets_with_optional_ocr(
         slide["embedded_assets"] = slide_assets
         slide["ocr_entries"] = ocr_entries
         slide["ocr_text"] = "\n\n".join(text for text in ocr_texts if text).strip()
+        slide["ocr_backends"] = [
+            backend
+            for backend in dict.fromkeys(
+                str(entry.get("ocr_backend") or "").strip()
+                for entry in ocr_entries
+                if str(entry.get("ocr_backend") or "").strip()
+            )
+        ]
         if ocr_entries:
             slide["origin_method"] = "hybrid"
             slide["ocr_status"] = "applied"
@@ -89,6 +100,7 @@ def augment_slide_packets_with_optional_ocr(
     payload["ocr_not_configured_count"] = not_configured_count
     payload["origin_method"] = "hybrid" if int(payload.get("ocr_applied_count") or 0) > 0 else "native"
     payload["ocr_status"] = _deck_ocr_status(slides)
+    payload["ocr_backends"] = used_backends
     return payload
 
 

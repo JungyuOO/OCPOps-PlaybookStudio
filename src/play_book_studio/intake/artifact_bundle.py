@@ -135,6 +135,7 @@ def build_customer_pack_artifact_bundle(
         enriched_payload["slide_asset_count"] = int(slide_packets_payload.get("embedded_asset_count") or 0)
         enriched_payload["origin_method"] = str(slide_packets_payload.get("origin_method") or "native").strip() or "native"
         enriched_payload["ocr_status"] = str(slide_packets_payload.get("ocr_status") or "not_run").strip() or "not_run"
+        enriched_payload["ocr_backends"] = list(slide_packets_payload.get("ocr_backends") or [])
         enriched_payload["ocr_candidate_count"] = int(slide_packets_payload.get("ocr_candidate_count") or 0)
     enriched_payload["artifact_bundle"] = {
         "truth_owner": "canonical_json_bundle",
@@ -159,6 +160,7 @@ def build_customer_pack_artifact_bundle(
         "slide_packet_count": len(slide_packets_payload.get("slides") or []),
         "slide_asset_count": len(slide_packets_payload.get("embedded_assets") or []),
         "ocr_status": str(slide_packets_payload.get("ocr_status") or "not_run").strip() if slide_packets_payload else "not_run",
+        "ocr_backends": list(slide_packets_payload.get("ocr_backends") or []) if slide_packets_payload else [],
         "ocr_candidate_count": int(slide_packets_payload.get("ocr_candidate_count") or 0) if slide_packets_payload else 0,
     }
     enriched_payload["artifact_manifest_path"] = str(manifest_path)
@@ -264,6 +266,7 @@ def build_customer_pack_artifact_manifest(
         "origin_method": str(payload.get("origin_method") or "native").strip() or "native",
         "ocr_status": str(payload.get("ocr_status") or ("not_run" if slide_packet_count else "not_required")).strip()
         or ("not_run" if slide_packet_count else "not_required"),
+        "ocr_backends": list(payload.get("ocr_backends") or []),
         "ocr_candidate_count": int(payload.get("ocr_candidate_count") or 0 or embedded_asset_count),
         "parser_backend": str(payload.get("parser_backend") or evidence.get("parser_backend") or "").strip(),
         "parser_route": str(payload.get("parser_route") or evidence.get("parser_route") or "").strip(),
