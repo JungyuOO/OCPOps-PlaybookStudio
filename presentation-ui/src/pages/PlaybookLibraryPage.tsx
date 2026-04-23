@@ -1796,11 +1796,11 @@ const PlaybookLibraryPage: React.FC = () => {
                 <Database size={16} />
                 <span>Repository</span>
               </button>
+              <Link to={ROUTES.opsWorkspaces} className="view-toggle-link">
+                <ShieldCheck size={16} />
+                <span>Ops Console</span>
+              </Link>
             </div>
-            <Link to={ROUTES.opsWorkspaces} className="library-ops-link">
-              <ShieldCheck size={16} />
-              <span>Ops Console</span>
-            </Link>
           </div>
         </div>
       </header>
