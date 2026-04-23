@@ -1,8 +1,12 @@
 .git
 .gitignore
+.env
+.omx
+.playwright-cli
 .venv
 .pytest_cache
 __pycache__
+**/__pycache__/
 *.pyc
 *.pyo
 *.pyd
@@ -11,7 +15,12 @@ data
 reports
 tmp
 tmp_source
+output
 presentation-ui/node_modules
 presentation-ui/dist
+tests
+schemas
+manifests
+current-repo-*.md
 .playwright-cli
 output/*
