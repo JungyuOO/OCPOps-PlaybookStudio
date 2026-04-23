@@ -92,7 +92,7 @@ def _viewer_html_for_path(root_dir: Path, viewer_path: str, *, page_mode: str = 
     viewer_path = _canonicalize_viewer_path(viewer_path)
     internal_html = (
         _internal_buyer_packet_viewer_html(root_dir, viewer_path)
-        or _internal_customer_pack_viewer_html(root_dir, viewer_path)
+        or _internal_customer_pack_viewer_html(root_dir, viewer_path, page_mode=page_mode)
         or _internal_active_runtime_markdown_viewer_html(root_dir, viewer_path, page_mode=page_mode)
         or _internal_entity_hub_viewer_html(root_dir, viewer_path)
         or _internal_figure_viewer_html(root_dir, viewer_path)

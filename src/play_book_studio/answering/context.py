@@ -301,6 +301,54 @@ def _is_customer_pack_explicit_query(query: str) -> bool:
     )
 
 
+def _is_customer_pack_relation_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return any(
+        token in lowered
+        for token in (
+            "흐름",
+            "플로우",
+            "flow",
+            "순서",
+            "어떻게 넘어",
+            "어디로 넘어",
+            "연결",
+            "연계",
+            "연동",
+            "의존",
+            "dependency",
+            "차이",
+            "difference",
+            "비교",
+            "승인",
+            "gate",
+            "owner",
+            "ownership",
+            "담당",
+            "주체",
+            "책임",
+        )
+    )
+
+
+def _relation_seed_priority(hit: RetrievalHit) -> int:
+    relation_semantics = {"flow", "gate", "difference", "dependency", "ownership"}
+    chunk_type = str(hit.chunk_type or "").strip().lower()
+    semantic_role = str(hit.semantic_role or "").strip().lower()
+    graph_relations = {
+        str(entry or "").strip().lower()
+        for entry in (hit.graph_relations or ())
+        if str(entry or "").strip()
+    }
+    if chunk_type == "relation":
+        return 0
+    if semantic_role in relation_semantics:
+        return 1
+    if graph_relations.intersection(relation_semantics):
+        return 2
+    return 3
+
+
 def _is_intro_recommendation_query(query: str) -> bool:
     normalized = (query or "").strip()
     lowered = normalized.lower()
@@ -494,8 +542,14 @@ def _should_force_clarification(
     hits: list[RetrievalHit],
     *,
     query: str = "",
+    session_context: SessionContext | None = None,
 ) -> bool:
     normalized = query or ""
+    if _is_customer_pack_relation_query(normalized) and (
+        _is_customer_pack_explicit_query(normalized)
+        or has_active_customer_pack_selection(session_context)
+    ):
+        return False
     if has_follow_up_reference(normalized):
         return False
     if any(
@@ -554,14 +608,17 @@ def _select_hits(
         return []
 
     ranked_hits = list(hits)
-    if _should_force_clarification(ranked_hits, query=query):
-        return []
-
     normalized = query or ""
     allow_uploaded_hits = (
         _is_customer_pack_explicit_query(normalized)
         or has_active_customer_pack_selection(session_context)
     )
+    if _should_force_clarification(
+        ranked_hits,
+        query=query,
+        session_context=session_context,
+    ):
+        return []
     if not allow_uploaded_hits:
         ranked_hits = [
             hit
@@ -1150,11 +1207,13 @@ def _select_hits(
         if str(hit.source_collection or "").strip() == "uploaded"
     ]
     should_seed_uploaded = bool(uploaded_hits) and allow_uploaded_hits
+    prefer_relation_uploaded_seed = should_seed_uploaded and _is_customer_pack_relation_query(normalized)
 
     if should_seed_uploaded:
         for hit in sorted(
             uploaded_hits,
             key=lambda item: (
+                _relation_seed_priority(item) if prefer_relation_uploaded_seed else 9,
                 -_hit_score(item),
                 item.book_slug,
                 item.chunk_id,

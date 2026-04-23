@@ -282,6 +282,11 @@ def load_customer_pack_draft(root_dir: Path, draft_id: str) -> dict[str, Any] | 
         payload["playable_asset_count"] = canonical_payload.get("playable_asset_count", 1)
         payload["derived_asset_count"] = canonical_payload.get("derived_asset_count", 0)
         payload["derived_assets"] = canonical_payload.get("derived_assets", [])
+        payload["surface_kind"] = canonical_payload.get("surface_kind")
+        payload["source_unit_kind"] = canonical_payload.get("source_unit_kind")
+        payload["source_unit_count"] = canonical_payload.get("source_unit_count")
+        payload["slide_packet_count"] = canonical_payload.get("slide_packet_count")
+        payload["slide_asset_count"] = canonical_payload.get("slide_asset_count")
     private_corpus = _private_corpus_payload(root_dir, record.draft_id)
     if private_corpus is not None:
         payload["private_corpus"] = private_corpus
@@ -299,6 +304,10 @@ def delete_customer_pack_draft(root_dir: Path, draft_id: str) -> bool:
     if books_dir.is_dir():
         for path in books_dir.glob(f"{draft_id}*.json"):
             path.unlink(missing_ok=True)
+        for path in books_dir.glob(f"{draft_id}*.slide-assets"):
+            if path.is_dir():
+                import shutil
+                shutil.rmtree(path, ignore_errors=True)
     delete_customer_pack_private_corpus(root_dir, draft_id)
     # Clean up capture artifacts
     capture_dir = settings.customer_pack_capture_dir / draft_id
@@ -327,6 +336,11 @@ def normalize_customer_pack_draft(root_dir: Path, payload: dict[str, Any]) -> di
         result["playable_asset_count"] = canonical_payload.get("playable_asset_count", 1)
         result["derived_asset_count"] = canonical_payload.get("derived_asset_count", 0)
         result["derived_assets"] = canonical_payload.get("derived_assets", [])
+        result["surface_kind"] = canonical_payload.get("surface_kind")
+        result["source_unit_kind"] = canonical_payload.get("source_unit_kind")
+        result["source_unit_count"] = canonical_payload.get("source_unit_count")
+        result["slide_packet_count"] = canonical_payload.get("slide_packet_count")
+        result["slide_asset_count"] = canonical_payload.get("slide_asset_count")
     private_corpus = _private_corpus_payload(root_dir, record.draft_id)
     if private_corpus is not None:
         result["private_corpus"] = private_corpus

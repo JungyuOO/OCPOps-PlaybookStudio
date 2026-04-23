@@ -9,6 +9,7 @@ from play_book_studio.config.settings import Settings, load_settings
 from play_book_studio.ingestion.chunking import chunk_sections
 from play_book_studio.ingestion.models import NormalizedSection
 from play_book_studio.ingestion.sentence_model import load_sentence_model
+from play_book_studio.intake.artifact_bundle import build_customer_pack_relations_payload
 from play_book_studio.intake.models import CustomerPackDraftRecord
 from play_book_studio.intake.private_boundary import summarize_private_runtime_boundary
 from play_book_studio.intake.service import evaluate_canonical_book_quality
@@ -35,6 +36,10 @@ def customer_pack_private_bm25_path(settings: Settings, draft_id: str) -> Path:
 
 def customer_pack_private_vector_path(settings: Settings, draft_id: str) -> Path:
     return customer_pack_private_corpus_dir(settings, draft_id) / "vector_store.jsonl"
+
+
+def customer_pack_private_relations_path(settings: Settings, draft_id: str) -> Path:
+    return customer_pack_private_corpus_dir(settings, draft_id) / "relations.jsonl"
 
 
 def customer_pack_private_manifest_path(settings: Settings, draft_id: str) -> Path:
@@ -172,6 +177,14 @@ def _bm25_row(chunk_row: dict[str, Any]) -> dict[str, Any]:
         "k8s_objects": list(chunk_row.get("k8s_objects") or []),
         "operator_names": list(chunk_row.get("operator_names") or []),
         "verification_hints": list(chunk_row.get("verification_hints") or []),
+        "graph_relations": list(chunk_row.get("graph_relations") or []),
+        "relation_question_classes": list(chunk_row.get("relation_question_classes") or []),
+        "relation_id": str(chunk_row.get("relation_id") or "").strip(),
+        "relation_type": str(chunk_row.get("relation_type") or "").strip(),
+        "source_entity_slug": str(chunk_row.get("source_entity_slug") or "").strip(),
+        "target_entity_slug": str(chunk_row.get("target_entity_slug") or "").strip(),
+        "source_label": str(chunk_row.get("source_label") or "").strip(),
+        "target_label": str(chunk_row.get("target_label") or "").strip(),
         "truth_owner": str(chunk_row.get("truth_owner") or "").strip(),
         "canonical_book_slug": str(chunk_row.get("canonical_book_slug") or "").strip(),
         "canonical_title": str(chunk_row.get("canonical_title") or "").strip(),
@@ -200,6 +213,169 @@ def _chunk_semantic_role(chunk_type: str) -> str:
 def _section_lineage_key(*, book_slug: str, section_id: str, anchor: str) -> tuple[str, str]:
     identifier = str(section_id or "").strip() or str(anchor or "").strip()
     return str(book_slug or "").strip(), identifier
+
+
+def _relation_question_classes(relation: dict[str, Any]) -> list[str]:
+    relation_type = str(relation.get("relation_type") or "").strip().lower()
+    heading = str(relation.get("heading") or "").strip().lower()
+    summary = str(relation.get("summary") or "").strip().lower()
+    source_label = str(relation.get("source_label") or "").strip().lower()
+    target_label = str(relation.get("target_label") or "").strip().lower()
+    blob = " ".join((relation_type, heading, summary, source_label, target_label))
+    classes: list[str] = []
+
+    if relation_type == "gate" or any(token in blob for token in ("승인", "gate", "approval", "mr ")):
+        classes.append("gate")
+    if relation_type in {"flow", "phase_sequence", "sequence"} or any(
+        token in blob
+        for token in ("flow", "흐름", "순서", "sync", "push", "pull", "배포", "이동")
+    ):
+        classes.append("flow")
+    if any(token in blob for token in ("차이", "비교", "difference", "versus", "vs")):
+        classes.append("difference")
+    if relation_type == "sequence" or any(
+        token in blob for token in ("의존", "dependency", "연계", "연동", "연결", "requires")
+    ):
+        classes.append("dependency")
+    if any(
+        token in blob
+        for token in ("ownership", "owner", "담당", "주체", "관리자", "운영자", "개발자", "책임")
+    ):
+        classes.append("ownership")
+    if not classes:
+        classes.append("dependency")
+    deduped: list[str] = []
+    for item in classes:
+        if item not in deduped:
+            deduped.append(item)
+    return deduped
+
+
+def _relation_semantic_role(relation: dict[str, Any]) -> str:
+    classes = _relation_question_classes(relation)
+    priority = ("gate", "flow", "difference", "dependency", "ownership")
+    for item in priority:
+        if item in classes:
+            return item
+    return classes[0] if classes else "dependency"
+
+
+def _relation_excerpt_text(relation: dict[str, Any]) -> str:
+    relation_type = str(relation.get("relation_type") or "").strip() or "sequence"
+    source_label = str(relation.get("source_label") or "").strip()
+    target_label = str(relation.get("target_label") or "").strip()
+    heading = str(relation.get("heading") or "").strip()
+    summary = str(relation.get("summary") or "").strip() or f"{source_label} -> {target_label}"
+    classes = _relation_question_classes(relation)
+    lines = [
+        heading,
+        summary,
+        f"relation_type: {relation_type}",
+        f"question_classes: {', '.join(classes)}",
+    ]
+    if source_label:
+        lines.append(f"source_entity: {source_label}")
+    if target_label:
+        lines.append(f"target_entity: {target_label}")
+    figure_asset_name = str(relation.get("figure_asset_name") or "").strip()
+    if figure_asset_name:
+        lines.append(f"figure_asset: {figure_asset_name}")
+    return "\n".join(line for line in lines if line).strip()
+
+
+def _relation_rows(
+    *,
+    record: CustomerPackDraftRecord,
+    canonical_payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    asset_slug = str(canonical_payload.get("asset_slug") or canonical_payload.get("book_slug") or record.draft_id).strip() or record.draft_id
+    relation_payload = build_customer_pack_relations_payload(
+        record=record,
+        payload=canonical_payload,
+        asset_slug=asset_slug,
+    )
+    relation_index = dict(relation_payload.get("candidate_relations") or {})
+    if not relation_index:
+        return []
+
+    book_slug = str(canonical_payload.get("book_slug") or asset_slug).strip() or asset_slug
+    title = str(canonical_payload.get("title") or book_slug).strip() or book_slug
+    source_type = str(canonical_payload.get("playbook_family") or canonical_payload.get("source_type") or "customer_pack").strip() or "customer_pack"
+    product = str(canonical_payload.get("inferred_product") or "customer_pack").strip() or "customer_pack"
+    version = str(canonical_payload.get("inferred_version") or record.draft_id).strip() or record.draft_id
+    language_hint = str(canonical_payload.get("language_hint") or "ko").strip() or "ko"
+    translation_status = "approved_ko" if language_hint == "ko" else "original"
+    asset_kind = str(canonical_payload.get("asset_kind") or "").strip()
+    derived_from_book_slug = str(canonical_payload.get("derived_from_book_slug") or "").strip()
+    runtime_truth_label = str(canonical_payload.get("runtime_truth_label") or "Customer Source-First Pack").strip() or "Customer Source-First Pack"
+    boundary_truth = str(canonical_payload.get("boundary_truth") or "private_customer_pack_runtime").strip() or "private_customer_pack_runtime"
+    boundary_badge = str(canonical_payload.get("boundary_badge") or "Private Pack Runtime").strip() or "Private Pack Runtime"
+
+    rows: list[dict[str, Any]] = []
+    for ordinal, relation in enumerate(relation_index.values(), start=1):
+        relation_id = str(relation.get("relation_id") or "").strip()
+        if not relation_id:
+            continue
+        heading = str(relation.get("heading") or title).strip() or title
+        anchor = str(relation.get("anchor") or "").strip()
+        viewer_path = str(relation.get("viewer_path") or "").strip()
+        semantic_role = _relation_semantic_role(relation)
+        question_classes = _relation_question_classes(relation)
+        rows.append(
+            {
+                "chunk_id": f"{record.draft_id}:relation:{relation_id}",
+                "book_slug": book_slug,
+                "chapter": title,
+                "section": heading,
+                "section_id": relation_id,
+                "section_path": [heading, semantic_role],
+                "anchor": anchor,
+                "source_url": str(relation.get("source_url") or "").strip(),
+                "viewer_path": viewer_path,
+                "text": _relation_excerpt_text(relation),
+                "chunk_type": "relation",
+                "source_id": f"customer_pack:{record.draft_id}",
+                "source_lane": str(record.source_lane or "customer_source_first_pack").strip() or "customer_source_first_pack",
+                "source_type": source_type,
+                "source_collection": "uploaded",
+                "product": product,
+                "version": version,
+                "locale": language_hint,
+                "translation_status": translation_status,
+                "review_status": _review_status(record),
+                "trust_score": 1.0,
+                "parsed_artifact_id": f"customer-pack:{record.draft_id}",
+                "semantic_role": semantic_role,
+                "block_kinds": ["relation", *question_classes],
+                "cli_commands": [],
+                "error_strings": [],
+                "k8s_objects": [],
+                "operator_names": [],
+                "verification_hints": [],
+                "graph_relations": question_classes,
+                "relation_id": relation_id,
+                "relation_type": str(relation.get("relation_type") or "").strip(),
+                "relation_question_classes": question_classes,
+                "source_entity_slug": str(relation.get("source_entity_slug") or "").strip(),
+                "target_entity_slug": str(relation.get("target_entity_slug") or "").strip(),
+                "source_label": str(relation.get("source_label") or "").strip(),
+                "target_label": str(relation.get("target_label") or "").strip(),
+                "group_index": int(relation.get("group_index") or ordinal),
+                "truth_owner": "canonical_json_bundle",
+                "canonical_book_slug": book_slug,
+                "canonical_title": title,
+                "asset_slug": asset_slug,
+                "asset_kind": asset_kind,
+                "derived_from_book_slug": derived_from_book_slug,
+                "runtime_truth_label": runtime_truth_label,
+                "boundary_truth": boundary_truth,
+                "boundary_badge": boundary_badge,
+                "lineage_section_key": str(relation.get("section_key") or "").strip(),
+                "lineage_anchor": anchor,
+                "lineage_viewer_path": viewer_path,
+            }
+        )
+    return rows
 
 
 def _lineage_indexes(
@@ -318,6 +494,7 @@ def _failed_private_corpus_payload(
     return {
         "normalized_sections": [],
         "chunk_rows": [],
+        "relation_rows": [],
         "bm25_rows": [],
         "vector_rows": [],
         "materialization_status": "failed",
@@ -354,6 +531,10 @@ def build_customer_pack_private_corpus_rows(
     materialization_error = ""
     chunks = []
     chunk_rows: list[dict[str, Any]] = []
+    relation_rows: list[dict[str, Any]] = _relation_rows(
+        record=record,
+        canonical_payload=canonical_payload,
+    )
     bm25_rows: list[dict[str, Any]] = []
     if normalized_sections:
         try:
@@ -364,23 +545,27 @@ def build_customer_pack_private_corpus_rows(
                 canonical_payload=canonical_payload,
                 derived_payloads=derived_payloads,
             )
-            bm25_rows = [_bm25_row(row) for row in chunk_rows]
-            materialization_status = "ready" if chunk_rows else "empty"
+            materialization_status = "ready" if chunk_rows or relation_rows else "empty"
         except Exception as exc:  # noqa: BLE001
             materialization_status = "failed"
             materialization_error = str(exc)
+    retrieval_rows = [*chunk_rows, *relation_rows]
+    if retrieval_rows and materialization_status == "empty":
+        materialization_status = "ready"
+    if retrieval_rows:
+        bm25_rows = [_bm25_row(row) for row in retrieval_rows]
     vector_rows: list[dict[str, Any]] = []
     vector_status = "skipped"
     vector_error = ""
-    if chunk_rows:
+    if retrieval_rows:
         try:
-            vectors = _encode_texts_locally(settings, [str(chunk.text) for chunk in chunks])
+            vectors = _encode_texts_locally(settings, [str(row.get("text") or "") for row in retrieval_rows])
             vector_rows = [
                 {
                     **row,
                     "vector": vector,
                 }
-                for row, vector in zip(chunk_rows, vectors, strict=False)
+                for row, vector in zip(retrieval_rows, vectors, strict=False)
             ]
             vector_status = "ready"
         except Exception as exc:  # noqa: BLE001
@@ -389,6 +574,7 @@ def build_customer_pack_private_corpus_rows(
     return {
         "normalized_sections": [section.to_dict() for section in normalized_sections],
         "chunk_rows": chunk_rows,
+        "relation_rows": relation_rows,
         "bm25_rows": bm25_rows,
         "vector_rows": vector_rows,
         "materialization_status": materialization_status,
@@ -424,9 +610,11 @@ def materialize_customer_pack_private_corpus(
             book_count=1 + len(derived_payloads),
         )
     chunk_rows = payload["chunk_rows"]
+    relation_rows = payload["relation_rows"]
     bm25_rows = payload["bm25_rows"]
     vector_rows = payload["vector_rows"]
     _write_jsonl(customer_pack_private_chunks_path(settings, draft_id), chunk_rows)
+    _write_jsonl(customer_pack_private_relations_path(settings, draft_id), relation_rows)
     _write_jsonl(customer_pack_private_bm25_path(settings, draft_id), bm25_rows)
     if vector_rows:
         _write_jsonl(customer_pack_private_vector_path(settings, draft_id), vector_rows)
@@ -468,6 +656,10 @@ def materialize_customer_pack_private_corpus(
         "materialization_status": str(payload["materialization_status"]),
         "materialization_error": str(payload["materialization_error"] or ""),
         "chunk_count": len(chunk_rows),
+        "relation_rows_path": str(customer_pack_private_relations_path(settings, draft_id)),
+        "relation_row_count": len(relation_rows),
+        "relation_truth_owner": "canonical_json_bundle",
+        "relation_bm25_ready": bool(relation_rows),
         "anchor_lineage_count": sum(1 for row in chunk_rows if str(row.get("anchor") or "").strip()),
         "bm25_ready": bool(bm25_rows),
         "vector_status": str(payload["vector_status"]),
@@ -518,6 +710,7 @@ __all__ = [
     "customer_pack_private_chunks_path",
     "customer_pack_private_corpus_dir",
     "customer_pack_private_manifest_path",
+    "customer_pack_private_relations_path",
     "customer_pack_private_vector_path",
     "delete_customer_pack_private_corpus",
     "materialize_customer_pack_private_corpus",

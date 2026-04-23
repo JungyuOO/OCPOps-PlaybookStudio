@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,38 @@ PLAYBOOK_LIBRARY_FAMILY_LABELS = {
     POLICY_OVERLAY_BOOK_SOURCE_TYPE: "정책 오버레이",
     SYNTHESIZED_PLAYBOOK_SOURCE_TYPE: "종합 플레이북",
 }
+CUSTOM_DOCUMENT_SOURCE_LANE = "customer_custom_materials_only"
+CUSTOM_DOCUMENT_SOURCE_COLLECTION = "custom_documents"
+CUSTOM_DOCUMENT_SOURCE_KIND = "customer_custom_document_slot"
+CUSTOM_DOCUMENT_SOURCE_KIND_LABEL = "커스텀 슬롯"
+CUSTOM_DOCUMENT_PROMOTION_STAGE = "material_catalog"
+CUSTOM_DOCUMENT_PROMOTION_STAGE_LABEL = "북팩토리 재료"
+CUSTOM_DOCUMENT_PIPELINE_TARGET = "custom_playbook_pipeline"
+CUSTOM_DOCUMENT_PIPELINE_TARGET_LABEL = "커스텀 플레이북 라인"
+CUSTOM_DOCUMENT_KIND_LABELS = {
+    "guide": "아키텍처 개선 가이드",
+    "architecture": "아키텍처 설계",
+    "unit_test": "단위 테스트",
+    "integration_test": "통합 테스트",
+    "performance_test": "성능 테스트",
+    "custom": "커스텀 문서",
+}
+CUSTOM_DOCUMENT_KIND_DESCRIPTIONS = {
+    "guide": "개선 사업 전체 맥락과 가이드 산출물을 담을 슬롯",
+    "architecture": "시스템 구조, 운영 설계, 연계 구조를 학습용 위키로 전환할 슬롯",
+    "unit_test": "단위 테스트 계획과 결과를 학습·검증 appendix로 전환할 슬롯",
+    "integration_test": "통합 테스트 계획과 결과를 운영 절차와 검증 흐름으로 전환할 슬롯",
+    "performance_test": "성능 테스트 결과를 운영 기준과 검증 지표로 전환할 슬롯",
+    "custom": "분류 대기 중인 커스텀 문서 슬롯",
+}
+CUSTOM_DOCUMENT_KIND_RANK = {
+    "guide": 0,
+    "architecture": 1,
+    "unit_test": 2,
+    "integration_test": 3,
+    "performance_test": 4,
+    "custom": 5,
+}
 
 
 def _copy_source_options(*candidates: Any) -> list[dict[str, Any]]:
@@ -43,6 +76,146 @@ def _copy_source_options(*candidates: Any) -> list[dict[str, Any]]:
         if isinstance(candidate, list):
             return [dict(item) for item in candidate if isinstance(item, dict)]
     return []
+
+
+def _custom_document_manifest_lookup(root: Path) -> dict[str, dict[str, Any]]:
+    manifest_path = root / ".P_docs" / "_review_bucket_manifest.json"
+    if not manifest_path.exists() or not manifest_path.is_file():
+        return {}
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    entries = payload.get("entries") if isinstance(payload, dict) else None
+    if not isinstance(entries, list):
+        return {}
+    items: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("bucket") or "").strip() != "material":
+            continue
+        relative_path = str(entry.get("relative_path") or "").strip()
+        if not relative_path:
+            continue
+        normalized = relative_path.replace("\\", "/").strip()
+        items[normalized] = dict(entry)
+    return items
+
+
+def _custom_document_kind(relative_path: Path, family: str) -> str:
+    haystack = " ".join([*relative_path.parts, family]).lower()
+    if "완료보고" in haystack or "guide" in haystack:
+        return "guide"
+    if "pd-arch" in haystack or "아키텍처" in haystack:
+        return "architecture"
+    if "pd-ut" in haystack or "단위" in haystack:
+        return "unit_test"
+    if "pd-it" in haystack or "통합" in haystack:
+        return "integration_test"
+    if "pd-perf" in haystack or "성능" in haystack:
+        return "performance_test"
+    return "custom"
+
+
+def _custom_document_fallback_family(relative_path: Path) -> str:
+    parent_name = str(relative_path.parent.name or "").strip()
+    if parent_name and parent_name not in {".", "..", "01_검토대기_플레이북재료"}:
+        return parent_name
+    return "커스텀 문서"
+
+
+def _build_custom_document_bucket(root: Path) -> dict[str, Any]:
+    material_dir = (root / ".P_docs" / "01_검토대기_플레이북재료").resolve()
+    if not material_dir.exists() or not material_dir.is_dir():
+        return {"selected_dir": "custom_documents/materials_only", "source_count": 0, "books": []}
+
+    manifest_lookup = _custom_document_manifest_lookup(root)
+    grouped: dict[str, dict[str, Any]] = {}
+    total_source_count = 0
+    for path in sorted(material_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        try:
+            relative_path_from_p_docs = path.resolve().relative_to((root / ".P_docs").resolve())
+        except ValueError:
+            continue
+        relative_path_from_p_docs_str = relative_path_from_p_docs.as_posix()
+        manifest_entry = manifest_lookup.get(relative_path_from_p_docs_str, {})
+        family = str(manifest_entry.get("family") or "").strip() or _custom_document_fallback_family(relative_path_from_p_docs)
+        document_kind = _custom_document_kind(relative_path_from_p_docs, family)
+        if family == "01_검토대기_플레이북재료" and document_kind == "guide":
+            family = "아키텍처 개선 가이드"
+        stat = path.stat()
+        del relative_path_from_p_docs_str
+        total_source_count += 1
+        bucket = grouped.setdefault(
+            document_kind,
+            {
+                "book_slug": f"custom_doc_slot_{document_kind}",
+                "title": CUSTOM_DOCUMENT_KIND_LABELS.get(document_kind, CUSTOM_DOCUMENT_KIND_LABELS["custom"]),
+                "grade": "",
+                "review_status": "source_material",
+                "source_type": "custom_document",
+                "source_lane": CUSTOM_DOCUMENT_SOURCE_LANE,
+                "source_kind": CUSTOM_DOCUMENT_SOURCE_KIND,
+                "source_kind_label": CUSTOM_DOCUMENT_SOURCE_KIND_LABEL,
+                "section_count": 0,
+                "code_block_count": 0,
+                "viewer_path": "",
+                "source_url": "",
+                "updated_at": "",
+                "source_collection": CUSTOM_DOCUMENT_SOURCE_COLLECTION,
+                "source_collection_label": "커스텀 문서",
+                "source_origin_label": CUSTOM_DOCUMENT_KIND_LABELS.get(document_kind, CUSTOM_DOCUMENT_KIND_LABELS["custom"]),
+                "source_origin_url": "",
+                "materialized": False,
+                "promotion_stage": CUSTOM_DOCUMENT_PROMOTION_STAGE,
+                "promotion_stage_label": CUSTOM_DOCUMENT_PROMOTION_STAGE_LABEL,
+                "pipeline_target": CUSTOM_DOCUMENT_PIPELINE_TARGET,
+                "pipeline_target_label": CUSTOM_DOCUMENT_PIPELINE_TARGET_LABEL,
+                "custom_document_kind": document_kind,
+                "custom_document_kind_label": CUSTOM_DOCUMENT_KIND_LABELS.get(document_kind, CUSTOM_DOCUMENT_KIND_LABELS["custom"]),
+                "custom_document_family": family,
+                "custom_document_description": CUSTOM_DOCUMENT_KIND_DESCRIPTIONS.get(document_kind, CUSTOM_DOCUMENT_KIND_DESCRIPTIONS["custom"]),
+                "custom_document_source_count": 0,
+                "custom_document_total_size_bytes": 0,
+                "custom_document_ext_breakdown": Counter(),
+                "custom_document_status": "ui_ready_source_hidden",
+            },
+        )
+        bucket["custom_document_source_count"] = int(bucket.get("custom_document_source_count") or 0) + 1
+        bucket["custom_document_total_size_bytes"] = int(bucket.get("custom_document_total_size_bytes") or 0) + int(stat.st_size)
+        ext = path.suffix.lower().lstrip(".") or "file"
+        bucket["custom_document_ext_breakdown"][ext] += 1
+        bucket["section_count"] = int(bucket.get("custom_document_source_count") or 0)
+        updated_at = str(bucket.get("updated_at") or "")
+        path_updated_at = datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds")
+        if not updated_at or path_updated_at > updated_at:
+            bucket["updated_at"] = path_updated_at
+
+    books = list(grouped.values())
+    for book in books:
+        ext_counter = book.get("custom_document_ext_breakdown")
+        book["custom_document_ext_breakdown"] = dict(sorted(ext_counter.items())) if isinstance(ext_counter, Counter) else {}
+    books.sort(
+        key=lambda item: (
+            int(CUSTOM_DOCUMENT_KIND_RANK.get(str(item.get("custom_document_kind") or "custom"), 99)),
+            str(item.get("title") or "").lower(),
+        )
+    )
+    return {
+        "selected_dir": "custom_documents/materials_only",
+        "source_count": total_source_count,
+        "slot_count": len(books),
+        "source_kind": CUSTOM_DOCUMENT_SOURCE_KIND,
+        "source_kind_label": CUSTOM_DOCUMENT_SOURCE_KIND_LABEL,
+        "promotion_stage": CUSTOM_DOCUMENT_PROMOTION_STAGE,
+        "promotion_stage_label": CUSTOM_DOCUMENT_PROMOTION_STAGE_LABEL,
+        "pipeline_target": CUSTOM_DOCUMENT_PIPELINE_TARGET,
+        "pipeline_target_label": CUSTOM_DOCUMENT_PIPELINE_TARGET_LABEL,
+        "books": books,
+    }
 
 
 def _customer_pack_source_origin_label(record: Any, fallback_title: str = "") -> str:
@@ -588,6 +761,8 @@ def _attach_corpus_status(
 
 
 __all__ = [
+    "CUSTOM_DOCUMENT_SOURCE_COLLECTION",
+    "CUSTOM_DOCUMENT_SOURCE_LANE",
     "DATA_CONTROL_ROOM_DERIVED_PLAYBOOK_SOURCE_TYPES",
     "DATA_CONTROL_ROOM_DERIVED_PLAYBOOK_SOURCE_TYPE_SET",
     "OPERATION_PLAYBOOK_SOURCE_TYPE",
@@ -601,6 +776,7 @@ __all__ = [
     "_attach_corpus_status",
     "_apply_customer_pack_runtime_truth",
     "_apply_viewer_path_fallback",
+    "_build_custom_document_bucket",
     "_build_manual_book_library",
     "_build_playbook_library",
     "_derived_family_status",

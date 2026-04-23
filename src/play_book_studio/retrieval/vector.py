@@ -44,6 +44,11 @@ def hit_from_payload(payload: dict[str, Any], *, source: str, score: float) -> R
         verification_hints=tuple(
             str(item) for item in (payload.get("verification_hints") or []) if str(item).strip()
         ),
+        graph_relations=tuple(
+            str(item)
+            for item in (payload.get("graph_relations") or payload.get("relation_question_classes") or [])
+            if str(item).strip()
+        ),
     )
 
 

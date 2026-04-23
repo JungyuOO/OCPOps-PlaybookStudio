@@ -21,6 +21,10 @@ PRIVATE_READ_PLACEHOLDER_VALUES = {
 PRIVATE_READ_ALLOWED_APPROVAL_STATES = {"approved"}
 LOCAL_CUSTOMER_PACK_TENANT_ID = "tenant-user-library-local"
 LOCAL_CUSTOMER_PACK_WORKSPACE_ID = "workspace-user-library-local"
+CUSTOMER_PACK_SOURCE_KIND = "customer_uploaded_document"
+CUSTOMER_PACK_SOURCE_KIND_LABEL = "업로드 문서"
+CUSTOMER_PACK_PIPELINE_TARGET = "custom_playbook_pipeline"
+CUSTOMER_PACK_PIPELINE_TARGET_LABEL = "커스텀 플레이북 라인"
 
 _DRAFT_ROUTE_DROP_FIELDS = {
     "request",
@@ -76,8 +80,15 @@ _SOURCE_META_ALLOWED_FIELDS = {
     "viewer_path",
     "section_match_exact",
     "source_collection",
+    "source_collection_label",
+    "source_kind",
+    "source_kind_label",
     "pack_label",
     "source_lane",
+    "promotion_stage",
+    "promotion_stage_label",
+    "pipeline_target",
+    "pipeline_target_label",
     "approval_state",
     "publication_state",
     "parser_backend",
@@ -110,6 +121,34 @@ _PRIVATE_CORPUS_DROP_FIELDS = {
     "materialization_error",
     "boundary_fail_reasons",
 }
+
+_CUSTOMER_PACK_PROMOTION_STAGE_LABELS = {
+    "planned": "업로드 대기",
+    "uploaded": "업로드 완료",
+    "captured": "캡처 완료",
+    "normalized": "플레이북 승급",
+}
+
+
+def _customer_pack_source_collection_label(source_collection: Any) -> str:
+    normalized = str(source_collection or "").strip().lower()
+    if normalized == "uploaded":
+        return "업로드 문서"
+    if normalized == "custom_documents":
+        return "커스텀 문서"
+    return "고객 문서"
+
+
+def _customer_pack_promotion_stage(status: Any) -> str:
+    normalized = str(status or "").strip().lower()
+    if normalized in _CUSTOMER_PACK_PROMOTION_STAGE_LABELS:
+        return normalized
+    return "uploaded" if normalized else "planned"
+
+
+def _customer_pack_promotion_stage_label(status: Any) -> str:
+    stage = _customer_pack_promotion_stage(status)
+    return _CUSTOMER_PACK_PROMOTION_STAGE_LABELS.get(stage, "업로드 완료")
 
 
 def customer_pack_draft_id_from_viewer_path(viewer_path: str) -> str | None:
@@ -416,6 +455,27 @@ def sanitize_customer_pack_draft_payload(payload: dict[str, Any]) -> dict[str, A
         for key, value in dict(payload).items()
         if key not in _DRAFT_ROUTE_DROP_FIELDS
     }
+    sanitized["source_kind"] = str(sanitized.get("source_kind") or CUSTOMER_PACK_SOURCE_KIND)
+    sanitized["source_kind_label"] = str(
+        sanitized.get("source_kind_label") or CUSTOMER_PACK_SOURCE_KIND_LABEL
+    )
+    sanitized["source_collection_label"] = str(
+        sanitized.get("source_collection_label")
+        or _customer_pack_source_collection_label(sanitized.get("source_collection"))
+    )
+    sanitized["promotion_stage"] = str(
+        sanitized.get("promotion_stage") or _customer_pack_promotion_stage(sanitized.get("status"))
+    )
+    sanitized["promotion_stage_label"] = str(
+        sanitized.get("promotion_stage_label")
+        or _customer_pack_promotion_stage_label(sanitized.get("status"))
+    )
+    sanitized["pipeline_target"] = str(
+        sanitized.get("pipeline_target") or CUSTOMER_PACK_PIPELINE_TARGET
+    )
+    sanitized["pipeline_target_label"] = str(
+        sanitized.get("pipeline_target_label") or CUSTOMER_PACK_PIPELINE_TARGET_LABEL
+    )
     draft_id = str(sanitized.get("draft_id") or "").strip()
     if draft_id and sanitized.get("capture_artifact_path"):
         sanitized["capture_artifact_path"] = f"{CUSTOMER_PACK_CAPTURE_API_PREFIX}?draft_id={draft_id}"
@@ -453,6 +513,27 @@ def sanitize_customer_pack_book_payload(payload: dict[str, Any]) -> dict[str, An
         for key, value in dict(payload).items()
         if key not in _BOOK_ROUTE_DROP_FIELDS
     }
+    sanitized["source_kind"] = str(sanitized.get("source_kind") or CUSTOMER_PACK_SOURCE_KIND)
+    sanitized["source_kind_label"] = str(
+        sanitized.get("source_kind_label") or CUSTOMER_PACK_SOURCE_KIND_LABEL
+    )
+    sanitized["source_collection_label"] = str(
+        sanitized.get("source_collection_label")
+        or _customer_pack_source_collection_label(sanitized.get("source_collection"))
+    )
+    sanitized["promotion_stage"] = str(
+        sanitized.get("promotion_stage") or _customer_pack_promotion_stage("normalized")
+    )
+    sanitized["promotion_stage_label"] = str(
+        sanitized.get("promotion_stage_label")
+        or _customer_pack_promotion_stage_label(sanitized.get("promotion_stage") or "normalized")
+    )
+    sanitized["pipeline_target"] = str(
+        sanitized.get("pipeline_target") or CUSTOMER_PACK_PIPELINE_TARGET
+    )
+    sanitized["pipeline_target_label"] = str(
+        sanitized.get("pipeline_target_label") or CUSTOMER_PACK_PIPELINE_TARGET_LABEL
+    )
     source_origin_url = str(sanitized.get("source_origin_url") or "").strip()
     sanitized["source_uri"] = source_origin_url
     sections = []

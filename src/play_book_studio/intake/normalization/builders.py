@@ -232,6 +232,8 @@ _FENCED_CODE_START_RE = re.compile(r"^\s*(?P<fence>`{3,}|~{3,})(?P<language>[\w.
 _TABLE_SEPARATOR_CELL_RE = re.compile(r"^:?-{3,}:?$")
 _PDF_INLINE_PAGE_MARKER_RE = re.compile(r"^[가-힣A-Za-z][가-힣A-Za-z0-9\s()./_-]{1,24}\s+\d+$")
 _TABLE_PLACEHOLDER_RE = re.compile(r"^[-–—=:./\\|]+$")
+_PPTX_DOC_CODE_RE = re.compile(r"^[A-Z]{2,}(?:-[A-Z0-9]{2,}){2,}$")
+_PPTX_DATE_RE = re.compile(r"^\d{4}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{1,2}\.?$")
 _GENERIC_TABLE_HEADER_TOKENS = {
     "이름",
     "항목",
@@ -256,6 +258,22 @@ _GENERIC_TABLE_HEADER_TOKENS = {
     "purpose",
     "notes",
     "command",
+}
+_PPTX_TITLE_HINTS = (
+    "프로세스",
+    "개요",
+    "이력",
+    "변경",
+    "예시",
+    "설계",
+    "구성",
+    "아키텍처",
+    "배포",
+    "구조",
+)
+_PPTX_TITLE_EXCLUDE_TOKENS = {
+    "as-is",
+    "to-be",
 }
 
 
@@ -858,21 +876,9 @@ def _pptx_to_rows(capture_path: Path, *, record: CustomerPackDraftRecord) -> lis
     viewer_base = f"/playbooks/customer-packs/{record.draft_id}/index.html"
     rows: list[dict[str, object]] = []
     for index, slide in enumerate(presentation.slides, start=1):
-        title = ""
-        if slide.shapes.title is not None and getattr(slide.shapes.title, "text", "").strip():
-            title = slide.shapes.title.text.strip()
-        if not title:
-            title = f"Slide {index}"
-        body_parts: list[str] = []
-        for shape in slide.shapes:
-            text = getattr(shape, "text", "").strip()
-            if text and text != title:
-                body_parts.append(text)
-            if getattr(shape, "has_table", False):
-                table_rows = [[cell.text.strip() for cell in row.cells] for row in shape.table.rows]
-                table_text = _table_to_tagged_text(table_rows)
-                if table_text:
-                    body_parts.append(table_text)
+        elements = _pptx_slide_elements(slide)
+        title = _pptx_infer_slide_title(slide, slide_index=index, elements=elements)
+        body_parts, block_kinds = _pptx_slide_body_parts(elements, title=title)
         body = "\n\n".join(part for part in body_parts if str(part).strip()).strip()
         if not body:
             continue
@@ -885,9 +891,250 @@ def _pptx_to_rows(capture_path: Path, *, record: CustomerPackDraftRecord) -> lis
                 anchor=_slug_anchor(title, ordinal=len(rows) + 1),
                 viewer_path_base=viewer_base,
                 text=body,
+                block_kinds=block_kinds,
             )
         )
     return rows
+
+
+def _pptx_slide_elements(slide) -> list[dict[str, object]]:
+    elements: list[dict[str, object]] = []
+    for shape in slide.shapes:
+        text = _pptx_shape_text(shape)
+        font_size = _pptx_shape_font_size(shape)
+        if text:
+            elements.append(
+                {
+                    "kind": "text",
+                    "text": text,
+                    "title_text": text,
+                    "body_text": text,
+                    "top": int(getattr(shape, "top", 0) or 0),
+                    "left": int(getattr(shape, "left", 0) or 0),
+                    "width": int(getattr(shape, "width", 0) or 0),
+                    "height": int(getattr(shape, "height", 0) or 0),
+                    "font_size": font_size,
+                }
+            )
+        if getattr(shape, "has_table", False):
+            table_rows = [[cell.text.strip() for cell in row.cells] for row in shape.table.rows]
+            table_text = _table_to_tagged_text(table_rows)
+            if table_text:
+                elements.append(
+                    {
+                        "kind": "table",
+                        "text": _pptx_table_title_candidate(table_rows),
+                        "title_text": _pptx_table_title_candidate(table_rows),
+                        "body_text": table_text,
+                        "rows": table_rows,
+                        "top": int(getattr(shape, "top", 0) or 0),
+                        "left": int(getattr(shape, "left", 0) or 0),
+                        "width": int(getattr(shape, "width", 0) or 0),
+                        "height": int(getattr(shape, "height", 0) or 0),
+                        "font_size": font_size,
+                    }
+                )
+    return elements
+
+
+def _pptx_shape_text(shape) -> str:
+    text = str(getattr(shape, "text", "") or "").strip()
+    if not text:
+        return ""
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    return "\n".join(line for line in lines if line).strip()
+
+
+def _pptx_shape_font_size(shape) -> float:
+    sizes: list[float] = []
+    try:
+        if getattr(shape, "has_text_frame", False):
+            for paragraph in shape.text_frame.paragraphs:
+                for run in paragraph.runs:
+                    size = getattr(getattr(run, "font", None), "size", None)
+                    if size is not None:
+                        sizes.append(float(size.pt))
+    except Exception:  # noqa: BLE001
+        return 0.0
+    return max(sizes) if sizes else 0.0
+
+
+def _pptx_table_title_candidate(rows: list[list[str]]) -> str:
+    for row in rows:
+        cells = [cell for cell in (_normalize_table_cell_text(item) for item in row) if cell]
+        if cells:
+            return " ".join(cells).strip()
+    return ""
+
+
+def _pptx_infer_slide_title(slide, *, slide_index: int, elements: list[dict[str, object]]) -> str:
+    placeholder_title = ""
+    if slide.shapes.title is not None and getattr(slide.shapes.title, "text", "").strip():
+        placeholder_title = _pptx_shape_text(slide.shapes.title)
+    if _pptx_is_title_candidate(placeholder_title):
+        return placeholder_title
+
+    candidates: list[tuple[float, str]] = []
+    for element in elements:
+        candidate = str(element.get("title_text") or "").strip()
+        if not _pptx_is_title_candidate(candidate):
+            continue
+        score = _pptx_title_score(candidate, element=element)
+        candidates.append((score, candidate))
+    if candidates:
+        candidates.sort(key=lambda item: (-item[0], item[1]))
+        return candidates[0][1]
+    return f"Slide {slide_index}"
+
+
+def _pptx_is_title_candidate(text: str) -> bool:
+    normalized = " ".join(str(text or "").split()).strip()
+    if not normalized:
+        return False
+    if _PPTX_DOC_CODE_RE.fullmatch(normalized):
+        return False
+    compact = normalized.lower()
+    if compact in _PPTX_TITLE_EXCLUDE_TOKENS:
+        return False
+    if _PPTX_DATE_RE.fullmatch(normalized):
+        return False
+    if len(normalized) < 2 or len(normalized) > 120:
+        return False
+    if normalized.isdigit():
+        return False
+    return True
+
+
+def _pptx_title_score(text: str, *, element: dict[str, object]) -> float:
+    normalized = " ".join(str(text or "").split()).strip()
+    top = int(element.get("top") or 0)
+    width = int(element.get("width") or 0)
+    font_size = float(element.get("font_size") or 0.0)
+    score = 0.0
+    score += max(0.0, 20.0 - (top / 500000.0))
+    score += font_size * 2.0
+    score += min(width / 300000.0, 16.0)
+    if 4 <= len(normalized) <= 48:
+        score += 8.0
+    if any(hint in normalized for hint in _PPTX_TITLE_HINTS):
+        score += 10.0
+    if "\n" not in normalized and len(normalized.split()) <= 12:
+        score += 4.0
+    return score
+
+
+def _pptx_slide_body_parts(
+    elements: list[dict[str, object]],
+    *,
+    title: str,
+) -> tuple[list[str], tuple[str, ...]]:
+    ordered = sorted(
+        elements,
+        key=lambda item: (
+            int(item.get("top") or 0),
+            int(item.get("left") or 0),
+            str(item.get("body_text") or ""),
+        ),
+    )
+    filtered: list[dict[str, object]] = []
+    normalized_title = " ".join(str(title or "").split()).strip()
+    for element in ordered:
+        candidate = " ".join(str(element.get("title_text") or "").split()).strip()
+        body_text = str(element.get("body_text") or "").strip()
+        if not body_text:
+            continue
+        if candidate and candidate == normalized_title:
+            continue
+        if _PPTX_DOC_CODE_RE.fullmatch(" ".join(body_text.split()).strip()):
+            continue
+        filtered.append(element)
+
+    body_parts: list[str]
+    if _pptx_slide_looks_diagram_like(filtered):
+        body_parts = _pptx_grouped_body_parts(filtered)
+    else:
+        body_parts = [str(element.get("body_text") or "").strip() for element in filtered]
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for part in body_parts:
+        normalized = part.strip()
+        if not normalized or normalized in seen:
+            continue
+        deduped.append(normalized)
+        seen.add(normalized)
+
+    block_kinds: list[str] = []
+    if any(str(element.get("kind") or "") == "text" for element in filtered):
+        block_kinds.append("paragraph")
+    if any(str(element.get("kind") or "") == "table" for element in filtered):
+        block_kinds.append("table")
+    if _pptx_slide_looks_diagram_like(filtered):
+        block_kinds.append("figure")
+    return deduped, tuple(block_kinds)
+
+
+def _pptx_slide_looks_diagram_like(elements: list[dict[str, object]]) -> bool:
+    text_elements = [element for element in elements if str(element.get("kind") or "") == "text"]
+    if len(text_elements) < 6:
+        return False
+    compact_lengths = [
+        len(" ".join(str(element.get("body_text") or "").split()))
+        for element in text_elements
+    ]
+    short_count = sum(1 for length in compact_lengths if 0 < length <= 40)
+    long_count = sum(1 for length in compact_lengths if length >= 90)
+    return short_count >= max(5, len(text_elements) // 2) and long_count <= 2
+
+
+def _pptx_grouped_body_parts(elements: list[dict[str, object]]) -> list[str]:
+    grouped_parts: list[str] = []
+    current_group: list[dict[str, object]] = []
+    current_top: int | None = None
+    threshold = 280000
+
+    def flush_group() -> None:
+        nonlocal current_group, current_top
+        if not current_group:
+            return
+        ordered_group = sorted(current_group, key=lambda item: int(item.get("left") or 0))
+        texts = [
+            " ".join(str(item.get("body_text") or "").split()).strip()
+            for item in ordered_group
+            if str(item.get("body_text") or "").strip()
+        ]
+        unique_texts: list[str] = []
+        seen: set[str] = set()
+        for text in texts:
+            if not text or text in seen:
+                continue
+            unique_texts.append(text)
+            seen.add(text)
+        if unique_texts:
+            if len(unique_texts) == 1:
+                grouped_parts.append(unique_texts[0])
+            else:
+                grouped_parts.append(" | ".join(unique_texts))
+        current_group = []
+        current_top = None
+
+    for element in elements:
+        kind = str(element.get("kind") or "")
+        if kind == "table":
+            flush_group()
+            grouped_parts.append(str(element.get("body_text") or "").strip())
+            continue
+        top = int(element.get("top") or 0)
+        if current_top is None or abs(top - current_top) <= threshold:
+            current_group.append(element)
+            if current_top is None:
+                current_top = top
+            continue
+        flush_group()
+        current_group.append(element)
+        current_top = top
+    flush_group()
+    return grouped_parts
 
 
 def _xlsx_to_structured_text(capture_path: Path) -> str:

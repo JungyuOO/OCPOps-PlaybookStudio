@@ -340,6 +340,22 @@ function customerPackBookEvidenceBits(book?: LibraryBook | null): string[] {
   return bits.filter(Boolean);
 }
 
+function customDocumentMeta(book?: LibraryBook | null): string[] {
+  if (!book) {
+    return [];
+  }
+  const sourceCount = Number(book.custom_document_source_count ?? 0);
+  const extSummary = Object.entries(book.custom_document_ext_breakdown ?? {})
+    .map(([ext, count]) => `${ext.toUpperCase()} ${count}`)
+    .join(' · ');
+  return [
+    book.custom_document_kind_label || '커스텀문서',
+    sourceCount > 0 ? `${sourceCount}개 재료` : '',
+    extSummary,
+    book.custom_document_status === 'ui_ready_source_hidden' ? '원본 비노출' : '',
+  ].filter(Boolean);
+}
+
 function normalizePlaybookGrade(grade?: string | null): 'Gold' | 'Silver' | 'Bronze' | 'Blocked' {
   const normalized = String(grade || '').trim().toLowerCase();
   if (normalized === 'gold') {
@@ -1530,6 +1546,7 @@ const PlaybookLibraryPage: React.FC = () => {
   const summary = controlRoom?.summary;
   const officialCorpusBooks = [...(controlRoom?.corpus?.books ?? [])];
   const officialPlaybookBooks = [...(controlRoom?.manualbooks?.books ?? [])];
+  const customDocumentBooks = [...(controlRoom?.custom_documents?.books ?? [])];
   const userLibraryBucket = controlRoom?.customer_pack_runtime_books ?? controlRoom?.user_library_books;
   const userCorpusBooks = [...(controlRoom?.user_library_corpus?.books ?? [])];
   const approvedRuntimeBooks = summary?.approved_runtime_count ?? summary?.gold_book_count ?? controlRoom?.gold_books?.length ?? 0;
@@ -1537,6 +1554,7 @@ const PlaybookLibraryPage: React.FC = () => {
   const userLibraryBookCount = summary?.customer_pack_runtime_book_count
     ?? summary?.user_library_book_count
     ?? userLibraryBooks.length;
+  const customDocumentCount = summary?.custom_document_count ?? customDocumentBooks.length;
   const userRuntimePlaybookCount = summary?.customer_pack_runtime_book_count ?? userLibraryBooks.length;
   const officialCorpusBookCount = summary?.corpus_book_count ?? officialCorpusBooks.length;
   const officialPlaybookFileCount = summary?.manualbook_count ?? officialPlaybookBooks.length;
@@ -1785,6 +1803,10 @@ const PlaybookLibraryPage: React.FC = () => {
 
           <div className="header-actions">
             <div className="view-toggle">
+              <Link to={ROUTES.pbsStudio} className="view-toggle-link">
+                <Layers size={16} />
+                <span>Studio</span>
+              </Link>
               <button
                 className={viewMode === 'monitoring' ? 'active' : ''}
                 onClick={() => navigate('/playbook-library/control-tower')}
@@ -2443,7 +2465,7 @@ const PlaybookLibraryPage: React.FC = () => {
                   {FACTORY_PIPELINE_STEPS.tools.map((step, index) => (
                     <React.Fragment key={step.badge}>
                       <div
-                        className={`pipeline-step ${index <= toolsPipelineState.completedIndex ? 'completed' : ''
+                        className={`pipeline-step pipeline-step--${step.badge.toLowerCase()} ${index <= toolsPipelineState.completedIndex ? 'completed' : ''
                           } ${index === toolsPipelineState.activeIndex ? 'active' : ''} ${index === 3 && toolsPipelineState.activeIndex === 3 ? 'final' : ''
                           }`}
                       >
@@ -2469,7 +2491,7 @@ const PlaybookLibraryPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="pipeline-visualizer" ref={pipelineRef}>
-                  <div className="pipeline-step">
+                  <div className="pipeline-step pipeline-step--bronze">
                     <div className="step-badge">Bronze</div>
                     <div className="step-icon">
                       {pipelineStage === 'uploading' ? <Loader2 className="spin-icon" /> : <UploadCloud />}
@@ -2482,7 +2504,7 @@ const PlaybookLibraryPage: React.FC = () => {
 
                   <div className="pipeline-connector"><div className="flow-particle"></div></div>
 
-                  <div className="pipeline-step">
+                  <div className="pipeline-step pipeline-step--silver">
                     <div className="step-badge">Silver</div>
                     <div className="step-icon">
                       {pipelineStage === 'capturing' ? <Loader2 className="spin-icon" /> : <HardDrive />}
@@ -2495,7 +2517,7 @@ const PlaybookLibraryPage: React.FC = () => {
 
                   <div className="pipeline-connector"><div className="flow-particle"></div></div>
 
-                  <div className="pipeline-step">
+                  <div className="pipeline-step pipeline-step--gold">
                     <div className="step-badge">Gold</div>
                     <div className="step-icon">
                       {pipelineStage === 'normalizing' ? <Loader2 className="spin-icon" /> : <Cpu />}
@@ -2508,7 +2530,7 @@ const PlaybookLibraryPage: React.FC = () => {
 
                   <div className="pipeline-connector"><div className="flow-particle"></div></div>
 
-                  <div className="pipeline-step">
+                  <div className="pipeline-step pipeline-step--judge">
                     <div className="step-badge">Judge</div>
                     <div className="step-icon"><BookOpen /></div>
                     <div className="step-info">
@@ -2773,6 +2795,66 @@ const PlaybookLibraryPage: React.FC = () => {
                 </div>
               </div>
             </section>
+
+            {customDocumentBooks.length > 0 && (
+              <section className="draft-management custom-material-section box-container">
+                <div className="section-header">
+                  <div>
+                    <h2>커스텀 문서 ({customDocumentCount})</h2>
+                    <p className="text-muted">이번 고객맞춤 플레이북에 사용하는 재료 문서만 모아둔 source-of-truth 버킷입니다.</p>
+                  </div>
+                </div>
+                <div className="draft-grid">
+                  {customDocumentBooks.map((book) => {
+                    const canOpenViewer = Boolean(book.viewer_path);
+                    const meta = customDocumentMeta(book);
+                    const cardBody = (
+                      <>
+                        <div className="draft-card-top">
+                          <span className="draft-type">커스텀문서</span>
+                          <span className="draft-status-badge status-cyan">
+                            {book.custom_document_kind_label || '재료'}
+                          </span>
+                        </div>
+                        <h4 className="draft-title">{book.title}</h4>
+                        {book.custom_document_description ? (
+                          <p className="custom-material-description">{book.custom_document_description}</p>
+                        ) : null}
+                        <div className="draft-meta">
+                          {meta.slice(1, 4).map((item) => (
+                            <span key={`${book.book_slug}:${item}`}>{item}</span>
+                          ))}
+                        </div>
+                        {meta.length > 0 && (
+                          <div className="preview-chip-row">
+                            {meta.map((item) => (
+                              <span key={`${book.book_slug}:chip:${item}`} className="preview-chip">{item}</span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="custom-material-path">
+                          원본 비노출 · 플레이북 생산 전용 슬롯
+                        </div>
+                      </>
+                    );
+                    return canOpenViewer ? (
+                      <button
+                        type="button"
+                        className="draft-card custom-material-card custom-material-card--openable"
+                        key={book.book_slug}
+                        onClick={() => setBookViewer(book)}
+                      >
+                        {cardBody}
+                      </button>
+                    ) : (
+                      <div className="draft-card custom-material-card" key={book.book_slug}>
+                        {cardBody}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             {factoryLane === 'tools' && (
               <>
@@ -3276,7 +3358,6 @@ const PlaybookLibraryPage: React.FC = () => {
 
             {factoryLane === 'user' && (
               <>
-
                 {userLibraryBooks.length > 0 && (
                   <section className="draft-management user-library-section box-container">
                     <div className="section-header">

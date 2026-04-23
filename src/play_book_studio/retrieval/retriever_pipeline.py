@@ -52,6 +52,36 @@ def _is_customer_pack_explicit_query(query: str) -> bool:
     )
 
 
+def _is_customer_pack_relation_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return any(
+        token in lowered
+        for token in (
+            "흐름",
+            "플로우",
+            "flow",
+            "순서",
+            "어떻게 넘어",
+            "어디로 넘어",
+            "연결",
+            "연계",
+            "연동",
+            "의존",
+            "dependency",
+            "차이",
+            "difference",
+            "비교",
+            "승인",
+            "gate",
+            "owner",
+            "ownership",
+            "담당",
+            "주체",
+            "책임",
+        )
+    )
+
+
 def _preserve_uploaded_customer_pack_candidate(
     query: str,
     *,
@@ -81,8 +111,19 @@ def _preserve_uploaded_customer_pack_candidate(
     if not uploaded_sources:
         return hybrid_hits
 
+    relation_query = _is_customer_pack_relation_query(query)
     uploaded_sources.sort(
         key=lambda item: (
+            0
+            if (
+                relation_query
+                and (
+                    str(item[2].chunk_type or "").strip() == "relation"
+                    or "flow" in tuple(str(entry).strip() for entry in item[2].graph_relations)
+                    or "gate" in tuple(str(entry).strip() for entry in item[2].graph_relations)
+                )
+            )
+            else 1,
             item[1] if item[0] == "hybrid" else 999 + item[1],
             -float(item[2].component_scores.get("overlay_bm25_score", item[2].raw_score)),
             item[2].book_slug,
@@ -227,6 +268,7 @@ def execute_retrieval_pipeline(
     context = context or SessionContext()
     timings_ms: dict[str, float] = {}
     plan = build_retrieval_plan(query, context=context, candidate_k=candidate_k)
+    relation_query = _is_customer_pack_relation_query(plan.rewritten_query or plan.normalized_query or query)
     timings_ms["normalize_query"] = plan.normalize_query_ms
     _emit_trace_event(
         trace_callback,
@@ -312,6 +354,11 @@ def execute_retrieval_pipeline(
         )
 
     effective_candidate_k = plan.effective_candidate_k
+    if relation_query and (
+        _is_customer_pack_explicit_query(query)
+        or has_active_customer_pack_selection(context)
+    ):
+        effective_candidate_k = max(effective_candidate_k, candidate_k, 30)
 
     bm25_hits: list[RetrievalHit] = []
     overlay_bm25_hits: list[RetrievalHit] = []

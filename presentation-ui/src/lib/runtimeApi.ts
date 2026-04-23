@@ -33,6 +33,13 @@ export interface LibraryBook {
   current_source_label?: string;
   source_options?: LibraryBookSourceOption[];
   source_collection?: string;
+  source_collection_label?: string;
+  source_kind?: string;
+  source_kind_label?: string;
+  promotion_stage?: string;
+  promotion_stage_label?: string;
+  pipeline_target?: string;
+  pipeline_target_label?: string;
   source_origin_label?: string;
   source_origin_url?: string;
   draft_id?: string;
@@ -51,11 +58,27 @@ export interface LibraryBook {
   corpus_runtime_eligible?: boolean;
   corpus_vector_status?: string;
   chunk_type_breakdown?: Record<string, number>;
+  custom_document_kind?: string;
+  custom_document_kind_label?: string;
+  custom_document_family?: string;
+  custom_document_description?: string;
+  custom_document_source_count?: number;
+  custom_document_total_size_bytes?: number;
+  custom_document_ext_breakdown?: Record<string, number>;
+  custom_document_status?: string;
 }
 
 export interface LibraryBucket {
   selected_dir?: string;
   selected_path?: string;
+  source_count?: number;
+  slot_count?: number;
+  source_kind?: string;
+  source_kind_label?: string;
+  promotion_stage?: string;
+  promotion_stage_label?: string;
+  pipeline_target?: string;
+  pipeline_target_label?: string;
   books: LibraryBook[];
 }
 
@@ -160,6 +183,8 @@ export interface DataControlRoomSummary {
   user_library_book_count?: number;
   user_library_corpus_book_count?: number;
   user_library_corpus_chunk_count?: number;
+  custom_document_count?: number;
+  custom_document_slot_count?: number;
   gold_candidate_book_count?: number;
   approved_wiki_runtime_book_count?: number;
   wiki_navigation_backlog_count?: number;
@@ -207,6 +232,7 @@ export interface DataControlRoomResponse {
   customer_pack_runtime_books?: LibraryBucket;
   user_library_books?: LibraryBucket;
   user_library_corpus?: LibraryBucket;
+  custom_documents?: LibraryBucket;
   gold_candidate_books?: LibraryBucket;
   approved_wiki_runtime_books?: LibraryBucket;
   wiki_navigation_backlog?: LibraryBucket;
@@ -497,7 +523,15 @@ export interface CustomerPackDraft {
   source_type: string;
   title: string;
   book_slug: string;
+  source_collection?: string;
+  source_collection_label?: string;
   pack_label: string;
+  source_kind?: string;
+  source_kind_label?: string;
+  promotion_stage?: string;
+  promotion_stage_label?: string;
+  pipeline_target?: string;
+  pipeline_target_label?: string;
   quality_status: string;
   quality_score: number;
   quality_summary: string;
@@ -539,6 +573,14 @@ export interface CustomerPackBook {
   quality_status: string;
   quality_score: number;
   quality_summary: string;
+  source_collection?: string;
+  source_collection_label?: string;
+  source_kind?: string;
+  source_kind_label?: string;
+  promotion_stage?: string;
+  promotion_stage_label?: string;
+  pipeline_target?: string;
+  pipeline_target_label?: string;
   playable_asset_count: number;
   derived_asset_count: number;
   derived_assets: DerivedAsset[];

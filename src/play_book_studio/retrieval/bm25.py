@@ -50,6 +50,11 @@ def _row_to_hit(row: dict, score: float) -> RetrievalHit:
         verification_hints=tuple(
             str(item) for item in (row.get("verification_hints") or []) if str(item).strip()
         ),
+        graph_relations=tuple(
+            str(item)
+            for item in (row.get("graph_relations") or row.get("relation_question_classes") or [])
+            if str(item).strip()
+        ),
     )
 
 

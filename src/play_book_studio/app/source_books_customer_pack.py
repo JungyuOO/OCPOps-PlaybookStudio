@@ -6,7 +6,7 @@ import html
 import json
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from play_book_studio.config.settings import load_settings
 from play_book_studio.intake import CustomerPackDraftStore
@@ -68,6 +68,336 @@ def parse_customer_pack_viewer_path(viewer_path: str) -> tuple[str, str] | None:
     if len(parts) == 4 and parts[1] == "assets" and parts[3] == "index.html":
         return f"{parts[0]}::{parts[2]}", parsed.fragment.strip()
     return None
+
+
+def _resolve_page_mode(page_mode: str) -> str:
+    return "multi" if str(page_mode or "").strip().lower() == "multi" else "single"
+
+
+def _customer_pack_slide_summary(payload: dict[str, Any]) -> str:
+    return (
+        "업로드한 PPT를 슬라이드 단위로 보존한 내부 review view입니다. "
+        "텍스트, 표, 이미지 자산을 같은 슬라이드 truth에서 함께 보여줍니다."
+    )
+
+
+def _load_customer_pack_slide_packets(payload: dict[str, Any]) -> dict[str, Any] | None:
+    artifact_bundle = dict(payload.get("artifact_bundle") or {})
+    slide_packets_path = Path(str(artifact_bundle.get("slide_packets_path") or "").strip())
+    if slide_packets_path.as_posix() in {"", "."} or not slide_packets_path.exists() or not slide_packets_path.is_file():
+        return None
+    try:
+        slide_packets = json.loads(slide_packets_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(slide_packets, dict):
+        return None
+    if str(slide_packets.get("surface_kind") or "").strip() != "slide_deck":
+        return None
+    return slide_packets
+
+
+def _customer_pack_artifact_url(draft_id: str, storage_relpath: str) -> str:
+    parts = [quote(part) for part in str(storage_relpath or "").replace("\\", "/").split("/") if str(part).strip()]
+    relative = "/".join(parts)
+    return f"{CUSTOMER_PACK_VIEWER_PREFIX}{draft_id}/artifacts/{relative}" if relative else ""
+
+
+def _customer_pack_slide_asset_allowlist(root_dir: Path, draft_id: str) -> set[str]:
+    payload = load_customer_pack_book(root_dir, draft_id)
+    if payload is None or str(payload.get("surface_kind") or "").strip() != "slide_deck":
+        return set()
+    slide_packets = _load_customer_pack_slide_packets(payload)
+    if slide_packets is None:
+        return set()
+    allowed: set[str] = set()
+    for asset in slide_packets.get("embedded_assets") or []:
+        if not isinstance(asset, dict):
+            continue
+        relpath = str(asset.get("storage_relpath") or "").replace("\\", "/").strip().lstrip("/")
+        if relpath:
+            allowed.add(relpath)
+    return allowed
+
+
+def resolve_customer_pack_asset_path(root_dir: Path, request_path: str) -> Path | None:
+    parsed = urlparse(str(request_path or "").strip())
+    path = parsed.path.strip()
+    if not path.startswith(CUSTOMER_PACK_VIEWER_PREFIX):
+        return None
+    remainder = path.removeprefix(CUSTOMER_PACK_VIEWER_PREFIX).strip("/")
+    parts = [part for part in remainder.split("/") if part]
+    if len(parts) < 4 or parts[1] != "artifacts":
+        return None
+    draft_id = str(parts[0]).strip()
+    if not draft_id or not bool(load_customer_pack_read_boundary(root_dir, draft_id).get("read_allowed", False)):
+        return None
+    relative_path = "/".join(parts[2:]).strip().lstrip("/")
+    if not relative_path:
+        return None
+    allowed_relpaths = _customer_pack_slide_asset_allowlist(root_dir, draft_id)
+    if relative_path.replace("\\", "/") not in allowed_relpaths:
+        return None
+    books_root = load_settings(root_dir).customer_pack_books_dir.resolve()
+    asset_path = (books_root / relative_path).resolve()
+    if not asset_path.is_file() or (asset_path != books_root and books_root not in asset_path.parents):
+        return None
+    return asset_path
+
+
+def _slide_bbox_style(bbox: dict[str, Any], slide_size: dict[str, Any], *, z_index: int) -> str:
+    width = max(float(slide_size.get("width") or 0.0), 1.0)
+    height = max(float(slide_size.get("height") or 0.0), 1.0)
+    left = max(0.0, min(100.0, (float(bbox.get("left") or 0.0) / width) * 100.0))
+    top = max(0.0, min(100.0, (float(bbox.get("top") or 0.0) / height) * 100.0))
+    box_width = max(3.0, min(100.0, (float(bbox.get("width") or width) / width) * 100.0))
+    box_height = max(3.0, min(100.0, (float(bbox.get("height") or height) / height) * 100.0))
+    return (
+        f"left:{left:.3f}%;top:{top:.3f}%;width:{box_width:.3f}%;height:{box_height:.3f}%;"
+        f"z-index:{z_index};"
+    )
+
+
+def _render_slide_text_node(block: dict[str, Any], slide_size: dict[str, Any]) -> str:
+    text = str(block.get("text") or "").strip()
+    if not text:
+        return ""
+    font_size = max(12.0, min(34.0, float(block.get("font_size") or 15.0) * 0.9))
+    title_class = " customer-slide-node-title" if bool(block.get("is_title_candidate")) else ""
+    return """
+    <div class="customer-slide-node customer-slide-node-text{title_class}" style="{style} font-size:{font_size:.1f}px;">
+      <div class="customer-slide-node-text-body">{text}</div>
+    </div>
+    """.format(
+        title_class=title_class,
+        style=_slide_bbox_style(dict(block.get("bbox") or {}), slide_size, z_index=3),
+        font_size=font_size,
+        text=html.escape(text).replace("\n", "<br/>"),
+    ).strip()
+
+
+def _render_slide_table_node(block: dict[str, Any], slide_size: dict[str, Any]) -> str:
+    rows = [row for row in (block.get("rows") or []) if isinstance(row, list)]
+    if not rows:
+        body_text = str(block.get("body_text") or block.get("title") or "").strip()
+        if not body_text:
+            return ""
+        return """
+        <div class="customer-slide-node customer-slide-node-table" style="{style}">
+          <div class="customer-slide-node-table-fallback">{text}</div>
+        </div>
+        """.format(
+            style=_slide_bbox_style(dict(block.get("bbox") or {}), slide_size, z_index=2),
+            text=html.escape(body_text).replace("\n", "<br/>"),
+        ).strip()
+    row_html = "".join(
+        "<tr>{cells}</tr>".format(
+            cells="".join(
+                "<td>{}</td>".format(html.escape(str(cell or "")))
+                for cell in row
+            )
+        )
+        for row in rows
+    )
+    return """
+    <div class="customer-slide-node customer-slide-node-table" style="{style}">
+      <div class="customer-slide-node-table-wrap">
+        <table class="customer-slide-node-table-grid">{rows}</table>
+      </div>
+    </div>
+    """.format(
+        style=_slide_bbox_style(dict(block.get("bbox") or {}), slide_size, z_index=2),
+        rows=row_html,
+    ).strip()
+
+
+def _render_slide_asset_node(asset: dict[str, Any], slide_size: dict[str, Any], *, draft_id: str) -> str:
+    asset_url = _customer_pack_artifact_url(draft_id, str(asset.get("storage_relpath") or "").strip())
+    if not asset_url:
+        return ""
+    return """
+    <figure class="customer-slide-node customer-slide-node-image" style="{style}">
+      <img src="{src}" alt="{alt}" loading="lazy" />
+    </figure>
+    """.format(
+        style=_slide_bbox_style(dict(asset.get("bbox") or {}), slide_size, z_index=1),
+        src=html.escape(asset_url, quote=True),
+        alt=html.escape(str(asset.get("alt") or asset.get("asset_name") or "slide image")),
+    ).strip()
+
+
+def _render_customer_pack_slide_cards(
+    slides: list[dict[str, Any]],
+    *,
+    draft_id: str,
+    target_anchor: str,
+    embedded: bool,
+) -> list[str]:
+    cards: list[str] = []
+    for slide in slides:
+        slide_anchor = str(slide.get("slide_anchor") or "").strip()
+        title = str(slide.get("title") or slide_anchor or "Slide").strip() or "Slide"
+        matched_heading = str(slide.get("matched_section_heading") or "").strip()
+        slide_role = str(slide.get("slide_role") or "content").strip() or "content"
+        slide_size = dict(slide.get("slide_size") or {})
+        is_target = bool(target_anchor) and slide_anchor == target_anchor
+        title_nodes = [
+            _render_slide_text_node(dict(block), slide_size)
+            for block in (slide.get("text_blocks") or [])
+            if isinstance(block, dict) and bool(block.get("is_title_candidate"))
+        ]
+        body_nodes = [
+            _render_slide_asset_node(dict(asset), slide_size, draft_id=draft_id)
+            for asset in (slide.get("embedded_assets") or [])
+            if isinstance(asset, dict) and str(asset.get("asset_kind") or "").strip() == "image"
+        ]
+        body_nodes.extend(
+            _render_slide_table_node(dict(block), slide_size)
+            for block in (slide.get("table_blocks") or [])
+            if isinstance(block, dict)
+        )
+        body_nodes.extend(
+            _render_slide_text_node(dict(block), slide_size)
+            for block in (slide.get("text_blocks") or [])
+            if isinstance(block, dict) and not bool(block.get("is_title_candidate"))
+        )
+        body_nodes = [node for node in body_nodes if node]
+        notes_text = str(slide.get("notes_text") or "").strip()
+        meta_parts = [f"Slide {int(slide.get('ordinal') or 0)}", slide_role.replace("_", " ")]
+        if matched_heading:
+            meta_parts.append(matched_heading)
+        canvas_ratio = max(float(slide_size.get("width") or 16.0), 1.0) / max(float(slide_size.get("height") or 9.0), 1.0)
+        cards.append(
+            """
+            <section id="{anchor}" class="{section_class}">
+              <div class="section-header">
+                <div class="section-meta">{meta}</div>
+                <h2>{title}</h2>
+              </div>
+              <div class="section-body">
+                <div class="customer-slide-stage" style="position:relative; aspect-ratio:{ratio:.6f}; background:linear-gradient(180deg, #ffffff 0%, #f6f8fb 100%); border:1px solid rgba(15,23,42,0.08); border-radius:18px; overflow:hidden; box-shadow:0 20px 50px rgba(15,23,42,0.08);">
+                  {title_nodes}
+                  {body_nodes}
+                </div>
+                {notes_block}
+              </div>
+            </section>
+            """.format(
+                anchor=html.escape(slide_anchor, quote=True),
+                section_class="embedded-section" if embedded else f"section-card{' section-card-target' if is_target else ''}",
+                meta=html.escape(" · ".join(part for part in meta_parts if part)),
+                title=html.escape(title),
+                ratio=canvas_ratio,
+                title_nodes="".join(title_nodes),
+                body_nodes="".join(body_nodes),
+                notes_block=(
+                    """
+                    <details class="customer-slide-notes">
+                      <summary>발표자 노트</summary>
+                      <div class="customer-slide-notes-body">{notes}</div>
+                    </details>
+                    """.format(notes=html.escape(notes_text).replace("\n", "<br/>")).strip()
+                    if notes_text
+                    else ""
+                ),
+            ).strip()
+        )
+    return cards
+
+
+def _customer_pack_slide_outline(slides: list[dict[str, Any]]) -> list[dict[str, str]]:
+    outline: list[dict[str, str]] = []
+    for slide in slides:
+        anchor = str(slide.get("slide_anchor") or "").strip()
+        title = str(slide.get("title") or anchor).strip()
+        ordinal = int(slide.get("ordinal") or 0)
+        matched_heading = str(slide.get("matched_section_heading") or "").strip()
+        if not anchor or not title:
+            continue
+        path = f"Slide {ordinal}" if ordinal > 0 else "Slide"
+        if matched_heading:
+            path = f"{path} > {matched_heading}"
+        outline.append(
+            {
+                "anchor": anchor,
+                "heading": title,
+                "path": path,
+            }
+        )
+    return outline
+
+
+def _customer_pack_slide_metrics(slides: list[dict[str, Any]]) -> list[str]:
+    table_count = sum(len([block for block in (slide.get("table_blocks") or []) if isinstance(block, dict)]) for slide in slides)
+    image_count = sum(len([asset for asset in (slide.get("embedded_assets") or []) if isinstance(asset, dict)]) for slide in slides)
+    visual_only_count = sum(1 for slide in slides if str(slide.get("slide_role") or "").strip() == "visual_only")
+    metrics = [f"슬라이드 {len(slides)}"]
+    if image_count:
+        metrics.append(f"이미지 {image_count}")
+    if table_count:
+        metrics.append(f"표 {table_count}")
+    if visual_only_count:
+        metrics.append(f"visual {visual_only_count}")
+    return metrics[:5]
+
+
+def _customer_pack_slide_navigation(
+    slides: list[dict[str, Any]],
+    *,
+    target_anchor: str,
+    viewer_path: str,
+    page_mode: str,
+) -> list[dict[str, str]]:
+    if _resolve_page_mode(page_mode) != "single" or not slides:
+        return []
+    current_index = 0
+    normalized_anchor = str(target_anchor or "").strip()
+    if normalized_anchor:
+        for index, slide in enumerate(slides):
+            if str(slide.get("slide_anchor") or "").strip() == normalized_anchor:
+                current_index = index
+                break
+    base_viewer_path = str(viewer_path or "").split("#", 1)[0]
+    navigation: list[dict[str, str]] = []
+    if current_index > 0:
+        previous_slide = slides[current_index - 1]
+        previous_anchor = str(previous_slide.get("slide_anchor") or "").strip()
+        if previous_anchor:
+            navigation.append(
+                {
+                    "label": "이전",
+                    "href": f"{base_viewer_path}#{previous_anchor}",
+                    "title": str(previous_slide.get("title") or previous_anchor).strip() or previous_anchor,
+                }
+            )
+    if current_index + 1 < len(slides):
+        next_slide = slides[current_index + 1]
+        next_anchor = str(next_slide.get("slide_anchor") or "").strip()
+        if next_anchor:
+            navigation.append(
+                {
+                    "label": "다음",
+                    "href": f"{base_viewer_path}#{next_anchor}",
+                    "title": str(next_slide.get("title") or next_anchor).strip() or next_anchor,
+                }
+            )
+    return navigation
+
+
+def _visible_customer_pack_slides(
+    slides: list[dict[str, Any]],
+    *,
+    target_anchor: str,
+    page_mode: str,
+) -> list[dict[str, Any]]:
+    if _resolve_page_mode(page_mode) == "multi":
+        return slides
+    normalized_anchor = str(target_anchor or "").strip()
+    if normalized_anchor:
+        for slide in slides:
+            if str(slide.get("slide_anchor") or "").strip() == normalized_anchor:
+                return [slide]
+    return slides[:1]
 
 
 def _merge_customer_pack_surface_truth(
@@ -157,7 +487,7 @@ def load_customer_pack_book(root_dir: Path, draft_id: str) -> dict[str, Any] | N
     return _merge_customer_pack_surface_truth(payload, corpus_manifest)
 
 
-def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str) -> str | None:
+def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str, *, page_mode: str = "single") -> str | None:
     parsed = parse_customer_pack_viewer_path(viewer_path)
     if parsed is None:
         return None
@@ -168,6 +498,111 @@ def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str) -> str 
     canonical_book = load_customer_pack_book(root_dir, draft_id)
     if canonical_book is None:
         return None
+
+    slide_packets = (
+        _load_customer_pack_slide_packets(canonical_book)
+        if str(canonical_book.get("surface_kind") or "").strip() == "slide_deck"
+        else None
+    )
+    if slide_packets is not None:
+        all_slides = [dict(slide) for slide in (slide_packets.get("slides") or []) if isinstance(slide, dict)]
+        if not all_slides:
+            return None
+        visible_slides = _visible_customer_pack_slides(
+            all_slides,
+            target_anchor=target_anchor,
+            page_mode=page_mode,
+        )
+        cards = _render_customer_pack_slide_cards(
+            visible_slides,
+            draft_id=str(canonical_book.get("draft_id") or draft_id).split("::", 1)[0],
+            target_anchor=target_anchor,
+            embedded=embedded,
+        )
+        family_label = str(canonical_book.get("family_label") or "").strip()
+        quality_summary = str(canonical_book.get("quality_summary") or "").strip()
+        base_summary = _customer_pack_slide_summary(canonical_book)
+        summary = f"{base_summary} {quality_summary}".strip() if quality_summary else base_summary
+        runtime_truth_label = str(canonical_book.get("runtime_truth_label") or "Customer Source-First Pack").strip()
+        approval_state = str(canonical_book.get("approval_state") or "unreviewed").strip()
+        publication_state = str(canonical_book.get("publication_state") or "draft").strip()
+        source_lane = str(canonical_book.get("source_lane") or "customer_source_first_pack").strip()
+        parser_backend = str(canonical_book.get("parser_backend") or "").strip()
+        shared_grade = str(canonical_book.get("shared_grade") or "blocked").strip() or "blocked"
+        grade_gate = dict(canonical_book.get("grade_gate") or {})
+        citation_gate = dict(grade_gate.get("citation_gate") or {})
+        retrieval_gate = dict(grade_gate.get("retrieval_gate") or {})
+        promotion_gate = dict(grade_gate.get("promotion_gate") or {})
+        citation_status = str(
+            canonical_book.get("citation_landing_status")
+            or citation_gate.get("status")
+            or "missing"
+        ).strip() or "missing"
+        evidence_badges = [
+            f"grade: {shared_grade}",
+            f"citation: {citation_status}",
+            f"retrieval: {'ready' if retrieval_gate.get('ready') else 'pending'}",
+            f"read: {'ready' if promotion_gate.get('read_ready') else 'blocked'}",
+            f"approval: {approval_state}",
+            f"publication: {publication_state}",
+            "surface: slide deck",
+        ]
+        if parser_backend:
+            evidence_badges.append(f"parser: {parser_backend}")
+        if source_lane and source_lane != "customer_source_first_pack":
+            evidence_badges.append(f"lane: {source_lane}")
+        supplementary_blocks = [
+            """
+            <section class="wiki-parent-card">
+              <div class="wiki-parent-eyebrow">Pack Runtime Truth</div>
+              <div class="viewer-truth-topline">
+                <span class="viewer-truth-badge">{badge}</span>
+                <a class="viewer-truth-link" href="{source_url}" target="_blank" rel="noreferrer">원본 캡처 열기</a>
+              </div>
+              <div class="viewer-truth-title">{title}</div>
+              <p>Customer pack runtime evidence</p>
+              <div class="wiki-entity-list">{badges}</div>
+            </section>
+            """.format(
+                source_url=html.escape(
+                    str(canonical_book.get("source_origin_url") or canonical_book.get("source_uri") or ""),
+                    quote=True,
+                ),
+                badge=html.escape(str(canonical_book.get("boundary_badge") or "Private Pack Runtime")),
+                title=html.escape(runtime_truth_label),
+                badges="".join(
+                    f'<span class="meta-pill">{html.escape(item)}</span>'
+                    for item in evidence_badges
+                    if item.strip()
+                ),
+            ).strip()
+        ]
+        viewer_target = str(canonical_book.get("target_viewer_path") or f"{CUSTOMER_PACK_VIEWER_PREFIX}{draft_id}/index.html")
+        return _render_study_viewer_html(
+            title=str(canonical_book.get("title") or draft_id),
+            source_url=str(canonical_book.get("source_origin_url") or canonical_book.get("source_uri") or ""),
+            cards=cards,
+            supplementary_blocks=supplementary_blocks,
+            section_count=len(all_slides),
+            eyebrow=family_label or "Customer Slide Deck",
+            summary=summary,
+            embedded=embedded,
+            section_outline=_customer_pack_slide_outline(all_slides),
+            section_navigation=_customer_pack_slide_navigation(
+                all_slides,
+                target_anchor=target_anchor,
+                viewer_path=viewer_target,
+                page_mode=page_mode,
+            ),
+            section_metrics=_customer_pack_slide_metrics(all_slides),
+            page_overlay_toolbar=_render_page_overlay_toolbar(
+                target_kind="book",
+                target_ref=f"book:{str(canonical_book.get('book_slug') or draft_id)}",
+                title=str(canonical_book.get("title") or draft_id),
+                book_slug=str(canonical_book.get("book_slug") or draft_id),
+                viewer_path=viewer_target,
+            ),
+        )
 
     sections = list(canonical_book.get("sections") or [])
     if not sections:
@@ -291,6 +726,11 @@ def list_customer_pack_drafts(root_dir: Path) -> dict[str, Any]:
                 summary["playable_asset_count"] = payload.get("playable_asset_count", 1)
                 summary["derived_asset_count"] = payload.get("derived_asset_count", 0)
                 summary["derived_assets"] = payload.get("derived_assets", [])
+                summary["surface_kind"] = payload.get("surface_kind")
+                summary["source_unit_kind"] = payload.get("source_unit_kind")
+                summary["source_unit_count"] = payload.get("source_unit_count")
+                summary["slide_packet_count"] = payload.get("slide_packet_count")
+                summary["slide_asset_count"] = payload.get("slide_asset_count")
         drafts.append(summary)
     return {"drafts": drafts}
 
@@ -300,4 +740,5 @@ __all__ = [
     "list_customer_pack_drafts",
     "load_customer_pack_book",
     "parse_customer_pack_viewer_path",
+    "resolve_customer_pack_asset_path",
 ]

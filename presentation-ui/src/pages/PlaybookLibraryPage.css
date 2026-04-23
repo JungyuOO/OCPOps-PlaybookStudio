@@ -2036,7 +2036,7 @@
   gap: 16px;
   text-align: center;
   position: relative;
-  padding-top: 24px;
+  padding-top: 36px;
 }
 
 .step-icon {
@@ -2117,6 +2117,114 @@
   color: var(--pbs-text-muted);
   transition: all 0.4s;
 }
+
+/* Specific Stage Colors */
+.pipeline-step--bronze .step-badge {
+  color: #e68a35;
+  border-color: rgba(230, 138, 53, 0.4);
+  background: rgba(230, 138, 53, 0.1);
+  box-shadow: 0 0 12px rgba(230, 138, 53, 0.2);
+}
+.pipeline-step--bronze .step-icon {
+  color: #e68a35;
+  border-color: rgba(230, 138, 53, 0.2);
+}
+.pipeline-step--bronze.active .step-icon {
+  background: linear-gradient(135deg, rgba(230, 138, 53, 0.12), transparent);
+  box-shadow: 0 0 30px rgba(230, 138, 53, 0.25), 0 0 60px rgba(230, 138, 53, 0.05);
+  border-color: #e68a35;
+}
+.pipeline-step--bronze.completed .step-icon {
+  background: rgba(230, 138, 53, 0.08);
+  border-color: rgba(230, 138, 53, 0.5);
+}
+.pipeline-step--bronze.active .step-badge,
+.pipeline-step--bronze.completed .step-badge {
+  color: #e68a35;
+  border-color: rgba(230, 138, 53, 0.4);
+  background: rgba(230, 138, 53, 0.1);
+}
+
+.pipeline-step--silver .step-badge {
+  color: #b0c4de;
+  border-color: rgba(176, 196, 222, 0.4);
+  background: rgba(176, 196, 222, 0.1);
+  box-shadow: 0 0 12px rgba(176, 196, 222, 0.2);
+}
+.pipeline-step--silver .step-icon {
+  color: #b0c4de;
+  border-color: rgba(176, 196, 222, 0.2);
+}
+.pipeline-step--silver.active .step-icon {
+  background: linear-gradient(135deg, rgba(176, 196, 222, 0.12), transparent);
+  box-shadow: 0 0 30px rgba(176, 196, 222, 0.25), 0 0 60px rgba(176, 196, 222, 0.05);
+  border-color: #b0c4de;
+}
+.pipeline-step--silver.completed .step-icon {
+  background: rgba(176, 196, 222, 0.08);
+  border-color: rgba(176, 196, 222, 0.5);
+}
+.pipeline-step--silver.active .step-badge,
+.pipeline-step--silver.completed .step-badge {
+  color: #b0c4de;
+  border-color: rgba(176, 196, 222, 0.4);
+  background: rgba(176, 196, 222, 0.1);
+}
+
+.pipeline-step--gold .step-badge {
+  color: #ffca28;
+  border-color: rgba(255, 202, 40, 0.4);
+  background: rgba(255, 202, 40, 0.1);
+  box-shadow: 0 0 12px rgba(255, 202, 40, 0.2);
+}
+.pipeline-step--gold .step-icon {
+  color: #ffca28;
+  border-color: rgba(255, 202, 40, 0.2);
+}
+.pipeline-step--gold.active .step-icon {
+  background: linear-gradient(135deg, rgba(255, 202, 40, 0.12), transparent);
+  box-shadow: 0 0 30px rgba(255, 202, 40, 0.25), 0 0 60px rgba(255, 202, 40, 0.05);
+  border-color: #ffca28;
+}
+.pipeline-step--gold.completed .step-icon {
+  background: rgba(255, 202, 40, 0.08);
+  border-color: rgba(255, 202, 40, 0.5);
+}
+.pipeline-step--gold.active .step-badge,
+.pipeline-step--gold.completed .step-badge {
+  color: #ffca28;
+  border-color: rgba(255, 202, 40, 0.4);
+  background: rgba(255, 202, 40, 0.1);
+}
+
+.pipeline-step--judge .step-badge {
+  color: var(--pbs-accent-purple);
+  border-color: rgba(140, 82, 255, 0.4);
+  background: rgba(140, 82, 255, 0.1);
+  box-shadow: 0 0 12px rgba(140, 82, 255, 0.2);
+}
+.pipeline-step--judge .step-icon {
+  color: var(--pbs-accent-purple);
+  border-color: rgba(140, 82, 255, 0.2);
+}
+.pipeline-step--judge.active .step-icon {
+  background: linear-gradient(135deg, rgba(140, 82, 255, 0.12), transparent);
+  box-shadow: 0 0 30px rgba(140, 82, 255, 0.25), 0 0 60px rgba(140, 82, 255, 0.05);
+  border-color: var(--pbs-accent-purple);
+}
+.pipeline-step--judge.completed .step-icon,
+.pipeline-step--judge.final .step-icon {
+  background: rgba(140, 82, 255, 0.08);
+  border-color: rgba(140, 82, 255, 0.5);
+}
+.pipeline-step--judge.active .step-badge,
+.pipeline-step--judge.completed .step-badge,
+.pipeline-step--judge.final .step-badge {
+  color: var(--pbs-accent-purple);
+  border-color: rgba(140, 82, 255, 0.4);
+  background: rgba(140, 82, 255, 0.1);
+}
+
 
 /* Connectors */
 .pipeline-connector {
@@ -2350,7 +2458,7 @@
 .factory-workbench-section .pipeline-step {
   width: 168px;
   gap: 12px;
-  padding-top: 20px;
+  padding-top: 32px;
 }
 
 .factory-workbench-section .step-icon {
@@ -4027,6 +4135,34 @@ details.factory-block:not([open]) .factory-block-toggle svg {
 .draft-card:hover {
   transform: translateY(-4px);
   border-color: rgba(255, 255, 255, 0.12);
+}
+
+.custom-material-card {
+  cursor: default;
+}
+
+.custom-material-card--openable {
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.custom-material-description {
+  margin: 10px 0 0;
+  color: var(--pbs-text-dim);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.custom-material-path {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--glass-border);
+  color: var(--pbs-text-dim);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 .user-library-card {

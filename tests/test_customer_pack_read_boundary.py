@@ -24,6 +24,8 @@ from play_book_studio.app.customer_pack_read_boundary import (
     LOCAL_CUSTOMER_PACK_WORKSPACE_ID,
     extract_customer_pack_draft_ids_from_payload,
     load_customer_pack_read_boundary,
+    sanitize_customer_pack_book_payload,
+    sanitize_customer_pack_draft_payload,
 )
 from play_book_studio.app.chat_debug import append_chat_turn_log
 from play_book_studio.app.data_control_room import build_data_control_room_payload
@@ -251,6 +253,41 @@ def _persist_private_session(
 
 
 class CustomerPackReadBoundaryTests(unittest.TestCase):
+    def test_customer_pack_sanitized_payloads_expose_catalog_boundary_metadata(self) -> None:
+        draft_payload = sanitize_customer_pack_draft_payload(
+            {
+                "draft_id": "draft-123",
+                "status": "normalized",
+                "source_type": "pptx",
+                "source_collection": "uploaded",
+                "capture_artifact_path": "C:/private/raw.pptx",
+            }
+        )
+        self.assertEqual("customer_uploaded_document", draft_payload["source_kind"])
+        self.assertEqual("업로드 문서", draft_payload["source_kind_label"])
+        self.assertEqual("업로드 문서", draft_payload["source_collection_label"])
+        self.assertEqual("normalized", draft_payload["promotion_stage"])
+        self.assertEqual("플레이북 승급", draft_payload["promotion_stage_label"])
+        self.assertEqual("custom_playbook_pipeline", draft_payload["pipeline_target"])
+        self.assertEqual("/api/customer-packs/captured?draft_id=draft-123", draft_payload["capture_artifact_path"])
+
+        book_payload = sanitize_customer_pack_book_payload(
+            {
+                "draft_id": "draft-123",
+                "title": "Customer Book",
+                "source_collection": "uploaded",
+                "source_origin_url": "/api/customer-packs/captured?draft_id=draft-123",
+                "sections": [{"heading": "Slide 1"}],
+            }
+        )
+        self.assertEqual("customer_uploaded_document", book_payload["source_kind"])
+        self.assertEqual("업로드 문서", book_payload["source_kind_label"])
+        self.assertEqual("업로드 문서", book_payload["source_collection_label"])
+        self.assertEqual("normalized", book_payload["promotion_stage"])
+        self.assertEqual("플레이북 승급", book_payload["promotion_stage_label"])
+        self.assertEqual("custom_playbook_pipeline", book_payload["pipeline_target"])
+        self.assertEqual("/api/customer-packs/captured?draft_id=draft-123", book_payload["source_uri"])
+
     def test_customer_pack_read_surfaces_fail_close_unreviewed_and_non_read_ready_packs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

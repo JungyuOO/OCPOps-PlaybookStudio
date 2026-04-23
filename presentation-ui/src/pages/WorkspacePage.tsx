@@ -119,14 +119,8 @@ interface ViewerActiveSection {
 }
 
 type LeftPanelMode = 'history' | 'outline' | 'signals';
+type OutlinePanelSectionKey = 'official_manuals' | 'custom_documents' | 'uploaded_docs';
 type SignalsFavoriteFilter = 'favorites' | 'edited';
-interface OutlineLinkItem {
-  id: string;
-  label: string;
-  meta?: string;
-  action: () => void;
-  tone?: 'default' | 'muted';
-}
 
 interface OutlineTocNode {
   id: string;
@@ -174,12 +168,12 @@ function normalizeEditedTextStyle(value?: Partial<WikiEditedTextStyle> | null): 
   return {
     tone:
       tone === 'ink'
-      || tone === 'teal'
-      || tone === 'amber'
-      || tone === 'cyan'
-      || tone === 'rose'
-      || tone === 'violet'
-      || tone === 'lime'
+        || tone === 'teal'
+        || tone === 'amber'
+        || tone === 'cyan'
+        || tone === 'rose'
+        || tone === 'violet'
+        || tone === 'lime'
         ? tone
         : DEFAULT_EDITED_TEXT_STYLE.tone,
     size: size === 'sm' || size === 'lg' || size === 'md' ? size : DEFAULT_EDITED_TEXT_STYLE.size,
@@ -379,6 +373,36 @@ function summarizeBookMeta(book: WorkspaceManualBook): string {
   return parts.join(' · ');
 }
 
+function formatCustomDocumentMeta(book: LibraryBook): string {
+  const sourceCount = Number(book.custom_document_source_count ?? 0);
+  const extSummary = Object.entries(book.custom_document_ext_breakdown ?? {})
+    .map(([ext, count]) => `${ext.toUpperCase()} ${count}`)
+    .join(' · ');
+  const parts = [
+    book.promotion_stage_label || '',
+    sourceCount > 0 ? `${sourceCount}개 재료` : '',
+    extSummary,
+    book.custom_document_status === 'ui_ready_source_hidden' ? '원본 비노출' : '',
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
+
+function dedupeCatalogChips(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(
+    values
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+  ));
+}
+
+function customDocumentCatalogChips(book: LibraryBook): string[] {
+  return dedupeCatalogChips([
+    book.source_kind_label,
+    book.promotion_stage_label,
+    book.custom_document_kind_label,
+  ]);
+}
+
 
 function inferOutlineCategory(book: WorkspaceManualBook): OutlineCategoryGroup {
   const haystack = [
@@ -411,11 +435,22 @@ function inferOutlineCategory(book: WorkspaceManualBook): OutlineCategoryGroup {
 
 function formatDraftMeta(draft: CustomerPackDraft): string {
   const size = formatBytes(draft.uploaded_byte_size);
-  const pieces = [draft.status, draft.source_type.toUpperCase()];
+  const pieces = [
+    draft.promotion_stage_label || '',
+    draft.source_type.toUpperCase(),
+  ];
   if (size) {
     pieces.push(size);
   }
   return pieces.filter(Boolean).join(' · ');
+}
+
+function uploadedDraftCatalogChips(draft: CustomerPackDraft): string[] {
+  return dedupeCatalogChips([
+    draft.source_kind_label,
+    draft.promotion_stage_label,
+    draft.source_type.toUpperCase(),
+  ]);
 }
 
 function primaryCitationTruth(citations?: ChatCitation[] | null): {
@@ -764,8 +799,11 @@ export default function WorkspacePage() {
   const [isNormalizing, setIsNormalizing] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     manuals: true,
+    custom_documents: false,
     drafts: true,
   });
+  const [customDocumentBooks, setCustomDocumentBooks] = useState<LibraryBook[]>([]);
+  const [customDocumentSourceCount, setCustomDocumentSourceCount] = useState(0);
 
   // Session history
   const [sessionList, setSessionList] = useState<SessionSummary[]>([]);
@@ -789,6 +827,11 @@ export default function WorkspacePage() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [sourcesDrawerOpen, setSourcesDrawerOpen] = useState(false);
+  const [collapsedOutlineSections, setCollapsedOutlineSections] = useState<Record<OutlinePanelSectionKey, boolean>>({
+    official_manuals: false,
+    custom_documents: false,
+    uploaded_docs: false,
+  });
   const [outlineCategoryKey, setOutlineCategoryKey] = useState(() => {
     if (typeof window === 'undefined') {
       return '';
@@ -1239,6 +1282,8 @@ export default function WorkspacePage() {
 
         setPackLabel(room.active_pack.pack_label || 'OpenShift 4.20');
         setManualBooks(sourceBooks);
+        setCustomDocumentBooks(room.custom_documents?.books ?? []);
+        setCustomDocumentSourceCount(room.summary.custom_document_count ?? room.custom_documents?.source_count ?? room.custom_documents?.books?.length ?? 0);
         setDrafts(nextDrafts);
       } catch (error) {
         console.error(error);
@@ -1629,6 +1674,19 @@ export default function WorkspacePage() {
     } catch (error) {
       console.error(error);
       window.alert(error instanceof Error ? error.message : '문서를 여는 중 오류가 발생했습니다.');
+    }
+  }
+
+  async function handleCustomDocumentClick(book: LibraryBook): Promise<void> {
+    if (!book.viewer_path) {
+      return;
+    }
+    try {
+      await openViewerPreview(book.viewer_path, book.title, `custom:${book.book_slug}`);
+      animatePreviewPanel();
+    } catch (error) {
+      console.error(error);
+      window.alert(error instanceof Error ? error.message : '커스텀 문서를 여는 중 오류가 발생했습니다.');
     }
   }
 
@@ -2201,10 +2259,6 @@ export default function WorkspacePage() {
       : favoriteOverlays
   ).slice(0, 6);
   const nextPlayItems = personalizedNextPlays.slice(0, 4);
-  const activeAssistantMessage = useMemo(
-    () => [...messages].reverse().find((message) => message.role === 'assistant') ?? null,
-    [messages],
-  );
   const activeBookSlug = useMemo(() => {
     if (preview.kind === 'viewer' && preview.meta?.book_slug) {
       return preview.meta.book_slug;
@@ -2264,94 +2318,12 @@ export default function WorkspacePage() {
     }
     setOutlineCategoryKey(resolvedOutlineCategoryKey);
   }, [outlineCategoryKey, resolvedOutlineCategoryKey]);
-  // Breadcrumb path for the currently focused section (used as a header line above the TOC)
-  const outlineBreadcrumb = useMemo<string[]>(() => {
-    if (preview.kind === 'viewer' && preview.meta?.section_path?.length) {
-      return preview.meta.section_path;
-    }
-    return [];
-  }, [preview]);
-
-  // Hierarchical TOC derived from the currently open document's sections
-  const outlineTocNodes = useMemo<OutlineTocNode[]>(() => {
-    if (preview.kind === 'draft' && preview.book?.sections?.length) {
-      return preview.book.sections.map((section, index) => {
-        const segments = (section.section_path_label || '')
-          .split(/\s*[>/]\s*/)
-          .map((part) => part.trim())
-          .filter(Boolean);
-        const rawDepth = Math.max(0, segments.length - 1);
-        return {
-          id: `toc-draft:${section.viewer_path}:${index}`,
-          heading: section.heading || segments[segments.length - 1] || 'Untitled section',
-          depth: Math.min(rawDepth, 3),
-          viewerPath: section.viewer_path,
-          sectionPathLabel: section.section_path_label || '',
-        };
-      });
-    }
-
-    if (preview.kind === 'viewer' && preview.meta?.section_path?.length) {
-      const sectionPath = preview.meta.section_path;
-      return sectionPath.map((section, index) => ({
-        id: `toc-viewer:${index}:${section}`,
-        heading: section,
-        depth: Math.min(index, 3),
-        viewerPath: preview.meta?.viewer_path || '',
-        sectionPathLabel: sectionPath.slice(0, index + 1).join(' > '),
-      }));
-    }
-
-    return [];
-  }, [preview]);
-
-  // Active TOC node identifier — best-effort match by viewerPath / section label
-  const activeTocNodeId = useMemo<string | null>(() => {
-    if (!outlineTocNodes.length) return null;
-    if (preview.kind === 'viewer') {
-      const currentPath = preview.meta?.viewer_path;
-      const lastSection = preview.meta?.section_path?.[preview.meta.section_path.length - 1];
-      const match = outlineTocNodes.find((node) => {
-        if (currentPath && node.viewerPath === currentPath) return true;
-        if (lastSection && node.heading === lastSection) return true;
-        return false;
-      });
-      return match?.id ?? null;
-    }
-    if (preview.kind === 'draft') {
-      // No persistent "active section" in draft mode — highlight the first node as a reading anchor
-      return outlineTocNodes[0]?.id ?? null;
-    }
-    return null;
-  }, [outlineTocNodes, preview]);
-  const outlineProcedureItems: OutlineLinkItem[] = (activeAssistantMessage?.relatedSections ?? [])
-    .slice(0, 6)
-    .map((link, index) => ({
-      id: `procedure:${link.href}:${index}`,
-      label: link.label,
-      meta: link.summary || '',
-      action: () => {
-        void handleRelatedLinkClick(link);
-      },
+  const toggleOutlineSection = useCallback((key: OutlinePanelSectionKey) => {
+    setCollapsedOutlineSections((current) => ({
+      ...current,
+      [key]: !current[key],
     }));
-  const outlineRuntimeItems: OutlineLinkItem[] = manualSources.map((source) => ({
-    id: source.id,
-    label: source.name,
-    meta: source.meta,
-    action: () => {
-      void handleSourceClick(source);
-    },
-    tone: activeSourceId === source.id ? 'default' : 'muted',
-  }));
-  const outlineCustomerItems: OutlineLinkItem[] = draftSources.slice(0, 4).map((source) => ({
-    id: source.id,
-    label: source.name,
-    meta: source.meta,
-    action: () => {
-      void handleSourceClick(source);
-    },
-    tone: activeSourceId === source.id ? 'default' : 'muted',
-  }));
+  }, []);
   const viewerSurfaceTitle = 'Wiki Viewer';
   const viewerHeaderToolbar = !testMode && currentOverlayTarget ? (
     <div className="viewer-header-toolbar" role="toolbar" aria-label="위키 뷰어 액션">
@@ -2603,196 +2575,226 @@ export default function WorkspacePage() {
                 <div className="outline-panel">
                   {outlineCategoryGroups.length > 0 && (
                     <section className="outline-category-board outline-surface-card outline-surface-card--catalog">
-                      <div className="outline-section-head">
-                        <strong>{visionMode === 'guided_tour' ? 'Tour Routes' : 'Categories'}</strong>
-                        <span>{outlineCategoryGroups.length}</span>
-                      </div>
-                      <div className="outline-category-list">
-                        {outlineCategoryGroups.map((group) => {
-                          const isActive = group.key === resolvedOutlineCategoryKey;
-                          const groupFamilies = (outlineCategoryFamilies.get(group.key) ?? []).slice(0, 14);
-                          return (
-                            <div key={group.key} className={`outline-category-card${isActive ? ' active' : ''}`}>
-                              <button
-                                type="button"
-                                className={`outline-category-item${isActive ? ' active' : ''}`}
-                                onClick={() => setOutlineCategoryKey(isActive ? OUTLINE_CATEGORY_COLLAPSED : group.key)}
-                              >
-                                <div className="outline-category-main">
-                                  <span className="outline-category-label">{group.label}</span>
-                                  <span className="outline-category-description">{group.description}</span>
-                                </div>
-                                <div className="outline-category-side">
-                                  <span className="outline-category-count">{groupFamilies.length}</span>
-                                  {isActive ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                </div>
-                              </button>
-                              {isActive && (
-                                <div className="outline-category-expand">
-                                  {groupFamilies.map((family) => {
-                                    const familyActive = [family.primary, ...family.variants].some(
-                                      (book) => book.book_slug === activeBookSlug,
-                                    );
-                                    return (
-                                      <div
-                                        key={family.key}
-                                        className={`outline-library-family${familyActive ? ' active' : ''}`}
-                                      >
-                                        <button
-                                          type="button"
-                                          className={`outline-library-item ${family.primary.book_slug === activeBookSlug ? 'active' : 'muted'}`}
-                                          onClick={() => {
-                                            void openManualPreview(family.primary);
-                                          }}
+                      <button
+                        type="button"
+                        className="outline-section-head outline-section-toggle"
+                        onClick={() => toggleOutlineSection('official_manuals')}
+                      >
+                        <div className="outline-section-copy">
+                          <strong>{visionMode === 'guided_tour' ? 'OCP 학습 경로' : 'OCP 공식 매뉴얼'}</strong>
+                          <span>공식 매뉴얼을 주제별로 묶어 둔 탐색 목록</span>
+                        </div>
+                        <div className="outline-section-toggle-side">
+                          <span>{`${outlineCategoryGroups.length}개 카테고리 · ${manualBooks.length}권`}</span>
+                          {collapsedOutlineSections.official_manuals ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                        </div>
+                      </button>
+                      {!collapsedOutlineSections.official_manuals && (
+                        <div className="outline-category-list">
+                          {outlineCategoryGroups.map((group) => {
+                            const isActive = group.key === resolvedOutlineCategoryKey;
+                            const groupFamilies = (outlineCategoryFamilies.get(group.key) ?? []).slice(0, 14);
+                            return (
+                              <div key={group.key} className={`outline-category-card${isActive ? ' active' : ''}`}>
+                                <button
+                                  type="button"
+                                  className={`outline-category-item${isActive ? ' active' : ''}`}
+                                  onClick={() => setOutlineCategoryKey(isActive ? OUTLINE_CATEGORY_COLLAPSED : group.key)}
+                                >
+                                  <div className="outline-category-main">
+                                    <span className="outline-category-label">{group.label}</span>
+                                    <span className="outline-category-description">{group.description}</span>
+                                  </div>
+                                  <div className="outline-category-side">
+                                    <span className="outline-category-count">{groupFamilies.length}</span>
+                                    {isActive ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                  </div>
+                                </button>
+                                {isActive && (
+                                  <div className="outline-category-expand">
+                                    {groupFamilies.map((family) => {
+                                      const familyActive = [family.primary, ...family.variants].some(
+                                        (book) => book.book_slug === activeBookSlug,
+                                      );
+                                      return (
+                                        <div
+                                          key={family.key}
+                                          className={`outline-library-family${familyActive ? ' active' : ''}`}
                                         >
-                                          <div className="outline-library-title-row">
-                                            <div className="outline-library-title-group">
-                                              <span className="outline-library-title">{family.primary.title}</span>
-                                              <span className={playbookGradeBadgeClass(family.primary.grade)}>
-                                                {normalizePlaybookGrade(family.primary.grade)}
-                                              </span>
+                                          <button
+                                            type="button"
+                                            className={`outline-library-item ${family.primary.book_slug === activeBookSlug ? 'active' : 'muted'}`}
+                                            onClick={() => {
+                                              void openManualPreview(family.primary);
+                                            }}
+                                          >
+                                            <div className="outline-library-title-row">
+                                              <div className="outline-library-title-group">
+                                                <span className="outline-library-title">{family.primary.title}</span>
+                                                <span className={playbookGradeBadgeClass(family.primary.grade)}>
+                                                  {normalizePlaybookGrade(family.primary.grade)}
+                                                </span>
+                                              </div>
+                                              {family.variants.length > 0 && (
+                                                <span className="outline-library-variant-count">+{family.variants.length}</span>
+                                              )}
                                             </div>
-                                            {family.variants.length > 0 && (
-                                              <span className="outline-library-variant-count">+{family.variants.length}</span>
-                                            )}
-                                          </div>
-                                          <span className="outline-library-meta">{summarizeBookMeta(family.primary)}</span>
-                                        </button>
-                                        {family.variants.length > 0 && (
-                                          <div className="outline-library-variants">
-                                            {family.variants.map((variant) => (
-                                              <button
-                                                key={`outline-book:${variant.book_slug}`}
-                                                type="button"
-                                                className={`outline-library-variant ${variant.book_slug === activeBookSlug ? 'active' : ''}`}
-                                                onClick={() => {
-                                                  void openManualPreview(variant);
-                                                }}
-                                              >
-                                                <div className="outline-library-variant-header">
-                                                  <span className="outline-library-variant-label">{describeOutlineVariant(variant)}</span>
-                                                  <span className={playbookGradeBadgeClass(variant.grade)}>
-                                                    {normalizePlaybookGrade(variant.grade)}
-                                                  </span>
-                                                </div>
-                                                <span className="outline-library-variant-meta">{summarizeBookMeta(variant)}</span>
-                                              </button>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                                            <span className="outline-library-meta">{summarizeBookMeta(family.primary)}</span>
+                                          </button>
+                                          {family.variants.length > 0 && (
+                                            <div className="outline-library-variants">
+                                              {family.variants.map((variant) => (
+                                                <button
+                                                  key={`outline-book:${variant.book_slug}`}
+                                                  type="button"
+                                                  className={`outline-library-variant ${variant.book_slug === activeBookSlug ? 'active' : ''}`}
+                                                  onClick={() => {
+                                                    void openManualPreview(variant);
+                                                  }}
+                                                >
+                                                  <div className="outline-library-variant-header">
+                                                    <span className="outline-library-variant-label">{describeOutlineVariant(variant)}</span>
+                                                    <span className={playbookGradeBadgeClass(variant.grade)}>
+                                                      {normalizePlaybookGrade(variant.grade)}
+                                                    </span>
+                                                  </div>
+                                                  <span className="outline-library-variant-meta">{summarizeBookMeta(variant)}</span>
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </section>
                   )}
 
-                  <nav className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Document outline">
-                    <div className="outline-section-head">
+                  <section className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Custom documents outline">
+                    <button
+                      type="button"
+                      className="outline-section-head outline-section-toggle"
+                      onClick={() => toggleOutlineSection('custom_documents')}
+                    >
                       <div className="outline-section-copy">
-                        <strong>{visionMode === 'guided_tour' ? 'Current Stop' : 'Current Document'}</strong>
-                        {preview.kind !== 'empty' && <span>{preview.title}</span>}
+                        <strong>커스텀 문서</strong>
+                        <span>북팩토리 커스텀 플레이북 재료 슬롯</span>
                       </div>
-                      {outlineTocNodes.length > 0 && <span>{outlineTocNodes.length}</span>}
-                    </div>
-                    {outlineTocNodes.length === 0 ? (
+                      <div className="outline-section-toggle-side">
+                        <span>{`${customDocumentBooks.length}개 슬롯 · ${customDocumentSourceCount || customDocumentBooks.length}개 재료`}</span>
+                        {collapsedOutlineSections.custom_documents ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                      </div>
+                    </button>
+                    {collapsedOutlineSections.custom_documents ? null : customDocumentBooks.length === 0 ? (
                       <div className="outline-empty">
-                        <p>목차 없음</p>
+                        <p>커스텀 문서가 아직 없습니다.</p>
                       </div>
                     ) : (
                       <>
-                        <div className="outline-toc-header">
-                          <strong className="outline-toc-title">{preview.kind !== 'empty' ? preview.title : ''}</strong>
-                          {outlineBreadcrumb.length > 0 && (
-                            <span className="outline-toc-breadcrumb">{outlineBreadcrumb.join(' › ')}</span>
-                          )}
-                          <span className="outline-toc-meta">{outlineTocNodes.length} sections</span>
-                        </div>
-                        <ul className="outline-toc-tree">
-                          {outlineTocNodes.map((node) => {
-                            const isActive = activeTocNodeId === node.id;
-                            return (
-                              <li
-                                key={node.id}
-                                className={`outline-toc-item${isActive ? ' active' : ''}`}
-                                style={{ ['--depth' as string]: node.depth } as React.CSSProperties}
+                         <div className="outline-toc-header">
+                           <strong className="outline-toc-title">북팩토리 대상</strong>
+                           <span className="outline-toc-breadcrumb">raw 문서 대신 커스텀 플레이북 슬롯만 표시합니다.</span>
+                           <span className="outline-toc-meta">{`${customDocumentBooks.length}개 슬롯 · ${customDocumentSourceCount || customDocumentBooks.length}개 재료`}</span>
+                         </div>
+                         <div className="outline-custom-doc-list outline-custom-doc-list--toc">
+                           {customDocumentBooks.map((book) => {
+                             const canOpen = Boolean(book.viewer_path);
+                             const chips = customDocumentCatalogChips(book);
+                            const body = (
+                              <>
+                                <span className="outline-item-label">{book.title}</span>
+                                <span className="outline-item-meta">{formatCustomDocumentMeta(book)}</span>
+                                {chips.length > 0 && (
+                                  <div className="outline-custom-chip-row">
+                                    {chips.map((chip) => (
+                                      <span key={`${book.book_slug}:${chip}`} className="outline-custom-chip">{chip}</span>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
+                            );
+                            return canOpen ? (
+                              <button
+                                key={`outline-custom-toc:${book.book_slug}`}
+                                type="button"
+                                className="outline-item muted"
+                                onClick={() => { void handleCustomDocumentClick(book); }}
                               >
-                                <button
-                                  type="button"
-                                  aria-current={isActive ? 'location' : undefined}
-                                  onClick={() => { void openViewerPreview(node.viewerPath, node.heading); }}
-                                  title={node.sectionPathLabel || node.heading}
-                                >
-                                  <span className="outline-toc-heading">{node.heading}</span>
-                                </button>
-                              </li>
+                                {body}
+                              </button>
+                            ) : (
+                              <div
+                                key={`outline-custom-toc:${book.book_slug}`}
+                                className="outline-item muted outline-item-static"
+                              >
+                                {body}
+                              </div>
                             );
                           })}
-                        </ul>
+                        </div>
                       </>
                     )}
-                    {outlineProcedureItems.length > 0 && (
-                      <div className="outline-toc-suggested">
-                        <div className="outline-toc-suggested-title">{visionMode === 'guided_tour' ? 'Then Open' : 'Suggested next'}</div>
-                        <div className="outline-toc-suggested-chips">
-                          {outlineProcedureItems.slice(0, 3).map((item) => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              className="outline-toc-chip"
-                              onClick={item.action}
-                              title={item.meta}
-                            >
-                              {item.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </nav>
+                  </section>
 
-                  {visionMode !== 'guided_tour' && (outlineRuntimeItems.length > 0 || outlineCustomerItems.length > 0) && (
-                    <details className="outline-more outline-surface-card outline-surface-card--sources">
-                      <summary>More sources</summary>
-                      {outlineRuntimeItems.length > 0 && (
-                        <div className="outline-group">
-                          <div className="outline-group-title">All Runtime Books</div>
-                          {outlineRuntimeItems.slice(0, 10).map((item) => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              className={`outline-item ${item.tone === 'muted' ? 'muted' : ''}`}
-                              onClick={item.action}
-                            >
-                              <span className="outline-item-label">{item.label}</span>
-                              {item.meta && <span className="outline-item-meta">{item.meta}</span>}
-                            </button>
-                          ))}
+                  <section className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Uploaded documents outline">
+                    <button
+                      type="button"
+                      className="outline-section-head outline-section-toggle"
+                      onClick={() => toggleOutlineSection('uploaded_docs')}
+                    >
+                      <div className="outline-section-copy">
+                        <strong>업로드 문서</strong>
+                        <span>커스텀 파이프라인 승급 후보 문서</span>
+                      </div>
+                      <div className="outline-section-toggle-side">
+                        <span>{`${draftSources.length}개`}</span>
+                        {collapsedOutlineSections.uploaded_docs ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                      </div>
+                    </button>
+                    {collapsedOutlineSections.uploaded_docs ? null : draftSources.length === 0 ? (
+                      <div className="outline-empty">
+                        <p>업로드된 문서가 아직 없습니다.</p>
+                      </div>
+                    ) : (
+                      <>
+                         <div className="outline-toc-header">
+                           <strong className="outline-toc-title">업로드된 사용자 문서</strong>
+                           <span className="outline-toc-breadcrumb">업로드 후 캡처, 정규화, 플레이북 승급으로 이어지는 초안 목록입니다.</span>
+                           <span className="outline-toc-meta">{`${draftSources.length}개 업로드`}</span>
+                         </div>
+                         <div className="outline-custom-doc-list outline-custom-doc-list--toc">
+                           {draftSources.map((source) => {
+                             const draft = source.draft;
+                             const chips = draft ? uploadedDraftCatalogChips(draft) : [];
+                            return (
+                              <button
+                                key={`outline-uploaded:${source.id}`}
+                                type="button"
+                                className="outline-item muted"
+                                onClick={() => { void handleSourceClick(source); }}
+                              >
+                                <span className="outline-item-label">{source.name}</span>
+                                <span className="outline-item-meta">{source.meta}</span>
+                                {chips.length > 0 && (
+                                  <div className="outline-custom-chip-row">
+                                    {chips.map((chip) => (
+                                      <span key={`${source.id}:${chip}`} className="outline-custom-chip">{chip}</span>
+                                    ))}
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
-                      )}
-                      {outlineCustomerItems.length > 0 && (
-                        <div className="outline-group">
-                          <div className="outline-group-title">Customer Packs</div>
-                          {outlineCustomerItems.map((item) => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              className={`outline-item ${item.tone === 'muted' ? 'muted' : ''}`}
-                              onClick={item.action}
-                            >
-                              <span className="outline-item-label">{item.label}</span>
-                              {item.meta && <span className="outline-item-meta">{item.meta}</span>}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </details>
-                  )}
+                      </>
+                    )}
+                  </section>
                 </div>
               ) : (
                 <div className="signals-panel">
@@ -2922,7 +2924,7 @@ export default function WorkspacePage() {
                         disabled={footerOauthPendingProvider === 'github'}
                         onClick={() => { void handleFooterOauth('github'); }}
                       >
-                      <LinkIcon size={14} />
+                        <LinkIcon size={14} />
                         <span>{footerOauthPendingProvider === 'github' ? 'Opening...' : 'GitHub'}</span>
                       </button>
                       <button
@@ -3222,29 +3224,84 @@ export default function WorkspacePage() {
                   )}
                 </div>
 
+                {customDocumentBooks.length > 0 && (
+                  <div className={`source-section ${collapsedSections.custom_documents ? 'collapsed' : ''}`}>
+                    <button className="section-header-btn" onClick={() => toggleSection('custom_documents')} type="button">
+                      <div className="header-label-group">
+                        {collapsedSections.custom_documents ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                        <span className="list-title">커스텀 문서 슬롯</span>
+                      </div>
+                      <span className="item-count-badge">{customDocumentBooks.length}</span>
+                    </button>
+                    {!collapsedSections.custom_documents && (
+                      <div className="section-items-container">
+                        {customDocumentBooks.map((book) => {
+                          const canOpen = Boolean(book.viewer_path);
+                          const sourceId = `custom:${book.book_slug}`;
+                          const chips = customDocumentCatalogChips(book);
+                          return (
+                            <div
+                              key={sourceId}
+                              className={`source-item ${activeSourceId === sourceId ? 'selected' : ''}${canOpen ? '' : ' readonly'}`}
+                              onClick={canOpen ? () => { void handleCustomDocumentClick(book); } : undefined}
+                            >
+                              <div className="item-main">
+                                <FileText size={16} className="file-icon" />
+                                <div className="item-main-copy">
+                                  <span className="file-name">{book.title}</span>
+                                  {chips.length > 0 ? (
+                                    <div className="source-chip-row">
+                                      {chips.map((chip) => (
+                                        <span key={`${sourceId}:${chip}`} className="source-kind-chip">{chip}</span>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="item-meta">{formatCustomDocumentMeta(book)}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className={`source-section ${collapsedSections.drafts ? 'collapsed' : ''}`}>
                   <button className="section-header-btn" onClick={() => toggleSection('drafts')} type="button">
                     <div className="header-label-group">
                       {collapsedSections.drafts ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      <span className="list-title">{visionMode === 'guided_tour' ? 'Added Sources' : 'Customer Packs'}</span>
+                      <span className="list-title">{visionMode === 'guided_tour' ? 'Added Sources' : '업로드 문서'}</span>
                     </div>
                     <span className="item-count-badge">{draftSources.length}</span>
                   </button>
                   {!collapsedSections.drafts && (
                     <div className="section-items-container">
-                      {draftSources.map((file) => (
-                        <div
-                          key={file.id}
-                          className={`source-item ${activeSourceId === file.id ? 'selected' : ''}`}
-                          onClick={() => { void handleSourceClick(file); }}
-                        >
-                          <div className="item-main">
-                            <FileText size={16} className="file-icon" />
-                            <span className="file-name">{file.name}</span>
+                      {draftSources.map((file) => {
+                        const chips = file.draft ? uploadedDraftCatalogChips(file.draft) : [];
+                        return (
+                          <div
+                            key={file.id}
+                            className={`source-item ${activeSourceId === file.id ? 'selected' : ''}`}
+                            onClick={() => { void handleSourceClick(file); }}
+                          >
+                            <div className="item-main">
+                              <FileText size={16} className="file-icon" />
+                              <div className="item-main-copy">
+                                <span className="file-name">{file.name}</span>
+                                {chips.length > 0 ? (
+                                  <div className="source-chip-row">
+                                    {chips.map((chip) => (
+                                      <span key={`${file.id}:${chip}`} className="source-kind-chip">{chip}</span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="item-meta">{file.meta}</div>
                           </div>
-                          <div className="item-meta">{file.meta}</div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

@@ -76,6 +76,7 @@ from play_book_studio.app.chat_debug import (
 from play_book_studio.app.presenters import _build_health_payload, _llm_runtime_signature, _refresh_answerer_llm_settings
 from play_book_studio.app.session_flow import context_with_request_overrides as _context_with_request_overrides, derive_next_context as _derive_next_context
 from play_book_studio.app.sessions import ChatSession, SessionStore
+from play_book_studio.app.source_books_customer_pack import resolve_customer_pack_asset_path
 
 
 def _build_handler(
@@ -126,6 +127,11 @@ def _build_handler(
                         viewer_html.encode("utf-8"),
                         content_type="text/html; charset=utf-8",
                     )
+                    return
+                customer_pack_asset_path = resolve_customer_pack_asset_path(root_dir, self.path)
+                if customer_pack_asset_path is not None:
+                    content_type = mimetypes.guess_type(str(customer_pack_asset_path))[0] or "application/octet-stream"
+                    self._send_bytes(customer_pack_asset_path.read_bytes(), content_type=content_type)
                     return
             if request_path.startswith("/playbooks/wiki-assets/"):
                 relative = request_path.removeprefix("/playbooks/wiki-assets/").strip("/")

@@ -55,6 +55,7 @@ from .data_control_room_library import (
     _attach_corpus_status,
     _apply_customer_pack_runtime_truth,
     _apply_viewer_path_fallback,
+    _build_custom_document_bucket,
     _build_manual_book_library,
     _build_playbook_library,
     _derived_family_status,
@@ -105,10 +106,15 @@ def _path_fingerprint(path: Path | None) -> tuple[str, bool, int, int]:
 def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, int, int], ...]:
     settings = load_settings(root)
     gate_path = root / "reports" / "build_logs" / "foundry_runs" / "profiles" / "morning_gate" / "latest.json"
+    custom_material_dir = root / ".P_docs" / "01_검토대기_플레이북재료"
+    custom_material_files = sorted(path for path in custom_material_dir.rglob("*") if path.is_file()) if custom_material_dir.exists() else []
     draft_store = CustomerPackDraftStore(root)
     draft_records = draft_store.list()
     watched_paths = [
         gate_path,
+        root / ".P_docs" / "01_검토대기_플레이북재료",
+        root / ".P_docs" / "_review_bucket_manifest.json",
+        *custom_material_files,
         settings.source_manifest_path,
         settings.source_approval_report_path,
         settings.translation_lane_report_path,
@@ -277,6 +283,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     }
     manual_book_library = _build_manual_book_library(core_manualbooks, extra_manualbooks)
     playbook_library = _build_playbook_library(derived_playbook_family_statuses)
+    custom_documents = _build_custom_document_bucket(root)
     gold_candidate_books = _build_gold_candidate_book_bucket(root)
     approved_wiki_runtime_books = _build_approved_wiki_runtime_book_bucket(root, translation_lane_report=translation_lane_report)
     navigation_backlog = _build_navigation_backlog_bucket(root)
@@ -361,6 +368,8 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "user_library_book_count": len(user_library_books),
             "user_library_corpus_book_count": len(user_library_corpus_books),
             "user_library_corpus_chunk_count": user_library_corpus_chunk_count,
+            "custom_document_count": int(custom_documents.get("source_count") or len(custom_documents.get("books") or [])),
+            "custom_document_slot_count": int(custom_documents.get("slot_count") or len(custom_documents.get("books") or [])),
             "gold_candidate_book_count": len(gold_candidate_books.get("books") or []),
             "approved_wiki_runtime_book_count": len(approved_wiki_runtime_books.get("books") or []),
             "wiki_navigation_backlog_count": len(navigation_backlog.get("books") or []),
@@ -425,6 +434,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "customer_pack_runtime_books": {"selected_dir": str(settings.customer_pack_books_dir.resolve()), "books": customer_pack_runtime_books},
         "user_library_books": {"selected_dir": str(settings.customer_pack_books_dir.resolve()), "books": user_library_books},
         "user_library_corpus": {"selected_dir": str(settings.customer_pack_corpus_dir.resolve()), "books": user_library_corpus_books},
+        "custom_documents": custom_documents,
         "gold_candidate_books": gold_candidate_books,
         "approved_wiki_runtime_books": approved_wiki_runtime_books,
         "wiki_navigation_backlog": navigation_backlog,
@@ -452,6 +462,8 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "user_library_book_count": len(user_library_books),
             "user_library_corpus_book_count": len(user_library_corpus_books),
             "user_library_corpus_chunk_count": user_library_corpus_chunk_count,
+            "custom_document_count": int(custom_documents.get("source_count") or len(custom_documents.get("books") or [])),
+            "custom_document_slot_count": int(custom_documents.get("slot_count") or len(custom_documents.get("books") or [])),
             "topic_playbook_book_count": len(topic_playbooks),
             "operation_playbook_book_count": len(operation_playbooks),
             "troubleshooting_playbook_book_count": len(troubleshooting_playbooks),

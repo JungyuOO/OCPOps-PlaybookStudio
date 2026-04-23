@@ -395,6 +395,9 @@ class CustomerPackNormalizeService:
                 Path(str((canonical_payload.get("artifact_bundle") or {}).get("citations_path") or "")),
                 canonical_bundle["citations"],
             )
+            slide_packets_path = Path(str((canonical_payload.get("artifact_bundle") or {}).get("slide_packets_path") or ""))
+            if slide_packets_path.as_posix() not in {"", "."} and canonical_bundle.get("slide_packets"):
+                write_json_payload(slide_packets_path, canonical_bundle["slide_packets"])
             for derived_payload in derived_payloads:
                 asset_slug = str(derived_payload.get("asset_slug") or "").strip()
                 if not asset_slug:
@@ -422,6 +425,9 @@ class CustomerPackNormalizeService:
                     Path(str((derived_payload.get("artifact_bundle") or {}).get("citations_path") or "")),
                     derived_bundle["citations"],
                 )
+                slide_packets_path = Path(str((derived_payload.get("artifact_bundle") or {}).get("slide_packets_path") or ""))
+                if slide_packets_path.as_posix() not in {"", "."} and derived_bundle.get("slide_packets"):
+                    write_json_payload(slide_packets_path, derived_bundle["slide_packets"])
             record.status = "normalized"
             record.canonical_book_path = str(book_path)
             record.normalized_section_count = len(canonical_book.sections)

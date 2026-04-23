@@ -6,7 +6,6 @@ from .pdf_rows import (
     _prepare_pdf_page_text,
     _segment_pdf_page,
 )
-from .service import CustomerPackNormalizeService
 
 __all__ = [
     "CustomerPackNormalizeService",
@@ -19,3 +18,11 @@ __all__ = [
     "_prepare_pdf_page_text",
     "_segment_pdf_page",
 ]
+
+
+def __getattr__(name: str):
+    if name == "CustomerPackNormalizeService":
+        from .service import CustomerPackNormalizeService
+
+        return CustomerPackNormalizeService
+    raise AttributeError(name)

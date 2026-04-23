@@ -314,7 +314,16 @@ def _apply_graph_payload(
         hit.component_scores["graph_provenance_count"] = 1.0 if provenance else 0.0
         hit.component_scores["graph_boost"] = boost
         if relation_labels:
-            hit.graph_relations = tuple(relation_labels)
+            existing_relation_labels = [
+                str(label).strip()
+                for label in hit.graph_relations
+                if str(label).strip()
+            ]
+            merged_relation_labels: list[str] = []
+            for label in [*existing_relation_labels, *relation_labels]:
+                if label not in merged_relation_labels:
+                    merged_relation_labels.append(label)
+            hit.graph_relations = tuple(merged_relation_labels)
         if derived_from_book_slug:
             hit.component_scores["graph_has_derivation"] = 1.0
         if boost > 0.0:
