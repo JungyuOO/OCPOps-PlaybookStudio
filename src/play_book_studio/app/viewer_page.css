@@ -203,6 +203,143 @@ body.is-embedded h1 {
   margin: 0 0 20px;
   min-width: 0;
 }
+.viewer-header-chrome {
+  margin: 0 0 24px;
+}
+.viewer-footer-chrome {
+  margin-top: 28px;
+}
+.customer-slide-toolbar-chrome {
+  display: grid;
+  gap: 14px;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: var(--shadow-sm);
+}
+.customer-slide-toolbar-chrome-single {
+  background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
+}
+.customer-slide-toolbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.customer-slide-toolbar-eyebrow {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.customer-slide-toolbar-title {
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.customer-slide-toolbar-focus {
+  display: grid;
+  gap: 12px;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.customer-slide-toolbar-focus-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.customer-slide-toolbar-focus-item {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  min-width: 0;
+}
+.customer-slide-toolbar-focus-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.customer-slide-toolbar-focus-value {
+  color: var(--ink);
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.customer-save-wiki-dock {
+  position: sticky;
+  bottom: 18px;
+  z-index: 8;
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(14px);
+}
+.customer-save-wiki-dock-copy {
+  display: grid;
+  gap: 4px;
+}
+.customer-save-wiki-dock-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.customer-save-wiki-dock-nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+.customer-save-wiki-dock-nav-link:hover {
+  border-color: rgba(37, 99, 235, 0.34);
+  color: var(--brand);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.14);
+}
+.customer-save-wiki-dock-title {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.customer-save-wiki-dock-summary {
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.customer-save-wiki-dock-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .document-nav-trigger {
   display: inline-flex;
   align-items: center;
@@ -425,6 +562,33 @@ body.is-embedded .embedded-section + .embedded-section {
   background: var(--accent-soft);
   border: 1px solid #bfdbfe;
 }
+.customer-slide-card-section {
+  padding: 24px 26px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: var(--shadow-sm);
+}
+.customer-slide-card-section-single {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.customer-slide-card-section-single.is-target {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+body.is-embedded .customer-slide-card-section-single.is-target {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
 body.is-embedded .section-card.is-target,
 body.is-embedded .embedded-section.is-target {
   margin: 0;
@@ -466,6 +630,40 @@ body.is-embedded .embedded-section.is-target {
   color: var(--ink-soft);
   min-width: 0;
   max-width: 100%;
+}
+.customer-slide-card-section .section-body {
+  display: grid;
+  gap: 18px;
+}
+.customer-slide-card-section-single .section-body {
+  gap: 14px;
+}
+.customer-slide-card-header {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.customer-slide-card-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.customer-slide-card-title {
+  color: var(--ink);
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.customer-slide-card-subject {
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 .reader-intro {
   color: var(--ink);
@@ -933,6 +1131,9 @@ tr:last-child td {
   position: relative;
   isolation: isolate;
 }
+.customer-slide-card-section .customer-slide-stage {
+  margin-top: 0;
+}
 .customer-slide-preview {
   position: absolute;
   inset: 0;
@@ -946,6 +1147,29 @@ tr:last-child td {
   height: 100%;
   object-fit: contain;
   background: #ffffff;
+}
+.customer-slide-preview-missing {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: radial-gradient(circle at top, rgba(37, 99, 235, 0.08), rgba(255, 255, 255, 0.98) 52%);
+  color: var(--ink);
+}
+.customer-slide-preview-missing-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.customer-slide-preview-missing-copy {
+  max-width: 34rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.6;
 }
 .customer-slide-caption {
   margin-top: 16px;
@@ -1053,6 +1277,12 @@ tr:last-child td {
     grid-template-columns: 1fr;
     padding: 0 24px;
   }
+  .customer-slide-toolbar-focus-grid {
+    grid-template-columns: 1fr;
+  }
+  .customer-save-wiki-dock {
+    position: static;
+  }
   .document-footer-nav {
     grid-template-columns: 1fr;
   }
@@ -1064,6 +1294,9 @@ tr:last-child td {
   }
   main {
     width: min(100%, calc(100vw - 32px));
+  }
+  .customer-slide-card-section {
+    padding: 20px;
   }
 }
 .wiki-parent-card,

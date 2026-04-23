@@ -40,7 +40,47 @@ from .models import Citation, ContextBundle
 SPACE_RE = re.compile(r"\s+")
 SECTION_PREFIX_RE = re.compile(r"^\d+(?:\.\d+)*\.?\s*")
 INTRO_RECOMMENDATION_COUNT_RE = re.compile(r"(\d+\s*개|세\s*개|3\s*개|목록|리스트|top\s*\d+)", re.IGNORECASE)
+QUERY_FOCUS_TOKEN_RE = re.compile(r"[A-Za-z0-9가-힣#]+")
 MAX_PROMPT_CLI_COMMANDS = 4
+QUERY_FOCUS_STOPWORDS = {
+    "고객",
+    "공식",
+    "문서",
+    "문서를",
+    "설계서",
+    "운영",
+    "공식문서",
+    "고객문서",
+    "같이",
+    "함께",
+    "참고",
+    "참고해서",
+    "설명",
+    "설명해줘",
+    "알려줘",
+    "찾아줘",
+    "ocp",
+    "openshift",
+    "container",
+    "platform",
+}
+QUERY_FOCUS_SUFFIXES = (
+    "으로",
+    "에서",
+    "에게",
+    "와",
+    "과",
+    "은",
+    "는",
+    "이",
+    "가",
+    "을",
+    "를",
+    "의",
+    "에",
+    "도",
+    "로",
+)
 
 
 def _normalize_excerpt(text: str) -> str:
@@ -67,6 +107,95 @@ def _hit_score(hit: RetrievalHit) -> float:
     if hit.fused_score > 0:
         return float(hit.fused_score)
     return float(hit.raw_score)
+
+
+def _looks_like_test_run_hit(hit: RetrievalHit) -> bool:
+    blob = " ".join(
+        part
+        for part in (
+            str(hit.book_slug or "").strip(),
+            str(hit.chunk_id or "").strip(),
+            _normalize_excerpt(str(hit.text or "")[:240]),
+        )
+        if part
+    ).lower()
+    return (
+        "문서 제목: test " in blob
+        or "문서 제목:test " in blob
+        or bool(re.search(r"\btest[-\s]*\d+\b", blob))
+        or bool(re.search(r"\b테스트[-\s]*\d+\b", blob))
+    )
+
+
+def _looks_like_uploaded_capture_hit(hit: RetrievalHit) -> bool:
+    path_blob = " ".join(
+        part
+        for part in (
+            str(hit.source_url or "").strip(),
+            str(hit.viewer_path or "").strip(),
+        )
+        if part
+    ).lower().replace("\\", "/")
+    return "customer_packs/captures/_uploads/" in path_blob
+
+
+def _uploaded_title_locator_priority(hit: RetrievalHit) -> tuple[int, int, int, int]:
+    viewer_path = str(hit.viewer_path or "").strip().lower()
+    source_type = str(hit.source_type or "").strip().lower()
+    asset_priority = 1 if "/assets/" in viewer_path else 0
+    source_document_priority = 0 if source_type in {
+        "ppt",
+        "pptx",
+        "pdf",
+        "doc",
+        "docx",
+        "hwp",
+        "hwpx",
+        "md",
+        "markdown",
+        "txt",
+        "html",
+        "json",
+    } else 1
+    return (
+        1 if _looks_like_test_run_hit(hit) else 0,
+        0 if _looks_like_uploaded_capture_hit(hit) else 1,
+        asset_priority,
+        source_document_priority,
+    )
+
+
+def _uploaded_seed_sort_key(
+    hit: RetrievalHit,
+    *,
+    order_lookup: dict[tuple[str, str], int],
+    prefer_relation_seed: bool,
+    title_locator_query: bool,
+    query_focus_terms: tuple[str, ...],
+ ) -> tuple[int, ...]:
+    relation_priority = _relation_seed_priority(hit) if prefer_relation_seed else 9
+    test_priority, capture_priority, asset_priority, source_document_priority = (
+        _uploaded_title_locator_priority(hit) if title_locator_query else (0, 0, 0, 0)
+    )
+    if prefer_relation_seed:
+        return (
+            relation_priority,
+            -_query_focus_score(hit, query_focus_terms),
+            test_priority,
+            capture_priority,
+            asset_priority,
+            source_document_priority,
+            order_lookup.get((hit.book_slug, hit.chunk_id), 10_000),
+        )
+    return (
+        -_query_focus_score(hit, query_focus_terms),
+        relation_priority,
+        test_priority,
+        capture_priority,
+        asset_priority,
+        source_document_priority,
+        order_lookup.get((hit.book_slug, hit.chunk_id), 10_000),
+    )
 
 
 def _crash_loop_priority(hit: RetrievalHit) -> int:
@@ -331,6 +460,92 @@ def _is_customer_pack_relation_query(query: str) -> bool:
     )
 
 
+def _query_focus_terms(query: str) -> tuple[str, ...]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for token in QUERY_FOCUS_TOKEN_RE.findall((query or "").lower()):
+        cleaned = token.strip()
+        for suffix in QUERY_FOCUS_SUFFIXES:
+            if cleaned.endswith(suffix) and len(cleaned) - len(suffix) >= 2:
+                cleaned = cleaned[: -len(suffix)]
+                break
+        if len(cleaned) < 2:
+            continue
+        if cleaned in QUERY_FOCUS_STOPWORDS:
+            continue
+        if cleaned in seen:
+            continue
+        seen.add(cleaned)
+        ordered.append(cleaned)
+    return tuple(ordered)
+
+
+def _query_focus_score(hit: RetrievalHit, query_focus_terms: tuple[str, ...]) -> int:
+    if not query_focus_terms:
+        return 0
+    haystack = " ".join(
+        part
+        for part in (
+            str(hit.section or "").lower(),
+            str(hit.anchor or "").lower(),
+            str(hit.text or "")[:900].lower(),
+        )
+        if part
+    )
+    return sum(1 for token in query_focus_terms if token in haystack)
+
+
+def _is_customer_pack_title_locator_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    title_query_signal = any(
+        token in lowered
+        for token in (
+            "설계서",
+            "제안서",
+            "발표",
+            "ppt",
+            "pptx",
+            "slide",
+            "슬라이드",
+        )
+    )
+    token_count = len([token for token in lowered.split() if token.strip()])
+    if has_doc_locator_intent(lowered):
+        return title_query_signal or token_count >= 3
+    return title_query_signal and token_count >= 2
+
+
+def _should_apply_generic_intro_context(
+    query: str,
+    *,
+    session_context: SessionContext | None,
+) -> bool:
+    if not is_generic_intro_query(query):
+        return False
+    if has_active_customer_pack_selection(session_context):
+        return False
+    return True
+
+
+def _mentions_official_runtime_sources(query: str) -> bool:
+    lowered = (query or "").lower()
+    return any(
+        token in lowered
+        for token in (
+            "공식문서",
+            "공식 문서",
+            "공식매뉴얼",
+            "공식 매뉴얼",
+            "ocp 공식",
+            "openshift 공식",
+            "official doc",
+            "official docs",
+            "official manual",
+            "official manuals",
+        )
+    )
+
+
 def _relation_seed_priority(hit: RetrievalHit) -> int:
     relation_semantics = {"flow", "gate", "difference", "dependency", "ownership"}
     chunk_type = str(hit.chunk_type or "").strip().lower()
@@ -554,9 +769,10 @@ def _should_force_clarification(
         return False
     if any(
         [
+            _is_customer_pack_title_locator_query(normalized),
             has_doc_locator_intent(normalized),
             has_openshift_kubernetes_compare_intent(normalized),
-            is_generic_intro_query(normalized),
+            _should_apply_generic_intro_context(normalized, session_context=session_context),
             has_operator_concept_intent(normalized),
             has_mco_concept_intent(normalized),
             has_pod_lifecycle_concept_intent(normalized),
@@ -609,9 +825,19 @@ def _select_hits(
 
     ranked_hits = list(hits)
     normalized = query or ""
+    title_locator_query = _is_customer_pack_title_locator_query(normalized)
+    generic_intro_query = _should_apply_generic_intro_context(
+        normalized,
+        session_context=session_context,
+    )
+    query_focus_terms = _query_focus_terms(normalized)
     allow_uploaded_hits = (
         _is_customer_pack_explicit_query(normalized)
         or has_active_customer_pack_selection(session_context)
+        or (
+            title_locator_query
+            and any(str(hit.source_collection or "").strip() == "uploaded" for hit in ranked_hits)
+        )
     )
     if _should_force_clarification(
         ranked_hits,
@@ -630,7 +856,7 @@ def _select_hits(
     is_concept_query = any(
         [
             has_openshift_kubernetes_compare_intent(normalized),
-            is_generic_intro_query(normalized),
+            generic_intro_query,
             _is_intro_recommendation_query(normalized),
             has_operator_concept_intent(normalized),
             has_mco_concept_intent(normalized),
@@ -689,7 +915,7 @@ def _select_hits(
         support_window = ranked_hits[: max(max_chunks * 2, 6)]
         top_score = _hit_score(support_window[0])
         top_book = support_window[0].book_slug
-    elif is_generic_intro_query(normalized):
+    elif generic_intro_query:
         ranked_hits = sorted(
             ranked_hits,
             key=lambda hit: (
@@ -970,6 +1196,29 @@ def _select_hits(
 
     allowed_books = {top_book}
     locked_allowed_books = False
+    if title_locator_query:
+        uploaded_support_window = [
+            hit
+            for hit in support_window
+            if str(hit.source_collection or "").strip() == "uploaded"
+        ]
+        if uploaded_support_window:
+            uploaded_support_order = {
+                (hit.book_slug, hit.chunk_id): index
+                for index, hit in enumerate(uploaded_support_window)
+            }
+            preferred_uploaded_hit = min(
+                uploaded_support_window,
+                key=lambda item: (
+                    -_query_focus_score(item, query_focus_terms),
+                    *_uploaded_title_locator_priority(item),
+                    uploaded_support_order.get((item.book_slug, item.chunk_id), 10_000),
+                ),
+            )
+            top_score = _hit_score(preferred_uploaded_hit)
+            top_book = preferred_uploaded_hit.book_slug
+            allowed_books = {preferred_uploaded_hit.book_slug}
+            locked_allowed_books = True
     if has_operator_concept_intent(normalized):
         operator_family = tuple(
             book_slug
@@ -996,7 +1245,7 @@ def _select_hits(
             for book_slug in ("overview", "architecture", "security_and_compliance"):
                 if best_book_scores.get(book_slug, 0.0) >= top_score * 0.62:
                     allowed_books.add(book_slug)
-    if is_generic_intro_query(normalized):
+    if generic_intro_query:
         intro_books = tuple(
             book_slug
             for book_slug in ("overview", "architecture", "extensions", "operators")
@@ -1206,19 +1455,48 @@ def _select_hits(
         for hit in ranked_hits
         if str(hit.source_collection or "").strip() == "uploaded"
     ]
+    core_hits = [
+        hit
+        for hit in ranked_hits
+        if str(hit.source_collection or "").strip() == "core"
+    ]
     should_seed_uploaded = bool(uploaded_hits) and allow_uploaded_hits
+    should_seed_core = (
+        bool(core_hits)
+        and not bool(getattr(session_context, "restrict_uploaded_sources", True))
+        and (_mentions_official_runtime_sources(normalized) or has_active_customer_pack_selection(session_context))
+        and (_is_customer_pack_explicit_query(normalized) or has_active_customer_pack_selection(session_context))
+    )
     prefer_relation_uploaded_seed = should_seed_uploaded and _is_customer_pack_relation_query(normalized)
 
     if should_seed_uploaded:
+        uploaded_hit_order = {
+            (hit.book_slug, hit.chunk_id): index
+            for index, hit in enumerate(uploaded_hits)
+        }
         for hit in sorted(
             uploaded_hits,
-            key=lambda item: (
-                _relation_seed_priority(item) if prefer_relation_uploaded_seed else 9,
-                -_hit_score(item),
-                item.book_slug,
-                item.chunk_id,
+            key=lambda item: _uploaded_seed_sort_key(
+                item,
+                order_lookup=uploaded_hit_order,
+                prefer_relation_seed=prefer_relation_uploaded_seed,
+                title_locator_query=title_locator_query,
+                query_focus_terms=query_focus_terms,
             ),
         ):
+            if len(selected) >= max_chunks:
+                break
+            section_signature = (hit.book_slug, _section_core(hit.section))
+            if section_signature in seen_sections:
+                continue
+            selected.append(hit)
+            per_book_counts[hit.book_slug] += 1
+            seen_sections.add(section_signature)
+            allowed_books.add(hit.book_slug)
+            break
+
+    if should_seed_core:
+        for hit in core_hits:
             if len(selected) >= max_chunks:
                 break
             section_signature = (hit.book_slug, _section_core(hit.section))
@@ -1242,10 +1520,7 @@ def _select_hits(
         if per_book_counts[hit.book_slug] >= per_book_limit:
             continue
         section_signature = (hit.book_slug, _section_core(hit.section))
-        if (
-            has_crash_loop_troubleshooting_intent(normalized)
-            or has_registry_storage_ops_intent(normalized)
-        ) and section_signature in seen_sections:
+        if section_signature in seen_sections:
             continue
         selected.append(hit)
         per_book_counts[hit.book_slug] += 1

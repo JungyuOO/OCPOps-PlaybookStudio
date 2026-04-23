@@ -7,6 +7,7 @@ retrieve -> assemble context -> prompt -> LLM -> answer shaping -> citations
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 
@@ -127,6 +128,39 @@ def _requires_rbac_grounding(query: str) -> bool:
     )
 
 
+def _has_explicit_locator_signal(query: str) -> bool:
+    lowered = str(query or "").lower()
+    if any(
+        token in lowered
+        for token in (
+            "어디",
+            "어디서",
+            "찾아",
+            "찾을",
+            "경로",
+            "이동",
+            "들어가",
+            "열어",
+            "열면",
+            "봐야",
+            "보려면",
+            "먼저",
+        )
+    ):
+        return True
+    return bool(
+        any(
+            re.search(pattern, lowered)
+            for pattern in (
+                r"\bpath\b",
+                r"\broute\b",
+                r"\bopen\b",
+                r"\bfind\b",
+            )
+        )
+    )
+
+
 def _citations_match_rbac_intent(citations: list) -> bool:
     return _citation_matches_keywords(
         citations,
@@ -159,6 +193,8 @@ def _citations_match_console_intent(citations: list) -> bool:
 
 def _build_doc_locator_answer(*, query: str, citations: list) -> str | None:
     if not citations or not has_doc_locator_intent(query):
+        return None
+    if is_explainer_query(query) and not _has_explicit_locator_signal(query):
         return None
     if any(
         (
@@ -337,6 +373,93 @@ def _prune_provenance_noise_citations(*, query: str, citations: list) -> list:
     return pruned or citations
 
 
+def _citation_truth_bucket_local(citation: Citation) -> str:
+    source_collection = str(getattr(citation, "source_collection", "") or "").strip().lower()
+    if source_collection == "uploaded":
+        return "private"
+    return "official"
+
+
+def _is_runtime_blend_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    has_private_signal = any(
+        token in lowered
+        for token in (
+            "customer pack",
+            "customer-pack",
+            "our document",
+        )
+    ) or any(
+        token in (query or "")
+        for token in ("고객 문서", "고객문서", "우리 문서", "업로드 문서", "업로드한 문서")
+    )
+    has_official_signal = any(
+        token in lowered
+        for token in (
+            "official runtime",
+            "official document",
+            "official docs",
+        )
+    ) or any(token in (query or "") for token in ("공식 runtime", "공식 문서", "공식 근거"))
+    has_blend_signal = any(
+        token in lowered
+        for token in (
+            "같이 참고",
+            "함께 참고",
+            "같이 보",
+            "함께 보",
+            "같이 써",
+            "함께 써",
+            "together",
+            "alongside",
+        )
+    )
+    return (has_private_signal and has_official_signal) or has_blend_signal
+
+
+def _polish_blended_runtime_answer_citations(
+    *,
+    query: str,
+    answer_text: str,
+    final_citations: list[Citation],
+    cited_indices: list[int],
+) -> tuple[str, list[Citation], list[int]]:
+    if not final_citations or not _is_runtime_blend_query(query):
+        return answer_text, final_citations, cited_indices
+    if _looks_like_missing_coverage_answer(answer_text):
+        return answer_text, final_citations, cited_indices
+
+    bucket_index_map: dict[str, int] = {}
+    for citation in final_citations:
+        bucket = _citation_truth_bucket_local(citation)
+        bucket_index_map.setdefault(bucket, citation.index)
+
+    private_index = bucket_index_map.get("private")
+    official_index = bucket_index_map.get("official")
+    if private_index is None or official_index is None:
+        return answer_text, final_citations, cited_indices
+
+    cited_buckets = {
+        _citation_truth_bucket_local(final_citations[index - 1])
+        for index in cited_indices
+        if 1 <= index <= len(final_citations)
+    }
+    if {"private", "official"}.issubset(cited_buckets):
+        return answer_text, final_citations, cited_indices
+
+    bridge_sentence = (
+        f"고객 업로드 문서 기준은 [{private_index}], OpenShift 공식 근거는 [{official_index}]를 함께 참고했습니다."
+    )
+    if bridge_sentence in answer_text:
+        return answer_text, final_citations, cited_indices
+
+    polished_answer = f"{answer_text.rstrip()}\n\n{bridge_sentence}".strip()
+    return finalize_citations(
+        polished_answer,
+        final_citations,
+    )
+
+
 def _deterministic_llm_runtime_meta(*, provider: str) -> dict[str, object]:
     return {
         "preferred_provider": provider,
@@ -351,6 +474,24 @@ def _deterministic_llm_runtime_meta(*, provider: str) -> dict[str, object]:
         "final_output_chars": 0,
         "requested_max_tokens": 0,
     }
+
+
+def _finalize_deterministic_runtime_answer(
+    *,
+    query: str,
+    answer_text: str,
+    citations: list[Citation],
+) -> tuple[str, list[Citation], list[int]]:
+    answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
+        answer_text,
+        citations,
+    )
+    final_citations = preserve_explicit_mixed_runtime_citations(
+        query,
+        selected_citations=citations,
+        final_citations=final_citations,
+    )
+    return answer_text, final_citations, cited_indices
 
 
 def _is_explanation_query(query: str) -> bool:
@@ -798,9 +939,10 @@ class ChatAnswerer:
             citations=context_bundle.citations,
         )
         if doc_locator_answer is not None:
-            answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
-                doc_locator_answer,
-                context_bundle.citations,
+            answer_text, final_citations, cited_indices = _finalize_deterministic_runtime_answer(
+                query=query,
+                answer_text=doc_locator_answer,
+                citations=context_bundle.citations,
             )
             pipeline_timings_ms["total"] = round(
                 (time.perf_counter() - answer_started_at) * 1000,
@@ -845,9 +987,10 @@ class ChatAnswerer:
         )
         if deployment_scaling_answer is not None:
             answer_text = deployment_scaling_answer
-            answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
-                answer_text,
-                context_bundle.citations,
+            answer_text, final_citations, cited_indices = _finalize_deterministic_runtime_answer(
+                query=query,
+                answer_text=answer_text,
+                citations=context_bundle.citations,
             )
             pipeline_timings_ms["total"] = round(
                 (time.perf_counter() - answer_started_at) * 1000,
@@ -890,9 +1033,10 @@ class ChatAnswerer:
             citations=context_bundle.citations,
         )
         if grounded_command_answer is not None:
-            answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
-                grounded_command_answer,
-                context_bundle.citations,
+            answer_text, final_citations, cited_indices = _finalize_deterministic_runtime_answer(
+                query=query,
+                answer_text=grounded_command_answer,
+                citations=context_bundle.citations,
             )
             pipeline_timings_ms["total"] = round(
                 (time.perf_counter() - answer_started_at) * 1000,
@@ -1068,6 +1212,11 @@ class ChatAnswerer:
             )
         else:
             final_citations = pruned_citations
+        final_citations = preserve_explicit_mixed_runtime_citations(
+            query,
+            selected_citations=context_bundle.citations,
+            final_citations=final_citations,
+        )
         if not cited_indices and final_citations and _allow_single_citation_fallback(
             query=query,
             citations=final_citations,
@@ -1098,6 +1247,12 @@ class ChatAnswerer:
                     answer_text,
                     fallback_citations,
                 )
+        answer_text, final_citations, cited_indices = _polish_blended_runtime_answer_citations(
+            query=query,
+            answer_text=answer_text,
+            final_citations=final_citations,
+            cited_indices=cited_indices,
+        )
         if not cited_indices:
             warnings.append("answer has no inline citations")
         pipeline_timings_ms["citation_finalize"] = round(

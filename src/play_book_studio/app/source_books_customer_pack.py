@@ -81,6 +81,35 @@ def _customer_pack_slide_summary(payload: dict[str, Any]) -> str:
     )
 
 
+def _customer_pack_slide_mode_label(page_mode: str) -> str:
+    return "카드식 슬라이드 목록" if _resolve_page_mode(page_mode) == "multi" else "원본 슬라이드 1장"
+
+
+def _customer_pack_slide_focus_label(slide: dict[str, Any]) -> str:
+    ordinal = int(slide.get("ordinal") or 0)
+    title = str(slide.get("title") or slide.get("slide_anchor") or "Slide").strip() or "Slide"
+    matched_heading = str(slide.get("matched_section_heading") or "").strip()
+    parts = [f"Slide {ordinal}" if ordinal > 0 else "Slide", title]
+    if matched_heading and matched_heading != title:
+        parts.append(matched_heading)
+    return " · ".join(part for part in parts if part)
+
+
+def _customer_pack_slide_subject(slide: dict[str, Any]) -> str:
+    title = str(slide.get("title") or slide.get("slide_anchor") or "Slide").strip() or "Slide"
+    matched_heading = str(slide.get("matched_section_heading") or "").strip()
+    return matched_heading if matched_heading and matched_heading != title else title
+
+
+def _customer_pack_slide_number_label(slide: dict[str, Any], *, total_slides: int) -> str:
+    ordinal = int(slide.get("ordinal") or 0)
+    if ordinal > 0 and total_slides > 0:
+        return f"Slide {ordinal} / {total_slides}"
+    if ordinal > 0:
+        return f"Slide {ordinal}"
+    return "Slide"
+
+
 def _load_customer_pack_slide_packets(payload: dict[str, Any]) -> dict[str, Any] | None:
     artifact_bundle = dict(payload.get("artifact_bundle") or {})
     slide_packets_path = Path(str(artifact_bundle.get("slide_packets_path") or "").strip())
@@ -253,14 +282,28 @@ def _render_slide_preview_node(asset: dict[str, Any], *, draft_id: str) -> str:
     ).strip()
 
 
+def _render_slide_preview_missing_node(*, title: str) -> str:
+    return """
+    <div class="customer-slide-preview-missing" role="status" aria-live="polite">
+      <div class="customer-slide-preview-missing-title">원본 슬라이드 preview 미준비</div>
+      <div class="customer-slide-preview-missing-copy">{title} 슬라이드는 preview asset이 준비된 뒤 원본 그대로 표시됩니다.</div>
+    </div>
+    """.format(
+        title=html.escape(title),
+    ).strip()
+
+
 def _render_customer_pack_slide_cards(
     slides: list[dict[str, Any]],
     *,
     draft_id: str,
     target_anchor: str,
     embedded: bool,
+    page_mode: str,
 ) -> list[str]:
     cards: list[str] = []
+    resolved_page_mode = _resolve_page_mode(page_mode)
+    show_card_header = resolved_page_mode == "multi"
     for slide in slides:
         slide_anchor = str(slide.get("slide_anchor") or "").strip()
         title = str(slide.get("title") or slide_anchor or "Slide").strip() or "Slide"
@@ -293,51 +336,53 @@ def _render_customer_pack_slide_cards(
         if preview_node:
             title_nodes = []
             body_nodes = [preview_node]
+        else:
+            title_nodes = []
+            body_nodes = [_render_slide_preview_missing_node(title=title)]
         body_nodes = [node for node in body_nodes if node]
         notes_text = str(slide.get("notes_text") or "").strip()
-        meta_parts = [f"Slide {int(slide.get('ordinal') or 0)}", slide_role.replace("_", " ")]
-        if matched_heading:
+        meta_parts = [f"Slide {int(slide.get('ordinal') or 0)}"]
+        if matched_heading and matched_heading != title:
             meta_parts.append(matched_heading)
+        elif slide_role and slide_role != "content":
+            meta_parts.append(slide_role.replace("_", " "))
         canvas_ratio = max(float(slide_size.get("width") or 16.0), 1.0) / max(float(slide_size.get("height") or 9.0), 1.0)
-        before_stage_block = """
-              <div class="section-header">
-                <div class="section-meta">{meta}</div>
-                <h2>{title}</h2>
-              </div>
-            """.format(
-                meta=html.escape(" · ".join(part for part in meta_parts if part)),
-                title=html.escape(title),
-            ).strip()
-        after_stage_block = ""
-        if preview_node:
-            before_stage_block = ""
-            after_stage_block = """
-              <div class="customer-slide-caption">
-                <div class="section-meta">{meta}</div>
-                <h2>{title}</h2>
-              </div>
-            """.format(
-                meta=html.escape(" · ".join(part for part in meta_parts if part)),
-                title=html.escape(title),
-            ).strip()
+        subject_block = ""
+        if matched_heading and matched_heading != title:
+            subject_block = '<div class="customer-slide-card-subject">{}</div>'.format(html.escape(matched_heading))
+        card_header = """
+          <div class="customer-slide-card-header">
+            <div class="customer-slide-card-meta">{meta}</div>
+            <div class="customer-slide-card-title">{title}</div>
+            {subject_block}
+          </div>
+        """.format(
+            meta=html.escape(" · ".join(part for part in meta_parts if part)),
+            title=html.escape(title),
+            subject_block=subject_block,
+        ).strip()
+        section_class = "embedded-section" if embedded else "section-card"
+        section_class = f"{section_class} customer-slide-card-section"
+        if not show_card_header:
+            section_class = f"{section_class} customer-slide-card-section-single"
+        if is_target:
+            section_class = f"{section_class} is-target"
         cards.append(
             """
             <section id="{anchor}" class="{section_class}">
               <div class="section-body">
-                {before_stage_block}
+                {card_header}
                 <div class="customer-slide-stage" style="position:relative; aspect-ratio:{ratio:.6f}; background:linear-gradient(180deg, #ffffff 0%, #f6f8fb 100%); border:1px solid rgba(15,23,42,0.08); border-radius:18px; overflow:hidden; box-shadow:0 20px 50px rgba(15,23,42,0.08);">
                   {title_nodes}
                   {body_nodes}
                 </div>
-                {after_stage_block}
                 {notes_block}
               </div>
             </section>
             """.format(
                 anchor=html.escape(slide_anchor, quote=True),
-                section_class="embedded-section" if embedded else f"section-card{' section-card-target' if is_target else ''}",
-                before_stage_block=before_stage_block,
-                after_stage_block=after_stage_block,
+                section_class=section_class,
+                card_header=card_header if show_card_header else "",
                 ratio=canvas_ratio,
                 title_nodes="".join(title_nodes),
                 body_nodes="".join(body_nodes),
@@ -354,6 +399,135 @@ def _render_customer_pack_slide_cards(
             ).strip()
         )
     return cards
+
+
+def _render_customer_pack_slide_toolbar_chrome(
+    canonical_book: dict[str, Any],
+    *,
+    all_slides: list[dict[str, Any]],
+    visible_slides: list[dict[str, Any]],
+    page_mode: str,
+) -> str:
+    resolved_page_mode = _resolve_page_mode(page_mode)
+    mode_label = _customer_pack_slide_mode_label(page_mode)
+    title = str(canonical_book.get("title") or canonical_book.get("draft_id") or "Customer Slide Deck").strip()
+    family_label = str(canonical_book.get("family_label") or "Customer Slide Deck").strip() or "Customer Slide Deck"
+    focus_slide = visible_slides[0] if resolved_page_mode == "single" and visible_slides else None
+    if focus_slide is not None:
+        focus_grid = """
+        <div class="customer-slide-toolbar-focus-grid">
+          <div class="customer-slide-toolbar-focus-item">
+            <div class="customer-slide-toolbar-focus-label">슬라이드</div>
+            <div class="customer-slide-toolbar-focus-value">{slide_number}</div>
+          </div>
+          <div class="customer-slide-toolbar-focus-item">
+            <div class="customer-slide-toolbar-focus-label">주제</div>
+            <div class="customer-slide-toolbar-focus-value">{slide_subject}</div>
+          </div>
+        </div>
+        """.format(
+            slide_number=html.escape(_customer_pack_slide_number_label(focus_slide, total_slides=len(all_slides))),
+            slide_subject=html.escape(_customer_pack_slide_subject(focus_slide)),
+        ).strip()
+    else:
+        focus_grid = """
+        <div class="customer-slide-toolbar-focus-grid">
+          <div class="customer-slide-toolbar-focus-item">
+            <div class="customer-slide-toolbar-focus-label">모드</div>
+            <div class="customer-slide-toolbar-focus-value">{mode_label}</div>
+          </div>
+          <div class="customer-slide-toolbar-focus-item">
+            <div class="customer-slide-toolbar-focus-label">슬라이드</div>
+            <div class="customer-slide-toolbar-focus-value">총 {slide_count}장</div>
+          </div>
+        </div>
+        """.format(
+            mode_label=html.escape(mode_label),
+            slide_count=len(all_slides),
+        ).strip()
+    return """
+    <div class="customer-slide-toolbar-chrome customer-slide-toolbar-chrome-{mode}">
+      <div class="customer-slide-toolbar-meta">
+        <span class="customer-slide-toolbar-eyebrow">{eyebrow}</span>
+        <span class="meta-pill meta-pill-accent">{mode_label}</span>
+        <span class="meta-pill">총 {slide_count}장</span>
+      </div>
+      <div class="customer-slide-toolbar-title">{title}</div>
+      <div class="customer-slide-toolbar-focus">{focus_grid}</div>
+    </div>
+    """.format(
+        mode=html.escape(resolved_page_mode, quote=True),
+        eyebrow=html.escape(family_label),
+        mode_label=html.escape(mode_label),
+        slide_count=len(all_slides),
+        title=html.escape(title),
+        focus_grid=focus_grid,
+    ).strip()
+
+
+def _render_customer_pack_save_to_wiki_dock(
+    canonical_book: dict[str, Any],
+    *,
+    visible_slides: list[dict[str, Any]],
+    total_slides: int,
+    viewer_path: str,
+    slide_navigation: list[dict[str, str]] | None = None,
+) -> str:
+    focus_slide = visible_slides[0] if visible_slides else {}
+    focus_anchor = str(focus_slide.get("slide_anchor") or "").strip()
+    focus_viewer_path = str(viewer_path or "").split("#", 1)[0]
+    if focus_anchor:
+        focus_viewer_path = f"{focus_viewer_path}#{focus_anchor}"
+    focus_summary = (
+        f"{_customer_pack_slide_number_label(focus_slide, total_slides=total_slides)} · {_customer_pack_slide_subject(focus_slide)}"
+        if focus_slide
+        else str(canonical_book.get("title") or "Customer Slide Deck")
+    )
+    navigation_links = "".join(
+        """
+        <a class="customer-save-wiki-dock-nav-link customer-save-wiki-dock-nav-link-{kind}" href="{href}" title="{title}">{label}</a>
+        """.format(
+            kind=html.escape("previous" if str(item.get("label") or "").strip() == "이전" else "next", quote=True),
+            href=html.escape(str(item.get("href") or ""), quote=True),
+            title=html.escape(str(item.get("title") or "")),
+            label=html.escape(str(item.get("label") or "")),
+        ).strip()
+        for item in (slide_navigation or [])
+        if str(item.get("href") or "").strip() and str(item.get("label") or "").strip()
+    )
+    return """
+    <div class="customer-save-wiki-dock">
+      <div class="customer-save-wiki-dock-copy">
+        <div class="customer-save-wiki-dock-title">Save to Wiki</div>
+        <div class="customer-save-wiki-dock-summary">{focus_summary}</div>
+      </div>
+      {navigation_block}
+      <div class="customer-save-wiki-dock-meta">
+        <span class="meta-pill meta-pill-accent">{book_title}</span>
+      </div>
+      {overlay_target}
+    </div>
+    """.format(
+        focus_summary=html.escape(focus_summary),
+        navigation_block=(
+            """
+            <div class="customer-save-wiki-dock-nav">
+              {navigation_links}
+            </div>
+            """.format(navigation_links=navigation_links).strip()
+            if navigation_links
+            else ""
+        ),
+        book_title=html.escape(str(canonical_book.get("title") or canonical_book.get("draft_id") or "Customer Slide Deck")),
+        overlay_target=_render_page_overlay_toolbar(
+            target_kind="book",
+            target_ref=f"book:{str(canonical_book.get('book_slug') or canonical_book.get('draft_id') or '')}",
+            title=str(canonical_book.get("title") or canonical_book.get("draft_id") or "Customer Slide Deck"),
+            book_slug=str(canonical_book.get("book_slug") or canonical_book.get("draft_id") or ""),
+            anchor=focus_anchor,
+            viewer_path=focus_viewer_path,
+        ),
+    ).strip()
 
 
 def _customer_pack_slide_outline(slides: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -569,9 +743,29 @@ def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str, *, page
             draft_id=str(canonical_book.get("draft_id") or draft_id).split("::", 1)[0],
             target_anchor=target_anchor,
             embedded=embedded,
+            page_mode=page_mode,
         )
         family_label = str(canonical_book.get("family_label") or "").strip()
         viewer_target = str(canonical_book.get("target_viewer_path") or f"{CUSTOMER_PACK_VIEWER_PREFIX}{draft_id}/index.html")
+        toolbar_chrome = _render_customer_pack_slide_toolbar_chrome(
+            canonical_book,
+            all_slides=all_slides,
+            visible_slides=visible_slides,
+            page_mode=page_mode,
+        )
+        slide_navigation = _customer_pack_slide_navigation(
+            all_slides,
+            target_anchor=target_anchor,
+            viewer_path=viewer_target,
+            page_mode=page_mode,
+        )
+        save_to_wiki_dock = _render_customer_pack_save_to_wiki_dock(
+            canonical_book,
+            visible_slides=visible_slides,
+            total_slides=len(all_slides),
+            viewer_path=viewer_target,
+            slide_navigation=slide_navigation,
+        )
         return _render_study_viewer_html(
             title=str(canonical_book.get("title") or draft_id),
             source_url=str(canonical_book.get("source_origin_url") or canonical_book.get("source_uri") or ""),
@@ -581,21 +775,11 @@ def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str, *, page
             eyebrow=family_label or "Customer Slide Deck",
             summary="",
             embedded=embedded,
-            section_outline=_customer_pack_slide_outline(all_slides),
-            section_navigation=_customer_pack_slide_navigation(
-                all_slides,
-                target_anchor=target_anchor,
-                viewer_path=viewer_target,
-                page_mode=page_mode,
-            ),
+            section_outline=[],
+            section_navigation=[],
             section_metrics=_customer_pack_slide_metrics(all_slides),
-            page_overlay_toolbar=_render_page_overlay_toolbar(
-                target_kind="book",
-                target_ref=f"book:{str(canonical_book.get('book_slug') or draft_id)}",
-                title=str(canonical_book.get("title") or draft_id),
-                book_slug=str(canonical_book.get("book_slug") or draft_id),
-                viewer_path=viewer_target,
-            ),
+            viewer_header_chrome=toolbar_chrome,
+            viewer_footer_chrome=save_to_wiki_dock,
             hero_mode="hidden",
         )
 
