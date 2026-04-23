@@ -77,6 +77,7 @@ def build_customer_pack_artifact_bundle(
     payload: dict[str, Any],
     book_path: Path,
     corpus_manifest: dict[str, Any],
+    slide_packets_payload: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     asset_slug = str(payload.get("asset_slug") or payload.get("book_slug") or record.draft_id).strip() or record.draft_id
     books_dir = book_path.parent
@@ -86,12 +87,13 @@ def build_customer_pack_artifact_bundle(
     citations_path = customer_pack_citations_path(books_dir, asset_slug)
     slide_packets_path = customer_pack_slide_packets_path(books_dir, asset_slug)
     semantic_payload = _figure_semantic_payload(payload=payload, asset_slug=asset_slug)
-    slide_packets_payload = build_customer_pack_slide_packets_payload(
-        record=record,
-        payload=payload,
-        asset_slug=asset_slug,
-        book_path=book_path,
-    )
+    if slide_packets_payload is None:
+        slide_packets_payload = build_customer_pack_slide_packets_payload(
+            record=record,
+            payload=payload,
+            asset_slug=asset_slug,
+            book_path=book_path,
+        )
 
     relations_payload = build_customer_pack_relations_payload(
         record=record,
@@ -131,6 +133,9 @@ def build_customer_pack_artifact_bundle(
         enriched_payload["source_unit_count"] = int(slide_packets_payload.get("slide_count") or 0)
         enriched_payload["slide_packet_count"] = int(slide_packets_payload.get("slide_count") or 0)
         enriched_payload["slide_asset_count"] = int(slide_packets_payload.get("embedded_asset_count") or 0)
+        enriched_payload["origin_method"] = str(slide_packets_payload.get("origin_method") or "native").strip() or "native"
+        enriched_payload["ocr_status"] = str(slide_packets_payload.get("ocr_status") or "not_run").strip() or "not_run"
+        enriched_payload["ocr_candidate_count"] = int(slide_packets_payload.get("ocr_candidate_count") or 0)
     enriched_payload["artifact_bundle"] = {
         "truth_owner": "canonical_json_bundle",
         "asset_slug": asset_slug,
@@ -153,6 +158,8 @@ def build_customer_pack_artifact_bundle(
         "figure_asset_count": len(figure_assets_payload.get("figure_assets") or []),
         "slide_packet_count": len(slide_packets_payload.get("slides") or []),
         "slide_asset_count": len(slide_packets_payload.get("embedded_assets") or []),
+        "ocr_status": str(slide_packets_payload.get("ocr_status") or "not_run").strip() if slide_packets_payload else "not_run",
+        "ocr_candidate_count": int(slide_packets_payload.get("ocr_candidate_count") or 0) if slide_packets_payload else 0,
     }
     enriched_payload["artifact_manifest_path"] = str(manifest_path)
 
@@ -240,14 +247,24 @@ def build_customer_pack_artifact_manifest(
         "embedded_asset_count": int(embedded_asset_count),
         "playable_asset_count": int(payload.get("playable_asset_count") or 1),
         "derived_asset_count": int(payload.get("derived_asset_count") or 0),
-        "surface_kind": str(payload.get("surface_kind") or "document").strip() or "document",
-        "source_unit_kind": str(payload.get("source_unit_kind") or "section").strip() or "section",
+        "surface_kind": (
+            str(payload.get("surface_kind") or "").strip()
+            or ("slide_deck" if slide_packet_count else "document")
+        ),
+        "source_unit_kind": (
+            str(payload.get("source_unit_kind") or "").strip()
+            or ("slide" if slide_packet_count else "section")
+        ),
         "source_unit_count": int(
             payload.get("source_unit_count")
             or slide_packet_count
             or len(sections)
             or 0
         ),
+        "origin_method": str(payload.get("origin_method") or "native").strip() or "native",
+        "ocr_status": str(payload.get("ocr_status") or ("not_run" if slide_packet_count else "not_required")).strip()
+        or ("not_run" if slide_packet_count else "not_required"),
+        "ocr_candidate_count": int(payload.get("ocr_candidate_count") or 0 or embedded_asset_count),
         "parser_backend": str(payload.get("parser_backend") or evidence.get("parser_backend") or "").strip(),
         "parser_route": str(payload.get("parser_route") or evidence.get("parser_route") or "").strip(),
         "primary_parse_strategy": str(payload.get("primary_parse_strategy") or evidence.get("primary_parse_strategy") or "").strip(),

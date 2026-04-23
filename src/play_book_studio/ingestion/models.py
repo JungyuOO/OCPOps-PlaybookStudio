@@ -312,6 +312,12 @@ class NormalizedSection:
     approval_state: str = ""
     publication_state: str = ""
     redaction_state: str = DEFAULT_REDACTION_STATE
+    surface_kind: str = "document"
+    source_unit_kind: str = "section"
+    source_unit_id: str = ""
+    source_unit_anchor: str = ""
+    origin_method: str = "native"
+    ocr_status: str = "not_run"
     cli_commands: tuple[str, ...] = field(default_factory=tuple)
     error_strings: tuple[str, ...] = field(default_factory=tuple)
     k8s_objects: tuple[str, ...] = field(default_factory=tuple)
@@ -370,6 +376,12 @@ class NormalizedSection:
                 citation_eligible=bool(self.translation_status == "approved_ko"),
             ),
             "redaction_state": self.redaction_state,
+            "surface_kind": self.surface_kind,
+            "source_unit_kind": self.source_unit_kind,
+            "source_unit_id": self.source_unit_id or self.section_id or self.anchor,
+            "source_unit_anchor": self.source_unit_anchor or self.anchor,
+            "origin_method": self.origin_method,
+            "ocr_status": self.ocr_status,
             "citation_eligible": bool(self.translation_status == "approved_ko"),
             "citation_block_reason": "" if self.translation_status == "approved_ko" else "translation_or_review_pending",
             "cli_commands": list(self.cli_commands),
@@ -436,6 +448,12 @@ class ChunkRecord:
     approval_state: str = ""
     publication_state: str = ""
     redaction_state: str = DEFAULT_REDACTION_STATE
+    surface_kind: str = "document"
+    source_unit_kind: str = "section"
+    source_unit_id: str = ""
+    source_unit_anchor: str = ""
+    origin_method: str = "native"
+    ocr_status: str = "not_run"
     citation_eligible: bool = False
     citation_block_reason: str = ""
     cli_commands: tuple[str, ...] = field(default_factory=tuple)
@@ -464,6 +482,12 @@ class ChunkRecord:
             approval_state=str(payload["approval_state"]),
             citation_eligible=bool(self.citation_eligible),
         )
+        payload["surface_kind"] = self.surface_kind
+        payload["source_unit_kind"] = self.source_unit_kind
+        payload["source_unit_id"] = self.source_unit_id or self.section_id or self.anchor
+        payload["source_unit_anchor"] = self.source_unit_anchor or self.anchor
+        payload["origin_method"] = self.origin_method
+        payload["ocr_status"] = self.ocr_status
         return payload
 
 

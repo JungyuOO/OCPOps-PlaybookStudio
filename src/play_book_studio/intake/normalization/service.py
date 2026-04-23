@@ -11,6 +11,8 @@ from play_book_studio.config.settings import load_settings
 from ..artifact_bundle import build_customer_pack_artifact_bundle, write_json_payload
 from ..books.store import CustomerPackDraftStore
 from ..models import CustomerPackDraftRecord
+from ..pptx_ocr_augment import augment_slide_packets_with_optional_ocr
+from ..pptx_slide_packets import build_customer_pack_slide_packets_payload
 from ..planner import CustomerPackPlanner
 from ..private_boundary import summarize_private_remote_ocr_boundary
 from ..private_corpus import materialize_customer_pack_private_corpus
@@ -287,6 +289,35 @@ class CustomerPackNormalizeService:
             )
             self.settings.customer_pack_books_dir.mkdir(parents=True, exist_ok=True)
             book_path = self.settings.customer_pack_books_dir / f"{record.draft_id}.json"
+            slide_packets_payload = None
+            if record.request.source_type == "pptx":
+                slide_packets_payload = build_customer_pack_slide_packets_payload(
+                    record=record,
+                    payload=canonical_payload,
+                    asset_slug=str(canonical_payload.get("asset_slug") or canonical_payload.get("book_slug") or record.draft_id).strip()
+                    or record.draft_id,
+                    book_path=book_path,
+                )
+                if slide_packets_payload:
+                    slide_packets_payload = augment_slide_packets_with_optional_ocr(
+                        slide_packets_payload,
+                        books_dir=book_path.parent,
+                        settings=self.settings,
+                        allow_remote_ocr=allow_remote_ocr,
+                    )
+                    canonical_payload.update(
+                        {
+                            "surface_kind": "slide_deck",
+                            "source_unit_kind": "slide",
+                            "source_unit_count": int(slide_packets_payload.get("slide_count") or 0),
+                            "slide_packet_count": int(slide_packets_payload.get("slide_count") or 0),
+                            "slide_asset_count": int(slide_packets_payload.get("embedded_asset_count") or 0),
+                            "origin_method": str(slide_packets_payload.get("origin_method") or "native").strip() or "native",
+                            "ocr_status": str(slide_packets_payload.get("ocr_status") or "not_run").strip() or "not_run",
+                            "ocr_candidate_count": int(slide_packets_payload.get("ocr_candidate_count") or 0),
+                            "ocr_applied_count": int(slide_packets_payload.get("ocr_applied_count") or 0),
+                        }
+                    )
             initial_quality = evaluate_canonical_book_quality(canonical_payload)
             initial_degraded = assess_degraded_pdf_payload(canonical_payload, quality=initial_quality)
             if bool(initial_degraded["degraded_pdf"]):
@@ -324,6 +355,12 @@ class CustomerPackNormalizeService:
                 fallback_attempt=fallback_attempt,
                 trigger_degraded=initial_degraded if bool(initial_degraded["degraded_pdf"]) else None,
             )
+            if slide_packets_payload:
+                evidence["ocr_used"] = bool(int(slide_packets_payload.get("ocr_applied_count") or 0) > 0)
+                evidence["ocr_status"] = str(slide_packets_payload.get("ocr_status") or "not_run")
+                evidence["ocr_candidate_count"] = int(slide_packets_payload.get("ocr_candidate_count") or 0)
+                evidence["ocr_applied_count"] = int(slide_packets_payload.get("ocr_applied_count") or 0)
+                evidence["origin_method"] = str(slide_packets_payload.get("origin_method") or "native")
             for stale_path in self.settings.customer_pack_books_dir.glob(f"{record.draft_id}--*.json"):
                 stale_path.unlink(missing_ok=True)
             canonical_payload["customer_pack_evidence"] = evidence
@@ -332,6 +369,7 @@ class CustomerPackNormalizeService:
                 record=record,
                 canonical_payload=canonical_payload,
                 derived_payloads=derived_payloads,
+                slide_packets_payload=slide_packets_payload,
             )
             final_quality = evaluate_canonical_book_quality(
                 canonical_payload,
@@ -379,6 +417,7 @@ class CustomerPackNormalizeService:
                 payload=canonical_payload,
                 book_path=book_path,
                 corpus_manifest=private_corpus_manifest,
+                slide_packets_payload=slide_packets_payload,
             )
             canonical_payload = dict(canonical_bundle["book"])
             write_json_payload(book_path, canonical_payload)

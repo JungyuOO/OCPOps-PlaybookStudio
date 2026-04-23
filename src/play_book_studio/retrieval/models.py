@@ -70,6 +70,12 @@ class RetrievalHit:
     source_lane: str = "official_ko"
     source_type: str = "official_doc"
     source_collection: str = "core"
+    surface_kind: str = "document"
+    source_unit_kind: str = "section"
+    source_unit_id: str = ""
+    source_unit_anchor: str = ""
+    origin_method: str = ""
+    ocr_status: str = ""
     review_status: str = "unreviewed"
     trust_score: float = 1.0
     parsed_artifact_id: str = ""

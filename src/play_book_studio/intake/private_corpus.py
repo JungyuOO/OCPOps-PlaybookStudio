@@ -42,6 +42,10 @@ def customer_pack_private_relations_path(settings: Settings, draft_id: str) -> P
     return customer_pack_private_corpus_dir(settings, draft_id) / "relations.jsonl"
 
 
+def customer_pack_private_visual_ocr_path(settings: Settings, draft_id: str) -> Path:
+    return customer_pack_private_corpus_dir(settings, draft_id) / "visual_ocr.jsonl"
+
+
 def customer_pack_private_manifest_path(settings: Settings, draft_id: str) -> Path:
     return customer_pack_private_corpus_dir(settings, draft_id) / "manifest.json"
 
@@ -73,6 +77,34 @@ def _record_access_groups(record: CustomerPackDraftRecord) -> tuple[str, ...]:
         str(record.tenant_id or "").strip() or "default-tenant",
     )
     return tuple(item for item in fallback if item)
+
+
+def _payload_surface_kind(payload: dict[str, Any]) -> str:
+    explicit = str(payload.get("surface_kind") or "").strip()
+    if explicit:
+        return explicit
+    source_type = str(payload.get("playbook_family") or payload.get("source_type") or "").strip().lower()
+    if source_type == "pptx":
+        return "slide_deck"
+    return "document"
+
+
+def _payload_source_unit_kind(payload: dict[str, Any]) -> str:
+    explicit = str(payload.get("source_unit_kind") or "").strip()
+    if explicit:
+        return explicit
+    source_type = str(payload.get("playbook_family") or payload.get("source_type") or "").strip().lower()
+    if source_type == "pptx":
+        return "slide"
+    return "section"
+
+
+def _payload_origin_method(payload: dict[str, Any]) -> str:
+    return str(payload.get("origin_method") or "native").strip() or "native"
+
+
+def _payload_ocr_status(payload: dict[str, Any]) -> str:
+    return str(payload.get("ocr_status") or "not_run").strip() or "not_run"
 
 
 def _section_to_normalized_section(
@@ -132,6 +164,23 @@ def _section_to_normalized_section(
         approval_state=str(record.approval_state or "").strip() or "unreviewed",
         publication_state=str(record.publication_state or "").strip() or "draft",
         redaction_state=str(record.redaction_state or "").strip() or "raw",
+        surface_kind=_payload_surface_kind(payload),
+        source_unit_kind=str(section.get("source_unit_kind") or _payload_source_unit_kind(payload)).strip()
+        or _payload_source_unit_kind(payload),
+        source_unit_id=(
+            str(section.get("source_unit_id") or "").strip()
+            or str(section.get("section_key") or "").strip()
+            or str(section.get("section_id") or "").strip()
+            or str(section.get("anchor") or "").strip()
+        ),
+        source_unit_anchor=(
+            str(section.get("source_unit_anchor") or "").strip()
+            or str(section.get("anchor") or "").strip()
+        ),
+        origin_method=str(section.get("origin_method") or _payload_origin_method(payload)).strip()
+        or _payload_origin_method(payload),
+        ocr_status=str(section.get("ocr_status") or _payload_ocr_status(payload)).strip()
+        or _payload_ocr_status(payload),
         cli_commands=tuple(str(item) for item in (section.get("cli_commands") or []) if str(item).strip()),
         error_strings=tuple(str(item) for item in (section.get("error_strings") or []) if str(item).strip()),
         k8s_objects=tuple(str(item) for item in (section.get("k8s_objects") or []) if str(item).strip()),
@@ -190,6 +239,12 @@ def _bm25_row(chunk_row: dict[str, Any]) -> dict[str, Any]:
         "canonical_title": str(chunk_row.get("canonical_title") or "").strip(),
         "asset_slug": str(chunk_row.get("asset_slug") or "").strip(),
         "asset_kind": str(chunk_row.get("asset_kind") or "").strip(),
+        "surface_kind": str(chunk_row.get("surface_kind") or "document").strip() or "document",
+        "source_unit_kind": str(chunk_row.get("source_unit_kind") or "section").strip() or "section",
+        "source_unit_id": str(chunk_row.get("source_unit_id") or "").strip(),
+        "source_unit_anchor": str(chunk_row.get("source_unit_anchor") or "").strip(),
+        "origin_method": str(chunk_row.get("origin_method") or "native").strip() or "native",
+        "ocr_status": str(chunk_row.get("ocr_status") or "not_run").strip() or "not_run",
         "derived_from_book_slug": str(chunk_row.get("derived_from_book_slug") or "").strip(),
         "runtime_truth_label": str(chunk_row.get("runtime_truth_label") or "").strip(),
         "boundary_truth": str(chunk_row.get("boundary_truth") or "").strip(),
@@ -287,6 +342,7 @@ def _relation_rows(
     *,
     record: CustomerPackDraftRecord,
     canonical_payload: dict[str, Any],
+    slide_packets_payload: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     asset_slug = str(canonical_payload.get("asset_slug") or canonical_payload.get("book_slug") or record.draft_id).strip() or record.draft_id
     relation_payload = build_customer_pack_relations_payload(
@@ -310,6 +366,8 @@ def _relation_rows(
     runtime_truth_label = str(canonical_payload.get("runtime_truth_label") or "Customer Source-First Pack").strip() or "Customer Source-First Pack"
     boundary_truth = str(canonical_payload.get("boundary_truth") or "private_customer_pack_runtime").strip() or "private_customer_pack_runtime"
     boundary_badge = str(canonical_payload.get("boundary_badge") or "Private Pack Runtime").strip() or "Private Pack Runtime"
+    surface_kind = _payload_surface_kind(canonical_payload)
+    slide_unit_index = _slide_unit_index(canonical_payload, slide_packets_payload=slide_packets_payload)
 
     rows: list[dict[str, Any]] = []
     for ordinal, relation in enumerate(relation_index.values(), start=1):
@@ -321,6 +379,11 @@ def _relation_rows(
         viewer_path = str(relation.get("viewer_path") or "").strip()
         semantic_role = _relation_semantic_role(relation)
         question_classes = _relation_question_classes(relation)
+        slide_lineage = (
+            slide_unit_index.get((book_slug, str(relation.get("section_key") or "").strip()))
+            or slide_unit_index.get((book_slug, anchor))
+            or {}
+        )
         rows.append(
             {
                 "chunk_id": f"{record.draft_id}:relation:{relation_id}",
@@ -366,6 +429,23 @@ def _relation_rows(
                 "canonical_title": title,
                 "asset_slug": asset_slug,
                 "asset_kind": asset_kind,
+                "surface_kind": str(slide_lineage.get("surface_kind") or surface_kind).strip() or surface_kind,
+                "source_unit_kind": (
+                    str(slide_lineage.get("source_unit_kind") or _payload_source_unit_kind(canonical_payload)).strip()
+                    or _payload_source_unit_kind(canonical_payload)
+                ),
+                "source_unit_id": (
+                    str(slide_lineage.get("source_unit_id") or "").strip()
+                    or str(relation.get("section_key") or "").strip()
+                    or anchor
+                    or relation_id
+                ),
+                "source_unit_anchor": (
+                    str(slide_lineage.get("source_unit_anchor") or "").strip()
+                    or anchor
+                ),
+                "origin_method": str(slide_lineage.get("origin_method") or "derived_native").strip() or "derived_native",
+                "ocr_status": str(slide_lineage.get("ocr_status") or "not_run").strip() or "not_run",
                 "derived_from_book_slug": derived_from_book_slug,
                 "runtime_truth_label": runtime_truth_label,
                 "boundary_truth": boundary_truth,
@@ -382,6 +462,7 @@ def _lineage_indexes(
     *,
     canonical_payload: dict[str, Any],
     derived_payloads: list[dict[str, Any]],
+    slide_packets_payload: dict[str, Any] | None = None,
 ) -> tuple[dict[str, dict[str, Any]], dict[tuple[str, str], dict[str, Any]]]:
     payloads = [dict(canonical_payload), *[dict(item) for item in derived_payloads]]
     canonical_book_slug = str(canonical_payload.get("book_slug") or "").strip()
@@ -398,6 +479,10 @@ def _lineage_indexes(
             "canonical_title": canonical_title or str(payload.get("title") or book_slug).strip(),
             "asset_slug": str(payload.get("asset_slug") or book_slug).strip() or book_slug,
             "asset_kind": str(payload.get("asset_kind") or "").strip(),
+            "surface_kind": _payload_surface_kind(payload),
+            "source_unit_kind": _payload_source_unit_kind(payload),
+            "origin_method": _payload_origin_method(payload),
+            "ocr_status": _payload_ocr_status(payload),
             "derived_from_book_slug": str(payload.get("derived_from_book_slug") or "").strip(),
             "runtime_truth_label": str(payload.get("runtime_truth_label") or "Customer Source-First Pack").strip(),
             "boundary_truth": str(payload.get("boundary_truth") or "private_customer_pack_runtime").strip(),
@@ -422,8 +507,88 @@ def _lineage_indexes(
                 "lineage_section_key": str(section.get("section_key") or section.get("section_id") or "").strip(),
                 "lineage_anchor": str(section.get("anchor") or "").strip(),
                 "lineage_viewer_path": str(section.get("viewer_path") or "").strip(),
+                "surface_kind": _payload_surface_kind(payload),
+                "source_unit_kind": str(section.get("source_unit_kind") or _payload_source_unit_kind(payload)).strip()
+                or _payload_source_unit_kind(payload),
+                "source_unit_id": (
+                    str(section.get("source_unit_id") or "").strip()
+                    or str(section.get("section_key") or section.get("section_id") or "").strip()
+                    or str(section.get("anchor") or "").strip()
+                ),
+                "source_unit_anchor": (
+                    str(section.get("source_unit_anchor") or "").strip()
+                    or str(section.get("anchor") or "").strip()
+                ),
+                "origin_method": str(section.get("origin_method") or _payload_origin_method(payload)).strip()
+                or _payload_origin_method(payload),
+                "ocr_status": str(section.get("ocr_status") or _payload_ocr_status(payload)).strip()
+                or _payload_ocr_status(payload),
             }
+    slide_unit_index = _slide_unit_index(canonical_payload, slide_packets_payload=slide_packets_payload)
+    if slide_unit_index:
+        for key, payload in slide_unit_index.items():
+            if key not in section_index:
+                section_index[key] = dict(payload)
+                continue
+            section_index[key].update(payload)
     return asset_index, section_index
+
+
+def _resolve_slide_packets_payload(
+    canonical_payload: dict[str, Any],
+    *,
+    slide_packets_payload: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    if isinstance(slide_packets_payload, dict):
+        return slide_packets_payload
+    artifact_bundle = dict(canonical_payload.get("artifact_bundle") or {})
+    slide_packets_path = Path(str(artifact_bundle.get("slide_packets_path") or "").strip())
+    if slide_packets_path.as_posix() in {"", "."} or not slide_packets_path.exists() or not slide_packets_path.is_file():
+        return None
+    try:
+        resolved = json.loads(slide_packets_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    return resolved if isinstance(resolved, dict) else None
+
+
+def _slide_unit_index(
+    canonical_payload: dict[str, Any],
+    *,
+    slide_packets_payload: dict[str, Any] | None = None,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    slide_packets = _resolve_slide_packets_payload(canonical_payload, slide_packets_payload=slide_packets_payload)
+    if slide_packets is None:
+        return {}
+    book_slug = str(canonical_payload.get("book_slug") or slide_packets.get("book_slug") or "").strip()
+    surface_kind = str(slide_packets.get("surface_kind") or _payload_surface_kind(canonical_payload)).strip() or "document"
+    origin_method = str(slide_packets.get("origin_method") or _payload_origin_method(canonical_payload)).strip() or "native"
+    ocr_status = str(slide_packets.get("ocr_status") or _payload_ocr_status(canonical_payload)).strip() or "not_run"
+    index: dict[tuple[str, str], dict[str, Any]] = {}
+    for slide in slide_packets.get("slides") or []:
+        if not isinstance(slide, dict):
+            continue
+        source_unit_id = str(slide.get("slide_id") or "").strip()
+        source_unit_anchor = str(slide.get("slide_anchor") or "").strip()
+        if not source_unit_id and not source_unit_anchor:
+            continue
+        section_keys = [
+            str(slide.get("matched_section_key") or "").strip(),
+            str(slide.get("matched_section_anchor") or "").strip(),
+        ]
+        metadata = {
+            "surface_kind": surface_kind,
+            "source_unit_kind": "slide",
+            "source_unit_id": source_unit_id or source_unit_anchor,
+            "source_unit_anchor": source_unit_anchor or str(slide.get("matched_section_anchor") or "").strip(),
+            "origin_method": str(slide.get("origin_method") or origin_method).strip() or origin_method,
+            "ocr_status": str(slide.get("ocr_status") or ocr_status).strip() or ocr_status,
+        }
+        for identifier in section_keys:
+            if not identifier:
+                continue
+            index[(book_slug, identifier)] = dict(metadata)
+    return index
 
 
 def _enrich_chunk_rows_with_lineage(
@@ -431,10 +596,12 @@ def _enrich_chunk_rows_with_lineage(
     *,
     canonical_payload: dict[str, Any],
     derived_payloads: list[dict[str, Any]],
+    slide_packets_payload: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     asset_index, section_index = _lineage_indexes(
         canonical_payload=canonical_payload,
         derived_payloads=derived_payloads,
+        slide_packets_payload=slide_packets_payload,
     )
     enriched_rows: list[dict[str, Any]] = []
     for row in chunk_rows:
@@ -470,6 +637,102 @@ def _enrich_chunk_rows_with_lineage(
     return enriched_rows
 
 
+def _visual_ocr_rows(
+    *,
+    record: CustomerPackDraftRecord,
+    canonical_payload: dict[str, Any],
+    slide_packets_payload: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    slide_packets = _resolve_slide_packets_payload(canonical_payload, slide_packets_payload=slide_packets_payload)
+    if slide_packets is None:
+        return []
+    book_slug = str(canonical_payload.get("book_slug") or slide_packets.get("book_slug") or record.draft_id).strip() or record.draft_id
+    title = str(canonical_payload.get("title") or book_slug).strip() or book_slug
+    source_type = str(canonical_payload.get("playbook_family") or canonical_payload.get("source_type") or "customer_pack").strip() or "customer_pack"
+    product = str(canonical_payload.get("inferred_product") or "customer_pack").strip() or "customer_pack"
+    version = str(canonical_payload.get("inferred_version") or record.draft_id).strip() or record.draft_id
+    language_hint = str(canonical_payload.get("language_hint") or "ko").strip() or "ko"
+    translation_status = "approved_ko" if language_hint == "ko" else "original"
+    asset_slug = str(canonical_payload.get("asset_slug") or book_slug).strip() or book_slug
+    asset_kind = str(canonical_payload.get("asset_kind") or "").strip()
+    runtime_truth_label = str(canonical_payload.get("runtime_truth_label") or "Customer Source-First Pack").strip() or "Customer Source-First Pack"
+    boundary_truth = str(canonical_payload.get("boundary_truth") or "private_customer_pack_runtime").strip() or "private_customer_pack_runtime"
+    boundary_badge = str(canonical_payload.get("boundary_badge") or "Private Pack Runtime").strip() or "Private Pack Runtime"
+    rows: list[dict[str, Any]] = []
+    for slide in slide_packets.get("slides") or []:
+        if not isinstance(slide, dict):
+            continue
+        ocr_text = str(slide.get("ocr_text") or "").strip()
+        if not ocr_text:
+            continue
+        slide_id = str(slide.get("slide_id") or "").strip()
+        slide_anchor = str(slide.get("slide_anchor") or "").strip()
+        heading = str(slide.get("title") or slide_anchor or title).strip() or title
+        text = "\n".join(
+            line
+            for line in [
+                heading,
+                ocr_text,
+            ]
+            if str(line).strip()
+        ).strip()
+        rows.append(
+            {
+                "chunk_id": f"{record.draft_id}:visual_ocr:{slide_id or slide_anchor or len(rows) + 1}",
+                "book_slug": book_slug,
+                "chapter": title,
+                "section": heading,
+                "section_id": slide_id or slide_anchor,
+                "section_path": [heading, "OCR"],
+                "anchor": slide_anchor,
+                "source_url": str(canonical_payload.get("source_uri") or "").strip(),
+                "viewer_path": str(slide.get("viewer_path") or slide_packets.get("viewer_path") or "").strip(),
+                "text": text,
+                "chunk_type": "visual_ocr",
+                "source_id": f"customer_pack:{record.draft_id}",
+                "source_lane": str(record.source_lane or "customer_source_first_pack").strip() or "customer_source_first_pack",
+                "source_type": source_type,
+                "source_collection": "uploaded",
+                "product": product,
+                "version": version,
+                "locale": language_hint,
+                "translation_status": translation_status,
+                "review_status": _review_status(record),
+                "trust_score": 0.8,
+                "parsed_artifact_id": f"customer-pack:{record.draft_id}",
+                "semantic_role": "reference",
+                "block_kinds": ["figure", "ocr", "visual"],
+                "cli_commands": [],
+                "error_strings": [],
+                "k8s_objects": [],
+                "operator_names": [],
+                "verification_hints": [],
+                "graph_relations": [],
+                "truth_owner": "canonical_json_bundle",
+                "canonical_book_slug": book_slug,
+                "canonical_title": title,
+                "asset_slug": asset_slug,
+                "asset_kind": asset_kind,
+                "surface_kind": str(slide_packets.get("surface_kind") or _payload_surface_kind(canonical_payload)).strip()
+                or _payload_surface_kind(canonical_payload),
+                "source_unit_kind": "slide",
+                "source_unit_id": slide_id or slide_anchor,
+                "source_unit_anchor": slide_anchor,
+                "origin_method": str(slide.get("origin_method") or slide_packets.get("origin_method") or "hybrid").strip()
+                or "hybrid",
+                "ocr_status": str(slide.get("ocr_status") or "applied").strip() or "applied",
+                "derived_from_book_slug": str(canonical_payload.get("derived_from_book_slug") or "").strip(),
+                "runtime_truth_label": runtime_truth_label,
+                "boundary_truth": boundary_truth,
+                "boundary_badge": boundary_badge,
+                "lineage_section_key": str(slide.get("matched_section_key") or "").strip(),
+                "lineage_anchor": str(slide.get("matched_section_anchor") or slide_anchor).strip(),
+                "lineage_viewer_path": str(slide.get("viewer_path") or slide_packets.get("viewer_path") or "").strip(),
+            }
+        )
+    return rows
+
+
 def _encode_texts_locally(
     settings: Settings,
     texts: list[str],
@@ -495,6 +758,7 @@ def _failed_private_corpus_payload(
         "normalized_sections": [],
         "chunk_rows": [],
         "relation_rows": [],
+        "ocr_rows": [],
         "bm25_rows": [],
         "vector_rows": [],
         "materialization_status": "failed",
@@ -511,6 +775,7 @@ def build_customer_pack_private_corpus_rows(
     record: CustomerPackDraftRecord,
     canonical_payload: dict[str, Any],
     derived_payloads: list[dict[str, Any]],
+    slide_packets_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payloads = [dict(canonical_payload), *[dict(item) for item in derived_payloads]]
     normalized_sections: list[NormalizedSection] = []
@@ -534,6 +799,12 @@ def build_customer_pack_private_corpus_rows(
     relation_rows: list[dict[str, Any]] = _relation_rows(
         record=record,
         canonical_payload=canonical_payload,
+        slide_packets_payload=slide_packets_payload,
+    )
+    ocr_rows: list[dict[str, Any]] = _visual_ocr_rows(
+        record=record,
+        canonical_payload=canonical_payload,
+        slide_packets_payload=slide_packets_payload,
     )
     bm25_rows: list[dict[str, Any]] = []
     if normalized_sections:
@@ -544,12 +815,13 @@ def build_customer_pack_private_corpus_rows(
                 chunk_rows,
                 canonical_payload=canonical_payload,
                 derived_payloads=derived_payloads,
+                slide_packets_payload=slide_packets_payload,
             )
-            materialization_status = "ready" if chunk_rows or relation_rows else "empty"
+            materialization_status = "ready" if chunk_rows or relation_rows or ocr_rows else "empty"
         except Exception as exc:  # noqa: BLE001
             materialization_status = "failed"
             materialization_error = str(exc)
-    retrieval_rows = [*chunk_rows, *relation_rows]
+    retrieval_rows = [*chunk_rows, *relation_rows, *ocr_rows]
     if retrieval_rows and materialization_status == "empty":
         materialization_status = "ready"
     if retrieval_rows:
@@ -575,6 +847,7 @@ def build_customer_pack_private_corpus_rows(
         "normalized_sections": [section.to_dict() for section in normalized_sections],
         "chunk_rows": chunk_rows,
         "relation_rows": relation_rows,
+        "ocr_rows": ocr_rows,
         "bm25_rows": bm25_rows,
         "vector_rows": vector_rows,
         "materialization_status": materialization_status,
@@ -591,6 +864,7 @@ def materialize_customer_pack_private_corpus(
     record: CustomerPackDraftRecord,
     canonical_payload: dict[str, Any],
     derived_payloads: list[dict[str, Any]],
+    slide_packets_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     settings = load_settings(root_dir)
     draft_id = str(record.draft_id).strip()
@@ -603,6 +877,7 @@ def materialize_customer_pack_private_corpus(
             record=record,
             canonical_payload=canonical_payload,
             derived_payloads=derived_payloads,
+            slide_packets_payload=slide_packets_payload,
         )
     except Exception as exc:  # noqa: BLE001
         payload = _failed_private_corpus_payload(
@@ -611,10 +886,12 @@ def materialize_customer_pack_private_corpus(
         )
     chunk_rows = payload["chunk_rows"]
     relation_rows = payload["relation_rows"]
+    ocr_rows = payload["ocr_rows"]
     bm25_rows = payload["bm25_rows"]
     vector_rows = payload["vector_rows"]
     _write_jsonl(customer_pack_private_chunks_path(settings, draft_id), chunk_rows)
     _write_jsonl(customer_pack_private_relations_path(settings, draft_id), relation_rows)
+    _write_jsonl(customer_pack_private_visual_ocr_path(settings, draft_id), ocr_rows)
     _write_jsonl(customer_pack_private_bm25_path(settings, draft_id), bm25_rows)
     if vector_rows:
         _write_jsonl(customer_pack_private_vector_path(settings, draft_id), vector_rows)
@@ -639,6 +916,12 @@ def materialize_customer_pack_private_corpus(
         "boundary_truth": "private_customer_pack_runtime",
         "runtime_truth_label": "Customer Source-First Pack",
         "boundary_badge": "Private Pack Runtime",
+        "surface_kind": _payload_surface_kind(canonical_payload),
+        "source_unit_kind": _payload_source_unit_kind(canonical_payload),
+        "origin_method": str((slide_packets_payload or {}).get("origin_method") or _payload_origin_method(canonical_payload)).strip()
+        or _payload_origin_method(canonical_payload),
+        "ocr_status": str((slide_packets_payload or {}).get("ocr_status") or _payload_ocr_status(canonical_payload)).strip()
+        or _payload_ocr_status(canonical_payload),
         "canonical_book_slug": str(canonical_payload.get("book_slug") or draft_id).strip() or draft_id,
         "canonical_title": str(canonical_payload.get("title") or draft_id).strip() or draft_id,
         "asset_slugs": [
@@ -660,6 +943,10 @@ def materialize_customer_pack_private_corpus(
         "relation_row_count": len(relation_rows),
         "relation_truth_owner": "canonical_json_bundle",
         "relation_bm25_ready": bool(relation_rows),
+        "ocr_rows_path": str(customer_pack_private_visual_ocr_path(settings, draft_id)),
+        "ocr_row_count": len(ocr_rows),
+        "ocr_candidate_count": int((slide_packets_payload or {}).get("ocr_candidate_count") or 0),
+        "ocr_applied_count": int((slide_packets_payload or {}).get("ocr_applied_count") or 0),
         "anchor_lineage_count": sum(1 for row in chunk_rows if str(row.get("anchor") or "").strip()),
         "bm25_ready": bool(bm25_rows),
         "vector_status": str(payload["vector_status"]),
@@ -711,6 +998,7 @@ __all__ = [
     "customer_pack_private_corpus_dir",
     "customer_pack_private_manifest_path",
     "customer_pack_private_relations_path",
+    "customer_pack_private_visual_ocr_path",
     "customer_pack_private_vector_path",
     "delete_customer_pack_private_corpus",
     "materialize_customer_pack_private_corpus",

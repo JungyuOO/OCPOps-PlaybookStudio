@@ -189,6 +189,24 @@ PPT 승급 기준:
 - `anchor`
 - `asset_ref`
 
+코퍼스 메타 최소 계약:
+
+- `surface_kind`
+- `source_unit_kind`
+- `source_unit_id`
+- `source_unit_anchor`
+- `origin_method`
+- `ocr_status`
+- `lineage_viewer_path`
+- `graph_relations`
+
+청크 계열:
+
+- `section chunk`
+- `relation chunk`
+- `table chunk`
+- `visual/ocr chunk`
+
 ## Acceptance Criteria
 
 ### A. 공통 구조
