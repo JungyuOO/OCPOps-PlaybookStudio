@@ -104,6 +104,7 @@ import type {
   WorkspaceTestTrace,
 } from './workspaceTypes';
 import { buildOutlineBookFamilies, describeOutlineVariant } from './workspaceOutline';
+import { isTestRunDraft, partitionDraftCatalog, shouldOpenDraftAsViewer } from './workspaceDraftCatalog';
 
 interface OverlayTargetDescriptor {
   kind: WikiOverlayTargetKind;
@@ -119,7 +120,7 @@ interface ViewerActiveSection {
 }
 
 type LeftPanelMode = 'history' | 'outline' | 'signals';
-type OutlinePanelSectionKey = 'official_manuals' | 'custom_documents' | 'uploaded_docs';
+type OutlinePanelSectionKey = 'official_manuals' | 'custom_documents' | 'test_runs' | 'uploaded_docs';
 type SignalsFavoriteFilter = 'favorites' | 'edited';
 
 interface OutlineTocNode {
@@ -447,6 +448,7 @@ function formatDraftMeta(draft: CustomerPackDraft): string {
 
 function uploadedDraftCatalogChips(draft: CustomerPackDraft): string[] {
   return dedupeCatalogChips([
+    isTestRunDraft(draft) ? '테스트 실험' : '',
     draft.source_kind_label,
     draft.promotion_stage_label,
     draft.source_type.toUpperCase(),
@@ -800,6 +802,7 @@ export default function WorkspacePage() {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     manuals: true,
     custom_documents: false,
+    test_runs: false,
     drafts: true,
   });
   const [customDocumentBooks, setCustomDocumentBooks] = useState<LibraryBook[]>([]);
@@ -830,6 +833,7 @@ export default function WorkspacePage() {
   const [collapsedOutlineSections, setCollapsedOutlineSections] = useState<Record<OutlinePanelSectionKey, boolean>>({
     official_manuals: false,
     custom_documents: false,
+    test_runs: false,
     uploaded_docs: false,
   });
   const [outlineCategoryKey, setOutlineCategoryKey] = useState(() => {
@@ -1314,16 +1318,32 @@ export default function WorkspacePage() {
     [manualBooks],
   );
 
-  const draftSources = useMemo<SourceEntry[]>(
-    () =>
-      drafts.map((draft) => ({
+  const { standardDrafts, testDrafts } = useMemo(
+    () => partitionDraftCatalog(drafts),
+    [drafts],
+  );
+
+  const draftSourcesFromCollection = useCallback(
+    (draftCollection: CustomerPackDraft[]): SourceEntry[] =>
+      draftCollection.map((draft) => ({
         id: `draft:${draft.draft_id}`,
         kind: 'draft',
         name: draft.title,
         meta: formatDraftMeta(draft),
         draft,
       })),
-    [drafts],
+    [],
+  );
+
+  const testDraftSources = useMemo<SourceEntry[]>(
+    () => draftSourcesFromCollection(testDrafts),
+    [draftSourcesFromCollection, testDrafts],
+  );
+
+  const draftSources = useMemo<SourceEntry[]>(
+    () =>
+      draftSourcesFromCollection(standardDrafts),
+    [draftSourcesFromCollection, standardDrafts],
   );
 
   const activeDraft = useMemo(
@@ -1548,6 +1568,15 @@ export default function WorkspacePage() {
     if (loadedDraft.status === 'normalized') {
       loadedBook = await loadCustomerPackBook(draftId);
       viewerUrl = toRuntimeUrl(preferredViewerPath || loadedBook.target_viewer_path);
+      if (shouldOpenDraftAsViewer(loadedDraft) && loadedBook.target_viewer_path) {
+        await openViewerPreview(
+          preferredViewerPath || loadedBook.target_viewer_path,
+          loadedBook.title || loadedDraft.title,
+          `draft:${draftId}`,
+          viewerPageMode,
+        );
+        return;
+      }
     } else if (loadedDraft.capture_artifact_path) {
       viewerUrl = toRuntimeUrl(`/api/customer-packs/captured?draft_id=${encodeURIComponent(draftId)}`);
     }
@@ -2742,6 +2771,60 @@ export default function WorkspacePage() {
                     )}
                   </section>
 
+                  <section className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Test drafts outline">
+                    <button
+                      type="button"
+                      className="outline-section-head outline-section-toggle"
+                      onClick={() => toggleOutlineSection('test_runs')}
+                    >
+                      <div className="outline-section-copy">
+                        <strong>테스트 목록</strong>
+                        <span>같은 고객 문서로 돌린 파이프라인 비교 실험군</span>
+                      </div>
+                      <div className="outline-section-toggle-side">
+                        <span>{`${testDraftSources.length}개`}</span>
+                        {collapsedOutlineSections.test_runs ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                      </div>
+                    </button>
+                    {collapsedOutlineSections.test_runs ? null : testDraftSources.length === 0 ? (
+                      <div className="outline-empty">
+                        <p>`Test 1`, `Test 2`처럼 이름 붙인 실험군이 아직 없습니다.</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="outline-toc-header">
+                          <strong className="outline-toc-title">고객 문서 비교 실험</strong>
+                          <span className="outline-toc-breadcrumb">같은 파일을 다른 파이프라인으로 돌린 결과를 바로 비교합니다.</span>
+                          <span className="outline-toc-meta">{`${testDraftSources.length}개 실험군`}</span>
+                        </div>
+                        <div className="outline-custom-doc-list outline-custom-doc-list--toc">
+                          {testDraftSources.map((source) => {
+                            const draft = source.draft;
+                            const chips = draft ? uploadedDraftCatalogChips(draft) : [];
+                            return (
+                              <button
+                                key={`outline-test:${source.id}`}
+                                type="button"
+                                className="outline-item muted"
+                                onClick={() => { void handleSourceClick(source); }}
+                              >
+                                <span className="outline-item-label">{source.name}</span>
+                                <span className="outline-item-meta">{source.meta}</span>
+                                {chips.length > 0 && (
+                                  <div className="outline-custom-chip-row">
+                                    {chips.map((chip) => (
+                                      <span key={`${source.id}:${chip}`} className="outline-custom-chip">{chip}</span>
+                                    ))}
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </section>
+
                   <section className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Uploaded documents outline">
                     <button
                       type="button"
@@ -2750,7 +2833,7 @@ export default function WorkspacePage() {
                     >
                       <div className="outline-section-copy">
                         <strong>업로드 문서</strong>
-                        <span>커스텀 파이프라인 승급 후보 문서</span>
+                        <span>일반 커스텀 파이프라인 승급 후보 문서</span>
                       </div>
                       <div className="outline-section-toggle-side">
                         <span>{`${draftSources.length}개`}</span>
@@ -2765,7 +2848,7 @@ export default function WorkspacePage() {
                       <>
                          <div className="outline-toc-header">
                            <strong className="outline-toc-title">업로드된 사용자 문서</strong>
-                           <span className="outline-toc-breadcrumb">업로드 후 캡처, 정규화, 플레이북 승급으로 이어지는 초안 목록입니다.</span>
+                           <span className="outline-toc-breadcrumb">테스트 실험군을 제외한 일반 업로드 초안 목록입니다.</span>
                            <span className="outline-toc-meta">{`${draftSources.length}개 업로드`}</span>
                          </div>
                          <div className="outline-custom-doc-list outline-custom-doc-list--toc">
@@ -3266,6 +3349,47 @@ export default function WorkspacePage() {
                     )}
                   </div>
                 )}
+
+                <div className={`source-section ${collapsedSections.test_runs ? 'collapsed' : ''}`}>
+                  <button className="section-header-btn" onClick={() => toggleSection('test_runs')} type="button">
+                    <div className="header-label-group">
+                      {collapsedSections.test_runs ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                      <span className="list-title">테스트 목록</span>
+                    </div>
+                    <span className="item-count-badge">{testDraftSources.length}</span>
+                  </button>
+                  {!collapsedSections.test_runs && (
+                    <div className="section-items-container">
+                      {testDraftSources.length === 0 ? (
+                        <div className="empty-hint">`Test 1`, `Test 2` 형식의 실험군이 아직 없습니다.</div>
+                      ) : testDraftSources.map((file) => {
+                        const chips = file.draft ? uploadedDraftCatalogChips(file.draft) : [];
+                        return (
+                          <div
+                            key={file.id}
+                            className={`source-item ${activeSourceId === file.id ? 'selected' : ''}`}
+                            onClick={() => { void handleSourceClick(file); }}
+                          >
+                            <div className="item-main">
+                              <FileText size={16} className="file-icon" />
+                              <div className="item-main-copy">
+                                <span className="file-name">{file.name}</span>
+                                {chips.length > 0 ? (
+                                  <div className="source-chip-row">
+                                    {chips.map((chip) => (
+                                      <span key={`${file.id}:${chip}`} className="source-kind-chip">{chip}</span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="item-meta">{file.meta}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
 
                 <div className={`source-section ${collapsedSections.drafts ? 'collapsed' : ''}`}>
                   <button className="section-header-btn" onClick={() => toggleSection('drafts')} type="button">

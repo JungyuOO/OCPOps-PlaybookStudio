@@ -6,10 +6,6 @@ import re
 from typing import Any
 
 from .models import CustomerPackDraftRecord
-from .pptx_slide_packets import (
-    build_customer_pack_slide_packets_payload,
-    customer_pack_slide_packets_path,
-)
 
 
 CUSTOMER_PACK_ARTIFACT_BUNDLE_VERSION = "customer_pack_artifact_bundle_v1"
@@ -51,6 +47,10 @@ def customer_pack_citations_path(books_dir: Path, asset_slug: str) -> Path:
     return books_dir / f"{asset_slug}.citations.json"
 
 
+def customer_pack_slide_packets_path(books_dir: Path, asset_slug: str) -> Path:
+    return books_dir / f"{asset_slug}.slide_packets.json"
+
+
 def is_customer_pack_bundle_sidecar_path(path: Path) -> bool:
     name = path.name.lower()
     return any(name.endswith(suffix) for suffix in _SIDECAR_SUFFIXES)
@@ -88,6 +88,8 @@ def build_customer_pack_artifact_bundle(
     slide_packets_path = customer_pack_slide_packets_path(books_dir, asset_slug)
     semantic_payload = _figure_semantic_payload(payload=payload, asset_slug=asset_slug)
     if slide_packets_payload is None:
+        from .pptx_slide_packets import build_customer_pack_slide_packets_payload
+
         slide_packets_payload = build_customer_pack_slide_packets_payload(
             record=record,
             payload=payload,
@@ -124,6 +126,7 @@ def build_customer_pack_artifact_bundle(
         citation_count=len(citations_payload.get("citations") or []),
         slide_packet_count=len(slide_packets_payload.get("slides") or []),
         embedded_asset_count=len(slide_packets_payload.get("embedded_assets") or []),
+        rendered_slide_asset_count=len(slide_packets_payload.get("rendered_slide_assets") or []),
     )
 
     enriched_payload = dict(payload)
@@ -136,6 +139,7 @@ def build_customer_pack_artifact_bundle(
         enriched_payload["origin_method"] = str(slide_packets_payload.get("origin_method") or "native").strip() or "native"
         enriched_payload["ocr_status"] = str(slide_packets_payload.get("ocr_status") or "not_run").strip() or "not_run"
         enriched_payload["ocr_backends"] = list(slide_packets_payload.get("ocr_backends") or [])
+        enriched_payload["ocr_target_kinds"] = list(slide_packets_payload.get("ocr_target_kinds") or [])
         enriched_payload["ocr_candidate_count"] = int(slide_packets_payload.get("ocr_candidate_count") or 0)
     enriched_payload["artifact_bundle"] = {
         "truth_owner": "canonical_json_bundle",
@@ -159,8 +163,10 @@ def build_customer_pack_artifact_bundle(
         "figure_asset_count": len(figure_assets_payload.get("figure_assets") or []),
         "slide_packet_count": len(slide_packets_payload.get("slides") or []),
         "slide_asset_count": len(slide_packets_payload.get("embedded_assets") or []),
+        "slide_preview_count": len(slide_packets_payload.get("rendered_slide_assets") or []),
         "ocr_status": str(slide_packets_payload.get("ocr_status") or "not_run").strip() if slide_packets_payload else "not_run",
         "ocr_backends": list(slide_packets_payload.get("ocr_backends") or []) if slide_packets_payload else [],
+        "ocr_target_kinds": list(slide_packets_payload.get("ocr_target_kinds") or []) if slide_packets_payload else [],
         "ocr_candidate_count": int(slide_packets_payload.get("ocr_candidate_count") or 0) if slide_packets_payload else 0,
     }
     enriched_payload["artifact_manifest_path"] = str(manifest_path)
@@ -192,6 +198,7 @@ def build_customer_pack_artifact_manifest(
     citation_count: int,
     slide_packet_count: int,
     embedded_asset_count: int,
+    rendered_slide_asset_count: int,
 ) -> dict[str, Any]:
     sections = _sections(payload)
     evidence = dict(payload.get("customer_pack_evidence") or {})
@@ -247,6 +254,7 @@ def build_customer_pack_artifact_manifest(
         "citation_count": int(citation_count),
         "slide_packet_count": int(slide_packet_count),
         "embedded_asset_count": int(embedded_asset_count),
+        "rendered_slide_asset_count": int(rendered_slide_asset_count),
         "playable_asset_count": int(payload.get("playable_asset_count") or 1),
         "derived_asset_count": int(payload.get("derived_asset_count") or 0),
         "surface_kind": (
@@ -267,6 +275,7 @@ def build_customer_pack_artifact_manifest(
         "ocr_status": str(payload.get("ocr_status") or ("not_run" if slide_packet_count else "not_required")).strip()
         or ("not_run" if slide_packet_count else "not_required"),
         "ocr_backends": list(payload.get("ocr_backends") or []),
+        "ocr_target_kinds": list(payload.get("ocr_target_kinds") or []),
         "ocr_candidate_count": int(payload.get("ocr_candidate_count") or 0 or embedded_asset_count),
         "parser_backend": str(payload.get("parser_backend") or evidence.get("parser_backend") or "").strip(),
         "parser_route": str(payload.get("parser_route") or evidence.get("parser_route") or "").strip(),

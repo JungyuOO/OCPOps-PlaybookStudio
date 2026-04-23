@@ -89,7 +89,7 @@ class CustomerPackRelationCorpusTests(unittest.TestCase):
             self.assertTrue(all(str(row.get("surface_kind") or "") == "slide_deck" for row in canonical_chunks))
             self.assertTrue(all(str(row.get("source_unit_kind") or "") == "slide" for row in canonical_chunks))
             self.assertTrue(all(str(row.get("origin_method") or "") == "native" for row in canonical_chunks))
-            self.assertTrue(all(str(row.get("ocr_status") or "") == "not_run" for row in canonical_chunks))
+            self.assertTrue(all(str(row.get("ocr_status") or "") == "not_configured" for row in canonical_chunks))
             self.assertTrue(all(str(row.get("source_unit_id") or "").strip() for row in canonical_chunks))
             self.assertTrue(relation_rows)
             self.assertTrue(all(str(row.get("chunk_type") or "") == "relation" for row in relation_rows))
@@ -107,6 +107,29 @@ class CustomerPackRelationCorpusTests(unittest.TestCase):
             source_path = root / "messy.pptx"
             _create_messy_pptx(source_path)
 
+            def _fake_optional_image_fallback(
+                source: str | Path,
+                *,
+                settings=None,
+                allow_remote=False,
+                backend_override: str = "",
+            ) -> PdfFallbackAttempt:
+                file_name = Path(source).name
+                backend = backend_override or "qwen"
+                if file_name == "slide-003-preview.png":
+                    return PdfFallbackAttempt(
+                        backend=backend,
+                        status="ready",
+                        used=True,
+                        markdown="# slide-003\n\n## OCR\n\n운영 환경 이미지 텍스트\nArgoCD 화면",
+                    )
+                return PdfFallbackAttempt(
+                    backend=backend,
+                    status="adapter_empty",
+                    used=False,
+                    markdown="",
+                )
+
             with (
                 patch(
                     "play_book_studio.intake.private_corpus.load_sentence_model",
@@ -122,12 +145,7 @@ class CustomerPackRelationCorpusTests(unittest.TestCase):
                 ),
                 patch(
                     "play_book_studio.intake.pptx_ocr_augment.attempt_optional_image_markdown_fallback",
-                    return_value=PdfFallbackAttempt(
-                        backend="surya",
-                        status="ready",
-                        used=True,
-                        markdown="# slide-003\n\n## OCR\n\n운영 환경 이미지 텍스트\nArgoCD 화면",
-                    ),
+                    side_effect=_fake_optional_image_fallback,
                 ),
             ):
                 result = ingest_customer_pack(
@@ -151,7 +169,8 @@ class CustomerPackRelationCorpusTests(unittest.TestCase):
 
             self.assertEqual("hybrid", manifest["origin_method"])
             self.assertEqual("applied", manifest["ocr_status"])
-            self.assertEqual(["surya"], list(manifest.get("ocr_backends") or []))
+            self.assertEqual(["qwen"], list(manifest.get("ocr_backends") or []))
+            self.assertIn("slide_preview", list(manifest.get("ocr_target_kinds") or []))
             self.assertGreater(int(manifest["ocr_row_count"]), 0)
             self.assertGreater(int(manifest["ocr_applied_count"]), 0)
             self.assertTrue(ocr_rows)
@@ -159,7 +178,9 @@ class CustomerPackRelationCorpusTests(unittest.TestCase):
             self.assertTrue(all(str(row.get("source_unit_kind") or "") == "slide" for row in ocr_rows))
             self.assertTrue(all(str(row.get("origin_method") or "") == "hybrid" for row in ocr_rows))
             self.assertTrue(all(str(row.get("ocr_status") or "") == "applied" for row in ocr_rows))
+            self.assertTrue(any("slide_preview" in list(row.get("ocr_target_kinds") or []) for row in ocr_rows))
             self.assertTrue(any("ArgoCD 화면" in str(row.get("text") or "") for row in ocr_rows))
+            self.assertTrue(any(str(row.get("source_unit_id") or "").endswith("slide-003") for row in ocr_rows))
 
     def test_relation_query_prefers_relation_hit_for_selected_customer_pack(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -721,6 +721,8 @@ def _visual_ocr_rows(
                 "origin_method": str(slide.get("origin_method") or slide_packets.get("origin_method") or "hybrid").strip()
                 or "hybrid",
                 "ocr_status": str(slide.get("ocr_status") or "applied").strip() or "applied",
+                "ocr_backends": list(slide.get("ocr_backends") or slide_packets.get("ocr_backends") or []),
+                "ocr_target_kinds": list(slide.get("ocr_target_kinds") or slide_packets.get("ocr_target_kinds") or []),
                 "derived_from_book_slug": str(canonical_payload.get("derived_from_book_slug") or "").strip(),
                 "runtime_truth_label": runtime_truth_label,
                 "boundary_truth": boundary_truth,
@@ -923,6 +925,7 @@ def materialize_customer_pack_private_corpus(
         "ocr_status": str((slide_packets_payload or {}).get("ocr_status") or _payload_ocr_status(canonical_payload)).strip()
         or _payload_ocr_status(canonical_payload),
         "ocr_backends": list((slide_packets_payload or {}).get("ocr_backends") or []),
+        "ocr_target_kinds": list((slide_packets_payload or {}).get("ocr_target_kinds") or []),
         "canonical_book_slug": str(canonical_payload.get("book_slug") or draft_id).strip() or draft_id,
         "canonical_title": str(canonical_payload.get("title") or draft_id).strip() or draft_id,
         "asset_slugs": [

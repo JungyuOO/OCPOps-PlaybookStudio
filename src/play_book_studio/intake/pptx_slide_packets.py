@@ -11,6 +11,7 @@ from .normalization.builders import (
     _pptx_slide_body_parts,
     _pptx_slide_elements,
 )
+from .pptx_slide_previews import render_pptx_slide_preview_assets
 
 try:  # pragma: no cover - optional runtime dependency
     from pptx import Presentation
@@ -130,6 +131,7 @@ def build_customer_pack_slide_packets_payload(
                 "text_blocks": text_blocks,
                 "table_blocks": table_blocks,
                 "embedded_assets": embedded_assets,
+                "rendered_slide_asset": {},
                 "element_counts": {
                     "text": len(text_blocks),
                     "table": len(table_blocks),
@@ -137,6 +139,24 @@ def build_customer_pack_slide_packets_payload(
                 },
             }
         )
+
+    rendered_slide_assets = render_pptx_slide_preview_assets(
+        capture_path=capture_path,
+        books_dir=books_dir,
+        asset_slug=asset_slug,
+        slide_width=slide_width,
+        slide_height=slide_height,
+        slide_count=len(slides),
+    )
+    rendered_slide_assets_by_ordinal = {
+        int(asset.get("ordinal") or 0): asset
+        for asset in rendered_slide_assets
+        if isinstance(asset, dict) and int(asset.get("ordinal") or 0) > 0
+    }
+    for slide in slides:
+        slide_ordinal = int(slide.get("ordinal") or 0)
+        slide["rendered_slide_asset"] = dict(rendered_slide_assets_by_ordinal.get(slide_ordinal) or {})
+        slide["ocr_candidate"] = bool(slide.get("rendered_slide_asset") or slide.get("embedded_assets"))
 
     return {
         "artifact_version": CUSTOMER_PACK_SLIDE_PACKET_VERSION,
@@ -152,10 +172,12 @@ def build_customer_pack_slide_packets_payload(
         "viewer_path": base_viewer_path,
         "slide_count": len(slides),
         "embedded_asset_count": len(extracted_assets),
+        "rendered_slide_asset_count": len(rendered_slide_assets),
         "visual_block_count": total_visual_blocks,
         "ocr_candidate_count": sum(1 for slide in slides if bool(slide.get("ocr_candidate"))),
         "slides": slides,
         "embedded_assets": extracted_assets,
+        "rendered_slide_assets": rendered_slide_assets,
         "slide_size": {
             "width": slide_width,
             "height": slide_height,

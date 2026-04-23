@@ -117,6 +117,19 @@ def _customer_pack_slide_asset_allowlist(root_dir: Path, draft_id: str) -> set[s
         relpath = str(asset.get("storage_relpath") or "").replace("\\", "/").strip().lstrip("/")
         if relpath:
             allowed.add(relpath)
+    for asset in slide_packets.get("rendered_slide_assets") or []:
+        if not isinstance(asset, dict):
+            continue
+        relpath = str(asset.get("storage_relpath") or "").replace("\\", "/").strip().lstrip("/")
+        if relpath:
+            allowed.add(relpath)
+    for slide in slide_packets.get("slides") or []:
+        if not isinstance(slide, dict):
+            continue
+        preview_asset = dict(slide.get("rendered_slide_asset") or {})
+        relpath = str(preview_asset.get("storage_relpath") or "").replace("\\", "/").strip().lstrip("/")
+        if relpath:
+            allowed.add(relpath)
     return allowed
 
 
@@ -226,6 +239,20 @@ def _render_slide_asset_node(asset: dict[str, Any], slide_size: dict[str, Any], 
     ).strip()
 
 
+def _render_slide_preview_node(asset: dict[str, Any], *, draft_id: str) -> str:
+    asset_url = _customer_pack_artifact_url(draft_id, str(asset.get("storage_relpath") or "").strip())
+    if not asset_url:
+        return ""
+    return """
+    <figure class="customer-slide-preview">
+      <img src="{src}" alt="{alt}" loading="lazy" />
+    </figure>
+    """.format(
+        src=html.escape(asset_url, quote=True),
+        alt=html.escape(str(asset.get("alt") or asset.get("asset_name") or "slide preview")),
+    ).strip()
+
+
 def _render_customer_pack_slide_cards(
     slides: list[dict[str, Any]],
     *,
@@ -241,6 +268,8 @@ def _render_customer_pack_slide_cards(
         slide_role = str(slide.get("slide_role") or "content").strip() or "content"
         slide_size = dict(slide.get("slide_size") or {})
         is_target = bool(target_anchor) and slide_anchor == target_anchor
+        rendered_slide_asset = dict(slide.get("rendered_slide_asset") or {})
+        preview_node = _render_slide_preview_node(rendered_slide_asset, draft_id=draft_id) if rendered_slide_asset else ""
         title_nodes = [
             _render_slide_text_node(dict(block), slide_size)
             for block in (slide.get("text_blocks") or [])
@@ -261,32 +290,54 @@ def _render_customer_pack_slide_cards(
             for block in (slide.get("text_blocks") or [])
             if isinstance(block, dict) and not bool(block.get("is_title_candidate"))
         )
+        if preview_node:
+            title_nodes = []
+            body_nodes = [preview_node]
         body_nodes = [node for node in body_nodes if node]
         notes_text = str(slide.get("notes_text") or "").strip()
         meta_parts = [f"Slide {int(slide.get('ordinal') or 0)}", slide_role.replace("_", " ")]
         if matched_heading:
             meta_parts.append(matched_heading)
         canvas_ratio = max(float(slide_size.get("width") or 16.0), 1.0) / max(float(slide_size.get("height") or 9.0), 1.0)
-        cards.append(
-            """
-            <section id="{anchor}" class="{section_class}">
+        before_stage_block = """
               <div class="section-header">
                 <div class="section-meta">{meta}</div>
                 <h2>{title}</h2>
               </div>
+            """.format(
+                meta=html.escape(" · ".join(part for part in meta_parts if part)),
+                title=html.escape(title),
+            ).strip()
+        after_stage_block = ""
+        if preview_node:
+            before_stage_block = ""
+            after_stage_block = """
+              <div class="customer-slide-caption">
+                <div class="section-meta">{meta}</div>
+                <h2>{title}</h2>
+              </div>
+            """.format(
+                meta=html.escape(" · ".join(part for part in meta_parts if part)),
+                title=html.escape(title),
+            ).strip()
+        cards.append(
+            """
+            <section id="{anchor}" class="{section_class}">
               <div class="section-body">
+                {before_stage_block}
                 <div class="customer-slide-stage" style="position:relative; aspect-ratio:{ratio:.6f}; background:linear-gradient(180deg, #ffffff 0%, #f6f8fb 100%); border:1px solid rgba(15,23,42,0.08); border-radius:18px; overflow:hidden; box-shadow:0 20px 50px rgba(15,23,42,0.08);">
                   {title_nodes}
                   {body_nodes}
                 </div>
+                {after_stage_block}
                 {notes_block}
               </div>
             </section>
             """.format(
                 anchor=html.escape(slide_anchor, quote=True),
                 section_class="embedded-section" if embedded else f"section-card{' section-card-target' if is_target else ''}",
-                meta=html.escape(" · ".join(part for part in meta_parts if part)),
-                title=html.escape(title),
+                before_stage_block=before_stage_block,
+                after_stage_block=after_stage_block,
                 ratio=canvas_ratio,
                 title_nodes="".join(title_nodes),
                 body_nodes="".join(body_nodes),
@@ -520,72 +571,15 @@ def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str, *, page
             embedded=embedded,
         )
         family_label = str(canonical_book.get("family_label") or "").strip()
-        quality_summary = str(canonical_book.get("quality_summary") or "").strip()
-        base_summary = _customer_pack_slide_summary(canonical_book)
-        summary = f"{base_summary} {quality_summary}".strip() if quality_summary else base_summary
-        runtime_truth_label = str(canonical_book.get("runtime_truth_label") or "Customer Source-First Pack").strip()
-        approval_state = str(canonical_book.get("approval_state") or "unreviewed").strip()
-        publication_state = str(canonical_book.get("publication_state") or "draft").strip()
-        source_lane = str(canonical_book.get("source_lane") or "customer_source_first_pack").strip()
-        parser_backend = str(canonical_book.get("parser_backend") or "").strip()
-        shared_grade = str(canonical_book.get("shared_grade") or "blocked").strip() or "blocked"
-        grade_gate = dict(canonical_book.get("grade_gate") or {})
-        citation_gate = dict(grade_gate.get("citation_gate") or {})
-        retrieval_gate = dict(grade_gate.get("retrieval_gate") or {})
-        promotion_gate = dict(grade_gate.get("promotion_gate") or {})
-        citation_status = str(
-            canonical_book.get("citation_landing_status")
-            or citation_gate.get("status")
-            or "missing"
-        ).strip() or "missing"
-        evidence_badges = [
-            f"grade: {shared_grade}",
-            f"citation: {citation_status}",
-            f"retrieval: {'ready' if retrieval_gate.get('ready') else 'pending'}",
-            f"read: {'ready' if promotion_gate.get('read_ready') else 'blocked'}",
-            f"approval: {approval_state}",
-            f"publication: {publication_state}",
-            "surface: slide deck",
-        ]
-        if parser_backend:
-            evidence_badges.append(f"parser: {parser_backend}")
-        if source_lane and source_lane != "customer_source_first_pack":
-            evidence_badges.append(f"lane: {source_lane}")
-        supplementary_blocks = [
-            """
-            <section class="wiki-parent-card">
-              <div class="wiki-parent-eyebrow">Pack Runtime Truth</div>
-              <div class="viewer-truth-topline">
-                <span class="viewer-truth-badge">{badge}</span>
-                <a class="viewer-truth-link" href="{source_url}" target="_blank" rel="noreferrer">원본 캡처 열기</a>
-              </div>
-              <div class="viewer-truth-title">{title}</div>
-              <p>Customer pack runtime evidence</p>
-              <div class="wiki-entity-list">{badges}</div>
-            </section>
-            """.format(
-                source_url=html.escape(
-                    str(canonical_book.get("source_origin_url") or canonical_book.get("source_uri") or ""),
-                    quote=True,
-                ),
-                badge=html.escape(str(canonical_book.get("boundary_badge") or "Private Pack Runtime")),
-                title=html.escape(runtime_truth_label),
-                badges="".join(
-                    f'<span class="meta-pill">{html.escape(item)}</span>'
-                    for item in evidence_badges
-                    if item.strip()
-                ),
-            ).strip()
-        ]
         viewer_target = str(canonical_book.get("target_viewer_path") or f"{CUSTOMER_PACK_VIEWER_PREFIX}{draft_id}/index.html")
         return _render_study_viewer_html(
             title=str(canonical_book.get("title") or draft_id),
             source_url=str(canonical_book.get("source_origin_url") or canonical_book.get("source_uri") or ""),
             cards=cards,
-            supplementary_blocks=supplementary_blocks,
+            supplementary_blocks=[],
             section_count=len(all_slides),
             eyebrow=family_label or "Customer Slide Deck",
-            summary=summary,
+            summary="",
             embedded=embedded,
             section_outline=_customer_pack_slide_outline(all_slides),
             section_navigation=_customer_pack_slide_navigation(
@@ -602,6 +596,7 @@ def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str, *, page
                 book_slug=str(canonical_book.get("book_slug") or draft_id),
                 viewer_path=viewer_target,
             ),
+            hero_mode="hidden",
         )
 
     sections = list(canonical_book.get("sections") or [])

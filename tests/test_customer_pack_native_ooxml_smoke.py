@@ -104,6 +104,47 @@ def _create_messy_pptx(path: Path) -> None:
     presentation.save(path)
 
 
+def _fake_render_slide_previews(
+    *,
+    capture_path: Path,
+    books_dir: Path,
+    asset_slug: str,
+    slide_width: int,
+    slide_height: int,
+    slide_count: int,
+) -> list[dict[str, object]]:
+    del capture_path
+    output_dir = books_dir / f"{asset_slug}.slide-assets"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    png_bytes = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9WcXQAAAAASUVORK5CYII="
+    )
+    assets: list[dict[str, object]] = []
+    for ordinal in range(1, slide_count + 1):
+        file_name = f"slide-{ordinal:03d}-preview.png"
+        preview_path = output_dir / file_name
+        preview_path.write_bytes(png_bytes)
+        assets.append(
+            {
+                "asset_ref": f"{asset_slug}::slide-{ordinal:03d}-preview",
+                "asset_name": f"slide-{ordinal:03d}-preview",
+                "asset_kind": "slide_preview",
+                "content_type": "image/png",
+                "storage_relpath": f"{asset_slug}.slide-assets/{file_name}",
+                "slide_id": f"{asset_slug}::slide-{ordinal:03d}",
+                "ordinal": ordinal,
+                "bbox": {
+                    "top": 0,
+                    "left": 0,
+                    "width": int(slide_width or 0),
+                    "height": int(slide_height or 0),
+                },
+                "alt": f"Slide {ordinal} preview",
+            }
+        )
+    return assets
+
+
 def _create_xlsx(path: Path) -> None:
     workbook = Workbook()
     sheet = workbook.active
@@ -136,6 +177,10 @@ class CustomerPackNativeOoxmlSmokeTests(unittest.TestCase):
                         patch(
                             "play_book_studio.ingestion.chunking.load_sentence_model",
                             return_value=_FakeChunkingModel(),
+                        ),
+                        patch(
+                            "play_book_studio.intake.pptx_slide_packets.render_pptx_slide_preview_assets",
+                            side_effect=_fake_render_slide_previews,
                         ),
                     ):
                         result = ingest_customer_pack(
@@ -186,6 +231,10 @@ class CustomerPackNativeOoxmlSmokeTests(unittest.TestCase):
                 patch(
                     "play_book_studio.ingestion.chunking.load_sentence_model",
                     return_value=_FakeChunkingModel(),
+                ),
+                patch(
+                    "play_book_studio.intake.pptx_slide_packets.render_pptx_slide_preview_assets",
+                    side_effect=_fake_render_slide_previews,
                 ),
             ):
                 result = ingest_customer_pack(
@@ -255,20 +304,25 @@ class CustomerPackNativeOoxmlSmokeTests(unittest.TestCase):
             self.assertEqual([], list(slide_packets_payload.get("ocr_backends") or []))
             self.assertEqual(3, int(slide_packets_payload["slide_count"]))
             self.assertEqual(3, len(slide_packets_payload["slides"]))
+            self.assertEqual(3, int(slide_packets_payload["rendered_slide_asset_count"]))
+            self.assertEqual(3, len(slide_packets_payload["rendered_slide_assets"]))
             self.assertGreaterEqual(int(slide_packets_payload["ocr_candidate_count"]), 1)
             self.assertTrue(any(asset.get("asset_kind") == "image" for asset in slide_packets_payload["embedded_assets"]))
             image_asset = next(asset for asset in slide_packets_payload["embedded_assets"] if asset.get("asset_kind") == "image")
+            preview_asset = dict(slide_packets_payload["slides"][0]["rendered_slide_asset"])
             self.assertTrue((Path(str(manifest["slide_packets_path"])).parent / str(image_asset["storage_relpath"])).exists())
+            self.assertTrue((Path(str(manifest["slide_packets_path"])).parent / str(preview_asset["storage_relpath"])).exists())
             self.assertEqual("visual_only", slide_packets_payload["slides"][2]["slide_role"])
             self.assertEqual("Slide 3", slide_packets_payload["slides"][2]["title"])
             self.assertFalse(slide_packets_payload["slides"][2]["matched_section_anchor"])
             self.assertEqual("slide", slide_packets_payload["slides"][1]["source_unit_kind"])
             self.assertEqual("native", slide_packets_payload["slides"][1]["origin_method"])
-            self.assertEqual("not_run", slide_packets_payload["slides"][1]["ocr_status"])
+            self.assertEqual("not_configured", slide_packets_payload["slides"][1]["ocr_status"])
             self.assertTrue(slide_packets_payload["slides"][2]["ocr_candidate"])
 
             with _test_server(root) as (base_url, _store, _answerer):
                 asset_url = f"/playbooks/customer-packs/{result['draft_id']}/artifacts/{image_asset['storage_relpath']}"
+                preview_asset_url = f"/playbooks/customer-packs/{result['draft_id']}/artifacts/{preview_asset['storage_relpath']}"
                 response = requests.get(
                     f"{base_url}/playbooks/customer-packs/{result['draft_id']}/index.html",
                     timeout=10,
@@ -293,6 +347,10 @@ class CustomerPackNativeOoxmlSmokeTests(unittest.TestCase):
                     f"{base_url}{asset_url}",
                     timeout=10,
                 )
+                preview_asset_response = requests.get(
+                    f"{base_url}{preview_asset_url}",
+                    timeout=10,
+                )
 
             self.assertEqual(200, response.status_code)
             self.assertIn("CICD 프로세스", response.text)
@@ -308,9 +366,11 @@ class CustomerPackNativeOoxmlSmokeTests(unittest.TestCase):
             self.assertIn('id="slide-001"', multi_html)
             self.assertIn('id="slide-002"', multi_html)
             self.assertIn('id="slide-003"', multi_html)
-            self.assertIn(asset_url, multi_html)
+            self.assertIn(preview_asset_url, multi_html)
             self.assertEqual(200, asset_response.status_code)
             self.assertEqual("image/png", asset_response.headers.get("Content-Type"))
+            self.assertEqual(200, preview_asset_response.status_code)
+            self.assertEqual("image/png", preview_asset_response.headers.get("Content-Type"))
 
 
 if __name__ == "__main__":

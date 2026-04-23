@@ -31,6 +31,7 @@ def _render_study_viewer_html(
     section_outline: list[dict[str, str]] | None = None,
     section_navigation: list[dict[str, str]] | None = None,
     section_metrics: list[str] | None = None,
+    hero_mode: str = "full",
 ) -> str:
     hero_block = ""
     embedded_meta_block = ""
@@ -113,7 +114,7 @@ def _render_study_viewer_html(
             {toolbar_items}
           </div>
         """.format(toolbar_items="".join(toolbar_items))
-    if not embedded:
+    if not embedded and str(hero_mode or "full").strip().lower() != "hidden":
         hero_meta_block = """
             <div class="hero-meta">
               {hero_metric_pills}

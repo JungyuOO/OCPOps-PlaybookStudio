@@ -87,8 +87,9 @@ def attempt_optional_ocr_markdown_fallback(
     settings: Settings | None = None,
     allow_remote: bool = False,
     source_type: str = "pdf",
+    backend_override: str = "",
 ) -> PdfFallbackAttempt:
-    backend = requested_pdf_fallback_backend(settings=settings)
+    backend = str(backend_override or "").strip().lower() or requested_pdf_fallback_backend(settings=settings)
     if not backend:
         return PdfFallbackAttempt(
             status="not_configured",
@@ -136,12 +137,14 @@ def attempt_optional_pdf_markdown_fallback(
     *,
     settings: Settings | None = None,
     allow_remote: bool = False,
+    backend_override: str = "",
 ) -> PdfFallbackAttempt:
     return attempt_optional_ocr_markdown_fallback(
         source,
         settings=settings,
         allow_remote=allow_remote,
         source_type="pdf",
+        backend_override=backend_override,
     )
 
 
@@ -150,12 +153,14 @@ def attempt_optional_image_markdown_fallback(
     *,
     settings: Settings | None = None,
     allow_remote: bool = False,
+    backend_override: str = "",
 ) -> PdfFallbackAttempt:
     return attempt_optional_ocr_markdown_fallback(
         source,
         settings=settings,
         allow_remote=allow_remote,
         source_type="image",
+        backend_override=backend_override,
     )
 
 

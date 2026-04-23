@@ -3921,6 +3921,7 @@
 .reader-stage-draft {
   max-width: 1320px;
   margin: 0 auto;
+  color: var(--pbs-text-main);
 }
 
 .doc-header {
@@ -3939,15 +3940,16 @@
   font-size: 1.22rem;
   margin-top: 6px;
   letter-spacing: -0.02em;
+  color: var(--pbs-text-main);
 }
 
 .doc-summary {
   font-size: 0.86rem;
-  color: rgba(255, 255, 255, 0.58);
+  color: var(--pbs-text-muted);
   line-height: 1.5;
   margin-bottom: 14px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .doc-metadata {

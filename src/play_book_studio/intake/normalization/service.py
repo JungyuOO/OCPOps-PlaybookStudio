@@ -312,9 +312,11 @@ class CustomerPackNormalizeService:
                             "source_unit_count": int(slide_packets_payload.get("slide_count") or 0),
                             "slide_packet_count": int(slide_packets_payload.get("slide_count") or 0),
                             "slide_asset_count": int(slide_packets_payload.get("embedded_asset_count") or 0),
+                            "slide_preview_count": int(slide_packets_payload.get("rendered_slide_asset_count") or 0),
                             "origin_method": str(slide_packets_payload.get("origin_method") or "native").strip() or "native",
                             "ocr_status": str(slide_packets_payload.get("ocr_status") or "not_run").strip() or "not_run",
                             "ocr_backends": list(slide_packets_payload.get("ocr_backends") or []),
+                            "ocr_target_kinds": list(slide_packets_payload.get("ocr_target_kinds") or []),
                             "ocr_candidate_count": int(slide_packets_payload.get("ocr_candidate_count") or 0),
                             "ocr_applied_count": int(slide_packets_payload.get("ocr_applied_count") or 0),
                         }
@@ -360,9 +362,11 @@ class CustomerPackNormalizeService:
                 evidence["ocr_used"] = bool(int(slide_packets_payload.get("ocr_applied_count") or 0) > 0)
                 evidence["ocr_status"] = str(slide_packets_payload.get("ocr_status") or "not_run")
                 evidence["ocr_backends"] = list(slide_packets_payload.get("ocr_backends") or [])
+                evidence["ocr_target_kinds"] = list(slide_packets_payload.get("ocr_target_kinds") or [])
                 evidence["ocr_candidate_count"] = int(slide_packets_payload.get("ocr_candidate_count") or 0)
                 evidence["ocr_applied_count"] = int(slide_packets_payload.get("ocr_applied_count") or 0)
                 evidence["origin_method"] = str(slide_packets_payload.get("origin_method") or "native")
+                evidence["slide_preview_count"] = int(slide_packets_payload.get("rendered_slide_asset_count") or 0)
             for stale_path in self.settings.customer_pack_books_dir.glob(f"{record.draft_id}--*.json"):
                 stale_path.unlink(missing_ok=True)
             canonical_payload["customer_pack_evidence"] = evidence
