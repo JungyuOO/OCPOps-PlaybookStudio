@@ -10,7 +10,6 @@ export const ROUTES = {
   pbsRepository: '/playbook-library/repository',
   opsWorkspaces: '/workspaces',
   opsConnections: '/connections',
-  opsModels: '/models',
   opsOverview: '/overview',
   opsResources: '/resources',
   opsLibrary: '/library',

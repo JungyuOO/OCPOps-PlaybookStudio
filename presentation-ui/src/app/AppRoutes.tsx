@@ -35,7 +35,6 @@ export default function AppRoutes() {
       <Route path={ROUTES.pbsRepository} element={<PlaybookLibraryPage />} />
       <Route path={ROUTES.opsWorkspaces} element={<OpsConsolePage />} />
       <Route path={ROUTES.opsConnections} element={<OpsConsolePage />} />
-      <Route path={ROUTES.opsModels} element={<OpsConsolePage />} />
       <Route path={ROUTES.opsOverview} element={<OpsConsolePage />} />
       <Route path={ROUTES.opsResources} element={<OpsConsolePage />} />
       <Route path={ROUTES.opsLibrary} element={<OpsConsolePage />} />

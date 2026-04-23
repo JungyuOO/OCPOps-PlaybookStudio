@@ -2910,7 +2910,7 @@ export default function WorkspacePage() {
                       <span className="profile-chip">{footerRepoCount} repos</span>
                     </div>
                     <div className="profile-action-stack">
-                      <button className="profile-connection-btn" type="button" onClick={() => openOpsRoute(ROUTES.opsConnections)}>
+                      <button className="profile-connection-btn" type="button" onClick={() => openOpsRoute(ROUTES.opsOverview)}>
                         Cluster
                       </button>
                       <button

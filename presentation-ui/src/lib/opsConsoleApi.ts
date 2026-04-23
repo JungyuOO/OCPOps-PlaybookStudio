@@ -3,7 +3,6 @@ import { RUNTIME_ORIGIN } from './runtimeApi';
 export type OpsRouteKey =
   | 'workspaces'
   | 'connections'
-  | 'models'
   | 'overview'
   | 'resources'
   | 'library'
@@ -18,19 +17,6 @@ export interface OpsWorkspace {
   industry: string;
   environment: string;
   created_at: string;
-  updated_at: string;
-}
-
-export interface OpsModelProfile {
-  workspace_id: string;
-  chat_provider: string;
-  chat_base_url: string;
-  chat_model: string;
-  chat_api_key_mode: string;
-  embedding_provider: string;
-  embedding_base_url: string;
-  embedding_model: string;
-  embedding_api_key_mode: string;
   updated_at: string;
 }
 
@@ -103,6 +89,45 @@ export interface OcpOverview {
   namespace_sample: string[];
   resource_counts: Record<string, number>;
   message: string;
+}
+
+export interface OcpMetricPodRow {
+  name: string;
+  cpu_mcores?: number;
+  memory_mib?: number;
+}
+
+export interface OcpMetricWorkloadRow {
+  kind: string;
+  name: string;
+  ready_replicas: number;
+  replicas: number;
+  status: string;
+}
+
+export interface OcpMetricEventRow {
+  name: string;
+  phase: string;
+}
+
+export interface OcpMetricsResponse {
+  connection_id: string;
+  namespace: string;
+  window: string;
+  source: {
+    provider: string;
+    live: boolean;
+  };
+  summary: {
+    warning_events: number;
+    degraded_deployments: number;
+    top_cpu_pod: OcpMetricPodRow | null;
+    top_memory_pod: OcpMetricPodRow | null;
+  };
+  pod_cpu_top: OcpMetricPodRow[];
+  pod_memory_top: OcpMetricPodRow[];
+  workload_health: OcpMetricWorkloadRow[];
+  event_summary: OcpMetricEventRow[];
 }
 
 export interface NamespaceListResponse {
@@ -244,6 +269,14 @@ export interface OpsChatSource {
 export interface OpsChatArtifact {
   kind: string;
   title: string;
+  connection_id?: string;
+  resource_type?: string;
+  namespace?: string;
+  name?: string;
+  editable?: boolean;
+  total_count?: number;
+  summary?: Record<string, unknown>;
+  manifest_preview?: string;
   items: Array<Record<string, unknown>>;
 }
 
@@ -460,17 +493,6 @@ export async function createOpsWorkspace(payload: { name: string; environment: s
   });
 }
 
-export async function loadOpsModels(workspaceId: string): Promise<OpsModelProfile> {
-  return requestJson<OpsModelProfile>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/models/default`);
-}
-
-export async function saveOpsModels(workspaceId: string, payload: Omit<OpsModelProfile, 'workspace_id' | 'updated_at'>): Promise<OpsModelProfile> {
-  return requestJson<OpsModelProfile>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/models/default`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-}
-
 export async function listRecommendations(workspaceId: string): Promise<RecommendationItem[]> {
   const payload = await requestJson<{ items: RecommendationItem[] }>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/recommendations?limit=10`);
   return payload.items;
@@ -528,6 +550,10 @@ export async function disconnectOcp(connectionId: string): Promise<{ disconnecte
 
 export async function loadOcpOverview(connectionId: string): Promise<OcpOverview> {
   return requestJson(`/api/v1/ocp/overview/${encodeURIComponent(connectionId)}`);
+}
+
+export async function loadOcpMetrics(connectionId: string, namespace: string): Promise<OcpMetricsResponse> {
+  return requestJson(`/api/v1/ocp/metrics/${encodeURIComponent(connectionId)}?namespace=${encodeURIComponent(namespace)}`);
 }
 
 export async function loadNamespaces(connectionId: string): Promise<NamespaceListResponse> {

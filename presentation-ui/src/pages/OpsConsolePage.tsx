@@ -1,14 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
   ArrowRight,
   BookOpen,
-  Bot,
   Cable,
   Database,
   GitBranch,
-  Layers3,
   Send,
   ShieldCheck,
   Sparkles,
@@ -25,7 +23,6 @@ import {
   createOpsWorkspace,
   createScmConnection,
   createScmRepository,
-  disconnectOcp,
   executeActionRequest,
   listActionAudit,
   listActionExecutions,
@@ -44,16 +41,14 @@ import {
   loadLibrarySummary,
   loadNamespaces,
   loadOcpLeaseStatus,
+  loadOcpMetrics,
   loadOcpOverview,
   loadOcpStatus,
-  loadOpsModels,
   loadResourceDetail,
   loadResources,
   previewAction,
   refreshOcpLease,
-  refreshRecommendations,
   rejectActionRequest,
-  saveOpsModels,
   sendOpsChatStream,
   startOAuth,
   testOcpConnection,
@@ -72,9 +67,9 @@ import {
   type NamespaceListResponse,
   type OcpConnection,
   type OcpConnectionTestResult,
+  type OcpMetricsResponse,
   type OcpOverview,
   type OpsChatResponse,
-  type OpsModelProfile,
   type OpsRouteKey,
   type OpsWorkspace,
   type RecommendationItem,
@@ -96,21 +91,19 @@ const ROUTE_SECTIONS: Array<{
   key: OpsRouteKey;
   label: string;
   path: string;
-  icon: typeof Layers3;
+  icon: typeof Activity;
   description: string;
 }> = [
-  { key: 'workspaces', label: 'Workspaces', path: ROUTES.opsWorkspaces, icon: Layers3, description: '작업 컨텍스트 생성과 active 선택' },
-  { key: 'connections', label: 'Connections', path: ROUTES.opsConnections, icon: Cable, description: 'OCP 연결 프로필 생성과 검증' },
-  { key: 'models', label: 'Models', path: ROUTES.opsModels, icon: Bot, description: 'workspace 기본 모델 설정' },
   { key: 'overview', label: 'Overview', path: ROUTES.opsOverview, icon: Activity, description: 'cluster overview와 추천' },
   { key: 'resources', label: 'Resources', path: ROUTES.opsResources, icon: Database, description: 'namespace/resource 탐색 및 YAML' },
-  { key: 'library', label: 'Library', path: ROUTES.opsLibrary, icon: BookOpen, description: '문서 카탈로그와 batch indexing' },
+  { key: 'library', label: 'Docs', path: ROUTES.opsLibrary, icon: BookOpen, description: '문서 카탈로그와 batch indexing' },
   { key: 'chat', label: 'Chat', path: ROUTES.opsChat, icon: Workflow, description: '문서와 live 결과를 함께 보는 Copilot' },
   { key: 'actions', label: 'Actions', path: ROUTES.opsActions, icon: ShieldCheck, description: 'preview/request/approve/execute/audit' },
   { key: 'scm', label: 'SCM', path: ROUTES.opsScm, icon: GitBranch, description: 'OAuth, repo profile, deployment plan' },
 ];
 
 const RESOURCE_OPTIONS = ['pods', 'deployments', 'services', 'routes', 'events'] as const;
+const EDITABLE_RESOURCE_TYPES = new Set(['deployments', 'services', 'routes']);
 const ACTION_OPTIONS = ['scale_deployment', 'rollout_restart', 'log_bundle', 'yaml_apply'] as const;
 const OPS_CHAT_STARTERS = [
   'demo namespace 배포 상태를 먼저 점검해줘',
@@ -118,9 +111,38 @@ const OPS_CHAT_STARTERS = [
   'Route와 Service 연결을 볼 때 어떤 리소스를 같이 봐야 하는지 정리해줘',
   '현재 문서 라이브러리 기준으로 OpenShift 운영 입문 순서를 추천해줘',
 ] as const;
+const CONNECT_GUIDE_STEPS = [
+  {
+    title: '1. Connect by MobaXterm',
+    body: 'VPN 연결 후 bastion 또는 접속 가능한 호스트로 로그인합니다.',
+    code: 'ssh <user>@<bastion-or-node>',
+  },
+  {
+    title: '2. Login to OpenShift',
+    body: 'API server URL과 현재 사용자 토큰을 확인합니다.',
+    code: 'oc login <api-server>\noc whoami --show-server\noc whoami -t',
+  },
+  {
+    title: '3. Service Account Option',
+    body: 'read-only serviceaccount 토큰이 필요하면 demo namespace에서 발급합니다.',
+    code: 'oc -n demo create token rag-reader',
+  },
+  {
+    title: '4. Console Defaults',
+    body: '이 Ops Console은 저장 프로필 기반으로 연결하고 demo namespace를 기본값으로 사용합니다.',
+    code: 'namespace: demo\nSSL verify: false',
+  },
+] as const;
+const OpsOverviewCharts = lazy(() => import('./ops/OpsOverviewCharts'));
 
 function sectionFromPath(pathname: string): OpsRouteKey {
-  return ROUTE_SECTIONS.find((item) => item.path === pathname)?.key ?? 'workspaces';
+  if (pathname === ROUTES.opsConnections) {
+    return 'overview';
+  }
+  if (pathname === ROUTES.opsWorkspaces) {
+    return 'overview';
+  }
+  return ROUTE_SECTIONS.find((item) => item.path === pathname)?.key ?? 'overview';
 }
 
 function formatJson(value: unknown): string {
@@ -131,8 +153,10 @@ function makeId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+
 export default function OpsConsolePage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const section = useMemo(() => sectionFromPath(location.pathname), [location.pathname]);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -140,21 +164,15 @@ export default function OpsConsolePage() {
   const [workspaces, setWorkspaces] = useState<OpsWorkspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => window.localStorage.getItem('opsConsole.activeWorkspaceId') ?? '');
   const [workspaceForm, setWorkspaceForm] = useState({ name: '', environment: 'dev' });
-
-  const [modelProfile, setModelProfile] = useState<OpsModelProfile | null>(null);
-  const [modelDraft, setModelDraft] = useState({
-    chat_provider: 'openai-compatible',
-    chat_base_url: '',
-    chat_model: '',
-    chat_api_key_mode: 'managed',
-    embedding_provider: 'tei',
-    embedding_base_url: '',
-    embedding_model: 'bge-m3',
-    embedding_api_key_mode: 'managed',
-  });
+  const [showWorkspaceCreateForm, setShowWorkspaceCreateForm] = useState(false);
 
   const [connections, setConnections] = useState<OcpConnection[]>([]);
   const [activeConnectionId, setActiveConnectionId] = useState(() => window.localStorage.getItem('opsConsole.activeConnectionId') ?? '');
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [connectStep, setConnectStep] = useState<1 | 2>(1);
+  const [modalProfileId, setModalProfileId] = useState('');
+  const [guideStepIndex, setGuideStepIndex] = useState(0);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [connectionForm, setConnectionForm] = useState({
     cluster_url: 'https://api.cluster.example.com:6443',
     auth_mode: 'token',
@@ -166,21 +184,32 @@ export default function OpsConsolePage() {
     username: '',
     password: '',
   });
-  const [connectionStatus, setConnectionStatus] = useState<OcpConnection | null>(null);
+  const [connectionDraft, setConnectionDraft] = useState({
+    cluster_url: '',
+    display_name: '',
+    token: '',
+    username: '',
+    password: '',
+  });
+  const [expandedCredentialField, setExpandedCredentialField] = useState<string | null>(null);
   const [connectionTest, setConnectionTest] = useState<OcpConnectionTestResult | null>(null);
-  const [leaseStatus, setLeaseStatus] = useState<any | null>(null);
 
   const [overview, setOverview] = useState<OcpOverview | null>(null);
+  const [overviewMetrics, setOverviewMetrics] = useState<OcpMetricsResponse | null>(null);
+  const [overviewRefreshing, setOverviewRefreshing] = useState(false);
+  const [overviewLastUpdatedAt, setOverviewLastUpdatedAt] = useState('');
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
 
   const [namespaces, setNamespaces] = useState<NamespaceListResponse | null>(null);
-  const [selectedNamespace, setSelectedNamespace] = useState('default');
+  const [selectedNamespace, setSelectedNamespace] = useState(() => window.localStorage.getItem('opsConsole.selectedNamespace') ?? '');
   const [selectedResourceType, setSelectedResourceType] = useState<typeof RESOURCE_OPTIONS[number]>('deployments');
   const [resourceList, setResourceList] = useState<ResourceListResponse | null>(null);
   const [selectedResourceName, setSelectedResourceName] = useState('');
   const [resourceDetail, setResourceDetail] = useState<ResourceDetailResponse | null>(null);
   const [yamlEditor, setYamlEditor] = useState('');
   const [yamlPreview, setYamlPreview] = useState<ActionPreview | null>(null);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
+  const [resourceDetailLoading, setResourceDetailLoading] = useState(false);
 
   const [librarySummary, setLibrarySummary] = useState<LibrarySummary | null>(null);
   const [libraryCatalog, setLibraryCatalog] = useState<LibraryCatalogItem[]>([]);
@@ -236,9 +265,14 @@ export default function OpsConsolePage() {
   });
   const [deploymentPlan, setDeploymentPlan] = useState<DeploymentPlanResponse | null>(null);
 
-  const activeWorkspace = workspaces.find((item) => item.workspace_id === activeWorkspaceId) ?? null;
   const activeConnection = connections.find((item) => item.connection_id === activeConnectionId) ?? null;
+  const savedProfiles = useMemo(
+    () => connections.filter((item) => item.save_profile).sort((left, right) => right.last_verified_at.localeCompare(left.last_verified_at)),
+    [connections],
+  );
+  const modalProfile = savedProfiles.find((item) => item.connection_id === modalProfileId) ?? savedProfiles[0] ?? null;
   const sectionMeta = ROUTE_SECTIONS.find((item) => item.key === section) ?? ROUTE_SECTIONS[0];
+  const resourceEditable = EDITABLE_RESOURCE_TYPES.has(selectedResourceType);
 
   useEffect(() => {
     window.localStorage.setItem('opsConsole.activeWorkspaceId', activeWorkspaceId);
@@ -247,6 +281,32 @@ export default function OpsConsolePage() {
   useEffect(() => {
     window.localStorage.setItem('opsConsole.activeConnectionId', activeConnectionId);
   }, [activeConnectionId]);
+
+  useEffect(() => {
+    window.localStorage.setItem('opsConsole.selectedNamespace', selectedNamespace);
+  }, [selectedNamespace]);
+
+  useEffect(() => {
+    if (location.pathname === ROUTES.opsWorkspaces || location.pathname === ROUTES.opsConnections) {
+      navigate(ROUTES.opsOverview, { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
+  useEffect(() => {
+    if (!activeConnectionId) {
+      setShowConnectModal(true);
+      setConnectStep(savedProfiles.length > 0 ? 1 : 2);
+    }
+  }, [activeConnectionId, savedProfiles.length]);
+
+  useEffect(() => {
+    if (!modalProfileId && savedProfiles.length > 0) {
+      setModalProfileId(savedProfiles[0].connection_id);
+    }
+    if (modalProfileId && !savedProfiles.some((item) => item.connection_id === modalProfileId)) {
+      setModalProfileId(savedProfiles[0]?.connection_id ?? '');
+    }
+  }, [modalProfileId, savedProfiles]);
 
   useEffect(() => {
     void refreshWorkspaces();
@@ -266,7 +326,6 @@ export default function OpsConsolePage() {
       return;
     }
     void refreshConnections(activeWorkspaceId);
-    void refreshModels(activeWorkspaceId);
     void refreshRecommendationsForWorkspace(activeWorkspaceId);
     void refreshLibrary(activeWorkspaceId);
     void refreshScm(activeWorkspaceId);
@@ -280,6 +339,59 @@ export default function OpsConsolePage() {
     void refreshOverview(activeConnectionId);
     void refreshNamespaces(activeConnectionId);
   }, [activeConnectionId]);
+
+  useEffect(() => {
+    if (!activeConnectionId || !selectedNamespace) {
+      return;
+    }
+    void refreshOverviewMetrics(activeConnectionId, selectedNamespace);
+  }, [activeConnectionId, selectedNamespace]);
+
+  useEffect(() => {
+    if (section !== 'overview' || !activeConnectionId || !selectedNamespace) {
+      return;
+    }
+    let cancelled = false;
+    const runRefreshCycle = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+      setOverviewRefreshing(true);
+      try {
+        await Promise.all([
+          refreshOverview(activeConnectionId),
+          refreshOverviewMetrics(activeConnectionId, selectedNamespace),
+          activeWorkspaceId ? refreshRecommendationsForWorkspace(activeWorkspaceId) : Promise.resolve(),
+        ]);
+        if (!cancelled) {
+          setOverviewLastUpdatedAt(
+            new Date().toLocaleTimeString('ko-KR', {
+              hour12: false,
+            }),
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setOverviewRefreshing(false);
+        }
+      }
+    };
+    void runRefreshCycle();
+    const intervalId = window.setInterval(() => {
+      void runRefreshCycle();
+    }, 10000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void runRefreshCycle();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [section, activeConnectionId, selectedNamespace, activeWorkspaceId]);
 
   useEffect(() => {
     if (!activeConnectionId || !selectedNamespace || !selectedResourceType) {
@@ -320,7 +432,7 @@ export default function OpsConsolePage() {
   async function refreshConnections(workspaceId?: string) {
     return run(async () => listOcpProfiles(workspaceId), (items) => {
       setConnections(items);
-      if (items.length > 0 && !items.some((item) => item.connection_id === activeConnectionId)) {
+      if (activeConnectionId && items.length > 0 && !items.some((item) => item.connection_id === activeConnectionId)) {
         setActiveConnectionId(items[0].connection_id);
       }
       if (items.length === 0) {
@@ -331,7 +443,7 @@ export default function OpsConsolePage() {
 
   async function refreshConnectionStatus(connectionId: string) {
     return run(async () => loadOcpStatus(connectionId), (value) => {
-      setConnectionStatus(value);
+      setSelectedNamespace((current) => current || value.default_namespace || 'demo');
       setConnections((current) => {
         const exists = current.some((item) => item.connection_id === value.connection_id);
         if (exists) {
@@ -343,23 +455,7 @@ export default function OpsConsolePage() {
   }
 
   async function refreshLeaseStatus() {
-    return run(async () => loadOcpLeaseStatus(), (value) => setLeaseStatus(value));
-  }
-
-  async function refreshModels(workspaceId: string) {
-    return run(async () => loadOpsModels(workspaceId), (value) => {
-      setModelProfile(value);
-      setModelDraft({
-        chat_provider: value.chat_provider,
-        chat_base_url: value.chat_base_url,
-        chat_model: value.chat_model,
-        chat_api_key_mode: value.chat_api_key_mode,
-        embedding_provider: value.embedding_provider,
-        embedding_base_url: value.embedding_base_url,
-        embedding_model: value.embedding_model,
-        embedding_api_key_mode: value.embedding_api_key_mode,
-      });
-    });
+    return run(async () => loadOcpLeaseStatus(), () => undefined);
   }
 
   async function refreshRecommendationsForWorkspace(workspaceId: string) {
@@ -370,29 +466,49 @@ export default function OpsConsolePage() {
     return run(async () => loadOcpOverview(connectionId), (value) => setOverview(value));
   }
 
+  async function refreshOverviewMetrics(connectionId: string, namespace: string) {
+    return run(async () => loadOcpMetrics(connectionId, namespace), (value) => setOverviewMetrics(value));
+  }
+
   async function refreshNamespaces(connectionId: string) {
     return run(async () => loadNamespaces(connectionId), (value) => {
       setNamespaces(value);
       if (!value.items.includes(selectedNamespace)) {
-        setSelectedNamespace(value.items[0] ?? 'default');
+        const preferredNamespace = activeConnection?.default_namespace || value.items[0] || 'demo';
+        setSelectedNamespace(preferredNamespace);
       }
     });
   }
 
   async function refreshResources(connectionId: string, resourceType: string, namespace: string) {
-    return run(async () => loadResources(connectionId, resourceType, namespace), (value) => {
+    setResourcesLoading(true);
+    setResourceDetailLoading(true);
+    setResourceList(null);
+    setResourceDetail(null);
+    setYamlEditor('');
+    setYamlPreview(null);
+    setSelectedResourceName('');
+    try {
+      const value = await loadResources(connectionId, resourceType, namespace);
       setResourceList(value);
       const preferredName = value.items.some((item) => item.name === selectedResourceName)
         ? selectedResourceName
         : value.items[0]?.name ?? '';
       setSelectedResourceName(preferredName);
       if (preferredName) {
-        void openResourceDetail(connectionId, resourceType, namespace, preferredName);
+        await openResourceDetail(connectionId, resourceType, namespace, preferredName);
       } else {
         setResourceDetail(null);
         setYamlEditor('');
+        setResourceDetailLoading(false);
       }
-    });
+      return value;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '리소스를 불러오는 중 오류가 발생했습니다.');
+      return null;
+    } finally {
+      setResourcesLoading(false);
+    }
   }
 
   async function refreshLibrary(workspaceId: string) {
@@ -412,9 +528,133 @@ export default function OpsConsolePage() {
     await run(async () => listScmRepositories(workspaceId), (value) => setScmRepositories(value));
   }
 
+  function resetConnectionDraft() {
+    setConnectionDraft({
+      cluster_url: '',
+      display_name: '',
+      token: '',
+      username: '',
+      password: '',
+    });
+    setExpandedCredentialField(null);
+  }
+
+  function syncConnectionForm(connection: OcpConnection) {
+    setConnectionForm((current) => ({
+      ...current,
+      cluster_url: connection.cluster_url,
+      auth_mode: connection.auth_mode,
+      verify_ssl: connection.verify_ssl,
+      default_namespace: connection.default_namespace,
+      display_name: connection.display_name,
+      save_profile: connection.save_profile,
+      token: current.token,
+      username: connection.username_hint || current.username,
+      password: '',
+    }));
+    resetConnectionDraft();
+  }
+
+  async function activateSavedProfile(connection: OcpConnection) {
+    setActiveWorkspaceId(connection.workspace_id);
+    setActiveConnectionId(connection.connection_id);
+    setModalProfileId(connection.connection_id);
+    setSelectedNamespace(connection.default_namespace || 'demo');
+    syncConnectionForm(connection);
+    setProfileMenuOpen(false);
+    setShowConnectModal(false);
+    navigate(ROUTES.opsOverview);
+    await refreshConnectionStatus(connection.connection_id);
+  }
+
+  function openConnectModal(step: 1 | 2 = 1) {
+    setConnectStep(step);
+    if (step === 1) {
+      setGuideStepIndex(0);
+    }
+    resetConnectionDraft();
+    setModalProfileId(activeConnectionId || savedProfiles[0]?.connection_id || '');
+    setProfileMenuOpen(false);
+    setShowConnectModal(true);
+  }
+
   async function openResourceDetail(connectionId: string, resourceType: string, namespace: string, name: string) {
     setSelectedResourceName(name);
-    await run(async () => loadResourceDetail(connectionId, resourceType, namespace, name), (value) => setResourceDetail(value));
+    setResourceDetailLoading(true);
+    setResourceDetail(null);
+    setYamlEditor('');
+    setYamlPreview(null);
+    try {
+      const value = await loadResourceDetail(connectionId, resourceType, namespace, name);
+      setResourceDetail(value);
+      return value;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '리소스 상세를 불러오는 중 오류가 발생했습니다.');
+      return null;
+    } finally {
+      setResourceDetailLoading(false);
+    }
+  }
+
+  async function openChatArtifactResource(artifact: {
+    connection_id?: string;
+    resource_type?: string;
+    namespace?: string;
+    name?: string;
+  }) {
+    const connectionId = String(artifact.connection_id || activeConnectionId || '').trim();
+    const resourceType = String(artifact.resource_type || '').trim();
+    const namespace = String(artifact.namespace || selectedNamespace || '').trim();
+    const name = String(artifact.name || '').trim();
+    if (!connectionId || !resourceType || !namespace) {
+      setError('Artifact에 필요한 리소스 정보가 부족합니다.');
+      return;
+    }
+    setActiveConnectionId(connectionId);
+    setSelectedNamespace(namespace);
+    if (RESOURCE_OPTIONS.includes(resourceType as typeof RESOURCE_OPTIONS[number])) {
+      setSelectedResourceType(resourceType as typeof RESOURCE_OPTIONS[number]);
+    }
+    navigate(ROUTES.opsResources);
+    if (name) {
+      await openResourceDetail(connectionId, resourceType, namespace, name);
+    } else {
+      await refreshResources(connectionId, resourceType, namespace);
+    }
+  }
+
+  async function handleCreateConnection() {
+    if (!activeWorkspaceId) {
+      setError('먼저 workspace를 선택하세요.');
+      return;
+    }
+    const payload = {
+      ...connectionForm,
+      cluster_url: connectionDraft.cluster_url.trim() || connectionForm.cluster_url,
+      display_name: connectionDraft.display_name.trim() || connectionForm.display_name,
+      token: connectionDraft.token.trim() || connectionForm.token,
+      username: connectionDraft.username.trim() || connectionForm.username,
+      password: connectionDraft.password || connectionForm.password,
+    };
+    const created = await run(
+      async () => connectOcp({ workspace_id: activeWorkspaceId, ...payload }),
+      (value) => {
+        setNotice(value.message);
+        setConnections((current) => [value.connection, ...current.filter((item) => item.connection_id !== value.connection.connection_id)]);
+        setActiveConnectionId(value.connection.connection_id);
+        setModalProfileId(value.connection.connection_id);
+        setSelectedNamespace(value.connection.default_namespace || 'demo');
+        setShowConnectModal(false);
+        setConnectStep(1);
+        setProfileMenuOpen(false);
+        resetConnectionDraft();
+      },
+    );
+    if (created) {
+      await refreshConnectionStatus(created.connection.connection_id);
+      await refreshRecommendationsForWorkspace(activeWorkspaceId);
+      navigate(ROUTES.opsOverview);
+    }
   }
 
   async function handleCreateWorkspace() {
@@ -422,9 +662,10 @@ export default function OpsConsolePage() {
       async () => createOpsWorkspace(workspaceForm),
       (value) => {
         setNotice(`Workspace "${value.name}" created.`);
-        setWorkspaceForm({ name: '', environment: 'dev' });
         setWorkspaces((current) => [value, ...current]);
         setActiveWorkspaceId(value.workspace_id);
+        setWorkspaceForm({ name: '', environment: 'dev' });
+        setShowWorkspaceCreateForm(false);
       },
     );
     if (created) {
@@ -432,42 +673,25 @@ export default function OpsConsolePage() {
     }
   }
 
-  async function handleCreateConnection() {
-    if (!activeWorkspaceId) {
-      setError('먼저 active workspace를 선택하세요.');
-      return;
-    }
-    const created = await run(
-      async () => connectOcp({ workspace_id: activeWorkspaceId, ...connectionForm }),
-      (value) => {
-        setNotice(value.message);
-        setConnections((current) => [value.connection, ...current.filter((item) => item.connection_id !== value.connection.connection_id)]);
-        setActiveConnectionId(value.connection.connection_id);
-      },
-    );
-    if (created) {
-      await refreshConnectionStatus(created.connection.connection_id);
-      await refreshRecommendationsForWorkspace(activeWorkspaceId);
-    }
-  }
-
   async function handleTestConnection() {
-    if (!activeConnectionId) {
-      setError('먼저 연결을 선택하세요.');
+    const targetConnectionId = activeConnectionId || modalProfile?.connection_id || '';
+    if (!targetConnectionId) {
+      setError('저장된 프로필을 선택하거나 먼저 연결을 생성하세요.');
       return;
     }
-    await run(async () => testOcpConnection(activeConnectionId), (value) => {
+    await run(async () => testOcpConnection(targetConnectionId), (value) => {
       setConnectionTest(value);
       setNotice(value.message);
     });
   }
 
   async function handleRefreshLease() {
-    if (!activeConnectionId) {
-      setError('먼저 연결을 선택하세요.');
+    const targetConnectionId = activeConnectionId || modalProfile?.connection_id || '';
+    if (!targetConnectionId) {
+      setError('활성 프로필이 있을 때만 lease를 갱신할 수 있습니다.');
       return;
     }
-    await run(async () => refreshOcpLease(activeConnectionId), (value) => {
+    await run(async () => refreshOcpLease(targetConnectionId), (value) => {
       setConnectionTest(value);
       setNotice('Lease metadata refreshed.');
     });
@@ -475,44 +699,19 @@ export default function OpsConsolePage() {
   }
 
   async function handleDisconnect() {
-    if (!activeConnectionId) {
-      setError('먼저 연결을 선택하세요.');
-      return;
-    }
-    const disconnectedId = activeConnectionId;
-    const result = await run(async () => disconnectOcp(disconnectedId), () => {
-      setNotice('Connection disconnected.');
-      setConnections((current) => current.filter((item) => item.connection_id !== disconnectedId));
-      setActiveConnectionId('');
-      setConnectionStatus(null);
-      setConnectionTest(null);
-      setOverview(null);
-    });
-    if (result) {
-      await refreshLeaseStatus();
-    }
-  }
-
-  async function handleSaveModels() {
-    if (!activeWorkspaceId) {
-      setError('먼저 active workspace를 선택하세요.');
-      return;
-    }
-    await run(async () => saveOpsModels(activeWorkspaceId, modelDraft), (value) => {
-      setModelProfile(value);
-      setNotice('Model profile saved.');
-    });
-  }
-
-  async function handleRefreshRecommendations() {
-    if (!activeWorkspaceId || !activeConnectionId) {
-      setError('workspace와 connection이 모두 필요합니다.');
-      return;
-    }
-    await run(async () => refreshRecommendations(activeWorkspaceId, activeConnectionId), (value) => {
-      setRecommendations(value);
-      setNotice('Recommendations refreshed.');
-    });
+    const previousConnectionId = activeConnectionId || savedProfiles[0]?.connection_id || '';
+    setNotice('Active profile cleared. Reconnect to continue.');
+    setActiveConnectionId('');
+    setModalProfileId(previousConnectionId);
+    setConnectionTest(null);
+    setOverview(null);
+    setOverviewMetrics(null);
+    setResourceDetail(null);
+    setYamlEditor('');
+    setYamlPreview(null);
+    setProfileMenuOpen(false);
+    setShowConnectModal(true);
+    setConnectStep(savedProfiles.length > 0 ? 1 : 2);
   }
 
   async function handlePreviewYaml() {
@@ -526,6 +725,7 @@ export default function OpsConsolePage() {
         actor_id: actionForm.actor_id,
         actor_roles: actionForm.actor_roles.split(',').map((item) => item.trim()).filter(Boolean),
         action_type: 'yaml_apply',
+        resource_type: selectedResourceType,
         namespace: selectedNamespace,
         resource_name: selectedResourceName,
         reason: 'edit resource yaml',
@@ -645,6 +845,7 @@ export default function OpsConsolePage() {
         actor_id: actionForm.actor_id,
         actor_roles: actionForm.actor_roles.split(',').map((item) => item.trim()).filter(Boolean),
         action_type: actionForm.action_type,
+        resource_type: selectedResourceType,
         namespace: selectedNamespace,
         resource_name: actionForm.resource_name,
         replicas: actionForm.replicas,
@@ -666,6 +867,7 @@ export default function OpsConsolePage() {
         actor_id: actionForm.actor_id,
         actor_roles: actionForm.actor_roles.split(',').map((item) => item.trim()).filter(Boolean),
         action_type: actionForm.action_type,
+        resource_type: selectedResourceType,
         namespace: selectedNamespace,
         resource_name: actionForm.resource_name,
         replicas: actionForm.replicas,
@@ -759,36 +961,57 @@ export default function OpsConsolePage() {
     );
   }
 
-  const contextCards = [
-    { label: 'Active workspace', value: activeWorkspace?.name || 'Not selected' },
-    { label: 'Active connection', value: activeConnection?.display_name || 'Not connected' },
-    { label: 'Current section', value: sectionMeta.label },
-  ];
-
   return (
     <div className="ops-console-page">
-      <header className="ops-console-hero">
-        <div>
-          <div className="ops-console-kicker">Current Spec Console</div>
-          <div className="ops-console-return-row">
-            <Link to={ROUTES.sharedHome} className="ops-return-link">Landing</Link>
-            <Link to={ROUTES.pbsStudio} className="ops-return-link">Studio</Link>
-            <Link to={ROUTES.pbsPlaybookLibrary} className="ops-return-link">Library</Link>
-          </div>
+      <header className="ops-console-hero ops-console-hero-compact">
+        <div className="ops-console-brand">
           <h1>Operations Console</h1>
           <p>{sectionMeta.description}</p>
         </div>
-        <div className="ops-console-context-grid">
-          {contextCards.map((card) => (
-            <div key={card.label} className="ops-context-card">
-              <span>{card.label}</span>
-              <strong>{card.value}</strong>
+        <div className="ops-console-hero-actions">
+          <Link to={ROUTES.pbsStudio} className="ops-nav-pill ops-nav-pill-utility">Studio</Link>
+          {activeConnection ? (
+            <div className="ops-profile-shell">
+              <button type="button" className="ops-nav-pill ops-nav-pill-profile" onClick={() => setProfileMenuOpen((current) => !current)}>
+                <Cable size={16} />
+                <span>{activeConnection.display_name}</span>
+              </button>
+              {profileMenuOpen ? (
+                <div className="ops-profile-menu">
+                  <div className="ops-profile-menu-head">
+                    <strong>{activeConnection.display_name}</strong>
+                    <span>{activeConnection.default_namespace} · {activeConnection.status}</span>
+                  </div>
+                  {savedProfiles.length > 1 ? (
+                    <div className="ops-profile-switch-list">
+                      {savedProfiles
+                        .filter((item) => item.connection_id !== activeConnection.connection_id)
+                        .slice(0, 4)
+                        .map((item) => (
+                          <button key={item.connection_id} type="button" className="ops-profile-switch-item" onClick={() => { void activateSavedProfile(item); }}>
+                            <strong>{item.display_name}</strong>
+                            <span>{item.default_namespace}</span>
+                          </button>
+                        ))}
+                    </div>
+                  ) : null}
+                  <div className="ops-inline-actions">
+                    <button type="button" onClick={() => openConnectModal(1)}>Manage profiles</button>
+                    <button type="button" onClick={() => { void handleDisconnect(); }}>Log out</button>
+                  </div>
+                </div>
+              ) : null}
             </div>
-          ))}
+          ) : (
+            <button type="button" className="ops-nav-pill ops-nav-pill-profile" onClick={() => openConnectModal(savedProfiles.length > 0 ? 1 : 2)}>
+              <Cable size={16} />
+              <span>Connect Cluster</span>
+            </button>
+          )}
         </div>
       </header>
 
-      <nav className="ops-console-nav">
+      <nav className="ops-console-nav ops-console-nav-compact">
         {ROUTE_SECTIONS.map((item) => {
           const Icon = item.icon;
           return (
@@ -803,169 +1026,308 @@ export default function OpsConsolePage() {
       {notice ? <div className="ops-banner success">{notice}</div> : null}
       {error ? <div className="ops-banner error">{error}</div> : null}
 
-      <div className="ops-console-layout">
-        <aside className="ops-sidebar">
-          <section className="ops-panel">
-            <div className="ops-panel-header">
-              <h3>Workspace Context</h3>
-            </div>
-            <div className="ops-field">
-              <label>Active workspace</label>
-              <select value={activeWorkspaceId} onChange={(event) => setActiveWorkspaceId(event.target.value)}>
-                {workspaces.map((workspace) => (
-                  <option key={workspace.workspace_id} value={workspace.workspace_id}>{workspace.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="ops-field">
-              <label>Active connection</label>
-              <select value={activeConnectionId} onChange={(event) => setActiveConnectionId(event.target.value)}>
-                <option value="">Select connection</option>
-                {connections.map((connection) => (
-                  <option key={connection.connection_id} value={connection.connection_id}>{connection.display_name}</option>
-                ))}
-              </select>
-            </div>
-          </section>
-
-          <section className="ops-panel">
-            <div className="ops-panel-header">
-              <h3>Section Intent</h3>
-            </div>
-            <p className="ops-muted">{sectionMeta.description}</p>
-            <ul className="ops-compact-list">
-              <li>문서 스펙 경로를 그대로 유지합니다.</li>
-              <li>기존 PBS 셸과 충돌 없이 병행 동작합니다.</li>
-              <li>상태는 로컬 JSON 저장소를 사용합니다.</li>
-            </ul>
-          </section>
-        </aside>
-
-        <main className="ops-main">
-          {section === 'workspaces' && (
-            <section className="ops-panel">
-              <div className="ops-panel-header">
-                <h2>Workspace Management</h2>
+      {showConnectModal ? (
+        <div className="ops-modal-backdrop" onClick={() => { if (activeConnectionId) { setShowConnectModal(false); } }}>
+          <section className="ops-connect-modal" role="dialog" aria-modal="true" aria-label="Connect OpenShift cluster" onClick={(event) => event.stopPropagation()}>
+            <aside className="ops-connect-sidebar">
+              <div className="ops-connect-sidebar-head">
+                <strong>Saved Profiles</strong>
+                <button type="button" className="ops-secondary-btn" onClick={() => {
+                  setModalProfileId('');
+                  setConnectStep(2);
+                  setConnectionTest(null);
+                  setConnectionForm((current) => ({
+                    ...current,
+                    cluster_url: 'https://api.cluster.example.com:6443',
+                    auth_mode: 'token',
+                    verify_ssl: false,
+                    default_namespace: 'demo',
+                    display_name: 'dev-cluster',
+                    save_profile: true,
+                    token: '',
+                    username: '',
+                    password: '',
+                  }));
+                  resetConnectionDraft();
+                }}>
+                  New
+                </button>
               </div>
-              <div className="ops-form-grid">
-                <div className="ops-field">
-                  <label>Name</label>
-                  <input value={workspaceForm.name} onChange={(event) => setWorkspaceForm((current) => ({ ...current, name: event.target.value }))} />
-                </div>
-                <div className="ops-field">
-                  <label>Environment</label>
-                  <input value={workspaceForm.environment} onChange={(event) => setWorkspaceForm((current) => ({ ...current, environment: event.target.value }))} />
-                </div>
-              </div>
-              <div className="ops-actions-row">
-                <button type="button" className="ops-primary-btn" onClick={() => { void handleCreateWorkspace(); }}>Create workspace</button>
-                <button type="button" className="ops-secondary-btn" onClick={() => { void refreshWorkspaces(); }}>Refresh list</button>
-              </div>
-              <div className="ops-card-grid">
-                {workspaces.map((workspace) => (
-                  <button key={workspace.workspace_id} type="button" className={`ops-record-card ${workspace.workspace_id === activeWorkspaceId ? 'selected' : ''}`} onClick={() => setActiveWorkspaceId(workspace.workspace_id)}>
-                    <strong>{workspace.name}</strong>
-                    <span>{workspace.environment}</span>
-                    <span>{workspace.slug}</span>
+              <div className="ops-connect-profile-list">
+                {savedProfiles.length > 0 ? savedProfiles.map((profile) => (
+                  <button
+                    key={profile.connection_id}
+                    type="button"
+                    className={`ops-connect-profile-card ${modalProfile?.connection_id === profile.connection_id ? 'selected' : ''}`}
+                    onClick={() => {
+                      setModalProfileId(profile.connection_id);
+                      syncConnectionForm(profile);
+                      setActiveWorkspaceId(profile.workspace_id);
+                      setConnectionTest(null);
+                      setConnectStep(1);
+                    }}
+                  >
+                    <strong>{profile.display_name}</strong>
+                    <span>{profile.default_namespace}</span>
+                    <span>{profile.status}</span>
                   </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {section === 'connections' && (
-            <section className="ops-panel">
-              <div className="ops-panel-header">
-                <h2>OpenShift Connections</h2>
-              </div>
-              <div className="ops-form-grid three">
-                <div className="ops-field">
-                  <label>Cluster URL</label>
-                  <input value={connectionForm.cluster_url} onChange={(event) => setConnectionForm((current) => ({ ...current, cluster_url: event.target.value }))} />
-                </div>
-                <div className="ops-field">
-                  <label>Auth mode</label>
-                  <select value={connectionForm.auth_mode} onChange={(event) => setConnectionForm((current) => ({ ...current, auth_mode: event.target.value }))}>
-                    <option value="token">token</option>
-                    <option value="password">password</option>
-                  </select>
-                </div>
-                <div className="ops-field">
-                  <label>Default namespace</label>
-                  <input value={connectionForm.default_namespace} disabled />
-                </div>
-                <div className="ops-field">
-                  <label>Display name</label>
-                  <input value={connectionForm.display_name} onChange={(event) => setConnectionForm((current) => ({ ...current, display_name: event.target.value }))} />
-                </div>
-                {connectionForm.auth_mode === 'token' ? (
-                  <div className="ops-field">
-                    <label>Token</label>
-                    <input value={connectionForm.token} onChange={(event) => setConnectionForm((current) => ({ ...current, token: event.target.value }))} />
+                )) : (
+                  <div className="ops-connect-empty">
+                    <strong>No saved profile</strong>
+                    <span>Create your first cluster profile.</span>
                   </div>
-                ) : (
-                  <>
-                    <div className="ops-field">
-                      <label>Username</label>
-                      <input value={connectionForm.username} onChange={(event) => setConnectionForm((current) => ({ ...current, username: event.target.value }))} />
-                    </div>
-                    <div className="ops-field">
-                      <label>Password</label>
-                      <input type="password" value={connectionForm.password} onChange={(event) => setConnectionForm((current) => ({ ...current, password: event.target.value }))} />
-                    </div>
-                  </>
                 )}
               </div>
-              <div className="ops-actions-row">
-                <button type="button" className="ops-primary-btn" onClick={() => { void handleCreateConnection(); }}>Create connection</button>
-                <button type="button" className="ops-secondary-btn" onClick={() => { void handleTestConnection(); }}>Test connection</button>
-                <button type="button" className="ops-secondary-btn" onClick={() => { void handleRefreshLease(); }}>Refresh lease</button>
-                <button type="button" className="ops-secondary-btn" onClick={() => { void handleDisconnect(); }}>Disconnect</button>
-              </div>
-              <div className="ops-card-grid">
-                {connections.map((connection) => (
-                  <button key={connection.connection_id} type="button" className={`ops-record-card ${connection.connection_id === activeConnectionId ? 'selected' : ''}`} onClick={() => setActiveConnectionId(connection.connection_id)}>
-                    <strong>{connection.display_name}</strong>
-                    <span>{connection.cluster_url}</span>
-                    <span>{connection.default_namespace}</span>
+              <div className="ops-connect-sidebar-foot">
+                <label className="ops-field">
+                  <span>Workspace</span>
+                  <select value={activeWorkspaceId} onChange={(event) => setActiveWorkspaceId(event.target.value)}>
+                    {workspaces.map((workspace) => (
+                      <option key={workspace.workspace_id} value={workspace.workspace_id}>{workspace.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="ops-inline-actions">
+                  <button type="button" className="ops-secondary-btn" onClick={() => { void refreshWorkspaces(); }}>Refresh</button>
+                  <button type="button" className="ops-secondary-btn" onClick={() => setShowWorkspaceCreateForm((current) => !current)}>
+                    {showWorkspaceCreateForm ? 'Hide form' : 'New workspace'}
                   </button>
-                ))}
-              </div>
-              <div className="ops-detail-grid">
-                <pre>{formatJson(connectionStatus)}</pre>
-                <pre>{formatJson(connectionTest)}</pre>
-                <pre>{formatJson(leaseStatus)}</pre>
-              </div>
-            </section>
-          )}
-
-          {section === 'models' && (
-            <section className="ops-panel">
-              <div className="ops-panel-header">
-                <h2>Workspace Models</h2>
-              </div>
-              <div className="ops-form-grid two">
-                {Object.entries(modelDraft).map(([key, value]) => (
-                  <div key={key} className="ops-field">
-                    <label>{key}</label>
-                    <input value={value} onChange={(event) => setModelDraft((current) => ({ ...current, [key]: event.target.value }))} />
+                </div>
+                {showWorkspaceCreateForm ? (
+                  <div className="ops-connect-workspace-form">
+                    <label className="ops-field">
+                      <span>Name</span>
+                      <input value={workspaceForm.name} onChange={(event) => setWorkspaceForm((current) => ({ ...current, name: event.target.value }))} placeholder="Platform Ops" />
+                    </label>
+                    <label className="ops-field">
+                      <span>Environment</span>
+                      <input value={workspaceForm.environment} onChange={(event) => setWorkspaceForm((current) => ({ ...current, environment: event.target.value }))} placeholder="dev" />
+                    </label>
+                    <button type="button" className="ops-primary-btn" onClick={() => { void handleCreateWorkspace(); }}>
+                      Create workspace
+                    </button>
                   </div>
-                ))}
+                ) : null}
               </div>
-              <div className="ops-actions-row">
-                <button type="button" className="ops-primary-btn" onClick={() => { void handleSaveModels(); }}>Save models</button>
+            </aside>
+            <div className="ops-connect-main">
+              <div className="ops-connect-main-head">
+                <div>
+                  <h2>Connect Cluster</h2>
+                  <p>저장 프로필을 선택하거나 새 연결을 만들어 바로 Overview로 진입합니다.</p>
+                </div>
+                {activeConnectionId ? (
+                  <button type="button" className="ops-secondary-btn" onClick={() => setShowConnectModal(false)}>
+                    Close
+                  </button>
+                ) : null}
               </div>
-              <pre>{formatJson(modelProfile)}</pre>
-            </section>
-          )}
+              <div className="ops-connect-stepbar">
+                <button type="button" className={`ops-step-chip ${connectStep === 1 ? 'active' : ''}`} onClick={() => setConnectStep(1)}>1. Guide</button>
+                <button type="button" className={`ops-step-chip ${connectStep === 2 ? 'active' : ''}`} onClick={() => setConnectStep(2)}>2. Credentials</button>
+              </div>
+              {connectStep === 1 ? (
+                <div className="ops-connect-step-layout">
+                  <div className="ops-guide-carousel">
+                    <div className="ops-guide-card ops-guide-card-focus">
+                      <div className="ops-guide-card-meta">
+                        <span>{guideStepIndex + 1} / {CONNECT_GUIDE_STEPS.length}</span>
+                        <strong>{CONNECT_GUIDE_STEPS[guideStepIndex].title}</strong>
+                      </div>
+                      <p>{CONNECT_GUIDE_STEPS[guideStepIndex].body}</p>
+                      <pre>{CONNECT_GUIDE_STEPS[guideStepIndex].code}</pre>
+                    </div>
+                    <div className="ops-connect-guide-nav">
+                      <button
+                        type="button"
+                        className="ops-secondary-btn ops-guide-nav-prev-btn"
+                        disabled={guideStepIndex === 0}
+                        onClick={() => setGuideStepIndex((current) => Math.max(0, current - 1))}
+                      >
+                        ← Previous
+                      </button>
+                      <div className="ops-connect-guide-dots" aria-hidden="true">
+                        {CONNECT_GUIDE_STEPS.map((_, index) => (
+                          <span key={`guide-dot-${index}`} className={`ops-connect-guide-dot ${index === guideStepIndex ? 'active' : ''}`} />
+                        ))}
+                      </div>
+                      {guideStepIndex < CONNECT_GUIDE_STEPS.length - 1 ? (
+                        <button
+                          type="button"
+                          className="ops-primary-btn ops-guide-nav-next-btn"
+                          onClick={() => setGuideStepIndex((current) => Math.min(CONNECT_GUIDE_STEPS.length - 1, current + 1))}
+                        >
+                          Next →
+                        </button>
+                      ) : (
+                        <button type="button" className="ops-primary-btn ops-guide-nav-finish-btn" onClick={() => setConnectStep(2)}>
+                          Go to credentials →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="ops-guide-grid ops-guide-grid-legacy">
+                    <div className="ops-guide-card">
+                      <strong>1. Connect by MobaXterm</strong>
+                      <p>VPN 연결 후 bastion 또는 접속 가능한 호스트로 로그인합니다.</p>
+                      <pre>{`ssh <user>@<bastion-or-node>`}</pre>
+                    </div>
+                    <div className="ops-guide-card">
+                      <strong>2. Login to OpenShift</strong>
+                      <p>API server URL과 현재 사용자 토큰을 확인합니다.</p>
+                      <pre>{`oc login <api-server>\noc whoami --show-server\noc whoami -t`}</pre>
+                    </div>
+                    <div className="ops-guide-card">
+                      <strong>3. Service Account Option</strong>
+                      <p>read-only serviceaccount 토큰이 필요하면 demo namespace에서 발급합니다.</p>
+                      <pre>{`oc -n demo create token rag-reader`}</pre>
+                    </div>
+                    <div className="ops-guide-card">
+                      <strong>4. Console Defaults</strong>
+                      <p>이 Ops Console은 저장 프로필 기반으로 연결하고 demo namespace를 기본값으로 사용합니다.</p>
+                      <pre>{`namespace: demo\nSSL verify: false`}</pre>
+                    </div>
+                  </div>
+                  <div className="ops-connect-summary">
+                    <h3>{modalProfile ? modalProfile.display_name : 'New cluster profile'}</h3>
+                    <p>{modalProfile ? `${modalProfile.cluster_url} · ${modalProfile.default_namespace}` : '새 OpenShift 프로필을 만들고 저장할 수 있습니다.'}</p>
+                    <div className="ops-inline-actions">
+                      {modalProfile ? (
+                        <button type="button" className="ops-primary-btn" onClick={() => { void activateSavedProfile(modalProfile); }}>
+                          Use this profile
+                        </button>
+                      ) : null}
+                      <button type="button" className="ops-secondary-btn" onClick={() => setConnectStep(2)}>
+                        {modalProfile ? 'Edit credentials' : 'Enter credentials'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="ops-connect-step-layout">
+                  <div className="ops-panel-subsection">
+                    <h3>Connection Input</h3>
+                    <div className="ops-form-grid three">
+                      <div className={`ops-field ops-credential-field ${expandedCredentialField === 'cluster_url' ? 'expanded' : ''}`}>
+                        <label>Cluster URL</label>
+                        <input
+                          className="ops-credential-input"
+                          value={connectionDraft.cluster_url}
+                          placeholder={connectionForm.cluster_url}
+                          onFocus={() => setExpandedCredentialField('cluster_url')}
+                          onBlur={() => setExpandedCredentialField((current) => (current === 'cluster_url' ? null : current))}
+                          onChange={(event) => setConnectionDraft((current) => ({ ...current, cluster_url: event.target.value }))}
+                        />
+                      </div>
+                      <div className="ops-field">
+                        <label>Auth mode</label>
+                        <select value={connectionForm.auth_mode} onChange={(event) => setConnectionForm((current) => ({ ...current, auth_mode: event.target.value }))}>
+                          <option value="token">token</option>
+                          <option value="password">password</option>
+                        </select>
+                      </div>
+                      <div className="ops-field">
+                        <label>Default namespace</label>
+                        <input value={connectionForm.default_namespace} disabled />
+                      </div>
+                      <div className="ops-field">
+                        <label>Display name</label>
+                        <input
+                          className="ops-credential-input"
+                          value={connectionDraft.display_name}
+                          placeholder={connectionForm.display_name}
+                          onChange={(event) => setConnectionDraft((current) => ({ ...current, display_name: event.target.value }))}
+                        />
+                      </div>
+                      {connectionForm.auth_mode === 'token' ? (
+                        <div className="ops-field ops-field-span-two">
+                          <label>Token</label>
+                          <input
+                            className="ops-credential-input"
+                            value={connectionDraft.token}
+                            placeholder={connectionForm.token || 'Paste access token'}
+                            onChange={(event) => setConnectionDraft((current) => ({ ...current, token: event.target.value }))}
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <div className="ops-field">
+                            <label>Username</label>
+                            <input
+                              className="ops-credential-input"
+                              value={connectionDraft.username}
+                              placeholder={connectionForm.username || 'Enter username'}
+                              onChange={(event) => setConnectionDraft((current) => ({ ...current, username: event.target.value }))}
+                            />
+                          </div>
+                          <div className="ops-field">
+                            <label>Password</label>
+                            <input
+                              type="password"
+                              className="ops-credential-input"
+                              value={connectionDraft.password}
+                              placeholder={connectionForm.password || 'Enter password'}
+                              onChange={(event) => setConnectionDraft((current) => ({ ...current, password: event.target.value }))}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <div className="ops-actions-row">
+                      <button type="button" className="ops-primary-btn" onClick={() => { void handleCreateConnection(); }}>Connect & Save</button>
+                      <button type="button" className="ops-secondary-btn" onClick={() => { void handleTestConnection(); }}>Test current profile</button>
+                      <button type="button" className="ops-secondary-btn" onClick={() => { void handleRefreshLease(); }}>Refresh lease</button>
+                    </div>
+                    <div className="ops-connect-guide-nav ops-connect-guide-nav-compact">
+                      <button type="button" className="ops-secondary-btn" onClick={() => setConnectStep(1)}>
+                        Back to guide
+                      </button>
+                      <button type="button" className="ops-primary-btn" onClick={() => { void handleCreateConnection(); }}>
+                        {'Connect ->'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="ops-panel-subsection">
+                    <h3>Connect Rules</h3>
+                    <div className="ops-connect-rules">
+                      <div className="ops-connect-rule">
+                        <strong>Auto reconnect</strong>
+                        <span>저장된 활성 프로필은 Studio에서 돌아와도 자동 연결됩니다.</span>
+                      </div>
+                      <div className="ops-connect-rule">
+                        <strong>Saved profile</strong>
+                        <span>연결 변경은 우측 상단 프로필 pill에서 바로 관리할 수 있습니다.</span>
+                      </div>
+                      <div className="ops-connect-rule">
+                        <strong>Cluster defaults</strong>
+                        <span>기본 namespace는 demo, SSL verify는 false로 고정됩니다.</span>
+                      </div>
+                    </div>
+                    {connectionTest ? (
+                      <div className="ops-guide-card">
+                        <strong>{connectionTest.success ? 'Connection verified' : 'Connection issue'}</strong>
+                        <p>{connectionTest.message || connectionTest.error}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      <main className="ops-main ops-main-full">
 
           {section === 'overview' && (
             <section className="ops-panel">
               <div className="ops-panel-header">
                 <h2>Cluster Overview</h2>
-              </div>
-              <div className="ops-actions-row">
-                <button type="button" className="ops-primary-btn" onClick={() => { void handleRefreshRecommendations(); }}>Refresh recommendations</button>
+                <div className="ops-inline-actions">
+                  <span className="ops-live-status">
+                    {overviewRefreshing ? 'Refreshing…' : overviewLastUpdatedAt ? `Updated ${overviewLastUpdatedAt}` : 'Waiting'}
+                  </span>
+                </div>
               </div>
               <div className="ops-metric-grid">
                 <div className="ops-metric-card">
@@ -988,6 +1350,17 @@ export default function OpsConsolePage() {
                   </article>
                 ))}
               </div>
+              {overviewMetrics ? (
+                <Suspense fallback={<div className="ops-chart-loading">Loading charts…</div>}>
+                  <OpsOverviewCharts
+                    overview={overview}
+                    overviewMetrics={overviewMetrics}
+                    activeConnectionId={activeConnectionId}
+                    selectedNamespace={selectedNamespace}
+                    onOpenResource={openChatArtifactResource}
+                  />
+                </Suspense>
+              ) : null}
             </section>
           )}
 
@@ -1010,33 +1383,51 @@ export default function OpsConsolePage() {
                   ))}
                 </div>
               </div>
-              <div className="ops-split-grid">
-                <div className="ops-list">
-                  {(resourceList?.items ?? []).map((item) => (
-                    <button key={item.name} type="button" className={`ops-list-row ${selectedResourceName === item.name ? 'selected' : ''}`} onClick={() => { if (activeConnectionId) { void openResourceDetail(activeConnectionId, selectedResourceType, selectedNamespace, item.name); } }}>
-                      <strong>{item.name}</strong>
-                      <span>{item.kind}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="ops-editor-column">
-                  <textarea value={yamlEditor} onChange={(event) => setYamlEditor(event.target.value)} />
-                  <div className="ops-actions-row">
-                    <button type="button" className="ops-primary-btn" onClick={() => { void handlePreviewYaml(); }}>Preview apply</button>
-                    <button
-                      type="button"
-                      className="ops-secondary-btn"
-                      onClick={() => {
-                        const copyRequest = navigator.clipboard?.writeText?.(yamlEditor);
-                        copyRequest?.catch(() => undefined);
-                      }}
-                    >
-                      Copy YAML
-                    </button>
+              {resourcesLoading ? (
+                <div className="ops-resource-loading-shell">
+                  <div className="ops-loading-state" aria-live="polite">
+                    <span className="ops-loading-spinner" aria-hidden="true" />
                   </div>
-                  {yamlPreview ? <pre>{yamlPreview.diff_unified || yamlPreview.summary}</pre> : null}
                 </div>
-              </div>
+              ) : (
+                <div className="ops-split-grid">
+                  <div className="ops-list">
+                    {(resourceList?.items ?? []).map((item) => (
+                      <button key={item.name} type="button" className={`ops-list-row ${selectedResourceName === item.name ? 'selected' : ''}`} onClick={() => { if (activeConnectionId) { void openResourceDetail(activeConnectionId, selectedResourceType, selectedNamespace, item.name); } }}>
+                        <strong>{item.name}</strong>
+                        <span>{item.kind}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="ops-editor-column">
+                    {resourceDetailLoading ? (
+                      <div className="ops-loading-state ops-loading-state-inline" aria-live="polite">
+                        <span className="ops-loading-spinner" aria-hidden="true" />
+                      </div>
+                    ) : (
+                      <>
+                        <textarea value={yamlEditor} onChange={(event) => setYamlEditor(event.target.value)} />
+                        <div className="ops-actions-row">
+                          <button type="button" className="ops-primary-btn" disabled={!resourceEditable} onClick={() => { void handlePreviewYaml(); }}>
+                            {resourceEditable ? 'Preview apply' : 'Read-only resource'}
+                          </button>
+                          <button
+                            type="button"
+                            className="ops-secondary-btn"
+                            onClick={() => {
+                              const copyRequest = navigator.clipboard?.writeText?.(yamlEditor);
+                              copyRequest?.catch(() => undefined);
+                            }}
+                          >
+                            Copy YAML
+                          </button>
+                        </div>
+                        {yamlPreview ? <pre>{yamlPreview.diff_unified || yamlPreview.summary}</pre> : null}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
@@ -1091,11 +1482,36 @@ export default function OpsConsolePage() {
                   </div>
                 ))}
               </div>
-              <div className="ops-detail-grid">
-                <pre>{formatJson(libraryChunks)}</pre>
-                <pre>{libraryContent?.content || ''}</pre>
-                <pre>{formatJson(batchJobs)}</pre>
-              </div>
+              {(libraryChunks || libraryContent || batchJobs.length > 0) ? (
+                <div className="ops-action-grid">
+                  <div className="ops-panel-subsection">
+                    <h3>Chunk Preview</h3>
+                    {libraryChunks ? libraryChunks.chunks.slice(0, 8).map((chunk) => (
+                      <div key={chunk.chunk_id} className="ops-table-row">
+                        <div>
+                          <strong>{chunk.section_title}</strong>
+                          <span>{chunk.preview_text}</span>
+                        </div>
+                      </div>
+                    )) : <p className="ops-muted">Select a document to inspect chunks.</p>}
+                  </div>
+                  <div className="ops-panel-subsection">
+                    <h3>Document Content</h3>
+                    {libraryContent ? <p className="ops-muted">{libraryContent.content.slice(0, 800)}...</p> : <p className="ops-muted">Open a document to read content.</p>}
+                  </div>
+                  <div className="ops-panel-subsection">
+                    <h3>Batch Jobs</h3>
+                    {batchJobs.length > 0 ? batchJobs.map((job) => (
+                      <div key={job.job_id} className="ops-table-row">
+                        <div>
+                          <strong>{job.job_id}</strong>
+                          <span>{job.status}</span>
+                        </div>
+                      </div>
+                    )) : <p className="ops-muted">No batch jobs yet.</p>}
+                  </div>
+                </div>
+              ) : null}
             </section>
           )}
 
@@ -1156,7 +1572,68 @@ export default function OpsConsolePage() {
                         {message.artifacts?.length ? (
                           <div className="ops-chat-artifact-panel">
                             <div className="ops-chat-artifact-title">Artifacts</div>
-                            <pre>{formatJson(message.artifacts)}</pre>
+                            <div className="ops-chat-artifact-list">
+                              {message.artifacts.map((artifact, artifactIndex) => (
+                                <div key={`${message.id}-artifact-${artifactIndex}`} className="ops-chat-artifact-card">
+                                  <div className="ops-chat-artifact-head">
+                                    <strong>{artifact.title}</strong>
+                                    {artifact.resource_type ? <span>{artifact.resource_type}</span> : null}
+                                  </div>
+                                  {artifact.kind === 'resource_list' ? (
+                                    <div className="ops-chat-artifact-items">
+                                      {artifact.items.map((item, itemIndex) => {
+                                        const itemName = String(item.name || '');
+                                        const itemNamespace = String(item.namespace || artifact.namespace || '');
+                                        const itemKind = String(item.kind || '');
+                                        return (
+                                          <div key={`${itemName}-${itemIndex}`} className="ops-chat-artifact-item-row">
+                                            <div className="ops-chat-artifact-item-copy">
+                                              <strong>{itemName}</strong>
+                                              <span>{itemKind} · {itemNamespace}</span>
+                                            </div>
+                                            <div className="ops-inline-actions">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  void openChatArtifactResource({
+                                                    connection_id: artifact.connection_id,
+                                                    resource_type: String(artifact.resource_type || ''),
+                                                    namespace: itemNamespace,
+                                                    name: itemName,
+                                                  });
+                                                }}
+                                              >
+                                                {artifact.editable ? 'Open YAML' : 'Open Detail'}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="ops-chat-artifact-items">
+                                      {artifact.summary ? <pre>{formatJson(artifact.summary)}</pre> : null}
+                                      {artifact.manifest_preview ? <pre>{artifact.manifest_preview}</pre> : null}
+                                      <div className="ops-inline-actions">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            void openChatArtifactResource({
+                                              connection_id: artifact.connection_id,
+                                              resource_type: String(artifact.resource_type || ''),
+                                              namespace: String(artifact.namespace || ''),
+                                              name: String(artifact.name || ''),
+                                            });
+                                          }}
+                                        >
+                                          {artifact.editable ? 'Open YAML Editor' : 'Open Detail'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ) : null}
                       </article>
@@ -1316,7 +1793,6 @@ export default function OpsConsolePage() {
             </section>
           )}
         </main>
-      </div>
     </div>
   );
 }
