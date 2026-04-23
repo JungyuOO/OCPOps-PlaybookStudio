@@ -74,3 +74,4 @@ __pycache__
 
 .playwright-cli
 output/*
+study-docs/*

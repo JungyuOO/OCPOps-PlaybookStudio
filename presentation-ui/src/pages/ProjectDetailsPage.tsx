@@ -27,7 +27,7 @@ export default function ProjectDetailsPage() {
             <span>Back to Home</span>
           </Link>
           <h2 className="sidebar-title gradient-text">Project Contracts</h2>
-          <Link to={ROUTES.opsWorkspaces} className="details-ops-link">
+          <Link to={ROUTES.opsOverview} className="details-ops-link">
             <span>Open Ops Console</span>
           </Link>
         </div>
