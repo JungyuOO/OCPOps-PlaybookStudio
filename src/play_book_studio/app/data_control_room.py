@@ -20,8 +20,10 @@ from play_book_studio.app.data_control_room_buckets import (
     _safe_read_json,
 )
 from play_book_studio.config.settings import load_settings
+from play_book_studio.intake.artifact_bundle import iter_customer_pack_book_payload_paths
 from play_book_studio.intake import CustomerPackDraftStore
 
+from .customer_pack_read_boundary import customer_pack_draft_id_from_viewer_path, load_customer_pack_read_boundary
 from .data_control_room_helpers import (
     _build_high_value_focus,
     _build_known_books_section,
@@ -59,6 +61,36 @@ from .data_control_room_library import (
 )
 
 
+def _book_customer_pack_draft_id(book: dict[str, object]) -> str:
+    boundary_truth = str(book.get("boundary_truth") or "").strip()
+    source_lane = str(book.get("source_lane") or "").strip()
+    draft_id = str(book.get("draft_id") or "").strip()
+    if draft_id:
+        return draft_id.split("::", 1)[0]
+    viewer_path = str(book.get("viewer_path") or "").strip()
+    viewer_draft_id = customer_pack_draft_id_from_viewer_path(viewer_path)
+    if viewer_draft_id:
+        return viewer_draft_id
+    if boundary_truth != "private_customer_pack_runtime" and source_lane != "customer_source_first_pack":
+        return ""
+    slug = str(book.get("book_slug") or "").strip()
+    return slug.split("--", 1)[0].strip() if "--" in slug else ""
+
+
+def _filter_readable_customer_pack_books(
+    books: list[dict[str, object]],
+    *,
+    readable_draft_ids: set[str],
+) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    for book in books:
+        draft_id = _book_customer_pack_draft_id(book)
+        if draft_id and draft_id not in readable_draft_ids:
+            continue
+        items.append(book)
+    return items
+
+
 def _path_fingerprint(path: Path | None) -> tuple[str, bool, int, int]:
     if path is None:
         return ("", False, 0, 0)
@@ -73,6 +105,8 @@ def _path_fingerprint(path: Path | None) -> tuple[str, bool, int, int]:
 def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, int, int], ...]:
     settings = load_settings(root)
     gate_path = root / "reports" / "build_logs" / "foundry_runs" / "profiles" / "morning_gate" / "latest.json"
+    draft_store = CustomerPackDraftStore(root)
+    draft_records = draft_store.list()
     watched_paths = [
         gate_path,
         settings.source_manifest_path,
@@ -85,6 +119,12 @@ def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, i
         settings.chunks_path,
         settings.customer_pack_books_dir,
         settings.customer_pack_corpus_dir,
+        draft_store.drafts_dir,
+        *[
+            Path(str(getattr(record, "private_corpus_manifest_path", "") or "").strip())
+            for record in draft_records
+            if str(getattr(record, "private_corpus_manifest_path", "") or "").strip()
+        ],
         *settings.playbook_book_dirs,
     ]
     return tuple(_path_fingerprint(path) for path in watched_paths)
@@ -139,8 +179,26 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     high_value_focus = _build_high_value_focus(source_bundle_quality_payload, known_books=known_books, manifest_by_slug=manifest_by_slug)
     selected_chunks_path, chunk_rows, chunk_candidates = _candidate_file_rows(settings.chunks_path, settings.chunks_path)
     selected_playbook_dir, playbook_files, playbook_candidates = _candidate_playbook_dirs(*settings.playbook_book_dirs, expected_count=len(manifest_by_slug))
-    customer_pack_files = sorted(settings.customer_pack_books_dir.glob("*.json"))
-    customer_pack_draft_records = {record.draft_id: record for record in CustomerPackDraftStore(root).list() if str(record.draft_id or "").strip()}
+    customer_pack_files = iter_customer_pack_book_payload_paths(settings.customer_pack_books_dir)
+    all_customer_pack_draft_records = {
+        record.draft_id: record
+        for record in CustomerPackDraftStore(root).list()
+        if str(record.draft_id or "").strip()
+    }
+    customer_pack_read_boundaries = {
+        draft_id: load_customer_pack_read_boundary(root, draft_id)
+        for draft_id in sorted(all_customer_pack_draft_records)
+    }
+    readable_customer_pack_draft_ids = {
+        draft_id
+        for draft_id, summary in customer_pack_read_boundaries.items()
+        if bool(summary.get("read_allowed", False))
+    }
+    customer_pack_draft_records = {
+        draft_id: record
+        for draft_id, record in all_customer_pack_draft_records.items()
+        if draft_id in readable_customer_pack_draft_ids
+    }
     customer_pack_corpus_rows = load_customer_pack_private_chunk_rows(root, draft_records_by_id=customer_pack_draft_records)
     all_playbook_files: list[Path] = []
     seen_playbook_paths: set[str] = set()
@@ -152,6 +210,10 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     corpus_books = _aggregate_corpus_books(chunk_rows, manifest_by_slug=manifest_by_slug, known_books=known_books, grade_label=_grade_label)
     manualbooks = _aggregate_playbooks(all_playbook_files, manifest_by_slug=manifest_by_slug, known_books=known_books, grade_label=_grade_label, safe_read_json=_safe_read_json)
     manualbooks = _apply_customer_pack_runtime_truth(manualbooks, draft_records_by_id=customer_pack_draft_records)
+    manualbooks = _filter_readable_customer_pack_books(
+        manualbooks,
+        readable_draft_ids=readable_customer_pack_draft_ids,
+    )
     user_library_corpus_books = _aggregate_corpus_books(customer_pack_corpus_rows, manifest_by_slug={}, known_books={}, grade_label=_grade_label)
     user_library_corpus_books = _apply_customer_pack_runtime_truth(user_library_corpus_books, draft_records_by_id=customer_pack_draft_records)
     combined_corpus_by_slug = {
@@ -196,7 +258,12 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     materialized_policy_overlay_book_slugs = set(derived_playbook_family_statuses[POLICY_OVERLAY_BOOK_SOURCE_TYPE]["slugs"])
     materialized_synthesized_playbook_slugs = set(derived_playbook_family_statuses[SYNTHESIZED_PLAYBOOK_SOURCE_TYPE]["slugs"])
     materialized_derived_playbook_slugs = materialized_topic_playbook_slugs | materialized_operation_playbook_slugs | materialized_troubleshooting_playbook_slugs | materialized_policy_overlay_book_slugs | materialized_synthesized_playbook_slugs
-    materialized_manualbook_slugs = {path.stem for path in all_playbook_files if path.stem not in materialized_derived_playbook_slugs}
+    materialized_manualbook_slugs = {
+        str(book.get("book_slug") or "").strip()
+        for book in manualbooks
+        if str(book.get("book_slug") or "").strip()
+        and str(book.get("source_type") or "").strip() not in DATA_CONTROL_ROOM_DERIVED_PLAYBOOK_SOURCE_TYPE_SET
+    }
     materialized_core_manualbook_slugs = materialized_manualbook_slugs & manifest_slugs
     extra_materialized_manualbook_slugs = materialized_manualbook_slugs - manifest_slugs
     buyer_scope = source_bundle_quality_payload.get("buyer_scope") if isinstance(source_bundle_quality_payload.get("buyer_scope"), dict) else {}

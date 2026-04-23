@@ -6,8 +6,9 @@ from dataclasses import asdict, dataclass, field
 from typing import Literal
 
 
-SourceType = Literal["web", "pdf", "md", "asciidoc", "txt", "docx", "pptx", "xlsx", "image"]
+SourceType = Literal["web", "pdf", "md", "asciidoc", "txt", "docx", "pptx", "xlsx", "hwp", "hwpx", "image"]
 SupportStatus = Literal["supported", "staged", "rejected"]
+LaneKind = Literal["native", "bridge", "rescue", "blocked"]
 
 
 def _default_private_access_groups(tenant_id: str, workspace_id: str) -> tuple[str, ...]:
@@ -54,6 +55,7 @@ class IntakeFormatSupportEntry:
     route_label: str
     source_type: str
     support_status: SupportStatus
+    lane_kind: LaneKind
     capture_strategy: str
     normalization_strategy: str
     review_rule: str
@@ -61,6 +63,7 @@ class IntakeFormatSupportEntry:
     accepted_extensions: tuple[str, ...] = field(default_factory=tuple)
     accepted_mime_types: tuple[str, ...] = field(default_factory=tuple)
     notes: tuple[str, ...] = field(default_factory=tuple)
+    fallback_lanes: tuple[LaneKind, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -68,6 +71,7 @@ class IntakeFormatSupportEntry:
             "route_label": self.route_label,
             "source_type": self.source_type,
             "support_status": self.support_status,
+            "lane_kind": self.lane_kind,
             "capture_strategy": self.capture_strategy,
             "normalization_strategy": self.normalization_strategy,
             "review_rule": self.review_rule,
@@ -75,6 +79,7 @@ class IntakeFormatSupportEntry:
             "accepted_extensions": list(self.accepted_extensions),
             "accepted_mime_types": list(self.accepted_mime_types),
             "notes": list(self.notes),
+            "fallback_lanes": list(self.fallback_lanes),
         }
 
 
@@ -98,6 +103,8 @@ class IntakeSupportMatrix:
                     "supported_route_ids": [],
                     "staged_route_ids": [],
                     "review_rules": [],
+                    "lane_kinds": [],
+                    "fallback_lane_kinds": [],
                     "ocr_enabled": False,
                     "ocr_required": False,
                     "has_rejected_route": False,
@@ -113,6 +120,11 @@ class IntakeSupportMatrix:
                 summary["has_rejected_route"] = True
             summary["ocr_enabled"] = bool(summary["ocr_enabled"]) or entry.ocr.enabled
             summary["ocr_required"] = bool(summary["ocr_required"]) or entry.ocr.required
+            if entry.lane_kind not in summary["lane_kinds"]:
+                summary["lane_kinds"].append(entry.lane_kind)
+            for fallback_lane in entry.fallback_lanes:
+                if fallback_lane not in summary["fallback_lane_kinds"]:
+                    summary["fallback_lane_kinds"].append(fallback_lane)
             if entry.review_rule not in summary["review_rules"]:
                 summary["review_rules"].append(entry.review_rule)
 
@@ -174,6 +186,12 @@ class CanonicalSection:
     source_url: str
     text: str
     block_kinds: tuple[str, ...] = field(default_factory=tuple)
+    semantic_role: str = "unknown"
+    cli_commands: tuple[str, ...] = field(default_factory=tuple)
+    error_strings: tuple[str, ...] = field(default_factory=tuple)
+    k8s_objects: tuple[str, ...] = field(default_factory=tuple)
+    operator_names: tuple[str, ...] = field(default_factory=tuple)
+    verification_hints: tuple[str, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -188,6 +206,12 @@ class CanonicalSection:
             "source_url": self.source_url,
             "text": self.text,
             "block_kinds": list(self.block_kinds),
+            "semantic_role": self.semantic_role,
+            "cli_commands": list(self.cli_commands),
+            "error_strings": list(self.error_strings),
+            "k8s_objects": list(self.k8s_objects),
+            "operator_names": list(self.operator_names),
+            "verification_hints": list(self.verification_hints),
         }
 
 

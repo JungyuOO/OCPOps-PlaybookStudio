@@ -16,6 +16,7 @@ from play_book_studio.app.presenters import (
     _build_citation_presentation_context,
     _serialize_citation,
 )
+from play_book_studio.app.presenters_runtime import _build_runtime_payload
 from play_book_studio.app.source_books import (
     build_chat_navigation_links as _build_chat_navigation_links,
     build_chat_section_links as _build_chat_section_links,
@@ -172,6 +173,7 @@ def _build_chat_payload(
         "history_size": len(session.history),
         "retrieval_trace": dict(result.retrieval_trace),
         "pipeline_trace": dict(result.pipeline_trace),
+        "runtime": _build_runtime_payload(answerer) if answerer is not None else {},
     }
     if result.response_kind == "no_answer":
         payload["acquisition"] = {

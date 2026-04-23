@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 from typing import Any
 
+from play_book_studio.config.settings import Settings
 from play_book_studio.ingestion.models import SourceManifestEntry
 from play_book_studio.ingestion.normalize import extract_sections
 
@@ -18,12 +19,13 @@ from .pdf import (
     extract_pdf_outline,
     extract_pdf_pages,
 )
-from .markitdown_adapter import MARKITDOWN_SOURCE_TYPES, convert_with_markitdown
+from .markitdown_adapter import MARKITDOWN_FALLBACK_SOURCE_TYPES, convert_with_markitdown
 from .pdf_rows import (
     _build_pdf_rows,
     _build_pdf_rows_from_docling_markdown,
     _docling_korean_quality_ok,
 )
+from .unhwp_adapter import extract_hwp_markdown_with_unhwp, extract_hwp_rows_with_unhwp
 
 try:  # pragma: no cover - optional runtime dependency
     from docling.document_converter import DocumentConverter
@@ -59,37 +61,48 @@ except Exception:  # noqa: BLE001
 def build_canonical_book(
     record: CustomerPackDraftRecord,
     *,
+    settings: Settings | None = None,
     extract_pdf_markdown_with_docling_fn: Callable[[Path], str] = extract_pdf_markdown_with_docling,
     extract_pdf_markdown_with_docling_ocr_fn: Callable[[Path], str] = extract_pdf_markdown_with_docling_ocr,
     extract_pdf_outline_fn: Callable[[Path], list] = extract_pdf_outline,
     extract_pdf_pages_fn: Callable[[Path], list[str]] = extract_pdf_pages,
 ):
-    if record.request.source_type in MARKITDOWN_SOURCE_TYPES:
-        return _build_markitdown_first_canonical_book(
-            record,
-            extract_pdf_markdown_with_docling_fn=extract_pdf_markdown_with_docling_fn,
-            extract_pdf_markdown_with_docling_ocr_fn=extract_pdf_markdown_with_docling_ocr_fn,
-            extract_pdf_outline_fn=extract_pdf_outline_fn,
-            extract_pdf_pages_fn=extract_pdf_pages_fn,
-        )
     if record.request.source_type == "pdf":
-        return _build_pdf_canonical_book(
+        return _build_source_first_with_optional_markitdown_fallback(
             record,
-            extract_pdf_markdown_with_docling_fn=extract_pdf_markdown_with_docling_fn,
-            extract_pdf_markdown_with_docling_ocr_fn=extract_pdf_markdown_with_docling_ocr_fn,
-            extract_pdf_outline_fn=extract_pdf_outline_fn,
-            extract_pdf_pages_fn=extract_pdf_pages_fn,
+            primary_builder=lambda: _build_pdf_canonical_book(
+                record,
+                extract_pdf_markdown_with_docling_fn=extract_pdf_markdown_with_docling_fn,
+                extract_pdf_markdown_with_docling_ocr_fn=extract_pdf_markdown_with_docling_ocr_fn,
+                extract_pdf_outline_fn=extract_pdf_outline_fn,
+                extract_pdf_pages_fn=extract_pdf_pages_fn,
+            ),
+            primary_note="Normalization backend: source-first PDF native lane (docling/docling OCR/page rows).",
         )
     if record.request.source_type == "web":
         return _build_web_canonical_book(record)
     if record.request.source_type in {"md", "asciidoc", "txt"}:
         return _build_text_canonical_book(record)
     if record.request.source_type == "docx":
-        return _build_docx_canonical_book(record)
+        return _build_source_first_with_optional_markitdown_fallback(
+            record,
+            primary_builder=lambda: _build_docx_canonical_book(record),
+            primary_note="Normalization backend: source-first DOCX native structured lane.",
+        )
     if record.request.source_type == "pptx":
-        return _build_pptx_canonical_book(record)
+        return _build_source_first_with_optional_markitdown_fallback(
+            record,
+            primary_builder=lambda: _build_pptx_canonical_book(record),
+            primary_note="Normalization backend: source-first PPTX native slide lane.",
+        )
     if record.request.source_type == "xlsx":
-        return _build_xlsx_canonical_book(record)
+        return _build_source_first_with_optional_markitdown_fallback(
+            record,
+            primary_builder=lambda: _build_xlsx_canonical_book(record),
+            primary_note="Normalization backend: source-first XLSX native sheet lane.",
+        )
+    if record.request.source_type in {"hwp", "hwpx"}:
+        return _build_hwp_canonical_book(record, settings=settings)
     if record.request.source_type == "image":
         return _build_image_canonical_book(record)
     raise ValueError("지원하지 않는 source_type입니다.")
@@ -100,35 +113,28 @@ def _append_normalization_note(book, note: str):
     return book
 
 
-def _build_markitdown_first_canonical_book(
+def _build_source_first_with_optional_markitdown_fallback(
     record: CustomerPackDraftRecord,
     *,
-    extract_pdf_markdown_with_docling_fn: Callable[[Path], str],
-    extract_pdf_markdown_with_docling_ocr_fn: Callable[[Path], str],
-    extract_pdf_outline_fn: Callable[[Path], list],
-    extract_pdf_pages_fn: Callable[[Path], list[str]],
+    primary_builder: Callable[[], Any],
+    primary_note: str,
 ):
     try:
+        return _append_normalization_note(primary_builder(), primary_note)
+    except Exception as primary_exc:
+        if record.request.source_type not in MARKITDOWN_FALLBACK_SOURCE_TYPES:
+            raise
+        try:
+            fallback_book = _build_markitdown_canonical_book(record)
+        except Exception as fallback_exc:
+            raise RuntimeError(
+                f"{record.request.source_type}_source_first_and_markitdown_failed:"
+                f"{primary_exc.__class__.__name__}:{fallback_exc.__class__.__name__}"
+            ) from fallback_exc
         return _append_normalization_note(
-            _build_markitdown_canonical_book(record),
-            f"Normalization backend: MarkItDown ({record.request.source_type} -> markdown).",
-        )
-    except Exception as exc:
-        fallback_builder = {
-            "pdf": lambda: _build_pdf_canonical_book(
-                record,
-                extract_pdf_markdown_with_docling_fn=extract_pdf_markdown_with_docling_fn,
-                extract_pdf_markdown_with_docling_ocr_fn=extract_pdf_markdown_with_docling_ocr_fn,
-                extract_pdf_outline_fn=extract_pdf_outline_fn,
-                extract_pdf_pages_fn=extract_pdf_pages_fn,
-            ),
-            "docx": lambda: _build_docx_canonical_book(record),
-            "pptx": lambda: _build_pptx_canonical_book(record),
-            "xlsx": lambda: _build_xlsx_canonical_book(record),
-        }[record.request.source_type]
-        return _append_normalization_note(
-            fallback_builder(),
-            f"Normalization backend: legacy fallback after MarkItDown failure ({exc.__class__.__name__}).",
+            fallback_book,
+            "Normalization backend: MarkItDown fallback after "
+            f"{record.request.source_type} native lane failure ({primary_exc.__class__.__name__}).",
         )
 
 
@@ -147,12 +153,7 @@ def _build_markitdown_canonical_book(record: CustomerPackDraftRecord):
     )
     if not normalized:
         raise ValueError(f"{record.request.source_type.upper()}에서 canonical section을 만들지 못했습니다.")
-    return _build_structured_text_canonical_book(
-        record,
-        source_type="md",
-        normalized=normalized,
-        origin_source_type=record.request.source_type,
-    )
+    return _build_structured_text_canonical_book(record, source_type="md", normalized=normalized, origin_source_type=record.request.source_type)
 
 
 def _markitdown_output_is_low_confidence(source_type: str, markdown: str) -> bool:
@@ -460,6 +461,28 @@ def _build_structured_text_canonical_book(
     normalized: str,
     origin_source_type: str = "",
 ):
+    rows = _structured_rows_from_normalized_text(
+        record,
+        source_type=source_type,
+        normalized=normalized,
+        origin_source_type=origin_source_type,
+    )
+    return _build_rows_canonical_book(record, rows)
+
+
+def _build_rows_canonical_book(record: CustomerPackDraftRecord, rows: list[dict[str, object]]):
+    if not rows:
+        raise ValueError("텍스트 소스에서 canonical section을 만들지 못했습니다.")
+    return CustomerPackPlanner().build_canonical_book(rows, request=record.request)
+
+
+def _structured_rows_from_normalized_text(
+    record: CustomerPackDraftRecord,
+    *,
+    source_type: str,
+    normalized: str,
+    origin_source_type: str = "",
+):
     if not normalized:
         raise ValueError("텍스트 소스에서 canonical section을 만들지 못했습니다.")
 
@@ -480,17 +503,15 @@ def _build_structured_text_canonical_book(
             return
         section_path = tuple(path_stack[:current_level]) if path_stack else (heading,)
         rows.append(
-            {
-                "book_slug": record.plan.book_slug,
-                "book_title": record.plan.title,
-                "heading": heading,
-                "section_level": current_level,
-                "section_path": list(section_path),
-                "anchor": anchor,
-                "source_url": record.request.uri,
-                "viewer_path": f"{viewer_base}#{anchor}",
-                "text": body,
-            }
+            _native_row_payload(
+                record,
+                heading=heading,
+                section_level=current_level,
+                section_path=section_path,
+                anchor=anchor,
+                viewer_path_base=viewer_base,
+                text=body,
+            )
         )
 
     for line in normalized.splitlines():
@@ -533,7 +554,50 @@ def _build_structured_text_canonical_book(
         current_body.append(line)
 
     flush()
-    return CustomerPackPlanner().build_canonical_book(rows, request=record.request)
+    return rows
+
+
+def _native_row_payload(
+    record: CustomerPackDraftRecord,
+    *,
+    heading: str,
+    section_level: int,
+    section_path: tuple[str, ...] | list[str],
+    anchor: str,
+    viewer_path_base: str,
+    text: str,
+    block_kinds: tuple[str, ...] | list[str] = (),
+    source_url: str = "",
+) -> dict[str, object]:
+    normalized_heading = heading.strip() or record.plan.title or record.plan.book_slug
+    normalized_anchor = anchor.strip() or _slug_anchor(normalized_heading, ordinal=1)
+    normalized_path = [
+        str(item).strip()
+        for item in section_path
+        if str(item).strip()
+    ] or [normalized_heading]
+    normalized_text = str(text or "").strip()
+    if not normalized_text:
+        raise ValueError("empty text cannot be promoted into canonical rows")
+    payload: dict[str, object] = {
+        "book_slug": record.plan.book_slug,
+        "book_title": record.plan.title,
+        "heading": normalized_heading,
+        "section_level": max(int(section_level or 1), 1),
+        "section_path": normalized_path,
+        "anchor": normalized_anchor,
+        "source_url": str(source_url or record.request.uri).strip(),
+        "viewer_path": f"{viewer_path_base}#{normalized_anchor}",
+        "text": normalized_text,
+    }
+    normalized_block_kinds = [
+        str(item).strip()
+        for item in block_kinds
+        if str(item).strip()
+    ]
+    if normalized_block_kinds:
+        payload["block_kinds"] = normalized_block_kinds
+    return payload
 
 
 def _table_to_tagged_text(rows: list[list[str]]) -> str:
@@ -688,6 +752,79 @@ def _docx_to_structured_text(capture_path: Path) -> str:
     return "\n\n".join(line for line in lines if line).strip()
 
 
+def _is_docx_code_style(style_name: str) -> bool:
+    lowered = str(style_name or "").strip().lower()
+    return any(token in lowered for token in ("code", "preformatted", "source", "terminal"))
+
+
+def _docx_to_rows(capture_path: Path, *, record: CustomerPackDraftRecord) -> list[dict[str, object]]:
+    if DocxDocument is None:
+        raise RuntimeError("python-docx dependency is unavailable")
+    document = DocxDocument(capture_path)
+    viewer_base = f"/playbooks/customer-packs/{record.draft_id}/index.html"
+    current_heading = record.plan.title or record.plan.book_slug
+    current_level = 1
+    current_body: list[str] = []
+    path_stack: list[str] = [current_heading]
+    rows: list[dict[str, object]] = []
+
+    def flush() -> None:
+        heading = current_heading.strip() or f"Section {len(rows) + 1}"
+        body = "\n\n".join(part for part in current_body if str(part).strip()).strip()
+        if not body:
+            return
+        section_path = tuple(path_stack[:current_level]) if path_stack else (heading,)
+        rows.append(
+            _native_row_payload(
+                record,
+                heading=heading,
+                section_level=current_level,
+                section_path=section_path,
+                anchor=_slug_anchor(heading, ordinal=len(rows) + 1),
+                viewer_path_base=viewer_base,
+                text=body,
+            )
+        )
+
+    for block in _iter_docx_blocks(document):
+        if DocxParagraph is not None and isinstance(block, DocxParagraph):
+            text = block.text.strip()
+            if not text:
+                continue
+            style_name = str(getattr(getattr(block, "style", None), "name", "") or "")
+            lowered_style = style_name.lower()
+            if lowered_style.startswith("heading"):
+                match = re.search(r"(\d+)", lowered_style)
+                heading_level = max(1, min(int(match.group(1)) if match else 1, 6))
+                if not rows and not "\n".join(current_body).strip():
+                    current_level = heading_level
+                    current_heading = text
+                    path_stack = path_stack[: max(current_level - 1, 0)]
+                    path_stack.append(current_heading)
+                    current_body = []
+                    continue
+                flush()
+                current_level = heading_level
+                current_heading = text
+                path_stack = path_stack[: max(current_level - 1, 0)]
+                path_stack.append(current_heading)
+                current_body = []
+                continue
+            if _is_docx_code_style(style_name):
+                current_body.append(f"[CODE]\n{text}\n[/CODE]")
+            else:
+                current_body.append(text)
+            continue
+        if DocxTable is not None and isinstance(block, DocxTable):
+            table_rows = [[cell.text.strip() for cell in row.cells] for row in block.rows]
+            table_text = _table_to_tagged_text(table_rows)
+            if table_text:
+                current_body.append(table_text)
+
+    flush()
+    return rows
+
+
 def _pptx_to_structured_text(capture_path: Path) -> str:
     if Presentation is None:
         raise RuntimeError("python-pptx dependency is unavailable")
@@ -714,6 +851,45 @@ def _pptx_to_structured_text(capture_path: Path) -> str:
     return "\n\n".join(line for line in lines if line).strip()
 
 
+def _pptx_to_rows(capture_path: Path, *, record: CustomerPackDraftRecord) -> list[dict[str, object]]:
+    if Presentation is None:
+        raise RuntimeError("python-pptx dependency is unavailable")
+    presentation = Presentation(capture_path)
+    viewer_base = f"/playbooks/customer-packs/{record.draft_id}/index.html"
+    rows: list[dict[str, object]] = []
+    for index, slide in enumerate(presentation.slides, start=1):
+        title = ""
+        if slide.shapes.title is not None and getattr(slide.shapes.title, "text", "").strip():
+            title = slide.shapes.title.text.strip()
+        if not title:
+            title = f"Slide {index}"
+        body_parts: list[str] = []
+        for shape in slide.shapes:
+            text = getattr(shape, "text", "").strip()
+            if text and text != title:
+                body_parts.append(text)
+            if getattr(shape, "has_table", False):
+                table_rows = [[cell.text.strip() for cell in row.cells] for row in shape.table.rows]
+                table_text = _table_to_tagged_text(table_rows)
+                if table_text:
+                    body_parts.append(table_text)
+        body = "\n\n".join(part for part in body_parts if str(part).strip()).strip()
+        if not body:
+            continue
+        rows.append(
+            _native_row_payload(
+                record,
+                heading=title,
+                section_level=1,
+                section_path=(title,),
+                anchor=_slug_anchor(title, ordinal=len(rows) + 1),
+                viewer_path_base=viewer_base,
+                text=body,
+            )
+        )
+    return rows
+
+
 def _xlsx_to_structured_text(capture_path: Path) -> str:
     if load_workbook is None:
         raise RuntimeError("openpyxl dependency is unavailable")
@@ -731,6 +907,39 @@ def _xlsx_to_structured_text(capture_path: Path) -> str:
             if table_text:
                 lines.append(table_text)
         return "\n\n".join(line for line in lines if line).strip()
+    finally:
+        workbook.close()
+
+
+def _xlsx_to_rows(capture_path: Path, *, record: CustomerPackDraftRecord) -> list[dict[str, object]]:
+    if load_workbook is None:
+        raise RuntimeError("openpyxl dependency is unavailable")
+    workbook = load_workbook(capture_path, read_only=True, data_only=True)
+    try:
+        viewer_base = f"/playbooks/customer-packs/{record.draft_id}/index.html"
+        rows: list[dict[str, object]] = []
+        for sheet in workbook.worksheets:
+            table_rows: list[list[str]] = []
+            for row in sheet.iter_rows(values_only=True):
+                rendered = ["" if value is None else str(value).strip() for value in row]
+                if any(rendered):
+                    table_rows.append(rendered)
+            table_text = _table_to_tagged_text(table_rows)
+            if not table_text:
+                continue
+            rows.append(
+                _native_row_payload(
+                    record,
+                    heading=sheet.title,
+                    section_level=1,
+                    section_path=(sheet.title,),
+                    anchor=_slug_anchor(sheet.title, ordinal=len(rows) + 1),
+                    viewer_path_base=viewer_base,
+                    text=table_text,
+                    block_kinds=("table",),
+                )
+            )
+        return rows
     finally:
         workbook.close()
 
@@ -771,30 +980,88 @@ def _build_docx_canonical_book(record: CustomerPackDraftRecord):
     capture_path = Path(record.capture_artifact_path)
     if not capture_path.exists():
         raise FileNotFoundError(f"captured artifact를 찾을 수 없습니다: {capture_path}")
-    normalized = _docx_to_structured_text(capture_path)
-    if not normalized:
+    rows = _docx_to_rows(capture_path, record=record)
+    if not rows:
         raise ValueError("DOCX에서 canonical section을 만들지 못했습니다.")
-    return _build_structured_text_canonical_book(record, source_type="md", normalized=normalized)
+    return _build_rows_canonical_book(record, rows)
 
 
 def _build_pptx_canonical_book(record: CustomerPackDraftRecord):
     capture_path = Path(record.capture_artifact_path)
     if not capture_path.exists():
         raise FileNotFoundError(f"captured artifact를 찾을 수 없습니다: {capture_path}")
-    normalized = _pptx_to_structured_text(capture_path)
-    if not normalized:
+    rows = _pptx_to_rows(capture_path, record=record)
+    if not rows:
         raise ValueError("PPTX에서 canonical section을 만들지 못했습니다.")
-    return _build_structured_text_canonical_book(record, source_type="md", normalized=normalized)
+    return _build_rows_canonical_book(record, rows)
 
 
 def _build_xlsx_canonical_book(record: CustomerPackDraftRecord):
     capture_path = Path(record.capture_artifact_path)
     if not capture_path.exists():
         raise FileNotFoundError(f"captured artifact를 찾을 수 없습니다: {capture_path}")
-    normalized = _xlsx_to_structured_text(capture_path)
-    if not normalized:
+    rows = _xlsx_to_rows(capture_path, record=record)
+    if not rows:
         raise ValueError("XLSX에서 canonical section을 만들지 못했습니다.")
-    return _build_structured_text_canonical_book(record, source_type="md", normalized=normalized)
+    return _build_rows_canonical_book(record, rows)
+
+
+def _build_hwp_canonical_book(
+    record: CustomerPackDraftRecord,
+    *,
+    settings: Settings | None = None,
+):
+    capture_path = Path(record.capture_artifact_path)
+    if not capture_path.exists():
+        raise FileNotFoundError(f"captured artifact를 찾을 수 없습니다: {capture_path}")
+
+    viewer_base = f"/playbooks/customer-packs/{record.draft_id}/index.html"
+    rows_failure: Exception | None = None
+    try:
+        rows = extract_hwp_rows_with_unhwp(
+            capture_path,
+            book_slug=record.plan.book_slug,
+            book_title=record.plan.title,
+            source_url=record.request.uri,
+            viewer_path_base=viewer_base,
+            settings=settings,
+        )
+    except Exception as exc:  # noqa: BLE001
+        rows = []
+        rows_failure = exc
+    if rows:
+        return _append_normalization_note(
+            CustomerPackPlanner().build_canonical_book(rows, request=record.request),
+            f"Normalization backend: unhwp structured rows first ({record.request.source_type}).",
+        )
+
+    try:
+        normalized = extract_hwp_markdown_with_unhwp(capture_path, settings=settings)
+    except Exception as bridge_exc:  # noqa: BLE001
+        if rows_failure is None:
+            raise
+        raise RuntimeError(
+            f"{record.request.source_type}_unhwp_structured_and_bridge_failed:"
+            f"{rows_failure.__class__.__name__}:{bridge_exc.__class__.__name__}"
+        ) from bridge_exc
+    if not normalized:
+        raise ValueError(f"{record.request.source_type.upper()}에서 canonical section을 만들지 못했습니다.")
+    fallback_suffix = ""
+    if rows_failure is not None:
+        fallback_suffix = f" Structured rows fallback reason: {rows_failure.__class__.__name__}."
+    return _append_normalization_note(
+        _build_rows_canonical_book(
+            record,
+            _structured_rows_from_normalized_text(
+                record,
+                source_type="md",
+                normalized=normalized,
+                origin_source_type=record.request.source_type,
+            ),
+        ),
+        f"Normalization backend: unhwp ({record.request.source_type} -> structured extract / markdown bridge)."
+        f"{fallback_suffix}",
+    )
 
 
 def _build_image_canonical_book(record: CustomerPackDraftRecord):

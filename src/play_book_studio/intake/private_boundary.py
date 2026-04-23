@@ -49,6 +49,9 @@ def summarize_private_runtime_boundary(payload: dict[str, Any] | None) -> dict[s
     runtime_truth_label = str(manifest.get("runtime_truth_label") or "").strip()
     boundary_badge = str(manifest.get("boundary_badge") or "").strip()
     approval_state = str(manifest.get("approval_state") or "").strip()
+    grade_gate = dict(manifest.get("grade_gate") or {})
+    promotion_gate = dict(grade_gate.get("promotion_gate") or {})
+    read_ready = bool(manifest.get("read_ready") or promotion_gate.get("read_ready"))
     boundary_truth_ok = boundary_truth == "private_customer_pack_runtime"
     runtime_truth_ok = runtime_truth_label == "Customer Source-First Pack"
     boundary_badge_ok = boundary_badge == "Private Pack Runtime"
@@ -61,6 +64,7 @@ def summarize_private_runtime_boundary(payload: dict[str, Any] | None) -> dict[s
         and runtime_truth_ok
         and boundary_badge_ok
         and approval_ready
+        and read_ready
     )
     fail_reasons: list[str] = []
     fail_reasons.extend(f"missing_security:{field_name}" for field_name in missing_security_fields)
@@ -74,10 +78,13 @@ def summarize_private_runtime_boundary(payload: dict[str, Any] | None) -> dict[s
         fail_reasons.append("invalid_boundary_badge")
     if not approval_ready:
         fail_reasons.append(f"approval_not_runtime_ready:{approval_state or 'missing'}")
+    if grade_gate and not read_ready:
+        fail_reasons.append("grade_gate_not_runtime_ready")
     return {
         "ok": runtime_eligible,
         "runtime_eligible": runtime_eligible,
         "approval_ready": approval_ready,
+        "read_ready": read_ready,
         "missing_security_fields": missing_security_fields,
         "missing_boundary_fields": missing_boundary_fields,
         "placeholder_security_fields": placeholder_security_fields,

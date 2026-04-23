@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from play_book_studio.config.settings import Settings
+from play_book_studio.intake.artifact_bundle import iter_customer_pack_book_payload_paths
 from play_book_studio.ingestion.sentence_model import load_sentence_model
 from play_book_studio.intake.private_boundary import summarize_private_runtime_boundary
 from play_book_studio.intake.service import evaluate_canonical_book_quality
@@ -102,8 +103,7 @@ def customer_pack_books_fingerprint(books_dir: Path) -> tuple[tuple[str, int], .
     return tuple(
         sorted(
             (path.name, path.stat().st_mtime_ns)
-            for path in books_dir.glob("*.json")
-            if path.is_file()
+            for path in iter_customer_pack_book_payload_paths(books_dir)
         )
     )
 
@@ -293,6 +293,7 @@ def customer_pack_row_from_section(
         "source_type": str(payload.get("playbook_family") or payload.get("source_type") or "customer_pack").strip(),
         "source_collection": "uploaded",
         "review_status": str(payload.get("quality_status") or "ready").strip() or "ready",
+        "shared_grade": str(payload.get("shared_grade") or "blocked").strip() or "blocked",
         "trust_score": 1.0,
         "semantic_role": str(section.get("semantic_role") or "unknown").strip(),
         "block_kinds": list(section.get("block_kinds") or []),
@@ -307,10 +308,13 @@ def load_customer_pack_overlay_index(
     del fingerprint
     books_dir = Path(books_dir_str)
     rows: list[dict[str, str]] = []
-    for path in sorted(books_dir.glob("*.json")):
+    for path in iter_customer_pack_book_payload_paths(books_dir):
         payload = json.loads(path.read_text(encoding="utf-8"))
-        if str(evaluate_canonical_book_quality(payload).get("quality_status") or "review") != "ready":
+        quality = evaluate_canonical_book_quality(payload)
+        surface_gates = dict((quality.get("grade_gate") or {}).get("surface_gates") or {})
+        if not bool(surface_gates.get("llmwiki_ready")):
             continue
+        payload.update(quality)
         sections = [
             dict(section)
             for section in (payload.get("sections") or [])

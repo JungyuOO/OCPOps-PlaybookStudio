@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 from play_book_studio.ingestion.topic_playbooks import (
     OPERATION_PLAYBOOK_SOURCE_TYPE,
@@ -77,6 +78,8 @@ _STRUCTURED_MANIFEST_KEY_RE = re.compile(
 )
 _STRUCTURED_COMMAND_RE = re.compile(r"^(?:oc|kubectl|helm|argocd|podman|docker)\s+\S", re.IGNORECASE)
 
+GRADE_GATE_VERSION = "customer_pack_grade_gate_v1"
+
 
 def _customer_pack_asset_slug(draft_id: str, family: str) -> str:
     return f"{draft_id}--{family}"
@@ -86,6 +89,41 @@ def _customer_pack_asset_viewer_path(*, draft_id: str, asset_slug: str = "") -> 
     if asset_slug:
         return f"/playbooks/customer-packs/{draft_id}/assets/{asset_slug}/index.html"
     return f"/playbooks/customer-packs/{draft_id}/index.html"
+
+
+def _customer_pack_evidence(payload: dict[str, object]) -> dict[str, Any]:
+    evidence = payload.get("customer_pack_evidence")
+    return dict(evidence) if isinstance(evidence, dict) else {}
+
+
+def _payload_or_evidence_value(payload: dict[str, object], field_name: str) -> Any:
+    value = payload.get(field_name)
+    if value not in ("", None, [], {}):
+        return value
+    return _customer_pack_evidence(payload).get(field_name)
+
+
+def _normalized_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "ready", "approved"}
+    return bool(value)
+
+
+def _safe_ratio(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round(numerator / denominator, 4)
+
+
+def _viewer_path_has_exact_anchor(viewer_path: str, anchor: str) -> bool:
+    normalized_viewer_path = str(viewer_path or "").strip()
+    normalized_anchor = str(anchor or "").strip()
+    if not normalized_viewer_path or not normalized_anchor or "#" not in normalized_viewer_path:
+        return False
+    parsed = urlparse(normalized_viewer_path)
+    return parsed.fragment.strip() == normalized_anchor
 
 
 def _canonical_sections(payload: dict[str, object]) -> list[dict[str, Any]]:
@@ -294,14 +332,160 @@ def build_customer_pack_playable_books(
     return enriched_payload, derived_payloads
 
 
-def evaluate_canonical_book_quality(payload: dict[str, object]) -> dict[str, object]:
+def _build_grade_gate(
+    payload: dict[str, object],
+    *,
+    sections: list[dict[str, Any]],
+    quality_score: int,
+    quality_flags: list[str],
+    corpus_manifest: dict[str, Any] | None = None,
+) -> dict[str, object]:
+    approval_state = str(_payload_or_evidence_value(payload, "approval_state") or "unreviewed").strip() or "unreviewed"
+    publication_state = str(_payload_or_evidence_value(payload, "publication_state") or "draft").strip() or "draft"
+    degraded_pdf = _normalized_bool(_payload_or_evidence_value(payload, "degraded_pdf"))
+    fallback_used = _normalized_bool(_payload_or_evidence_value(payload, "fallback_used"))
+    total_sections = len(sections)
+    semantic_ready_count = sum(
+        1
+        for section in sections
+        if str(section.get("semantic_role") or "").strip() not in {"", "unknown"}
+    )
+    anchored_section_count = sum(1 for section in sections if str(section.get("anchor") or "").strip())
+    exact_landing_count = sum(
+        1
+        for section in sections
+        if _viewer_path_has_exact_anchor(
+            str(section.get("viewer_path") or "").strip(),
+            str(section.get("anchor") or "").strip(),
+        )
+    )
+    parse_ready = quality_score >= 70 and not quality_flags
+    if total_sections <= 0:
+        citation_status = "missing"
+    elif exact_landing_count == total_sections:
+        citation_status = "exact"
+    elif exact_landing_count > 0 or anchored_section_count > 0:
+        citation_status = "partial"
+    else:
+        citation_status = "missing"
+    citation_ready = citation_status == "exact"
+
+    manifest = dict(corpus_manifest or {})
+    chunk_count = int(manifest.get("chunk_count") or 0)
+    bm25_ready = bool(manifest.get("bm25_ready"))
+    vector_status = str(manifest.get("vector_status") or "").strip()
+    anchor_lineage_count = int(manifest.get("anchor_lineage_count") or 0)
+    if chunk_count > 0 and bm25_ready and anchor_lineage_count >= max(exact_landing_count, 1):
+        retrieval_status = "ready"
+    elif chunk_count > 0 and (bm25_ready or vector_status == "ready"):
+        retrieval_status = "partial"
+    else:
+        retrieval_status = "missing"
+    retrieval_ready = retrieval_status == "ready"
+
+    if not parse_ready:
+        shared_grade = "blocked"
+    elif citation_ready and retrieval_ready and quality_score >= 85 and not degraded_pdf and not fallback_used:
+        shared_grade = "gold"
+    elif citation_ready and retrieval_ready:
+        shared_grade = "silver"
+    elif citation_status in {"exact", "partial"} and retrieval_status in {"ready", "partial"}:
+        shared_grade = "bronze"
+    else:
+        shared_grade = "blocked"
+
+    llmwiki_ready = shared_grade in {"gold", "silver"} and retrieval_ready
+    wikibook_ready = shared_grade in {"gold", "silver"} and citation_ready
+    read_ready = llmwiki_ready and wikibook_ready and approval_state == "approved"
+    publish_ready = read_ready and publication_state in {"active", "published"}
+    promotion_reasons: list[str] = []
+    if not parse_ready:
+        promotion_reasons.append("parse_gate_not_ready")
+    if not citation_ready:
+        promotion_reasons.append(f"citation_landing_{citation_status}")
+    if not retrieval_ready:
+        promotion_reasons.append(f"retrieval_gate_{retrieval_status}")
+    if approval_state != "approved":
+        promotion_reasons.append(f"approval_not_ready:{approval_state}")
+    if publication_state not in {"active", "published"}:
+        promotion_reasons.append(f"publication_not_publish_ready:{publication_state}")
+
+    if publish_ready:
+        promotion_status = "promoted"
+    elif llmwiki_ready and wikibook_ready and approval_state == "approved":
+        promotion_status = "candidate"
+    else:
+        promotion_status = "blocked"
+
+    return {
+        "gate_version": GRADE_GATE_VERSION,
+        "shared_grade": shared_grade,
+        "parse_gate": {
+            "status": "ready" if parse_ready else "review",
+            "ready": parse_ready,
+            "quality_score": int(quality_score),
+            "quality_flags": list(quality_flags),
+            "section_count": int(total_sections),
+            "semantic_ready_count": int(semantic_ready_count),
+            "semantic_ready_ratio": _safe_ratio(semantic_ready_count, total_sections),
+            "degraded_pdf": degraded_pdf,
+            "fallback_used": fallback_used,
+        },
+        "citation_gate": {
+            "status": citation_status,
+            "ready": citation_ready,
+            "section_count": int(total_sections),
+            "anchored_section_count": int(anchored_section_count),
+            "exact_landing_count": int(exact_landing_count),
+            "anchor_presence_ratio": _safe_ratio(anchored_section_count, total_sections),
+            "exact_landing_ratio": _safe_ratio(exact_landing_count, total_sections),
+        },
+        "retrieval_gate": {
+            "status": retrieval_status,
+            "ready": retrieval_ready,
+            "chunk_count": int(chunk_count),
+            "bm25_ready": bm25_ready,
+            "vector_status": vector_status or "missing",
+            "anchor_lineage_count": int(anchor_lineage_count),
+        },
+        "surface_gates": {
+            "llmwiki_ready": llmwiki_ready,
+            "wikibook_ready": wikibook_ready,
+            "llmwiki_status": "ready" if llmwiki_ready else ("review" if parse_ready else "blocked"),
+            "wikibook_status": "ready" if wikibook_ready else ("review" if parse_ready else "blocked"),
+        },
+        "promotion_gate": {
+            "status": promotion_status,
+            "read_ready": read_ready,
+            "publish_ready": publish_ready,
+            "approval_state": approval_state,
+            "publication_state": publication_state,
+            "blocked_reasons": promotion_reasons,
+        },
+    }
+
+
+def evaluate_canonical_book_quality(
+    payload: dict[str, object],
+    *,
+    corpus_manifest: dict[str, Any] | None = None,
+) -> dict[str, object]:
     sections = [dict(section) for section in (payload.get("sections") or []) if isinstance(section, dict)]
     if not sections:
+        grade_gate = _build_grade_gate(
+            payload,
+            sections=[],
+            quality_score=0,
+            quality_flags=["no_sections"],
+            corpus_manifest=corpus_manifest,
+        )
         return {
             "quality_status": "review",
             "quality_score": 0,
             "quality_flags": ["no_sections"],
             "quality_summary": "섹션이 없어 study asset으로 사용할 수 없습니다.",
+            "shared_grade": str(grade_gate["shared_grade"]),
+            "grade_gate": grade_gate,
         }
 
     headings = [str(section.get("heading") or "").strip() for section in sections]
@@ -361,17 +545,31 @@ def evaluate_canonical_book_quality(payload: dict[str, object]) -> dict[str, obj
         flags.append("structured_blocks_flattened")
         score -= 25
 
-    status = "ready" if score >= 70 and not flags else "review"
-    summary = (
-        "정규화 품질이 충분해 study asset으로 사용할 수 있습니다."
-        if status == "ready"
-        else "정규화 품질 검토가 필요합니다. section 구조가 아직 불안정합니다."
+    clamped_score = max(score, 0)
+    grade_gate = _build_grade_gate(
+        payload,
+        sections=sections,
+        quality_score=clamped_score,
+        quality_flags=flags,
+        corpus_manifest=corpus_manifest,
     )
+    shared_grade = str(grade_gate["shared_grade"])
+    status = "ready" if shared_grade in {"gold", "silver"} else "review"
+    if shared_grade == "gold":
+        summary = "정규화 품질이 gold입니다. exact citation landing과 retrieval gate가 함께 준비되었습니다."
+    elif shared_grade == "silver":
+        summary = "정규화 품질이 silver입니다. LLM Wiki와 Wiki Book 승급선에 도달했습니다."
+    elif shared_grade == "bronze":
+        summary = "파싱은 성공했지만 citation 또는 retrieval gate가 아직 완전하지 않아 bronze 상태입니다."
+    else:
+        summary = "정규화 품질 검토가 필요합니다. section 구조 또는 승급 gate가 아직 불안정합니다."
     return {
         "quality_status": status,
-        "quality_score": max(score, 0),
+        "quality_score": clamped_score,
         "quality_flags": flags,
         "quality_summary": summary,
+        "shared_grade": shared_grade,
+        "grade_gate": grade_gate,
     }
 
 

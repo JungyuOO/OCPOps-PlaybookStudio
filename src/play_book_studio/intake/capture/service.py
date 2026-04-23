@@ -40,7 +40,7 @@ class CustomerPackCaptureService:
                 artifact_path, content_type, byte_size = self._capture_web(record)
             elif record.request.source_type == "pdf":
                 artifact_path, content_type, byte_size = self._capture_pdf(record)
-            elif record.request.source_type in {"docx", "pptx", "xlsx", "image"}:
+            elif record.request.source_type in {"docx", "pptx", "xlsx", "hwp", "hwpx", "image"}:
                 artifact_path, content_type, byte_size = self._capture_binary_source(record)
             else:
                 artifact_path, content_type, byte_size = self._capture_text_source(record)
@@ -139,12 +139,16 @@ class CustomerPackCaptureService:
             "docx": ".docx",
             "pptx": ".pptx",
             "xlsx": ".xlsx",
+            "hwp": ".hwp",
+            "hwpx": ".hwpx",
             "image": ".png",
         }[record.request.source_type]
         default_content_type = {
             "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "hwp": "application/x-hwp",
+            "hwpx": "application/x-hwpx",
             "image": "image/png",
         }[record.request.source_type]
 

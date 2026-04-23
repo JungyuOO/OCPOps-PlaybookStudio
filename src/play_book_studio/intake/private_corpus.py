@@ -11,6 +11,7 @@ from play_book_studio.ingestion.models import NormalizedSection
 from play_book_studio.ingestion.sentence_model import load_sentence_model
 from play_book_studio.intake.models import CustomerPackDraftRecord
 from play_book_studio.intake.private_boundary import summarize_private_runtime_boundary
+from play_book_studio.intake.service import evaluate_canonical_book_quality
 
 
 PRIVATE_CORPUS_VERSION = "customer_private_corpus_v1"
@@ -136,6 +137,13 @@ def _section_to_normalized_section(
 
 def _bm25_row(chunk_row: dict[str, Any]) -> dict[str, Any]:
     chunk_type = str(chunk_row.get("chunk_type", "reference"))
+    semantic_role = str(chunk_row.get("semantic_role") or "").strip()
+    if not semantic_role:
+        semantic_role = (
+            "procedure"
+            if chunk_type in {"procedure", "command"}
+            else ("concept" if chunk_type == "concept" else "reference")
+        )
     return {
         "chunk_id": chunk_row["chunk_id"],
         "book_slug": chunk_row["book_slug"],
@@ -157,17 +165,133 @@ def _bm25_row(chunk_row: dict[str, Any]) -> dict[str, Any]:
         "translation_status": chunk_row["translation_status"],
         "review_status": chunk_row["review_status"],
         "trust_score": chunk_row["trust_score"],
-        "semantic_role": (
-            "procedure"
-            if chunk_type in {"procedure", "command"}
-            else ("concept" if chunk_type == "concept" else "reference")
-        ),
+        "semantic_role": semantic_role,
+        "block_kinds": list(chunk_row.get("block_kinds") or []),
         "cli_commands": list(chunk_row.get("cli_commands") or []),
         "error_strings": list(chunk_row.get("error_strings") or []),
         "k8s_objects": list(chunk_row.get("k8s_objects") or []),
         "operator_names": list(chunk_row.get("operator_names") or []),
         "verification_hints": list(chunk_row.get("verification_hints") or []),
+        "truth_owner": str(chunk_row.get("truth_owner") or "").strip(),
+        "canonical_book_slug": str(chunk_row.get("canonical_book_slug") or "").strip(),
+        "canonical_title": str(chunk_row.get("canonical_title") or "").strip(),
+        "asset_slug": str(chunk_row.get("asset_slug") or "").strip(),
+        "asset_kind": str(chunk_row.get("asset_kind") or "").strip(),
+        "derived_from_book_slug": str(chunk_row.get("derived_from_book_slug") or "").strip(),
+        "runtime_truth_label": str(chunk_row.get("runtime_truth_label") or "").strip(),
+        "boundary_truth": str(chunk_row.get("boundary_truth") or "").strip(),
+        "boundary_badge": str(chunk_row.get("boundary_badge") or "").strip(),
+        "lineage_section_key": str(chunk_row.get("lineage_section_key") or "").strip(),
+        "lineage_anchor": str(chunk_row.get("lineage_anchor") or "").strip(),
+        "lineage_viewer_path": str(chunk_row.get("lineage_viewer_path") or "").strip(),
     }
+
+
+def _chunk_semantic_role(chunk_type: str) -> str:
+    if chunk_type in {"procedure", "command"}:
+        return "procedure"
+    if chunk_type == "concept":
+        return "concept"
+    if chunk_type == "troubleshooting":
+        return "troubleshooting"
+    return "reference"
+
+
+def _section_lineage_key(*, book_slug: str, section_id: str, anchor: str) -> tuple[str, str]:
+    identifier = str(section_id or "").strip() or str(anchor or "").strip()
+    return str(book_slug or "").strip(), identifier
+
+
+def _lineage_indexes(
+    *,
+    canonical_payload: dict[str, Any],
+    derived_payloads: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], dict[tuple[str, str], dict[str, Any]]]:
+    payloads = [dict(canonical_payload), *[dict(item) for item in derived_payloads]]
+    canonical_book_slug = str(canonical_payload.get("book_slug") or "").strip()
+    canonical_title = str(canonical_payload.get("title") or "").strip()
+    asset_index: dict[str, dict[str, Any]] = {}
+    section_index: dict[tuple[str, str], dict[str, Any]] = {}
+    for payload in payloads:
+        book_slug = str(payload.get("book_slug") or "").strip()
+        if not book_slug:
+            continue
+        asset_index[book_slug] = {
+            "truth_owner": "canonical_json_bundle",
+            "canonical_book_slug": canonical_book_slug or book_slug,
+            "canonical_title": canonical_title or str(payload.get("title") or book_slug).strip(),
+            "asset_slug": str(payload.get("asset_slug") or book_slug).strip() or book_slug,
+            "asset_kind": str(payload.get("asset_kind") or "").strip(),
+            "derived_from_book_slug": str(payload.get("derived_from_book_slug") or "").strip(),
+            "runtime_truth_label": str(payload.get("runtime_truth_label") or "Customer Source-First Pack").strip(),
+            "boundary_truth": str(payload.get("boundary_truth") or "private_customer_pack_runtime").strip(),
+            "boundary_badge": str(payload.get("boundary_badge") or "Private Pack Runtime").strip(),
+        }
+        sections = [
+            dict(section)
+            for section in (payload.get("sections") or [])
+            if isinstance(section, dict)
+        ]
+        for section in sections:
+            key = _section_lineage_key(
+                book_slug=book_slug,
+                section_id=str(section.get("section_key") or section.get("section_id") or "").strip(),
+                anchor=str(section.get("anchor") or "").strip(),
+            )
+            if not key[1]:
+                continue
+            section_index[key] = {
+                "semantic_role": str(section.get("semantic_role") or "").strip(),
+                "block_kinds": list(section.get("block_kinds") or []),
+                "lineage_section_key": str(section.get("section_key") or section.get("section_id") or "").strip(),
+                "lineage_anchor": str(section.get("anchor") or "").strip(),
+                "lineage_viewer_path": str(section.get("viewer_path") or "").strip(),
+            }
+    return asset_index, section_index
+
+
+def _enrich_chunk_rows_with_lineage(
+    chunk_rows: list[dict[str, Any]],
+    *,
+    canonical_payload: dict[str, Any],
+    derived_payloads: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    asset_index, section_index = _lineage_indexes(
+        canonical_payload=canonical_payload,
+        derived_payloads=derived_payloads,
+    )
+    enriched_rows: list[dict[str, Any]] = []
+    for row in chunk_rows:
+        book_slug = str(row.get("book_slug") or "").strip()
+        section_key = _section_lineage_key(
+            book_slug=book_slug,
+            section_id=str(row.get("section_id") or "").strip(),
+            anchor=str(row.get("anchor") or "").strip(),
+        )
+        asset_payload = dict(asset_index.get(book_slug) or {})
+        section_payload = dict(section_index.get(section_key) or {})
+        semantic_role = str(section_payload.get("semantic_role") or row.get("semantic_role") or "").strip()
+        if not semantic_role:
+            semantic_role = _chunk_semantic_role(str(row.get("chunk_type") or "reference").strip())
+        block_kinds = [
+            str(item).strip()
+            for item in (
+                section_payload.get("block_kinds")
+                or row.get("block_kinds")
+                or []
+            )
+            if str(item).strip()
+        ]
+        enriched_rows.append(
+            {
+                **row,
+                **asset_payload,
+                **section_payload,
+                "semantic_role": semantic_role,
+                "block_kinds": block_kinds,
+            }
+        )
+    return enriched_rows
 
 
 def _encode_texts_locally(
@@ -235,6 +359,11 @@ def build_customer_pack_private_corpus_rows(
         try:
             chunks = chunk_sections(normalized_sections, settings)
             chunk_rows = [chunk.to_dict() for chunk in chunks]
+            chunk_rows = _enrich_chunk_rows_with_lineage(
+                chunk_rows,
+                canonical_payload=canonical_payload,
+                derived_payloads=derived_payloads,
+            )
             bm25_rows = [_bm25_row(row) for row in chunk_rows]
             materialization_status = "ready" if chunk_rows else "empty"
         except Exception as exc:  # noqa: BLE001
@@ -280,6 +409,7 @@ def materialize_customer_pack_private_corpus(
     settings = load_settings(root_dir)
     draft_id = str(record.draft_id).strip()
     corpus_dir = customer_pack_private_corpus_dir(settings, draft_id)
+    manifest_path = customer_pack_private_manifest_path(settings, draft_id)
     corpus_dir.mkdir(parents=True, exist_ok=True)
     try:
         payload = build_customer_pack_private_corpus_rows(
@@ -304,6 +434,7 @@ def materialize_customer_pack_private_corpus(
         customer_pack_private_vector_path(settings, draft_id).unlink(missing_ok=True)
     manifest = {
         "artifact_version": PRIVATE_CORPUS_VERSION,
+        "truth_owner": "canonical_json_bundle",
         "draft_id": draft_id,
         "tenant_id": str(record.tenant_id or "").strip() or "default-tenant",
         "workspace_id": str(record.workspace_id or "").strip() or "default-workspace",
@@ -320,21 +451,50 @@ def materialize_customer_pack_private_corpus(
         "boundary_truth": "private_customer_pack_runtime",
         "runtime_truth_label": "Customer Source-First Pack",
         "boundary_badge": "Private Pack Runtime",
+        "canonical_book_slug": str(canonical_payload.get("book_slug") or draft_id).strip() or draft_id,
+        "canonical_title": str(canonical_payload.get("title") or draft_id).strip() or draft_id,
+        "asset_slugs": [
+            str(item.get("asset_slug") or item.get("book_slug") or draft_id).strip() or draft_id
+            for item in [dict(canonical_payload), *[dict(item) for item in derived_payloads]]
+        ],
+        "book_slugs": [
+            str(item.get("book_slug") or item.get("asset_slug") or draft_id).strip() or draft_id
+            for item in [dict(canonical_payload), *[dict(item) for item in derived_payloads]]
+        ],
+        "playable_asset_count": int(canonical_payload.get("playable_asset_count") or 1 + len(derived_payloads)),
+        "derived_asset_count": int(canonical_payload.get("derived_asset_count") or len(derived_payloads)),
         "book_count": int(payload["book_count"]),
         "section_count": len(payload["normalized_sections"]),
         "materialization_status": str(payload["materialization_status"]),
         "materialization_error": str(payload["materialization_error"] or ""),
         "chunk_count": len(chunk_rows),
+        "anchor_lineage_count": sum(1 for row in chunk_rows if str(row.get("anchor") or "").strip()),
         "bm25_ready": bool(bm25_rows),
         "vector_status": str(payload["vector_status"]),
         "vector_chunk_count": len(vector_rows),
         "vector_error": str(payload["vector_error"] or ""),
+        "manifest_path": str(manifest_path),
         "updated_at": _utc_now(),
     }
+    quality = evaluate_canonical_book_quality(canonical_payload, corpus_manifest=manifest)
+    grade_gate = dict(quality.get("grade_gate") or {})
+    promotion_gate = dict(grade_gate.get("promotion_gate") or {})
+    citation_gate = dict(grade_gate.get("citation_gate") or {})
+    retrieval_gate = dict(grade_gate.get("retrieval_gate") or {})
+    manifest["quality_status"] = str(quality.get("quality_status") or "review")
+    manifest["quality_score"] = int(quality.get("quality_score") or 0)
+    manifest["quality_flags"] = list(quality.get("quality_flags") or [])
+    manifest["quality_summary"] = str(quality.get("quality_summary") or "")
+    manifest["shared_grade"] = str(quality.get("shared_grade") or "blocked")
+    manifest["grade_gate"] = grade_gate
+    manifest["read_ready"] = bool(promotion_gate.get("read_ready"))
+    manifest["publish_ready"] = bool(promotion_gate.get("publish_ready"))
+    manifest["citation_landing_status"] = str(citation_gate.get("status") or "missing")
+    manifest["retrieval_ready"] = bool(retrieval_gate.get("ready"))
     boundary_summary = summarize_private_runtime_boundary(manifest)
     manifest["runtime_eligible"] = bool(boundary_summary["runtime_eligible"])
     manifest["boundary_fail_reasons"] = list(boundary_summary["fail_reasons"])
-    customer_pack_private_manifest_path(settings, draft_id).write_text(
+    manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )

@@ -68,7 +68,7 @@ def _refresh_answerer_llm_settings(
     return answerer, signature
 
 
-def _build_health_payload(answerer: ChatAnswerer) -> dict[str, Any]:
+def _build_runtime_payload(answerer: ChatAnswerer) -> dict[str, Any]:
     settings = answerer.settings
     pack = settings.active_pack
     embedding_mode = "remote" if settings.embedding_base_url else "local"
@@ -79,45 +79,49 @@ def _build_health_payload(answerer: ChatAnswerer) -> dict[str, Any]:
         else {}
     )
     return {
+        "app_id": settings.app_id,
+        "app_label": settings.app_label,
+        "config_fingerprint": _runtime_fingerprint(settings),
+        "runtime_refresh_strategy": "rebuild_answerer_on_signature_change",
+        "ocp_version": settings.ocp_version,
+        "docs_language": settings.docs_language,
+        "active_pack_id": pack.pack_id,
+        "active_pack_label": pack.pack_label,
+        "active_pack_product": pack.product_label,
+        "viewer_path_prefix": pack.viewer_path_prefix,
+        "llm_endpoint": settings.llm_endpoint,
+        "llm_model": settings.llm_model,
+        "llm_provider_hint": llm_runtime.get("preferred_provider", "unknown"),
+        "llm_fallback_enabled": bool(llm_runtime.get("fallback_enabled", False)),
+        "llm_last_provider": llm_runtime.get("last_provider"),
+        "llm_last_fallback_used": bool(llm_runtime.get("last_fallback_used", False)),
+        "llm_attempted_providers": list(llm_runtime.get("last_attempted_providers", [])),
+        "embedding_mode": embedding_mode,
+        "embedding_base_url": settings.embedding_base_url,
+        "embedding_model": settings.embedding_model,
+        "embedding_device": settings.embedding_device,
+        "reranker_enabled": bool(settings.reranker_enabled),
+        "reranker_model": settings.reranker_model,
+        "reranker_top_n": settings.reranker_top_n,
+        "reranker_batch_size": settings.reranker_batch_size,
+        "reranker_device": settings.reranker_device,
+        "qdrant_url": settings.qdrant_url,
+        "qdrant_collection": settings.qdrant_collection,
+        "graph_backend": settings.graph_backend,
+        "graph_runtime_mode": settings.graph_runtime_mode,
+        "graph_compact_artifact": compact_graph_artifact,
+        "artifacts_dir": str(settings.artifacts_dir),
+        "source_manifest_path": str(settings.source_manifest_path),
+        "normalized_docs_path": str(settings.retrieval_normalized_docs_path),
+        "bm25_corpus_path": str(settings.retrieval_bm25_corpus_path),
+        "customer_pack_books_dir": str(settings.customer_pack_books_dir),
+    }
+
+
+def _build_health_payload(answerer: ChatAnswerer) -> dict[str, Any]:
+    return {
         "ok": True,
-        "runtime": {
-            "app_id": settings.app_id,
-            "app_label": settings.app_label,
-            "config_fingerprint": _runtime_fingerprint(settings),
-            "runtime_refresh_strategy": "rebuild_answerer_on_signature_change",
-            "ocp_version": settings.ocp_version,
-            "docs_language": settings.docs_language,
-            "active_pack_id": pack.pack_id,
-            "active_pack_label": pack.pack_label,
-            "active_pack_product": pack.product_label,
-            "viewer_path_prefix": pack.viewer_path_prefix,
-            "llm_endpoint": settings.llm_endpoint,
-            "llm_model": settings.llm_model,
-            "llm_provider_hint": llm_runtime.get("preferred_provider", "unknown"),
-            "llm_fallback_enabled": bool(llm_runtime.get("fallback_enabled", False)),
-            "llm_last_provider": llm_runtime.get("last_provider"),
-            "llm_last_fallback_used": bool(llm_runtime.get("last_fallback_used", False)),
-            "llm_attempted_providers": list(llm_runtime.get("last_attempted_providers", [])),
-            "embedding_mode": embedding_mode,
-            "embedding_base_url": settings.embedding_base_url,
-            "embedding_model": settings.embedding_model,
-            "embedding_device": settings.embedding_device,
-            "reranker_enabled": bool(settings.reranker_enabled),
-            "reranker_model": settings.reranker_model,
-            "reranker_top_n": settings.reranker_top_n,
-            "reranker_batch_size": settings.reranker_batch_size,
-            "reranker_device": settings.reranker_device,
-            "qdrant_url": settings.qdrant_url,
-            "qdrant_collection": settings.qdrant_collection,
-            "graph_backend": settings.graph_backend,
-            "graph_runtime_mode": settings.graph_runtime_mode,
-            "graph_compact_artifact": compact_graph_artifact,
-            "artifacts_dir": str(settings.artifacts_dir),
-            "source_manifest_path": str(settings.source_manifest_path),
-            "normalized_docs_path": str(settings.retrieval_normalized_docs_path),
-            "bm25_corpus_path": str(settings.retrieval_bm25_corpus_path),
-            "customer_pack_books_dir": str(settings.customer_pack_books_dir),
-        },
+        "runtime": _build_runtime_payload(answerer),
     }
 
 
@@ -125,5 +129,6 @@ __all__ = [
     "_build_health_payload",
     "_llm_runtime_signature",
     "_refresh_answerer_llm_settings",
+    "_build_runtime_payload",
     "_runtime_fingerprint",
 ]

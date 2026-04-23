@@ -8,6 +8,7 @@ from pathlib import Path
 
 from play_book_studio.config.settings import load_settings
 
+from ..artifact_bundle import build_customer_pack_artifact_bundle, write_json_payload
 from ..books.store import CustomerPackDraftStore
 from ..models import CustomerPackDraftRecord
 from ..planner import CustomerPackPlanner
@@ -43,6 +44,66 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _normalization_notes(payload: dict[str, object]) -> tuple[str, ...]:
+    return tuple(
+        str(item).strip()
+        for item in (payload.get("normalization_notes") or payload.get("notes") or [])
+        if str(item).strip()
+    )
+
+
+def _primary_parse_strategy(source_type: str) -> str:
+    if source_type in {"pptx", "docx", "xlsx"}:
+        return "native_ooxml_first"
+    if source_type in {"hwp", "hwpx"}:
+        return "structured_hwp_first"
+    if source_type == "pdf":
+        return "structured_pdf_first"
+    if source_type == "image":
+        return "ocr_image_first"
+    if source_type == "web":
+        return "html_extract_first"
+    if source_type in {"md", "asciidoc", "txt"}:
+        return "structured_text_first"
+    return "source_first"
+
+
+def _parser_backend_label(
+    *,
+    source_type: str,
+    canonical_payload: dict[str, object],
+    fallback_attempt: PdfFallbackAttempt,
+) -> str:
+    notes_blob = " ".join(_normalization_notes(canonical_payload)).lower()
+    if "unhwp structured rows first" in notes_blob:
+        return "unhwp_structured_rows"
+    if "unhwp (" in notes_blob:
+        return "unhwp_markdown_bridge"
+    if "source-first docx native structured lane" in notes_blob:
+        return "docx_native_structure"
+    if "source-first pptx native slide lane" in notes_blob:
+        return "pptx_native_slide_extract"
+    if "source-first xlsx native sheet lane" in notes_blob:
+        return "xlsx_native_sheet_extract"
+    if "source-first pdf native lane" in notes_blob:
+        return "docling_pdf"
+    if source_type in {"docx", "pptx", "xlsx", "pdf"} and "markitdown fallback" in notes_blob:
+        return f"markitdown_{source_type}"
+    if source_type == "pdf":
+        if fallback_attempt.used and str(fallback_attempt.backend).strip():
+            return str(fallback_attempt.backend).strip()
+        return "docling_pdf"
+    if source_type == "image":
+        if fallback_attempt.used and str(fallback_attempt.backend).strip():
+            return str(fallback_attempt.backend).strip()
+        return "docling_image_ocr"
+    if source_type == "web":
+        return "html_section_extract"
+    if source_type in {"md", "asciidoc", "txt"}:
+        return "structured_text_builder"
+    return "customer_pack_normalize_service"
+
+
 def _finalize_pdf_evidence(
     record: CustomerPackDraftRecord,
     *,
@@ -71,14 +132,21 @@ def _finalize_pdf_evidence(
         "source_ref": record.request.uri,
         "source_fingerprint": record.source_fingerprint,
         "parser_route": f"{record.request.source_type}_customer_pack_normalize_v1",
-        "parser_backend": "customer_pack_normalize_service",
+        "parser_backend": _parser_backend_label(
+            source_type=record.request.source_type,
+            canonical_payload=canonical_payload,
+            fallback_attempt=fallback_attempt,
+        ),
         "parser_version": "v1",
+        "primary_parse_strategy": _primary_parse_strategy(record.request.source_type),
         "ocr_used": record.request.source_type in {"pdf", "image"},
         "extraction_confidence": 0.95,
         "quality_status": str(quality["quality_status"]),
         "quality_score": int(quality["quality_score"]),
         "quality_flags": list(quality["quality_flags"]),
         "quality_summary": str(quality["quality_summary"]),
+        "shared_grade": str(quality.get("shared_grade") or "blocked"),
+        "grade_gate": dict(quality.get("grade_gate") or {}),
         "degraded_pdf": bool(degraded["degraded_pdf"]),
         "degraded_reasons": list(degraded["degraded_reasons"]),
         "degraded_reason": str(degraded["degraded_reason"]),
@@ -93,6 +161,7 @@ def _finalize_pdf_evidence(
         "approval_state": record.approval_state,
         "publication_state": record.publication_state,
         "canonical_book_path": str(book_path),
+        "normalization_notes": list(_normalization_notes(canonical_payload)),
     }
     payload_patch = {
         **quality,
@@ -206,6 +275,7 @@ class CustomerPackNormalizeService:
             else:
                 canonical_book = build_canonical_book(
                     record,
+                    settings=self.settings,
                     extract_pdf_markdown_with_docling_fn=extract_pdf_markdown_with_docling,
                     extract_pdf_markdown_with_docling_ocr_fn=extract_pdf_markdown_with_docling_ocr,
                     extract_pdf_outline_fn=extract_pdf_outline,
@@ -257,29 +327,101 @@ class CustomerPackNormalizeService:
             for stale_path in self.settings.customer_pack_books_dir.glob(f"{record.draft_id}--*.json"):
                 stale_path.unlink(missing_ok=True)
             canonical_payload["customer_pack_evidence"] = evidence
-            book_path.write_text(
-                json.dumps(canonical_payload, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            for derived_payload in derived_payloads:
-                asset_slug = str(derived_payload.get("asset_slug") or "").strip()
-                if not asset_slug:
-                    continue
-                asset_path = self.settings.customer_pack_books_dir / f"{asset_slug}.json"
-                derived_payload["customer_pack_evidence"] = {
-                    **evidence,
-                    "canonical_book_path": str(asset_path),
-                }
-                asset_path.write_text(
-                    json.dumps(derived_payload, ensure_ascii=False, indent=2) + "\n",
-                    encoding="utf-8",
-                )
             private_corpus_manifest = materialize_customer_pack_private_corpus(
                 self.root_dir,
                 record=record,
                 canonical_payload=canonical_payload,
                 derived_payloads=derived_payloads,
             )
+            final_quality = evaluate_canonical_book_quality(
+                canonical_payload,
+                corpus_manifest=private_corpus_manifest,
+            )
+            final_grade_gate = dict(final_quality.get("grade_gate") or {})
+            final_promotion_gate = dict(final_grade_gate.get("promotion_gate") or {})
+            final_citation_gate = dict(final_grade_gate.get("citation_gate") or {})
+            final_retrieval_gate = dict(final_grade_gate.get("retrieval_gate") or {})
+            evidence.update(
+                {
+                    "quality_status": str(final_quality["quality_status"]),
+                    "quality_score": int(final_quality["quality_score"]),
+                    "quality_flags": list(final_quality["quality_flags"]),
+                    "quality_summary": str(final_quality["quality_summary"]),
+                    "shared_grade": str(final_quality.get("shared_grade") or "blocked"),
+                    "grade_gate": final_grade_gate,
+                    "read_ready": bool(final_promotion_gate.get("read_ready")),
+                    "publish_ready": bool(final_promotion_gate.get("publish_ready")),
+                    "citation_landing_status": str(final_citation_gate.get("status") or "missing"),
+                    "retrieval_ready": bool(final_retrieval_gate.get("ready")),
+                }
+            )
+            quality_patch = {
+                "quality_status": str(final_quality["quality_status"]),
+                "quality_score": int(final_quality["quality_score"]),
+                "quality_flags": list(final_quality["quality_flags"]),
+                "quality_summary": str(final_quality["quality_summary"]),
+                "shared_grade": str(final_quality.get("shared_grade") or "blocked"),
+                "grade_gate": final_grade_gate,
+            }
+            canonical_payload.update(quality_patch)
+            canonical_payload["customer_pack_evidence"] = evidence
+            for derived_payload in derived_payloads:
+                derived_payload.update(quality_patch)
+                derived_payload["customer_pack_evidence"] = {
+                    **evidence,
+                    "canonical_book_path": str(
+                        self.settings.customer_pack_books_dir
+                        / f"{str(derived_payload.get('asset_slug') or '').strip()}.json"
+                    ),
+                }
+            canonical_bundle = build_customer_pack_artifact_bundle(
+                record=record,
+                payload=canonical_payload,
+                book_path=book_path,
+                corpus_manifest=private_corpus_manifest,
+            )
+            canonical_payload = dict(canonical_bundle["book"])
+            write_json_payload(book_path, canonical_payload)
+            write_json_payload(Path(str(canonical_payload["artifact_manifest_path"])), canonical_bundle["manifest"])
+            write_json_payload(
+                Path(str((canonical_payload.get("artifact_bundle") or {}).get("relations_path") or "")),
+                canonical_bundle["relations"],
+            )
+            write_json_payload(
+                Path(str((canonical_payload.get("artifact_bundle") or {}).get("figure_assets_path") or "")),
+                canonical_bundle["figure_assets"],
+            )
+            write_json_payload(
+                Path(str((canonical_payload.get("artifact_bundle") or {}).get("citations_path") or "")),
+                canonical_bundle["citations"],
+            )
+            for derived_payload in derived_payloads:
+                asset_slug = str(derived_payload.get("asset_slug") or "").strip()
+                if not asset_slug:
+                    continue
+                asset_path = self.settings.customer_pack_books_dir / f"{asset_slug}.json"
+                derived_payload["customer_pack_evidence"] = {**evidence, "canonical_book_path": str(asset_path)}
+                derived_bundle = build_customer_pack_artifact_bundle(
+                    record=record,
+                    payload=derived_payload,
+                    book_path=asset_path,
+                    corpus_manifest=private_corpus_manifest,
+                )
+                derived_payload = dict(derived_bundle["book"])
+                write_json_payload(asset_path, derived_payload)
+                write_json_payload(Path(str(derived_payload["artifact_manifest_path"])), derived_bundle["manifest"])
+                write_json_payload(
+                    Path(str((derived_payload.get("artifact_bundle") or {}).get("relations_path") or "")),
+                    derived_bundle["relations"],
+                )
+                write_json_payload(
+                    Path(str((derived_payload.get("artifact_bundle") or {}).get("figure_assets_path") or "")),
+                    derived_bundle["figure_assets"],
+                )
+                write_json_payload(
+                    Path(str((derived_payload.get("artifact_bundle") or {}).get("citations_path") or "")),
+                    derived_bundle["citations"],
+                )
             record.status = "normalized"
             record.canonical_book_path = str(book_path)
             record.normalized_section_count = len(canonical_book.sections)

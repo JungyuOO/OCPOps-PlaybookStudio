@@ -101,6 +101,19 @@ def _select_report_candidate(
 
 
 def _grade_label(book: dict[str, Any]) -> str:
+    shared_grade = str(
+        book.get("shared_grade")
+        or (book.get("grade_gate") or {}).get("shared_grade")
+        or ""
+    ).strip().lower()
+    if shared_grade == "gold":
+        return "Gold"
+    if shared_grade == "silver":
+        return "Silver"
+    if shared_grade == "bronze":
+        return "Bronze"
+    if shared_grade == "blocked":
+        return "Blocked"
     content_status = str(book.get("content_status") or book.get("translation_status") or "").strip()
     approval_status = str(book.get("approval_status") or book.get("review_status") or "").strip()
     if content_status == "approved_ko" and approval_status == "approved":

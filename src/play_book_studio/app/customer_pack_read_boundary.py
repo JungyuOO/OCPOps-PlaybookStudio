@@ -43,6 +43,8 @@ _DRAFT_ROUTE_DROP_FIELDS = {
     "quality_flags",
     "capture_error",
     "normalize_error",
+    "tenant_id",
+    "workspace_id",
 }
 _BOOK_ROUTE_DROP_FIELDS = {
     "source_uri",
@@ -58,6 +60,10 @@ _BOOK_ROUTE_DROP_FIELDS = {
     "quality_score",
     "quality_flags",
     "customer_pack_evidence",
+    "artifact_bundle",
+    "artifact_manifest_path",
+    "tenant_id",
+    "workspace_id",
 }
 _SOURCE_META_ALLOWED_FIELDS = {
     "book_slug",
@@ -79,6 +85,12 @@ _SOURCE_META_ALLOWED_FIELDS = {
     "runtime_truth_label",
     "boundary_badge",
     "quality_status",
+    "shared_grade",
+    "grade_gate",
+    "citation_landing_status",
+    "retrieval_ready",
+    "read_ready",
+    "publish_ready",
     "fallback_used",
 }
 _DEBUG_RUNTIME_DROP_FIELDS = {
@@ -129,6 +141,11 @@ def summarize_customer_pack_read_boundary(record: Any | None) -> dict[str, Any]:
             "ok": False,
             "read_allowed": False,
             "approval_ready": False,
+            "shared_grade": "blocked",
+            "citation_landing_status": "missing",
+            "retrieval_ready": False,
+            "read_ready": False,
+            "publish_ready": False,
             "placeholder_security_fields": [],
             "fail_reasons": ["draft_missing"],
             "draft_id": "",
@@ -165,12 +182,41 @@ def summarize_customer_pack_read_boundary(record: Any | None) -> dict[str, Any]:
         manifest_present = True
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest_summary = summarize_private_runtime_boundary(manifest)
+        grade_gate = dict(manifest.get("grade_gate") or {})
+        promotion_gate = dict(grade_gate.get("promotion_gate") or {})
+        citation_gate = dict(grade_gate.get("citation_gate") or {})
+        retrieval_gate = dict(grade_gate.get("retrieval_gate") or {})
         if not bool(manifest_summary.get("runtime_eligible", False)):
             fail_reasons.extend(
                 f"private_manifest:{reason}"
                 for reason in (manifest_summary.get("fail_reasons") or [])
                 if str(reason).strip()
             )
+        shared_grade = str(manifest.get("shared_grade") or grade_gate.get("shared_grade") or "blocked").strip() or "blocked"
+        citation_landing_status = str(
+            manifest.get("citation_landing_status")
+            or citation_gate.get("status")
+            or "missing"
+        ).strip() or "missing"
+        retrieval_ready = bool(manifest.get("retrieval_ready") or retrieval_gate.get("ready"))
+        read_ready = bool(manifest.get("read_ready") or promotion_gate.get("read_ready"))
+        publish_ready = bool(manifest.get("publish_ready") or promotion_gate.get("publish_ready"))
+        if grade_gate and not read_ready:
+            blocked_reasons = [
+                str(reason).strip()
+                for reason in (promotion_gate.get("blocked_reasons") or [])
+                if str(reason).strip()
+            ]
+            if blocked_reasons:
+                fail_reasons.extend(f"grade_gate:{reason}" for reason in blocked_reasons)
+            else:
+                fail_reasons.append(f"grade_gate:read_not_ready:{shared_grade}")
+    else:
+        shared_grade = "blocked"
+        citation_landing_status = "missing"
+        retrieval_ready = False
+        read_ready = False
+        publish_ready = False
 
     deduped_fail_reasons: list[str] = []
     seen: set[str] = set()
@@ -186,6 +232,11 @@ def summarize_customer_pack_read_boundary(record: Any | None) -> dict[str, Any]:
         "ok": read_allowed,
         "read_allowed": read_allowed,
         "approval_ready": approval_ready,
+        "shared_grade": shared_grade,
+        "citation_landing_status": citation_landing_status,
+        "retrieval_ready": retrieval_ready,
+        "read_ready": read_ready,
+        "publish_ready": publish_ready,
         "placeholder_security_fields": placeholder_security_fields,
         "fail_reasons": deduped_fail_reasons,
         "draft_id": str(getattr(record, "draft_id", "") or "").strip(),
@@ -247,6 +298,53 @@ def _rewrite_private_manifest_runtime_boundary(
     payload["access_groups"] = list(access_groups)
     payload["approval_state"] = approval_state
     payload["publication_state"] = publication_state
+    grade_gate = dict(payload.get("grade_gate") or {})
+    if grade_gate:
+        surface_gates = dict(grade_gate.get("surface_gates") or {})
+        promotion_gate = dict(grade_gate.get("promotion_gate") or {})
+        shared_grade = str(payload.get("shared_grade") or grade_gate.get("shared_grade") or "blocked").strip() or "blocked"
+        llmwiki_ready = bool(
+            surface_gates.get("llmwiki_ready")
+            or (payload.get("retrieval_ready") and shared_grade in {"gold", "silver"})
+        )
+        wikibook_ready = bool(
+            surface_gates.get("wikibook_ready")
+            or (
+                str(payload.get("citation_landing_status") or "") == "exact"
+                and shared_grade in {"gold", "silver"}
+            )
+        )
+        read_ready = llmwiki_ready and wikibook_ready and approval_state == "approved"
+        publish_ready = read_ready and publication_state in {"active", "published"}
+        blocked_reasons = [
+            str(reason).strip()
+            for reason in (promotion_gate.get("blocked_reasons") or [])
+            if str(reason).strip()
+            and not str(reason).startswith("approval_not_ready:")
+            and not str(reason).startswith("publication_not_publish_ready:")
+        ]
+        if approval_state != "approved":
+            blocked_reasons.append(f"approval_not_ready:{approval_state or 'missing'}")
+        if publication_state not in {"active", "published"}:
+            blocked_reasons.append(f"publication_not_publish_ready:{publication_state or 'missing'}")
+        promotion_gate.update(
+            {
+                "status": (
+                    "promoted"
+                    if publish_ready
+                    else ("candidate" if llmwiki_ready and wikibook_ready and approval_state == "approved" else "blocked")
+                ),
+                "read_ready": read_ready,
+                "publish_ready": publish_ready,
+                "approval_state": approval_state,
+                "publication_state": publication_state,
+                "blocked_reasons": blocked_reasons,
+            }
+        )
+        grade_gate["promotion_gate"] = promotion_gate
+        payload["grade_gate"] = grade_gate
+        payload["read_ready"] = read_ready
+        payload["publish_ready"] = publish_ready
     boundary_summary = summarize_private_runtime_boundary(payload)
     payload["runtime_eligible"] = bool(boundary_summary.get("runtime_eligible", False))
     payload["boundary_fail_reasons"] = list(boundary_summary.get("fail_reasons") or [])
@@ -262,7 +360,7 @@ def _repair_local_uploaded_customer_pack_record(root_dir: Path, record: Any | No
     placeholder_fields = set(_placeholder_field_names(record))
     approval_state = str(getattr(record, "approval_state", "") or "").strip()
     publication_state = str(getattr(record, "publication_state", "") or "").strip()
-    needs_repair = bool(placeholder_fields) or approval_state in {"", "unreviewed"}
+    needs_repair = bool(placeholder_fields) or not publication_state
     if not needs_repair:
         return record
 
@@ -276,7 +374,7 @@ def _repair_local_uploaded_customer_pack_record(root_dir: Path, record: Any | No
         if "workspace_id" in placeholder_fields
         else str(getattr(record, "workspace_id", "") or "").strip()
     )
-    repaired_approval_state = approval_state if approval_state and approval_state != "unreviewed" else "approved"
+    repaired_approval_state = approval_state
     repaired_publication_state = publication_state or "draft"
     repaired_access_groups = tuple(
         item

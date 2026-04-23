@@ -137,6 +137,8 @@ class Settings(SettingsPathMixin):
     surya_ocr_endpoint: str = ""
     surya_health_endpoint: str = ""
     surya_timeout_seconds: float = 30.0
+    unhwp_bin: str = ""
+    unhwp_timeout_seconds: float = 30.0
     ocp_api_base_url: str = ""
     ocp_api_token: str = ""
     scm_github_client_id: str = ""
@@ -353,6 +355,8 @@ def load_settings(root_dir: str | Path) -> Settings:
         surya_ocr_endpoint=effective_env.get("SURYA_OCR", "").strip().rstrip("/"),
         surya_health_endpoint=effective_env.get("SURYA_HEALTH", "").strip().rstrip("/"),
         surya_timeout_seconds=float(effective_env.get("SURYA_TIMEOUT_SECONDS", "30")),
+        unhwp_bin=effective_env.get("UNHWP_BIN", "").strip(),
+        unhwp_timeout_seconds=float(effective_env.get("UNHWP_TIMEOUT_SECONDS", "30")),
         ocp_api_base_url=effective_env.get("OCP_API_BASE_URL", "").strip().rstrip("/"),
         ocp_api_token=effective_env.get("OCP_API_TOKEN", "").strip(),
         scm_github_client_id=effective_env.get("SCM_GITHUB_CLIENT_ID", "").strip(),

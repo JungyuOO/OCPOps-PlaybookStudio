@@ -11,7 +11,11 @@ from unittest.mock import patch
 import requests
 
 from play_book_studio.app import server
+from play_book_studio.app.server_support import _build_chat_payload
+from play_book_studio.app.sessions import ChatSession
+from play_book_studio.answering.models import AnswerResult
 from play_book_studio.config.settings import load_settings
+from play_book_studio.retrieval.models import SessionContext
 
 
 class _FakeReranker:
@@ -162,3 +166,33 @@ def test_runtime_namespaces_resolve_viewer_html_instead_of_shared_spa_shell() ->
         assert response.headers["Content-Type"].startswith("text/html")
         assert "OCP 출처 뷰어" in response.text
         assert "pbs-shell" not in response.text
+
+
+def test_build_chat_payload_includes_runtime_compact_graph_artifact() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        answerer = _FakeAnswerer(root)
+        session = ChatSession(
+            session_id="session-runtime",
+            context=SessionContext(mode="chat", ocp_version=answerer.settings.ocp_version),
+        )
+        result = AnswerResult(
+            query="runtime probe",
+            mode="chat",
+            answer="ok",
+            rewritten_query="runtime probe",
+            citations=[],
+            response_kind="rag",
+        )
+
+        payload = _build_chat_payload(
+            root_dir=root,
+            answerer=answerer,
+            session=session,
+            result=result,
+        )
+
+        runtime = payload.get("runtime")
+        assert isinstance(runtime, dict)
+        assert isinstance(runtime.get("graph_compact_artifact"), dict)
+        assert "config_fingerprint" in runtime

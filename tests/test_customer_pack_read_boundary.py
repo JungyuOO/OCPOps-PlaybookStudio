@@ -22,9 +22,11 @@ from play_book_studio.answering.models import AnswerResult, Citation
 from play_book_studio.app.customer_pack_read_boundary import (
     LOCAL_CUSTOMER_PACK_TENANT_ID,
     LOCAL_CUSTOMER_PACK_WORKSPACE_ID,
+    extract_customer_pack_draft_ids_from_payload,
     load_customer_pack_read_boundary,
 )
 from play_book_studio.app.chat_debug import append_chat_turn_log
+from play_book_studio.app.data_control_room import build_data_control_room_payload
 from play_book_studio.app.server import _build_handler
 from play_book_studio.app.sessions import ChatSession, SessionStore, Turn
 from play_book_studio.config.settings import load_settings
@@ -249,7 +251,7 @@ def _persist_private_session(
 
 
 class CustomerPackReadBoundaryTests(unittest.TestCase):
-    def test_customer_pack_read_surfaces_auto_repair_local_uploads_and_fail_close_non_read_ready_packs(self) -> None:
+    def test_customer_pack_read_surfaces_fail_close_unreviewed_and_non_read_ready_packs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             approved = _ingest_pack(
@@ -290,7 +292,7 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
             with _test_server(root) as (base_url, _store, _answerer):
                 for draft_id, expected_status in (
                     (approved_id, 200),
-                    (unreviewed_id, 200),
+                    (unreviewed_id, 404),
                     (placeholder_id, 200),
                     (blocked_id, 404),
                 ):
@@ -332,15 +334,16 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
                 drafts = requests.get(f"{base_url}/api/customer-packs/drafts", timeout=10)
                 self.assertEqual(200, drafts.status_code)
                 payload = drafts.json()
-                self.assertEqual(3, payload["count"])
+                self.assertEqual(2, payload["count"])
                 self.assertEqual(
-                    {approved_id, unreviewed_id, placeholder_id},
+                    {approved_id, placeholder_id},
                     {item["draft_id"] for item in payload["drafts"]},
                 )
 
             unreviewed_boundary = load_customer_pack_read_boundary(root, unreviewed_id)
-            self.assertTrue(unreviewed_boundary["read_allowed"])
-            self.assertEqual("approved", unreviewed_boundary["approval_state"])
+            self.assertFalse(unreviewed_boundary["read_allowed"])
+            self.assertEqual("unreviewed", unreviewed_boundary["approval_state"])
+            self.assertIn("approval_not_read_ready:unreviewed", unreviewed_boundary["fail_reasons"])
 
             placeholder_boundary = load_customer_pack_read_boundary(root, placeholder_id)
             self.assertTrue(placeholder_boundary["read_allowed"])
@@ -411,6 +414,8 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
                 self.assertNotIn("fallback_status", book_payload)
                 self.assertNotIn("fallback_reason", book_payload)
                 self.assertNotIn("quality_score", book_payload)
+                self.assertNotIn("tenant_id", book_payload)
+                self.assertNotIn("workspace_id", book_payload)
                 self.assertTrue(
                     all(
                         section["source_url"] == f"/api/customer-packs/captured?draft_id={draft_id}"
@@ -430,6 +435,11 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
                 self.assertNotIn("fallback_reason", source_meta_payload)
                 self.assertIn("parser_backend", source_meta_payload)
                 self.assertIn("quality_status", source_meta_payload)
+                self.assertIn("shared_grade", source_meta_payload)
+                self.assertIn("grade_gate", source_meta_payload)
+                self.assertIn("citation_landing_status", source_meta_payload)
+                self.assertIn("read_ready", source_meta_payload)
+                self.assertTrue(source_meta_payload["read_ready"])
 
     def test_sessions_and_debug_surfaces_fail_close_for_blocked_private_drafts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -504,7 +514,7 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
 
                 for session_id, expected_status in (
                     ("session-approved", 200),
-                    ("session-unreviewed", 200),
+                    ("session-unreviewed", 404),
                     ("session-placeholder", 200),
                     ("session-blocked", 404),
                 ):
@@ -530,9 +540,9 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
                 self.assertEqual(200, chat_log_payload.status_code)
                 debug_log = chat_log_payload.json()
                 self.assertNotIn("path", debug_log)
-                self.assertEqual(3, debug_log["count"])
+                self.assertEqual(2, debug_log["count"])
                 self.assertEqual(
-                    {"session-approved", "session-unreviewed", "session-placeholder"},
+                    {"session-approved", "session-placeholder"},
                     {entry["session_id"] for entry in debug_log["entries"]},
                 )
                 for entry in debug_log["entries"]:
@@ -542,6 +552,85 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
                     self.assertNotIn("artifacts_dir", runtime_payload)
                     self.assertNotIn("source_manifest_path", runtime_payload)
                     self.assertNotIn("customer_pack_books_dir", runtime_payload)
+
+    def test_private_runtime_boundary_fail_closes_when_grade_gate_is_not_read_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            approved = _ingest_pack(
+                root,
+                draft_tag="approved",
+                tenant_id="tenant-a",
+                workspace_id="workspace-a",
+                approval_state="approved",
+            )
+            draft_id = str(approved["draft_id"])
+            manifest_path = customer_pack_private_manifest_path(load_settings(root), draft_id)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["read_ready"] = False
+            manifest["runtime_eligible"] = False
+            manifest["grade_gate"] = {
+                "promotion_gate": {
+                    "read_ready": False,
+                    "publish_ready": False,
+                    "blocked_reasons": ["citation_landing_partial"],
+                }
+            }
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            boundary = load_customer_pack_read_boundary(root, draft_id)
+            self.assertFalse(boundary["read_allowed"])
+            self.assertEqual("gold", boundary["shared_grade"])
+            self.assertIn("grade_gate:citation_landing_partial", boundary["fail_reasons"])
+
+    def test_data_control_room_filters_unreadable_customer_pack_drafts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            approved = _ingest_pack(
+                root,
+                draft_tag="room-approved",
+                tenant_id="tenant-a",
+                workspace_id="workspace-a",
+                approval_state="approved",
+            )
+            unreviewed = _ingest_pack(
+                root,
+                draft_tag="room-unreviewed",
+                tenant_id="tenant-b",
+                workspace_id="workspace-b",
+                approval_state="unreviewed",
+            )
+            blocked = _ingest_pack(
+                root,
+                draft_tag="room-needs-review",
+                tenant_id="tenant-c",
+                workspace_id="workspace-c",
+                approval_state="approved",
+            )
+            _mark_pack_needs_review(root, str(blocked["draft_id"]))
+
+            approved_id = str(approved["draft_id"])
+            unreadable_ids = {str(unreviewed["draft_id"]), str(blocked["draft_id"])}
+
+            payload = build_data_control_room_payload(root)
+
+            visible_ids = extract_customer_pack_draft_ids_from_payload(payload)
+            self.assertIn(approved_id, visible_ids)
+            self.assertTrue(unreadable_ids.isdisjoint(visible_ids))
+
+            self.assertEqual(
+                {approved_id},
+                {
+                    str(item.get("draft_id") or "")
+                    for item in payload["customer_pack_runtime_books"]["books"]
+                },
+            )
+            self.assertEqual(
+                {approved_id},
+                {
+                    str(item.get("draft_id") or "")
+                    for item in payload["user_library_books"]["books"]
+                },
+            )
 
 
 if __name__ == "__main__":

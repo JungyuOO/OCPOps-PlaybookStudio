@@ -1391,6 +1391,12 @@
   border-color: rgba(226, 176, 131, 0.2);
 }
 
+.playbook-grade-badge--blocked {
+  color: #ff8f88;
+  background: rgba(255, 143, 136, 0.12);
+  border-color: rgba(255, 143, 136, 0.2);
+}
+
 .release-freeze-hero-copy p {
   margin: 0;
   max-width: 60ch;

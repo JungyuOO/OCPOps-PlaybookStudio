@@ -340,13 +340,16 @@ function customerPackBookEvidenceBits(book?: LibraryBook | null): string[] {
   return bits.filter(Boolean);
 }
 
-function normalizePlaybookGrade(grade?: string | null): 'Gold' | 'Silver' | 'Bronze' {
+function normalizePlaybookGrade(grade?: string | null): 'Gold' | 'Silver' | 'Bronze' | 'Blocked' {
   const normalized = String(grade || '').trim().toLowerCase();
   if (normalized === 'gold') {
     return 'Gold';
   }
   if (normalized === 'silver' || normalized === 'silver draft' || normalized === 'mixed review') {
     return 'Silver';
+  }
+  if (normalized === 'blocked') {
+    return 'Blocked';
   }
   return 'Bronze';
 }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,8 @@ from play_book_studio.ingestion.topic_playbooks import (
     TOPIC_PLAYBOOK_SOURCE_TYPE,
     TROUBLESHOOTING_PLAYBOOK_SOURCE_TYPE,
 )
+
+from .data_control_room_helpers import _grade_label
 
 POLICY_OVERLAY_BOOK_SOURCE_TYPE = "policy_overlay_book"
 SYNTHESIZED_PLAYBOOK_SOURCE_TYPE = "synthesized_playbook"
@@ -79,6 +82,25 @@ def _customer_pack_capture_url(draft_id: str) -> str:
     return f"/api/customer-packs/captured?draft_id={normalized}" if normalized else ""
 
 
+def _customer_pack_surface_payload(record: Any) -> dict[str, Any]:
+    manifest_path = Path(str(getattr(record, "private_corpus_manifest_path", "") or "").strip())
+    if manifest_path.as_posix() in {"", "."} or not manifest_path.exists() or not manifest_path.is_file():
+        return {}
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _authoritative_value(primary: dict[str, Any], secondary: dict[str, Any], key: str, fallback: Any = "") -> Any:
+    if key in primary:
+        return primary.get(key)
+    if key in secondary:
+        return secondary.get(key)
+    return fallback
+
+
 def _apply_customer_pack_runtime_truth(
     books: list[dict[str, Any]],
     *,
@@ -90,20 +112,28 @@ def _apply_customer_pack_runtime_truth(
         draft_id = _customer_pack_draft_id_from_book(entry)
         record = draft_records_by_id.get(draft_id) if draft_id else None
         if record is not None:
+            surface_payload = _customer_pack_surface_payload(record)
+            grade_gate = dict(
+                _authoritative_value(surface_payload, entry, "grade_gate", {})
+                or {}
+            )
+            citation_gate = dict(grade_gate.get("citation_gate") or {})
+            retrieval_gate = dict(grade_gate.get("retrieval_gate") or {})
+            promotion_gate = dict(grade_gate.get("promotion_gate") or {})
             source_origin_label = _customer_pack_source_origin_label(
                 record,
                 fallback_title=str(entry.get("title") or getattr(getattr(record, "plan", None), "title", "") or "").strip(),
             )
-            entry["source_lane"] = str(entry.get("source_lane") or getattr(record, "source_lane", "") or "customer_source_first_pack")
-            entry["approval_state"] = str(entry.get("approval_state") or getattr(record, "approval_state", "") or "unreviewed")
-            entry["publication_state"] = str(entry.get("publication_state") or getattr(record, "publication_state", "") or "draft")
-            entry["parser_backend"] = str(entry.get("parser_backend") or getattr(record, "parser_backend", "") or "customer_pack_normalize_service")
+            entry["source_lane"] = str(getattr(record, "source_lane", "") or entry.get("source_lane") or "customer_source_first_pack")
+            entry["approval_state"] = str(getattr(record, "approval_state", "") or entry.get("approval_state") or "unreviewed")
+            entry["publication_state"] = str(getattr(record, "publication_state", "") or entry.get("publication_state") or "draft")
+            entry["parser_backend"] = str(getattr(record, "parser_backend", "") or entry.get("parser_backend") or "customer_pack_normalize_service")
             entry["boundary_truth"] = str(entry.get("boundary_truth") or "private_customer_pack_runtime")
             entry["runtime_truth_label"] = str(entry.get("runtime_truth_label") or "Customer Source-First Pack")
             entry["boundary_badge"] = str(entry.get("boundary_badge") or "Private Pack Runtime")
             entry["source_collection"] = str(
-                entry.get("source_collection")
-                or getattr(getattr(record, "plan", None), "source_collection", "")
+                getattr(getattr(record, "plan", None), "source_collection", "")
+                or entry.get("source_collection")
                 or "uploaded"
             )
             entry["draft_id"] = draft_id
@@ -114,14 +144,52 @@ def _apply_customer_pack_runtime_truth(
             entry["delete_target_label"] = str(entry.get("delete_target_label") or source_origin_label or draft_id)
             entry["chunk_scope"] = "customer_pack"
             entry["corpus_runtime_eligible"] = bool(
-                entry.get("corpus_runtime_eligible")
-                or str(getattr(record, "private_corpus_status", "") or "").strip() == "ready"
+                str(getattr(record, "private_corpus_status", "") or "").strip() == "ready"
+                or entry.get("corpus_runtime_eligible")
             )
             entry["corpus_vector_status"] = str(
-                entry.get("corpus_vector_status")
-                or getattr(record, "private_corpus_vector_status", "")
+                getattr(record, "private_corpus_vector_status", "")
+                or entry.get("corpus_vector_status")
                 or ""
             )
+            entry["quality_status"] = str(_authoritative_value(surface_payload, entry, "quality_status", "") or "")
+            entry["quality_summary"] = str(_authoritative_value(surface_payload, entry, "quality_summary", "") or "")
+            entry["shared_grade"] = str(_authoritative_value(surface_payload, entry, "shared_grade", "") or "")
+            entry["grade_gate"] = grade_gate
+            entry["citation_landing_status"] = str(
+                _authoritative_value(
+                    surface_payload,
+                    entry,
+                    "citation_landing_status",
+                    citation_gate.get("status") or "",
+                )
+                or ""
+            )
+            entry["retrieval_ready"] = bool(
+                _authoritative_value(
+                    surface_payload,
+                    entry,
+                    "retrieval_ready",
+                    retrieval_gate.get("ready"),
+                )
+            )
+            entry["read_ready"] = bool(
+                _authoritative_value(
+                    surface_payload,
+                    entry,
+                    "read_ready",
+                    promotion_gate.get("read_ready"),
+                )
+            )
+            entry["publish_ready"] = bool(
+                _authoritative_value(
+                    surface_payload,
+                    entry,
+                    "publish_ready",
+                    promotion_gate.get("publish_ready"),
+                )
+            )
+            entry["grade"] = _grade_label(entry)
         items.append(entry)
     return items
 
@@ -138,13 +206,22 @@ def _aggregate_corpus_books(
         slug = str(row.get("book_slug") or "").strip()
         if not slug:
             continue
+        grade_source = {
+            **manifest_by_slug.get(slug, {}),
+            **known_books.get(slug, {}),
+            **row,
+        }
+        row_grade_gate = dict(row.get("grade_gate") or {})
+        row_citation_gate = dict(row_grade_gate.get("citation_gate") or {})
+        row_retrieval_gate = dict(row_grade_gate.get("retrieval_gate") or {})
+        row_promotion_gate = dict(row_grade_gate.get("promotion_gate") or {})
         title = str(row.get("book_title") or "") or str(known_books.get(slug, {}).get("title") or "") or str(manifest_by_slug.get(slug, {}).get("title") or "") or slug
         bucket = grouped.setdefault(
             slug,
             {
                 "book_slug": slug,
                 "title": title,
-                "grade": grade_label(known_books.get(slug, {})) if slug in known_books else "Gold" if slug in manifest_by_slug else "Bronze",
+                "grade": grade_label(grade_source) if grade_source else ("Gold" if slug in manifest_by_slug else "Bronze"),
                 "chunk_count": 0,
                 "token_total": 0,
                 "command_chunk_count": 0,
@@ -174,6 +251,14 @@ def _aggregate_corpus_books(
                 "delete_target_id": str(row.get("delete_target_id") or ""),
                 "delete_target_label": str(row.get("delete_target_label") or ""),
                 "chunk_scope": str(row.get("chunk_scope") or "runtime"),
+                "quality_status": str(row.get("quality_status") or ""),
+                "quality_summary": str(row.get("quality_summary") or ""),
+                "shared_grade": str(row.get("shared_grade") or ""),
+                "grade_gate": row_grade_gate,
+                "citation_landing_status": str(row.get("citation_landing_status") or row_citation_gate.get("status") or ""),
+                "retrieval_ready": bool(row.get("retrieval_ready") or row_retrieval_gate.get("ready")),
+                "read_ready": bool(row.get("read_ready") or row_promotion_gate.get("read_ready")),
+                "publish_ready": bool(row.get("publish_ready") or row_promotion_gate.get("publish_ready")),
                 "materialized": True,
             },
         )
@@ -188,12 +273,16 @@ def _aggregate_corpus_books(
             bucket["anchors"].add(anchor_id)
         bucket["chunk_types"][str(row.get("chunk_type") or "unknown").strip() or "unknown"] += 1
     for slug, entry in manifest_by_slug.items():
+        grade_source = {
+            **entry,
+            **known_books.get(slug, {}),
+        }
         grouped.setdefault(
             slug,
             {
                 "book_slug": slug,
                 "title": str(entry.get("title") or slug),
-                "grade": grade_label(known_books.get(slug, {})) if slug in known_books else "Gold",
+                "grade": grade_label(grade_source) if grade_source else "Gold",
                 "chunk_count": 0,
                 "token_total": 0,
                 "command_chunk_count": 0,
@@ -223,6 +312,14 @@ def _aggregate_corpus_books(
                 "delete_target_id": "",
                 "delete_target_label": "",
                 "chunk_scope": "runtime",
+                "quality_status": "",
+                "quality_summary": "",
+                "shared_grade": "",
+                "grade_gate": {},
+                "citation_landing_status": "",
+                "retrieval_ready": False,
+                "read_ready": False,
+                "publish_ready": False,
                 "materialized": False,
             },
         )
@@ -265,10 +362,19 @@ def _aggregate_playbooks(
         source_type = str((playbook_family if playbook_family in DATA_CONTROL_ROOM_DERIVED_PLAYBOOK_SOURCE_TYPE_SET else (source_metadata.get("source_type") or payload.get("source_type") or "")) or "")
         known = known_books.get(slug, {})
         manifest = manifest_by_slug.get(slug, {})
+        grade_gate = dict(payload.get("grade_gate") or {})
+        citation_gate = dict(grade_gate.get("citation_gate") or {})
+        retrieval_gate = dict(grade_gate.get("retrieval_gate") or {})
+        promotion_gate = dict(grade_gate.get("promotion_gate") or {})
+        grade_source = {
+            **manifest,
+            **known,
+            **payload,
+        }
         grouped[slug] = {
             "book_slug": slug,
             "title": str(payload.get("title") or payload.get("book_title") or slug),
-            "grade": grade_label(known) if known else "Gold" if manifest else "Bronze",
+            "grade": grade_label(grade_source) if grade_source else ("Gold" if manifest else "Bronze"),
             "translation_status": str(payload.get("translation_status") or known.get("content_status") or ""),
             "review_status": str(payload.get("review_status") or known.get("review_status") or ""),
             "source_type": source_type or str(known.get("source_type") or manifest.get("source_type") or ""),
@@ -301,15 +407,27 @@ def _aggregate_playbooks(
             "delete_target_id": str(payload.get("delete_target_id") or ""),
             "delete_target_label": str(payload.get("delete_target_label") or ""),
             "chunk_scope": str(payload.get("chunk_scope") or "runtime"),
+            "quality_status": str(payload.get("quality_status") or ""),
+            "quality_summary": str(payload.get("quality_summary") or ""),
+            "shared_grade": str(payload.get("shared_grade") or ""),
+            "grade_gate": grade_gate,
+            "citation_landing_status": str(payload.get("citation_landing_status") or citation_gate.get("status") or ""),
+            "retrieval_ready": bool(payload.get("retrieval_ready") or retrieval_gate.get("ready")),
+            "read_ready": bool(payload.get("read_ready") or promotion_gate.get("read_ready")),
+            "publish_ready": bool(payload.get("publish_ready") or promotion_gate.get("publish_ready")),
             "materialized": True,
         }
     for slug, entry in manifest_by_slug.items():
+        grade_source = {
+            **entry,
+            **known_books.get(slug, {}),
+        }
         grouped.setdefault(
             slug,
             {
                 "book_slug": slug,
                 "title": str(entry.get("title") or slug),
-                "grade": grade_label(known_books.get(slug, {})) if slug in known_books else "Gold",
+                "grade": grade_label(grade_source) if grade_source else "Gold",
                 "translation_status": str(entry.get("content_status") or ""),
                 "review_status": str(entry.get("review_status") or ""),
                 "source_type": str(entry.get("source_type") or ""),
@@ -341,6 +459,14 @@ def _aggregate_playbooks(
                 "delete_target_id": "",
                 "delete_target_label": "",
                 "chunk_scope": "runtime",
+                "quality_status": "",
+                "quality_summary": "",
+                "shared_grade": "",
+                "grade_gate": {},
+                "citation_landing_status": "",
+                "retrieval_ready": False,
+                "read_ready": False,
+                "publish_ready": False,
                 "materialized": False,
             },
         )
@@ -441,11 +567,22 @@ def _attach_corpus_status(
                 entry["corpus_runtime_eligible"] = bool(corpus.get("corpus_runtime_eligible"))
             if not str(entry.get("corpus_vector_status") or "").strip():
                 entry["corpus_vector_status"] = str(corpus.get("corpus_vector_status") or "")
+            entry["quality_status"] = str(_authoritative_value(corpus, entry, "quality_status", "") or "")
+            entry["quality_summary"] = str(_authoritative_value(corpus, entry, "quality_summary", "") or "")
+            entry["shared_grade"] = str(_authoritative_value(corpus, entry, "shared_grade", "") or "")
+            entry["citation_landing_status"] = str(
+                _authoritative_value(corpus, entry, "citation_landing_status", "") or ""
+            )
+            entry["grade_gate"] = dict(_authoritative_value(corpus, entry, "grade_gate", {}) or {})
+            entry["retrieval_ready"] = bool(_authoritative_value(corpus, entry, "retrieval_ready", False))
+            entry["read_ready"] = bool(_authoritative_value(corpus, entry, "read_ready", False))
+            entry["publish_ready"] = bool(_authoritative_value(corpus, entry, "publish_ready", False))
         else:
             entry["corpus_chunk_count"] = int(entry.get("corpus_chunk_count") or 0)
             entry["corpus_token_total"] = int(entry.get("corpus_token_total") or 0)
             entry["corpus_materialized"] = bool(entry.get("corpus_materialized", False))
             entry["chunk_scope"] = str(entry.get("chunk_scope") or default_chunk_scope)
+        entry["grade"] = _grade_label(entry)
         items.append(entry)
     return items
 

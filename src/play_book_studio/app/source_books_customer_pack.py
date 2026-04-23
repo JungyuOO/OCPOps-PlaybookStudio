@@ -10,9 +10,9 @@ from urllib.parse import urlparse
 
 from play_book_studio.config.settings import load_settings
 from play_book_studio.intake import CustomerPackDraftStore
-from play_book_studio.intake.service import evaluate_canonical_book_quality
 
 from .presenters import _default_customer_pack_summary
+from .customer_pack_read_boundary import load_customer_pack_read_boundary
 from .viewer_page import _render_page_overlay_toolbar
 from .viewers import (
     _build_section_metrics,
@@ -70,11 +70,46 @@ def parse_customer_pack_viewer_path(viewer_path: str) -> tuple[str, str] | None:
     return None
 
 
+def _merge_customer_pack_surface_truth(
+    payload: dict[str, Any],
+    corpus_manifest: dict[str, Any] | None,
+) -> dict[str, Any]:
+    manifest = dict(corpus_manifest or {})
+    grade_gate = dict(manifest.get("grade_gate") or payload.get("grade_gate") or {})
+    citation_gate = dict(grade_gate.get("citation_gate") or {})
+    retrieval_gate = dict(grade_gate.get("retrieval_gate") or {})
+    promotion_gate = dict(grade_gate.get("promotion_gate") or {})
+
+    def _value(key: str, fallback: Any = "") -> Any:
+        if key in manifest:
+            return manifest.get(key)
+        if key in payload:
+            return payload.get(key)
+        return fallback
+
+    payload["quality_status"] = str(_value("quality_status", "") or "")
+    payload["quality_score"] = int(_value("quality_score", 0) or 0)
+    payload["quality_flags"] = list(_value("quality_flags", []) or [])
+    payload["quality_summary"] = str(_value("quality_summary", "") or "")
+    payload["shared_grade"] = str(_value("shared_grade", "blocked") or "blocked")
+    payload["grade_gate"] = grade_gate
+    payload["citation_landing_status"] = str(
+        _value("citation_landing_status", citation_gate.get("status") or "missing") or "missing"
+    )
+    payload["retrieval_ready"] = bool(_value("retrieval_ready", retrieval_gate.get("ready")))
+    payload["read_ready"] = bool(_value("read_ready", promotion_gate.get("read_ready")))
+    payload["publish_ready"] = bool(_value("publish_ready", promotion_gate.get("publish_ready")))
+    return payload
+
+
 def load_customer_pack_book(root_dir: Path, draft_id: str) -> dict[str, Any] | None:
     resolved_draft_id = draft_id
     asset_slug = ""
     if "::" in draft_id:
         resolved_draft_id, asset_slug = draft_id.split("::", 1)
+    boundary = load_customer_pack_read_boundary(root_dir, resolved_draft_id)
+    if not bool(boundary.get("read_allowed", False)):
+        return None
     store = CustomerPackDraftStore(root_dir)
     record = store.get(draft_id)
     if record is None and resolved_draft_id != draft_id:
@@ -102,9 +137,24 @@ def load_customer_pack_book(root_dir: Path, draft_id: str) -> dict[str, Any] | N
     payload.setdefault("pack_label", record.plan.pack_label)
     payload.setdefault("inferred_product", record.plan.inferred_product)
     payload.setdefault("inferred_version", record.plan.inferred_version)
-    payload.update(_customer_pack_boundary_payload(record))
-    payload.update(evaluate_canonical_book_quality(payload))
-    return payload
+    boundary_payload = _customer_pack_boundary_payload(record)
+    existing_evidence = payload.get("customer_pack_evidence")
+    merged_evidence: dict[str, Any] = {}
+    if isinstance(existing_evidence, dict):
+        merged_evidence.update(existing_evidence)
+    payload.update(boundary_payload)
+    merged_evidence.update(boundary_payload.get("customer_pack_evidence") or {})
+    if merged_evidence:
+        payload["customer_pack_evidence"] = merged_evidence
+        if str(merged_evidence.get("primary_parse_strategy") or "").strip():
+            payload["primary_parse_strategy"] = str(merged_evidence["primary_parse_strategy"])
+    corpus_manifest_path = Path(str(getattr(record, "private_corpus_manifest_path", "") or "").strip())
+    corpus_manifest = (
+        json.loads(corpus_manifest_path.read_text(encoding="utf-8"))
+        if corpus_manifest_path.as_posix() not in {"", "."} and corpus_manifest_path.exists()
+        else None
+    )
+    return _merge_customer_pack_surface_truth(payload, corpus_manifest)
 
 
 def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str) -> str | None:
@@ -136,14 +186,30 @@ def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str) -> str 
             )
     quality_summary = str(canonical_book.get("quality_summary") or "").strip()
     summary = f"{base_summary} {quality_summary}".strip() if quality_summary else base_summary
-    if str(canonical_book.get("quality_status") or "ready") != "ready":
-        summary = f"{summary} 이 자산은 아직 review needed 상태입니다."
+    shared_grade = str(canonical_book.get("shared_grade") or "blocked").strip() or "blocked"
+    grade_gate = dict(canonical_book.get("grade_gate") or {})
+    promotion_gate = dict(grade_gate.get("promotion_gate") or {})
+    citation_gate = dict(grade_gate.get("citation_gate") or {})
+    retrieval_gate = dict(grade_gate.get("retrieval_gate") or {})
+    citation_status = str(
+        canonical_book.get("citation_landing_status")
+        or citation_gate.get("status")
+        or "missing"
+    ).strip() or "missing"
+    if shared_grade not in {"gold", "silver"}:
+        summary = f"{summary} 현재 승급선은 {shared_grade} 상태입니다."
+    if not bool(promotion_gate.get("read_ready")):
+        summary = f"{summary} citation landing 또는 retrieval gate가 아직 read-ready가 아닙니다.".strip()
     runtime_truth_label = str(canonical_book.get("runtime_truth_label") or "Customer Source-First Pack").strip()
     approval_state = str(canonical_book.get("approval_state") or "unreviewed").strip()
     publication_state = str(canonical_book.get("publication_state") or "draft").strip()
     source_lane = str(canonical_book.get("source_lane") or "customer_source_first_pack").strip()
     parser_backend = str(canonical_book.get("parser_backend") or "").strip()
     evidence_badges = [
+        f"grade: {shared_grade}",
+        f"citation: {citation_status}",
+        f"retrieval: {'ready' if retrieval_gate.get('ready') else 'pending'}",
+        f"read: {'ready' if promotion_gate.get('read_ready') else 'blocked'}",
         f"approval: {approval_state}",
         f"publication: {publication_state}",
     ]
@@ -210,6 +276,12 @@ def list_customer_pack_drafts(root_dir: Path) -> dict[str, Any]:
                 summary["quality_score"] = payload.get("quality_score")
                 summary["quality_summary"] = payload.get("quality_summary")
                 summary["quality_flags"] = payload.get("quality_flags")
+                summary["shared_grade"] = payload.get("shared_grade")
+                summary["grade_gate"] = payload.get("grade_gate")
+                summary["citation_landing_status"] = payload.get("citation_landing_status")
+                summary["retrieval_ready"] = payload.get("retrieval_ready")
+                summary["read_ready"] = payload.get("read_ready")
+                summary["publish_ready"] = payload.get("publish_ready")
                 summary["degraded_pdf"] = payload.get("degraded_pdf")
                 summary["degraded_reason"] = payload.get("degraded_reason")
                 summary["fallback_used"] = payload.get("fallback_used")

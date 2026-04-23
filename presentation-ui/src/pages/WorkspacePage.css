@@ -1724,6 +1724,12 @@
   border-color: rgba(226, 176, 131, 0.18);
 }
 
+.playbook-grade-badge--blocked {
+  color: #ff8f88;
+  background: rgba(255, 143, 136, 0.1);
+  border-color: rgba(255, 143, 136, 0.18);
+}
+
 /* Middle Panel OK (Chat) */
 .chat-area {
   flex: 1;

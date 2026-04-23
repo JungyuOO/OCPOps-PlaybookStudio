@@ -34,6 +34,8 @@ SUPPORTED_CUSTOMER_PACK_SOURCE_TYPES = {
     "docx",
     "pptx",
     "xlsx",
+    "hwp",
+    "hwpx",
     "image",
 }
 
@@ -47,6 +49,7 @@ def _private_corpus_payload(root_dir: Path, draft_id: str) -> dict[str, Any] | N
     boundary_summary = summarize_private_runtime_boundary(manifest)
     return {
         "artifact_version": str(manifest.get("artifact_version") or "").strip(),
+        "truth_owner": str(manifest.get("truth_owner") or "").strip(),
         "draft_id": str(manifest.get("draft_id") or "").strip(),
         "tenant_id": str(manifest.get("tenant_id") or "").strip(),
         "workspace_id": str(manifest.get("workspace_id") or "").strip(),
@@ -63,18 +66,36 @@ def _private_corpus_payload(root_dir: Path, draft_id: str) -> dict[str, Any] | N
         "boundary_truth": str(manifest.get("boundary_truth") or "").strip(),
         "runtime_truth_label": str(manifest.get("runtime_truth_label") or "").strip(),
         "boundary_badge": str(manifest.get("boundary_badge") or "").strip(),
+        "canonical_book_slug": str(manifest.get("canonical_book_slug") or "").strip(),
+        "canonical_title": str(manifest.get("canonical_title") or "").strip(),
+        "asset_slugs": list(manifest.get("asset_slugs") or []),
+        "book_slugs": list(manifest.get("book_slugs") or []),
+        "playable_asset_count": int(manifest.get("playable_asset_count") or 0),
+        "derived_asset_count": int(manifest.get("derived_asset_count") or 0),
         "book_count": int(manifest.get("book_count") or 0),
         "section_count": int(manifest.get("section_count") or 0),
         "chunk_count": int(manifest.get("chunk_count") or 0),
+        "anchor_lineage_count": int(manifest.get("anchor_lineage_count") or 0),
         "bm25_ready": bool(manifest.get("bm25_ready")),
         "vector_status": str(manifest.get("vector_status") or "").strip(),
         "vector_chunk_count": int(manifest.get("vector_chunk_count") or 0),
+        "quality_status": str(manifest.get("quality_status") or "").strip(),
+        "quality_score": int(manifest.get("quality_score") or 0),
+        "quality_flags": list(manifest.get("quality_flags") or []),
+        "quality_summary": str(manifest.get("quality_summary") or "").strip(),
+        "shared_grade": str(manifest.get("shared_grade") or "").strip(),
+        "grade_gate": dict(manifest.get("grade_gate") or {}),
+        "read_ready": bool(manifest.get("read_ready") or False),
+        "publish_ready": bool(manifest.get("publish_ready") or False),
+        "citation_landing_status": str(manifest.get("citation_landing_status") or "").strip(),
+        "retrieval_ready": bool(manifest.get("retrieval_ready") or False),
         "runtime_eligible": bool(manifest.get("runtime_eligible") or False),
         "boundary_fail_reasons": list(
             manifest.get("boundary_fail_reasons")
             or boundary_summary.get("fail_reasons")
             or []
         ),
+        "manifest_path": str(manifest.get("manifest_path") or path),
         "updated_at": str(manifest.get("updated_at") or "").strip(),
     }
 
@@ -164,13 +185,19 @@ def build_customer_pack_support_matrix() -> dict[str, Any]:
 def customer_pack_request_from_payload(payload: dict[str, Any]) -> DocSourceRequest:
     source_type = str(payload.get("source_type") or "").strip().lower()
     uri = str(payload.get("uri") or "").strip()
+    file_name = str(payload.get("file_name") or "").strip()
     title = str(payload.get("title") or "").strip()
     language_hint = str(payload.get("language_hint") or "ko").strip() or "ko"
+    has_uploaded_content = isinstance(payload.get("file_bytes"), (bytes, bytearray)) or bool(
+        str(payload.get("content_base64") or "").strip()
+    )
 
     if source_type not in SUPPORTED_CUSTOMER_PACK_SOURCE_TYPES:
         raise ValueError(
-            "source_type은 web, pdf, md, asciidoc, txt, docx, pptx, xlsx, image 중 하나여야 합니다."
+            "source_type은 web, pdf, md, asciidoc, txt, docx, pptx, xlsx, hwp, hwpx, image 중 하나여야 합니다."
         )
+    if not uri and has_uploaded_content and file_name:
+        uri = f"upload://customer-pack/{Path(file_name).name}"
     if not uri:
         raise ValueError("uri가 필요합니다.")
 
@@ -220,6 +247,8 @@ def upload_customer_pack_draft(root_dir: Path, payload: dict[str, Any]) -> dict[
         "docx": ".docx",
         "pptx": ".pptx",
         "xlsx": ".xlsx",
+        "hwp": ".hwp",
+        "hwpx": ".hwpx",
         "image": ".png",
     }.get(request.source_type, ".html")
     source_suffix = Path(file_name).suffix or default_suffix

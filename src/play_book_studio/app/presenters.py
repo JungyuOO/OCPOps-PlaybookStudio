@@ -8,13 +8,17 @@ from pathlib import Path
 from typing import Any
 
 from play_book_studio.intake import CustomerPackDraftStore
-from play_book_studio.intake.service import evaluate_canonical_book_quality
 from play_book_studio.config.packs import default_core_pack, resolve_ocp_core_pack
 from play_book_studio.config.settings import Settings, load_settings
 from play_book_studio.config.validation import read_jsonl
 from play_book_studio.runtime_catalog_registry import official_runtime_book_entry
 from play_book_studio.answering.models import Citation
 from play_book_studio.app.viewers import _parse_viewer_path
+from .customer_pack_read_boundary import (
+    customer_pack_draft_id_from_capture_url,
+    customer_pack_draft_id_from_viewer_path,
+    load_customer_pack_read_boundary,
+)
 from .runtime_truth import official_runtime_truth_payload
 from .presenters_runtime import (
     _build_health_payload,
@@ -227,6 +231,38 @@ def _parse_customer_pack_viewer_path(viewer_path: str) -> tuple[str, str] | None
     return None
 
 
+def _merge_customer_pack_surface_truth(
+    payload: dict[str, Any],
+    corpus_manifest: dict[str, Any] | None,
+) -> dict[str, Any]:
+    manifest = dict(corpus_manifest or {})
+    grade_gate = dict(manifest.get("grade_gate") or payload.get("grade_gate") or {})
+    citation_gate = dict(grade_gate.get("citation_gate") or {})
+    retrieval_gate = dict(grade_gate.get("retrieval_gate") or {})
+    promotion_gate = dict(grade_gate.get("promotion_gate") or {})
+
+    def _value(key: str, fallback: Any = "") -> Any:
+        if key in manifest:
+            return manifest.get(key)
+        if key in payload:
+            return payload.get(key)
+        return fallback
+
+    payload["quality_status"] = str(_value("quality_status", "") or "")
+    payload["quality_score"] = int(_value("quality_score", 0) or 0)
+    payload["quality_flags"] = list(_value("quality_flags", []) or [])
+    payload["quality_summary"] = str(_value("quality_summary", "") or "")
+    payload["shared_grade"] = str(_value("shared_grade", "blocked") or "blocked")
+    payload["grade_gate"] = grade_gate
+    payload["citation_landing_status"] = str(
+        _value("citation_landing_status", citation_gate.get("status") or "missing") or "missing"
+    )
+    payload["retrieval_ready"] = bool(_value("retrieval_ready", retrieval_gate.get("ready")))
+    payload["read_ready"] = bool(_value("read_ready", promotion_gate.get("read_ready")))
+    payload["publish_ready"] = bool(_value("publish_ready", promotion_gate.get("publish_ready")))
+    return payload
+
+
 def _customer_pack_book_for_viewer_path(
     root_dir: Path,
     viewer_path: str,
@@ -241,6 +277,9 @@ def _customer_pack_book_for_viewer_path(
     asset_slug = ""
     if "::" in draft_id:
         resolved_draft_id, asset_slug = draft_id.split("::", 1)
+    boundary = load_customer_pack_read_boundary(root_dir, resolved_draft_id)
+    if not bool(boundary.get("read_allowed", False)):
+        return None
     record = CustomerPackDraftStore(root_dir).get(resolved_draft_id)
     if record is None or not record.canonical_book_path.strip():
         return None
@@ -283,8 +322,13 @@ def _customer_pack_book_for_viewer_path(
     payload.setdefault("boundary_truth", "private_customer_pack_runtime")
     payload.setdefault("runtime_truth_label", "Customer Source-First Pack")
     payload.setdefault("boundary_badge", "Private Pack Runtime")
-    payload.update(evaluate_canonical_book_quality(payload))
-    return payload
+    corpus_manifest_path = Path(str(getattr(record, "private_corpus_manifest_path", "") or "").strip())
+    corpus_manifest = (
+        json.loads(corpus_manifest_path.read_text(encoding="utf-8"))
+        if corpus_manifest_path.as_posix() not in {"", "."} and corpus_manifest_path.exists()
+        else None
+    )
+    return _merge_customer_pack_surface_truth(payload, corpus_manifest)
 
 
 def _customer_pack_meta_for_viewer_path(
@@ -309,6 +353,10 @@ def _customer_pack_meta_for_viewer_path(
             break
     section_path = _display_section_path(list(target.get("section_path") or []))
     section = _display_source_heading(str(target.get("heading") or ""))
+    grade_gate = dict(payload.get("grade_gate") or {})
+    citation_gate = dict(grade_gate.get("citation_gate") or {})
+    retrieval_gate = dict(grade_gate.get("retrieval_gate") or {})
+    promotion_gate = dict(grade_gate.get("promotion_gate") or {})
     return {
         "book_slug": str(payload.get("book_slug") or ""),
         "book_title": str(payload.get("title") or payload.get("book_slug") or ""),
@@ -337,6 +385,12 @@ def _customer_pack_meta_for_viewer_path(
         "inferred_version": str(payload.get("inferred_version") or "unknown"),
         "quality_status": str(payload.get("quality_status") or "ready"),
         "quality_summary": str(payload.get("quality_summary") or ""),
+        "shared_grade": str(payload.get("shared_grade") or "blocked"),
+        "grade_gate": grade_gate,
+        "citation_landing_status": str(payload.get("citation_landing_status") or citation_gate.get("status") or "missing"),
+        "retrieval_ready": bool(payload.get("retrieval_ready") or retrieval_gate.get("ready")),
+        "read_ready": bool(payload.get("read_ready") or promotion_gate.get("read_ready")),
+        "publish_ready": bool(payload.get("publish_ready") or promotion_gate.get("publish_ready")),
         "section_match_exact": matched_exact,
     }
 
@@ -348,6 +402,8 @@ def _default_customer_pack_summary(payload: dict[str, Any]) -> str:
         "md": "text 문서를",
         "asciidoc": "text 문서를",
         "txt": "text 문서를",
+        "hwp": "한글 문서를",
+        "hwpx": "한글 문서를",
     }.get(source_type, "웹 문서를")
     return (
         f"업로드 {source_label} canonical section으로 정리한 내부 review view입니다. "
@@ -457,6 +513,10 @@ def _serialize_citation_uncached(
     settings = context.settings
     href = _citation_href(citation)
     manifest_entry = context.manifest_entry(citation.book_slug)
+    customer_pack_draft_id = (
+        customer_pack_draft_id_from_viewer_path(href)
+        or customer_pack_draft_id_from_capture_url(citation.source_url)
+    )
     customer_pack_meta = context.customer_pack_meta(href)
     row: dict[str, Any] | None = None
 
@@ -494,12 +554,65 @@ def _serialize_citation_uncached(
             "parser_backend": str(customer_pack_meta.get("parser_backend") or ""),
             "fallback_used": bool(customer_pack_meta.get("fallback_used") or False),
             "quality_status": str(customer_pack_meta.get("quality_status") or "ready"),
+            "quality_summary": str(customer_pack_meta.get("quality_summary") or ""),
+            "shared_grade": str(customer_pack_meta.get("shared_grade") or "blocked"),
+            "grade_gate": dict(customer_pack_meta.get("grade_gate") or {}),
+            "citation_landing_status": str(customer_pack_meta.get("citation_landing_status") or "missing"),
+            "retrieval_ready": bool(customer_pack_meta.get("retrieval_ready")),
+            "read_ready": bool(customer_pack_meta.get("read_ready")),
+            "publish_ready": bool(customer_pack_meta.get("publish_ready")),
             "boundary_truth": str(customer_pack_meta.get("boundary_truth") or "private_customer_pack_runtime"),
             "runtime_truth_label": str(customer_pack_meta.get("runtime_truth_label") or "Customer Source-First Pack"),
             "boundary_badge": str(customer_pack_meta.get("boundary_badge") or "Private Pack Runtime"),
             "inferred_product": str(customer_pack_meta.get("inferred_product") or "unknown"),
             "inferred_version": str(customer_pack_meta.get("inferred_version") or "unknown"),
             "section_match_exact": bool(customer_pack_meta.get("section_match_exact", True)),
+        }
+
+    if customer_pack_draft_id:
+        boundary = load_customer_pack_read_boundary(root_dir, customer_pack_draft_id)
+        blocked_reasons = [
+            str(reason).strip()
+            for reason in (boundary.get("fail_reasons") or [])
+            if str(reason).strip()
+        ]
+        return {
+            **citation.to_dict(),
+            "section": _display_source_heading(str(citation.section or citation.anchor)),
+            "href": href,
+            "book_title": "Restricted customer pack",
+            "section_path": [],
+            "section_path_label": "",
+            "source_label": "Restricted customer pack",
+            "source_collection": "uploaded",
+            "pack_id": "",
+            "pack_label": "",
+            "source_lane": "customer_source_first_pack",
+            "approval_state": str(boundary.get("approval_state") or "unreviewed"),
+            "publication_state": str(boundary.get("publication_state") or "draft"),
+            "parser_backend": "",
+            "fallback_used": False,
+            "quality_status": "blocked",
+            "quality_summary": "; ".join(blocked_reasons),
+            "shared_grade": "blocked",
+            "grade_gate": {
+                "shared_grade": "blocked",
+                "promotion_gate": {
+                    "read_ready": False,
+                    "publish_ready": False,
+                    "blocked_reasons": blocked_reasons or ["customer_pack_read_blocked"],
+                },
+            },
+            "citation_landing_status": "missing",
+            "retrieval_ready": False,
+            "read_ready": False,
+            "publish_ready": False,
+            "boundary_truth": "private_customer_pack_runtime",
+            "runtime_truth_label": "Customer Source-First Pack",
+            "boundary_badge": "Private Pack Runtime",
+            "inferred_product": "unknown",
+            "inferred_version": "unknown",
+            "section_match_exact": False,
         }
 
     if _citation_has_direct_section_metadata(citation):
