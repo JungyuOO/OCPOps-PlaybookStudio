@@ -44,8 +44,6 @@ def filter_customer_pack_hits_by_selection(
     allowed_draft_ids: tuple[str, ...] | None = None,
 ) -> list[RetrievalHit]:
     context = context or SessionContext()
-    if not context.restrict_uploaded_sources:
-        return hits
     selected = (
         {str(draft_id).strip() for draft_id in allowed_draft_ids if str(draft_id).strip()}
         if allowed_draft_ids is not None
@@ -56,21 +54,17 @@ def filter_customer_pack_hits_by_selection(
         }
     )
     if not selected:
-        return []
+        return hits if not context.restrict_uploaded_sources else []
     return [hit for hit in hits if draft_id_from_intake_hit(hit) in selected]
 
 
 def has_active_customer_pack_selection(context: SessionContext | None = None) -> bool:
     context = context or SessionContext()
-    if not context.restrict_uploaded_sources:
-        return False
     return any(str(draft_id).strip() for draft_id in context.selected_draft_ids)
 
 
 def _selected_draft_ids(context: SessionContext | None = None) -> tuple[str, ...]:
     context = context or SessionContext()
-    if not context.restrict_uploaded_sources:
-        return ()
     return tuple(
         str(draft_id).strip()
         for draft_id in context.selected_draft_ids
@@ -278,16 +272,23 @@ def customer_pack_row_from_section(
         if str(item).strip()
     ]
     title = str(payload.get("title") or payload.get("book_slug") or draft_id).strip()
+    heading = str(section.get("heading") or section.get("section_path_label") or title).strip()
+    section_text = str(section.get("text") or "").strip()
+    text_prefix: list[str] = []
+    if title:
+        text_prefix.append(f"문서 제목: {title}")
+    if heading and heading != title:
+        text_prefix.append(f"섹션 제목: {heading}")
     return {
         "chunk_id": f"{draft_id}:{str(section.get('section_key') or anchor or section.get('ordinal') or 'section').strip()}",
         "book_slug": str(payload.get("book_slug") or draft_id).strip(),
         "chapter": section_path[0] if section_path else title,
-        "section": str(section.get("heading") or section.get("section_path_label") or title).strip(),
+        "section": heading,
         "section_path": section_path,
         "anchor": anchor,
         "source_url": str(section.get("source_url") or payload.get("source_uri") or "").strip(),
         "viewer_path": viewer_path,
-        "text": str(section.get("text") or "").strip(),
+        "text": "\n".join(part for part in (*text_prefix, section_text) if part).strip(),
         "source_id": f"customer_pack:{draft_id}",
         "source_lane": "customer_pack",
         "source_type": str(payload.get("playbook_family") or payload.get("source_type") or "customer_pack").strip(),
@@ -300,6 +301,16 @@ def customer_pack_row_from_section(
     }
 
 
+def _customer_pack_corpus_manifest_for_book(books_dir: Path, draft_id: str) -> dict[str, Any] | None:
+    manifest_path = books_dir.parent / "corpus" / draft_id / "manifest.json"
+    if not manifest_path.exists():
+        return None
+    try:
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 @lru_cache(maxsize=4)
 def load_customer_pack_overlay_index(
     books_dir_str: str,
@@ -310,9 +321,10 @@ def load_customer_pack_overlay_index(
     rows: list[dict[str, str]] = []
     for path in iter_customer_pack_book_payload_paths(books_dir):
         payload = json.loads(path.read_text(encoding="utf-8"))
-        quality = evaluate_canonical_book_quality(payload)
-        surface_gates = dict((quality.get("grade_gate") or {}).get("surface_gates") or {})
-        if not bool(surface_gates.get("llmwiki_ready")):
+        corpus_manifest = _customer_pack_corpus_manifest_for_book(books_dir, path.stem)
+        quality = evaluate_canonical_book_quality(payload, corpus_manifest=corpus_manifest)
+        promotion_gate = dict((quality.get("grade_gate") or {}).get("promotion_gate") or {})
+        if not bool(promotion_gate.get("publish_ready")):
             continue
         payload.update(quality)
         sections = [

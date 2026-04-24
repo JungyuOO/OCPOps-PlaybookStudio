@@ -92,6 +92,45 @@ class CustomerPackGradeGateTests(unittest.TestCase):
         self.assertEqual("partial", quality["grade_gate"]["citation_gate"]["status"])
         self.assertFalse(quality["grade_gate"]["promotion_gate"]["read_ready"])
 
+    def test_slide_deck_report_is_not_blocked_by_short_sections_only(self) -> None:
+        payload = {
+            "title": "서비스 테스트 결과서",
+            "source_type": "pptx",
+            "surface_kind": "slide_deck",
+            "approval_state": "approved",
+            "publication_state": "active",
+            "sections": [
+                {
+                    "ordinal": index,
+                    "section_key": f"section-{index}",
+                    "heading": f"{index}. 결과 요약",
+                    "section_level": 1,
+                    "section_path": [f"{index}. 결과 요약"],
+                    "anchor": f"section-{index}",
+                    "viewer_path": f"/playbooks/customer-packs/draft-1/index.html#section-{index}",
+                    "source_url": "/api/customer-packs/captured?draft_id=draft-1",
+                    "text": f"짧은 결과 문장 {index}",
+                    "semantic_role": "reference" if index % 2 == 0 else "unknown",
+                    "block_kinds": ["paragraph"],
+                }
+                for index in range(1, 31)
+            ],
+        }
+
+        quality = evaluate_canonical_book_quality(
+            payload,
+            corpus_manifest={
+                "chunk_count": 60,
+                "bm25_ready": True,
+                "vector_status": "ready",
+                "anchor_lineage_count": 30,
+            },
+        )
+
+        self.assertEqual(["too_many_short_sections"], quality["quality_flags"])
+        self.assertIn(quality["shared_grade"], {"gold", "silver"})
+        self.assertTrue(quality["grade_gate"]["promotion_gate"]["publish_ready"])
+
     def test_private_runtime_boundary_requires_grade_gate_read_ready(self) -> None:
         summary = summarize_private_runtime_boundary(
             {

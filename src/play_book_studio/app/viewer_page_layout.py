@@ -31,6 +31,8 @@ def _render_study_viewer_html(
     section_outline: list[dict[str, str]] | None = None,
     section_navigation: list[dict[str, str]] | None = None,
     section_metrics: list[str] | None = None,
+    viewer_header_chrome: str = "",
+    viewer_footer_chrome: str = "",
     hero_mode: str = "full",
 ) -> str:
     hero_block = ""
@@ -39,6 +41,8 @@ def _render_study_viewer_html(
     hero_meta_block = ""
     document_toolbar_block = ""
     document_footer_navigation_block = ""
+    header_chrome_block = ""
+    footer_chrome_block = ""
     summary_block = f'<p class="summary">{html.escape(summary)}</p>' if summary else ""
     hero_metric_pills = "".join(
         '<span class="meta-pill">{}</span>'.format(html.escape(metric))
@@ -114,6 +118,18 @@ def _render_study_viewer_html(
             {toolbar_items}
           </div>
         """.format(toolbar_items="".join(toolbar_items))
+    if viewer_header_chrome:
+        header_chrome_block = """
+          <div class="viewer-header-chrome">
+            {viewer_header_chrome}
+          </div>
+        """.format(viewer_header_chrome=viewer_header_chrome)
+    if viewer_footer_chrome:
+        footer_chrome_block = """
+          <div class="viewer-footer-chrome">
+            {viewer_footer_chrome}
+          </div>
+        """.format(viewer_footer_chrome=viewer_footer_chrome)
     if not embedded and str(hero_mode or "full").strip().lower() != "hidden":
         hero_meta_block = """
             <div class="hero-meta">
@@ -160,12 +176,14 @@ def _render_study_viewer_html(
           <section class="reader-layout">
             <div class="reader-main">
               <article class="{document_class}">
+                {header_chrome_block}
                 {article_toolbar_block}
                 {extra_blocks}
                 <div class="section-list">
                   {cards}
                 </div>
                 {document_footer_navigation_block}
+                {footer_chrome_block}
               </article>
             </div>
             {reader_sidebar}
@@ -188,6 +206,8 @@ def _render_study_viewer_html(
         extra_blocks=extra_blocks,
         reader_sidebar=reader_sidebar,
         document_footer_navigation_block=document_footer_navigation_block,
+        header_chrome_block=header_chrome_block,
+        footer_chrome_block=footer_chrome_block,
         article_toolbar_block=article_toolbar_block or "",
         hero_metric_pills=hero_metric_pills,
         hero_meta_block=hero_meta_block.format(

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from play_book_studio.canonical import project_playbook_document
+from play_book_studio.canonical import build_source_repo_document_ast, project_playbook_document, validate_document_ast
 from .audit_rules import (
     LANGUAGE_FALLBACK_RE,
     body_language_guess,
@@ -45,6 +45,8 @@ from .playbook_materialization import (
     project_playbook_payload_sections,
 )
 from .qdrant_store import ensure_collection, upsert_chunks
+from .source_repo_hydration import hydrate_source_repo_artifacts
+from .translation_draft_generation import _source_repo_runtime_entry
 from play_book_studio.config.settings import HIGH_VALUE_SLUGS, Settings
 
 
@@ -154,6 +156,7 @@ def _entry_with_inferred_runtime_status(
 
 
 def _save_log(settings: Settings, log: PipelineLog) -> None:
+    settings.preprocessing_log_path.parent.mkdir(parents=True, exist_ok=True)
     settings.preprocessing_log_path.write_text(
         json.dumps(log.to_dict(), ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -162,6 +165,13 @@ def _save_log(settings: Settings, log: PipelineLog) -> None:
 
 def _progress(message: str) -> None:
     print(message, flush=True)
+
+
+def _validate_source_repo_document(document, slug: str) -> None:
+    errors = [issue for issue in validate_document_ast(document) if issue.severity == "error"]
+    if errors:
+        joined = ", ".join(issue.code for issue in errors[:5])
+        raise ValueError(f"Invalid canonical AST for {slug}: {joined}")
 
 
 def ensure_manifest(settings: Settings, refresh: bool = False) -> list[SourceManifestEntry]:
@@ -228,6 +238,30 @@ def run_ingestion_pipeline(
     log.stage = "collect"
     for index, entry in enumerate(collect_entries, start=1):
         try:
+            approved_playbook_payload = None
+            if entry.source_type == "manual_synthesis":
+                approved_playbook_payload = load_approved_playbook_payload(
+                    settings,
+                    entry.book_slug,
+                    source_type="manual_synthesis",
+                )
+            if approved_playbook_payload is not None:
+                log.upsert_book_stat(entry.book_slug, collected=True, source_url=entry.source_url)
+                _progress(
+                    f"[collect {index}/{len(collect_entries)}] "
+                    f"{entry.book_slug} source=approved_playbook_payload"
+                )
+                _save_log(settings, log)
+                continue
+            if entry.source_kind == "source-first":
+                hydrate_source_repo_artifacts(settings, entry)
+                log.upsert_book_stat(entry.book_slug, collected=True, source_url=entry.source_url)
+                _progress(
+                    f"[collect {index}/{len(collect_entries)}] "
+                    f"{entry.book_slug} source=source_repo_raw"
+                )
+                _save_log(settings, log)
+                continue
             collect_entry(entry, settings, force=force_collect)
             log.collected_count += 1
             log.collected_sources.append(entry.book_slug)
@@ -262,6 +296,22 @@ def run_ingestion_pipeline(
                     sections=sections,
                 )
                 playbook_documents.append(approved_playbook_payload)
+            elif entry.source_kind == "source-first":
+                hydrate_source_repo_artifacts(settings, entry)
+                runtime_entry, source_paths = _source_repo_runtime_entry(settings, entry)
+                document = build_source_repo_document_ast(
+                    entry=runtime_entry,
+                    source_paths=source_paths,
+                    fallback_title=runtime_entry.title or entry.title or entry.book_slug,
+                )
+                _validate_source_repo_document(document, runtime_entry.book_slug)
+                sections = project_normalized_sections(document)
+                inferred_entry = _entry_with_inferred_runtime_status(
+                    runtime_entry,
+                    html="",
+                    sections=sections,
+                )
+                playbook_documents.append(project_playbook_document(document).to_dict())
             else:
                 html_path = raw_html_path(settings, entry.book_slug)
                 if not html_path.exists():

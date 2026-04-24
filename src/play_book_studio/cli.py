@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import date
 from pathlib import Path
 
 from play_book_studio.answering.answerer import ChatAnswerer
+from play_book_studio.app.customer_pack_batch import write_customer_pack_material_batch_report
 from play_book_studio.app.private_lane_smoke import write_private_lane_smoke
 from play_book_studio.app.runtime_maintenance_smoke import write_runtime_maintenance_smoke
 from play_book_studio.app.runtime_report import (
@@ -125,6 +127,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Rebuild the compact graph fallback artifact from current chunks and playbook documents",
     )
     compact_graph_parser.add_argument("--output", type=Path, default=None)
+
+    customer_pack_batch_parser = subparsers.add_parser(
+        "customer-pack-batch",
+        help="Batch ingest customer material PPT sources into the custom playbook pipeline",
+    )
+    customer_pack_batch_parser.add_argument(
+        "--materials-root",
+        type=Path,
+        default=ROOT / ".P_docs" / "01_검토대기_플레이북재료",
+    )
+    customer_pack_batch_parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT / ".kugnusdocs" / "reports" / f"{date.today().isoformat()}-customer-pack-material-batch.json",
+    )
+    customer_pack_batch_parser.add_argument("--approval-state", default="approved")
+    customer_pack_batch_parser.add_argument("--publication-state", default="active")
 
     return parser
 
@@ -337,6 +356,19 @@ def _run_graph_compact(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_customer_pack_batch(args: argparse.Namespace) -> int:
+    output_path, payload = write_customer_pack_material_batch_report(
+        ROOT,
+        materials_root=args.materials_root,
+        output_path=args.output,
+        approval_state=args.approval_state,
+        publication_state=args.publication_state,
+    )
+    print(f"wrote customer pack batch report: {output_path}")
+    print(json.dumps(payload["summary"], ensure_ascii=False, indent=2))
+    return 0 if bool(payload["summary"].get("customer_llmwiki_ready")) else 1
+
+
 def main() -> int:
     args = build_parser().parse_args()
     if args.command == "ui":
@@ -355,6 +387,8 @@ def main() -> int:
         return _run_private_lane_smoke(args)
     if args.command == "graph-compact":
         return _run_graph_compact(args)
+    if args.command == "customer-pack-batch":
+        return _run_customer_pack_batch(args)
     raise ValueError(f"unsupported command: {args.command}")
 
 

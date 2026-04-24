@@ -77,8 +77,6 @@ def preserve_explicit_mixed_runtime_citations(
     selected_citations,
     final_citations,
 ) -> list:
-    if not _is_explicit_mixed_runtime_query(query):
-        return final_citations
     if not selected_citations:
         return final_citations
 
@@ -99,6 +97,8 @@ def preserve_explicit_mixed_runtime_citations(
         None,
     )
     if private_selected is None or official_selected is None:
+        return final_citations
+    if not (_is_explicit_mixed_runtime_query(query) or _has_runtime_blend_signal(query)):
         return final_citations
 
     preserved = [replace(citation, index=index + 1) for index, citation in enumerate(final_citations)]
@@ -219,6 +219,23 @@ def _is_explicit_mixed_runtime_query(query: str) -> bool:
         )
     ) or any(token in (query or "") for token in ("공식 runtime", "공식 문서", "공식 근거"))
     return has_private_signal and has_official_signal
+
+
+def _has_runtime_blend_signal(query: str) -> bool:
+    lowered = (query or "").lower()
+    return any(
+        token in lowered
+        for token in (
+            "같이 참고",
+            "함께 참고",
+            "같이 보",
+            "함께 보",
+            "같이 써",
+            "함께 써",
+            "together",
+            "alongside",
+        )
+    )
 
 
 def _citation_truth_bucket(citation) -> str:

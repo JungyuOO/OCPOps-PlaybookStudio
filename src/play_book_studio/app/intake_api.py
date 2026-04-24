@@ -329,7 +329,13 @@ def normalize_customer_pack_draft(root_dir: Path, payload: dict[str, Any]) -> di
     draft_id = str(payload.get("draft_id") or "").strip()
     if not draft_id:
         raise ValueError("normalize할 draft_id가 필요합니다.")
-    record = CustomerPackNormalizeService(root_dir).normalize(draft_id=draft_id)
+    store = CustomerPackDraftStore(root_dir)
+    existing = store.get(draft_id)
+    if existing is None:
+        raise ValueError("normalize할 draft를 찾을 수 없습니다.")
+    _apply_private_runtime_overrides(root_dir, existing, payload)
+    force_rebuild = bool(payload.get("force_rebuild"))
+    record = CustomerPackNormalizeService(root_dir).normalize(draft_id=draft_id, force_rebuild=force_rebuild)
     result = record.to_dict()
     canonical_payload = load_customer_pack_book(root_dir, record.draft_id)
     if canonical_payload is not None:

@@ -49,7 +49,7 @@ const VIEWER_READER_POLISH = `
     display: none !important;
   }
 
-  .viewer-root .document-toolbar {
+  .viewer-root:not(.viewer-root--slide-deck) .document-toolbar {
     display: none !important;
   }
 
@@ -66,7 +66,7 @@ const VIEWER_READER_POLISH = `
     min-width: 0 !important;
   }
 
-  .viewer-root .section-card {
+  .viewer-root .section-card:not(.customer-slide-card-section) {
     background: var(--pbs-reader-card-bg) !important;
     border: 1px solid var(--pbs-reader-border) !important;
     box-shadow: 0 4px 12px rgba(0,0,0,0.03) !important;
@@ -120,9 +120,35 @@ const VIEWER_READER_POLISH = `
     max-width: 100% !important;
   }
 
+  .viewer-root.viewer-root--slide-deck main {
+    width: min(1120px, 100%) !important;
+    max-width: 1120px !important;
+    padding: 18px 20px 42px !important;
+  }
+
+  .viewer-root.viewer-root--slide-deck .document-toolbar {
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 14px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .viewer-root.viewer-root--slide-deck .customer-slide-toolbar-chrome {
+    order: 0 !important;
+  }
+
+  .viewer-root.viewer-root--slide-deck .customer-slide-card-section {
+    margin-bottom: 28px !important;
+  }
+
   @media (max-width: 1100px) {
     .viewer-root main {
       padding: 24px 20px 48px !important;
+    }
+
+    .viewer-root.viewer-root--slide-deck main {
+      padding: 16px 16px 36px !important;
     }
   }
 
@@ -542,6 +568,7 @@ export default function ViewerDocumentStage({
   const latestRemoveTextAnnotationRef = useRef(onRemoveTextAnnotation);
   const [editorDraft, setEditorDraft] = useState<ViewerTextEditorDraft | null>(null);
   const inlineStylesKey = viewerDocument.inlineStyles.join('\n/*__viewer-style-split__*/\n');
+  const isSlideDeckSurface = /customer-slide-(?:preview|card-section|toolbar-chrome)/.test(viewerDocument.html);
 
   latestViewerPathRef.current = currentViewerPath;
   latestNavigateViewerPathRef.current = onNavigateViewerPath;
@@ -578,7 +605,12 @@ export default function ViewerDocumentStage({
     root.appendChild(annotationStyle);
 
     const wrapper = document.createElement('div');
-    wrapper.className = ['viewer-root', 'is-embedded', viewerDocument.bodyClassName].filter(Boolean).join(' ');
+    wrapper.className = [
+      'viewer-root',
+      'is-embedded',
+      viewerDocument.bodyClassName,
+      isSlideDeckSurface ? 'viewer-root--slide-deck' : '',
+    ].filter(Boolean).join(' ');
     wrapper.innerHTML = viewerDocument.html;
     root.appendChild(wrapper);
     wrapperRef.current = wrapper;

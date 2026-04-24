@@ -3,11 +3,13 @@ from __future__ import annotations
 # graph_sidecar_v2
 
 import json
+import shutil
 from collections import Counter, defaultdict
 from dataclasses import fields
 from datetime import datetime
 from itertools import islice
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, Iterator
 
 from play_book_studio.config.settings import Settings
@@ -310,6 +312,37 @@ def _append_book_relation(
     edge["weight"] += 1
 
 
+def _compact_relation_groups(
+    relation_groups: dict[str, list[dict[str, Any]]],
+    *,
+    related_book_slug_limit: int = 8,
+) -> dict[str, list[dict[str, Any]]]:
+    compact_groups: dict[str, list[dict[str, Any]]] = {}
+    for group_name, groups in sorted(relation_groups.items()):
+        compact_entries: list[dict[str, Any]] = []
+        for group in groups:
+            related_chunk_ids = [
+                str(value).strip()
+                for value in (group.get("related_chunk_ids") or [])
+                if str(value).strip()
+            ]
+            related_book_slugs = [
+                str(value).strip()
+                for value in (group.get("related_book_slugs") or [])
+                if str(value).strip()
+            ]
+            compact_entries.append(
+                {
+                    "value": str(group.get("value") or "").strip(),
+                    "related_chunk_count": len(related_chunk_ids),
+                    "related_book_count": len(related_book_slugs),
+                    "related_book_slugs": related_book_slugs[:related_book_slug_limit],
+                }
+            )
+        compact_groups[group_name] = compact_entries
+    return compact_groups
+
+
 def _build_book_relations(
     *,
     book_index: dict[str, dict[str, Any]],
@@ -388,6 +421,7 @@ def build_graph_sidecar_payload(
             group_name: groups
             for group_name, groups in sorted(relation_groups_by_chunk.get(chunk_id, {}).items())
         }
+        compact_relation_groups = _compact_relation_groups(relation_groups)
         chunks.append(
             {
                 "chunk_id": chunk_id,
@@ -409,7 +443,7 @@ def build_graph_sidecar_payload(
                 "operator_names": list(row.get("operator_names") or []),
                 "error_strings": list(row.get("error_strings") or []),
                 "verification_hints": list(row.get("verification_hints") or []),
-                "relation_groups": relation_groups,
+                "relation_groups": compact_relation_groups,
                 "relation_count": sum(len(groups) for groups in relation_groups.values()),
             }
         )
@@ -640,9 +674,107 @@ def write_graph_sidecar_compact_from_artifacts(
         pack_id=settings.active_pack_id,
     )
     target_path = output_path or settings.graph_sidecar_compact_path
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    target_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _atomic_write_json_payload(target_path, payload)
     return target_path, payload
+
+
+def _atomic_write_json_payload(path: Path, payload: dict[str, Any]) -> None:
+    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+    _atomic_write_text(path, serialized)
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            delete=False,
+            dir=path.parent,
+            prefix=f".{path.stem}.",
+            suffix=".tmp",
+        ) as handle:
+            tmp_path = Path(handle.name)
+            handle.write(text)
+        _replace_or_copy_atomic_output(tmp_path, path)
+    finally:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+
+
+def _stream_json_array(handle, rows: list[dict[str, Any]]) -> None:
+    handle.write("[")
+    first = True
+    for row in rows:
+        if not first:
+            handle.write(",")
+        handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")))
+        first = False
+    handle.write("]")
+
+
+def _stream_full_graph_sidecar_payload(handle, payload: dict[str, Any]) -> None:
+    scalar_items: tuple[tuple[str, Any], ...] = (
+        ("schema", payload.get("schema")),
+        ("schema_version", payload.get("schema_version")),
+        ("app_id", payload.get("app_id")),
+        ("pack_id", payload.get("pack_id")),
+        ("pack_scope", payload.get("pack_scope")),
+        ("graph_backend", payload.get("graph_backend")),
+        ("book_count", payload.get("book_count")),
+        ("chunk_count", payload.get("chunk_count")),
+        ("relation_count", payload.get("relation_count")),
+        ("summary", payload.get("summary")),
+    )
+    handle.write("{")
+    for index, (key, value) in enumerate(scalar_items):
+        if index:
+            handle.write(",")
+        handle.write(json.dumps(key, ensure_ascii=False, separators=(",", ":")))
+        handle.write(":")
+        handle.write(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+    handle.write(",")
+    handle.write(json.dumps("books", ensure_ascii=False, separators=(",", ":")))
+    handle.write(":")
+    _stream_json_array(handle, [row for row in payload.get("books") or [] if isinstance(row, dict)])
+    handle.write(",")
+    handle.write(json.dumps("chunks", ensure_ascii=False, separators=(",", ":")))
+    handle.write(":")
+    _stream_json_array(handle, [row for row in payload.get("chunks") or [] if isinstance(row, dict)])
+    handle.write(",")
+    handle.write(json.dumps("relations", ensure_ascii=False, separators=(",", ":")))
+    handle.write(":")
+    _stream_json_array(handle, [row for row in payload.get("relations") or [] if isinstance(row, dict)])
+    handle.write("}\n")
+
+
+def _atomic_write_full_graph_sidecar_payload(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            delete=False,
+            dir=path.parent,
+            prefix=f".{path.stem}.",
+            suffix=".tmp",
+        ) as handle:
+            tmp_path = Path(handle.name)
+            _stream_full_graph_sidecar_payload(handle, payload)
+        _replace_or_copy_atomic_output(tmp_path, path)
+    finally:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+
+
+def _replace_or_copy_atomic_output(tmp_path: Path, path: Path) -> None:
+    try:
+        tmp_path.replace(path)
+    except PermissionError:
+        with tmp_path.open("rb") as source, path.open("wb") as target:
+            shutil.copyfileobj(source, target, length=1024 * 1024)
 
 
 def write_graph_sidecar_from_artifacts(
@@ -663,12 +795,8 @@ def write_graph_sidecar_from_artifacts(
     compact_payload = build_graph_sidecar_compact_payload(payload)
     target_path = output_path or settings.graph_sidecar_path
     compact_target_path = compact_output_path or settings.graph_sidecar_compact_path
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    target_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    compact_target_path.write_text(
-        json.dumps(compact_payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    _atomic_write_full_graph_sidecar_payload(target_path, payload)
+    _atomic_write_json_payload(compact_target_path, compact_payload)
     if target_path == settings.graph_sidecar_path and compact_target_path == settings.graph_sidecar_compact_path:
         _write_neo4j_payload(settings, payload=payload)
     return target_path, payload
@@ -681,7 +809,32 @@ def refresh_active_runtime_graph_artifacts(
     allow_compact_degrade: bool = False,
 ) -> dict[str, Any]:
     if refresh_full_sidecar:
-        output_path, payload = write_graph_sidecar_from_artifacts(settings)
+        try:
+            output_path, payload = write_graph_sidecar_from_artifacts(settings)
+        except Exception as exc:  # noqa: BLE001
+            if not allow_compact_degrade:
+                raise
+            full_status = graph_sidecar_artifact_status(settings)
+            compact_status = graph_sidecar_compact_artifact_status(settings)
+            return {
+                "status": "degraded",
+                "degrade_mode": "full_sidecar_runtime_fallback",
+                "full_sidecar": {
+                    "status": "degraded",
+                    "error": str(exc),
+                    "output_path": str(settings.graph_sidecar_path),
+                    "book_count": int(full_status.get("book_count") or 0),
+                    "relation_count": int(full_status.get("relation_count") or 0),
+                    "artifact_status": full_status,
+                },
+                "compact_sidecar": {
+                    "status": "degraded" if not compact_status.get("ready") else "ok",
+                    "output_path": str(settings.graph_sidecar_compact_path),
+                    "book_count": int(compact_status.get("book_count") or 0),
+                    "relation_count": int(compact_status.get("relation_count") or 0),
+                    "artifact_status": compact_status,
+                },
+            }
         compact_status = graph_sidecar_compact_artifact_status(settings)
         return {
             "status": "ok",

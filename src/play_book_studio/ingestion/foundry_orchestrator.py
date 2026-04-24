@@ -456,6 +456,14 @@ def _run_approved_runtime_rebuild(settings: Settings, report_dir: Path, _: str) 
         skip_qdrant=True,
     )
     payload = log.to_dict()
+    pipeline_errors = list(payload.get("errors", []))
+    if pipeline_errors:
+        first_error = pipeline_errors[0] if isinstance(pipeline_errors[0], dict) else {}
+        raise RuntimeError(
+            "approved runtime rebuild encountered "
+            f"{len(pipeline_errors)} pipeline errors; "
+            f"first={first_error.get('book_slug', 'unknown')}: {first_error.get('message', 'unknown error')}"
+        )
     payload["curated_gold_refresh"] = {
         "requested_count": int(dict(curated_gold_refresh.get("summary", {})).get("requested_count", 0) or 0),
         "promoted_count": int(dict(curated_gold_refresh.get("summary", {})).get("promoted_count", 0) or 0),

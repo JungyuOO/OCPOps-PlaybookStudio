@@ -297,6 +297,7 @@ def _render_customer_pack_slide_cards(
     slides: list[dict[str, Any]],
     *,
     draft_id: str,
+    document_title: str,
     target_anchor: str,
     embedded: bool,
     page_mode: str,
@@ -304,6 +305,7 @@ def _render_customer_pack_slide_cards(
     cards: list[str] = []
     resolved_page_mode = _resolve_page_mode(page_mode)
     show_card_header = resolved_page_mode == "multi"
+    safe_document_title = str(document_title or "").strip()
     for slide in slides:
         slide_anchor = str(slide.get("slide_anchor") or "").strip()
         title = str(slide.get("title") or slide_anchor or "Slide").strip() or "Slide"
@@ -352,11 +354,13 @@ def _render_customer_pack_slide_cards(
             subject_block = '<div class="customer-slide-card-subject">{}</div>'.format(html.escape(matched_heading))
         card_header = """
           <div class="customer-slide-card-header">
+            <div class="customer-slide-card-document">{document_title}</div>
             <div class="customer-slide-card-meta">{meta}</div>
             <div class="customer-slide-card-title">{title}</div>
             {subject_block}
           </div>
         """.format(
+            document_title=html.escape(safe_document_title),
             meta=html.escape(" · ".join(part for part in meta_parts if part)),
             title=html.escape(title),
             subject_block=subject_block,
@@ -741,6 +745,7 @@ def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str, *, page
         cards = _render_customer_pack_slide_cards(
             visible_slides,
             draft_id=str(canonical_book.get("draft_id") or draft_id).split("::", 1)[0],
+            document_title=str(canonical_book.get("title") or draft_id),
             target_anchor=target_anchor,
             embedded=embedded,
             page_mode=page_mode,

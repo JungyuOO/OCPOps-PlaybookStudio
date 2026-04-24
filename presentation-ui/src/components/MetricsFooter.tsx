@@ -9,8 +9,8 @@ export default function MetricsFooter() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [metrics, setMetrics] = useState({
     approvedRuntime: 0,
-    topicPlaybooks: 0,
-    playableAssets: 0,
+    customerUploadedPlaybooks: 0,
+    pendingMaterials: 0,
   });
 
   useEffect(() => {
@@ -22,8 +22,8 @@ export default function MetricsFooter() {
         }
         setMetrics({
           approvedRuntime: Number(payload.summary.approved_runtime_count || 0),
-          topicPlaybooks: Number(payload.summary.topic_playbook_count || 0),
-          playableAssets: Number(payload.summary.playable_asset_count || 0),
+          customerUploadedPlaybooks: Number(payload.summary.user_library_book_count || 0),
+          pendingMaterials: Number(payload.summary.custom_document_count || 0),
         });
       })
       .catch(() => {
@@ -32,8 +32,8 @@ export default function MetricsFooter() {
         }
         setMetrics({
           approvedRuntime: 0,
-          topicPlaybooks: 0,
-          playableAssets: 0,
+          customerUploadedPlaybooks: 0,
+          pendingMaterials: 0,
         });
       });
     return () => {
@@ -72,20 +72,23 @@ export default function MetricsFooter() {
   return (
     <footer className="metrics-footer" ref={containerRef}>
       <div className="metrics-content">
-        <h2>지금 바로 플랫폼에 검증된 지식</h2>
+        <h2>플랫폼 문서 현황</h2>
+        <p className="metrics-intro">
+          승인된 OCP 공식 매뉴얼, 고객 업로드 플레이북, 플레이북 반영 대기 자료를 기준으로 집계합니다.
+        </p>
 
         <div className="metrics-grid">
           <div className="metric-item">
             <span className="metric-number gradient-text" data-target={metrics.approvedRuntime}>{metrics.approvedRuntime}</span>
-            <span className="metric-label">Approved Runtime Books</span>
+            <span className="metric-label">OCP 공식 매뉴얼</span>
           </div>
           <div className="metric-item">
-            <span className="metric-number gradient-text" data-target={metrics.topicPlaybooks}>{metrics.topicPlaybooks}</span>
-            <span className="metric-label">Topic Playbooks</span>
+            <span className="metric-number gradient-text" data-target={metrics.customerUploadedPlaybooks}>{metrics.customerUploadedPlaybooks}</span>
+            <span className="metric-label">고객 업로드 문서</span>
           </div>
           <div className="metric-item">
-            <span className="metric-number gradient-text" data-target={metrics.playableAssets}>{metrics.playableAssets}</span>
-            <span className="metric-label">Playable Assets</span>
+            <span className="metric-number gradient-text" data-target={metrics.pendingMaterials}>{metrics.pendingMaterials}</span>
+            <span className="metric-label">반영 대기 자료</span>
           </div>
         </div>
 

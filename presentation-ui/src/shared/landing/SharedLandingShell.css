@@ -1,5 +1,8 @@
 .shared-landing-shell {
   min-height: 100vh;
+}
+
+.shared-landing-shell.partner-mode {
   padding: 24px;
   background:
     radial-gradient(circle at top left, rgba(0, 209, 255, 0.12), transparent 28%),
@@ -152,7 +155,7 @@
 }
 
 @media (max-width: 720px) {
-  .shared-landing-shell {
+  .shared-landing-shell.partner-mode {
     padding: 14px;
   }
 

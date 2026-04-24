@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://127.0.0.1:8765'
+const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://127.0.0.1:8876'
 
 // https://vite.dev/config/
 export default defineConfig({

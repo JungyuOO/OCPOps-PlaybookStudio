@@ -1,5 +1,5 @@
 export const RUNTIME_ORIGIN = (import.meta.env.VITE_RUNTIME_ORIGIN ?? '').trim().replace(/\/$/, '');
-export const RUNTIME_EXTERNAL_ORIGIN = RUNTIME_ORIGIN || 'http://127.0.0.1:8765';
+export const RUNTIME_EXTERNAL_ORIGIN = RUNTIME_ORIGIN || 'http://127.0.0.1:8876';
 export const CUSTOMER_PACK_UPLOAD_ACCEPT = '.pdf,.md,.markdown,.docx,.pptx,.xlsx,.txt,.adoc,.asciidoc,.html,.htm,.png,.jpg,.jpeg,.webp';
 
 export interface LibraryBookSourceOption {
@@ -521,6 +521,12 @@ export interface CustomerPackDraft {
   created_at: string;
   updated_at: string;
   source_type: string;
+  surface_kind?: string;
+  source_unit_kind?: string;
+  source_unit_count?: number;
+  slide_packet_count?: number;
+  slide_asset_count?: number;
+  slide_preview_count?: number;
   title: string;
   book_slug: string;
   source_collection?: string;
@@ -570,6 +576,12 @@ export interface CustomerPackBook {
   draft_id: string;
   title: string;
   target_viewer_path: string;
+  surface_kind?: string;
+  source_unit_kind?: string;
+  source_unit_count?: number;
+  slide_packet_count?: number;
+  slide_asset_count?: number;
+  slide_preview_count?: number;
   quality_status: string;
   quality_score: number;
   quality_summary: string;
@@ -1160,10 +1172,20 @@ export async function captureCustomerPackDraft(draftId: string): Promise<Custome
   });
 }
 
-export async function normalizeCustomerPackDraft(draftId: string): Promise<CustomerPackDraft> {
+export async function normalizeCustomerPackDraft(
+  draftId: string,
+  options?: {
+    approvalState?: string;
+    publicationState?: string;
+  },
+): Promise<CustomerPackDraft> {
   return requestJson<CustomerPackDraft>('/api/customer-packs/normalize', {
     method: 'POST',
-    body: JSON.stringify({ draft_id: draftId }),
+    body: JSON.stringify({
+      draft_id: draftId,
+      approval_state: options?.approvalState,
+      publication_state: options?.publicationState,
+    }),
   });
 }
 

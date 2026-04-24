@@ -27,6 +27,7 @@ from .validation import read_jsonl
 
 
 OFFICIAL_SOURCE_TYPE = "official_doc"
+OFFICIAL_RUNTIME_SOURCE_TYPES = {OFFICIAL_SOURCE_TYPE, "manual_synthesis"}
 
 
 def _read_jsonl_rows(path: Path) -> list[dict[str, Any]]:
@@ -50,6 +51,10 @@ def _playbook_source_type(row: dict[str, Any]) -> str:
 def _row_source_type(row: dict[str, Any]) -> str:
     direct = str(row.get("source_type") or "").strip()
     return direct or _playbook_source_type(row)
+
+
+def _is_official_runtime_source_type(source_type: str) -> bool:
+    return str(source_type or "").strip() in OFFICIAL_RUNTIME_SOURCE_TYPES
 
 
 def _retain_non_official_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -148,6 +153,27 @@ def _chunk_records(rows: list[dict[str, Any]]) -> list[ChunkRecord]:
         payload["verification_hints"] = tuple(payload.get("verification_hints", []))
         records.append(ChunkRecord(**payload))
     return records
+
+
+def _normalized_section_records(rows: list[dict[str, Any]]) -> list[NormalizedSection]:
+    allowed = {field.name for field in fields(NormalizedSection)}
+    sections: list[NormalizedSection] = []
+    tuple_fields = (
+        "block_kinds",
+        "access_groups",
+        "cli_commands",
+        "error_strings",
+        "k8s_objects",
+        "operator_names",
+        "verification_hints",
+    )
+    for row in rows:
+        payload = {key: value for key, value in row.items() if key in allowed}
+        payload["section_path"] = list(payload.get("section_path", []))
+        for key in tuple_fields:
+            payload[key] = tuple(payload.get(key, []))
+        sections.append(NormalizedSection(**payload))
+    return sections
 
 
 def _stringify(value: Any) -> str:
@@ -394,16 +420,14 @@ def materialize_runtime_corpus_from_playbooks(
     sync_qdrant: bool = False,
     recreate_qdrant: bool = False,
 ) -> dict[str, Any]:
-    official_normalized_rows = [
+    official_seed_rows = [
         dict(row)
         for row in _read_jsonl_rows(settings.normalized_docs_path)
-        if _row_source_type(row) == OFFICIAL_SOURCE_TYPE
+        if _is_official_runtime_source_type(_row_source_type(row))
     ]
-    official_chunk_rows = [
-        dict(row)
-        for row in _read_jsonl_rows(settings.chunks_path)
-        if _row_source_type(row) == OFFICIAL_SOURCE_TYPE
-    ]
+    official_sections = _normalized_section_records(official_seed_rows)
+    official_normalized_rows = [section.to_dict() for section in official_sections]
+    official_chunk_rows = [chunk.to_dict() for chunk in chunk_sections(official_sections, settings)]
     retained_normalized_rows = _retain_non_official_rows(_read_jsonl_rows(settings.normalized_docs_path))
     retained_chunk_rows = _retain_non_official_rows(_read_jsonl_rows(settings.chunks_path))
 
@@ -422,6 +446,7 @@ def materialize_runtime_corpus_from_playbooks(
     graph_refresh = refresh_active_runtime_graph_artifacts(
         settings,
         refresh_full_sidecar=True,
+        allow_compact_degrade=True,
     )
     full_sidecar = dict(graph_refresh.get("full_sidecar", {}))
 
@@ -544,6 +569,7 @@ def materialize_runtime_catalog_library(
     graph_refresh = refresh_active_runtime_graph_artifacts(
         settings,
         refresh_full_sidecar=True,
+        allow_compact_degrade=True,
     )
     full_sidecar = dict(graph_refresh.get("full_sidecar", {}))
 

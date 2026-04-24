@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { CustomerPackDraft } from '../lib/runtimeApi';
 import {
+  describeDraftCatalogSemantics,
   isTestRunDraft,
+  needsSlideDeckUpgrade,
   parseDraftTestRunOrder,
   partitionDraftCatalog,
+  resolveDraftScopedViewerSourceId,
   shouldOpenDraftAsViewer,
 } from './workspaceDraftCatalog';
 
@@ -55,9 +58,50 @@ describe('workspaceDraftCatalog', () => {
     expect(isTestRunDraft(makeDraft('Partner Architecture Pack'))).toBe(false);
   });
 
-  it('opens normalized test runs directly in the viewer surface', () => {
+  it('opens normalized pptx drafts directly in the viewer surface', () => {
     expect(shouldOpenDraftAsViewer(makeDraft('Test 1 - Surya'))).toBe(true);
-    expect(shouldOpenDraftAsViewer(makeDraft('Customer PPT'))).toBe(false);
+    expect(shouldOpenDraftAsViewer(makeDraft('Customer PPT'))).toBe(true);
     expect(shouldOpenDraftAsViewer({ ...makeDraft('Test 2 - Qwen'), status: 'captured' })).toBe(false);
+  });
+
+  it('opens normalized customer docs in the viewer when a materialized book surface exists', () => {
+    expect(
+      shouldOpenDraftAsViewer(
+        { ...makeDraft('Customer DOCX'), source_type: 'docx' },
+        { target_viewer_path: '/playbooks/customer-packs/customer-docx/index.html' },
+      ),
+    ).toBe(true);
+    expect(shouldOpenDraftAsViewer({ ...makeDraft('Customer DOCX'), source_type: 'docx' })).toBe(false);
+  });
+
+  it('marks stale normalized pptx drafts for slide-deck upgrade', () => {
+    expect(needsSlideDeckUpgrade(makeDraft('Customer PPT'))).toBe(true);
+    expect(needsSlideDeckUpgrade({ ...makeDraft('Customer PPT'), surface_kind: 'slide_deck' })).toBe(false);
+    expect(needsSlideDeckUpgrade(makeDraft('Customer PPT'), { surface_kind: 'slide_deck' })).toBe(false);
+    expect(needsSlideDeckUpgrade({ ...makeDraft('Customer DOCX'), source_type: 'docx' })).toBe(false);
+  });
+
+  it('recovers draft-scoped identity from customer pack viewer paths', () => {
+    expect(resolveDraftScopedViewerSourceId('draft:customer-pack-123')).toBe('draft:customer-pack-123');
+    expect(
+      resolveDraftScopedViewerSourceId(undefined, '/playbooks/customer-packs/customer-pack-456/index.html#slide-2'),
+    ).toBe('draft:customer-pack-456');
+    expect(resolveDraftScopedViewerSourceId(undefined, '/docs/ocp/4.20/ko/networking/index.html')).toBeUndefined();
+  });
+
+  it('describes customer docs and test runs with explicit surface semantics', () => {
+    expect(describeDraftCatalogSemantics(makeDraft('Test 1 - Surya'))).toEqual({
+      audienceLabel: '테스트 런',
+      surfaceLabel: '슬라이드 덱',
+    });
+    expect(
+      describeDraftCatalogSemantics(
+        { ...makeDraft('Customer DOCX'), source_type: 'docx' },
+        { target_viewer_path: '/playbooks/customer-packs/customer-docx/index.html' },
+      ),
+    ).toEqual({
+      audienceLabel: '고객 문서',
+      surfaceLabel: '위키 북',
+    });
   });
 });

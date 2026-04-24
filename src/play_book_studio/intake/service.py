@@ -344,6 +344,7 @@ def _build_grade_gate(
     publication_state = str(_payload_or_evidence_value(payload, "publication_state") or "draft").strip() or "draft"
     degraded_pdf = _normalized_bool(_payload_or_evidence_value(payload, "degraded_pdf"))
     fallback_used = _normalized_bool(_payload_or_evidence_value(payload, "fallback_used"))
+    surface_kind = str(_payload_or_evidence_value(payload, "surface_kind") or "").strip().lower()
     total_sections = len(sections)
     semantic_ready_count = sum(
         1
@@ -359,7 +360,13 @@ def _build_grade_gate(
             str(section.get("anchor") or "").strip(),
         )
     )
-    parse_ready = quality_score >= 70 and not quality_flags
+    slide_deck_short_section_tolerated = (
+        surface_kind == "slide_deck"
+        and total_sections >= 24
+        and quality_score >= 80
+        and set(quality_flags) == {"too_many_short_sections"}
+    )
+    parse_ready = quality_score >= 70 and (not quality_flags or slide_deck_short_section_tolerated)
     if total_sections <= 0:
         citation_status = "missing"
     elif exact_landing_count == total_sections:

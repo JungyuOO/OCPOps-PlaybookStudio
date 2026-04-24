@@ -49,6 +49,7 @@ type WorkspaceViewerPanelProps = {
   annotationEnabled: boolean;
   annotationTool: WikiAnnotationTool;
   atlasCanvasActive: boolean;
+  bottomToolbar?: ReactNode;
   children: ReactNode;
   drawerContent: ReactNode;
   fileInputRef: RefObject<HTMLInputElement | null>;
@@ -76,11 +77,26 @@ type WorkspaceViewerPanelProps = {
   panelRef: ReturnType<typeof usePanelRef>;
 };
 
+export function buildWorkspaceViewerPanelClassName(
+  hasBottomToolbar: boolean,
+  rightCollapsed: boolean,
+): string {
+  const classNames = ['panel-inner', 'workspace-viewer-panel', 'no-border-radius-left'];
+  if (hasBottomToolbar) {
+    classNames.push('workspace-viewer-panel--with-bottom-toolbar');
+  }
+  if (rightCollapsed) {
+    classNames.push('panel-collapsed-inner');
+  }
+  return classNames.join(' ');
+}
+
 export default function WorkspaceViewerPanel({
   annotationColorId,
   annotationEnabled,
   annotationTool,
   atlasCanvasActive,
+  bottomToolbar,
   children,
   drawerContent,
   fileInputRef,
@@ -107,6 +123,7 @@ export default function WorkspaceViewerPanel({
   onUploadSelection,
   panelRef,
 }: WorkspaceViewerPanelProps) {
+  const hasBottomToolbar = Boolean(bottomToolbar);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const inkPopoverRef = useRef<HTMLDivElement | null>(null);
   const drawingRef = useRef<{ pointerId: number; stroke: WikiInkStroke } | null>(null);
@@ -282,6 +299,8 @@ export default function WorkspaceViewerPanel({
     setAnnotationPopoverOpen((current) => !current);
   }
 
+  const panelClassName = buildWorkspaceViewerPanelClassName(hasBottomToolbar, rightCollapsed);
+
   return (
     <Panel
       id="workspace-right"
@@ -293,7 +312,7 @@ export default function WorkspaceViewerPanel({
       onResize={(panelSize) => onRightPanelCollapsedChange(panelSize.asPercentage <= 0.5)}
       className="workspace-panel-item"
       >
-        <div className={`panel-inner workspace-viewer-panel no-border-radius-left ${rightCollapsed ? 'panel-collapsed-inner' : ''}`}>
+        <div className={panelClassName}>
           <div className={`panel-header ${testMode ? '' : 'viewer-panel-toolbar'}`} style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
             <div className="panel-header-copy" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '12px' }}>
               {testMode && <div className="header-icon"><BookOpen size={18} /></div>}
@@ -512,57 +531,64 @@ export default function WorkspaceViewerPanel({
           </>
         )}
 
-        <div className="source-viewer-content viewer-surface">
-          <div
-            ref={stageRef}
-            className={`atlas-ink-stage ${inkEnabled ? 'is-inking' : ''}`}
-          >
-            {children}
-            {annotationAvailable && inkToolActive && inkViewport.width > 0 && inkViewport.height > 0 && (
-              <svg
-                className={`atlas-ink-overlay ${inkEnabled ? 'is-enabled' : ''} atlas-ink-overlay--${inkTool}`}
-                width={inkViewport.width}
-                height={inkViewport.height}
-                viewBox={`0 0 ${inkViewport.width} ${inkViewport.height}`}
-                style={{ width: `${inkViewport.width}px`, height: `${inkViewport.height}px` }}
-                onPointerDown={handleInkPointerDown}
-                onPointerMove={handleInkPointerMove}
-                onPointerUp={finalizeInkPointer}
-                onPointerCancel={finalizeInkPointer}
-                onPointerLeave={finalizeInkPointer}
-              >
-                <rect
-                  className="atlas-ink-hit-area"
-                  x="0"
-                  y="0"
+        <div className="workspace-viewer-panel-body">
+          <div className="source-viewer-content viewer-surface">
+            <div
+              ref={stageRef}
+              className={`atlas-ink-stage ${inkEnabled ? 'is-inking' : ''}`}
+            >
+              {children}
+              {annotationAvailable && inkToolActive && inkViewport.width > 0 && inkViewport.height > 0 && (
+                <svg
+                  className={`atlas-ink-overlay ${inkEnabled ? 'is-enabled' : ''} atlas-ink-overlay--${inkTool}`}
                   width={inkViewport.width}
                   height={inkViewport.height}
-                />
-                {inkStrokes.map((stroke, index) => (
-                  <path
-                    key={`ink-path-${index}`}
-                    className={`atlas-ink-path atlas-ink-path--${stroke.tool}`}
-                    d={stroke.path}
-                    style={{
-                      stroke: stroke.tool === 'highlighter' ? stroke.style.highlighterColor : stroke.style.penColor,
-                    }}
+                  viewBox={`0 0 ${inkViewport.width} ${inkViewport.height}`}
+                  style={{ width: `${inkViewport.width}px`, height: `${inkViewport.height}px` }}
+                  onPointerDown={handleInkPointerDown}
+                  onPointerMove={handleInkPointerMove}
+                  onPointerUp={finalizeInkPointer}
+                  onPointerCancel={finalizeInkPointer}
+                  onPointerLeave={finalizeInkPointer}
+                >
+                  <rect
+                    className="atlas-ink-hit-area"
+                    x="0"
+                    y="0"
+                    width={inkViewport.width}
+                    height={inkViewport.height}
                   />
-                ))}
-                {activeInkStroke && (
-                  <path
-                    className={`atlas-ink-path atlas-ink-path-active atlas-ink-path--${activeInkStroke.tool}`}
-                    d={activeInkStroke.path}
-                    style={{
-                      stroke: activeInkStroke.tool === 'highlighter'
-                        ? activeInkStroke.style.highlighterColor
-                        : activeInkStroke.style.penColor,
-                    }}
-                  />
-                )}
-              </svg>
-            )}
+                  {inkStrokes.map((stroke, index) => (
+                    <path
+                      key={`ink-path-${index}`}
+                      className={`atlas-ink-path atlas-ink-path--${stroke.tool}`}
+                      d={stroke.path}
+                      style={{
+                        stroke: stroke.tool === 'highlighter' ? stroke.style.highlighterColor : stroke.style.penColor,
+                      }}
+                    />
+                  ))}
+                  {activeInkStroke && (
+                    <path
+                      className={`atlas-ink-path atlas-ink-path-active atlas-ink-path--${activeInkStroke.tool}`}
+                      d={activeInkStroke.path}
+                      style={{
+                        stroke: activeInkStroke.tool === 'highlighter'
+                          ? activeInkStroke.style.highlighterColor
+                          : activeInkStroke.style.penColor,
+                      }}
+                    />
+                  )}
+                </svg>
+              )}
+            </div>
           </div>
         </div>
+        {hasBottomToolbar ? (
+          <div className="viewer-bottom-toolbar-slot">
+            {bottomToolbar}
+          </div>
+        ) : null}
       </div>
     </Panel>
   );

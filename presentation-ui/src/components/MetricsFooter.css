@@ -21,10 +21,18 @@
 
 .metrics-content h2 {
   font-size: 3rem;
-  margin-bottom: 4rem;
+  margin-bottom: 1rem;
   background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-purple) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.metrics-intro {
+  margin: 0 auto 4rem;
+  max-width: 720px;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--text-muted);
 }
 
 .metrics-grid {

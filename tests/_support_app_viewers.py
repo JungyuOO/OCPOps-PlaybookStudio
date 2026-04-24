@@ -416,6 +416,7 @@ class AppViewersTestSupport(unittest.TestCase):
                 urlencode(
                     {
                         "viewer_path": "/playbooks/wiki-runtime/active/operators/index.html",
+                        "page_mode": "multi",
                     }
                 ),
                 root_dir=root,
@@ -523,15 +524,16 @@ class AppViewersTestSupport(unittest.TestCase):
         self.assertEqual(HTTPStatus.OK, multi_handler.calls[0][0])
         single_html = str(single_handler.calls[0][1]["html"])
         multi_html = str(multi_handler.calls[0][1]["html"])
-        self.assertIn("개요 본문", single_html)
         self.assertIn("후속 본문", single_html)
+        self.assertNotIn("개요 본문", single_html)
+        self.assertIn('class="document-footer-nav"', single_html)
+        self.assertIn('href="#install-overview"', single_html)
+        self.assertIn(">이전<", single_html)
+        self.assertNotIn(">다음<", single_html)
         self.assertIn(">Quick Nav</summary>", multi_html)
+        self.assertIn("개요 본문", multi_html)
         self.assertIn("후속 본문", multi_html)
-        self.assertNotIn("개요 본문", multi_html)
-        self.assertIn('class="document-footer-nav"', multi_html)
-        self.assertIn('href="#install-overview"', multi_html)
-        self.assertIn(">이전<", multi_html)
-        self.assertNotIn(">다음<", multi_html)
+        self.assertNotIn('class="document-footer-nav"', multi_html)
 
     def test_active_runtime_viewer_uses_local_asciidoc_overlay_for_missing_link_metadata(self) -> None:
         with self._workspace() as root:
@@ -622,6 +624,7 @@ class AppViewersTestSupport(unittest.TestCase):
                 urlencode(
                     {
                         "viewer_path": "/playbooks/wiki-runtime/active/installation_overview/index.html",
+                        "page_mode": "multi",
                     }
                 ),
                 root_dir=root,
@@ -1061,13 +1064,23 @@ class AppViewersTestSupport(unittest.TestCase):
                 advanced_handler = self._capture_json_response()
                 handle_viewer_document(
                     advanced_handler,
-                    urlencode({"viewer_path": "/playbooks/wiki-runtime/active/advanced_networking/index.html"}),
+                    urlencode(
+                        {
+                            "viewer_path": "/playbooks/wiki-runtime/active/advanced_networking/index.html",
+                            "page_mode": "multi",
+                        }
+                    ),
                     root_dir=root,
                 )
                 architecture_handler = self._capture_json_response()
                 handle_viewer_document(
                     architecture_handler,
-                    urlencode({"viewer_path": "/playbooks/wiki-runtime/active/architecture/index.html"}),
+                    urlencode(
+                        {
+                            "viewer_path": "/playbooks/wiki-runtime/active/architecture/index.html",
+                            "page_mode": "multi",
+                        }
+                    ),
                     root_dir=root,
                 )
 
@@ -1197,6 +1210,7 @@ class AppViewersTestSupport(unittest.TestCase):
                 urlencode(
                     {
                         "viewer_path": "/docs/ocp/4.20/ko/distributed_tracing/index.html",
+                        "page_mode": "multi",
                     }
                 ),
                 root_dir=root,

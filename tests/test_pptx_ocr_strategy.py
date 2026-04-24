@@ -10,7 +10,11 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from play_book_studio.config.settings import Settings
-from play_book_studio.intake.pptx_ocr_augment import _ocr_markdown_text, _preferred_ppt_ocr_backends
+from play_book_studio.intake.pptx_ocr_augment import (
+    _clean_slide_ocr_text,
+    _ocr_markdown_text,
+    _preferred_ppt_ocr_backends,
+)
 
 
 class PptxOcrStrategyTests(unittest.TestCase):
@@ -84,6 +88,39 @@ class PptxOcrStrategyTests(unittest.TestCase):
         cleaned = _ocr_markdown_text(markdown)
 
         self.assertEqual("Title\nLine 1\nLine 2", cleaned)
+
+    def test_clean_slide_ocr_text_drops_logo_noise_and_duplicate_title(self) -> None:
+        slide = {
+            "title": "CICD 프로세스",
+            "body_text": "개발(aka. 검증) 환경 | 운영 환경\n\nPush | Sync | Pull",
+            "text_blocks": [],
+            "table_blocks": [],
+            "notes_text": "",
+        }
+
+        cleaned = _clean_slide_ocr_text(
+            slide,
+            "ком-со\nCICD 프로세스\nDSGN-005-401\nPush\nNexus\n. . . . .\nPull",
+        )
+
+        self.assertEqual("DSGN-005-401\nNexus", cleaned)
+
+    def test_clean_slide_ocr_text_keeps_table_markdown_when_it_is_not_noise(self) -> None:
+        slide = {
+            "title": "개정 이력",
+            "body_text": "[TABLE]\nNO | 작성일자 작성자 비고\n1 | 2025-08-14 노근욱 최초 작성\n[/TABLE]",
+            "text_blocks": [],
+            "table_blocks": [],
+            "notes_text": "",
+        }
+
+        cleaned = _clean_slide_ocr_text(
+            slide,
+            "| NO | 작성일자 | 작성자 | 비고 |\n|:---|:---|:---|:---|\n| 1 | 2025-08-14 | 노근욱 | • 최초 작성 |",
+        )
+
+        self.assertIn("| NO | 작성일자 | 작성자 | 비고 |", cleaned)
+        self.assertIn("| 1 | 2025-08-14 | 노근욱 | • 최초 작성 |", cleaned)
 
 
 if __name__ == "__main__":

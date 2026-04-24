@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -81,14 +82,29 @@ def render_pptx_slide_preview_assets(
         return []
     node_bin = _resolve_node_bin()
     node_modules_dir = _resolve_node_modules_dir(node_bin)
-    if node_bin is None or node_modules_dir is None:
-        return []
 
     runtime_dir = books_dir / ".pptx-slide-preview-tool"
     output_dir = books_dir / f"{asset_slug}.slide-assets"
     output_dir.mkdir(parents=True, exist_ok=True)
     for stale_path in output_dir.glob("slide-*-preview.png"):
         stale_path.unlink(missing_ok=True)
+
+    if node_bin is None or node_modules_dir is None:
+        if _render_pptx_slide_previews_with_powerpoint(
+            capture_path=capture_path,
+            output_dir=output_dir,
+            slide_width=slide_width,
+            slide_height=slide_height,
+            slide_count=slide_count,
+        ):
+            return _collect_rendered_slide_preview_assets(
+                output_dir=output_dir,
+                asset_slug=asset_slug,
+                slide_width=slide_width,
+                slide_height=slide_height,
+                slide_count=slide_count,
+            )
+        return []
 
     try:
         script_path = _ensure_renderer_workspace(runtime_dir, node_modules_dir)
@@ -110,16 +126,33 @@ def render_pptx_slide_preview_assets(
         slide_height=slide_height,
         slide_count=slide_count,
     )
-    if preview_assets:
+    if len(preview_assets) >= slide_count:
         return preview_assets
 
+    if _render_pptx_slide_previews_with_powerpoint(
+        capture_path=capture_path,
+        output_dir=output_dir,
+        slide_width=slide_width,
+        slide_height=slide_height,
+        slide_count=slide_count,
+    ):
+        preview_assets = _collect_rendered_slide_preview_assets(
+            output_dir=output_dir,
+            asset_slug=asset_slug,
+            slide_width=slide_width,
+            slide_height=slide_height,
+            slide_count=slide_count,
+        )
+        if preview_assets:
+            return preview_assets
+
     if completed is None:
-        return []
+        return preview_assets
 
     payload = _parse_renderer_stdout(completed.stdout)
     expected_count = int(payload.get("preview_count") or 0)
     if expected_count <= 0:
-        return []
+        return preview_assets
     return _collect_rendered_slide_preview_assets(
         output_dir=output_dir,
         asset_slug=asset_slug,
@@ -127,6 +160,86 @@ def render_pptx_slide_preview_assets(
         slide_height=slide_height,
         slide_count=slide_count,
     )
+
+
+def _render_pptx_slide_previews_with_powerpoint(
+    *,
+    capture_path: Path,
+    output_dir: Path,
+    slide_width: int,
+    slide_height: int,
+    slide_count: int,
+) -> bool:
+    if os.name != "nt" or slide_count <= 0:
+        return False
+    try:
+        import pythoncom  # type: ignore[import-not-found]
+        import win32com.client  # type: ignore[import-not-found]
+    except Exception:  # noqa: BLE001
+        return False
+
+    export_dir = output_dir / "_powerpoint_export"
+    shutil.rmtree(export_dir, ignore_errors=True)
+    export_dir.mkdir(parents=True, exist_ok=True)
+
+    pythoncom.CoInitialize()
+    app = None
+    presentation = None
+    try:
+        app = win32com.client.DispatchEx("PowerPoint.Application")
+        presentation = app.Presentations.Open(str(capture_path.resolve()), WithWindow=False)
+        presentation.Export(
+            str(export_dir),
+            "PNG",
+            int(slide_width or 1280),
+            int(slide_height or 720),
+        )
+    except Exception:  # noqa: BLE001
+        return False
+    finally:
+        if presentation is not None:
+            try:
+                presentation.Close()
+            except Exception:  # noqa: BLE001
+                pass
+        if app is not None:
+            try:
+                app.Quit()
+            except Exception:  # noqa: BLE001
+                pass
+        pythoncom.CoUninitialize()
+
+    exported_paths = [*export_dir.glob("*.PNG"), *export_dir.glob("*.png")]
+    if not exported_paths:
+        shutil.rmtree(export_dir, ignore_errors=True)
+        return False
+    for stale_path in output_dir.glob("slide-*-preview.png"):
+        stale_path.unlink(missing_ok=True)
+
+    raw_export_ordinals = [_slide_number_from_exported_preview(path) for path in exported_paths]
+    ordinal_offset = 1 if 0 in raw_export_ordinals and slide_count not in raw_export_ordinals else 0
+    copied = 0
+    for rendered_path in exported_paths:
+        ordinal = _slide_number_from_exported_preview(rendered_path) + ordinal_offset
+        if ordinal <= 0 or ordinal > slide_count:
+            continue
+        target_path = output_dir / f"slide-{ordinal:03d}-preview.png"
+        if target_path.exists():
+            continue
+        shutil.copyfile(rendered_path, target_path)
+        copied += 1
+    shutil.rmtree(export_dir, ignore_errors=True)
+    return copied > 0
+
+
+def _slide_number_from_exported_preview(path: Path) -> int:
+    match = re.search(r"(\d+)$", path.stem)
+    if match is None:
+        return 0
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return 0
 
 
 def _parse_renderer_stdout(stdout: str) -> dict[str, Any]:

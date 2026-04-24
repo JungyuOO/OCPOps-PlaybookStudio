@@ -14,6 +14,7 @@ from .retriever_search import search_bm25_candidates, search_vector_candidates
 from .ranking import summarize_hit_list as _summarize_hit_list
 from .query import (
     has_follow_up_reference,
+    has_doc_locator_intent,
     has_mco_concept_intent,
     has_openshift_kubernetes_compare_intent,
     has_operator_concept_intent,
@@ -82,6 +83,43 @@ def _is_customer_pack_relation_query(query: str) -> bool:
     )
 
 
+def _is_customer_pack_title_locator_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    if not has_doc_locator_intent(lowered):
+        return False
+    return any(
+        token in lowered
+        for token in (
+            "설계서",
+            "제안서",
+            "발표",
+            "ppt",
+            "pptx",
+            "slide",
+            "슬라이드",
+        )
+    ) or len([token for token in lowered.split() if token.strip()]) >= 3
+
+
+def _mentions_official_runtime_sources(query: str) -> bool:
+    lowered = (query or "").lower()
+    return any(
+        token in lowered
+        for token in (
+            "공식문서",
+            "공식 문서",
+            "공식매뉴얼",
+            "공식 매뉴얼",
+            "ocp 공식",
+            "openshift 공식",
+            "official doc",
+            "official docs",
+            "official manual",
+            "official manuals",
+        )
+    )
+
+
 def _preserve_uploaded_customer_pack_candidate(
     query: str,
     *,
@@ -94,6 +132,7 @@ def _preserve_uploaded_customer_pack_candidate(
     if not (
         _is_customer_pack_explicit_query(query)
         or has_active_customer_pack_selection(context)
+        or _is_customer_pack_title_locator_query(query)
     ):
         return hybrid_hits
 
@@ -112,6 +151,7 @@ def _preserve_uploaded_customer_pack_candidate(
         return hybrid_hits
 
     relation_query = _is_customer_pack_relation_query(query)
+    title_locator_query = _is_customer_pack_title_locator_query(query)
     uploaded_sources.sort(
         key=lambda item: (
             0
@@ -124,8 +164,8 @@ def _preserve_uploaded_customer_pack_candidate(
                 )
             )
             else 1,
-            item[1] if item[0] == "hybrid" else 999 + item[1],
             -float(item[2].component_scores.get("overlay_bm25_score", item[2].raw_score)),
+            item[1] if (relation_query or not title_locator_query) and item[0] == "hybrid" else 999 + item[1],
             item[2].book_slug,
             item[2].chunk_id,
         )
@@ -143,7 +183,57 @@ def _preserve_uploaded_customer_pack_candidate(
 
     preserved = [rescued]
     preserved.extend(hit for hit in hybrid_hits if hit.chunk_id != rescued.chunk_id)
-    return preserved[: max(len(hybrid_hits), 1)]
+    has_distinct_hybrid_support = any(hit.chunk_id != rescued.chunk_id for hit in hybrid_hits)
+    return preserved[: max(len(hybrid_hits), 2 if has_distinct_hybrid_support else 1)]
+
+
+def _preserve_customer_pack_core_blend(
+    query: str,
+    *,
+    hybrid_hits: list[RetrievalHit],
+    core_hits: list[RetrievalHit],
+    context: SessionContext | None,
+) -> list[RetrievalHit]:
+    context = context or SessionContext()
+    if context.restrict_uploaded_sources:
+        return hybrid_hits
+    if _is_customer_pack_title_locator_query(query) and not _mentions_official_runtime_sources(query):
+        return hybrid_hits
+    if not (_is_customer_pack_explicit_query(query) or has_active_customer_pack_selection(context)):
+        return hybrid_hits
+    if not (_mentions_official_runtime_sources(query) or has_active_customer_pack_selection(context)):
+        return hybrid_hits
+
+    uploaded_candidate = next(
+        (hit for hit in hybrid_hits if str(hit.source_collection or "").strip() == "uploaded"),
+        None,
+    )
+    core_candidate = next(
+        (hit for hit in hybrid_hits if str(hit.source_collection or "").strip() == "core"),
+        None,
+    )
+    if core_candidate is None:
+        core_candidate = next(
+            (hit for hit in core_hits if str(hit.source_collection or "").strip() == "core"),
+            None,
+        )
+    if uploaded_candidate is None or core_candidate is None:
+        return hybrid_hits
+
+    seeded: list[RetrievalHit] = []
+    if hybrid_hits:
+        seeded.append(hybrid_hits[0])
+    if all(hit.chunk_id != uploaded_candidate.chunk_id for hit in seeded):
+        seeded.append(uploaded_candidate)
+    if all(hit.chunk_id != core_candidate.chunk_id for hit in seeded):
+        seeded.append(copy.deepcopy(core_candidate))
+    seeded.extend(
+        hit
+        for hit in hybrid_hits
+        if all(existing.chunk_id != hit.chunk_id for existing in seeded)
+    )
+    target_size = max(len(hybrid_hits), 2)
+    return seeded[:target_size]
 
 
 @lru_cache(maxsize=1)
@@ -354,14 +444,16 @@ def execute_retrieval_pipeline(
         )
 
     effective_candidate_k = plan.effective_candidate_k
-    if relation_query and (
+    if (relation_query or _is_customer_pack_title_locator_query(plan.rewritten_query or plan.normalized_query or query)) and (
         _is_customer_pack_explicit_query(query)
         or has_active_customer_pack_selection(context)
+        or _is_customer_pack_title_locator_query(query)
     ):
         effective_candidate_k = max(effective_candidate_k, candidate_k, 30)
 
     bm25_hits: list[RetrievalHit] = []
     overlay_bm25_hits: list[RetrievalHit] = []
+    core_reference_hits: list[RetrievalHit] = []
     if use_bm25:
         bm25_search = search_bm25_candidates(
             retriever,
@@ -373,8 +465,10 @@ def execute_retrieval_pipeline(
         )
         bm25_hits = bm25_search["hits"]
         overlay_bm25_hits = bm25_search["overlay_hits"]
+        core_reference_hits = bm25_search["core_hits"]
         bm25_hits = _filter_latest_only_hits(retriever, bm25_hits)
         overlay_bm25_hits = _filter_latest_only_hits(retriever, overlay_bm25_hits)
+        core_reference_hits = _filter_latest_only_hits(retriever, core_reference_hits)
     vector_hits: list[RetrievalHit] = []
     vector_runtime: dict[str, object] = {}
     if use_vector:
@@ -389,6 +483,9 @@ def execute_retrieval_pipeline(
         vector_hits = vector_search["hits"]
         vector_runtime = vector_search["runtime"]
         vector_hits = _filter_latest_only_hits(retriever, vector_hits)
+        core_reference_hits.extend(
+            hit for hit in vector_hits if str(hit.source_collection or "").strip() == "core"
+        )
 
     _emit_trace_event(
         trace_callback,
@@ -416,6 +513,12 @@ def execute_retrieval_pipeline(
         plan.rewritten_query,
         hybrid_hits=hybrid_hits,
         overlay_hits=overlay_bm25_hits,
+        context=context,
+    )
+    hybrid_hits = _preserve_customer_pack_core_blend(
+        plan.rewritten_query,
+        hybrid_hits=hybrid_hits,
+        core_hits=core_reference_hits,
         context=context,
     )
     hybrid_hits = _filter_latest_only_hits(retriever, hybrid_hits)
@@ -495,6 +598,12 @@ def execute_retrieval_pipeline(
         plan.rewritten_query,
         hybrid_hits=graph_enriched_hits,
         overlay_hits=overlay_bm25_hits,
+        context=context,
+    )
+    graph_enriched_hits = _preserve_customer_pack_core_blend(
+        plan.rewritten_query,
+        hybrid_hits=graph_enriched_hits,
+        core_hits=core_reference_hits,
         context=context,
     )
     graph_enriched_hits = _filter_latest_only_hits(retriever, graph_enriched_hits)

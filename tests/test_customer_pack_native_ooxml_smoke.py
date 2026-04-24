@@ -377,6 +377,8 @@ class CustomerPackNativeOoxmlSmokeTests(unittest.TestCase):
             self.assertIn('id="slide-003"', multi_html)
             self.assertGreaterEqual(multi_html.count("customer-slide-card-section"), 3)
             self.assertGreaterEqual(multi_html.count('class="customer-slide-card-header"'), 3)
+            self.assertGreaterEqual(multi_html.count('class="customer-slide-card-document"'), 3)
+            self.assertGreaterEqual(multi_html.count("P 유형 샘플"), 3)
             self.assertIn('class="customer-save-wiki-dock"', multi_html)
             self.assertNotIn('class="section-header"', multi_html)
             self.assertIn(preview_asset_url, multi_html)

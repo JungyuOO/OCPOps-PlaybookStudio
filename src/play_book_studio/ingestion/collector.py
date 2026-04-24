@@ -231,7 +231,9 @@ def _write_raw_html_metadata(
             else "html_single"
         ),
     }
-    raw_html_metadata_path(settings, entry.book_slug).write_text(
+    metadata_path = raw_html_metadata_path(settings, entry.book_slug)
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
@@ -284,6 +286,7 @@ def collect_entry(entry: SourceManifestEntry, settings: Settings, force: bool = 
             "fallback_detected": entry.docs_language == "ko" and resolved_language == "en",
         }
     )
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(html, encoding="utf-8")
     _write_raw_html_metadata(settings, entry, html=html, response=response)
     return target

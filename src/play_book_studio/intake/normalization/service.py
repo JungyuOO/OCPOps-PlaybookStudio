@@ -14,7 +14,7 @@ from ..models import CustomerPackDraftRecord
 from ..pptx_ocr_augment import augment_slide_packets_with_optional_ocr
 from ..pptx_slide_packets import build_customer_pack_slide_packets_payload
 from ..planner import CustomerPackPlanner
-from ..private_boundary import summarize_private_remote_ocr_boundary
+from ..private_boundary import summarize_private_remote_ocr_boundary, summarize_private_runtime_boundary
 from ..private_corpus import materialize_customer_pack_private_corpus
 from ..service import build_customer_pack_playable_books, evaluate_canonical_book_quality
 from .builders import (
@@ -252,18 +252,305 @@ def _build_image_book_with_optional_fallback(
     return build_image_canonical_book_from_markdown(record, chosen_markdown), fallback_attempt
 
 
+def _load_json_payload(path: Path) -> dict[str, object] | None:
+    if path.as_posix() in {"", "."} or not path.exists() or not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _refresh_private_corpus_manifest_runtime_boundary(
+    manifest_path: Path,
+    *,
+    record: CustomerPackDraftRecord,
+    updated_at: str,
+    quality_payload: dict[str, object] | None = None,
+) -> dict[str, object] | None:
+    payload = _load_json_payload(manifest_path)
+    if payload is None:
+        return None
+    payload["tenant_id"] = str(record.tenant_id or "").strip() or "default-tenant"
+    payload["workspace_id"] = str(record.workspace_id or "").strip() or "default-workspace"
+    payload["pack_id"] = str(record.plan.pack_id or "").strip() or f"customer-pack:{record.draft_id}"
+    payload["pack_version"] = str(record.draft_id)
+    payload["classification"] = str(record.classification or "").strip() or "private"
+    payload["access_groups"] = list(record.access_groups or ())
+    payload["provider_egress_policy"] = str(record.provider_egress_policy or "").strip() or "local_only"
+    payload["approval_state"] = str(record.approval_state or "").strip() or "unreviewed"
+    payload["publication_state"] = str(record.publication_state or "").strip() or "draft"
+    payload["redaction_state"] = str(record.redaction_state or "").strip() or "raw"
+    payload["source_lane"] = str(record.source_lane or "").strip() or "customer_source_first_pack"
+    payload["source_collection"] = str(record.plan.source_collection or "uploaded").strip() or "uploaded"
+    payload["boundary_truth"] = "private_customer_pack_runtime"
+    payload["runtime_truth_label"] = "Customer Source-First Pack"
+    payload["boundary_badge"] = "Private Pack Runtime"
+    if quality_payload:
+        payload["quality_status"] = str(quality_payload.get("quality_status") or "")
+        payload["quality_score"] = int(quality_payload.get("quality_score") or 0)
+        payload["quality_flags"] = list(quality_payload.get("quality_flags") or [])
+        payload["quality_summary"] = str(quality_payload.get("quality_summary") or "")
+        payload["shared_grade"] = str(quality_payload.get("shared_grade") or "blocked")
+        payload["grade_gate"] = dict(quality_payload.get("grade_gate") or {})
+    grade_gate = dict(payload.get("grade_gate") or {})
+    if grade_gate:
+        surface_gates = dict(grade_gate.get("surface_gates") or {})
+        promotion_gate = dict(grade_gate.get("promotion_gate") or {})
+        shared_grade = str(payload.get("shared_grade") or grade_gate.get("shared_grade") or "blocked").strip() or "blocked"
+        llmwiki_ready = bool(
+            surface_gates.get("llmwiki_ready")
+            or (payload.get("retrieval_ready") and shared_grade in {"gold", "silver"})
+        )
+        wikibook_ready = bool(
+            surface_gates.get("wikibook_ready")
+            or (
+                str(payload.get("citation_landing_status") or "") == "exact"
+                and shared_grade in {"gold", "silver"}
+            )
+        )
+        approval_state = str(payload["approval_state"])
+        publication_state = str(payload["publication_state"])
+        read_ready = llmwiki_ready and wikibook_ready and approval_state == "approved"
+        publish_ready = read_ready and publication_state in {"active", "published"}
+        blocked_reasons = [
+            str(reason).strip()
+            for reason in (promotion_gate.get("blocked_reasons") or [])
+            if str(reason).strip()
+            and not str(reason).startswith("approval_not_ready:")
+            and not str(reason).startswith("publication_not_publish_ready:")
+        ]
+        if approval_state != "approved":
+            blocked_reasons.append(f"approval_not_ready:{approval_state or 'missing'}")
+        if publication_state not in {"active", "published"}:
+            blocked_reasons.append(f"publication_not_publish_ready:{publication_state or 'missing'}")
+        promotion_gate.update(
+            {
+                "status": (
+                    "promoted"
+                    if publish_ready
+                    else ("candidate" if llmwiki_ready and wikibook_ready and approval_state == "approved" else "blocked")
+                ),
+                "read_ready": read_ready,
+                "publish_ready": publish_ready,
+                "approval_state": approval_state,
+                "publication_state": publication_state,
+                "blocked_reasons": blocked_reasons,
+            }
+        )
+        grade_gate["promotion_gate"] = promotion_gate
+        payload["grade_gate"] = grade_gate
+        payload["read_ready"] = read_ready
+        payload["publish_ready"] = publish_ready
+    boundary_summary = summarize_private_runtime_boundary(payload)
+    payload["runtime_eligible"] = bool(boundary_summary.get("runtime_eligible", False))
+    payload["boundary_fail_reasons"] = list(boundary_summary.get("fail_reasons") or [])
+    payload["updated_at"] = updated_at
+    write_json_payload(manifest_path, payload)
+    return payload
+
+
+def _quality_runtime_patch(corpus_manifest: dict[str, object], updated_at: str) -> dict[str, object]:
+    grade_gate = dict(corpus_manifest.get("grade_gate") or {})
+    citation_gate = dict(grade_gate.get("citation_gate") or {})
+    retrieval_gate = dict(grade_gate.get("retrieval_gate") or {})
+    promotion_gate = dict(grade_gate.get("promotion_gate") or {})
+    return {
+        "quality_status": str(corpus_manifest.get("quality_status") or ""),
+        "quality_score": int(corpus_manifest.get("quality_score") or 0),
+        "quality_flags": list(corpus_manifest.get("quality_flags") or []),
+        "quality_summary": str(corpus_manifest.get("quality_summary") or ""),
+        "shared_grade": str(corpus_manifest.get("shared_grade") or "blocked"),
+        "grade_gate": grade_gate,
+        "citation_landing_status": str(corpus_manifest.get("citation_landing_status") or citation_gate.get("status") or "missing"),
+        "retrieval_ready": bool(corpus_manifest.get("retrieval_ready") or retrieval_gate.get("ready")),
+        "read_ready": bool(corpus_manifest.get("read_ready") or promotion_gate.get("read_ready")),
+        "publish_ready": bool(corpus_manifest.get("publish_ready") or promotion_gate.get("publish_ready")),
+        "runtime_eligible": bool(corpus_manifest.get("runtime_eligible")),
+        "boundary_fail_reasons": list(corpus_manifest.get("boundary_fail_reasons") or []),
+        "updated_at": updated_at,
+    }
+
+
+def _record_runtime_patch(record: CustomerPackDraftRecord) -> dict[str, object]:
+    return {
+        "source_collection": str(record.plan.source_collection or "uploaded").strip() or "uploaded",
+        "pack_id": str(record.plan.pack_id or "").strip() or f"customer-pack:{record.draft_id}",
+        "pack_label": str(record.plan.pack_label or "").strip() or "User Custom Pack",
+        "inferred_product": str(record.plan.inferred_product or "").strip() or "unknown",
+        "inferred_version": str(record.plan.inferred_version or "").strip() or "unknown",
+        "source_lane": str(record.source_lane or "").strip() or "customer_source_first_pack",
+        "tenant_id": str(record.tenant_id or "").strip() or "default-tenant",
+        "workspace_id": str(record.workspace_id or "").strip() or "default-workspace",
+        "classification": str(record.classification or "").strip() or "private",
+        "access_groups": list(record.access_groups or ()),
+        "provider_egress_policy": str(record.provider_egress_policy or "").strip() or "local_only",
+        "approval_state": str(record.approval_state or "").strip() or "unreviewed",
+        "publication_state": str(record.publication_state or "").strip() or "draft",
+        "redaction_state": str(record.redaction_state or "").strip() or "raw",
+        "boundary_truth": "private_customer_pack_runtime",
+        "runtime_truth_label": "Customer Source-First Pack",
+        "boundary_badge": "Private Pack Runtime",
+    }
+
+
+def _refresh_customer_pack_book_payload(
+    book_path: Path,
+    *,
+    record: CustomerPackDraftRecord,
+    corpus_manifest: dict[str, object],
+    updated_at: str,
+) -> dict[str, object] | None:
+    payload = _load_json_payload(book_path)
+    if payload is None:
+        return None
+    runtime_patch = _record_runtime_patch(record)
+    quality_patch = _quality_runtime_patch(corpus_manifest, updated_at)
+    payload.update(runtime_patch)
+    payload.update(quality_patch)
+    evidence = dict(payload.get("customer_pack_evidence") or {})
+    evidence.update(runtime_patch)
+    evidence.update(quality_patch)
+    payload["customer_pack_evidence"] = evidence
+    artifact_bundle = dict(payload.get("artifact_bundle") or {})
+    if artifact_bundle:
+        artifact_bundle.update(
+            {
+                "source_lane": str(runtime_patch["source_lane"]),
+                "runtime_truth_label": str(runtime_patch["runtime_truth_label"]),
+                "shared_grade": str(quality_patch["shared_grade"]),
+                "read_ready": bool(quality_patch["read_ready"]),
+                "publish_ready": bool(quality_patch["publish_ready"]),
+                "corpus_manifest_path": str(corpus_manifest.get("manifest_path") or artifact_bundle.get("corpus_manifest_path") or ""),
+            }
+        )
+        payload["artifact_bundle"] = artifact_bundle
+    write_json_payload(book_path, payload)
+    return payload
+
+
+def _refresh_customer_pack_artifact_manifest(
+    manifest_path: Path,
+    *,
+    record: CustomerPackDraftRecord,
+    corpus_manifest: dict[str, object],
+    updated_at: str,
+) -> dict[str, object] | None:
+    payload = _load_json_payload(manifest_path)
+    if payload is None:
+        return None
+    payload.update(_record_runtime_patch(record))
+    payload.update(_quality_runtime_patch(corpus_manifest, updated_at))
+    write_json_payload(manifest_path, payload)
+    return payload
+
+
+def _asset_slugs_from_canonical_payload(payload: dict[str, object]) -> list[str]:
+    slugs: list[str] = []
+
+    def _append(slug: object) -> None:
+        normalized = str(slug or "").strip()
+        if normalized and normalized not in slugs:
+            slugs.append(normalized)
+
+    _append(payload.get("asset_slug"))
+    for key in ("playable_assets", "derived_assets"):
+        for item in payload.get(key) or []:
+            if isinstance(item, dict):
+                _append(item.get("asset_slug"))
+    return slugs
+
+
 class CustomerPackNormalizeService:
     def __init__(self, root_dir: str | Path) -> None:
         self.root_dir = Path(root_dir)
         self.settings = load_settings(self.root_dir)
         self.store = CustomerPackDraftStore(self.root_dir)
 
-    def normalize(self, *, draft_id: str) -> CustomerPackDraftRecord:
+    def _try_fast_refresh_existing_normalized_payloads(
+        self,
+        *,
+        record: CustomerPackDraftRecord,
+    ) -> CustomerPackDraftRecord | None:
+        if str(record.status or "").strip() != "normalized":
+            return None
+        canonical_path = Path(str(record.canonical_book_path or "").strip())
+        manifest_path = Path(str(record.private_corpus_manifest_path or "").strip())
+        if canonical_path.as_posix() in {"", "."} or manifest_path.as_posix() in {"", "."}:
+            return None
+        if not canonical_path.exists() or not manifest_path.exists():
+            return None
+        canonical_payload = _load_json_payload(canonical_path)
+        if canonical_payload is None:
+            return None
+        updated_at = _utc_now()
+        quality_payload = evaluate_canonical_book_quality(canonical_payload)
+        corpus_manifest = _refresh_private_corpus_manifest_runtime_boundary(
+            manifest_path,
+            record=record,
+            updated_at=updated_at,
+            quality_payload=quality_payload,
+        )
+        if corpus_manifest is None:
+            return None
+        quality_payload = evaluate_canonical_book_quality(
+            canonical_payload,
+            corpus_manifest=corpus_manifest,
+        )
+        corpus_manifest = _refresh_private_corpus_manifest_runtime_boundary(
+            manifest_path,
+            record=record,
+            updated_at=updated_at,
+            quality_payload=quality_payload,
+        )
+        if corpus_manifest is None:
+            return None
+        refreshed_canonical = _refresh_customer_pack_book_payload(
+            canonical_path,
+            record=record,
+            corpus_manifest=corpus_manifest,
+            updated_at=updated_at,
+        )
+        if refreshed_canonical is None:
+            return None
+        books_dir = canonical_path.parent
+        for asset_slug in _asset_slugs_from_canonical_payload(refreshed_canonical):
+            asset_path = books_dir / f"{asset_slug}.json"
+            manifest_sidecar_path = books_dir / f"{asset_slug}.manifest.json"
+            if asset_path != canonical_path:
+                _refresh_customer_pack_book_payload(
+                    asset_path,
+                    record=record,
+                    corpus_manifest=corpus_manifest,
+                    updated_at=updated_at,
+                )
+            _refresh_customer_pack_artifact_manifest(
+                manifest_sidecar_path,
+                record=record,
+                corpus_manifest=corpus_manifest,
+                updated_at=updated_at,
+            )
+        record.normalize_error = ""
+        record.updated_at = updated_at
+        record.private_corpus_status = str(
+            corpus_manifest.get("materialization_status", "") or ""
+        ) or ("ready" if bool(corpus_manifest.get("bm25_ready")) else "empty")
+        record.private_corpus_chunk_count = int(corpus_manifest.get("chunk_count", 0) or 0)
+        record.private_corpus_vector_status = str(corpus_manifest.get("vector_status", "") or "")
+        self.store.save(record)
+        return record
+
+    def normalize(self, *, draft_id: str, force_rebuild: bool = False) -> CustomerPackDraftRecord:
         record = self.store.get(draft_id.strip())
         if record is None:
             raise ValueError("업로드 플레이북 초안을 찾을 수 없습니다.")
         if not record.capture_artifact_path.strip():
             raise ValueError("먼저 capture를 실행해서 source artifact를 확보해야 합니다.")
+        if not force_rebuild:
+            refreshed_record = self._try_fast_refresh_existing_normalized_payloads(record=record)
+            if refreshed_record is not None:
+                return refreshed_record
 
         try:
             allow_remote_ocr = _remote_ocr_allowed(record)

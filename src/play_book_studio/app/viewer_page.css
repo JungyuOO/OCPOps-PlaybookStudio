@@ -643,6 +643,14 @@ body.is-embedded .embedded-section.is-target {
   gap: 6px;
   min-width: 0;
 }
+.customer-slide-card-document {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
 .customer-slide-card-meta {
   color: var(--muted);
   font-size: 0.8rem;

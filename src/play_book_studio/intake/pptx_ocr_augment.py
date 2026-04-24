@@ -8,6 +8,20 @@ from typing import Any
 from .normalization.builders import image_markdown_is_low_confidence
 from .normalization.degraded_pdf import attempt_optional_image_markdown_fallback
 
+_COMPANY_LOGO_NOISE_PATTERNS = (
+    re.compile(r"^kom\s*[:=\-]?\s*co$", re.IGNORECASE),
+    re.compile(r"^koms?co$", re.IGNORECASE),
+    re.compile(r"^ком\s*[:=\-]?\s*со$", re.IGNORECASE),
+)
+_PUNCTUATION_ONLY_RE = re.compile(r"^[\s.\-_=~·•:|/\\]+$")
+_NUMERIC_ONLY_RE = re.compile(r"^\d{1,5}$")
+_WHITESPACE_RE = re.compile(r"\s+")
+_COMPARE_NORMALIZE_RE = re.compile(r"[\s.\-_=~·•:|/\\()\[\]{}<>]+")
+_GENERIC_OCR_LABELS = {
+    "설계명",
+    "설계id",
+}
+
 
 def augment_slide_packets_with_optional_ocr(
     slide_packets_payload: dict[str, Any],
@@ -93,7 +107,8 @@ def augment_slide_packets_with_optional_ocr(
                 failed_count += 1
         slide["embedded_assets"] = slide_assets
         slide["ocr_entries"] = ocr_entries
-        slide["ocr_text"] = "\n\n".join(text for text in ocr_texts if text).strip()
+        slide["ocr_text_raw"] = "\n\n".join(text for text in ocr_texts if text).strip()
+        slide["ocr_text"] = _clean_slide_ocr_text(slide, slide["ocr_text_raw"])
         slide["ocr_backends"] = [
             backend
             for backend in dict.fromkeys(
@@ -314,6 +329,98 @@ def _ocr_markdown_text(markdown: str) -> str:
             continue
         lines.append(stripped)
     return "\n".join(lines).strip()
+
+
+def _clean_slide_ocr_text(slide: dict[str, Any], raw_text: str) -> str:
+    lines = [str(line).strip() for line in str(raw_text or "").splitlines() if str(line).strip()]
+    if not lines:
+        return ""
+    title_fp = _normalize_compare_text(str(slide.get("title") or ""))
+    native_lines = _slide_native_lines(slide)
+    native_fingerprints = {
+        fingerprint
+        for fingerprint in (
+            _normalize_compare_text(line)
+            for line in native_lines
+        )
+        if fingerprint
+    }
+    native_compact = "\n".join(native_fingerprints)
+    cleaned: list[str] = []
+    seen_fingerprints: set[str] = set()
+    for raw_line in lines:
+        line = _WHITESPACE_RE.sub(" ", raw_line).strip()
+        if not line:
+            continue
+        fingerprint = _normalize_compare_text(line)
+        if not fingerprint:
+            continue
+        if fingerprint == title_fp:
+            continue
+        if _is_company_logo_noise(line):
+            continue
+        if _PUNCTUATION_ONLY_RE.fullmatch(line):
+            continue
+        if _NUMERIC_ONLY_RE.fullmatch(line):
+            continue
+        if fingerprint in _GENERIC_OCR_LABELS:
+            continue
+        if fingerprint in seen_fingerprints:
+            continue
+        if (
+            fingerprint in native_fingerprints
+            or (fingerprint and fingerprint in native_compact and _is_low_signal_duplicate(line, fingerprint))
+        ) and _is_low_signal_duplicate(line, fingerprint):
+            continue
+        seen_fingerprints.add(fingerprint)
+        cleaned.append(line)
+    return "\n".join(cleaned).strip()
+
+
+def _slide_native_lines(slide: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    for key in ("title", "body_text", "notes_text"):
+        value = str(slide.get(key) or "").strip()
+        if value:
+            lines.extend(part.strip() for part in value.splitlines() if part.strip())
+    for block in slide.get("text_blocks") or []:
+        if not isinstance(block, dict):
+            continue
+        text = str(block.get("text") or "").strip()
+        if text:
+            lines.extend(part.strip() for part in text.splitlines() if part.strip())
+    for block in slide.get("table_blocks") or []:
+        if not isinstance(block, dict):
+            continue
+        title = str(block.get("title") or "").strip()
+        body_text = str(block.get("body_text") or "").strip()
+        if title:
+            lines.extend(part.strip() for part in title.splitlines() if part.strip())
+        if body_text:
+            lines.extend(part.strip() for part in body_text.splitlines() if part.strip())
+        for row in block.get("rows") or []:
+            if not isinstance(row, list):
+                continue
+            row_text = " ".join(str(cell).strip() for cell in row if str(cell).strip()).strip()
+            if row_text:
+                lines.append(row_text)
+    return lines
+
+
+def _normalize_compare_text(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    normalized = _COMPARE_NORMALIZE_RE.sub("", normalized)
+    return normalized
+
+
+def _is_company_logo_noise(line: str) -> bool:
+    normalized_line = str(line or "").strip()
+    return any(pattern.fullmatch(normalized_line) for pattern in _COMPANY_LOGO_NOISE_PATTERNS)
+
+
+def _is_low_signal_duplicate(line: str, fingerprint: str) -> bool:
+    token_count = len(str(line or "").split())
+    return len(fingerprint) <= 10 or token_count <= 2
 
 
 def _asset_ocr_status(status: str, *, has_text: bool, low_confidence: bool) -> str:

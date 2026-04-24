@@ -76,7 +76,7 @@ export default function Hero() {
         <div className="mouse-icon">
           <div className="mouse-wheel"></div>
         </div>
-        <span>Knowledge</span>
+        <span>Play Scroll</span>
       </div>
     </section>
   );

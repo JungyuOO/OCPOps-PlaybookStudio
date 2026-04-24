@@ -31,6 +31,8 @@ reports/technical_notes/
 reports/execution_harness/**/chrome-headless-profile*/
 validation_report.json
 tmp_customer_pack_live/
+.P_docs/
+.kugnusdocs/
 #
 # local source mirrors for rebuild/materialization are intentionally unmanaged
 # in the top-level PBS repository.

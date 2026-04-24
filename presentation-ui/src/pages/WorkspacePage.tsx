@@ -104,7 +104,13 @@ import type {
   WorkspaceTestTrace,
 } from './workspaceTypes';
 import { buildOutlineBookFamilies, describeOutlineVariant } from './workspaceOutline';
-import { isTestRunDraft, partitionDraftCatalog, shouldOpenDraftAsViewer } from './workspaceDraftCatalog';
+import {
+  describeDraftCatalogSemantics,
+  needsSlideDeckUpgrade,
+  partitionDraftCatalog,
+  resolveDraftScopedViewerSourceId,
+  shouldOpenDraftAsViewer,
+} from './workspaceDraftCatalog';
 
 interface OverlayTargetDescriptor {
   kind: WikiOverlayTargetKind;
@@ -340,6 +346,43 @@ type PreviewState =
     viewerDocument?: ViewerDocumentPayload;
   };
 
+export interface ViewerBuildActionState {
+  show: boolean;
+  showPrepare: boolean;
+  canCapture: boolean;
+  canNormalize: boolean;
+}
+
+export function resolveDraftScopedSourceId(
+  sourceId?: string | null,
+  viewerPath?: string | null,
+): string | undefined {
+  return resolveDraftScopedViewerSourceId(sourceId, viewerPath);
+}
+
+export function resolveViewerBuildActionState(
+  activeDraft: Pick<CustomerPackDraft, 'status'> | null,
+  isCapturing: boolean,
+  isNormalizing: boolean,
+): ViewerBuildActionState {
+  if (!activeDraft) {
+    return {
+      show: false,
+      showPrepare: false,
+      canCapture: false,
+      canNormalize: false,
+    };
+  }
+  const normalizedStatus = String(activeDraft.status || '').trim().toLowerCase();
+  const showPrepare = normalizedStatus !== 'normalized';
+  return {
+    show: true,
+    showPrepare,
+    canCapture: showPrepare && !isCapturing,
+    canNormalize: !isNormalizing,
+  };
+}
+
 function makeId(prefix: string): string {
   const shortPart = Math.random().toString(36).substring(2, 8).toUpperCase();
   return `${prefix}-${shortPart}`;
@@ -436,20 +479,25 @@ function inferOutlineCategory(book: WorkspaceManualBook): OutlineCategoryGroup {
 
 function formatDraftMeta(draft: CustomerPackDraft): string {
   const size = formatBytes(draft.uploaded_byte_size);
+  const semantics = describeDraftCatalogSemantics(draft);
   const pieces = [
-    draft.promotion_stage_label || '',
+    semantics.audienceLabel,
+    semantics.surfaceLabel,
     draft.source_type.toUpperCase(),
   ];
   if (size) {
     pieces.push(size);
   }
-  return pieces.filter(Boolean).join(' · ');
+  return dedupeCatalogChips(pieces).join(' · ');
 }
 
 function uploadedDraftCatalogChips(draft: CustomerPackDraft): string[] {
+  const semantics = describeDraftCatalogSemantics(draft);
   return dedupeCatalogChips([
-    isTestRunDraft(draft) ? '테스트 실험' : '',
+    semantics.audienceLabel,
+    semantics.surfaceLabel,
     draft.source_kind_label,
+    draft.pipeline_target_label,
     draft.promotion_stage_label,
     draft.source_type.toUpperCase(),
   ]);
@@ -1363,6 +1411,10 @@ export default function WorkspacePage() {
     },
     [preview],
   );
+  const draftScopedSourceId = useMemo(
+    () => resolveDraftScopedSourceId(activeSourceId, currentViewerPath),
+    [activeSourceId, currentViewerPath],
+  );
 
   const viewerOriginalSourceHref = useMemo(() => {
     if (preview.kind !== 'viewer') {
@@ -1505,7 +1557,8 @@ export default function WorkspacePage() {
       setPreview({ kind: 'empty' });
       return;
     }
-    setActiveSourceId(sourceId ?? `viewer:${normalizedViewerPath}`);
+    const resolvedSourceId = resolveDraftScopedSourceId(sourceId, normalizedViewerPath) ?? `viewer:${normalizedViewerPath}`;
+    setActiveSourceId(resolvedSourceId);
     setPreview({ kind: 'loading', title });
     try {
       const meta = await loadSourceMeta(normalizedViewerPath);
@@ -1558,8 +1611,8 @@ export default function WorkspacePage() {
     setActiveSourceId(`draft:${draftId}`);
     setPreview({ kind: 'loading', title: 'Customer Pack' });
 
-    const loadedDraft = await loadCustomerPackDraft(draftId);
-    const mergedDrafts = mergeDraft(loadedDraft, currentDrafts);
+    let loadedDraft = await loadCustomerPackDraft(draftId);
+    let mergedDrafts = mergeDraft(loadedDraft, currentDrafts);
     setDrafts(mergedDrafts);
 
     let loadedBook: CustomerPackBook | undefined;
@@ -1567,8 +1620,18 @@ export default function WorkspacePage() {
 
     if (loadedDraft.status === 'normalized') {
       loadedBook = await loadCustomerPackBook(draftId);
+      if (needsSlideDeckUpgrade(loadedDraft, loadedBook)) {
+        const upgradedDraft = await normalizeCustomerPackDraft(draftId, {
+          approvalState: loadedDraft.approval_state,
+          publicationState: 'active',
+        });
+        loadedDraft = upgradedDraft;
+        mergedDrafts = mergeDraft(upgradedDraft, mergedDrafts);
+        setDrafts(mergedDrafts);
+        loadedBook = await loadCustomerPackBook(draftId);
+      }
       viewerUrl = toRuntimeUrl(preferredViewerPath || loadedBook.target_viewer_path);
-      if (shouldOpenDraftAsViewer(loadedDraft) && loadedBook.target_viewer_path) {
+      if (shouldOpenDraftAsViewer(loadedDraft, loadedBook) && loadedBook.target_viewer_path) {
         await openViewerPreview(
           preferredViewerPath || loadedBook.target_viewer_path,
           loadedBook.title || loadedDraft.title,
@@ -2122,7 +2185,10 @@ export default function WorkspacePage() {
     }
     setIsNormalizing(true);
     try {
-      const normalized = await normalizeCustomerPackDraft(activeDraft.draft_id);
+      const normalized = await normalizeCustomerPackDraft(activeDraft.draft_id, {
+        approvalState: activeDraft.approval_state,
+        publicationState: 'active',
+      });
       setDrafts((current) => mergeDraft(normalized, current));
       await openDraftPreview(normalized.draft_id, mergeDraft(normalized));
     } catch (error) {
@@ -2277,8 +2343,10 @@ export default function WorkspacePage() {
     animatePreviewPanel();
   }
 
-  const canCapture = Boolean(activeDraft) && !isCapturing;
-  const canNormalize = Boolean(activeDraft) && !isNormalizing;
+  const viewerBuildActionState = useMemo(
+    () => resolveViewerBuildActionState(activeDraft, isCapturing, isNormalizing),
+    [activeDraft, isCapturing, isNormalizing],
+  );
 
   const recentOverlayItems = recentPositionOverlays.slice(0, 4);
   const editedOverlayItems = editedCardOverlays.slice(0, 6);
@@ -2427,7 +2495,7 @@ export default function WorkspacePage() {
                     className="viewer-quick-nav-item"
                     onClick={() => {
                       setQuickNavOpen(false);
-                      void openViewerPreview(item.viewerPath, preview.title, undefined, viewerPageMode);
+                      void openViewerPreview(item.viewerPath, preview.title, draftScopedSourceId, viewerPageMode);
                     }}
                   >
                     <span className="viewer-quick-nav-item-heading">{item.heading}</span>
@@ -2771,15 +2839,15 @@ export default function WorkspacePage() {
                     )}
                   </section>
 
-                  <section className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Test drafts outline">
+                  <section className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Test run outline">
                     <button
                       type="button"
                       className="outline-section-head outline-section-toggle"
                       onClick={() => toggleOutlineSection('test_runs')}
                     >
                       <div className="outline-section-copy">
-                        <strong>테스트 목록</strong>
-                        <span>같은 고객 문서로 돌린 파이프라인 비교 실험군</span>
+                        <strong>테스트 런</strong>
+                        <span>같은 고객 문서를 여러 파이프라인으로 돌린 비교 실험군</span>
                       </div>
                       <div className="outline-section-toggle-side">
                         <span>{`${testDraftSources.length}개`}</span>
@@ -2793,8 +2861,8 @@ export default function WorkspacePage() {
                     ) : (
                       <>
                         <div className="outline-toc-header">
-                          <strong className="outline-toc-title">고객 문서 비교 실험</strong>
-                          <span className="outline-toc-breadcrumb">같은 파일을 다른 파이프라인으로 돌린 결과를 바로 비교합니다.</span>
+                          <strong className="outline-toc-title">고객 문서 테스트 런</strong>
+                          <span className="outline-toc-breadcrumb">같은 파일을 다른 파이프라인으로 돌린 viewer surface 결과를 바로 비교합니다.</span>
                           <span className="outline-toc-meta">{`${testDraftSources.length}개 실험군`}</span>
                         </div>
                         <div className="outline-custom-doc-list outline-custom-doc-list--toc">
@@ -2825,15 +2893,15 @@ export default function WorkspacePage() {
                     )}
                   </section>
 
-                  <section className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Uploaded documents outline">
+                  <section className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Customer documents outline">
                     <button
                       type="button"
                       className="outline-section-head outline-section-toggle"
                       onClick={() => toggleOutlineSection('uploaded_docs')}
                     >
                       <div className="outline-section-copy">
-                        <strong>업로드 문서</strong>
-                        <span>일반 커스텀 파이프라인 승급 후보 문서</span>
+                        <strong>고객 문서</strong>
+                        <span>테스트 런을 제외한 일반 customer doc 승급 후보</span>
                       </div>
                       <div className="outline-section-toggle-side">
                         <span>{`${draftSources.length}개`}</span>
@@ -2847,9 +2915,9 @@ export default function WorkspacePage() {
                     ) : (
                       <>
                          <div className="outline-toc-header">
-                           <strong className="outline-toc-title">업로드된 사용자 문서</strong>
-                           <span className="outline-toc-breadcrumb">테스트 실험군을 제외한 일반 업로드 초안 목록입니다.</span>
-                           <span className="outline-toc-meta">{`${draftSources.length}개 업로드`}</span>
+                           <strong className="outline-toc-title">고객 문서 초안</strong>
+                           <span className="outline-toc-breadcrumb">테스트 런을 제외한 일반 customer doc 목록입니다.</span>
+                           <span className="outline-toc-meta">{`${draftSources.length}개 고객 문서`}</span>
                          </div>
                          <div className="outline-custom-doc-list outline-custom-doc-list--toc">
                            {draftSources.map((source) => {
@@ -3245,6 +3313,22 @@ export default function WorkspacePage() {
             annotationEnabled={annotationEnabled}
             annotationTool={annotationTool}
             atlasCanvasActive={visionMode === 'atlas_canvas' && viewerPageMode === 'multi'}
+            bottomToolbar={viewerBuildActionState.show ? (
+              <div className="panel-footer viewer-build-actions viewer-build-actions-docked">
+                <div className="footer-actions">
+                  {viewerBuildActionState.showPrepare ? (
+                    <button className="outline-btn" onClick={() => { void handleCapture(); }} type="button" disabled={!viewerBuildActionState.canCapture}>
+                      <Cpu size={14} />
+                      <span>{isCapturing ? 'Preparing...' : 'Prepare Pack'}</span>
+                    </button>
+                  ) : null}
+                  <button className="primary-btn" onClick={() => { void handleNormalize(); }} type="button" disabled={!viewerBuildActionState.canNormalize}>
+                    <span>{isNormalizing ? 'Saving...' : 'Save to Wiki'}</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              </div>
+            ) : undefined}
             savedInkStrokes={currentInkStrokes}
             isInkSaving={isOverlaySaving}
             rightCollapsed={rightCollapsed}
@@ -3323,10 +3407,12 @@ export default function WorkspacePage() {
                           const sourceId = `custom:${book.book_slug}`;
                           const chips = customDocumentCatalogChips(book);
                           return (
-                            <div
+                            <button
                               key={sourceId}
+                              type="button"
                               className={`source-item ${activeSourceId === sourceId ? 'selected' : ''}${canOpen ? '' : ' readonly'}`}
                               onClick={canOpen ? () => { void handleCustomDocumentClick(book); } : undefined}
+                              disabled={!canOpen}
                             >
                               <div className="item-main">
                                 <FileText size={16} className="file-icon" />
@@ -3342,7 +3428,7 @@ export default function WorkspacePage() {
                                 </div>
                               </div>
                               <div className="item-meta">{formatCustomDocumentMeta(book)}</div>
-                            </div>
+                            </button>
                           );
                         })}
                       </div>
@@ -3354,7 +3440,7 @@ export default function WorkspacePage() {
                   <button className="section-header-btn" onClick={() => toggleSection('test_runs')} type="button">
                     <div className="header-label-group">
                       {collapsedSections.test_runs ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      <span className="list-title">테스트 목록</span>
+                      <span className="list-title">테스트 런</span>
                     </div>
                     <span className="item-count-badge">{testDraftSources.length}</span>
                   </button>
@@ -3365,8 +3451,9 @@ export default function WorkspacePage() {
                       ) : testDraftSources.map((file) => {
                         const chips = file.draft ? uploadedDraftCatalogChips(file.draft) : [];
                         return (
-                          <div
+                          <button
                             key={file.id}
+                            type="button"
                             className={`source-item ${activeSourceId === file.id ? 'selected' : ''}`}
                             onClick={() => { void handleSourceClick(file); }}
                           >
@@ -3384,7 +3471,7 @@ export default function WorkspacePage() {
                               </div>
                             </div>
                             <div className="item-meta">{file.meta}</div>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
@@ -3395,7 +3482,7 @@ export default function WorkspacePage() {
                   <button className="section-header-btn" onClick={() => toggleSection('drafts')} type="button">
                     <div className="header-label-group">
                       {collapsedSections.drafts ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      <span className="list-title">{visionMode === 'guided_tour' ? 'Added Sources' : '업로드 문서'}</span>
+                      <span className="list-title">{visionMode === 'guided_tour' ? 'Customer Docs' : '고객 문서'}</span>
                     </div>
                     <span className="item-count-badge">{draftSources.length}</span>
                   </button>
@@ -3404,8 +3491,9 @@ export default function WorkspacePage() {
                       {draftSources.map((file) => {
                         const chips = file.draft ? uploadedDraftCatalogChips(file.draft) : [];
                         return (
-                          <div
+                          <button
                             key={file.id}
+                            type="button"
                             className={`source-item ${activeSourceId === file.id ? 'selected' : ''}`}
                             onClick={() => { void handleSourceClick(file); }}
                           >
@@ -3423,7 +3511,7 @@ export default function WorkspacePage() {
                               </div>
                             </div>
                             <div className="item-meta">{file.meta}</div>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
@@ -3464,7 +3552,7 @@ export default function WorkspacePage() {
                     currentViewerPath={currentViewerPath}
                     onActiveSectionChange={viewerPageMode === 'multi' ? setViewerActiveSection : undefined}
                     onNavigateViewerPath={(viewerPath) => {
-                      void openViewerPreview(viewerPath, preview.title, undefined, viewerPageMode);
+                      void openViewerPreview(viewerPath, preview.title, draftScopedSourceId, viewerPageMode);
                     }}
                     textAnnotationsByAnchor={sectionTextAnnotationsByAnchor}
                     textToolEnabled={annotationEnabled && annotationTool === 'text' && viewerPageMode === 'multi' && visionMode === 'atlas_canvas'}
@@ -3526,7 +3614,7 @@ export default function WorkspacePage() {
                       viewerDocument={preview.viewerDocument}
                       currentViewerPath={runtimePathFromUrl(preview.viewerUrl)}
                       onNavigateViewerPath={(viewerPath) => {
-                        void openViewerPreview(viewerPath, preview.title, undefined, viewerPageMode);
+                        void openViewerPreview(viewerPath, preview.title, draftScopedSourceId, viewerPageMode);
                       }}
                       className="playbook-reader-shadow-host"
                     />
@@ -3540,20 +3628,6 @@ export default function WorkspacePage() {
               );
             })()}
 
-            {activeDraft && (
-              <div className="panel-footer viewer-build-actions">
-                <div className="footer-actions">
-                  <button className="outline-btn" onClick={() => { void handleCapture(); }} type="button" disabled={!canCapture}>
-                    <Cpu size={14} />
-                    <span>{isCapturing ? 'Preparing...' : 'Prepare Pack'}</span>
-                  </button>
-                  <button className="primary-btn" onClick={() => { void handleNormalize(); }} type="button" disabled={!canNormalize}>
-                    <span>{isNormalizing ? 'Saving...' : 'Save to Wiki'}</span>
-                    <ArrowRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
           </WorkspaceViewerPanel>
         </Group>
       </main>

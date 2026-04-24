@@ -42,7 +42,7 @@ def _select_view_sections(
     target_anchor: str,
     page_mode: str,
 ) -> list[dict]:
-    if _resolve_page_mode(page_mode) != "multi":
+    if _resolve_page_mode(page_mode) == "multi":
         return sections
     if not sections:
         return sections
@@ -60,7 +60,7 @@ def _build_section_navigation(
     target_anchor: str,
     page_mode: str,
 ) -> list[dict[str, str]]:
-    if _resolve_page_mode(page_mode) != "multi" or not sections:
+    if _resolve_page_mode(page_mode) != "single" or not sections:
         return []
     current_index = 0
     normalized_anchor = str(target_anchor or "").strip()
@@ -95,7 +95,7 @@ def _overlay_target_for_view(
     page_mode: str,
 ) -> dict[str, str]:
     resolved_anchor = str(target_anchor or "").strip()
-    if not resolved_anchor and _resolve_page_mode(page_mode) == "multi" and visible_sections:
+    if not resolved_anchor and _resolve_page_mode(page_mode) == "single" and visible_sections:
         resolved_anchor = str(visible_sections[0].get("anchor") or "").strip()
     if resolved_anchor:
         return {

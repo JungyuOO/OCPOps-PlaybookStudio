@@ -1698,6 +1698,11 @@
 }
 
 .source-item {
+  width: 100%;
+  display: block;
+  text-align: left;
+  font: inherit;
+  color: inherit;
   padding: 12px;
   border-radius: 12px;
   background: transparent;
@@ -1705,11 +1710,23 @@
   transition: all 0.3s;
   margin-bottom: 8px;
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .source-item:hover {
   background: rgba(255, 255, 255, 0.03);
   border-color: var(--glass-border);
+}
+
+.source-item:focus-visible {
+  outline: 2px solid rgba(0, 209, 255, 0.34);
+  outline-offset: 2px;
+  border-color: rgba(0, 209, 255, 0.28);
+}
+
+.source-item:disabled {
+  opacity: 1;
 }
 
 .source-item.readonly {
@@ -4404,6 +4421,24 @@
 .workspace-viewer-panel {
   background: linear-gradient(180deg, #faf8f4 0%, #f3eee5 100%);
   border-left: 1px solid rgba(17, 20, 24, 0.06);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.workspace-viewer-panel--with-bottom-toolbar {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.workspace-viewer-panel-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace-viewer-panel--with-bottom-toolbar .source-viewer-content.viewer-surface {
+  padding-bottom: 0;
 }
 
 .workspace-viewer-panel .empty-state {
@@ -4925,12 +4960,45 @@
 }
 
 .viewer-build-actions {
-  background: rgba(255, 255, 255, 0.015);
+  background: rgba(250, 248, 244, 0.92);
+  border-top: 1px solid rgba(17, 20, 24, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.viewer-build-actions-docked {
+  padding: 14px 18px 18px;
+}
+
+.viewer-bottom-toolbar-slot {
+  flex: 0 0 auto;
+  min-height: 0;
+  position: relative;
+  z-index: 8;
+  background:
+    linear-gradient(180deg, rgba(250, 248, 244, 0.72), rgba(250, 248, 244, 0.96) 24%, rgba(250, 248, 244, 1) 100%);
+  box-shadow: 0 -14px 28px rgba(68, 49, 30, 0.08);
+  border-top: 1px solid rgba(17, 20, 24, 0.08);
 }
 
 .footer-actions {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.viewer-bottom-toolbar-slot .panel-footer {
+  margin: 0;
+  border-top: 0;
+}
+
+.viewer-bottom-toolbar-slot .viewer-build-actions-docked {
+  padding: 12px 18px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.viewer-bottom-toolbar-slot .outline-btn,
+.viewer-bottom-toolbar-slot .primary-btn {
+  min-height: 44px;
 }
 
 .primary-btn {
