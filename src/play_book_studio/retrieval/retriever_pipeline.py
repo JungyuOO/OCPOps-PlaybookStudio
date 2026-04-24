@@ -43,8 +43,20 @@ def _is_customer_pack_explicit_query(query: str) -> bool:
         for token in (
             "업로드 문서",
             "업로드한 문서",
+            "업로드 자료",
+            "업로드자료",
+            "유저 업로드",
+            "사용자 업로드",
             "고객 문서",
             "고객문서",
+            "고객 자료",
+            "고객자료",
+            "고객 ppt",
+            "고객ppt",
+            "고객 운영북",
+            "운영북",
+            "ppt 자료",
+            "ppt자료",
             "우리 문서",
             "our document",
             "customer pack",
@@ -195,7 +207,11 @@ def _preserve_customer_pack_core_blend(
     context: SessionContext | None,
 ) -> list[RetrievalHit]:
     context = context or SessionContext()
-    if context.restrict_uploaded_sources:
+    explicit_blend_request = (
+        _is_customer_pack_explicit_query(query)
+        or has_active_customer_pack_selection(context)
+    ) and _mentions_official_runtime_sources(query)
+    if context.restrict_uploaded_sources and not explicit_blend_request:
         return hybrid_hits
     if _is_customer_pack_title_locator_query(query) and not _mentions_official_runtime_sources(query):
         return hybrid_hits
@@ -236,6 +252,52 @@ def _preserve_customer_pack_core_blend(
     return seeded[:target_size]
 
 
+def _preserve_official_title_locator_candidate(
+    *,
+    hybrid_hits: list[RetrievalHit],
+    official_title_hits: list[RetrievalHit],
+) -> list[RetrievalHit]:
+    if not official_title_hits:
+        return hybrid_hits
+    source_hit = official_title_hits[0]
+    if not str(source_hit.book_slug or "").strip():
+        return hybrid_hits
+
+    target_chunk_id = str(source_hit.chunk_id or "").strip()
+    target_book_slug = str(source_hit.book_slug or "").strip()
+    if hybrid_hits and hybrid_hits[0].book_slug == target_book_slug:
+        return hybrid_hits
+
+    reordered = list(hybrid_hits)
+    existing_index = next(
+        (
+            index
+            for index, hit in enumerate(reordered)
+            if str(hit.chunk_id or "").strip() == target_chunk_id
+        ),
+        None,
+    )
+    if existing_index is not None:
+        official_hit = reordered.pop(existing_index)
+    else:
+        official_hit = copy.deepcopy(source_hit)
+        official_hit.source = "hybrid_official_title_seeded"
+
+    official_hit.component_scores = dict(official_hit.component_scores)
+    official_hit.component_scores.setdefault("official_title_seed", 1.0)
+    official_hit.component_scores.setdefault(
+        "pre_official_title_seed_score",
+        float(official_hit.fused_score or official_hit.raw_score or 0.0),
+    )
+    official_hit.fused_score = max(
+        float(official_hit.fused_score or 0.0),
+        float(source_hit.raw_score or 0.0),
+    )
+    official_hit.raw_score = max(float(official_hit.raw_score or 0.0), official_hit.fused_score)
+    reordered.insert(0, official_hit)
+    return reordered[: max(len(hybrid_hits), 1)]
+
+
 @lru_cache(maxsize=1)
 def _active_runtime_slug_set(manifest_path: str) -> frozenset[str]:
     path = Path(manifest_path)
@@ -270,7 +332,7 @@ def _is_latest_only_hit(hit: RetrievalHit, *, active_slugs: frozenset[str]) -> b
     if str(hit.book_slug or "").strip() not in active_slugs:
         return True
     review_status = str(hit.review_status or "").strip()
-    if review_status not in {"", "approved", "unreviewed"}:
+    if review_status not in {"", "approved", "unreviewed", "needs_review"}:
         return False
     if source_collection != "core":
         return False
@@ -453,6 +515,7 @@ def execute_retrieval_pipeline(
 
     bm25_hits: list[RetrievalHit] = []
     overlay_bm25_hits: list[RetrievalHit] = []
+    official_title_locator_hits: list[RetrievalHit] = []
     core_reference_hits: list[RetrievalHit] = []
     if use_bm25:
         bm25_search = search_bm25_candidates(
@@ -465,9 +528,14 @@ def execute_retrieval_pipeline(
         )
         bm25_hits = bm25_search["hits"]
         overlay_bm25_hits = bm25_search["overlay_hits"]
+        official_title_locator_hits = bm25_search.get("official_title_locator_hits", [])
         core_reference_hits = bm25_search["core_hits"]
         bm25_hits = _filter_latest_only_hits(retriever, bm25_hits)
         overlay_bm25_hits = _filter_latest_only_hits(retriever, overlay_bm25_hits)
+        official_title_locator_hits = _filter_latest_only_hits(
+            retriever,
+            official_title_locator_hits,
+        )
         core_reference_hits = _filter_latest_only_hits(retriever, core_reference_hits)
     vector_hits: list[RetrievalHit] = []
     vector_runtime: dict[str, object] = {}
@@ -520,6 +588,10 @@ def execute_retrieval_pipeline(
         hybrid_hits=hybrid_hits,
         core_hits=core_reference_hits,
         context=context,
+    )
+    hybrid_hits = _preserve_official_title_locator_candidate(
+        hybrid_hits=hybrid_hits,
+        official_title_hits=official_title_locator_hits,
     )
     hybrid_hits = _filter_latest_only_hits(retriever, hybrid_hits)
     timings_ms["fusion"] = _duration_ms(fusion_started_at)
@@ -606,6 +678,10 @@ def execute_retrieval_pipeline(
         core_hits=core_reference_hits,
         context=context,
     )
+    graph_enriched_hits = _preserve_official_title_locator_candidate(
+        hybrid_hits=graph_enriched_hits,
+        official_title_hits=official_title_locator_hits,
+    )
     graph_enriched_hits = _filter_latest_only_hits(retriever, graph_enriched_hits)
     hits, reranker_trace = maybe_rerank_hits(
         retriever,
@@ -615,6 +691,11 @@ def execute_retrieval_pipeline(
         top_k=top_k,
         trace_callback=trace_callback,
         timings_ms=timings_ms,
+    )
+    hits = _filter_latest_only_hits(retriever, hits)
+    hits = _preserve_official_title_locator_candidate(
+        hybrid_hits=hits,
+        official_title_hits=official_title_locator_hits,
     )
     hits = _filter_latest_only_hits(retriever, hits)
     trace = build_retrieval_trace(

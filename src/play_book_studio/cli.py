@@ -33,6 +33,7 @@ from play_book_studio.ingestion.official_gold_gate import (
     ARTIFACT_MANIFEST_RELATIVE_PATH,
     ONE_CLICK_REPORT_RELATIVE_PATH,
     materialize_runtime_markdown_from_playbooks,
+    publish_runtime_manifest_from_playbooks,
     repair_portable_json_paths,
     write_artifact_manifest,
     write_official_gold_gate_report,
@@ -172,6 +173,17 @@ def build_parser() -> argparse.ArgumentParser:
     official_gold_rebuild_parser.add_argument("--collect-limit", type=int, default=None)
     official_gold_rebuild_parser.add_argument("--process-limit", type=int, default=None)
     official_gold_rebuild_parser.add_argument("--force-collect", action="store_true")
+    official_gold_rebuild_parser.add_argument(
+        "--source-manifest",
+        type=Path,
+        default=None,
+        help="Runtime manifest to rebuild from. Defaults to configured SOURCE_MANIFEST_PATH.",
+    )
+    official_gold_rebuild_parser.add_argument(
+        "--full-official-catalog",
+        action="store_true",
+        help="Use the active pack html-single catalog as the rebuild source manifest.",
+    )
     official_gold_rebuild_parser.add_argument(
         "--with-embeddings",
         action="store_true",
@@ -480,7 +492,18 @@ def _run_official_gold_gate(args: argparse.Namespace) -> int:
 
 
 def _run_official_gold_rebuild(args: argparse.Namespace) -> int:
-    settings = replace(load_settings(ROOT), graph_backend="local")
+    base_settings = load_settings(ROOT)
+    source_manifest_path: Path | None = args.source_manifest
+    if getattr(args, "full_official_catalog", False):
+        source_manifest_path = ROOT / "manifests" / base_settings.active_pack.source_catalog_name
+    source_manifest_override = ""
+    if source_manifest_path is not None:
+        source_manifest_override = str(source_manifest_path)
+    settings = replace(
+        base_settings,
+        graph_backend="local",
+        source_manifest_path_override=source_manifest_override,
+    )
     log = run_ingestion_pipeline(
         settings,
         collect_subset=args.collect_subset,
@@ -490,6 +513,10 @@ def _run_official_gold_rebuild(args: argparse.Namespace) -> int:
         force_collect=bool(args.force_collect),
         skip_embeddings=not (bool(args.with_embeddings) or bool(args.with_qdrant)),
         skip_qdrant=not bool(args.with_qdrant),
+    )
+    runtime_manifest_publication = publish_runtime_manifest_from_playbooks(
+        ROOT,
+        source_manifest_path=settings.source_manifest_path,
     )
     markdown_materialization = materialize_runtime_markdown_from_playbooks(ROOT)
     repair_results = repair_portable_json_paths(ROOT)
@@ -502,6 +529,8 @@ def _run_official_gold_rebuild(args: argparse.Namespace) -> int:
         output_path=args.output,
     )
     payload["pipeline_log"] = log.to_dict()
+    payload["rebuild_source_manifest_path"] = str(settings.source_manifest_path)
+    payload["runtime_manifest_publication"] = runtime_manifest_publication
     payload["runtime_markdown_materialization"] = markdown_materialization
     payload["portable_path_repair"] = repair_results
     report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -520,6 +549,7 @@ def _run_official_gold_rebuild(args: argparse.Namespace) -> int:
                 "chunk_count": log.chunk_count,
                 "graph_book_count": log.graph_book_count,
                 "graph_relation_count": log.graph_relation_count,
+                "runtime_manifest_count": runtime_manifest_publication.get("runtime_count", 0),
                 "runtime_markdown_written": sum(
                     len(item.get("written", []))
                     for item in markdown_materialization

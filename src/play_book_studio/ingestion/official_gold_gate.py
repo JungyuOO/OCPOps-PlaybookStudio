@@ -10,6 +10,7 @@ from typing import Any
 
 from play_book_studio.app.server_routes_viewer import resolve_viewer_html
 from play_book_studio.config.settings import load_settings
+from play_book_studio.source_provenance import source_fingerprint_for_entry, source_provenance_payload, source_ref_for_entry
 
 
 PORTABLE_JSON_RELATIVE_PATHS = (
@@ -247,6 +248,246 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _safe_read_json(path: Path) -> dict[str, Any]:
+    if not path.exists() or not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _manifest_entries(path: Path) -> list[dict[str, Any]]:
+    payload = _safe_read_json(path)
+    entries = payload.get("entries")
+    return [item for item in entries if isinstance(item, dict)] if isinstance(entries, list) else []
+
+
+def _official_catalog_path(root_dir: Path) -> Path:
+    settings = load_settings(root_dir)
+    return root_dir / "manifests" / settings.active_pack.source_catalog_name
+
+
+def _official_catalog_slugs(root_dir: Path) -> set[str]:
+    return {
+        str(item.get("book_slug") or "").strip()
+        for item in _manifest_entries(_official_catalog_path(root_dir))
+        if str(item.get("book_slug") or "").strip()
+    }
+
+
+def _row_source_metadata(row: dict[str, Any]) -> dict[str, Any]:
+    metadata = row.get("source_metadata")
+    return dict(metadata) if isinstance(metadata, dict) else {}
+
+
+def _playbook_slugs(playbook_rows: list[dict[str, Any]]) -> set[str]:
+    return {
+        str(row.get("book_slug") or "").strip()
+        for row in playbook_rows
+        if str(row.get("book_slug") or "").strip()
+    }
+
+
+def _chunk_slugs(rows: list[dict[str, Any]]) -> set[str]:
+    return {
+        str(row.get("book_slug") or "").strip()
+        for row in rows
+        if str(row.get("book_slug") or "").strip()
+    }
+
+
+def _runtime_manifest_slugs(root_dir: Path) -> set[str]:
+    active_manifest_path = root_dir / "data/wiki_runtime_books/active_manifest.json"
+    return {
+        str(item.get("slug") or item.get("book_slug") or "").strip()
+        for item in _manifest_entries(active_manifest_path)
+        if str(item.get("slug") or item.get("book_slug") or "").strip()
+    }
+
+
+def _official_catalog_coverage(
+    root_dir: Path,
+    *,
+    chunks_rows: list[dict[str, Any]],
+    bm25_rows: list[dict[str, Any]],
+    playbook_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    catalog_slugs = _official_catalog_slugs(root_dir)
+    playbook_book_slugs = _playbook_slugs(playbook_rows)
+    chunk_book_slugs = _chunk_slugs(chunks_rows)
+    bm25_book_slugs = _chunk_slugs(bm25_rows)
+    runtime_book_slugs = _runtime_manifest_slugs(root_dir)
+    return {
+        "catalog_count": len(catalog_slugs),
+        "playbook_book_count": len(playbook_book_slugs),
+        "chunk_book_count": len(chunk_book_slugs),
+        "bm25_book_count": len(bm25_book_slugs),
+        "active_runtime_book_count": len(runtime_book_slugs),
+        "missing_playbook_slugs": sorted(catalog_slugs - playbook_book_slugs),
+        "missing_chunk_slugs": sorted(catalog_slugs - chunk_book_slugs),
+        "missing_bm25_slugs": sorted(catalog_slugs - bm25_book_slugs),
+        "missing_active_runtime_slugs": sorted(catalog_slugs - runtime_book_slugs),
+    }
+
+
+def _runtime_entry_from_playbook(
+    root_dir: Path,
+    *,
+    row: dict[str, Any],
+    source_entry: dict[str, Any],
+    source_manifest_path: Path,
+) -> dict[str, Any]:
+    settings = load_settings(root_dir)
+    slug = str(row.get("book_slug") or "").strip()
+    title = str(row.get("title") or source_entry.get("title") or slug).strip()
+    source_metadata = _row_source_metadata(row)
+    combined = {**source_entry, **source_metadata}
+    if not combined.get("source_url"):
+        combined["source_url"] = str(row.get("source_uri") or "")
+    if not combined.get("viewer_path"):
+        combined["viewer_path"] = settings.viewer_path_template.format(slug=slug)
+    provenance = source_provenance_payload(combined)
+    runtime_path = f"data/wiki_runtime_books/full_rebuild/{slug}.md"
+    source_candidate_path = f"data/gold_candidate_books/full_rebuild/{slug}.md"
+    review_status = str(row.get("review_status") or source_metadata.get("review_status") or source_entry.get("review_status") or "").strip()
+    translation_status = str(row.get("translation_status") or row.get("translation_stage") or source_entry.get("content_status") or "").strip()
+    approval_state = str(source_metadata.get("approval_state") or source_entry.get("approval_state") or "").strip()
+    publication_state = str(source_metadata.get("publication_state") or source_entry.get("publication_state") or "").strip()
+    return {
+        "slug": slug,
+        "book_slug": slug,
+        "title": title,
+        "source_lane": str(source_metadata.get("source_lane") or source_entry.get("source_lane") or "official_ko").strip(),
+        "source_type": str(source_metadata.get("source_type") or source_entry.get("source_type") or "official_doc").strip(),
+        "source_ref": source_ref_for_entry(combined),
+        "source_fingerprint": source_fingerprint_for_entry(combined),
+        "source_repo": provenance.get("source_repo", ""),
+        "source_branch": provenance.get("source_branch", ""),
+        "source_binding_kind": provenance.get("source_binding_kind", ""),
+        "source_relative_path": provenance.get("source_relative_path", ""),
+        "source_relative_paths": provenance.get("source_relative_paths", []),
+        "primary_input_kind": str(
+            provenance.get("primary_input_kind")
+            or source_entry.get("primary_input_kind")
+            or row.get("primary_input_kind")
+            or "html_single"
+        ),
+        "fallback_input_kind": str(
+            provenance.get("fallback_input_kind")
+            or source_entry.get("fallback_input_kind")
+            or row.get("fallback_input_kind")
+            or "html_single"
+        ),
+        "fallback_source_url": str(
+            provenance.get("fallback_source_url")
+            or source_entry.get("source_url")
+            or row.get("source_uri")
+            or ""
+        ),
+        "fallback_viewer_path": str(
+            provenance.get("fallback_viewer_path")
+            or source_entry.get("viewer_path")
+            or settings.viewer_path_template.format(slug=slug)
+        ),
+        "source_candidate_path": source_candidate_path,
+        "runtime_path": runtime_path,
+        "promotion_strategy": "full_official_catalog_runtime",
+        "source_manifest_path": _relative_path(root_dir, source_manifest_path),
+        "parser_route": "canonical_playbook_document",
+        "parser_backend": "playbook_ast_v1",
+        "review_status": review_status,
+        "approval_state": approval_state,
+        "publication_state": publication_state,
+        "translation_status": translation_status,
+        "translation_stage": str(row.get("translation_stage") or translation_status),
+        "quality_status": str(row.get("quality_status") or "").strip(),
+        "quality_flags": list(row.get("quality_flags") or []),
+        "updated_at": str(source_metadata.get("updated_at") or source_entry.get("updated_at") or ""),
+        "rebuild_target_paths": {
+            "wiki_runtime_md": runtime_path,
+            "gold_candidate_md": source_candidate_path,
+        },
+    }
+
+
+def publish_runtime_manifest_from_playbooks(
+    root_dir: Path,
+    *,
+    source_manifest_path: Path | None = None,
+    active_group: str = "full_rebuild",
+) -> dict[str, Any]:
+    settings = load_settings(root_dir)
+    playbook_rows = _read_jsonl(settings.playbook_documents_path)
+    source_manifest = source_manifest_path or settings.source_manifest_path
+    source_entries = {
+        str(item.get("book_slug") or item.get("slug") or "").strip(): item
+        for item in _manifest_entries(source_manifest)
+        if str(item.get("book_slug") or item.get("slug") or "").strip()
+    }
+    entries = [
+        _runtime_entry_from_playbook(
+            root_dir,
+            row=row,
+            source_entry=source_entries.get(str(row.get("book_slug") or "").strip(), {}),
+            source_manifest_path=source_manifest,
+        )
+        for row in playbook_rows
+        if str(row.get("book_slug") or "").strip()
+    ]
+    entries.sort(key=lambda item: str(item.get("slug") or ""))
+    generated_at = _utc_now()
+    full_payload = {
+        "generated_at_utc": generated_at,
+        "runtime_count": len(entries),
+        "promotion_group": "full_official_catalog_runtime",
+        "source_strategy": "official-html-single-full-catalog",
+        "source_manifest_path": _relative_path(root_dir, source_manifest),
+        "entries": entries,
+    }
+    active_payload = {
+        "generated_at_utc": generated_at,
+        "active_group": active_group,
+        "runtime_count": len(entries),
+        "source_manifest_path": "data/wiki_runtime_books/full_rebuild_manifest.json",
+        "entries": entries,
+    }
+    candidate_payload = {
+        "generated_at_utc": generated_at,
+        "candidate_count": len(entries),
+        "promotion_group": "full_official_catalog_gold_candidates",
+        "entries": entries,
+    }
+    source_first_payload = {
+        "generated_at_utc": generated_at,
+        "count": len(entries),
+        "source_strategy": "official-html-single-full-catalog",
+        "source_manifest_path": _relative_path(root_dir, source_manifest),
+        "entries": entries,
+    }
+    targets = {
+        "full_runtime_manifest": root_dir / "data/wiki_runtime_books/full_rebuild_manifest.json",
+        "active_manifest": root_dir / "data/wiki_runtime_books/active_manifest.json",
+        "gold_candidate_manifest": root_dir / "data/gold_candidate_books/full_rebuild_manifest.json",
+        "source_first_manifest": root_dir / "manifests/ocp420_source_first_full_rebuild_manifest.json",
+    }
+    payloads = {
+        "full_runtime_manifest": full_payload,
+        "active_manifest": active_payload,
+        "gold_candidate_manifest": candidate_payload,
+        "source_first_manifest": source_first_payload,
+    }
+    for key, path in targets.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payloads[key], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {
+        "runtime_count": len(entries),
+        "source_manifest_path": _relative_path(root_dir, source_manifest),
+        "targets": {key: _relative_path(root_dir, path) for key, path in targets.items()},
+    }
+
+
 def _markdown_block_text(block: dict[str, Any]) -> str:
     kind = str(block.get("kind") or "").strip().lower()
     if kind == "paragraph":
@@ -479,6 +720,12 @@ def build_official_gold_gate_report(root_dir: Path) -> dict[str, Any]:
     playbook_rows = _read_jsonl(settings.playbook_documents_path)
     block_counts = _block_counts(playbook_rows)
     figure_sidecar_count = _figure_sidecar_count(root_dir)
+    official_catalog_coverage = _official_catalog_coverage(
+        root_dir,
+        chunks_rows=chunks_rows,
+        bm25_rows=bm25_rows,
+        playbook_rows=playbook_rows,
+    )
     sample_slug = _first_figure_slug(root_dir) or "advanced_networking"
     viewer_probe = _viewer_probe(root_dir, sample_slug)
     portable_paths = _portable_path_findings(root_dir)
@@ -496,6 +743,15 @@ def build_official_gold_gate_report(root_dir: Path) -> dict[str, Any]:
         "single_page_renders_one_section": int(viewer_probe["single_section_cards"]) == 1,
         "viewer_code_blocks_render": int(viewer_probe["multi_code_blocks"]) > 0,
         "smoke": all(smoke.values()),
+        "full_official_catalog_coverage": (
+            int(official_catalog_coverage["catalog_count"]) == 0
+            or (
+                not official_catalog_coverage["missing_playbook_slugs"]
+                and not official_catalog_coverage["missing_chunk_slugs"]
+                and not official_catalog_coverage["missing_bm25_slugs"]
+                and not official_catalog_coverage["missing_active_runtime_slugs"]
+            )
+        ),
     }
     failures = [name for name, ok in checks.items() if not ok]
     status = "ok" if not failures else "fail"
@@ -523,6 +779,7 @@ def build_official_gold_gate_report(root_dir: Path) -> dict[str, Any]:
             "figure_sidecar_count": figure_sidecar_count,
             "viewer_probe": viewer_probe,
             "portable_paths": portable_paths,
+            "official_catalog_coverage": official_catalog_coverage,
         },
         "artifact_manifest": artifact_manifest,
     }
@@ -542,6 +799,7 @@ __all__ = [
     "ONE_CLICK_REPORT_RELATIVE_PATH",
     "build_official_gold_gate_report",
     "materialize_runtime_markdown_from_playbooks",
+    "publish_runtime_manifest_from_playbooks",
     "repair_portable_json_paths",
     "write_artifact_manifest",
     "write_official_gold_gate_report",

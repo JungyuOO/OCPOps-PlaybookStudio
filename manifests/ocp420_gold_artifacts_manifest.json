@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-04-24T02:51:55+00:00",
+  "generated_at_utc": "2026-04-24T05:36:26+00:00",
   "policy": {
     "large_jsonl": "do_not_commit_payload_without_lfs_or_external_artifact_store",
     "tracked_truth": "track manifests, hashes, and producer commands",
@@ -9,44 +9,44 @@
     {
       "path": "data/gold_corpus_ko/chunks.jsonl",
       "exists": true,
-      "size_bytes": 119897431,
-      "sha256": "27ff5a4a76e02c6bb891ccf67add9e9ec12b93c352074022694ee2a51bfda38f",
-      "line_count": 30823,
+      "size_bytes": 325376236,
+      "sha256": "040d442d520a50c76596014aa5062388f1bf8d027fc2c1aaa4a90647500c40f7",
+      "line_count": 86027,
       "producer_command": "python -m play_book_studio.cli official-gold-rebuild",
       "storage_policy": "generated_large_artifact_manifest_only"
     },
     {
       "path": "data/gold_corpus_ko/bm25_corpus.jsonl",
       "exists": true,
-      "size_bytes": 67473655,
-      "sha256": "5efa69f10ea8c3434f3defba80335502ab24c73f05d8b8ad5785f77b06ac2daf",
-      "line_count": 30823,
+      "size_bytes": 179710195,
+      "sha256": "6fd9a302e36f05212441befd6a2cab53d6d43ca1b8075ca9e920b5994cce26b3",
+      "line_count": 86027,
       "producer_command": "python -m play_book_studio.cli official-gold-rebuild",
       "storage_policy": "generated_large_artifact_manifest_only"
     },
     {
       "path": "data/gold_manualbook_ko/playbook_documents.jsonl",
       "exists": true,
-      "size_bytes": 25669605,
-      "sha256": "aaed34ff946bf10274d9b7f447ef676d0e35288b12170e2ffa259bac9353de19",
-      "line_count": 34,
+      "size_bytes": 80544632,
+      "sha256": "f62d7cb1474d4de47d3b44c6b705618111987f5780a3c4af5e58419494cbbb82",
+      "line_count": 113,
       "producer_command": "python -m play_book_studio.cli official-gold-rebuild",
       "storage_policy": "generated_large_artifact_manifest_only"
     },
     {
       "path": "artifacts/official_lane/repo_wide_official_source/normalized_docs.jsonl",
       "exists": true,
-      "size_bytes": 29567101,
-      "sha256": "250a022dde0bb1bd924fffd34382a5a2478c6c87ae6edc5c93452fa4a42b0222",
-      "line_count": 6468,
+      "size_bytes": 100603672,
+      "sha256": "26c279a236b4fb4efca732e96eac5d8d12f7e13599e9fe8d9d66a74ea78d070b",
+      "line_count": 23390,
       "producer_command": "python -m play_book_studio.cli official-gold-rebuild",
       "storage_policy": "generated_large_artifact_manifest_only"
     },
     {
       "path": "artifacts/retrieval/graph_sidecar_compact.json",
       "exists": true,
-      "size_bytes": 182122,
-      "sha256": "85afb297765de3aa50f8cec3c30d27fe00c989b93afec9a251aef5f28619279e",
+      "size_bytes": 1126662,
+      "sha256": "c09e29ce4f52e7390b1e0626f72f2995ec98b6622140e2f5b12d1a333d45c917",
       "line_count": null,
       "producer_command": "play-book-studio graph-compact",
       "storage_policy": "tracked_or_small_artifact"
@@ -72,8 +72,8 @@
     {
       "path": "data/wiki_runtime_books/active_manifest.json",
       "exists": true,
-      "size_bytes": 43728,
-      "sha256": "9f49333a0f55309b9c0512756fcfae70d6faeef54192fe2f4bc953193c8f1d32",
+      "size_bytes": 214512,
+      "sha256": "e48742931f7078b75b4f3a91af61acad84726e17efc707eabab9538c90f0fecb",
       "line_count": null,
       "producer_command": "official runtime switch",
       "storage_policy": "tracked_or_small_artifact"
@@ -81,8 +81,8 @@
     {
       "path": "data/wiki_runtime_books/full_rebuild_manifest.json",
       "exists": true,
-      "size_bytes": 43812,
-      "sha256": "16980ed48928c358a0fe7d1fcb81f7927fb06ff6c1c826573dd2ec2f3aa2e26d",
+      "size_bytes": 214579,
+      "sha256": "daa8ae942a1bd1374287a69788a163a8364d0c70614a79227e530f91ef2e1cbc",
       "line_count": null,
       "producer_command": "official source-first runtime materialization",
       "storage_policy": "tracked_or_small_artifact"

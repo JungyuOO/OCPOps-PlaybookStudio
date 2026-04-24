@@ -161,6 +161,46 @@ def _has_explicit_locator_signal(query: str) -> bool:
     )
 
 
+def _is_actionable_guide_request(query: str) -> bool:
+    lowered = str(query or "").lower()
+    return any(
+        token in lowered
+        for token in (
+            "점검",
+            "확인",
+            "운영자",
+            "운영",
+            "절차",
+            "순서",
+            "교육",
+            "학습",
+            "요약",
+            "정리",
+            "설명",
+            "가이드",
+            "알려",
+            "checklist",
+            "check list",
+            "guide",
+            "training",
+        )
+    )
+
+
+def _has_uploaded_customer_pack_citation(citations: list) -> bool:
+    for citation in citations:
+        source_collection = str(getattr(citation, "source_collection", "") or "").strip()
+        source_lane = str(getattr(citation, "source_lane", "") or "").strip()
+        viewer_path = str(getattr(citation, "viewer_path", "") or "").strip()
+        if (
+            source_collection == "uploaded"
+            or source_lane.startswith("customer")
+            or viewer_path.startswith("/playbooks/customer-packs/")
+        ):
+            return True
+    return False
+
+
 def _citations_match_rbac_intent(citations: list) -> bool:
     return _citation_matches_keywords(
         citations,
@@ -169,6 +209,9 @@ def _citations_match_rbac_intent(citations: list) -> bool:
             "rolebinding",
             "role binding",
             "authorization",
+            "permissions",
+            "permission",
+            "iam",
             "권한",
             "사용자 역할",
             "clusterrole",
@@ -194,7 +237,11 @@ def _citations_match_console_intent(citations: list) -> bool:
 def _build_doc_locator_answer(*, query: str, citations: list) -> str | None:
     if not citations or not has_doc_locator_intent(query):
         return None
+    if _has_uploaded_customer_pack_citation(citations) and not _has_explicit_locator_signal(query):
+        return None
     if is_explainer_query(query) and not _has_explicit_locator_signal(query):
+        return None
+    if not _has_explicit_locator_signal(query) and _is_actionable_guide_request(query):
         return None
     if any(
         (
@@ -391,7 +438,22 @@ def _is_runtime_blend_query(query: str) -> bool:
         )
     ) or any(
         token in (query or "")
-        for token in ("고객 문서", "고객문서", "우리 문서", "업로드 문서", "업로드한 문서")
+        for token in (
+            "고객 문서",
+            "고객문서",
+            "고객 자료",
+            "고객자료",
+            "고객 PPT",
+            "고객 운영북",
+            "운영북",
+            "우리 문서",
+            "업로드 문서",
+            "업로드한 문서",
+            "업로드 자료",
+            "업로드자료",
+            "유저 업로드",
+            "사용자 업로드",
+        )
     )
     has_official_signal = any(
         token in lowered
@@ -400,7 +462,17 @@ def _is_runtime_blend_query(query: str) -> bool:
             "official document",
             "official docs",
         )
-    ) or any(token in (query or "") for token in ("공식 runtime", "공식 문서", "공식 근거"))
+    ) or any(
+        token in (query or "")
+        for token in (
+            "공식 runtime",
+            "공식 문서",
+            "공식문서",
+            "공식 매뉴얼",
+            "공식매뉴얼",
+            "공식 근거",
+        )
+    )
     has_blend_signal = any(
         token in lowered
         for token in (
@@ -458,6 +530,45 @@ def _polish_blended_runtime_answer_citations(
         polished_answer,
         final_citations,
     )
+
+
+def _build_blended_runtime_fallback_answer(
+    *,
+    query: str,
+    citations: list[Citation],
+) -> tuple[str, list[Citation]] | None:
+    if not _is_runtime_blend_query(query):
+        return None
+    private_citation = next(
+        (
+            citation
+            for citation in citations
+            if _citation_truth_bucket_local(citation) == "private"
+        ),
+        None,
+    )
+    official_citation = next(
+        (
+            citation
+            for citation in citations
+            if _citation_truth_bucket_local(citation) == "official"
+        ),
+        None,
+    )
+    if private_citation is None or official_citation is None:
+        return None
+
+    private_section = str(private_citation.section or "고객 운영북").strip()
+    official_section = str(official_citation.section or "OpenShift 공식 문서").strip()
+    answer_text = (
+        "답변: 근거는 고객 업로드 운영북과 OpenShift 공식 매뉴얼 양쪽에 있습니다. "
+        f"먼저 고객 운영북의 `{private_section}`에서 이 환경의 기준과 현행 절차를 확인하고, "
+        f"공식 매뉴얼의 `{official_section}`로 표준 리소스/명령/제약 조건을 보강하면 됩니다 [1][2].\n\n"
+        "1. 고객 운영북에서 대상 업무, 구성 요소, 고객 환경의 예외 조건을 먼저 표시합니다 [1].\n"
+        "2. 공식 매뉴얼에서 같은 영역의 OpenShift 표준 확인 항목을 대조합니다 [2].\n"
+        "3. 운영 절차로 옮길 때는 고객 기준을 우선 적용하고, 공식 문서 기준으로 상태 확인 명령과 판단 근거를 남깁니다 [1][2]."
+    )
+    return answer_text, [private_citation, official_citation]
 
 
 def _deterministic_llm_runtime_meta(*, provider: str) -> dict[str, object]:
@@ -1253,6 +1364,26 @@ class ChatAnswerer:
             final_citations=final_citations,
             cited_indices=cited_indices,
         )
+        if _looks_like_missing_coverage_answer(answer_text):
+            blended_fallback = _build_blended_runtime_fallback_answer(
+                query=query,
+                citations=context_bundle.citations,
+            )
+            if blended_fallback is not None:
+                fallback_text, fallback_citations = blended_fallback
+                answer_text, final_citations, cited_indices = finalize_citations(
+                    fallback_text,
+                    fallback_citations,
+                )
+                warnings.append("llm missing coverage replaced with blended runtime fallback")
+                emit(
+                    {
+                        "step": "deterministic_answer",
+                        "label": "혼합 런타임 fallback 답변 생성 완료",
+                        "status": "done",
+                        "detail": "uploaded+official citations preserved",
+                    }
+                )
         if not cited_indices:
             warnings.append("answer has no inline citations")
         pipeline_timings_ms["citation_finalize"] = round(
@@ -1383,43 +1514,63 @@ class ChatAnswerer:
             )
 
         if _looks_like_missing_coverage_answer(answer_text):
-            warnings.append("answer indicates missing corpus coverage")
-            emit(
-                {
-                    "step": "grounding_guard",
-                    "label": "근거 범위 차단",
-                    "status": "error",
-                    "detail": "생성 답변이 코퍼스 부재를 직접 인정했습니다",
-                }
-            )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
-            emit(
-                {
-                    "step": "pipeline_complete",
-                    "label": "답변 생성 중단",
-                    "status": "done",
-                    "detail": f"총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
-                }
-            )
-            return self._build_grounding_blocked_result(
+            blended_fallback = _build_blended_runtime_fallback_answer(
                 query=query,
-                mode=mode,
-                rewritten_query=retrieval.rewritten_query,
-                answer=(
-                    "답변: 현재 Playbook Library에 해당 자료가 없습니다. "
-                    "자료 추가가 필요합니다."
-                ),
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
-                llm_runtime_meta=llm_runtime_meta,
+                citations=context_bundle.citations,
             )
+            if blended_fallback is not None:
+                fallback_text, fallback_citations = blended_fallback
+                answer_text, final_citations, cited_indices = finalize_citations(
+                    fallback_text,
+                    fallback_citations,
+                )
+                warnings.append("llm missing coverage replaced with blended runtime fallback")
+                emit(
+                    {
+                        "step": "deterministic_answer",
+                        "label": "혼합 런타임 fallback 답변 생성 완료",
+                        "status": "done",
+                        "detail": "uploaded+official citations preserved",
+                    }
+                )
+            else:
+                warnings.append("answer indicates missing corpus coverage")
+                emit(
+                    {
+                        "step": "grounding_guard",
+                        "label": "근거 범위 차단",
+                        "status": "error",
+                        "detail": "생성 답변이 코퍼스 부재를 직접 인정했습니다",
+                    }
+                )
+                pipeline_timings_ms["total"] = round(
+                    (time.perf_counter() - answer_started_at) * 1000,
+                    1,
+                )
+                emit(
+                    {
+                        "step": "pipeline_complete",
+                        "label": "답변 생성 중단",
+                        "status": "done",
+                        "detail": f"총 {pipeline_timings_ms['total']}ms",
+                        "duration_ms": pipeline_timings_ms["total"],
+                    }
+                )
+                return self._build_grounding_blocked_result(
+                    query=query,
+                    mode=mode,
+                    rewritten_query=retrieval.rewritten_query,
+                    answer=(
+                        "답변: 현재 Playbook Library에 해당 자료가 없습니다. "
+                        "자료 추가가 필요합니다."
+                    ),
+                    warnings=warnings,
+                    retrieval_trace=retrieval.trace,
+                    pipeline_events=pipeline_events,
+                    pipeline_timings_ms=pipeline_timings_ms,
+                    selected_hits=selected_hits,
+                    llm_runtime_meta=llm_runtime_meta,
+                )
 
         pipeline_timings_ms["total"] = round(
             (time.perf_counter() - answer_started_at) * 1000,

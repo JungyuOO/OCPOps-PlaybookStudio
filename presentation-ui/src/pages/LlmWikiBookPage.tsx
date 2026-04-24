@@ -34,6 +34,7 @@ import {
   saveWikiOverlay,
   toRuntimeUrl,
 } from '../lib/runtimeApi';
+import { displayCustomerDocumentTitle } from '../lib/customerDocumentTitles';
 import { resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';
 import type { SourceEntry, WorkspaceManualBook } from './workspaceTypes';
 import { buildOutlineBookFamilies, describeOutlineVariant, type OutlineBookFamily } from './workspaceOutline';
@@ -195,7 +196,7 @@ export default function LlmWikiBookPage() {
     drafts.map((draft) => ({
       id: `draft:${draft.draft_id}`,
       kind: 'draft',
-      name: draft.title,
+      name: displayCustomerDocumentTitle(draft),
       meta: formatDraftMeta(draft),
       grade: draft.quality_status,
       viewerPath: draft.derived_assets?.[0]?.viewer_path || '',
@@ -415,7 +416,7 @@ export default function LlmWikiBookPage() {
       const viewerDocument = await loadViewerDocumentPayload(resolvedViewerPath, pageMode);
       setPreview({
         kind: 'viewer',
-        title: meta.book_title || title,
+        title: displayCustomerDocumentTitle({ title: meta.book_title || title }),
         subtitle: meta.section_path_label || meta.section || meta.source_url || '',
         meta,
         viewerUrl,
@@ -464,7 +465,7 @@ export default function LlmWikiBookPage() {
 
     setPreview({
       kind: 'draft',
-      title: loadedDraft.title,
+      title: displayCustomerDocumentTitle(loadedDraft),
       subtitle: `${loadedDraft.pack_label} · ${truthSurfaceCopy(loadedBook ?? loadedDraft).label} · ${loadedDraft.quality_status}`,
       draft: loadedDraft,
       book: loadedBook,

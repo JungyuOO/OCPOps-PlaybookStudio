@@ -31,6 +31,7 @@ from play_book_studio.retrieval.query import (
     has_project_finalizer_intent,
     has_project_terminating_intent,
     has_rbac_intent,
+    is_explainer_query,
     is_generic_intro_query,
 )
 
@@ -41,6 +42,11 @@ SPACE_RE = re.compile(r"\s+")
 SECTION_PREFIX_RE = re.compile(r"^\d+(?:\.\d+)*\.?\s*")
 INTRO_RECOMMENDATION_COUNT_RE = re.compile(r"(\d+\s*개|세\s*개|3\s*개|목록|리스트|top\s*\d+)", re.IGNORECASE)
 QUERY_FOCUS_TOKEN_RE = re.compile(r"[A-Za-z0-9가-힣#]+")
+CUSTOMER_PACK_EXPLICIT_LOCATOR_RE = re.compile(
+    r"(어디서|어디 있어|어디를|찾아|찾을|열어|보여|보고 싶|참고할|경로|위치|이동|들어가|"
+    r"파일|ppt|pptx|slide|slides|슬라이드|문서\s*(?:목록|위치|경로)|자료\s*(?:목록|위치|경로))",
+    re.IGNORECASE,
+)
 MAX_PROMPT_CLI_COMMANDS = 4
 QUERY_FOCUS_STOPWORDS = {
     "고객",
@@ -172,14 +178,21 @@ def _uploaded_seed_sort_key(
     prefer_relation_seed: bool,
     title_locator_query: bool,
     query_focus_terms: tuple[str, ...],
- ) -> tuple[int, ...]:
+    prefer_customer_master: bool,
+) -> tuple[int, ...]:
     relation_priority = _relation_seed_priority(hit) if prefer_relation_seed else 9
+    master_priority = (
+        0
+        if prefer_customer_master and hit.book_slug == "customer-master-kmsc-ocp-operations-playbook"
+        else 1
+    )
     test_priority, capture_priority, asset_priority, source_document_priority = (
         _uploaded_title_locator_priority(hit) if title_locator_query else (0, 0, 0, 0)
     )
     if prefer_relation_seed:
         return (
             relation_priority,
+            master_priority,
             -_query_focus_score(hit, query_focus_terms),
             test_priority,
             capture_priority,
@@ -188,6 +201,7 @@ def _uploaded_seed_sort_key(
             order_lookup.get((hit.book_slug, hit.chunk_id), 10_000),
         )
     return (
+        master_priority,
         -_query_focus_score(hit, query_focus_terms),
         relation_priority,
         test_priority,
@@ -322,7 +336,7 @@ def _rbac_signal(hit: RetrievalHit) -> bool:
     lowered_text = (hit.text or "").lower()
     haystack = " ".join((lowered_section, lowered_anchor, lowered_text))
     return (
-        hit.book_slug in {"authentication_and_authorization", "cli_tools"}
+        hit.book_slug in {"authentication_and_authorization", "authorization_apis", "rbac_apis", "cli_tools"}
         or (
             hit.book_slug == "postinstallation_configuration"
             and any(
@@ -420,8 +434,20 @@ def _is_customer_pack_explicit_query(query: str) -> bool:
         for token in (
             "업로드 문서",
             "업로드한 문서",
+            "업로드 자료",
+            "업로드자료",
+            "유저 업로드",
+            "사용자 업로드",
             "고객 문서",
             "고객문서",
+            "고객 자료",
+            "고객자료",
+            "고객 ppt",
+            "고객ppt",
+            "고객 운영북",
+            "운영북",
+            "ppt 자료",
+            "ppt자료",
             "우리 문서",
             "our document",
             "customer pack",
@@ -495,6 +521,10 @@ def _query_focus_score(hit: RetrievalHit, query_focus_terms: tuple[str, ...]) ->
     return sum(1 for token in query_focus_terms if token in haystack)
 
 
+def _has_customer_pack_explicit_locator_signal(query: str) -> bool:
+    return bool(CUSTOMER_PACK_EXPLICIT_LOCATOR_RE.search(query or ""))
+
+
 def _is_customer_pack_title_locator_query(query: str) -> bool:
     lowered = (query or "").lower()
     title_query_signal = any(
@@ -510,6 +540,34 @@ def _is_customer_pack_title_locator_query(query: str) -> bool:
         )
     )
     token_count = len([token for token in lowered.split() if token.strip()])
+    has_explicit_locator = _has_customer_pack_explicit_locator_signal(query)
+    navigation_locator = any(
+        token in lowered
+        for token in (
+            "어디",
+            "찾아",
+            "찾을",
+            "열어",
+            "보여",
+            "보고 싶",
+            "경로",
+            "위치",
+            "이동",
+            "들어가",
+            "목록",
+        )
+    )
+    if is_explainer_query(query) and not navigation_locator:
+        return False
+    if (
+        not has_explicit_locator
+        and "문서" in lowered
+        and not any(
+            token in lowered
+            for token in ("설계서", "제안서", "ppt", "pptx", "slide", "슬라이드")
+        )
+    ):
+        return False
     if has_doc_locator_intent(lowered):
         return title_query_signal or token_count >= 3
     return title_query_signal and token_count >= 2
@@ -568,6 +626,37 @@ def _is_intro_recommendation_query(query: str) -> bool:
     normalized = (query or "").strip()
     lowered = normalized.lower()
     if not normalized:
+        return False
+    asks_for_training_plan = any(
+        token in normalized
+        for token in (
+            "교육",
+            "학습",
+            "입문",
+            "로드맵",
+            "추천",
+        )
+    )
+    specific_ops_request = any(
+        token in lowered
+        for token in (
+            "buildconfig",
+            "podnetworkconnectivitycheck",
+            "router",
+            "ingress",
+        )
+    ) or any(
+        token in normalized
+        for token in (
+            "점검",
+            "확인",
+            "조치",
+            "장애",
+            "설정",
+            "구성",
+        )
+    )
+    if specific_ops_request and not asks_for_training_plan:
         return False
 
     asks_for_intro = any(
@@ -767,6 +856,12 @@ def _should_force_clarification(
         return False
     if has_follow_up_reference(normalized):
         return False
+    if (
+        has_active_customer_pack_selection(session_context)
+        and hits
+        and str(hits[0].source_collection or "").strip() == "uploaded"
+    ):
+        return False
     if any(
         [
             _is_customer_pack_title_locator_query(normalized),
@@ -830,6 +925,17 @@ def _select_hits(
         normalized,
         session_context=session_context,
     )
+    has_uploaded_ranked_hit = any(
+        str(hit.source_collection or "").strip() == "uploaded"
+        for hit in ranked_hits
+    )
+    if (
+        _is_customer_pack_explicit_query(normalized)
+        and not has_active_customer_pack_selection(session_context)
+        and not title_locator_query
+        and not has_uploaded_ranked_hit
+    ):
+        return []
     query_focus_terms = _query_focus_terms(normalized)
     allow_uploaded_hits = (
         _is_customer_pack_explicit_query(normalized)
@@ -1071,9 +1177,11 @@ def _select_hits(
         and any(_rbac_signal(hit) for hit in ranked_hits[:8])
     ):
         preferred_order = {
-            "authentication_and_authorization": 0,
-            "cli_tools": 1,
-            "postinstallation_configuration": 2,
+            "authorization_apis": 0,
+            "rbac_apis": 1,
+            "authentication_and_authorization": 2,
+            "cli_tools": 3,
+            "postinstallation_configuration": 4,
         }
         ranked_hits = sorted(
             ranked_hits,
@@ -1389,7 +1497,13 @@ def _select_hits(
         _session_mentions_rbac(session_context)
         and any(_rbac_signal(hit) for hit in ranked_hits[:8])
     ):
-        for book_slug in ("authentication_and_authorization", "cli_tools", "postinstallation_configuration"):
+        for book_slug in (
+            "authorization_apis",
+            "rbac_apis",
+            "authentication_and_authorization",
+            "cli_tools",
+            "postinstallation_configuration",
+        ):
             if best_book_scores.get(book_slug, 0.0) >= top_score * 0.58:
                 allowed_books.add(book_slug)
     if has_project_terminating_intent(normalized):
@@ -1460,14 +1574,25 @@ def _select_hits(
         for hit in ranked_hits
         if str(hit.source_collection or "").strip() == "core"
     ]
+    explicit_blend_request = (
+        _is_customer_pack_explicit_query(normalized)
+        or has_active_customer_pack_selection(session_context)
+    ) and _mentions_official_runtime_sources(normalized)
     should_seed_uploaded = bool(uploaded_hits) and allow_uploaded_hits
     should_seed_core = (
         bool(core_hits)
-        and not bool(getattr(session_context, "restrict_uploaded_sources", True))
+        and (
+            explicit_blend_request
+            or not bool(getattr(session_context, "restrict_uploaded_sources", True))
+        )
         and (_mentions_official_runtime_sources(normalized) or has_active_customer_pack_selection(session_context))
         and (_is_customer_pack_explicit_query(normalized) or has_active_customer_pack_selection(session_context))
     )
     prefer_relation_uploaded_seed = should_seed_uploaded and _is_customer_pack_relation_query(normalized)
+    prefer_customer_master_seed = any(
+        token in normalized
+        for token in ("운영북", "고객 PPT", "고객 ppt", "교육", "학습")
+    )
 
     if should_seed_uploaded:
         uploaded_hit_order = {
@@ -1482,6 +1607,7 @@ def _select_hits(
                 prefer_relation_seed=prefer_relation_uploaded_seed,
                 title_locator_query=title_locator_query,
                 query_focus_terms=query_focus_terms,
+                prefer_customer_master=prefer_customer_master_seed,
             ),
         ):
             if len(selected) >= max_chunks:

@@ -26,6 +26,7 @@ body {
   font-family: 'Inter', 'Noto Sans KR', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 body.is-embedded {
   background: #ffffff;
@@ -85,12 +86,14 @@ body.is-embedded .hero {
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 h1 {
   margin: 0;
   font-size: clamp(2.2rem, 4.5vw, 3.2rem);
   line-height: 1.15;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   font-weight: 800;
   color: var(--ink);
   max-width: 100%;
@@ -376,6 +379,9 @@ body.is-embedded h1 {
   background: var(--accent-soft);
   border-color: #bfdbfe;
   color: var(--accent);
+}
+.document-nav-menu:not([open]) .document-nav-popover {
+  display: none;
 }
 .document-nav-trigger::after {
   content: "";
@@ -1084,6 +1090,16 @@ th {
   font-size: 0.9375rem;
   color: var(--ink);
 }
+.section-body .table-wrap th:first-child,
+.section-body .table-wrap td:first-child {
+  width: 32%;
+  min-width: 13rem;
+}
+.section-body .table-wrap th:nth-child(2),
+.section-body .table-wrap td:nth-child(2) {
+  width: 7rem;
+  white-space: nowrap;
+}
 tr:last-child td {
   border-bottom: 0;
 }
@@ -1305,6 +1321,63 @@ tr:last-child td {
   }
   .customer-slide-card-section {
     padding: 20px;
+  }
+}
+@media (max-width: 640px) {
+  main {
+    width: 100%;
+    padding: 28px 16px 56px;
+  }
+  .reader-layout {
+    padding: 0;
+  }
+  .hero {
+    margin-bottom: 34px;
+    padding-bottom: 28px;
+  }
+  h1 {
+    font-size: 2rem;
+    line-height: 1.18;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+  .summary {
+    font-size: 1rem;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+  .meta-pill,
+  .hero-meta a {
+    min-height: 30px;
+    padding: 0 12px;
+    font-size: 0.82rem;
+  }
+  .document-toolbar {
+    justify-content: flex-start;
+  }
+  .document-nav-popover {
+    left: 0;
+    right: auto;
+    width: min(320px, calc(100vw - 32px));
+  }
+  .section-card h2,
+  .embedded-section h2 {
+    font-size: 1.45rem;
+    line-height: 1.28;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+  th,
+  td {
+    padding: 10px 12px;
+    font-size: 0.86rem;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  table {
+    table-layout: fixed;
+    min-width: 0;
   }
 }
 .wiki-parent-card,

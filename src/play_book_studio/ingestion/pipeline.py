@@ -111,6 +111,20 @@ def _runtime_review_status(entry: SourceManifestEntry, approval_status: str) -> 
     return current
 
 
+def _runtime_approval_state(approval_status: str) -> str:
+    if approval_status == "approved":
+        return "approved"
+    if approval_status == "needs_review":
+        return "review_required"
+    return "unreviewed"
+
+
+def _runtime_publication_state(*, approval_status: str, citation_eligible: bool) -> str:
+    if approval_status == "approved" and citation_eligible:
+        return "published"
+    return "candidate"
+
+
 def _entry_with_inferred_runtime_status(
     entry: SourceManifestEntry,
     *,
@@ -142,6 +156,11 @@ def _entry_with_inferred_runtime_status(
             "citation_eligible": citation_eligible,
             "citation_block_reason": citation_block_reason,
             "review_status": _runtime_review_status(entry, approval_status),
+            "approval_state": _runtime_approval_state(approval_status),
+            "publication_state": _runtime_publication_state(
+                approval_status=approval_status,
+                citation_eligible=citation_eligible,
+            ),
             "approval_status": approval_status,
             "body_language_guess": body_language_guess(
                 hangul_chunk_ratio=hangul_chunk_ratio,

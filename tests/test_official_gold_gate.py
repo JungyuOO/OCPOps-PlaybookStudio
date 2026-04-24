@@ -18,6 +18,7 @@ from play_book_studio.canonical.models import FigureBlock
 from play_book_studio.ingestion.models import SourceManifestEntry
 from play_book_studio.ingestion.official_gold_gate import (
     _portable_path_findings,
+    publish_runtime_manifest_from_playbooks,
     repair_portable_json_paths,
 )
 
@@ -129,6 +130,92 @@ class OfficialGoldGateTests(unittest.TestCase):
             self.assertEqual(
                 "tmp_source/openshift-docs-enterprise-4.20/modules/demo.adoc",
                 repaired["entries"][0]["source_file"],
+            )
+
+    def test_publish_runtime_manifest_from_playbooks_uses_full_playbook_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            playbooks_path = root / "data" / "gold_manualbook_ko" / "playbook_documents.jsonl"
+            source_manifest_path = root / "manifests" / "ocp_ko_4_20_html_single.json"
+            playbooks_path.parent.mkdir(parents=True, exist_ok=True)
+            source_manifest_path.parent.mkdir(parents=True, exist_ok=True)
+            rows = [
+                {
+                    "book_slug": "authorization_apis",
+                    "title": "권한 부여 API",
+                    "source_uri": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/authorization_apis/index",
+                    "translation_status": "approved_ko",
+                    "translation_stage": "approved_ko",
+                    "review_status": "approved",
+                    "quality_status": "ready",
+                    "sections": [],
+                    "source_metadata": {
+                        "source_lane": "official_ko",
+                        "source_type": "official_doc",
+                        "approval_state": "approved",
+                        "publication_state": "published",
+                        "citation_eligible": True,
+                    },
+                },
+                {
+                    "book_slug": "pipelines",
+                    "title": "파이프라인",
+                    "source_uri": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/pipelines/index",
+                    "translation_status": "original",
+                    "translation_stage": "original",
+                    "review_status": "needs_review",
+                    "quality_status": "translation_required",
+                    "sections": [],
+                    "source_metadata": {
+                        "source_lane": "official_en_fallback",
+                        "source_type": "official_doc",
+                        "approval_state": "review_required",
+                        "publication_state": "candidate",
+                    },
+                },
+            ]
+            playbooks_path.write_text(
+                "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+                encoding="utf-8",
+            )
+            source_manifest_path.write_text(
+                json.dumps(
+                    {
+                        "entries": [
+                            {
+                                "book_slug": row["book_slug"],
+                                "title": row["title"],
+                                "source_url": row["source_uri"],
+                                "viewer_path": f"/docs/ocp/4.20/ko/{row['book_slug']}/index.html",
+                                "source_fingerprint": row["book_slug"],
+                            }
+                            for row in rows
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            report = publish_runtime_manifest_from_playbooks(
+                root,
+                source_manifest_path=source_manifest_path,
+            )
+
+            self.assertEqual(2, report["runtime_count"])
+            active = json.loads((root / "data" / "wiki_runtime_books" / "active_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(2, active["runtime_count"])
+            self.assertEqual(
+                ["authorization_apis", "pipelines"],
+                [entry["slug"] for entry in active["entries"]],
+            )
+            self.assertEqual(
+                "data/wiki_runtime_books/full_rebuild/pipelines.md",
+                active["entries"][1]["runtime_path"],
+            )
+            self.assertEqual(
+                "data/wiki_runtime_books/full_rebuild_manifest.json",
+                active["source_manifest_path"],
             )
 
 

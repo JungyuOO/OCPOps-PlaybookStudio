@@ -9,7 +9,7 @@ from pathlib import Path
 from play_book_studio.intake.artifact_bundle import iter_customer_pack_book_payload_paths
 from play_book_studio.intake.private_boundary import summarize_private_runtime_boundary
 
-from .bm25 import tokenize_text
+from .bm25 import BM25Index, tokenize_text
 from .intake_overlay import (
     customer_pack_row_from_section,
     filter_customer_pack_hits_by_selection,
@@ -19,7 +19,7 @@ from .intake_overlay import (
     search_selected_customer_pack_private_vectors,
 )
 from .models import RetrievalHit
-from .query import has_doc_locator_intent
+from .query import has_doc_locator_intent, is_explainer_query
 from .ranking import (
     rrf_merge_hit_lists as _rrf_merge_hit_lists,
     rrf_merge_named_hit_lists as _rrf_merge_named_hit_lists,
@@ -51,6 +51,73 @@ _CUSTOMER_PACK_TITLE_QUERY_STOPWORDS = frozenset(
     }
 )
 _CUSTOMER_PACK_TITLE_TEXT_RE = re.compile(r"[^0-9a-z가-힣]+", re.IGNORECASE)
+_CUSTOMER_PACK_EXPLICIT_LOCATOR_RE = re.compile(
+    r"(어디서|어디 있어|어디를|찾아|찾을|열어|보여|보고 싶|참고할|경로|위치|이동|들어가|"
+    r"파일|ppt|pptx|slide|slides|슬라이드|문서\s*(?:목록|위치|경로)|자료\s*(?:목록|위치|경로))",
+    re.IGNORECASE,
+)
+_OFFICIAL_TITLE_QUERY_STOPWORDS = frozenset(
+    {
+        "공식",
+        "공식문서",
+        "공식매뉴얼",
+        "문서",
+        "매뉴얼",
+        "기준",
+        "요약",
+        "설명",
+        "설명해줘",
+        "알려줘",
+        "대해",
+        "관련",
+        "에서",
+        "ocp",
+        "openshift",
+        "container",
+        "platform",
+        "official",
+        "docs",
+        "doc",
+        "manual",
+        "manuals",
+        "install",
+        "installing",
+        "installation",
+        "using",
+        "uses",
+        "use",
+        "build",
+        "builds",
+        "building",
+        "migration",
+    }
+)
+_OFFICIAL_RUNTIME_SOURCE_RE = re.compile(
+    r"(공식\s*(?:문서|매뉴얼)|ocp\s*공식|openshift\s*공식|official\s*(?:docs?|manuals?))",
+    re.IGNORECASE,
+)
+_CUSTOMER_PACK_EXPLICIT_QUERY_TOKENS = (
+    "업로드 문서",
+    "업로드한 문서",
+    "업로드 자료",
+    "업로드자료",
+    "유저 업로드",
+    "사용자 업로드",
+    "고객 문서",
+    "고객문서",
+    "고객 자료",
+    "고객자료",
+    "고객 ppt",
+    "고객ppt",
+    "고객 운영북",
+    "운영북",
+    "ppt 자료",
+    "ppt자료",
+    "우리 문서",
+    "our document",
+    "customer pack",
+    "customer-pack",
+)
 
 
 def _compact_customer_pack_title_text(text: str) -> str:
@@ -65,12 +132,246 @@ def _customer_pack_locator_tokens(text: str) -> tuple[str, ...]:
     )
 
 
+def _official_runtime_manifest_path(retriever) -> Path:
+    return retriever.settings.root_dir / "data" / "wiki_runtime_books" / "active_manifest.json"
+
+
+def _official_runtime_title_fingerprint(manifest_path: Path) -> tuple[tuple[str, int], ...]:
+    if not manifest_path.exists():
+        return ()
+    return ((str(manifest_path), manifest_path.stat().st_mtime_ns),)
+
+
+def _official_title_tokens(text: str) -> tuple[str, ...]:
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for token in tokenize_text(text):
+        normalized = token.strip().lower()
+        if len(normalized) < 2:
+            continue
+        if normalized in _OFFICIAL_TITLE_QUERY_STOPWORDS:
+            continue
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        tokens.append(normalized)
+    return tuple(tokens)
+
+
+def _official_title_candidates(entry: dict[str, object]) -> tuple[str, ...]:
+    candidates: list[str] = []
+    for raw in (
+        entry.get("title"),
+        entry.get("book_title"),
+        entry.get("canonical_title"),
+        entry.get("slug"),
+    ):
+        value = str(raw or "").strip()
+        if value:
+            candidates.append(value)
+            if raw == entry.get("slug"):
+                candidates.append(value.replace("_", " ").replace("-", " "))
+    source_ref = str(entry.get("source_ref") or entry.get("source_url") or "").strip()
+    if source_ref:
+        stem = source_ref.rstrip("/").rsplit("/", maxsplit=1)[-1]
+        if stem and stem != "index":
+            candidates.append(stem.replace("_", " ").replace("-", " "))
+        if "/html-single/" in source_ref:
+            slug_part = source_ref.split("/html-single/", maxsplit=1)[-1].split("/", maxsplit=1)[0]
+            if slug_part:
+                candidates.append(slug_part)
+                candidates.append(slug_part.replace("_", " ").replace("-", " "))
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        compact = _compact_customer_pack_title_text(candidate)
+        if not compact or compact in seen:
+            continue
+        seen.add(compact)
+        deduped.append(candidate)
+    return tuple(deduped)
+
+
+@lru_cache(maxsize=4)
+def _official_runtime_title_catalog(
+    manifest_path_str: str,
+    fingerprint: tuple[tuple[str, int], ...],
+) -> tuple[dict[str, object], ...]:
+    del fingerprint
+    path = Path(manifest_path_str)
+    if not path.exists():
+        return ()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return ()
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        return ()
+    catalog: list[dict[str, object]] = []
+    for raw_entry in entries:
+        if not isinstance(raw_entry, dict):
+            continue
+        slug = str(raw_entry.get("slug") or "").strip()
+        if not slug:
+            continue
+        candidates = _official_title_candidates(raw_entry)
+        if not candidates:
+            continue
+        catalog.append(
+            {
+                "slug": slug,
+                "title_candidates": candidates,
+                "review_status": str(raw_entry.get("review_status") or "").strip(),
+            }
+        )
+    return tuple(catalog)
+
+
+def _mentions_official_runtime_sources(query: str) -> bool:
+    return bool(_OFFICIAL_RUNTIME_SOURCE_RE.search(query or ""))
+
+
+def _is_customer_pack_explicit_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return any(token in lowered for token in _CUSTOMER_PACK_EXPLICIT_QUERY_TOKENS)
+
+
+def _official_title_match_score(query: str, *, title_candidates: tuple[str, ...]) -> float:
+    compact_query = _compact_customer_pack_title_text(query)
+    if not compact_query:
+        return 0.0
+    query_tokens = set(_official_title_tokens(query))
+    official_source_mentioned = _mentions_official_runtime_sources(query)
+    best_score = 0.0
+    for candidate in title_candidates:
+        compact_candidate = _compact_customer_pack_title_text(candidate)
+        if len(compact_candidate) >= 6 and compact_candidate in compact_query:
+            best_score = max(best_score, 12.0 + min(len(compact_candidate), 120) / 100.0)
+            continue
+        if len(compact_query) >= 8 and compact_query in compact_candidate:
+            best_score = max(best_score, 10.0 + min(len(compact_query), 120) / 100.0)
+        title_tokens = set(_official_title_tokens(candidate))
+        if not title_tokens or not query_tokens:
+            continue
+        overlap_tokens = query_tokens & title_tokens
+        overlap = len(overlap_tokens)
+        coverage = overlap / len(title_tokens)
+        query_coverage = overlap / len(query_tokens)
+        decisive_overlap = any(
+            len(token) >= 7 and re.search(r"[a-z0-9]", token, re.IGNORECASE)
+            for token in overlap_tokens
+        )
+        if overlap >= 2 and coverage >= 0.6:
+            best_score = max(best_score, 7.5 + coverage + query_coverage)
+        elif official_source_mentioned and decisive_overlap:
+            best_score = max(best_score, 14.0 + query_coverage)
+        elif official_source_mentioned and overlap >= 3 and query_coverage >= 0.4:
+            best_score = max(best_score, 6.5 + coverage + query_coverage)
+    return best_score
+
+
+def _book_rows_for_slug(retriever, slug: str) -> list[dict]:
+    return [
+        row
+        for row in retriever.bm25_index.rows
+        if str(row.get("book_slug") or "").strip() == slug
+        and str(row.get("source_collection") or "core").strip() == "core"
+        and str(row.get("section") or "").strip().lower() != "legal notice"
+    ]
+
+
+def _search_official_runtime_title_hits(
+    retriever,
+    *,
+    query: str,
+    top_k: int,
+) -> list[RetrievalHit]:
+    manifest_path = _official_runtime_manifest_path(retriever)
+    fingerprint = _official_runtime_title_fingerprint(manifest_path)
+    if not fingerprint:
+        return []
+    catalog = _official_runtime_title_catalog(str(manifest_path), fingerprint)
+    scored_slugs: list[tuple[float, str]] = []
+    for entry in catalog:
+        title_score = _official_title_match_score(
+            query,
+            title_candidates=tuple(entry.get("title_candidates") or ()),
+        )
+        if title_score <= 0:
+            continue
+        scored_slugs.append((title_score, str(entry.get("slug") or "").strip()))
+    if not scored_slugs:
+        return []
+    scored_slugs.sort(key=lambda item: (-item[0], item[1]))
+
+    hits: list[RetrievalHit] = []
+    per_book_limit = max(2, min(4, top_k))
+    for title_score, slug in scored_slugs[: min(len(scored_slugs), 4)]:
+        rows = _book_rows_for_slug(retriever, slug)
+        if not rows:
+            continue
+        scoped_hits = BM25Index.from_rows(rows).search(query, top_k=per_book_limit)
+        if not scoped_hits:
+            scoped_hits = [hit_from_payload(rows[0], source="official_title_locator", score=title_score)]
+        for rank, source_hit in enumerate(scoped_hits[:per_book_limit], start=1):
+            hit = source_hit
+            hit.source = "official_title_locator"
+            scoped_score = min(float(source_hit.raw_score) / max(rank, 1), 2.0)
+            hit.raw_score = float(title_score) + scoped_score
+            hit.fused_score = hit.raw_score
+            hit.component_scores = dict(hit.component_scores)
+            hit.component_scores["official_title_score"] = float(title_score)
+            hit.component_scores["official_title_rank"] = float(rank)
+            hits.append(hit)
+    hits.sort(
+        key=lambda item: (
+            -item.raw_score,
+            item.book_slug,
+            item.chunk_id,
+        )
+    )
+    return hits[:top_k]
+
+
+def _has_customer_pack_explicit_locator_signal(query: str) -> bool:
+    return bool(_CUSTOMER_PACK_EXPLICIT_LOCATOR_RE.search(query or ""))
+
+
 def _is_customer_pack_title_locator_query(query: str) -> bool:
     normalized = str(query or "").strip()
     if not normalized or not has_doc_locator_intent(normalized.lower()):
         return False
     locator_tokens = _customer_pack_locator_tokens(normalized)
     lowered = normalized.lower()
+    has_explicit_locator = _has_customer_pack_explicit_locator_signal(normalized)
+    navigation_locator = any(
+        token in lowered
+        for token in (
+            "어디",
+            "찾아",
+            "찾을",
+            "열어",
+            "보여",
+            "보고 싶",
+            "경로",
+            "위치",
+            "이동",
+            "들어가",
+            "목록",
+        )
+    )
+    if is_explainer_query(normalized) and not navigation_locator:
+        return False
+    if (
+        not has_explicit_locator
+        and "문서" in lowered
+        and not any(
+            token in lowered
+            for token in ("설계서", "제안서", "ppt", "pptx", "slide", "슬라이드")
+        )
+    ):
+        return False
     return len(locator_tokens) >= 3 or any(
         token in lowered
         for token in (
@@ -344,6 +645,21 @@ def search_bm25_candidates(
         source_name="bm25",
         top_k=effective_candidate_k,
     )
+    official_title_locator_hits = _search_official_runtime_title_hits(
+        retriever,
+        query=rewritten_queries[0] if rewritten_queries else "",
+        top_k=effective_candidate_k,
+    )
+    if official_title_locator_hits:
+        core_hits = _rrf_merge_named_hit_lists(
+            {
+                "bm25": core_hits,
+                "official_title": official_title_locator_hits,
+            },
+            source_name="bm25",
+            top_k=effective_candidate_k,
+            weights={"bm25": 1.0, "official_title": 3.4},
+        )
     overlay_bm25_hits: list[RetrievalHit] = []
     private_index = load_selected_customer_pack_private_bm25_index(
         retriever.settings,
@@ -356,7 +672,10 @@ def search_bm25_candidates(
         _is_customer_pack_title_locator_query(subquery)
         for subquery in rewritten_queries
     )
-    if overlay_index is None and has_active_customer_pack_selection(context):
+    if overlay_index is None and (
+        has_active_customer_pack_selection(context)
+        or any(_is_customer_pack_explicit_query(subquery) for subquery in rewritten_queries)
+    ):
         overlay_index = retriever.customer_pack_overlay_index()
     eligible_selected = _runtime_eligible_selected_draft_ids(retriever.settings, context)
     if overlay_index is not None:
@@ -424,6 +743,7 @@ def search_bm25_candidates(
             "overlay_count": len(overlay_hits),
             "overlay_bm25_count": len(overlay_bm25_hits),
             "title_locator_count": len(title_locator_hits),
+            "official_title_locator_count": len(official_title_locator_hits),
             "title_locator_query": title_locator_query,
             "private_overlay_ready": private_index is not None,
             "summary": _summarize_hit_list(bm25_hits),
@@ -433,6 +753,7 @@ def search_bm25_candidates(
         "core_hits": core_hits,
         "overlay_hits": overlay_hits,
         "title_locator_hits": title_locator_hits,
+        "official_title_locator_hits": official_title_locator_hits,
         "hits": bm25_hits,
     }
 

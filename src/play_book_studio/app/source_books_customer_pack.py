@@ -26,10 +26,11 @@ CUSTOMER_PACK_VIEWER_PREFIX = "/playbooks/customer-packs/"
 
 
 def _customer_pack_boundary_payload(record: Any) -> dict[str, Any]:
+    source_lane = str(getattr(record, "source_lane", "") or "customer_source_first_pack")
     truth_label = "Customer Source-First Pack"
     boundary_badge = "Private Pack Runtime"
     evidence = {
-        "source_lane": str(getattr(record, "source_lane", "") or "customer_source_first_pack"),
+        "source_lane": source_lane,
         "source_fingerprint": str(getattr(record, "source_fingerprint", "") or ""),
         "parser_route": str(getattr(record, "parser_route", "") or ""),
         "parser_backend": str(getattr(record, "parser_backend", "") or ""),
@@ -690,7 +691,15 @@ def load_customer_pack_book(root_dir: Path, draft_id: str) -> dict[str, Any] | N
         else f"{CUSTOMER_PACK_VIEWER_PREFIX}{record.draft_id}/index.html"
     )
     payload["target_anchor"] = payload.get("target_anchor") or ""
-    payload["source_origin_url"] = f"/api/customer-packs/captured?draft_id={record.draft_id}"
+    is_master_payload = (
+        str(payload.get("asset_kind") or "").strip() == "customer_master_playbook"
+        or str(payload.get("composition_model") or "").strip() == "customer_master_book_v1"
+    )
+    payload["source_origin_url"] = (
+        str(payload.get("source_uri") or f"customer-master:{record.draft_id}")
+        if is_master_payload
+        else f"/api/customer-packs/captured?draft_id={record.draft_id}"
+    )
     payload.setdefault("source_collection", record.plan.source_collection)
     payload.setdefault("pack_id", record.plan.pack_id)
     payload.setdefault("pack_label", record.plan.pack_label)
@@ -792,6 +801,10 @@ def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str, *, page
     if not sections:
         return None
     cards = _build_study_section_cards(sections, target_anchor=target_anchor, embedded=embedded)
+    is_master_book = (
+        str(canonical_book.get("asset_kind") or "").strip() == "customer_master_playbook"
+        or str(canonical_book.get("composition_model") or "").strip() == "customer_master_book_v1"
+    )
     family_label = str(canonical_book.get("family_label") or "").strip()
     family_summary = str(canonical_book.get("family_summary") or "").strip()
     derived_asset_count = int(canonical_book.get("derived_asset_count") or 0)
@@ -836,25 +849,42 @@ def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str, *, page
         evidence_badges.append(f"parser: {parser_backend}")
     if source_lane and source_lane != "customer_source_first_pack":
         evidence_badges.append(f"lane: {source_lane}")
+    source_url_value = str(canonical_book.get("source_origin_url") or canonical_book.get("source_uri") or "").strip()
+    source_link = ""
+    if source_url_value and not is_master_book and not source_url_value.startswith("customer-master:"):
+        source_link = '<a class="viewer-truth-link" href="{source_url}" target="_blank" rel="noreferrer">원본 캡처 열기</a>'.format(
+            source_url=html.escape(source_url_value, quote=True),
+        )
+    composition_scope = dict(canonical_book.get("composition_scope") or {})
+    master_source_count = int(composition_scope.get("source_count") or 0)
+    master_source_unit_count = int(composition_scope.get("source_unit_count") or canonical_book.get("source_unit_count") or 0)
+    evidence_title = "Customer Master Book Runtime" if is_master_book else runtime_truth_label
+    evidence_summary = (
+        (
+            f"고객 PPT 원본 {master_source_count}개와 슬라이드 근거 {master_source_unit_count}장을 "
+            "통합 목차와 검색 코퍼스에 연결한 실행 증거입니다."
+        )
+        if is_master_book
+        else "Customer pack runtime evidence"
+    )
     supplementary_blocks = [
         """
         <section class="wiki-parent-card">
-          <div class="wiki-parent-eyebrow">Pack Runtime Truth</div>
+          <div class="wiki-parent-eyebrow">{evidence_label}</div>
           <div class="viewer-truth-topline">
             <span class="viewer-truth-badge">{badge}</span>
-            <a class="viewer-truth-link" href="{source_url}" target="_blank" rel="noreferrer">원본 캡처 열기</a>
+            {source_link}
           </div>
           <div class="viewer-truth-title">{title}</div>
-          <p>Customer pack runtime evidence</p>
+          <p>{evidence_summary}</p>
           <div class="wiki-entity-list">{badges}</div>
         </section>
         """.format(
-            source_url=html.escape(
-                str(canonical_book.get("source_origin_url") or canonical_book.get("source_uri") or ""),
-                quote=True,
-            ),
+            evidence_label="Master Book Evidence" if is_master_book else "Pack Runtime Truth",
+            source_link=source_link,
             badge=html.escape(str(canonical_book.get("boundary_badge") or "Private Pack Runtime")),
-            title=html.escape(runtime_truth_label),
+            title=html.escape(evidence_title),
+            evidence_summary=html.escape(evidence_summary),
             badges="".join(
                 f'<span class="meta-pill">{html.escape(item)}</span>'
                 for item in evidence_badges

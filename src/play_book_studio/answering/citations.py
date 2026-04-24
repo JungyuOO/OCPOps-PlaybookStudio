@@ -209,7 +209,25 @@ def _is_explicit_mixed_runtime_query(query: str) -> bool:
             "customer-pack",
             "our document",
         )
-    ) or any(token in (query or "") for token in ("고객 문서", "고객문서", "우리 문서", "업로드 문서", "업로드한 문서"))
+    ) or any(
+        token in (query or "")
+        for token in (
+            "고객 문서",
+            "고객문서",
+            "고객 자료",
+            "고객자료",
+            "고객 PPT",
+            "고객 운영북",
+            "운영북",
+            "우리 문서",
+            "업로드 문서",
+            "업로드한 문서",
+            "업로드 자료",
+            "업로드자료",
+            "유저 업로드",
+            "사용자 업로드",
+        )
+    )
     has_official_signal = any(
         token in lowered
         for token in (
@@ -217,7 +235,17 @@ def _is_explicit_mixed_runtime_query(query: str) -> bool:
             "official document",
             "official docs",
         )
-    ) or any(token in (query or "") for token in ("공식 runtime", "공식 문서", "공식 근거"))
+    ) or any(
+        token in (query or "")
+        for token in (
+            "공식 runtime",
+            "공식 문서",
+            "공식문서",
+            "공식 매뉴얼",
+            "공식매뉴얼",
+            "공식 근거",
+        )
+    )
     return has_private_signal and has_official_signal
 
 

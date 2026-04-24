@@ -66,6 +66,7 @@ import {
   formatBytes,
 } from '../lib/runtimeApi';
 import { WIKI_VISION_MODES, loadStoredVisionMode, persistVisionMode, type VisionMode } from '../lib/wikiVision';
+import { displayCustomerDocumentTitle } from '../lib/customerDocumentTitles';
 import { ROUTES } from '../app/routes';
 
 type PipelineStage = 'idle' | 'uploading' | 'capturing' | 'normalizing' | 'done' | 'error';
@@ -2577,7 +2578,7 @@ const PlaybookLibraryPage: React.FC = () => {
                         >
                           {drafts.map((draft) => (
                             <option key={draft.draft_id} value={draft.draft_id}>
-                              {draft.title}
+                              {displayCustomerDocumentTitle(draft)}
                             </option>
                           ))}
                         </select>
@@ -2808,6 +2809,7 @@ const PlaybookLibraryPage: React.FC = () => {
                   {customDocumentBooks.map((book) => {
                     const canOpenViewer = Boolean(book.viewer_path);
                     const meta = customDocumentMeta(book);
+                    const displayTitle = displayCustomerDocumentTitle(book);
                     const cardBody = (
                       <>
                         <div className="draft-card-top">
@@ -2816,7 +2818,7 @@ const PlaybookLibraryPage: React.FC = () => {
                             {book.custom_document_kind_label || '재료'}
                           </span>
                         </div>
-                        <h4 className="draft-title">{book.title}</h4>
+                        <h4 className="draft-title">{displayTitle}</h4>
                         {book.custom_document_description ? (
                           <p className="custom-material-description">{book.custom_document_description}</p>
                         ) : null}
@@ -3374,34 +3376,37 @@ const PlaybookLibraryPage: React.FC = () => {
                       </button>
                     </div>
                     <div className="draft-grid">
-                      {userLibraryBooks.map((book) => (
-                        <button
-                          type="button"
-                          className="draft-card user-library-card"
-                          key={book.book_slug}
-                          onClick={() => setBookViewer(book)}
-                        >
-                          <div className="draft-card-top">
-                            <span className="draft-type">User Library</span>
-                            <span className={`draft-status-badge status-${book.review_status === 'approved' ? 'green' : 'cyan'}`}>
-                              {book.review_status}
-                            </span>
-                          </div>
-                          <h4 className="draft-title">{book.title}</h4>
-                          <div className="draft-meta">
-                            <span>{customerPackBookTruth(book) || book.source_lane}</span>
-                            <span>{book.section_count} sections</span>
-                            <span className={playbookGradeBadgeClass(book.grade)}>{normalizePlaybookGrade(book.grade)}</span>
-                          </div>
-                          {customerPackBookEvidenceBits(book).length > 0 && (
-                            <div className="preview-chip-row">
-                              {customerPackBookEvidenceBits(book).slice(0, 3).map((item) => (
-                                <span key={item} className="preview-chip">{item}</span>
-                              ))}
+                      {userLibraryBooks.map((book) => {
+                        const displayTitle = displayCustomerDocumentTitle(book);
+                        return (
+                          <button
+                            type="button"
+                            className="draft-card user-library-card"
+                            key={book.book_slug}
+                            onClick={() => setBookViewer(book)}
+                          >
+                            <div className="draft-card-top">
+                              <span className="draft-type">User Library</span>
+                              <span className={`draft-status-badge status-${book.review_status === 'approved' ? 'green' : 'cyan'}`}>
+                                {book.review_status}
+                              </span>
                             </div>
-                          )}
-                        </button>
-                      ))}
+                            <h4 className="draft-title">{displayTitle}</h4>
+                            <div className="draft-meta">
+                              <span>{customerPackBookTruth(book) || book.source_lane}</span>
+                              <span>{book.section_count} sections</span>
+                              <span className={playbookGradeBadgeClass(book.grade)}>{normalizePlaybookGrade(book.grade)}</span>
+                            </div>
+                            {customerPackBookEvidenceBits(book).length > 0 && (
+                              <div className="preview-chip-row">
+                                {customerPackBookEvidenceBits(book).slice(0, 3).map((item) => (
+                                  <span key={item} className="preview-chip">{item}</span>
+                                ))}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </section>
                 )}
@@ -3412,46 +3417,49 @@ const PlaybookLibraryPage: React.FC = () => {
                       <h2>Uploaded Drafts ({drafts.length})</h2>
                     </div>
                     <div className="draft-grid">
-                      {drafts.map((draft) => (
-                        <div className="draft-card" key={draft.draft_id} onClick={() => openPreview(draft)} style={{ cursor: 'pointer' }}>
-                          <div className="draft-card-top">
-                            <FileText size={18} className="draft-file-icon" />
-                            <span className={`draft-status-badge status-${statusColor(draft.status)}`}>
-                              {draft.status}
-                            </span>
-                          </div>
-                          <h4 className="draft-title">{draft.title}</h4>
-                          <div className="draft-meta">
-                            <span className="draft-type">{draft.source_type.toUpperCase()}</span>
-                            {draft.uploaded_byte_size ? (
-                              <span>{formatBytes(draft.uploaded_byte_size)}</span>
-                            ) : null}
-                            {draft.quality_score > 0 && (
-                              <span className="draft-quality">Q:{draft.quality_score}</span>
-                            )}
-                          </div>
-                          {draft.derived_asset_count > 0 && (
-                            <div className="draft-assets">
-                              <CheckCircle2 size={12} />
-                              <span>{draft.playable_asset_count} playable · {draft.derived_asset_count} derived</span>
+                      {drafts.map((draft) => {
+                        const displayTitle = displayCustomerDocumentTitle(draft);
+                        return (
+                          <div className="draft-card" key={draft.draft_id} onClick={() => openPreview(draft)} style={{ cursor: 'pointer' }}>
+                            <div className="draft-card-top">
+                              <FileText size={18} className="draft-file-icon" />
+                              <span className={`draft-status-badge status-${statusColor(draft.status)}`}>
+                                {draft.status}
+                              </span>
                             </div>
-                          )}
-                          <div className="draft-card-footer">
-                            <span className="draft-date">
-                              <Clock size={12} />
-                              {new Date(draft.created_at).toLocaleDateString()}
-                            </span>
-                            <button
-                              className="draft-delete-btn"
-                              onClick={(e) => { e.stopPropagation(); handleDelete(draft.draft_id, draft.title, true); }}
-                              disabled={deletingId === draft.draft_id}
-                              title="Delete draft"
-                            >
-                              {deletingId === draft.draft_id ? <Loader2 size={14} className="spin-icon" /> : <Trash2 size={14} />}
-                            </button>
+                            <h4 className="draft-title">{displayTitle}</h4>
+                            <div className="draft-meta">
+                              <span className="draft-type">{draft.source_type.toUpperCase()}</span>
+                              {draft.uploaded_byte_size ? (
+                                <span>{formatBytes(draft.uploaded_byte_size)}</span>
+                              ) : null}
+                              {draft.quality_score > 0 && (
+                                <span className="draft-quality">Q:{draft.quality_score}</span>
+                              )}
+                            </div>
+                            {draft.derived_asset_count > 0 && (
+                              <div className="draft-assets">
+                                <CheckCircle2 size={12} />
+                                <span>{draft.playable_asset_count} playable · {draft.derived_asset_count} derived</span>
+                              </div>
+                            )}
+                            <div className="draft-card-footer">
+                              <span className="draft-date">
+                                <Clock size={12} />
+                                {new Date(draft.created_at).toLocaleDateString()}
+                              </span>
+                              <button
+                                className="draft-delete-btn"
+                                onClick={(e) => { e.stopPropagation(); handleDelete(draft.draft_id, displayTitle, true); }}
+                                disabled={deletingId === draft.draft_id}
+                                title="Delete draft"
+                              >
+                                {deletingId === draft.draft_id ? <Loader2 size={14} className="spin-icon" /> : <Trash2 size={14} />}
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </section>
                 )}
@@ -3467,7 +3475,7 @@ const PlaybookLibraryPage: React.FC = () => {
           <div className="preview-popover" onClick={(e) => e.stopPropagation()}>
             <div className="preview-header">
               <div className="preview-header-left">
-                <h3>{previewDraft.title}</h3>
+                <h3>{displayCustomerDocumentTitle(previewDraft)}</h3>
                 <div className="preview-header-meta">
                   <span className={`draft-status-badge status-${statusColor(previewDraft.status)}`}>{previewDraft.status}</span>
                   <span>{previewDraft.source_type.toUpperCase()}</span>
@@ -3477,7 +3485,7 @@ const PlaybookLibraryPage: React.FC = () => {
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   className="preview-delete-btn"
-                  onClick={async () => { const ok = await handleDelete(previewDraft.draft_id, previewDraft.title, true); if (ok) closePreview(); }}
+                  onClick={async () => { const ok = await handleDelete(previewDraft.draft_id, displayCustomerDocumentTitle(previewDraft), true); if (ok) closePreview(); }}
                   disabled={deletingId === previewDraft.draft_id}
                   title="Delete"
                 >
@@ -3501,7 +3509,7 @@ const PlaybookLibraryPage: React.FC = () => {
               )}
               {!previewLoading && !previewViewerDocument && previewCapturedUrl && (
                 <iframe
-                  title={previewDraft.title}
+                  title={displayCustomerDocumentTitle(previewDraft)}
                   className="preview-viewer-frame"
                   src={previewCapturedUrl}
                   sandbox={previewCapturedType.includes('text/html') ? 'allow-same-origin' : undefined}
@@ -3563,7 +3571,7 @@ const PlaybookLibraryPage: React.FC = () => {
                             <FileText size={16} className="metric-book-icon" />
                           )}
                           <div className="metric-book-info">
-                            <span className="metric-book-title">{book.title}</span>
+                            <span className="metric-book-title">{displayCustomerDocumentTitle(book)}</span>
                             <div className="metric-book-meta">
                               <span>{customerPackBookTruth(book) || book.source_lane || book.source_type}</span>
                               {isCorpusMode ? (
@@ -3786,7 +3794,7 @@ const PlaybookLibraryPage: React.FC = () => {
           <div className="preview-popover" onClick={(e) => e.stopPropagation()}>
             <div className="preview-header">
               <div className="preview-header-left">
-                <h3>{bookViewer.title}</h3>
+                <h3>{displayCustomerDocumentTitle(bookViewer)}</h3>
                 <div className="preview-header-meta">
                   <span>{customerPackBookTruth(bookViewer) || bookViewer.source_lane}</span>
                   {bookViewer.current_source_label ? <span>{bookViewer.current_source_label}</span> : null}
@@ -3837,7 +3845,7 @@ const PlaybookLibraryPage: React.FC = () => {
                         <span className="book-preview-atlas-kind">Document</span>
                         <span className="book-preview-atlas-intent">Read</span>
                       </div>
-                      <strong>{bookViewer.title}</strong>
+                      <strong>{displayCustomerDocumentTitle(bookViewer)}</strong>
                       <span>{bookViewer.book_slug.replace(/_/g, ' ')}</span>
                     </div>
                   </div>

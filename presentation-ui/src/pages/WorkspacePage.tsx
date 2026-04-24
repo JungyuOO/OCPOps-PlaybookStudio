@@ -85,6 +85,7 @@ import {
   type ScmRepository,
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../app/routes';
+import { displayCustomerDocumentTitle } from '../lib/customerDocumentTitles';
 import { WIKI_VISION_MODES, loadStoredVisionMode, persistVisionMode, type VisionMode } from '../lib/wikiVision';
 import { resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';
 import WorkspaceTracePanel from '../components/WorkspaceTracePanel';
@@ -1376,7 +1377,7 @@ export default function WorkspacePage() {
       draftCollection.map((draft) => ({
         id: `draft:${draft.draft_id}`,
         kind: 'draft',
-        name: draft.title,
+        name: displayCustomerDocumentTitle(draft),
         meta: formatDraftMeta(draft),
         draft,
       })),
@@ -1567,7 +1568,7 @@ export default function WorkspacePage() {
       const viewerDocument = await loadViewerDocumentPayload(resolvedViewerPath, pageMode);
       setPreview({
         kind: 'viewer',
-        title: meta.book_title || title,
+        title: displayCustomerDocumentTitle({ title: meta.book_title || title }),
         subtitle: meta.section_path_label || meta.section || meta.source_url || '',
         meta,
         viewerUrl,
@@ -1634,7 +1635,12 @@ export default function WorkspacePage() {
       if (shouldOpenDraftAsViewer(loadedDraft, loadedBook) && loadedBook.target_viewer_path) {
         await openViewerPreview(
           preferredViewerPath || loadedBook.target_viewer_path,
-          loadedBook.title || loadedDraft.title,
+          displayCustomerDocumentTitle({
+            title: loadedBook.title || loadedDraft.title,
+            uploaded_file_name: loadedDraft.uploaded_file_name,
+            book_slug: loadedDraft.book_slug,
+            source_type: loadedDraft.source_type,
+          }),
           `draft:${draftId}`,
           viewerPageMode,
         );
@@ -1650,7 +1656,7 @@ export default function WorkspacePage() {
 
     setPreview({
       kind: 'draft',
-      title: loadedDraft.title,
+      title: displayCustomerDocumentTitle(loadedDraft),
       subtitle: `${loadedDraft.pack_label} · ${truthSurfaceCopy(loadedBook ?? loadedDraft).label} · ${loadedDraft.quality_status}`,
       draft: loadedDraft,
       book: loadedBook,
@@ -1774,7 +1780,7 @@ export default function WorkspacePage() {
       return;
     }
     try {
-      await openViewerPreview(book.viewer_path, book.title, `custom:${book.book_slug}`);
+      await openViewerPreview(book.viewer_path, displayCustomerDocumentTitle(book), `custom:${book.book_slug}`);
       animatePreviewPanel();
     } catch (error) {
       console.error(error);
@@ -2803,9 +2809,10 @@ export default function WorkspacePage() {
                            {customDocumentBooks.map((book) => {
                              const canOpen = Boolean(book.viewer_path);
                              const chips = customDocumentCatalogChips(book);
+                             const displayTitle = displayCustomerDocumentTitle(book);
                             const body = (
                               <>
-                                <span className="outline-item-label">{book.title}</span>
+                                <span className="outline-item-label">{displayTitle}</span>
                                 <span className="outline-item-meta">{formatCustomDocumentMeta(book)}</span>
                                 {chips.length > 0 && (
                                   <div className="outline-custom-chip-row">
@@ -3406,6 +3413,7 @@ export default function WorkspacePage() {
                           const canOpen = Boolean(book.viewer_path);
                           const sourceId = `custom:${book.book_slug}`;
                           const chips = customDocumentCatalogChips(book);
+                          const displayTitle = displayCustomerDocumentTitle(book);
                           return (
                             <button
                               key={sourceId}
@@ -3417,7 +3425,7 @@ export default function WorkspacePage() {
                               <div className="item-main">
                                 <FileText size={16} className="file-icon" />
                                 <div className="item-main-copy">
-                                  <span className="file-name">{book.title}</span>
+                                  <span className="file-name">{displayTitle}</span>
                                   {chips.length > 0 ? (
                                     <div className="source-chip-row">
                                       {chips.map((chip) => (
