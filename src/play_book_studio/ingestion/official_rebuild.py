@@ -9,12 +9,13 @@ ASCIIDOC_HEADING_RE = re.compile(r"^(?P<marks>={1,6})\s+(?P<title>.+?)\s*$")
 ASCIIDOC_ATTR_RE = re.compile(r"^:[^:]+:\s*.*$")
 ASCIIDOC_ATTR_DEF_RE = re.compile(r"^:(?P<name>[A-Za-z0-9_-]+):\s*(?P<value>.*)$")
 ASCIIDOC_DIRECTIVE_RE = re.compile(r"^(ifdef|ifndef|ifeval|endif|toc)::")
-ASCIIDOC_IMAGE_RE = re.compile(r"^\s*image::")
+ASCIIDOC_IMAGE_RE = re.compile(r"^\s*image:{1,2}(?P<target>[^\[]+)\[(?P<attrs>[^\]]*)\]\s*$")
 ASCIIDOC_COMMENT_RE = re.compile(r"^\s*//")
 SOURCE_BLOCK_ATTR_RE = re.compile(r"^\[(?P<body>[^\]]+)\]\s*$")
 ATTRIBUTE_TOKEN_RE = re.compile(r"\{(?P<name>[A-Za-z0-9_-]+)\}")
 LINK_RE = re.compile(r"link:(?P<url>\S+)\[(?P<label>[^\]]*)\]")
 XREF_RE = re.compile(r"xref:[^\[]+\[(?P<label>[^\]]*)\]")
+IMAGE_NAMED_ATTR_RE = re.compile(r"(?P<key>[A-Za-z0-9_-]+)=(?P<value>\"[^\"]*\"|'[^']*'|[^,]+)")
 
 DEFAULT_ATTRIBUTES: dict[str, str] = {
     "product-title": "OpenShift Container Platform",
@@ -81,6 +82,52 @@ def _normalize_inline_text(text: str, attributes: dict[str, str]) -> str:
     return normalized
 
 
+def _strip_asciidoc_attr_value(value: str) -> str:
+    normalized = str(value or "").strip()
+    if len(normalized) >= 2 and normalized[0] == normalized[-1] and normalized[0] in {"'", '"'}:
+        return normalized[1:-1].strip()
+    return normalized
+
+
+def parse_asciidoc_image_directive(line: str, attributes: dict[str, str] | None = None) -> dict[str, str] | None:
+    match = ASCIIDOC_IMAGE_RE.match(str(line or "").strip())
+    if match is None:
+        return None
+    active_attributes = dict(DEFAULT_ATTRIBUTES)
+    if attributes:
+        active_attributes.update(attributes)
+    target = _substitute_attributes(str(match.group("target") or "").strip(), active_attributes)
+    raw_attrs = _substitute_attributes(str(match.group("attrs") or "").strip(), active_attributes)
+    attrs: dict[str, str] = {
+        key.lower().strip(): _strip_asciidoc_attr_value(value)
+        for key, value in IMAGE_NAMED_ATTR_RE.findall(raw_attrs)
+        if str(key).strip()
+    }
+    positional = [
+        _strip_asciidoc_attr_value(part)
+        for part in raw_attrs.split(",")
+        if part.strip() and "=" not in part
+    ]
+    caption = attrs.get("caption") or attrs.get("title") or attrs.get("alt") or (positional[0] if positional else "")
+    alt = attrs.get("alt") or caption
+    return {
+        "target": target,
+        "caption": _normalize_inline_text(caption, active_attributes),
+        "alt": _normalize_inline_text(alt, active_attributes),
+    }
+
+
+def asciidoc_image_to_markdown(line: str, attributes: dict[str, str] | None = None) -> str:
+    image = parse_asciidoc_image_directive(line, attributes)
+    if image is None:
+        return ""
+    target = image["target"].strip()
+    if not target:
+        return ""
+    caption = image["caption"].strip() or image["alt"].strip() or Path(target).name
+    return f"![{caption}]({target})"
+
+
 def normalize_inline_text_fragment(text: str) -> str:
     return _normalize_inline_text(text, dict(DEFAULT_ATTRIBUTES))
 
@@ -114,8 +161,6 @@ def _read_expanded_asciidoc(path: Path, seen: set[Path], attributes: dict[str, s
         if ASCIIDOC_ATTR_RE.match(stripped):
             continue
         if ASCIIDOC_DIRECTIVE_RE.match(stripped):
-            continue
-        if ASCIIDOC_IMAGE_RE.match(stripped):
             continue
         if ASCIIDOC_COMMENT_RE.match(stripped):
             continue
@@ -276,7 +321,10 @@ def _convert_asciidoc_to_markdown(
             continue
         if stripped.startswith("[") and stripped.endswith("]"):
             continue
-        if ASCIIDOC_IMAGE_RE.match(stripped):
+        image_markdown = asciidoc_image_to_markdown(stripped)
+        if image_markdown:
+            output.append(image_markdown)
+            output.append("")
             continue
         if stripped.startswith(".") and len(stripped) > 1 and not stripped.startswith(".."):
             raw_line = stripped[1:]

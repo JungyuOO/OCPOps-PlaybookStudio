@@ -14,6 +14,8 @@ artifacts/
 data/bronze/raw_html/
 data/bronze/source_bundles/
 data/silver/normalized_docs.jsonl
+data/gold_candidate_books/full_rebuild/
+data/wiki_runtime_books/full_rebuild/
 # incorporation baseline keeps the three curated datasets below in Git:
 # - data/silver_ko
 # - data/gold_corpus_ko

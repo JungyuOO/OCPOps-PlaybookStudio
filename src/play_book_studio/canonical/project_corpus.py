@@ -17,6 +17,7 @@ from .models import (
     AnchorBlock,
     CanonicalDocumentAst,
     CodeBlock,
+    FigureBlock,
     NoteBlock,
     ParagraphBlock,
     PrerequisiteBlock,
@@ -161,6 +162,11 @@ def _flatten_block(block) -> str:
         return "\n".join(lines)
     if isinstance(block, CodeBlock):
         return f"[CODE]\n{block.code.strip()}\n[/CODE]"
+    if isinstance(block, FigureBlock):
+        caption = block.caption.strip() or block.alt.strip() or block.asset_ref.strip()
+        src = block.asset_url.strip() or block.src.strip()
+        body = " ".join(part for part in (caption, src) if part).strip()
+        return f"[FIGURE]\n{body}\n[/FIGURE]" if body else ""
     if isinstance(block, NoteBlock):
         label = block.variant.upper()
         title = f" {block.title.strip()}" if block.title.strip() else ""

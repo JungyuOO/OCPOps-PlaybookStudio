@@ -190,6 +190,46 @@ class CodeBlock:
 
 
 @dataclass(slots=True)
+class FigureBlock:
+    src: str
+    caption: str = ""
+    alt: str = ""
+    asset_ref: str = ""
+    asset_url: str = ""
+    viewer_path: str = ""
+    source_file: str = ""
+    source_anchor: str = ""
+    asset_kind: str = "figure"
+    diagram_type: str = ""
+    kind_label: str = ""
+    kind: str = "figure"
+
+    def __post_init__(self) -> None:
+        if not self.asset_url:
+            self.asset_url = self.src
+        if not self.src:
+            self.src = self.asset_url
+        if not self.alt:
+            self.alt = self.caption or self.asset_ref or "figure"
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "kind": self.kind,
+            "src": self.src,
+            "caption": self.caption,
+            "alt": self.alt,
+            "asset_ref": self.asset_ref,
+            "asset_url": self.asset_url,
+            "viewer_path": self.viewer_path,
+            "source_file": self.source_file,
+            "source_anchor": self.source_anchor,
+            "asset_kind": self.asset_kind,
+            "diagram_type": self.diagram_type,
+            "kind_label": self.kind_label,
+        }
+
+
+@dataclass(slots=True)
 class NoteBlock:
     text: str
     variant: NoteVariant = "note"
@@ -240,6 +280,7 @@ AstBlock = (
     | PrerequisiteBlock
     | ProcedureBlock
     | CodeBlock
+    | FigureBlock
     | NoteBlock
     | TableBlock
     | AnchorBlock

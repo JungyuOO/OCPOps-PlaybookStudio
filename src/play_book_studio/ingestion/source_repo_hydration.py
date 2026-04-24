@@ -8,7 +8,7 @@ import requests
 
 from play_book_studio.config.settings import Settings
 
-from .official_rebuild import ASCIIDOC_INCLUDE_RE
+from .official_rebuild import ASCIIDOC_INCLUDE_RE, parse_asciidoc_image_directive
 from .source_first import SOURCE_BRANCH, resolve_repo_relative_paths, source_mirror_root
 
 
@@ -70,6 +70,19 @@ def _iter_include_targets(text: str) -> Iterable[str]:
         yield target
 
 
+def _iter_image_targets(text: str) -> Iterable[str]:
+    for raw_line in str(text or "").splitlines():
+        image = parse_asciidoc_image_directive(raw_line)
+        if image is None:
+            continue
+        target = str(image.get("target") or "").strip()
+        if not target or "{" in target or "}" in target:
+            continue
+        if target.startswith(("http://", "https://", "data:")):
+            continue
+        yield target
+
+
 def _include_repo_path_candidates(current_repo_path: str, include_target: str) -> list[str]:
     current = PurePosixPath(current_repo_path)
     candidates = [
@@ -82,6 +95,26 @@ def _include_repo_path_candidates(current_repo_path: str, include_target: str) -
         if normalized and ".." not in PurePosixPath(normalized).parts and normalized not in resolved:
             resolved.append(normalized)
     return resolved
+
+
+def _image_repo_path_candidates(current_repo_path: str, image_target: str) -> list[str]:
+    current = PurePosixPath(current_repo_path)
+    target = PurePosixPath(str(image_target or "").strip().lstrip("/"))
+    candidates = [
+        (current.parent / target).as_posix(),
+        (PurePosixPath("images") / target.name).as_posix(),
+        target.as_posix(),
+    ]
+    resolved: list[str] = []
+    for candidate in candidates:
+        normalized = candidate.strip().lstrip("/")
+        if normalized and ".." not in PurePosixPath(normalized).parts and normalized not in resolved:
+            resolved.append(normalized)
+    return resolved
+
+
+def _is_asciidoc_repo_path(repo_path: str) -> bool:
+    return PurePosixPath(repo_path).suffix.lower() in {".adoc", ".asciidoc"}
 
 
 def hydrate_source_repo_artifacts(settings: Settings, entry) -> list[Path]:
@@ -99,6 +132,8 @@ def hydrate_source_repo_artifacts(settings: Settings, entry) -> list[Path]:
         visited.add(normalized)
         target = mirror_root / Path(normalized)
         if target.exists():
+            if not _is_asciidoc_repo_path(normalized):
+                return
             text = target.read_text(encoding="utf-8", errors="ignore")
         else:
             url = _raw_github_content_url(branch, normalized)
@@ -108,15 +143,26 @@ def hydrate_source_repo_artifacts(settings: Settings, entry) -> list[Path]:
                 timeout=settings.request_timeout_seconds,
             )
             response.raise_for_status()
-            text = _decode_response_text(response)
             target.parent.mkdir(parents=True, exist_ok=True)
+            if not _is_asciidoc_repo_path(normalized):
+                content = getattr(response, "content", None)
+                target.write_bytes(content if isinstance(content, bytes) else _decode_response_text(response).encode("utf-8"))
+                return
+            text = _decode_response_text(response)
             target.write_text(text, encoding="utf-8")
-        if target.suffix.lower() not in {".adoc", ".asciidoc"}:
+        if not _is_asciidoc_repo_path(normalized):
             return
         for include_target in _iter_include_targets(text):
             for include_repo_path in _include_repo_path_candidates(normalized, include_target):
                 try:
                     hydrate(include_repo_path)
+                    break
+                except requests.HTTPError:
+                    continue
+        for image_target in _iter_image_targets(text):
+            for image_repo_path in _image_repo_path_candidates(normalized, image_target):
+                try:
+                    hydrate(image_repo_path)
                     break
                 except requests.HTTPError:
                     continue

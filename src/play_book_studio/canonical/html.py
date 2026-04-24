@@ -19,6 +19,7 @@ from .models import (
     CanonicalDocumentAst,
     CanonicalSectionAst,
     CodeBlock,
+    FigureBlock,
     NoteBlock,
     ParagraphBlock,
     PrerequisiteBlock,
@@ -29,7 +30,7 @@ from .models import (
 
 
 BLOCK_SPLIT_RE = re.compile(
-    r"(\[CODE(?:\s+[^\]]+)?\].*?\[/CODE\]|\[TABLE(?:\s+[^\]]+)?\].*?\[/TABLE\])",
+    r"(\[CODE(?:\s+[^\]]+)?\].*?\[/CODE\]|\[TABLE(?:\s+[^\]]+)?\].*?\[/TABLE\]|\[FIGURE(?:\s+[^\]]+)?\].*?\[/FIGURE\])",
     re.DOTALL,
 )
 MARKER_ATTR_RE = re.compile(r'([a-z_]+)="((?:[^"\\]|\\.)*)"')
@@ -44,6 +45,7 @@ VERIFICATION_PREFIX_RE = re.compile(
 PREREQUISITE_PREFIXES = ("사전 요구 사항", "사전 요구사항", "Prerequisites")
 CODE_BLOCK_RE = re.compile(r"^\[CODE(?P<attrs>[^\]]*)\]\s*(?P<body>.*?)\s*\[/CODE\]$", re.DOTALL)
 TABLE_BLOCK_RE = re.compile(r"^\[TABLE(?P<attrs>[^\]]*)\]\s*(?P<body>.*?)\s*\[/TABLE\]$", re.DOTALL)
+FIGURE_BLOCK_RE = re.compile(r"^\[FIGURE(?P<attrs>[^\]]*)\]\s*(?P<body>.*?)\s*\[/FIGURE\]$", re.DOTALL)
 LEADING_NOISE_BLOCK_RE = (
     re.compile(r"^Red Hat OpenShift Documentation Team(?:\s+법적 공지\s+초록)?$", re.IGNORECASE),
     re.compile(r"^Red Hat OpenShift .*법적 공지.*요약$", re.IGNORECASE),
@@ -84,6 +86,17 @@ def _block_text(block: object) -> str:
         return " ".join(parts).strip()
     if isinstance(block, CodeBlock):
         return f"{block.caption} {block.code}".strip()
+    if isinstance(block, FigureBlock):
+        return " ".join(
+            part
+            for part in (
+                block.caption,
+                block.alt,
+                block.asset_ref,
+                block.source_anchor,
+            )
+            if part
+        ).strip()
     if isinstance(block, TableBlock):
         values = list(block.headers)
         for row in block.rows:
@@ -267,6 +280,27 @@ def _blocks_from_text(text: str) -> tuple[object, ...]:
                     for row in rows[1:]
                 )
             blocks.append(TableBlock(headers=headers, rows=table_rows, caption=attrs.get("caption", "")))
+            continue
+        figure_match = FIGURE_BLOCK_RE.match(chunk)
+        if figure_match:
+            attrs = _parse_marker_attrs(figure_match.group("attrs"))
+            caption = figure_match.group("body").strip()
+            src = attrs.get("src", "") or attrs.get("asset_url", "")
+            blocks.append(
+                FigureBlock(
+                    src=src,
+                    caption=caption or attrs.get("caption", ""),
+                    alt=attrs.get("alt", ""),
+                    asset_ref=attrs.get("asset_ref", ""),
+                    asset_url=attrs.get("asset_url", src),
+                    viewer_path=attrs.get("viewer_path", ""),
+                    source_file=attrs.get("source_file", ""),
+                    source_anchor=attrs.get("source_anchor", ""),
+                    asset_kind=attrs.get("asset_kind", "figure") or "figure",
+                    diagram_type=attrs.get("diagram_type", ""),
+                    kind_label=attrs.get("kind_label", ""),
+                )
+            )
             continue
         for paragraph in re.split(r"\n\s*\n+", chunk):
             block = _parse_plaintext_block(paragraph)

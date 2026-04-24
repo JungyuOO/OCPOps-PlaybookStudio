@@ -27,9 +27,11 @@ def runtime_truth_paths(root_dir: Path) -> RuntimeTruthPaths:
     source_first_manifest_path = root_dir / "manifests" / "ocp420_source_first_full_rebuild_manifest.json"
     one_click_report_path = root_dir / "reports" / "build_logs" / "ocp420_one_click_runtime_report.json"
     active_manifest = _read_json(active_manifest_path)
-    configured_source_manifest = Path(str(active_manifest.get("source_manifest_path") or "")).expanduser()
-    source_manifest_path = configured_source_manifest if configured_source_manifest.is_absolute() else (
-        root_dir / "data" / "wiki_runtime_books" / "full_rebuild_manifest.json"
+    configured_source_manifest = str(active_manifest.get("source_manifest_path") or "").strip()
+    source_manifest_path = (
+        _resolve_manifest_path(root_dir, configured_source_manifest)
+        if configured_source_manifest
+        else root_dir / "data" / "wiki_runtime_books" / "full_rebuild_manifest.json"
     )
     return RuntimeTruthPaths(
         active_manifest_path=active_manifest_path,
@@ -88,9 +90,13 @@ def audit_runtime_truth(root_dir: Path) -> dict[str, Any]:
         source_item = source_items[0] if source_items else {}
         source_first_item = source_first_items[0] if source_first_items else {}
 
-        runtime_path = Path(str(active_item.get("runtime_path") or source_item.get("runtime_path") or ""))
-        source_candidate_path = Path(
-            str(active_item.get("source_candidate_path") or source_item.get("source_candidate_path") or "")
+        runtime_path = _resolve_manifest_path(
+            root_dir,
+            str(active_item.get("runtime_path") or source_item.get("runtime_path") or ""),
+        )
+        source_candidate_path = _resolve_manifest_path(
+            root_dir,
+            str(active_item.get("source_candidate_path") or source_item.get("source_candidate_path") or ""),
         )
 
         if not runtime_path.exists():
@@ -99,8 +105,11 @@ def audit_runtime_truth(root_dir: Path) -> dict[str, Any]:
             source_candidate_missing_count += 1
 
         if str(source_first_item.get("rebuild_target_paths", {}).get("wiki_runtime_md") or ""):
-            expected_runtime_path = root_dir / str(source_first_item["rebuild_target_paths"]["wiki_runtime_md"])
-            if expected_runtime_path != runtime_path:
+            expected_runtime_path = _resolve_manifest_path(
+                root_dir,
+                str(source_first_item["rebuild_target_paths"]["wiki_runtime_md"]),
+            )
+            if expected_runtime_path.resolve() != runtime_path.resolve():
                 provenance_chain_break_count += 1
 
         viewer_path = _canonical_active_viewer_path(slug)
@@ -252,6 +261,16 @@ def _slug_from_viewer_path(viewer_path: str) -> str:
     if len(parts) >= 4 and parts[0] == "playbooks" and parts[1] == "wiki-runtime" and parts[2] == "active":
         return parts[3]
     return ""
+
+
+def _resolve_manifest_path(root_dir: Path, value: str) -> Path:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return root_dir / "__missing_manifest_path__"
+    candidate = Path(normalized).expanduser()
+    if not candidate.is_absolute():
+        candidate = root_dir / candidate
+    return candidate
 
 
 def _active_snapshot_id(active_manifest: dict[str, Any]) -> str:

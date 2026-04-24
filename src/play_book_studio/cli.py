@@ -8,11 +8,17 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
 from play_book_studio.answering.answerer import ChatAnswerer
 from play_book_studio.app.customer_pack_batch import write_customer_pack_material_batch_report
+from play_book_studio.app.customer_master_book import (
+    DEFAULT_MASTER_BOOK_SLUG,
+    DEFAULT_MASTER_BOOK_TITLE,
+    write_customer_master_book,
+)
 from play_book_studio.app.private_lane_smoke import write_private_lane_smoke
 from play_book_studio.app.runtime_maintenance_smoke import write_runtime_maintenance_smoke
 from play_book_studio.app.runtime_report import (
@@ -23,6 +29,15 @@ from play_book_studio.app.server import serve
 from play_book_studio.config.settings import load_effective_env, load_settings
 from play_book_studio.evals.answer_eval import evaluate_case, summarize_case_results
 from play_book_studio.ingestion.graph_sidecar import write_graph_sidecar_compact_from_artifacts
+from play_book_studio.ingestion.official_gold_gate import (
+    ARTIFACT_MANIFEST_RELATIVE_PATH,
+    ONE_CLICK_REPORT_RELATIVE_PATH,
+    materialize_runtime_markdown_from_playbooks,
+    repair_portable_json_paths,
+    write_artifact_manifest,
+    write_official_gold_gate_report,
+)
+from play_book_studio.ingestion.pipeline import run_ingestion_pipeline
 from play_book_studio.retrieval.models import SessionContext
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -128,6 +143,56 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compact_graph_parser.add_argument("--output", type=Path, default=None)
 
+    official_gold_gate_parser = subparsers.add_parser(
+        "official-gold-gate",
+        help="Validate OCP official gold-book reproducibility, figure, code, and viewer gates",
+    )
+    official_gold_gate_parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT / ONE_CLICK_REPORT_RELATIVE_PATH,
+    )
+    official_gold_gate_parser.add_argument(
+        "--artifact-manifest",
+        type=Path,
+        default=ROOT / ARTIFACT_MANIFEST_RELATIVE_PATH,
+    )
+    official_gold_gate_parser.add_argument(
+        "--repair-portable-paths",
+        action="store_true",
+        help="Rewrite known runtime/source-first manifest paths to repo-relative portable paths before validation.",
+    )
+
+    official_gold_rebuild_parser = subparsers.add_parser(
+        "official-gold-rebuild",
+        help="Rebuild OCP official gold-book artifacts, repair portable paths, and run the gold gate",
+    )
+    official_gold_rebuild_parser.add_argument("--collect-subset", choices=("all", "high-value"), default="all")
+    official_gold_rebuild_parser.add_argument("--process-subset", choices=("all", "high-value"), default="all")
+    official_gold_rebuild_parser.add_argument("--collect-limit", type=int, default=None)
+    official_gold_rebuild_parser.add_argument("--process-limit", type=int, default=None)
+    official_gold_rebuild_parser.add_argument("--force-collect", action="store_true")
+    official_gold_rebuild_parser.add_argument(
+        "--with-embeddings",
+        action="store_true",
+        help="Also rebuild embeddings. Disabled by default so the gold artifact rebuild stays local and deterministic.",
+    )
+    official_gold_rebuild_parser.add_argument(
+        "--with-qdrant",
+        action="store_true",
+        help="Also upsert rebuilt embeddings to Qdrant. Implies --with-embeddings.",
+    )
+    official_gold_rebuild_parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT / ONE_CLICK_REPORT_RELATIVE_PATH,
+    )
+    official_gold_rebuild_parser.add_argument(
+        "--artifact-manifest",
+        type=Path,
+        default=ROOT / ARTIFACT_MANIFEST_RELATIVE_PATH,
+    )
+
     customer_pack_batch_parser = subparsers.add_parser(
         "customer-pack-batch",
         help="Batch ingest customer material PPT sources into the custom playbook pipeline",
@@ -144,6 +209,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     customer_pack_batch_parser.add_argument("--approval-state", default="approved")
     customer_pack_batch_parser.add_argument("--publication-state", default="active")
+
+    customer_master_parser = subparsers.add_parser(
+        "customer-master-book",
+        help="Compose one customer master playbook from approved customer pack PPT books",
+    )
+    customer_master_parser.add_argument("--slug", default=DEFAULT_MASTER_BOOK_SLUG)
+    customer_master_parser.add_argument("--title", default=DEFAULT_MASTER_BOOK_TITLE)
+    customer_master_parser.add_argument(
+        "--source-draft-id",
+        action="append",
+        default=[],
+        help="Limit composition to selected source draft ids. Can be passed more than once.",
+    )
+    customer_master_parser.add_argument(
+        "--include-test-sources",
+        action="store_true",
+        help="Include sources whose title/source path looks like a test run.",
+    )
+    customer_master_parser.add_argument(
+        "--report",
+        type=Path,
+        default=ROOT / ".kugnusdocs" / "reports" / f"{date.today().isoformat()}-customer-master-book-report.json",
+    )
 
     return parser
 
@@ -356,6 +444,98 @@ def _run_graph_compact(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_official_gold_gate(args: argparse.Namespace) -> int:
+    repair_results = []
+    if getattr(args, "repair_portable_paths", False):
+        repair_results = repair_portable_json_paths(ROOT)
+    artifact_manifest_path, artifact_manifest = write_artifact_manifest(
+        ROOT,
+        output_path=args.artifact_manifest,
+    )
+    report_path, payload = write_official_gold_gate_report(
+        ROOT,
+        output_path=args.output,
+    )
+    if repair_results:
+        payload["portable_path_repair"] = repair_results
+        report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote official gold gate report: {report_path}")
+    print(f"wrote artifact manifest: {artifact_manifest_path}")
+    print(
+        json.dumps(
+            {
+                "status": payload["status"],
+                "failures": payload.get("failures", []),
+                "chunks_count": payload["metrics"]["chunks_count"],
+                "bm25_count": payload["metrics"]["bm25_count"],
+                "figure_sidecar_count": payload["metrics"]["figure_sidecar_count"],
+                "playbook_figure_blocks": payload["metrics"]["playbook_block_counts"].get("figure", 0),
+                "artifact_count": len(artifact_manifest.get("artifacts", [])),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if payload.get("status") == "ok" else 1
+
+
+def _run_official_gold_rebuild(args: argparse.Namespace) -> int:
+    settings = replace(load_settings(ROOT), graph_backend="local")
+    log = run_ingestion_pipeline(
+        settings,
+        collect_subset=args.collect_subset,
+        process_subset=args.process_subset,
+        collect_limit=args.collect_limit,
+        process_limit=args.process_limit,
+        force_collect=bool(args.force_collect),
+        skip_embeddings=not (bool(args.with_embeddings) or bool(args.with_qdrant)),
+        skip_qdrant=not bool(args.with_qdrant),
+    )
+    markdown_materialization = materialize_runtime_markdown_from_playbooks(ROOT)
+    repair_results = repair_portable_json_paths(ROOT)
+    artifact_manifest_path, artifact_manifest = write_artifact_manifest(
+        ROOT,
+        output_path=args.artifact_manifest,
+    )
+    report_path, payload = write_official_gold_gate_report(
+        ROOT,
+        output_path=args.output,
+    )
+    payload["pipeline_log"] = log.to_dict()
+    payload["runtime_markdown_materialization"] = markdown_materialization
+    payload["portable_path_repair"] = repair_results
+    report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    pipeline_ok = not log.errors
+    gate_ok = payload.get("status") == "ok"
+    print(f"wrote official gold gate report: {report_path}")
+    print(f"wrote artifact manifest: {artifact_manifest_path}")
+    print(
+        json.dumps(
+            {
+                "status": "ok" if pipeline_ok and gate_ok else "fail",
+                "gate_status": payload.get("status"),
+                "pipeline_error_count": len(log.errors),
+                "manifest_count": log.manifest_count,
+                "normalized_count": log.normalized_count,
+                "chunk_count": log.chunk_count,
+                "graph_book_count": log.graph_book_count,
+                "graph_relation_count": log.graph_relation_count,
+                "runtime_markdown_written": sum(
+                    len(item.get("written", []))
+                    for item in markdown_materialization
+                    if isinstance(item, dict)
+                ),
+                "playbook_figure_blocks": payload["metrics"]["playbook_block_counts"].get("figure", 0),
+                "artifact_count": len(artifact_manifest.get("artifacts", [])),
+                "failures": payload.get("failures", []),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if pipeline_ok and gate_ok else 1
+
+
 def _run_customer_pack_batch(args: argparse.Namespace) -> int:
     output_path, payload = write_customer_pack_material_batch_report(
         ROOT,
@@ -367,6 +547,36 @@ def _run_customer_pack_batch(args: argparse.Namespace) -> int:
     print(f"wrote customer pack batch report: {output_path}")
     print(json.dumps(payload["summary"], ensure_ascii=False, indent=2))
     return 0 if bool(payload["summary"].get("customer_llmwiki_ready")) else 1
+
+
+def _run_customer_master_book(args: argparse.Namespace) -> int:
+    _book_path, payload = write_customer_master_book(
+        ROOT,
+        master_slug=args.slug,
+        title=args.title,
+        source_draft_ids=tuple(args.source_draft_id or ()) or None,
+        include_test_sources=bool(args.include_test_sources),
+    )
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+    args.report.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote customer master book report: {args.report}")
+    print(
+        json.dumps(
+            {
+                "status": payload["status"],
+                "master_slug": payload["master_slug"],
+                "source_count": payload["source_count"],
+                "section_count": payload["section_count"],
+                "shared_grade": payload["shared_grade"],
+                "publish_ready": payload["publish_ready"],
+                "runtime_eligible": payload["runtime_eligible"],
+                "source_coverage_ratio": payload["validation"]["source_coverage_ratio"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if payload["status"] == "ready" else 1
 
 
 def main() -> int:
@@ -387,8 +597,14 @@ def main() -> int:
         return _run_private_lane_smoke(args)
     if args.command == "graph-compact":
         return _run_graph_compact(args)
+    if args.command == "official-gold-gate":
+        return _run_official_gold_gate(args)
+    if args.command == "official-gold-rebuild":
+        return _run_official_gold_rebuild(args)
     if args.command == "customer-pack-batch":
         return _run_customer_pack_batch(args)
+    if args.command == "customer-master-book":
+        return _run_customer_master_book(args)
     raise ValueError(f"unsupported command: {args.command}")
 
 

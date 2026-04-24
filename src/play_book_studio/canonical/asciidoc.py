@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +18,8 @@ from play_book_studio.ingestion.official_rebuild import (
     ASCIIDOC_COMMENT_RE,
     ASCIIDOC_DIRECTIVE_RE,
     ASCIIDOC_HEADING_RE,
-    ASCIIDOC_IMAGE_RE,
     _parse_source_language,
+    parse_asciidoc_image_directive,
     _render_table,
     expand_asciidoc,
 )
@@ -105,7 +106,123 @@ def _admonition_text(kind: str, body_lines: list[str]) -> str:
     return f"{label}: {body}"
 
 
-def _body_to_marked_text(body_lines: list[str]) -> str:
+def _marker_attr_value(value: str) -> str:
+    return " ".join(str(value or "").replace('"', "'").split()).strip()
+
+
+def _marker_attrs(**values: object) -> str:
+    parts: list[str] = []
+    for key, value in values.items():
+        normalized = _marker_attr_value(str(value or ""))
+        if normalized:
+            parts.append(f'{key}="{normalized}"')
+    return (" " + " ".join(parts)) if parts else ""
+
+
+def _source_mirror_root_from_paths(source_paths: tuple[Path, ...]) -> Path | None:
+    for source_path in source_paths:
+        resolved = source_path.resolve()
+        for parent in (resolved.parent, *resolved.parents):
+            if (parent / "_attributes").exists() or parent.name == "openshift-docs-enterprise-4.20":
+                return parent
+    return None
+
+
+def _workspace_root_from_mirror(mirror_root: Path | None) -> Path | None:
+    if mirror_root is None:
+        return None
+    parent = mirror_root.parent
+    if parent.name == "tmp_source":
+        return parent.parent
+    return None
+
+
+def _find_source_asset(mirror_root: Path | None, asset_ref: str) -> Path | None:
+    if mirror_root is None:
+        return None
+    normalized = str(asset_ref or "").strip().replace("\\", "/").lstrip("/")
+    if not normalized:
+        return None
+    relative = Path(normalized)
+    candidates = [
+        mirror_root / relative,
+        mirror_root / "images" / relative.name,
+    ]
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    asset_name = relative.name
+    if not asset_name:
+        return None
+    for candidate in mirror_root.rglob(asset_name):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _wiki_asset_url(
+    *,
+    book_slug: str,
+    asset_ref: str,
+    source_asset_path: Path | None,
+    workspace_root: Path | None,
+) -> str:
+    asset_name = Path(str(asset_ref or "")).name
+    if not book_slug or not asset_name:
+        return str(asset_ref or "").strip()
+    target_url = f"/playbooks/wiki-assets/full_rebuild/{book_slug}/{asset_name}"
+    if source_asset_path is not None and workspace_root is not None:
+        target_path = workspace_root / "data" / "wiki_assets" / "full_rebuild" / book_slug / asset_name
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if not target_path.exists() or source_asset_path.read_bytes() != target_path.read_bytes():
+            shutil.copyfile(source_asset_path, target_path)
+    return target_url
+
+
+def _figure_marker_from_asciidoc(
+    line: str,
+    *,
+    book_slug: str,
+    source_paths: tuple[Path, ...],
+) -> str:
+    parsed = parse_asciidoc_image_directive(line)
+    if parsed is None:
+        return ""
+    asset_ref = parsed["target"].strip()
+    if not asset_ref:
+        return ""
+    mirror_root = _source_mirror_root_from_paths(source_paths)
+    workspace_root = _workspace_root_from_mirror(mirror_root)
+    source_asset_path = _find_source_asset(mirror_root, asset_ref)
+    src = _wiki_asset_url(
+        book_slug=book_slug,
+        asset_ref=asset_ref,
+        source_asset_path=source_asset_path,
+        workspace_root=workspace_root,
+    )
+    asset_name = Path(asset_ref).name
+    extension = Path(asset_name).suffix.lower()
+    asset_kind = "diagram" if extension == ".svg" else "figure"
+    diagram_type = "semantic_diagram" if asset_kind == "diagram" else "image_figure"
+    attrs = _marker_attrs(
+        src=src,
+        asset_url=src,
+        asset_ref=asset_ref,
+        alt=parsed.get("alt", ""),
+        source_file=str(source_asset_path.relative_to(mirror_root).as_posix()) if source_asset_path is not None and mirror_root is not None else "",
+        asset_kind=asset_kind,
+        diagram_type=diagram_type,
+    )
+    caption = parsed.get("caption", "").strip() or parsed.get("alt", "").strip() or asset_name
+    return f"[FIGURE{attrs}]\n{caption}\n[/FIGURE]"
+
+
+def _body_to_marked_text(
+    body_lines: list[str],
+    *,
+    book_slug: str = "",
+    source_paths: tuple[Path, ...] = (),
+) -> str:
     output: list[str] = []
     pending_source_language: str | None = None
     index = 0
@@ -165,10 +282,15 @@ def _body_to_marked_text(body_lines: list[str]) -> str:
             index += 1
             continue
 
+        figure_marker = _figure_marker_from_asciidoc(stripped, book_slug=book_slug, source_paths=source_paths)
+        if figure_marker:
+            output.extend([figure_marker, ""])
+            index += 1
+            continue
+
         if (
             ASCIIDOC_ATTR_RE.match(stripped)
             or ASCIIDOC_DIRECTIVE_RE.match(stripped)
-            or ASCIIDOC_IMAGE_RE.match(stripped)
             or ASCIIDOC_COMMENT_RE.match(stripped)
         ):
             index += 1
@@ -192,8 +314,10 @@ def _flush_section(
     level: int,
     path_by_level: dict[int, str],
     body_lines: list[str],
+    book_slug: str = "",
+    source_paths: tuple[Path, ...] = (),
 ) -> None:
-    body = _body_to_marked_text(body_lines)
+    body = _body_to_marked_text(body_lines, book_slug=book_slug, source_paths=source_paths)
     if not body:
         return
     section_path = tuple(value for key, value in sorted(path_by_level.items()) if key >= 2 and value)
@@ -208,7 +332,13 @@ def _flush_section(
     )
 
 
-def parse_asciidoc_sections(*, text: str, fallback_title: str) -> tuple[str, list[dict[str, Any]]]:
+def parse_asciidoc_sections(
+    *,
+    text: str,
+    fallback_title: str,
+    book_slug: str = "",
+    source_paths: tuple[Path, ...] = (),
+) -> tuple[str, list[dict[str, Any]]]:
     doc_title = str(fallback_title or "").strip() or "Untitled"
     sections: list[dict[str, Any]] = []
     path_by_level: dict[int, str] = {}
@@ -255,6 +385,8 @@ def parse_asciidoc_sections(*, text: str, fallback_title: str) -> tuple[str, lis
                     level=current_level,
                     path_by_level=path_by_level,
                     body_lines=current_lines,
+                    book_slug=book_slug,
+                    source_paths=source_paths,
                 )
                 current_lines = []
             path_by_level[level] = heading
@@ -280,9 +412,11 @@ def parse_asciidoc_sections(*, text: str, fallback_title: str) -> tuple[str, lis
             level=current_level,
             path_by_level=path_by_level,
             body_lines=current_lines,
+            book_slug=book_slug,
+            source_paths=source_paths,
         )
 
-    preamble = _body_to_marked_text(preamble_lines)
+    preamble = _body_to_marked_text(preamble_lines, book_slug=book_slug, source_paths=source_paths)
     if preamble:
         sections.insert(
             0,
@@ -321,7 +455,13 @@ def build_source_repo_document_ast(
         if expanded.strip():
             expanded_parts.append(expanded.strip())
     expanded_text = "\n\n".join(expanded_parts).strip()
-    book_title, parsed_sections = parse_asciidoc_sections(text=expanded_text, fallback_title=fallback_title)
+    source_path_tuple = tuple(source_paths)
+    book_title, parsed_sections = parse_asciidoc_sections(
+        text=expanded_text,
+        fallback_title=fallback_title,
+        book_slug=entry.book_slug,
+        source_paths=source_path_tuple,
+    )
     pack = resolve_ocp_core_pack(
         version=entry.ocp_version or "4.20",
         language=entry.docs_language or "ko",

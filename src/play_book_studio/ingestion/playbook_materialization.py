@@ -55,6 +55,33 @@ def _table_marker(block: dict[str, Any]) -> str:
     return "[TABLE{attrs}]\n{table}\n[/TABLE]".format(attrs=attrs, table=table_text)
 
 
+def _figure_marker(block: dict[str, Any]) -> str:
+    src = str(block.get("src") or block.get("asset_url") or "").strip()
+    caption = str(block.get("caption") or block.get("alt") or "").strip()
+    if not src and not caption:
+        return ""
+    attrs: list[str] = []
+    for key in (
+        "src",
+        "asset_url",
+        "asset_ref",
+        "alt",
+        "viewer_path",
+        "source_file",
+        "source_anchor",
+        "asset_kind",
+        "diagram_type",
+        "kind_label",
+    ):
+        value = str(block.get(key) or "").strip()
+        if value:
+            attrs.append(f'{key}="{value}"')
+    return "[FIGURE {attrs}]\n{caption}\n[/FIGURE]".format(
+        attrs=" ".join(attrs),
+        caption=caption,
+    )
+
+
 def _block_text(block: dict[str, Any]) -> str:
     kind = str(block.get("kind") or "").strip().lower()
     if kind == "paragraph":
@@ -85,6 +112,8 @@ def _block_text(block: dict[str, Any]) -> str:
         return _code_marker(block)
     if kind == "table":
         return _table_marker(block)
+    if kind == "figure":
+        return _figure_marker(block)
     if kind == "note":
         title = str(block.get("title") or "").strip()
         text = str(block.get("text") or "").strip()

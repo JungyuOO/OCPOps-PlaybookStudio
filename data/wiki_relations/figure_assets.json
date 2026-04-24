@@ -10,7 +10,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/advanced_networking/552_OpenShift_slb_mode_0625.png",
         "viewer_path": "/wiki/figures/advanced_networking/552_OpenShift_slb_mode_0625.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\enabling-OVS-balance-slb-mode.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/enabling-OVS-balance-slb-mode.adoc",
         "source_asset_ref": "552_OpenShift_slb_mode_0625.png",
         "section_hint": "Network bonding considerations",
         "related_entities": [
@@ -31,7 +31,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/advanced_networking/524-openshift-bgp-ovn-k8s-no-vpn-0325.png",
         "viewer_path": "/wiki/figures/advanced_networking/524-openshift-bgp-ovn-k8s-no-vpn-0325.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-routeadvertisements-example.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/nw-routeadvertisements-example.adoc",
         "source_asset_ref": "524-openshift-bgp-ovn-k8s-no-vpn-0325.png",
         "section_hint": "About route advertisements",
         "related_entities": [
@@ -52,7 +52,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/advanced_networking/524-openshift-bgp-ovn-k8s-vrf-lite-0325.png",
         "viewer_path": "/wiki/figures/advanced_networking/524-openshift-bgp-ovn-k8s-vrf-lite-0325.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-routeadvertisements-example.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/nw-routeadvertisements-example.adoc",
         "source_asset_ref": "524-openshift-bgp-ovn-k8s-vrf-lite-0325.png",
         "section_hint": "About route advertisements",
         "related_entities": [
@@ -73,7 +73,7 @@
         "diagram_type": "semantic_diagram",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_1123_PTP_network.png",
         "viewer_path": "/wiki/figures/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_1123_PTP_network.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-ptp-introduction.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/nw-ptp-introduction.adoc",
         "source_asset_ref": "319_OpenShift_PTP_bare-metal_OCP_nodes_1123_PTP_network.png",
         "section_hint": "About PTP in OpenShift cluster nodes",
         "related_entities": [
@@ -94,7 +94,7 @@
         "diagram_type": "semantic_diagram",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_1023_PTP.png",
         "viewer_path": "/wiki/figures/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_1023_PTP.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\ptp-overview-of-gnss-grandmaster-clock.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/ptp-overview-of-gnss-grandmaster-clock.adoc",
         "source_asset_ref": "319_OpenShift_PTP_bare-metal_OCP_nodes_1023_PTP.png",
         "section_hint": "About PTP in OpenShift cluster nodes",
         "related_entities": [
@@ -115,7 +115,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/advanced_networking/openshift-ptp-using-dual-nic-ptp.png",
         "viewer_path": "/wiki/figures/advanced_networking/openshift-ptp-using-dual-nic-ptp.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\ptp-dual-nics.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/ptp-dual-nics.adoc",
         "source_asset_ref": "openshift-ptp-using-dual-nic-ptp.png",
         "section_hint": "About PTP in OpenShift cluster nodes",
         "related_entities": [
@@ -136,7 +136,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/advanced_networking/openshift-ptp-3-card-grandmaster.png",
         "viewer_path": "/wiki/figures/advanced_networking/openshift-ptp-3-card-grandmaster.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\ptp-three-card-grandmaster.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/ptp-three-card-grandmaster.adoc",
         "source_asset_ref": "openshift-ptp-3-card-grandmaster.png",
         "section_hint": "About PTP in OpenShift cluster nodes",
         "related_entities": [
@@ -157,7 +157,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/advanced_networking/openshift-ptp-holdover-tgm-clock-with-gnss.png",
         "viewer_path": "/wiki/figures/advanced_networking/openshift-ptp-holdover-tgm-clock-with-gnss.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-ptp-holdover-in-a-grandmaster-clock.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/nw-ptp-holdover-in-a-grandmaster-clock.adoc",
         "source_asset_ref": "openshift-ptp-holdover-tgm-clock-with-gnss.png",
         "section_hint": "Configuring PTP devices",
         "related_entities": [
@@ -178,7 +178,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_0323_4.17.png",
         "viewer_path": "/wiki/figures/advanced_networking/319_OpenShift_PTP_bare-metal_OCP_nodes_0323_4.17.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\cnf-about-ptp-events-using-ptp-event-producer-with-o-ran-api.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/cnf-about-ptp-events-using-ptp-event-producer-with-o-ran-api.adoc",
         "source_asset_ref": "319_OpenShift_PTP_bare-metal_OCP_nodes_0323_4.17.png",
         "section_hint": "Developing PTP events consumer applications with the REST API v2",
         "related_entities": [
@@ -208,7 +208,7 @@
         "diagram_type": "semantic_diagram",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/nw-sharding-route-labels.png",
         "viewer_path": "/wiki/figures/ingress_and_load_balancing/nw-sharding-route-labels.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-ingress-sharding-route-labels.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/nw-ingress-sharding-route-labels.adoc",
         "source_asset_ref": "nw-sharding-route-labels.png",
         "section_hint": "Configuring ingress cluster traffic by using an Ingress Controller",
         "related_entities": [
@@ -229,7 +229,7 @@
         "diagram_type": "semantic_diagram",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/nw-sharding-namespace-labels.png",
         "viewer_path": "/wiki/figures/ingress_and_load_balancing/nw-sharding-namespace-labels.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-ingress-sharding-namespace-labels.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/nw-ingress-sharding-namespace-labels.adoc",
         "source_asset_ref": "nw-sharding-namespace-labels.png",
         "section_hint": "Configuring ingress cluster traffic by using an Ingress Controller",
         "related_entities": [
@@ -250,7 +250,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/202_OpenShift_Ingress_0222_node_port.png",
         "viewer_path": "/wiki/figures/ingress_and_load_balancing/202_OpenShift_Ingress_0222_node_port.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-ingress-controller-endpoint-publishing-strategies.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/nw-ingress-controller-endpoint-publishing-strategies.adoc",
         "source_asset_ref": "202_OpenShift_Ingress_0222_node_port.png",
         "section_hint": "Configuring the Ingress Controller endpoint publishing strategy",
         "related_entities": [
@@ -271,7 +271,7 @@
         "diagram_type": "semantic_diagram",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/external-load-balancer-default.png",
         "viewer_path": "/wiki/figures/ingress_and_load_balancing/external-load-balancer-default.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-osp-services-external-load-balancer.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/nw-osp-services-external-load-balancer.adoc",
         "source_asset_ref": "external-load-balancer-default.png",
         "section_hint": "Load balancing on {rh-openstack}",
         "related_entities": [
@@ -292,7 +292,7 @@
         "diagram_type": "semantic_diagram",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/external-load-balancer-openshift-api.png",
         "viewer_path": "/wiki/figures/ingress_and_load_balancing/external-load-balancer-openshift-api.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-osp-services-external-load-balancer.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/nw-osp-services-external-load-balancer.adoc",
         "source_asset_ref": "external-load-balancer-openshift-api.png",
         "section_hint": "Load balancing on {rh-openstack}",
         "related_entities": [
@@ -313,7 +313,7 @@
         "diagram_type": "semantic_diagram",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/external-load-balancer-machine-config-api.png",
         "viewer_path": "/wiki/figures/ingress_and_load_balancing/external-load-balancer-machine-config-api.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\nw-osp-services-external-load-balancer.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/nw-osp-services-external-load-balancer.adoc",
         "source_asset_ref": "external-load-balancer-machine-config-api.png",
         "section_hint": "Load balancing on {rh-openstack}",
         "related_entities": [
@@ -334,7 +334,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/357_OpenShift_MetalLB_VRF_0823.png",
         "viewer_path": "/wiki/figures/ingress_and_load_balancing/357_OpenShift_MetalLB_VRF_0823.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\overview-of-managing-symmetric-routing-using-vrf-based-networks-with-metallb.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/overview-of-managing-symmetric-routing-using-vrf-based-networks-with-metallb.adoc",
         "source_asset_ref": "357_OpenShift_MetalLB_VRF_0823.png",
         "section_hint": "Managing symmetric routing with MetalLB",
         "related_entities": [
@@ -355,7 +355,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/ingress_and_load_balancing/695_OpenShift_MetalLB_FRRK8s_integration_0624.png",
         "viewer_path": "/wiki/figures/ingress_and_load_balancing/695_OpenShift_MetalLB_FRRK8s_integration_0624.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\networking\\ingress_load_balancing\\metallb\\metallb-frr-k8s.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/networking/ingress_load_balancing/metallb/metallb-frr-k8s.adoc",
         "source_asset_ref": "695_OpenShift_MetalLB_FRRK8s_integration_0624.png",
         "section_hint": "Configuring the integration of MetalLB and FRR-K8s",
         "related_entities": [
@@ -378,7 +378,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/installation_overview/targets-and-dependencies.png",
         "viewer_path": "/wiki/figures/installation_overview/targets-and-dependencies.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\installation-overview.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/installation-overview.adoc",
         "source_asset_ref": "targets-and-dependencies.png",
         "section_hint": "OpenShift Container Platform installation overview",
         "related_entities": [
@@ -399,7 +399,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/installation_overview/create-nodes.png",
         "viewer_path": "/wiki/figures/installation_overview/create-nodes.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\installation-process.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/installation-process.adoc",
         "source_asset_ref": "create-nodes.png",
         "section_hint": "OpenShift Container Platform installation overview",
         "related_entities": [
@@ -420,7 +420,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/installation_overview/150_OpenShift_VMware_on_AWS_1021_installer_FCOS.png",
         "viewer_path": "/wiki/figures/installation_overview/150_OpenShift_VMware_on_AWS_1021_installer_FCOS.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\installation-process.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/installation-process.adoc",
         "source_asset_ref": "150_OpenShift_VMware_on_AWS_1021_installer_FCOS.png",
         "section_hint": "OpenShift Container Platform installation overview",
         "related_entities": [
@@ -443,7 +443,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/installing_on_any_platform/targets-and-dependencies.png",
         "viewer_path": "/wiki/figures/installing_on_any_platform/targets-and-dependencies.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\installation-overview.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/installation-overview.adoc",
         "source_asset_ref": "targets-and-dependencies.png",
         "section_hint": "OpenShift Container Platform installation overview",
         "related_entities": [
@@ -468,7 +468,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/installing_on_any_platform/create-nodes.png",
         "viewer_path": "/wiki/figures/installing_on_any_platform/create-nodes.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\installation-process.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/installation-process.adoc",
         "source_asset_ref": "create-nodes.png",
         "section_hint": "OpenShift Container Platform installation overview",
         "related_entities": [
@@ -493,7 +493,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/installing_on_any_platform/150_OpenShift_VMware_on_AWS_1021_installer_FCOS.png",
         "viewer_path": "/wiki/figures/installing_on_any_platform/150_OpenShift_VMware_on_AWS_1021_installer_FCOS.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\installation-process.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/installation-process.adoc",
         "source_asset_ref": "150_OpenShift_VMware_on_AWS_1021_installer_FCOS.png",
         "section_hint": "OpenShift Container Platform installation overview",
         "related_entities": [
@@ -525,7 +525,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/nodes/295_OpenShift_Nodes_Overview_1222.png",
         "viewer_path": "/wiki/figures/nodes/295_OpenShift_Nodes_Overview_1222.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\nodes\\index.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/nodes/index.adoc",
         "source_asset_ref": "295_OpenShift_Nodes_Overview_1222.png",
         "section_hint": "Overview of nodes",
         "related_entities": [
@@ -550,7 +550,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/nodes/ROSA-HCP-overview-of-nodes-487.png",
         "viewer_path": "/wiki/figures/nodes/ROSA-HCP-overview-of-nodes-487.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\nodes\\index.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/nodes/index.adoc",
         "source_asset_ref": "ROSA-HCP-overview-of-nodes-487.png",
         "section_hint": "Overview of nodes",
         "related_entities": [
@@ -579,7 +579,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/overview/291_OpenShift_on_AWS_Intro_1122_docs.png",
         "viewer_path": "/wiki/figures/overview/291_OpenShift_on_AWS_Intro_1122_docs.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\welcome\\index.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/welcome/index.adoc",
         "source_asset_ref": "291_OpenShift_on_AWS_Intro_1122_docs.png",
         "section_hint": "OpenShift Container Platform 4.20 Documentation",
         "related_entities": [
@@ -596,7 +596,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/overview/oke-about-ocp-stack-image.png",
         "viewer_path": "/wiki/figures/overview/oke-about-ocp-stack-image.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\understanding-openshift.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/understanding-openshift.adoc",
         "source_asset_ref": "oke-about-ocp-stack-image.png",
         "section_hint": "Introduction to OpenShift Container Platform",
         "related_entities": [
@@ -613,7 +613,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/overview/247-OpenShift-Kubernetes-Overview.png",
         "viewer_path": "/wiki/figures/overview/247-OpenShift-Kubernetes-Overview.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\welcome\\kubernetes-overview.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/welcome/kubernetes-overview.adoc",
         "source_asset_ref": "247-OpenShift-Kubernetes-Overview.png",
         "section_hint": "Kubernetes overview",
         "related_entities": [
@@ -630,7 +630,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/overview/247_OpenShift_Kubernetes_Overview-2.png",
         "viewer_path": "/wiki/figures/overview/247_OpenShift_Kubernetes_Overview-2.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\welcome\\kubernetes-overview.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/welcome/kubernetes-overview.adoc",
         "source_asset_ref": "247_OpenShift_Kubernetes_Overview-2.png",
         "section_hint": "Kubernetes overview",
         "related_entities": [
@@ -647,7 +647,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/overview/247_OpenShift_Kubernetes_Overview-1.png",
         "viewer_path": "/wiki/figures/overview/247_OpenShift_Kubernetes_Overview-1.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\kubernetes-resources.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/kubernetes-resources.adoc",
         "source_asset_ref": "247_OpenShift_Kubernetes_Overview-1.png",
         "section_hint": "Kubernetes overview",
         "related_entities": [
@@ -673,7 +673,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/validation_and_troubleshooting/monitoring-dashboard-compute-resources.png",
         "viewer_path": "/wiki/figures/validation_and_troubleshooting/monitoring-dashboard-compute-resources.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\checking-cluster-resource-availability-and-utilization.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/checking-cluster-resource-availability-and-utilization.adoc",
         "source_asset_ref": "monitoring-dashboard-compute-resources.png",
         "section_hint": "Validating an installation",
         "related_entities": []
@@ -687,7 +687,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/web_console/cluster-settings-console.png",
         "viewer_path": "/wiki/figures/web_console/cluster-settings-console.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\snippets\\access-cluster-configuration-console.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/snippets/access-cluster-configuration-console.adoc",
         "source_asset_ref": "cluster-settings-console.png",
         "section_hint": "Configuring the web console in OpenShift Container Platform",
         "related_entities": [
@@ -704,7 +704,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/web_console/customizing-user-perspective.png",
         "viewer_path": "/wiki/figures/web_console/customizing-user-perspective.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\odc-customizing-a-perspective-using-form-view.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/odc-customizing-a-perspective-using-form-view.adoc",
         "source_asset_ref": "customizing-user-perspective.png",
         "section_hint": "Customizing the web console in OpenShift Container Platform",
         "related_entities": [
@@ -721,7 +721,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/web_console/odc_customizing_developer_catalog.png",
         "viewer_path": "/wiki/figures/web_console/odc_customizing_developer_catalog.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\odc_customizing-a-developer-catalog-or-its-sub-catalogs-using-the-form-view.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/odc_customizing-a-developer-catalog-or-its-sub-catalogs-using-the-form-view.adoc",
         "source_asset_ref": "odc_customizing_developer_catalog.png",
         "section_hint": "Customizing the web console in OpenShift Container Platform",
         "related_entities": [
@@ -738,7 +738,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/web_console/quick-start-conclusion.png",
         "viewer_path": "/wiki/figures/web_console/quick-start-conclusion.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\understanding-quick-start-elements.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/understanding-quick-start-elements.adoc",
         "source_asset_ref": "quick-start-conclusion.png",
         "section_hint": "Creating quick start tutorials in the web console",
         "related_entities": [
@@ -755,7 +755,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/web_console/quick-start-description.png",
         "viewer_path": "/wiki/figures/web_console/quick-start-description.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\understanding-quick-start-elements.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/understanding-quick-start-elements.adoc",
         "source_asset_ref": "quick-start-description.png",
         "section_hint": "Creating quick start tutorials in the web console",
         "related_entities": [
@@ -772,7 +772,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/web_console/quick-start-display-name.png",
         "viewer_path": "/wiki/figures/web_console/quick-start-display-name.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\understanding-quick-start-elements.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/understanding-quick-start-elements.adoc",
         "source_asset_ref": "quick-start-display-name.png",
         "section_hint": "Creating quick start tutorials in the web console",
         "related_entities": [
@@ -789,7 +789,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/web_console/quick-start-duration.png",
         "viewer_path": "/wiki/figures/web_console/quick-start-duration.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\understanding-quick-start-elements.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/understanding-quick-start-elements.adoc",
         "source_asset_ref": "quick-start-duration.png",
         "section_hint": "Creating quick start tutorials in the web console",
         "related_entities": [
@@ -806,7 +806,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/web_console/quick-start-icon.png",
         "viewer_path": "/wiki/figures/web_console/quick-start-icon.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\understanding-quick-start-elements.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/understanding-quick-start-elements.adoc",
         "source_asset_ref": "quick-start-icon.png",
         "section_hint": "Creating quick start tutorials in the web console",
         "related_entities": [
@@ -823,7 +823,7 @@
         "diagram_type": "image_figure",
         "asset_url": "/playbooks/wiki-assets/full_rebuild/web_console/quick-start-introduction.png",
         "viewer_path": "/wiki/figures/web_console/quick-start-introduction.png/index.html",
-        "source_file": "C:\\Users\\soulu\\cywell\\ocp-play-studio\\ocp-play-studio\\tmp_source\\openshift-docs-enterprise-4.20\\modules\\understanding-quick-start-elements.adoc",
+        "source_file": "tmp_source/openshift-docs-enterprise-4.20/modules/understanding-quick-start-elements.adoc",
         "source_asset_ref": "quick-start-introduction.png",
         "section_hint": "Creating quick start tutorials in the web console",
         "related_entities": [

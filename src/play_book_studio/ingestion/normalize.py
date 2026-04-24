@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from pathlib import Path
 import re
 from typing import Iterable
 
@@ -138,6 +139,17 @@ def _table_marker(table_text: str, *, caption: str = "") -> str:
     return f"\n\n[TABLE{attrs}]\n{table_text}\n[/TABLE]\n\n"
 
 
+def _figure_marker(src: str, *, caption: str = "", alt: str = "") -> str:
+    attrs = _marker_attrs(
+        src=src,
+        asset_url=src,
+        alt=alt or caption,
+        asset_ref=Path(str(src or "")).name if src else "",
+        asset_kind="figure",
+    )
+    return f"\n\n[FIGURE{attrs}]\n{caption or alt}\n[/FIGURE]\n\n"
+
+
 def _normalize_non_code_whitespace(text: str) -> str:
     text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\xa0", " ")
     text = re.sub(r"[ \t]+", " ", text)
@@ -188,7 +200,7 @@ def _split_reader_grade_paragraphs(text: str) -> list[str]:
 
 def _normalize_text_preserving_blocks(text: str) -> str:
     pattern = re.compile(
-        r"(\[CODE(?:\s+[^\]]+)?\].*?\[/CODE\]|\[TABLE(?:\s+[^\]]+)?\].*?\[/TABLE\])",
+        r"(\[CODE(?:\s+[^\]]+)?\].*?\[/CODE\]|\[TABLE(?:\s+[^\]]+)?\].*?\[/TABLE\]|\[FIGURE(?:\s+[^\]]+)?\].*?\[/FIGURE\])",
         re.DOTALL,
     )
     parts = pattern.split(text)
@@ -196,7 +208,7 @@ def _normalize_text_preserving_blocks(text: str) -> str:
     for part in parts:
         if not part:
             continue
-        if part.startswith("[CODE") or part.startswith("[TABLE"):
+        if part.startswith("[CODE") or part.startswith("[TABLE") or part.startswith("[FIGURE"):
             normalized.append(part.strip())
         else:
             cleaned = _normalize_non_code_whitespace(part)
@@ -453,6 +465,27 @@ def extract_document_ast(
         if isinstance(caption_tag, Tag):
             caption = caption_tag.get_text(" ", strip=True)
         tag.replace_with(NavigableString(_table_marker(table_text, caption=caption)))
+
+    for tag in article.find_all("figure"):
+        img = tag.find("img")
+        if not isinstance(img, Tag):
+            continue
+        src = str(img.get("src") or "").strip()
+        if not src:
+            tag.decompose()
+            continue
+        caption_tag = tag.find("figcaption")
+        caption = caption_tag.get_text(" ", strip=True) if isinstance(caption_tag, Tag) else ""
+        alt = str(img.get("alt") or "").strip()
+        tag.replace_with(NavigableString(_figure_marker(src, caption=caption, alt=alt)))
+
+    for tag in article.find_all("img"):
+        src = str(tag.get("src") or "").strip()
+        if not src:
+            tag.decompose()
+            continue
+        alt = str(tag.get("alt") or "").strip()
+        tag.replace_with(NavigableString(_figure_marker(src, caption=alt, alt=alt)))
 
     for heading in article.find_all(re.compile(r"^h[1-6]$")):
         level = int(heading.name[1:])

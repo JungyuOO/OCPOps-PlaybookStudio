@@ -108,6 +108,10 @@ def _viewer_html_for_path(root_dir: Path, viewer_path: str, *, page_mode: str = 
 
 def resolve_viewer_html(root_dir: Path, viewer_path: str, *, page_mode: str = "single") -> str | None:
     viewer_path = _canonicalize_viewer_path(viewer_path)
+    params = parse_qs(urlparse(viewer_path).query, keep_blank_values=False)
+    requested_page_mode = str((params.get("page_mode") or [page_mode])[0]).strip().lower()
+    if requested_page_mode in {"single", "multi"}:
+        page_mode = requested_page_mode
     customer_pack_draft_id = customer_pack_draft_id_from_viewer_path(viewer_path)
     if customer_pack_draft_id and not _customer_pack_read_allowed(root_dir, customer_pack_draft_id):
         return None

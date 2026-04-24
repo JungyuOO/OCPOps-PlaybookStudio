@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -20,7 +21,12 @@ from .source_books_viewer_resolver import (
     parse_active_runtime_markdown_viewer_path,
 )
 from .source_books_viewer_wiki import _build_wiki_supplementary_blocks
-from .source_books_wiki_relations import _active_runtime_markdown_path, _preferred_book_href
+from .source_books_wiki_relations import (
+    _active_runtime_markdown_path,
+    _figure_asset_filename,
+    _figure_viewer_href,
+    _preferred_book_href,
+)
 from .viewer_page import _render_page_overlay_toolbar
 from .viewers import (
     _build_section_metrics,
@@ -83,6 +89,137 @@ def _build_section_navigation(
         if next_anchor:
             navigation.append({"label": "다음", "href": f"#{next_anchor}", "title": next_heading})
     return navigation
+
+
+def _marker_attr_value(value: str) -> str:
+    return " ".join(str(value or "").replace('"', "'").split()).strip()
+
+
+def _figure_marker(block: dict[str, str]) -> str:
+    attrs = []
+    for key in (
+        "src",
+        "asset_url",
+        "asset_ref",
+        "alt",
+        "viewer_path",
+        "source_anchor",
+        "asset_kind",
+        "diagram_type",
+        "kind_label",
+    ):
+        value = _marker_attr_value(block.get(key, ""))
+        if value:
+            attrs.append(f'{key}="{value}"')
+    caption = str(block.get("caption") or "").strip()
+    return "[FIGURE {attrs}]\n{caption}\n[/FIGURE]".format(
+        attrs=" ".join(attrs),
+        caption=caption,
+    )
+
+
+def _section_has_figure(blocks: list[dict], *, asset_url: str, viewer_path: str, asset_ref: str) -> bool:
+    for block in blocks:
+        if str(block.get("kind") or "").strip() != "figure":
+            continue
+        if asset_url and str(block.get("asset_url") or block.get("src") or "").strip() == asset_url:
+            return True
+        if viewer_path and str(block.get("viewer_path") or "").strip() == viewer_path:
+            return True
+        if asset_ref and str(block.get("asset_ref") or "").strip() == asset_ref:
+            return True
+    return False
+
+
+def _load_root_json(root_dir: Path, relative_path: str) -> dict:
+    path = root_dir / relative_path
+    if not path.exists() or not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _root_figure_asset_by_name(root_dir: Path, slug: str, asset_name: str) -> dict:
+    payload = _load_root_json(root_dir, "data/wiki_relations/figure_assets.json")
+    entries = payload.get("entries") if isinstance(payload.get("entries"), dict) else {}
+    items = entries.get(str(slug or "").strip()) if isinstance(entries, dict) else []
+    if not isinstance(items, list):
+        return {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if _figure_asset_filename(item) == str(asset_name or "").strip():
+            return item
+    return {}
+
+
+def _relation_figure_blocks(root_dir: Path, book_slug: str, anchor: str) -> list[dict[str, str]]:
+    payload = _load_root_json(root_dir, "data/wiki_relations/figure_section_index.json")
+    by_slug = payload.get("by_slug") if isinstance(payload.get("by_slug"), dict) else {}
+    records = by_slug.get(str(book_slug or "").strip())
+    if not isinstance(records, list):
+        return []
+    blocks: list[dict[str, str]] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("section_anchor") or "").strip() != str(anchor or "").strip():
+            continue
+        asset_name = str(record.get("asset_name") or "").strip()
+        asset = _root_figure_asset_by_name(root_dir, book_slug, asset_name)
+        asset_url = str(asset.get("asset_url") or "").strip()
+        viewer_path = str(record.get("viewer_path") or "").strip() or _figure_viewer_href(book_slug, asset)
+        asset_ref = str(asset.get("source_asset_ref") or asset_name or _figure_asset_filename(asset)).strip()
+        blocks.append(
+            {
+                "kind": "figure",
+                "src": asset_url,
+                "asset_url": asset_url,
+                "asset_ref": asset_ref,
+                "caption": str(record.get("caption") or asset.get("caption") or asset.get("alt") or asset_name or "Figure").strip(),
+                "alt": str(asset.get("alt") or record.get("caption") or asset_name or "Figure").strip(),
+                "viewer_path": viewer_path,
+                "source_anchor": str(anchor or "").strip(),
+                "asset_kind": str(asset.get("asset_kind") or "figure").strip() or "figure",
+                "diagram_type": str(asset.get("diagram_type") or "").strip(),
+                "kind_label": str(asset.get("asset_kind") or "").strip(),
+            }
+        )
+    return blocks
+
+
+def _sections_with_relation_figures(root_dir: Path, book_slug: str, sections: list[dict]) -> list[dict]:
+    if not book_slug or not sections:
+        return sections
+    enriched: list[dict] = []
+    for row in sections:
+        next_row = dict(row)
+        anchor = str(next_row.get("anchor") or "").strip()
+        relation_blocks = _relation_figure_blocks(root_dir, book_slug, anchor)
+        if not relation_blocks:
+            enriched.append(next_row)
+            continue
+        blocks = [dict(block) for block in (next_row.get("blocks") or []) if isinstance(block, dict)]
+        if blocks:
+            for figure_block in relation_blocks:
+                if not _section_has_figure(
+                    blocks,
+                    asset_url=figure_block["asset_url"],
+                    viewer_path=figure_block["viewer_path"],
+                    asset_ref=figure_block["asset_ref"],
+                ):
+                    blocks.append(figure_block)
+            next_row["blocks"] = blocks
+            next_row["block_kinds"] = [str(block.get("kind") or "") for block in blocks if str(block.get("kind") or "")]
+        else:
+            existing_text = str(next_row.get("text") or "").strip()
+            figure_text = "\n\n".join(_figure_marker(block) for block in relation_blocks).strip()
+            next_row["text"] = "\n\n".join(part for part in (existing_text, figure_text) if part).strip()
+        enriched.append(next_row)
+    return enriched
 
 
 def _overlay_target_for_view(
@@ -164,6 +301,7 @@ def internal_viewer_html(root_dir: Path, viewer_path: str, *, page_mode: str = "
         eyebrow, summary = _playbook_viewer_chrome(playbook_book)
         content_sections = sections
 
+    content_sections = _sections_with_relation_figures(root_dir, book_slug, content_sections)
     visible_sections = _select_view_sections(content_sections, target_anchor=target_anchor, page_mode=page_mode)
     cards = _build_study_section_cards(visible_sections, book_slug=book_slug, target_anchor=target_anchor, embedded=embedded, root_dir=root_dir)
     overlay_target = _overlay_target_for_view(
@@ -237,6 +375,7 @@ def internal_active_runtime_markdown_viewer_html(root_dir: Path, viewer_path: st
             content_sections = _trim_leading_title_section(sections, title=str(title))
             summary = _markdown_summary(content_sections)
             source_url = ""
+    content_sections = _sections_with_relation_figures(root_dir, slug, content_sections)
     visible_sections = _select_view_sections(content_sections, target_anchor=request.fragment.strip(), page_mode=page_mode)
     cards = _build_study_section_cards(visible_sections, book_slug=slug, target_anchor=request.fragment.strip(), embedded=embedded, root_dir=root_dir)
     overlay_target = _overlay_target_for_view(
