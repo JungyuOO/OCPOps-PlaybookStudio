@@ -362,6 +362,258 @@ def _build_llmwiki_promotion_control_status(root: Path) -> dict[str, object]:
     }
 
 
+def _rail_ready(llmwiki_promotion: dict[str, object], key: str) -> bool:
+    for item in _list_from(llmwiki_promotion.get("status_rail")):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("key") or "").strip() == key:
+            return bool(item.get("ready"))
+    return False
+
+
+def _surface_status(*, ready: bool, watch: bool = False) -> str:
+    if ready:
+        return "ready"
+    if watch:
+        return "watch"
+    return "blocked"
+
+
+def _build_development_surface(
+    *,
+    surface_id: str,
+    title: str,
+    route: str,
+    ready: bool,
+    acceptance: str,
+    evidence: list[str],
+    next_action: str,
+    blockers: list[str] | None = None,
+    watch: bool = False,
+    required: bool = True,
+) -> dict[str, object]:
+    normalized_blockers = [str(item) for item in blockers or [] if str(item).strip()]
+    return {
+        "id": surface_id,
+        "title": title,
+        "route": route,
+        "owner_scope": "feat/dev-kugnus",
+        "required": required,
+        "ready": bool(ready),
+        "status": _surface_status(ready=ready, watch=watch and not ready),
+        "acceptance": acceptance,
+        "evidence": evidence,
+        "next_action": next_action,
+        "blockers": normalized_blockers,
+    }
+
+
+def _build_development_control_status(
+    *,
+    llmwiki_promotion: dict[str, object],
+    official_playbook_count: int,
+    customer_playbook_count: int,
+    user_corpus_chunk_count: int,
+    custom_document_count: int,
+    playable_asset_count: int,
+    source_of_truth_drift: dict[str, object],
+    product_rehearsal: dict[str, object],
+) -> dict[str, object]:
+    metrics = _dict_from(llmwiki_promotion.get("metrics"))
+    mode_contract = _dict_from(llmwiki_promotion.get("mode_contract"))
+    mode_ids = {
+        str(item.get("id") or "").strip()
+        for item in _list_from(mode_contract.get("supported_modes"))
+        if isinstance(item, dict)
+    }
+    selected_report = _dict_from(llmwiki_promotion.get("selected_report"))
+    official_chunks = _safe_int(metrics.get("official_chunks_count"))
+    official_code_blocks = _safe_int(metrics.get("official_code_blocks"))
+    official_figures = _safe_int(metrics.get("official_inline_figures"))
+    customer_sources = _safe_int(metrics.get("customer_master_source_count"))
+    customer_sections = _safe_int(metrics.get("customer_master_section_count"))
+    chat_pass_count = _safe_int(metrics.get("chat_live_pass_count"))
+    chat_total = _safe_int(metrics.get("chat_live_total"))
+    source_alignment = _dict_from(source_of_truth_drift.get("status_alignment"))
+    drift_mismatches = [
+        str(item)
+        for item in _list_from(source_alignment.get("mismatches"))
+        if str(item).strip()
+    ]
+    rehearsal_blockers = [
+        str(item)
+        for item in _list_from(product_rehearsal.get("blockers"))
+        if str(item).strip()
+    ]
+    rehearsal_exists = bool(product_rehearsal.get("exists")) and str(product_rehearsal.get("status") or "").strip() != "missing"
+    promotion_ready = bool(llmwiki_promotion.get("ready"))
+    official_ready = _rail_ready(llmwiki_promotion, "official") and official_chunks > 0 and official_code_blocks > 0
+    customer_ready = _rail_ready(llmwiki_promotion, "customer") and customer_sources > 0 and customer_sections > 0
+    runtime_ready = _rail_ready(llmwiki_promotion, "runtime")
+    chat_ready = _rail_ready(llmwiki_promotion, "chat") and {"learn", "ops"}.issubset(mode_ids) and chat_total > 0 and chat_pass_count == chat_total
+    viewer_ready = official_ready and official_playbook_count > 0 and official_figures > 0
+    library_ready = customer_ready and customer_playbook_count > 0 and user_corpus_chunk_count > 0
+    factory_ready = custom_document_count > 0 or customer_playbook_count > 0
+    harness_ready = promotion_ready and runtime_ready and not drift_mismatches
+    surfaces = [
+        _build_development_surface(
+            surface_id="control_tower",
+            title="Control Tower",
+            route="/playbook-library/control-tower",
+            ready=promotion_ready,
+            acceptance="현재 checkout의 promotion report가 stale 없이 전체 LLMWiki 상태를 대표한다.",
+            evidence=[
+                f"status={llmwiki_promotion.get('status') or 'unknown'}",
+                "HEAD matched" if selected_report.get("head_matches_current") else "HEAD mismatch",
+            ],
+            next_action="report가 stale이면 llmwiki-promotion을 다시 실행한다.",
+            blockers=[] if promotion_ready else [*map(str, _list_from(llmwiki_promotion.get("failures")))],
+        ),
+        _build_development_surface(
+            surface_id="studio_chat",
+            title="Studio Chat",
+            route="/studio",
+            ready=chat_ready,
+            acceptance="챗봇은 학습/운영 2모드만 노출하고, 두 모드 모두 live LLM/vector 검증을 통과한다.",
+            evidence=[
+                f"modes={', '.join(sorted(mode_ids)) or 'missing'}",
+                f"chat live={chat_pass_count}/{chat_total}",
+            ],
+            next_action="질문 유형별 회귀 matrix를 늘려 모드별 hallucination guard를 강화한다.",
+            blockers=[] if chat_ready else ["learn/ops mode contract or live chat matrix is incomplete"],
+        ),
+        _build_development_surface(
+            surface_id="official_manual_wiki",
+            title="Official Manual Wiki",
+            route="/docs/ocp/4.20/ko/cli_tools/index.html?page_mode=multi",
+            ready=official_ready,
+            acceptance="공식 매뉴얼은 chunks, code blocks, figures를 보존한 Gold source로 재생산된다.",
+            evidence=[
+                f"{official_chunks:,} chunks",
+                f"{official_code_blocks:,} code blocks",
+                f"{official_figures:,} figures",
+            ],
+            next_action="영문 잔류와 용어 사전 적용률을 gate에 추가한다.",
+            blockers=[] if official_ready else ["official gold contract is not ready"],
+        ),
+        _build_development_surface(
+            surface_id="customer_operating_books",
+            title="Customer Operating Books",
+            route="/playbooks/customer-packs/customer-master-kmsc-ocp-operations-playbook/index.html?page_mode=multi",
+            ready=library_ready,
+            acceptance="고객 PPT는 master 운영북과 private corpus에 합류해 챗봇 근거로 쓰인다.",
+            evidence=[
+                f"{customer_sources:,} source docs",
+                f"{customer_sections:,} master sections",
+                f"{customer_playbook_count:,} customer books",
+                f"{user_corpus_chunk_count:,} private chunks",
+            ],
+            next_action="고객 문서별 Q/A smoke를 promotion report에 더 촘촘히 편입한다.",
+            blockers=[] if library_ready else ["customer master or private corpus is incomplete"],
+        ),
+        _build_development_surface(
+            surface_id="wiki_viewer",
+            title="Wiki Viewer",
+            route="/studio",
+            ready=viewer_ready,
+            acceptance="viewer는 single/multi 모드에서 목차, inline figure, code block이 읽히는 책 경험을 제공한다.",
+            evidence=[
+                f"{official_playbook_count:,} official playbooks",
+                f"{official_figures:,} inline figures",
+            ],
+            next_action="브라우저 screenshot smoke를 대표 문서별로 자동 저장한다.",
+            blockers=[] if viewer_ready else ["viewer evidence is missing official playbooks or figures"],
+        ),
+        _build_development_surface(
+            surface_id="book_factory_repository",
+            title="Book Factory & Repository",
+            route="/playbook-library/repository",
+            ready=factory_ready,
+            acceptance="공식/사용자 원천은 수집, 검토, viewer 합류까지 하나의 흐름으로 추적된다.",
+            evidence=[
+                f"{custom_document_count:,} custom documents",
+                f"{playable_asset_count:,} playable assets",
+            ],
+            next_action="원천 요청 backlog와 materialization 결과를 같은 품질 gate로 연결한다.",
+            blockers=[] if factory_ready else ["no custom/customer material is visible to the factory"],
+            watch=not factory_ready,
+            required=False,
+        ),
+        _build_development_surface(
+            surface_id="automation_harness",
+            title="Automation Harness",
+            route="/playbook-library/control-tower",
+            ready=harness_ready,
+            acceptance="promotion, runtime, source-of-truth drift가 한 명령/한 report에서 판정된다.",
+            evidence=[
+                "runtime ready" if runtime_ready else "runtime blocked",
+                f"{len(drift_mismatches)} drift mismatches",
+            ],
+            next_action="fresh checkout one-command rebuild를 dev gate에 고정한다.",
+            blockers=drift_mismatches if drift_mismatches else ([] if harness_ready else ["promotion or runtime contract is not ready"]),
+        ),
+        _build_development_surface(
+            surface_id="product_rehearsal",
+            title="Product Rehearsal",
+            route="/playbook-library/control-tower",
+            ready=rehearsal_exists and not rehearsal_blockers,
+            acceptance="제품 시나리오 rehearsal가 현재 상태를 반영하고 blocker를 숨기지 않는다.",
+            evidence=[
+                f"status={product_rehearsal.get('status') or 'missing'}",
+                f"{len(rehearsal_blockers)} blockers",
+            ],
+            next_action="Control Tower 시나리오를 실제 사용자 흐름 기준으로 재정렬한다.",
+            blockers=rehearsal_blockers,
+            watch=not rehearsal_blockers,
+            required=False,
+        ),
+    ]
+    required_surfaces = [item for item in surfaces if bool(item.get("required", True))]
+    required_ready_count = sum(1 for item in required_surfaces if bool(item.get("ready")))
+    blocked_count = sum(1 for item in surfaces if item.get("status") == "blocked")
+    watch_count = sum(1 for item in surfaces if item.get("status") == "watch")
+    ready_count = sum(1 for item in surfaces if bool(item.get("ready")))
+    overall_ready = required_ready_count == len(required_surfaces) and blocked_count == 0
+    return {
+        "status": "ready" if overall_ready else "blocked" if blocked_count else "watch",
+        "ready": overall_ready,
+        "summary": {
+            "ready_count": ready_count,
+            "surface_count": len(surfaces),
+            "required_ready_count": required_ready_count,
+            "required_surface_count": len(required_surfaces),
+            "blocked_count": blocked_count,
+            "watch_count": watch_count,
+        },
+        "scope": {
+            "included": [
+                "Studio",
+                "Playbook Library",
+                "Control Tower",
+                "Wiki Viewer",
+                "Book Factory",
+                "Customer Operating Books",
+                "Official Manual Pipeline",
+                "Chatbot Runtime",
+            ],
+            "excluded": [
+                {
+                    "id": "ops_console",
+                    "title": "Ops Console",
+                    "reason": "다른 팀원 담당 lane이므로 feat/dev-kugnus 고도화 범위에서 제외",
+                    "route": "/ops-console",
+                }
+            ],
+        },
+        "surfaces": surfaces,
+        "verification_commands": [
+            "python -m unittest tests.test_chat_modes_contract tests.test_data_control_room_llmwiki",
+            "python -m play_book_studio.cli llmwiki-promotion --ui-base-url http://127.0.0.1:8896",
+            "npm run build",
+        ],
+    }
+
+
 @lru_cache(maxsize=8)
 def _build_data_control_room_payload_cached(
     root_dir: str,
@@ -563,6 +815,16 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "ragas_eval": _path_snapshot(settings.ragas_eval_report_path),
         "runtime_report": _path_snapshot(settings.runtime_report_path),
     }
+    development_control = _build_development_control_status(
+        llmwiki_promotion=llmwiki_promotion,
+        official_playbook_count=len(core_manualbooks),
+        customer_playbook_count=len(customer_pack_runtime_books),
+        user_corpus_chunk_count=user_library_corpus_chunk_count,
+        custom_document_count=int(custom_documents.get("source_count") or len(custom_documents.get("books") or [])),
+        playable_asset_count=playable_asset_count,
+        source_of_truth_drift=source_of_truth_drift,
+        product_rehearsal=product_rehearsal,
+    )
     return {
         "generated_at": _iso_now(),
         "active_pack": {
@@ -608,6 +870,8 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "llmwiki_promotion_status": str(llmwiki_promotion.get("status") or "unknown"),
             "llmwiki_promotion_report_stale": bool((_dict_from(llmwiki_promotion.get("selected_report"))).get("stale")),
             "llmwiki_promotion_failure_count": len(_list_from(llmwiki_promotion.get("failures"))),
+            "development_control_status": str(development_control.get("status") or "unknown"),
+            "development_control_ready": bool(development_control.get("ready")),
             "official_gold_ok": _promotion_contract_ok({"summary": {"contracts": _dict_from(llmwiki_promotion.get("contracts"))}}, "official_gold"),
             "customer_master_ok": _promotion_contract_ok({"summary": {"contracts": _dict_from(llmwiki_promotion.get("contracts"))}}, "customer_master"),
             "runtime_live_ok": _promotion_contract_ok({"summary": {"contracts": _dict_from(llmwiki_promotion.get("contracts"))}}, "runtime_report"),
@@ -680,6 +944,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "release_candidate_freeze": release_candidate_freeze,
         "product_rehearsal": product_rehearsal,
         "llmwiki_promotion": llmwiki_promotion,
+        "development_control": development_control,
         "manual_book_library": manual_book_library,
         "topic_playbooks": {"selected_dir": str(selected_playbook_dir) if selected_playbook_dir else "", "books": topic_playbooks},
         "operation_playbooks": {"selected_dir": str(selected_playbook_dir) if selected_playbook_dir else "", "books": operation_playbooks},

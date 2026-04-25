@@ -201,6 +201,8 @@ export interface DataControlRoomSummary {
   runtime_live_ok?: boolean;
   runtime_maintenance_ok?: boolean;
   chat_matrix_ok?: boolean;
+  development_control_ready?: boolean;
+  development_control_status?: string;
   product_gate_pass_rate?: number | null;
   topic_playbook_count: number;
   derived_playbook_count: number;
@@ -253,6 +255,44 @@ export interface LlmWikiPromotionStatus {
   mode_contract?: ChatModeContract;
 }
 
+export interface DevelopmentControlSurface {
+  id: string;
+  title: string;
+  route: string;
+  owner_scope: string;
+  required: boolean;
+  ready: boolean;
+  status: 'ready' | 'watch' | 'blocked' | string;
+  acceptance: string;
+  evidence: string[];
+  next_action: string;
+  blockers: string[];
+}
+
+export interface DevelopmentControlStatus {
+  status: 'ready' | 'watch' | 'blocked' | string;
+  ready: boolean;
+  summary: {
+    ready_count: number;
+    surface_count: number;
+    required_ready_count: number;
+    required_surface_count: number;
+    blocked_count: number;
+    watch_count: number;
+  };
+  scope: {
+    included: string[];
+    excluded: Array<{
+      id: string;
+      title: string;
+      reason: string;
+      route: string;
+    }>;
+  };
+  surfaces: DevelopmentControlSurface[];
+  verification_commands: string[];
+}
+
 export interface DataControlRoomResponse {
   active_pack: {
     pack_label: string;
@@ -295,6 +335,7 @@ export interface DataControlRoomResponse {
   buyer_packet_bundle?: BuyerPacketBucket;
   release_candidate_freeze?: ReleaseCandidateFreezeSummary;
   llmwiki_promotion?: LlmWikiPromotionStatus;
+  development_control?: DevelopmentControlStatus;
   topic_playbooks: LibraryBucket;
   operation_playbooks: LibraryBucket;
   troubleshooting_playbooks: LibraryBucket;

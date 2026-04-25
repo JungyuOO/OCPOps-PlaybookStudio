@@ -12,7 +12,10 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from play_book_studio.app.data_control_room import _build_llmwiki_promotion_control_status
+from play_book_studio.app.data_control_room import (
+    _build_development_control_status,
+    _build_llmwiki_promotion_control_status,
+)
 
 
 def _write_report(root: Path, *, head: str = "abc123") -> Path:
@@ -110,6 +113,37 @@ class DataControlRoomLlmWikiTests(unittest.TestCase):
         self.assertEqual("stale", status["status"])
         self.assertFalse(status["ready"])
         self.assertTrue(status["selected_report"]["stale"])
+
+    def test_development_control_excludes_ops_console_and_scores_surfaces(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_report(root, head="abc123")
+            with patch(
+                "play_book_studio.app.data_control_room._current_git_context",
+                return_value={"branch": "feat/dev-kugnus", "head": "abc123", "dirty_tracked_files": False},
+            ):
+                promotion = _build_llmwiki_promotion_control_status(root)
+
+        status = _build_development_control_status(
+            llmwiki_promotion=promotion,
+            official_playbook_count=70,
+            customer_playbook_count=10,
+            user_corpus_chunk_count=10,
+            custom_document_count=10,
+            playable_asset_count=90,
+            source_of_truth_drift={"status_alignment": {"mismatches": []}},
+            product_rehearsal={"exists": True, "status": "ok", "blockers": []},
+        )
+
+        self.assertTrue(status["ready"])
+        self.assertEqual("ready", status["status"])
+        self.assertEqual(0, status["summary"]["blocked_count"])
+        surface_ids = [item["id"] for item in status["surfaces"]]
+        self.assertIn("studio_chat", surface_ids)
+        self.assertIn("automation_harness", surface_ids)
+        self.assertNotIn("ops_console", surface_ids)
+        excluded_ids = [item["id"] for item in status["scope"]["excluded"]]
+        self.assertEqual(["ops_console"], excluded_ids)
 
 
 if __name__ == "__main__":

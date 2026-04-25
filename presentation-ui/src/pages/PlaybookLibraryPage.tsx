@@ -1554,6 +1554,15 @@ const PlaybookLibraryPage: React.FC = () => {
   const llmwikiReady = Boolean(llmwikiPromotion?.ready ?? summary?.llmwiki_promotion_ready);
   const llmwikiStale = Boolean(llmwikiReport?.stale ?? summary?.llmwiki_promotion_report_stale);
   const llmwikiGeneratedAt = llmwikiReport?.generated_at ? new Date(llmwikiReport.generated_at).toLocaleString() : 'No report';
+  const developmentControl = controlRoom?.development_control;
+  const developmentSurfaces = developmentControl?.surfaces ?? [];
+  const developmentSummary = developmentControl?.summary;
+  const developmentExcluded = developmentControl?.scope?.excluded ?? [];
+  const developmentStatusLabel = developmentControl?.ready
+    ? 'Ready'
+    : developmentControl?.status === 'watch'
+      ? 'Watch'
+      : developmentControl?.status ?? 'Missing';
   const officialCorpusBooks = [...(controlRoom?.corpus?.books ?? [])];
   const officialPlaybookBooks = [...(controlRoom?.manualbooks?.books ?? [])];
   const customDocumentBooks = [...(controlRoom?.custom_documents?.books ?? [])];
@@ -1902,6 +1911,81 @@ const PlaybookLibraryPage: React.FC = () => {
                 </div>
               </div>
             </section>
+            {developmentControl && (
+              <section className="development-control-panel box-container">
+                <div className="development-control-header">
+                  <div>
+                    <span className="vision-compare-eyebrow">Dev-Kugnus Product Scope</span>
+                    <h2>Ops Console 제외 제품 고도화 보드</h2>
+                    <p>
+                      Studio, 문서 viewer, Library, Book Factory, 공식/고객 문서 파이프라인을 같은 readiness 계약으로 묶어 봅니다.
+                    </p>
+                  </div>
+                  <div className={`development-ready-badge ${developmentControl.ready ? 'ready' : developmentControl.status === 'watch' ? 'watch' : 'blocked'}`}>
+                    {developmentControl.ready ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+                    <span>{developmentStatusLabel}</span>
+                  </div>
+                </div>
+
+                <div className="development-summary-strip" aria-label="development control summary">
+                  <div>
+                    <span>Required</span>
+                    <strong>
+                      {developmentSummary?.required_ready_count ?? 0} / {developmentSummary?.required_surface_count ?? 0}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>All Surfaces</span>
+                    <strong>
+                      {developmentSummary?.ready_count ?? 0} / {developmentSummary?.surface_count ?? developmentSurfaces.length}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Watch</span>
+                    <strong>{developmentSummary?.watch_count ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>Blocked</span>
+                    <strong>{developmentSummary?.blocked_count ?? 0}</strong>
+                  </div>
+                </div>
+
+                <div className="development-surface-grid">
+                  {developmentSurfaces.map((surface) => (
+                    <article key={surface.id} className={`development-surface-card ${surface.status}`}>
+                      <div className="development-surface-top">
+                        <span>{surface.required ? 'Required' : 'Watch lane'}</span>
+                        {surface.ready ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                      </div>
+                      <h3>{surface.title}</h3>
+                      <p>{surface.acceptance}</p>
+                      <div className="development-surface-evidence">
+                        {surface.evidence.slice(0, 3).map((item) => (
+                          <span key={`${surface.id}-${item}`}>{item}</span>
+                        ))}
+                      </div>
+                      {surface.blockers.length > 0 ? (
+                        <div className="development-surface-blocker">{surface.blockers[0]}</div>
+                      ) : (
+                        <div className="development-surface-next">{surface.next_action}</div>
+                      )}
+                      <a className="development-surface-link" href={surface.route}>
+                        <span>Open surface</span>
+                        <ExternalLink size={14} />
+                      </a>
+                    </article>
+                  ))}
+                </div>
+
+                {developmentExcluded.length > 0 && (
+                  <div className="development-excluded-note">
+                    <span>Excluded lane</span>
+                    <strong>{developmentExcluded.map((item) => item.title).join(', ')}</strong>
+                    <p>{developmentExcluded.map((item) => item.reason).join(' · ')}</p>
+                  </div>
+                )}
+              </section>
+            )}
             {comparisonBook && (
               <section className="vision-compare box-container">
                 <div className="vision-compare-header">
