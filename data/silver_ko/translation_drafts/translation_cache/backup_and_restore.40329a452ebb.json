@@ -4594,7 +4594,7 @@
     "s81.b6.paragraph": "기본적으로 각 OADP 배포는 네임스페이스(namespace) 간 클러스터 수준의 액세스를 갖습니다.",
     "s82.b10.paragraph": "Write Once Read Many (WORM) 버킷",
     "s84.b0.table.cell.0.1": "Velero: CPU - 요청 200m, 제한 1000m 메모리 - 요청 256Mi, 제한 1024Mi",
-    "s84.b0.table.cell.0.2": "Velero: CPU- Request 200m, Limits 2000m Memory- Request 256Mi, Limits 2048Mi",
+    "s84.b0.table.cell.0.2": "Velero: CPU - Request 200m, Limits 2000m Memory - Request 256Mi, Limits 2048Mi",
     "s84.b0.table.cell.1.1": "[3] Restic: CPU - 요청 1000m, 제한 2000m 메모리 - 요청 16Gi, 제한 32Gi",
     "s84.b0.table.cell.1.2": "[4] Restic: CPU - Request 2000m, Limits 8000m Memory - Request 16Gi, Limits 40Gi",
     "s85.b4.paragraph": "따라서, 포드에서 CPU 제한을 사용하는 것은 안티 패턴으로 간주됩니다.",

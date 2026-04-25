@@ -48,6 +48,7 @@ from .models import (
     SourceManifestEntry,
 )
 from .normalize import extract_document_ast, project_normalized_sections
+from .official_figures import write_official_figure_relation_sidecars
 from .playbook_materialization import (
     load_approved_playbook_payload,
     project_playbook_payload_sections,
@@ -100,6 +101,81 @@ def _write_playbook_payloads(path: Path, books_dir: Path, payloads: list[dict]) 
     for stale_path in books_dir.glob("*.json"):
         if stale_path.name not in expected_filenames:
             stale_path.unlink()
+
+
+def _semantic_role_for_chunk(chunk: ChunkRecord) -> str:
+    if chunk.chunk_type in {"procedure", "command"}:
+        return "procedure"
+    if chunk.chunk_type == "concept":
+        return "concept"
+    return "reference"
+
+
+def _bm25_row_from_chunk(chunk: ChunkRecord) -> dict[str, object]:
+    return {
+        "chunk_id": chunk.chunk_id,
+        "book_slug": chunk.book_slug,
+        "book_title": chunk.book_title,
+        "chapter": chunk.chapter,
+        "section": chunk.section,
+        "section_id": chunk.section_id,
+        "anchor": chunk.anchor,
+        "source_url": chunk.source_url,
+        "viewer_path": chunk.viewer_path,
+        "text": chunk.text,
+        "token_count": chunk.token_count,
+        "ordinal": chunk.ordinal,
+        "section_path": list(chunk.section_path),
+        "chunk_type": chunk.chunk_type,
+        "source_id": chunk.source_id,
+        "source_lane": chunk.source_lane,
+        "source_type": chunk.source_type,
+        "source_collection": chunk.source_collection,
+        "product": chunk.product,
+        "version": chunk.version,
+        "locale": chunk.locale,
+        "source_language": chunk.source_language,
+        "display_language": chunk.display_language,
+        "translation_status": chunk.translation_status,
+        "translation_stage": chunk.translation_stage,
+        "translation_source_language": chunk.translation_source_language,
+        "translation_source_url": chunk.translation_source_url,
+        "translation_source_fingerprint": chunk.translation_source_fingerprint,
+        "original_title": chunk.original_title,
+        "legal_notice_url": chunk.legal_notice_url,
+        "license_or_terms": chunk.license_or_terms,
+        "review_status": chunk.review_status,
+        "trust_score": chunk.trust_score,
+        "verifiability": chunk.verifiability,
+        "updated_at": chunk.updated_at,
+        "parsed_artifact_id": chunk.parsed_artifact_id,
+        "tenant_id": chunk.tenant_id,
+        "workspace_id": chunk.workspace_id,
+        "parent_pack_id": chunk.parent_pack_id,
+        "pack_version": chunk.pack_version,
+        "bundle_scope": chunk.bundle_scope,
+        "classification": chunk.classification,
+        "access_groups": list(chunk.access_groups),
+        "provider_egress_policy": chunk.provider_egress_policy,
+        "approval_state": chunk.approval_state,
+        "publication_state": chunk.publication_state,
+        "redaction_state": chunk.redaction_state,
+        "surface_kind": chunk.surface_kind,
+        "source_unit_kind": chunk.source_unit_kind,
+        "source_unit_id": chunk.source_unit_id or chunk.section_id or chunk.anchor,
+        "source_unit_anchor": chunk.source_unit_anchor or chunk.anchor,
+        "origin_method": chunk.origin_method,
+        "ocr_status": chunk.ocr_status,
+        "citation_eligible": chunk.citation_eligible,
+        "citation_block_reason": chunk.citation_block_reason,
+        "semantic_role": _semantic_role_for_chunk(chunk),
+        "block_kinds": list(chunk.block_kinds),
+        "cli_commands": list(chunk.cli_commands),
+        "error_strings": list(chunk.error_strings),
+        "k8s_objects": list(chunk.k8s_objects),
+        "operator_names": list(chunk.operator_names),
+        "verification_hints": list(chunk.verification_hints),
+    }
 
 
 def _runtime_source_lane(entry: SourceManifestEntry, content_status: str) -> str:
@@ -459,6 +535,12 @@ def run_ingestion_pipeline(
         settings.playbook_books_dir,
         playbook_documents,
     )
+    figure_sidecars = write_official_figure_relation_sidecars(settings, playbook_documents)
+    _progress(
+        "[figures] "
+        f"figure_blocks={figure_sidecars['figure_count']} "
+        f"matched_sections={figure_sidecars['matched_section_count']}"
+    )
     _save_log(settings, log)
 
     log.stage = "chunk"
@@ -476,39 +558,7 @@ def run_ingestion_pipeline(
         (settings.chunks_path,),
         chunk_rows,
     )
-    bm25_rows = [
-        {
-            "chunk_id": chunk.chunk_id,
-            "book_slug": chunk.book_slug,
-            "chapter": chunk.chapter,
-            "section": chunk.section,
-            "anchor": chunk.anchor,
-            "source_url": chunk.source_url,
-            "viewer_path": chunk.viewer_path,
-            "text": chunk.text,
-            "section_path": list(chunk.section_path),
-            "chunk_type": chunk.chunk_type,
-            "source_id": chunk.source_id,
-            "source_lane": chunk.source_lane,
-            "source_type": chunk.source_type,
-            "source_collection": chunk.source_collection,
-            "product": chunk.product,
-            "version": chunk.version,
-            "locale": chunk.locale,
-            "translation_status": chunk.translation_status,
-            "review_status": chunk.review_status,
-            "trust_score": chunk.trust_score,
-            "semantic_role": "procedure" if chunk.chunk_type in {"procedure", "command"} else (
-                "concept" if chunk.chunk_type == "concept" else "reference"
-            ),
-            "cli_commands": list(chunk.cli_commands),
-            "error_strings": list(chunk.error_strings),
-            "k8s_objects": list(chunk.k8s_objects),
-            "operator_names": list(chunk.operator_names),
-            "verification_hints": list(chunk.verification_hints),
-        }
-        for chunk in chunks
-    ]
+    bm25_rows = [_bm25_row_from_chunk(chunk) for chunk in chunks]
     _write_jsonl_targets(
         (settings.bm25_corpus_path,),
         bm25_rows,

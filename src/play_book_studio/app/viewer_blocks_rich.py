@@ -256,7 +256,15 @@ def _render_table_block_html(
     """.format(caption_html=caption_html, header_html=header_html, rows="".join(body_rows)).strip()
 
 
-def _render_figure_block_html(src: str, *, caption: str = "", alt: str = "", kind: str = "", diagram_type: str = "") -> str:
+def _render_figure_block_html(
+    src: str,
+    *,
+    caption: str = "",
+    alt: str = "",
+    kind: str = "",
+    diagram_type: str = "",
+    viewer_path: str = "",
+) -> str:
     safe_src = html.escape(src, quote=True)
     safe_alt = html.escape(alt or caption or "figure", quote=True)
     caption_html = f"<figcaption>{html.escape(caption)}</figcaption>" if caption.strip() else ""
@@ -269,10 +277,12 @@ def _render_figure_block_html(src: str, *, caption: str = "", alt: str = "", kin
     if normalized_kind == "diagram":
         label = "Diagram" if not normalized_diagram_type else f"Diagram · {normalized_diagram_type.replace('_', ' ')}"
         eyebrow_html = f'<div class="figure-eyebrow">{html.escape(label)}</div>'
-    href = src
+    href = viewer_path.strip() or src
     external_attrs = ' target="_blank" rel="noreferrer"'
     match = WIKI_ASSET_URL_RE.fullmatch(src.strip())
-    if match is not None:
+    if viewer_path.strip():
+        external_attrs = ""
+    elif match is not None:
         href = "/wiki/figures/{slug}/{asset_name}/index.html".format(slug=match.group("slug"), asset_name=match.group("asset_name"))
         external_attrs = ""
     meta_bits = [str(kind or "").strip(), str(diagram_type or "").strip()]
@@ -405,6 +415,7 @@ def _render_playbook_block_html(block: dict[str, Any]) -> str:
             alt=str(block.get("alt") or "").strip(),
             kind=str(block.get("kind_label") or block.get("asset_kind") or "").strip(),
             diagram_type=str(block.get("diagram_type") or "").strip(),
+            viewer_path=str(block.get("viewer_path") or "").strip(),
         )
     return ""
 

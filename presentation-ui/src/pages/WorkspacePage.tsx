@@ -32,6 +32,7 @@ import {
   CUSTOMER_PACK_UPLOAD_ACCEPT,
   type ChatResponse,
   type ChatCitation,
+  type ChatModeContractItem,
   type ChatRelatedLink,
   type CustomerPackBook,
   type CustomerPackDraft,
@@ -131,14 +132,16 @@ type OutlinePanelSectionKey = 'official_manuals' | 'custom_documents' | 'test_ru
 type SignalsFavoriteFilter = 'favorites' | 'edited';
 type ChatMode = 'learn' | 'ops';
 
-const CHAT_MODE_OPTIONS: Array<{
+type ChatModeOption = {
   id: ChatMode;
   label: string;
   shortLabel: string;
   title: string;
   cue: string;
   summary: string;
-}> = [
+};
+
+const CHAT_MODE_OPTIONS: ChatModeOption[] = [
   {
     id: 'ops',
     label: '운영 모드',
@@ -156,6 +159,27 @@ const CHAT_MODE_OPTIONS: Array<{
     summary: '공식 매뉴얼과 고객 자료를 교육 문서로 읽고 개념, 배경, 다음 학습 경로를 citation 중심으로 안내합니다.',
   },
 ];
+
+function normalizeWorkspaceChatMode(value: string | undefined): ChatMode {
+  return value === 'learn' ? 'learn' : 'ops';
+}
+
+function chatModeOptionsFromContract(items: ChatModeContractItem[]): ChatModeOption[] {
+  const options = items
+    .map((item) => {
+      const id = normalizeWorkspaceChatMode(String(item.id || 'ops'));
+      const fallback = CHAT_MODE_OPTIONS.find((mode) => mode.id === id) ?? CHAT_MODE_OPTIONS[0];
+      return {
+        ...fallback,
+        id,
+        label: String(item.label || fallback.label),
+        cue: String(item.hallucination_guard || item.contract || fallback.cue),
+        summary: String(item.contract || fallback.summary),
+      };
+    })
+    .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index);
+  return options.length > 0 ? options : CHAT_MODE_OPTIONS;
+}
 
 interface OutlineTocNode {
   id: string;
@@ -873,6 +897,7 @@ export default function WorkspacePage() {
     const saved = window.localStorage.getItem('workspace.chatMode');
     return saved === 'learn' || saved === 'ops' ? saved : 'ops';
   });
+  const [chatModeContractItems, setChatModeContractItems] = useState<ChatModeContractItem[]>([]);
   const [activeTestTrace, setActiveTestTrace] = useState<WorkspaceTestTrace | null>(null);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState>({ kind: 'empty' });
@@ -1028,8 +1053,12 @@ export default function WorkspacePage() {
     [],
   );
   const activeChatMode = useMemo(
-    () => CHAT_MODE_OPTIONS.find((mode) => mode.id === chatMode) ?? CHAT_MODE_OPTIONS[0],
-    [chatMode],
+    () => chatModeOptionsFromContract(chatModeContractItems).find((mode) => mode.id === chatMode) ?? CHAT_MODE_OPTIONS[0],
+    [chatMode, chatModeContractItems],
+  );
+  const chatModeOptions = useMemo(
+    () => chatModeOptionsFromContract(chatModeContractItems),
+    [chatModeContractItems],
   );
   const activeFooterConnection = useMemo(
     () => footerConnections.find((item) => item.connection_id === opsConnectionId) ?? footerConnections[0] ?? null,
@@ -1374,6 +1403,15 @@ export default function WorkspacePage() {
         setManualBooks(sourceBooks);
         setCustomDocumentBooks(room.custom_documents?.books ?? []);
         setCustomDocumentSourceCount(room.summary.custom_document_count ?? room.custom_documents?.source_count ?? room.custom_documents?.books?.length ?? 0);
+        const supportedModes = room.llmwiki_promotion?.mode_contract?.supported_modes ?? [];
+        setChatModeContractItems(supportedModes);
+        const contractedOptions = chatModeOptionsFromContract(supportedModes);
+        const contractedModeIds = contractedOptions.map((mode) => mode.id);
+        setChatMode((current) => (
+          contractedModeIds.includes(current)
+            ? current
+            : normalizeWorkspaceChatMode(String(room.llmwiki_promotion?.mode_contract?.default_mode || 'ops'))
+        ));
         setDrafts(nextDrafts);
       } catch (error) {
         console.error(error);
@@ -3171,7 +3209,7 @@ export default function WorkspacePage() {
                       {activeChatMode.summary}
                     </p>
                     <div className="welcome-vision-grid welcome-chat-mode-grid">
-                      {CHAT_MODE_OPTIONS.map((mode) => {
+                      {chatModeOptions.map((mode) => {
                         const Icon = mode.id === 'learn' ? BookOpen : Cpu;
                         return (
                           <button
@@ -3318,7 +3356,7 @@ export default function WorkspacePage() {
               <div className="chat-input-wrapper">
                 <div className="input-container glass-panel">
                   <div className="chat-mode-switch" role="tablist" aria-label="chat mode">
-                    {CHAT_MODE_OPTIONS.map((mode) => {
+                    {chatModeOptions.map((mode) => {
                       const Icon = mode.id === 'learn' ? BookOpen : Cpu;
                       return (
                         <button

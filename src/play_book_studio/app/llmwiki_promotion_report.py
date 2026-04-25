@@ -144,6 +144,16 @@ def _official_gold_contract(payload: dict[str, Any]) -> dict[str, Any]:
     )
     figure_sidecar_count = _safe_int(metrics.get("figure_sidecar_count"))
     figure_blocks = _safe_int(block_counts.get("figure"))
+    figure_relation_coverage = (
+        metrics.get("figure_relation_coverage")
+        if isinstance(metrics.get("figure_relation_coverage"), dict)
+        else {}
+    )
+    bm25_metadata_contract = (
+        metrics.get("bm25_metadata_contract")
+        if isinstance(metrics.get("bm25_metadata_contract"), dict)
+        else {}
+    )
     checks = {
         "official_gate_ok": payload.get("status") == "ok",
         "chunks_and_bm25_match": _safe_int(metrics.get("chunks_count")) > 0
@@ -161,6 +171,11 @@ def _official_gold_contract(payload: dict[str, Any]) -> dict[str, Any]:
             "code_blocks": block_counts.get("code"),
             "figure_sidecar_count": figure_sidecar_count,
             "playbook_figure_blocks": figure_blocks,
+            "figure_relation_status": figure_relation_coverage.get("status"),
+            "figure_missing_relation_count": _safe_int(figure_relation_coverage.get("missing_relation_count")),
+            "figure_matched_section_count": _safe_int(figure_relation_coverage.get("matched_section_count")),
+            "bm25_metadata_status": bm25_metadata_contract.get("status"),
+            "bm25_metadata_missing_row_count": _safe_int(bm25_metadata_contract.get("missing_row_count")),
         },
         "failures": list(payload.get("failures") or []),
     }

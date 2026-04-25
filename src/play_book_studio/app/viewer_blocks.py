@@ -172,6 +172,7 @@ def _render_normalized_section_html(text: str) -> str:
                     alt=str(attrs.get("alt") or "").strip(),
                     kind=str(attrs.get("kind") or "").strip(),
                     diagram_type=str(attrs.get("diagram_type") or "").strip(),
+                    viewer_path=str(attrs.get("viewer_path") or "").strip(),
                 )
             )
             continue

@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-04-25T00:50:40+00:00",
+  "generated_at_utc": "2026-04-25T17:04:54+00:00",
   "active_group": "full_rebuild",
   "runtime_count": 113,
   "source_manifest_path": "data/wiki_runtime_books/full_rebuild_manifest.json",
@@ -774,7 +774,7 @@
         "machine_translated_draft",
         "translated_ko_draft"
       ],
-      "updated_at": "2026-04-25T00:27:34Z",
+      "updated_at": "2026-04-25T16:44:49Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/distributed_tracing.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/distributed_tracing.md"
@@ -3260,7 +3260,7 @@
         "machine_translated_draft",
         "translated_ko_draft"
       ],
-      "updated_at": "2026-04-25T00:30:38Z",
+      "updated_at": "2026-04-25T16:44:50Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/power_monitoring.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/power_monitoring.md"
@@ -3415,7 +3415,7 @@
         "machine_translated_draft",
         "translated_ko_draft"
       ],
-      "updated_at": "2026-04-25T00:30:41Z",
+      "updated_at": "2026-04-25T16:44:51Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/red_hat_build_of_opentelemetry.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/red_hat_build_of_opentelemetry.md"

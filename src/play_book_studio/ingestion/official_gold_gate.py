@@ -11,6 +11,7 @@ from typing import Any
 from play_book_studio.app.server_routes_viewer import resolve_viewer_html
 from play_book_studio.config.settings import load_settings
 from play_book_studio.ingestion.localization_quality import build_official_ko_localization_audit
+from play_book_studio.ingestion.official_figures import build_official_figure_relation_sidecars
 from play_book_studio.source_provenance import source_fingerprint_for_entry, source_provenance_payload, source_ref_for_entry
 
 
@@ -719,6 +720,108 @@ def _figure_sidecar_count(root_dir: Path) -> int:
     return sum(len(items) for items in entries.values() if isinstance(items, list)) if isinstance(entries, dict) else 0
 
 
+def _count_payload_entries(payload: dict[str, Any], key: str) -> int:
+    entries = payload.get(key) if isinstance(payload.get(key), dict) else {}
+    return sum(len(items) for items in entries.values() if isinstance(items, list)) if isinstance(entries, dict) else 0
+
+
+def _figure_relation_signatures(payload: dict[str, Any]) -> set[tuple[str, str, str]]:
+    by_slug = payload.get("by_slug") if isinstance(payload.get("by_slug"), dict) else {}
+    signatures: set[tuple[str, str, str]] = set()
+    if not isinstance(by_slug, dict):
+        return signatures
+    for slug, records in by_slug.items():
+        if not isinstance(records, list):
+            continue
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            signatures.add(
+                (
+                    str(slug or "").strip(),
+                    str(record.get("section_anchor") or "").strip(),
+                    str(record.get("asset_name") or "").strip(),
+                )
+            )
+    return {signature for signature in signatures if all(signature)}
+
+
+def _figure_relation_coverage(root_dir: Path, playbook_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    expected = build_official_figure_relation_sidecars(playbook_rows)
+    expected_section_index = expected["figure_section_index"]
+    expected_signatures = _figure_relation_signatures(expected_section_index)
+    figure_assets_path = root_dir / "data/wiki_relations/figure_assets.json"
+    figure_section_path = root_dir / "data/wiki_relations/figure_section_index.json"
+    actual_assets = _safe_read_json(figure_assets_path)
+    actual_section_index = _safe_read_json(figure_section_path)
+    actual_signatures = _figure_relation_signatures(actual_section_index)
+    missing_signatures = sorted(expected_signatures - actual_signatures)
+    expected_count = int(expected_section_index.get("figure_count") or 0)
+    sidecar_count = _count_payload_entries(actual_assets, "entries")
+    matched_section_count = _count_payload_entries(actual_section_index, "by_slug")
+    ok = (
+        expected_count == 0
+        or (
+            not missing_signatures
+            and sidecar_count >= expected_count
+            and matched_section_count >= expected_count
+        )
+    )
+    return {
+        "status": "ok" if ok else "fail",
+        "expected_figure_blocks": expected_count,
+        "figure_sidecar_count": sidecar_count,
+        "matched_section_count": matched_section_count,
+        "missing_relation_count": len(missing_signatures),
+        "sample_missing_relations": [
+            {
+                "book_slug": slug,
+                "section_anchor": section_anchor,
+                "asset_name": asset_name,
+            }
+            for slug, section_anchor, asset_name in missing_signatures[:10]
+        ],
+    }
+
+
+def _bm25_metadata_contract(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    required_fields = (
+        "section_id",
+        "surface_kind",
+        "source_unit_kind",
+        "source_unit_id",
+        "source_unit_anchor",
+        "origin_method",
+        "ocr_status",
+        "block_kinds",
+        "citation_eligible",
+    )
+    missing_by_field = {field: 0 for field in required_fields}
+    figure_rows = 0
+    figure_rows_with_block_kind = 0
+    for row in rows:
+        for field in required_fields:
+            value = row.get(field)
+            if value is None or value == "" or value == []:
+                missing_by_field[field] += 1
+        block_kinds = [str(item) for item in (row.get("block_kinds") or [])]
+        text = str(row.get("text") or "")
+        if "figure" in block_kinds or "[FIGURE" in text:
+            figure_rows += 1
+            if "figure" in block_kinds:
+                figure_rows_with_block_kind += 1
+    missing_row_count = sum(1 for row in rows if any(row.get(field) in (None, "", []) for field in required_fields))
+    ok = bool(rows) and missing_row_count == 0 and (figure_rows == 0 or figure_rows_with_block_kind == figure_rows)
+    return {
+        "status": "ok" if ok else "fail",
+        "row_count": len(rows),
+        "missing_row_count": missing_row_count,
+        "missing_by_field": missing_by_field,
+        "figure_rows": figure_rows,
+        "figure_rows_with_block_kind": figure_rows_with_block_kind,
+    }
+
+
 def _first_figure_slug(root_dir: Path) -> str:
     path = root_dir / "data/wiki_relations/figure_assets.json"
     if not path.exists():
@@ -818,17 +921,21 @@ def build_official_gold_gate_report(root_dir: Path) -> dict[str, Any]:
     artifact_manifest = _artifact_manifest(root_dir)
     large_jsonl_artifact_policy = _large_jsonl_artifact_policy(root_dir, artifact_manifest)
     ko_localization = build_official_ko_localization_audit(playbook_rows)
+    figure_relation_coverage = _figure_relation_coverage(root_dir, playbook_rows)
+    bm25_metadata_contract = _bm25_metadata_contract(bm25_rows)
     smoke = _smoke(root_dir, sample_slug)
     checks = {
         "portable_paths": portable_paths["status"] == "ok",
         "large_jsonl_artifacts_manifest_only": large_jsonl_artifact_policy["status"] == "ok",
         "chunks_and_bm25_match": bool(chunks_rows) and len(chunks_rows) == len(bm25_rows),
+        "bm25_metadata_contract": bm25_metadata_contract["status"] == "ok",
         "code_blocks_present": int(block_counts.get("code", 0)) > 0,
         "ko_runtime_has_no_unlocalized_english_prose": ko_localization["status"] == "ok",
         "inline_figures_present_when_sidecar_has_figures": (
             figure_sidecar_count == 0
             or int(block_counts.get("figure", 0)) > 0
         ),
+        "figure_sidecar_covers_playbook_figures": figure_relation_coverage["status"] == "ok",
         "multi_page_renders_multiple_sections": int(viewer_probe["multi_section_cards"]) > 1,
         "single_page_renders_one_section": int(viewer_probe["single_section_cards"]) == 1,
         "viewer_code_blocks_render": int(viewer_probe["multi_code_blocks"]) > 0,
@@ -872,6 +979,8 @@ def build_official_gold_gate_report(root_dir: Path) -> dict[str, Any]:
             "large_jsonl_artifact_policy": large_jsonl_artifact_policy,
             "official_catalog_coverage": official_catalog_coverage,
             "ko_localization": ko_localization,
+            "figure_relation_coverage": figure_relation_coverage,
+            "bm25_metadata_contract": bm25_metadata_contract,
         },
         "artifact_manifest": artifact_manifest,
     }

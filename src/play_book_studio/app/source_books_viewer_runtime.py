@@ -195,6 +195,27 @@ def _section_has_figure(blocks: list[dict], *, asset_url: str, viewer_path: str,
     return False
 
 
+def _merge_relation_figure_block(blocks: list[dict], figure_block: dict[str, str]) -> bool:
+    asset_url = figure_block.get("asset_url", "")
+    viewer_path = figure_block.get("viewer_path", "")
+    asset_ref = figure_block.get("asset_ref", "")
+    for block in blocks:
+        if str(block.get("kind") or "").strip() != "figure":
+            continue
+        matched = (
+            bool(asset_url and str(block.get("asset_url") or block.get("src") or "").strip() == asset_url)
+            or bool(viewer_path and str(block.get("viewer_path") or "").strip() == viewer_path)
+            or bool(asset_ref and str(block.get("asset_ref") or "").strip() == asset_ref)
+        )
+        if not matched:
+            continue
+        for key, value in figure_block.items():
+            if value and not str(block.get(key) or "").strip():
+                block[key] = value
+        return True
+    return False
+
+
 def _load_root_json(root_dir: Path, relative_path: str) -> dict:
     path = root_dir / relative_path
     if not path.exists() or not path.is_file():
@@ -269,12 +290,7 @@ def _sections_with_relation_figures(root_dir: Path, book_slug: str, sections: li
         blocks = [dict(block) for block in (next_row.get("blocks") or []) if isinstance(block, dict)]
         if blocks:
             for figure_block in relation_blocks:
-                if not _section_has_figure(
-                    blocks,
-                    asset_url=figure_block["asset_url"],
-                    viewer_path=figure_block["viewer_path"],
-                    asset_ref=figure_block["asset_ref"],
-                ):
+                if not _merge_relation_figure_block(blocks, figure_block):
                     blocks.append(figure_block)
             next_row["blocks"] = blocks
             next_row["block_kinds"] = [str(block.get("kind") or "") for block in blocks if str(block.get("kind") or "")]

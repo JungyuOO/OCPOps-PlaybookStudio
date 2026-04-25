@@ -454,6 +454,7 @@ class ChunkRecord:
     source_unit_anchor: str = ""
     origin_method: str = "native"
     ocr_status: str = "not_run"
+    block_kinds: tuple[str, ...] = field(default_factory=tuple)
     citation_eligible: bool = False
     citation_block_reason: str = ""
     cli_commands: tuple[str, ...] = field(default_factory=tuple)
@@ -488,6 +489,7 @@ class ChunkRecord:
         payload["source_unit_anchor"] = self.source_unit_anchor or self.anchor
         payload["origin_method"] = self.origin_method
         payload["ocr_status"] = self.ocr_status
+        payload["block_kinds"] = list(self.block_kinds)
         return payload
 
 

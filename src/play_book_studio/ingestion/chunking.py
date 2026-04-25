@@ -129,10 +129,15 @@ def _split_blocks(text: str) -> list[str]:
 
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith("[CODE") or stripped.startswith("[TABLE"):
+        if stripped.startswith("[CODE") or stripped.startswith("[TABLE") or stripped.startswith("[FIGURE"):
             flush()
             in_block = True
-            end_tag = "[/CODE]" if stripped.startswith("[CODE") else "[/TABLE]"
+            if stripped.startswith("[CODE"):
+                end_tag = "[/CODE]"
+            elif stripped.startswith("[TABLE"):
+                end_tag = "[/TABLE]"
+            else:
+                end_tag = "[/FIGURE]"
             current.append(stripped)
             continue
         if in_block:
@@ -245,6 +250,7 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
                     source_unit_anchor=section.source_unit_anchor,
                     origin_method=section.origin_method,
                     ocr_status=section.ocr_status,
+                    block_kinds=section.block_kinds,
                     citation_eligible=section.translation_status == "approved_ko",
                     citation_block_reason="" if section.translation_status == "approved_ko" else "translation_or_review_pending",
                     cli_commands=section.cli_commands,

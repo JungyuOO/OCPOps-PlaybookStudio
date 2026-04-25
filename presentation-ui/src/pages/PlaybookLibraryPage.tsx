@@ -1909,6 +1909,16 @@ const PlaybookLibraryPage: React.FC = () => {
                   <p>{Number(llmwikiMetrics.official_code_blocks ?? 0).toLocaleString()} code blocks / {Number(llmwikiMetrics.official_inline_figures ?? 0).toLocaleString()} figures</p>
                 </div>
                 <div>
+                  <span>Figure Sidecar</span>
+                  <strong>{Number(llmwikiMetrics.official_figure_sidecar_count ?? 0).toLocaleString()} assets</strong>
+                  <p>{Number(llmwikiMetrics.official_figure_matched_section_count ?? 0).toLocaleString()} section links / {Number(llmwikiMetrics.official_figure_missing_relation_count ?? 0).toLocaleString()} missing</p>
+                </div>
+                <div>
+                  <span>BM25 Metadata</span>
+                  <strong>{Number(llmwikiMetrics.official_bm25_count ?? 0).toLocaleString()} rows</strong>
+                  <p>{Number(llmwikiMetrics.official_bm25_metadata_missing_row_count ?? 0).toLocaleString()} metadata gaps</p>
+                </div>
+                <div>
                   <span>Customer Master</span>
                   <strong>{Number(llmwikiMetrics.customer_master_source_count ?? 0).toLocaleString()} sources</strong>
                   <p>{Number(llmwikiMetrics.customer_master_section_count ?? 0).toLocaleString()} sections / {Number(llmwikiMetrics.customer_master_chunk_count ?? 0).toLocaleString()} chunks</p>
