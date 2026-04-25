@@ -1,0 +1,24 @@
+{
+  "book_slug": "edge_computing",
+  "doc_id": "edge_computing:4.20:ko",
+  "source_fingerprint": "9c39edfd5d04102d35f5d597b0437e5f7f1bb849459ec200f56319cccf8e838f",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/edge_computing/index",
+  "item_count": 5,
+  "items": {
+    "s20.b13.paragraph": "플릿 사이트 CR 을 관리하는 `/update` 폴더 및 Git 리포지터리에서 구성 및 배포 소스 CR 간 변경 사항을 비교합니다.",
+    "s301.b5.table.cell.0.0": "[CODE language=\"yaml\" wrap_hint=\"true\" overflow_hint=\"toggle\"] plan: - actions: [\"Prep\", \"Upgrade\", \"FinalizeUpgrade\"] rolloutStrategy: maxConcurrency: 200 timeout: 60 [/CODE]",
+    "s301.b5.table.cell.1.0": "[CODE language=\"yaml\" wrap_hint=\"true\" overflow_hint=\"toggle\"] plan: - actions: [\"Prep\", \"Upgrade\"] rolloutStrategy: maxConcurrency: 200 timeout: 60 - actions: [\"FinalizeUpgrade\"] rolloutStrategy: maxConcurrency: 500 timeout: 10 [/CODE]",
+    "s301.b5.table.cell.2.0": "[CODE language=\"yaml\" wrap_hint=\"true\" overflow_hint=\"toggle\"] plan: - actions: [\"Prep\"] rolloutStrategy: maxConcurrency: 200 timeout: 60 - actions: [\"Upgrade\"] rolloutStrategy: maxConcurrency: 200 timeout: 20 - actions: [\"FinalizeUpgrade\"] rolloutStrategy: maxConcurrency: 500 timeout: 10 [/CODE]",
+    "s89.b3.paragraph": "권장 PTP Westport 채널 e810 그랜드마스터 클록 구성 (`PtpConfigGmWpc.yaml`)"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 2,
+    "total_unit_count": 2,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

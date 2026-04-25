@@ -21,6 +21,7 @@ from play_book_studio.ingestion.official_gold_gate import (
     publish_runtime_manifest_from_playbooks,
     repair_portable_json_paths,
 )
+from play_book_studio.ingestion.localization_quality import build_official_ko_localization_audit
 
 
 class OfficialGoldGateTests(unittest.TestCase):
@@ -217,6 +218,203 @@ class OfficialGoldGateTests(unittest.TestCase):
                 "data/wiki_runtime_books/full_rebuild_manifest.json",
                 active["source_manifest_path"],
             )
+
+    def test_ko_localization_audit_fails_untranslated_english_prose(self) -> None:
+        audit = build_official_ko_localization_audit(
+            [
+                {
+                    "book_slug": "builds_using_buildconfig",
+                    "title": "Builds using BuildConfig",
+                    "translation_status": "original",
+                    "sections": [
+                        {
+                            "heading": "Understanding OpenShift Container Platform pipelines",
+                            "blocks": [
+                                {
+                                    "kind": "paragraph",
+                                    "text": (
+                                        "The Pipeline build strategy is deprecated in "
+                                        "OpenShift Container Platform 4."
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        )
+
+        self.assertEqual("fail", audit["status"])
+        self.assertEqual(1, audit["failing_book_count"])
+        self.assertEqual("builds_using_buildconfig", audit["examples"][0]["book_slug"])
+
+    def test_ko_localization_audit_allows_commands_urls_and_product_terms(self) -> None:
+        audit = build_official_ko_localization_audit(
+            [
+                {
+                    "book_slug": "cli_tools",
+                    "title": "CLI 툴",
+                    "translation_status": "approved_ko",
+                    "sections": [
+                        {
+                            "heading": "OpenShift CLI 사용",
+                            "blocks": [
+                                {"kind": "paragraph", "text": "다음 명령으로 BuildConfig 상태를 확인합니다."},
+                                {"kind": "code", "code": "oc get buildconfig example -o yaml"},
+                                {
+                                    "kind": "paragraph",
+                                    "text": "https://docs.redhat.com/en/documentation/openshift_container_platform",
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ]
+        )
+
+        self.assertEqual("ok", audit["status"])
+        self.assertEqual(0, audit["failing_book_count"])
+
+    def test_ko_localization_audit_fails_short_english_body_sentences(self) -> None:
+        audit = build_official_ko_localization_audit(
+            [
+                {
+                    "book_slug": "builds_using_buildconfig",
+                    "title": "BuildConfig를 사용한 빌드",
+                    "translation_status": "translated_ko_draft",
+                    "sections": [
+                        {
+                            "heading": "빌드",
+                            "blocks": [
+                                {
+                                    "kind": "paragraph",
+                                    "text": "A `BuildConfig` object is the definition of the entire build process.",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        )
+
+        self.assertEqual("fail", audit["status"])
+        self.assertEqual(1, audit["failing_book_count"])
+
+    def test_ko_localization_audit_fails_cyrillic_translation_contamination(self) -> None:
+        audit = build_official_ko_localization_audit(
+            [
+                {
+                    "book_slug": "builds_using_buildconfig",
+                    "title": "BuildConfig를 사용한 빌드",
+                    "translation_status": "translated_ko_draft",
+                    "sections": [
+                        {
+                            "heading": "증분 빌드",
+                            "blocks": [
+                                {
+                                    "kind": "paragraph",
+                                    "text": "S2I는 이전에 빌드된 артефакt를 재사용합니다.",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        )
+
+        self.assertEqual("fail", audit["status"])
+        self.assertEqual("cyrillic_translation_contamination", audit["examples"][0]["findings"][0]["reason"])
+
+    def test_ko_localization_audit_allows_api_field_paths_and_yaml_snippets(self) -> None:
+        audit = build_official_ko_localization_audit(
+            [
+                {
+                    "book_slug": "operator_apis",
+                    "title": "Operator API",
+                    "translation_status": "translated_ko_draft",
+                    "sections": [
+                        {
+                            "heading": (
+                                "5.1.28. "
+                                ".spec.customization.perspectives[].visibility.accessReview.missing[].fieldSelector"
+                            ),
+                            "blocks": [
+                                {
+                                    "kind": "paragraph",
+                                    "text": (
+                                        "matches: - method: service: foo.bar "
+                                        "headers: values: version: 2"
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        )
+
+        self.assertEqual("ok", audit["status"])
+        self.assertEqual(0, audit["failing_book_count"])
+
+    def test_ko_localization_audit_allows_product_and_numeric_table_fragments(self) -> None:
+        audit = build_official_ko_localization_audit(
+            [
+                {
+                    "book_slug": "storage",
+                    "title": "스토리지",
+                    "translation_status": "translated_ko_draft",
+                    "sections": [
+                        {
+                            "heading": "지원되는 스토리지",
+                            "blocks": [
+                                {"kind": "paragraph", "text": "GCP PD(Google Compute Engine Persistent Disk)"},
+                                {
+                                    "kind": "paragraph",
+                                    "text": "60 pods per node; 30 server pods and 30 client pods (total 30k)",
+                                },
+                                {
+                                    "kind": "paragraph",
+                                    "text": "NBDE(Network-bound Disk Encryption) Tang Server Operator",
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ]
+        )
+
+        self.assertEqual("ok", audit["status"])
+        self.assertEqual(0, audit["failing_book_count"])
+
+    def test_ko_localization_audit_allows_korean_sentence_with_ui_option_labels(self) -> None:
+        audit = build_official_ko_localization_audit(
+            [
+                {
+                    "book_slug": "building_applications",
+                    "title": "애플리케이션 빌드",
+                    "translation_status": "translated_ko_draft",
+                    "sections": [
+                        {
+                            "heading": "서비스 추가",
+                            "blocks": [
+                                {
+                                    "kind": "paragraph",
+                                    "text": (
+                                        "애플리케이션에 추가 를 사용하여 애플리케이션 그룹에 서비스를 "
+                                        "추가하는 방법을 선택합니다(예: From Git, Container Image, "
+                                        "From Dockerfile, From Devfile, Upload JAR file, Event Source, "
+                                        "Channel, 또는 Broker)."
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        )
+
+        self.assertEqual("ok", audit["status"])
+        self.assertEqual(0, audit["failing_book_count"])
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ from .html import build_web_document_ast
 from .asciidoc import build_source_repo_document_ast
 from .project_corpus import CorpusSectionProjection, project_corpus_sections
 from .project_playbook import project_playbook_document, write_playbook_documents
-from .translate import translate_document_ast
+from .translate import repair_unlocalized_english_units, translate_document_ast
 from .validate import CanonicalValidationIssue, validate_document_ast
 
 __all__ = [
@@ -49,6 +49,7 @@ __all__ = [
     "CanonicalValidationIssue",
     "project_corpus_sections",
     "project_playbook_document",
+    "repair_unlocalized_english_units",
     "translate_document_ast",
     "write_playbook_documents",
     "validate_document_ast",

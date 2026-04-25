@@ -1,0 +1,20 @@
+{
+  "book_slug": "operators",
+  "doc_id": "operators:4.20:ko",
+  "source_fingerprint": "0207c57314ae6409d4495c6bfcd97b7da38ff73b203ffdbdbf2b7efcd7674733",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/operators/index",
+  "item_count": 1,
+  "items": {
+    "s82.b0.paragraph": "0 개 이상의 간단한 제약 조건과 함께 하나 이상의 하위 복합 제약 조건을 포함하는 중첩된 복합 제약 조건은 이전에 설명한 각 제약 조건 유형에 대한 프로시저에 따라 하위에서 위로 평가됩니다."
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 1
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "book_slug": "security_apis",
+  "doc_id": "security_apis:4.20:ko",
+  "source_fingerprint": "e3289b026b04306205f44af78fa9cde9916044fcdef046ecf366923af794125d",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/security_apis/index",
+  "item_count": 2,
+  "items": {
+    "s28.b7.table.cell.0.2": "conditions 는 CredentialsRequest 의 자세한 상태를 포함합니다",
+    "s29.b1.paragraph": "conditions 는 CredentialsRequest 의 자세한 상태를 포함합니다"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 2,
+    "total_unit_count": 2,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

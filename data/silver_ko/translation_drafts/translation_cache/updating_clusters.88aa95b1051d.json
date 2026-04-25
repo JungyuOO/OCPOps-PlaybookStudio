@@ -1,0 +1,20 @@
+{
+  "book_slug": "updating_clusters",
+  "doc_id": "updating_clusters:4.20:ko",
+  "source_fingerprint": "88aa95b1051d78dd78cfcf4eaccdc77fb86901d41ca176a31f2d3865c759fba1",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/updating_clusters/index",
+  "item_count": 1,
+  "items": {
+    "s93.b10.paragraph": "클러스터를 업데이트하는 방법에 대한 자세한 내용은 \"추가 리소스\"의 \"웹 콘솔을 사용한 컨트롤 플레인 전용 업데이트\" 및 \"CLI 를 사용한 컨트롤 플레인 전용 업데이트\"를 참조하십시오."
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 1
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "book_slug": "machine_management",
+  "doc_id": "machine_management:4.20:ko",
+  "source_fingerprint": "4115d0d3d8967ed2112893adf8a77a12f7415cd7cb71f1900d4f9e39cca62f22",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/machine_management/index",
+  "item_count": 1,
+  "items": {
+    "s88.b2.table.cell.4.2": "`VirtualMachine.Config.AddRemoveDevice` `VirtualMachine.Config.AdvancedConfig` `VirtualMachine.Config.CPUCount` `VirtualMachine.Config.DiskExtend` `VirtualMachine.Config.Memory` `VirtualMachine.Config.Settings` `VirtualMachine.PowerOff` `VirtualMachine.PowerOff` `VirtualMachine.PowerOn` `Cryostat.CreateFromExisting` `Cryostat` `VirtualMachine.Cryostat` `VirtualMachine.ECDHE` `VirtualMachine.Provision` `VirtualMachine.Config.DiskExtend` `VirtualMachine.Config.MemoryExtend` `VirtualMachine.Cryostat`"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

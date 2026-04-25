@@ -12,12 +12,22 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from play_book_studio.config.settings import load_settings
-from play_book_studio.answering.context import assemble_context
+from play_book_studio.answering.context import (
+    _is_customer_pack_explicit_query as answer_context_customer_pack_explicit,
+    assemble_context,
+)
 from play_book_studio.answering.answerer import _build_doc_locator_answer, _citations_match_rbac_intent
 from play_book_studio.answering.models import Citation
 from play_book_studio.retrieval.bm25 import BM25Index
 from play_book_studio.retrieval.models import SessionContext
 from play_book_studio.retrieval.retriever import ChatRetriever
+from play_book_studio.retrieval.retriever_pipeline import (
+    _is_customer_pack_explicit_query as retrieval_pipeline_customer_pack_explicit,
+)
+from play_book_studio.retrieval.retriever_search import (
+    _is_customer_pack_explicit_query as retrieval_search_customer_pack_explicit,
+    _official_title_match_score,
+)
 
 
 def _write_active_manifest(root: Path, entries: list[dict[str, str]]) -> None:
@@ -73,6 +83,21 @@ def _official_doc_row(
 
 
 class OfficialRuntimeTitleLocatorTests(unittest.TestCase):
+    def test_ocp_topic_signal_routes_decisive_buildconfig_title_token(self) -> None:
+        score = _official_title_match_score(
+            "OCP 4.20에서 BuildConfig 운영자가 먼저 확인할 점과 예시 명령을 알려줘",
+            title_candidates=("Builds using BuildConfig",),
+        )
+
+        self.assertGreater(score, 0.0)
+
+    def test_customer_broad_phrase_counts_as_uploaded_runtime_query(self) -> None:
+        query = "고객 CI/CD 운영 자료와 OCP 4.20 BuildConfig 공식문서를 같이 참고해줘"
+
+        self.assertTrue(retrieval_search_customer_pack_explicit(query))
+        self.assertTrue(retrieval_pipeline_customer_pack_explicit(query))
+        self.assertTrue(answer_context_customer_pack_explicit(query))
+
     def test_exact_korean_official_title_seeds_matching_api_book(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

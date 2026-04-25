@@ -502,8 +502,9 @@ class AppViewersTestSupport(unittest.TestCase):
                 single_handler,
                 urlencode(
                     {
-                        "viewer_path": "/playbooks/wiki-runtime/active/install_modes/index.html#post-install",
+                        "viewer_path": "/playbooks/wiki-runtime/active/install_modes/index.html",
                         "page_mode": "single",
+                        "section": "post-install",
                     }
                 ),
                 root_dir=root,
@@ -527,7 +528,10 @@ class AppViewersTestSupport(unittest.TestCase):
         self.assertIn("후속 본문", single_html)
         self.assertNotIn("개요 본문", single_html)
         self.assertIn('class="document-footer-nav"', single_html)
-        self.assertIn('href="#install-overview"', single_html)
+        self.assertIn(
+            'href="/playbooks/wiki-runtime/active/install_modes/index.html?page_mode=single&amp;section=install-overview#install-overview"',
+            single_html,
+        )
         self.assertIn(">이전<", single_html)
         self.assertNotIn(">다음<", single_html)
         self.assertIn(">Quick Nav</summary>", multi_html)

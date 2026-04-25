@@ -34,11 +34,22 @@ DERIVED_RUNTIME_SOURCE_TYPES = frozenset(
         "synthesized_playbook",
     }
 )
+CUSTOMER_PACK_BROAD_CONTEXT_TOKENS = (
+    "자료",
+    "문서",
+    "운영",
+    "설계",
+    "ppt",
+    "pptx",
+    "ci/cd",
+    "cicd",
+    "운영북",
+)
 
 
 def _is_customer_pack_explicit_query(query: str) -> bool:
     lowered = (query or "").lower()
-    return any(
+    exact_match = any(
         token in lowered
         for token in (
             "업로드 문서",
@@ -63,6 +74,10 @@ def _is_customer_pack_explicit_query(query: str) -> bool:
             "customer-pack",
         )
     )
+    broad_match = "고객" in lowered and any(
+        token in lowered for token in CUSTOMER_PACK_BROAD_CONTEXT_TOKENS
+    )
+    return exact_match or broad_match
 
 
 def _is_customer_pack_relation_query(query: str) -> bool:

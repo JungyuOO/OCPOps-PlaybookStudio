@@ -1,0 +1,22 @@
+{
+  "book_slug": "nodes",
+  "doc_id": "nodes:4.20:ko",
+  "source_fingerprint": "ab2eed78693bd526feec39ce922d7549f5483edb56b9c3b26fea4bfc011aef31",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/nodes/index",
+  "item_count": 3,
+  "items": {
+    "s367.b1.table.cell.3.0": "[CODE language=\"plaintext\" wrap_hint=\"true\" overflow_hint=\"toggle\"] hosts: interfaces: name: [/CODE]",
+    "s367.b1.table.cell.4.0": "[CODE language=\"plaintext\" wrap_hint=\"true\" overflow_hint=\"toggle\"] hosts: interfaces: macAddress: [/CODE]",
+    "s367.b1.table.cell.6.0": "[CODE language=\"plaintext\" wrap_hint=\"true\" overflow_hint=\"toggle\"] hosts: rootDeviceHints: deviceName: [/CODE]"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 3,
+    "total_unit_count": 3,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

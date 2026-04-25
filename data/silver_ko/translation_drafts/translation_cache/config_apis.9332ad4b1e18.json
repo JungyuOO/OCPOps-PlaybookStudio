@@ -1,0 +1,21 @@
+{
+  "book_slug": "config_apis",
+  "doc_id": "config_apis:4.20:ko",
+  "source_fingerprint": "9332ad4b1e18b0190c45e6111f2883380204c9906d74aca1ac16ca8c668ad5ee",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/config_apis/index",
+  "item_count": 2,
+  "items": {
+    "s80.b4.table.cell.0.2": "forcePull 이 설정되어 있으면, builds 의 등가 값을 덮어씁니다. 즉, false 는 모든 빌드에 대해 force pull 을 비활성화하고, true 는 모든 빌드에 대해 force pull 을 활성화합니다. 각 빌드는 자체적으로 force pull 을 지정할 수 있습니다.",
+    "s325.b4.table.cell.2.2": "Location 는 클러스터가 배포된 위치입니다."
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 2,
+    "total_unit_count": 2,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

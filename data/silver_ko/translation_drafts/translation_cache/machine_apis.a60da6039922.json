@@ -1,0 +1,24 @@
+{
+  "book_slug": "machine_apis",
+  "doc_id": "machine_apis:4.20:ko",
+  "source_fingerprint": "a60da6039922bfc5c25d3234c216a859f56b97e8cd1fd06f6aabf000483c8861",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/machine_apis/index",
+  "item_count": 5,
+  "items": {
+    "s83.b9.table.cell.1.2": "true 인 경우, 소유자가 \"foreworkspaceDeletion\" 최종izers 를 가지고 있다면 이 참조가 제거될 때까지 소유자는 키-값 저장소에서 삭제될 수 없습니다. 가비지 수집기가 이 필드와 상호 작용하고 전경 삭제를 적용하는 방법은 https://kubernetes.io/docs/concepts/architecture/garbage-collection/#foreground-deletion 를 참조하십시오. 기본값은 false 입니다. 이 필드를 설정하려면 사용자에게 소유자의 \"삭제\" 권한이 필요하며, 그렇지 않으면 422(처리할 수 없는 엔티티) 가 반환됩니다.",
+    "s171.b9.table.cell.1.2": "true 인 경우, 소유자가 \"foreworkspaceDeletion\" 최종izers 를 가지고 있다면 이 참조가 제거될 때까지 소유자는 키-값 저장소에서 삭제될 수 없습니다. 가비지 수집기가 이 필드와 상호 작용하고 전경 삭제를 적용하는 방법은 https://kubernetes.io/docs/concepts/architecture/garbage-collection/#foreground-deletion 를 참조하십시오. 기본값은 false 입니다. 이 필드를 설정하려면 사용자에게 소유자의 \"삭제\" 권한이 필요하며, 그렇지 않으면 422(처리할 수 없는 엔티티) 가 반환됩니다.",
+    "s196.b9.table.cell.1.2": "true 인 경우, 소유자가 \"foreworkspaceDeletion\" 최종izers 를 가지고 있다면 이 참조가 제거될 때까지 소유자는 키-값 저장소에서 삭제될 수 없습니다. 가비지 수집기가 이 필드와 상호 작용하고 전경 삭제를 적용하는 방법은 https://kubernetes.io/docs/concepts/architecture/garbage-collection/#foreground-deletion 를 참조하십시오. 기본값은 false 입니다. 이 필드를 설정하려면 사용자에게 소유자의 \"삭제\" 권한이 필요하며, 그렇지 않으면 422(처리할 수 없는 엔티티) 가 반환됩니다.",
+    "s205.b9.table.cell.1.2": "true 인 경우, 소유자가 \"foreworkspaceDeletion\" 최종izers 를 가지고 있다면 이 참조가 제거될 때까지 소유자는 키-값 저장소에서 삭제될 수 없습니다. 가비지 수집기가 이 필드와 상호 작용하고 전경 삭제를 적용하는 방법은 https://kubernetes.io/docs/concepts/architecture/garbage-collection/#foreground-deletion 를 참조하십시오. 기본값은 false 입니다. 이 필드를 설정하려면 사용자에게 소유자의 \"삭제\" 권한이 필요하며, 그렇지 않으면 422(처리할 수 없는 엔티티) 가 반환됩니다.",
+    "s30.b13.table.cell.16.2": "kubeAPIServerServingCAData 는 Kubelet 에서 API 서버 인증서를 관리하며 자동으로 회전됩니다"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 5,
+    "total_unit_count": 5,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

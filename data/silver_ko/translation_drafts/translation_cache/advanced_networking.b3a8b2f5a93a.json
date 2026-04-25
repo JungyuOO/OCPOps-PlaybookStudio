@@ -1,9 +1,9 @@
 {
   "book_slug": "advanced_networking",
-  "doc_id": "advanced_networking:4.20:ko:source_repo",
+  "doc_id": "advanced_networking:4.20:ko",
   "source_fingerprint": "b3a8b2f5a93ad0a94e6cfe6e1aa9a4b1be02706f545a376639b16ecb5d43452e",
   "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/advanced_networking/index",
-  "item_count": 3541,
+  "item_count": 3564,
   "items": {
     "doc.title": "고급 네트워킹",
     "s0.heading": "OpenShift Container Platform 의 전문화된 고급 네트워킹 주제",
@@ -3545,16 +3545,39 @@
     "s126.b3.paragraph": "* `api/ocloudNotifications/v2/health`\n** `GET`: `ocloudNotifications` API 의 건강 상태를 반환합니다.",
     "s126.b4.paragraph": "* `api/ocloudNotifications/v2/publishers`\n** `GET`: 클러스터 노드의 PTP 이벤트 게시자 목록을 반환합니다.",
     "s126.b5.paragraph": "* `api/ocloudnotifications/v2/{resource_address}/CurrentState`\n** `GET`: `{resouce_address}` 로 지정된 이벤트 유형의 현재 상태를 반환합니다.",
-    "s128.b1.code.caption": ".예시 API 응답"
+    "s128.b1.code.caption": ".예시 API 응답",
+    "s66.b13.paragraph": "다음 `RouteAdvertisements` CR 은 빨간색 및 파란색 테넌트에 대한 구성을 설명합니다.",
+    "s66.b14.code.caption": "빨간색 및 파란색 테넌트에 대한 `RouteAdvertisements` CR",
+    "s66.b15.paragraph": "OVN-Kubernetes 컨트롤러에서 이 `RouteAdvertisements` CR 을 볼 때 해당 경로를 알리기 위해 선택한 FRR 데몬을 기반으로 추가 `FRRConfiguration` 오브젝트를 생성합니다. 다음 예제는 선택된 노드 및 네트워크에 따라 생성된 `FRRConfiguration` 오브젝트 수를 사용하여 이러한 구성 오브젝트 중 하나입니다.",
+    "s66.b16.code.caption": "OVN-Kubernetes 에서 생성된 `FRRConfiguration` CR 의 예",
+    "s66.b19.paragraph": "`targetVRF` 필드를 생략하면 경로가 유출되고 기본 VRF 를 통해 광고됩니다. 또한 초기 FRRConfiguration 오브젝트 정의 후 기본 VRF 로 가져온 경로도 blue VRF 로 가져옵니다.",
+    "s67.b17.paragraph": "다음 구성에서 추가 `FRRConfiguration` CR 은 파란색 및 빨간색 VLAN 의 PE 라우터로 피어링을 구성합니다.",
+    "s67.b18.code.caption": "BGP VPN 설정을 위해 수동으로 구성된 `FRRConfiguration` CR",
+    "s67.b19.paragraph": "다음 `RouteAdvertisements` CR 은 파란색 및 빨간색 테넌트에 대한 구성을 설명합니다.",
+    "s67.b20.code.caption": "Blue 및 빨간색 테넌트에 대한 `RouteAdvertisements` CR",
+    "s67.b23.paragraph": "OVN-Kubernetes 컨트롤러에서 이 `RouteAdvertisements` CR 을 볼 때 파란색 및 빨간색 테넌트의 경로를 알리도록 FRR 데몬을 구성하는 선택된 항목을 기반으로 추가 `FRRConfiguration` 개체를 생성합니다.",
+    "s67.b24.code.caption": "Blue 및 빨간색 테넌트를 위해 OVN-Kubernetes 에서 생성한 `FRRConfiguration` CR",
+    "s67.b25.paragraph": "이 시나리오에서는 피어링 관계를 정의하는 `FRRConfiguration` CR 에서 수신할 경로 필터링 또는 선택을 수행해야 합니다.",
+    "s76.b11.paragraph": "일반 클록에는 네트워크의 위치에 따라 소스 또는 대상 클록의 역할을 수행할 수 있는 단일 포트가 연결되어 있습니다. 일반 클록은 타임스탬프를 읽고 쓸 수 있습니다.",
+    "s79.b10.paragraph": "DPLL 은 네트워크의 다양한 PTP 노드 간에 클럭 동기화를 제공합니다. DPLL 은 로컬 시스템 클럭 신호의 단계를 들어오는 동기화 신호의 단계와 비교합니다(예: PTP 할 마스터 클록에서 PTP 메시지). DPLL 은 로컬 클럭과 참조 클록 사이의 단계 차이를 최소화하기 위해 현지 클럭 빈도 및 단계를 지속적으로 조정합니다.",
+    "s82.b16.paragraph": "경계 클럭 리더 소스 선택은 A-BMCA 알고리즘을 사용하여 수행됩니다. 자세한 내용은 ITU-T 권장 사항 G.8275.1 을 참조하십시오.",
+    "s98.b28.paragraph": "GNSS 신호가 다시 손실되고 T-GM 클럭이 `HOLDOVER` 모드로 다시 들어갑니다. 시간 오류가 증가하기 시작합니다.",
+    "s98.b30.paragraph": "시간 오류는 추적 기능의 긴 손실로 인해 `MaxInSpecOffset` 임계값을 초과합니다.",
+    "s98.b32.paragraph": "GNSS 신호가 복원되고 T-GM 클럭이 동기화를 재개합니다. 시간 오류가 줄어들기 시작합니다.",
+    "s98.b34.paragraph": "시간 오류는 `MaxInSpecOffset` 임계값 내에 감소하고 대체됩니다.",
+    "s116.b10.paragraph": "이벤트가 게시됩니다.",
+    "s116.b11.paragraph": "PTP Operator 관리 Pod의 `cloud-event-proxy` 사이드카는 이벤트를 처리하고 PTP 이벤트 REST API v2를 사용하여 이벤트를 게시합니다.",
+    "s116.b13.paragraph": "소비자 애플리케이션은 서브스크립션을 요청하고 서브스크립션 이벤트를 수신합니다.",
+    "s116.b14.paragraph": "소비자 애플리케이션은 API 요청을 생산자 `cloud-event-proxy` 사이드카로 전송하여 PTP 이벤트 서브스크립션을 생성합니다. 서브스크립션이 생성되면 소비자 애플리케이션은 리소스 한정자에 지정된 주소를 수신 대기하고 PTP 이벤트를 수신하고 처리합니다."
   },
   "progress": {
     "status": "complete",
-    "completed_unit_count": 3541,
-    "total_unit_count": 1971,
+    "completed_unit_count": 3564,
+    "total_unit_count": 2463,
     "pending_unit_count": 0,
-    "completed_batch_count": 63,
-    "total_batch_count": 63,
-    "current_batch_index": 61,
-    "current_batch_size": 14
+    "completed_batch_count": 2,
+    "total_batch_count": 2,
+    "current_batch_index": 2,
+    "current_batch_size": 5
   }
 }

@@ -1,0 +1,20 @@
+{
+  "book_slug": "project_apis",
+  "doc_id": "project_apis:4.20:ko",
+  "source_fingerprint": "f1c000872f0d81f773a3924bb8cfd2b76ef70d45e12767b363e7da494d3f94c5",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/project_apis/index",
+  "item_count": 1,
+  "items": {
+    "s13.b0.table.cell.1.2": "Description 는 프로젝트에 적용할 설명입니다."
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

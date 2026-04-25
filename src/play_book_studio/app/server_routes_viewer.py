@@ -5,7 +5,7 @@ import re
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urljoin, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from play_book_studio.app.customer_pack_read_boundary import (
     customer_pack_draft_id_from_viewer_path,
@@ -86,6 +86,20 @@ def _canonicalize_viewer_path(viewer_path: str) -> str:
     if normalized_path == path:
         return raw
     return urlunparse(parsed._replace(path=normalized_path))
+
+
+def _viewer_path_with_section_query(viewer_path: str, section_anchor: str) -> str:
+    anchor = str(section_anchor or "").strip()
+    if not anchor:
+        return viewer_path
+    parsed = urlparse(str(viewer_path or "").strip())
+    if str(parsed.fragment or "").strip():
+        return viewer_path
+    params = parse_qs(parsed.query, keep_blank_values=False)
+    if any(str((params.get(key) or [""])[0]).strip() for key in ("section", "anchor", "section_anchor")):
+        return viewer_path
+    params["section"] = [anchor]
+    return urlunparse(parsed._replace(query=urlencode(params, doseq=True)))
 
 
 def _viewer_html_for_path(root_dir: Path, viewer_path: str, *, page_mode: str = "single") -> str | None:
@@ -320,6 +334,10 @@ def handle_viewer_document(handler: Any, query: str, *, root_dir: Path) -> None:
     if not viewer_path:
         handler._send_json({"error": "viewer_path가 필요합니다."}, HTTPStatus.BAD_REQUEST)
         return
+    viewer_path = _viewer_path_with_section_query(
+        viewer_path,
+        str((params.get("section") or params.get("anchor") or params.get("section_anchor") or [""])[0]).strip(),
+    )
     viewer_path = _canonicalize_viewer_path(viewer_path)
     customer_pack_draft_id = customer_pack_draft_id_from_viewer_path(viewer_path)
     if customer_pack_draft_id and not _customer_pack_read_allowed(root_dir, customer_pack_draft_id):

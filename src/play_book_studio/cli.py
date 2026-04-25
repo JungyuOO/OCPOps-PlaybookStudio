@@ -11,8 +11,10 @@ import json
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from play_book_studio.answering.answerer import ChatAnswerer
+from play_book_studio.app.chat_matrix_smoke import write_chat_matrix_smoke
 from play_book_studio.app.customer_pack_batch import write_customer_pack_material_batch_report
 from play_book_studio.app.customer_master_book import (
     DEFAULT_MASTER_BOOK_SLUG,
@@ -29,6 +31,7 @@ from play_book_studio.app.server import serve
 from play_book_studio.config.settings import load_effective_env, load_settings
 from play_book_studio.evals.answer_eval import evaluate_case, summarize_case_results
 from play_book_studio.ingestion.graph_sidecar import write_graph_sidecar_compact_from_artifacts
+from play_book_studio.ingestion.localization_quality import build_official_ko_localization_audit
 from play_book_studio.ingestion.official_gold_gate import (
     ARTIFACT_MANIFEST_RELATIVE_PATH,
     ONE_CLICK_REPORT_RELATIVE_PATH,
@@ -127,6 +130,15 @@ def build_parser() -> argparse.ArgumentParser:
         default="OpenShift architecture overview",
     )
 
+    chat_matrix_smoke_parser = subparsers.add_parser(
+        "chat-matrix-smoke",
+        help="Validate live /api/chat answers across official, customer, and blended document lanes",
+    )
+    chat_matrix_smoke_parser.add_argument("--output", type=Path, default=None)
+    chat_matrix_smoke_parser.add_argument("--ui-base-url", default=DEFAULT_PLAYBOOK_UI_BASE_URL)
+    chat_matrix_smoke_parser.add_argument("--cases", type=Path, default=None)
+    chat_matrix_smoke_parser.add_argument("--timeout-seconds", type=float, default=90.0)
+
     private_lane_smoke_parser = subparsers.add_parser(
         "private-lane-smoke",
         help="Ingest a synthetic private markdown pack and validate library plus chat boundary handling",
@@ -203,6 +215,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--artifact-manifest",
         type=Path,
         default=ROOT / ARTIFACT_MANIFEST_RELATIVE_PATH,
+    )
+    official_gold_rebuild_parser.add_argument(
+        "--localization-repair-passes",
+        type=int,
+        default=2,
+        help=(
+            "Automatically rerun the full official catalog rebuild when the Korean "
+            "localization gate or a transient translation transport error fails."
+        ),
     )
 
     customer_pack_batch_parser = subparsers.add_parser(
@@ -420,6 +441,39 @@ def _run_maintenance_smoke(args: argparse.Namespace) -> int:
     return 0 if bool(summary.get("ok")) else 1
 
 
+def _run_chat_matrix_smoke(args: argparse.Namespace) -> int:
+    output_path, payload = write_chat_matrix_smoke(
+        ROOT,
+        output_path=args.output,
+        ui_base_url=args.ui_base_url,
+        cases_path=args.cases,
+        timeout_seconds=args.timeout_seconds,
+    )
+    print(f"wrote chat matrix smoke: {output_path}")
+    print(
+        json.dumps(
+            {
+                "status": payload.get("status"),
+                "pass_count": payload.get("pass_count"),
+                "total": payload.get("total"),
+                "failures": [
+                    {
+                        "id": item.get("id"),
+                        "checks": item.get("checks"),
+                        "warnings": item.get("warnings"),
+                        "error": item.get("error"),
+                    }
+                    for item in payload.get("results", [])
+                    if not item.get("pass")
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if payload.get("status") == "ok" else 1
+
+
 def _run_private_lane_smoke(args: argparse.Namespace) -> int:
     output_path, payload = write_private_lane_smoke(
         ROOT,
@@ -491,18 +545,118 @@ def _run_official_gold_gate(args: argparse.Namespace) -> int:
     return 0 if payload.get("status") == "ok" else 1
 
 
-def _run_official_gold_rebuild(args: argparse.Namespace) -> int:
-    base_settings = load_settings(ROOT)
-    source_manifest_path: Path | None = args.source_manifest
-    if getattr(args, "full_official_catalog", False):
-        source_manifest_path = ROOT / "manifests" / base_settings.active_pack.source_catalog_name
-    source_manifest_override = ""
-    if source_manifest_path is not None:
-        source_manifest_override = str(source_manifest_path)
+def _localized_full_catalog_manifest(root_dir: Path, settings) -> Path:
+    active_pack = settings.active_pack
+    translated_all_name = f"{active_pack.manifest_prefix}_translated_ko_draft_all_runtime.json"
+    translated_all_path = root_dir / "manifests" / translated_all_name
+    source_catalog_path = root_dir / "manifests" / active_pack.source_catalog_name
+    if not translated_all_path.exists():
+        return source_catalog_path
+
+    current_playbooks = _read_jsonl(settings.playbook_documents_path)
+    localization_audit = build_official_ko_localization_audit(current_playbooks, max_examples=200)
+    blocker_slugs = set(localization_audit.get("failing_book_slugs") or [])
+    if not blocker_slugs:
+        return source_catalog_path
+    current_playbooks_by_slug = {
+        str(row.get("book_slug") or "").strip(): row
+        for row in current_playbooks
+        if str(row.get("book_slug") or "").strip()
+    }
+    full_translation_slugs = {
+        slug
+        for slug in blocker_slugs
+        if str(current_playbooks_by_slug.get(slug, {}).get("translation_status") or "").strip()
+        in {"original", "en_only", "mixed"}
+    }
+    targeted_repair_slugs = blocker_slugs - full_translation_slugs
+
+    source_payload = json.loads(source_catalog_path.read_text(encoding="utf-8"))
+    translated_payload = json.loads(translated_all_path.read_text(encoding="utf-8"))
+    translated_by_slug = {
+        str(item.get("book_slug") or "").strip(): item
+        for item in translated_payload.get("entries") or []
+        if str(item.get("book_slug") or "").strip()
+    }
+    entries = []
+    for item in source_payload.get("entries") or []:
+        slug = str(item.get("book_slug") or "").strip()
+        if slug in full_translation_slugs and slug in translated_by_slug:
+            entries.append(translated_by_slug[slug])
+        else:
+            entries.append(item)
+    output_path = root_dir / ".kugnusdocs" / "reports" / f"{active_pack.manifest_prefix}_localized_hybrid_rebuild_manifest.json"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(
+            {
+                **source_payload,
+                "source_strategy": "hybrid_official_ko_plus_translated_blockers",
+                "localized_blocker_count": len(blocker_slugs),
+                "localized_blocker_slugs": sorted(blocker_slugs),
+                "full_translation_blocker_count": len(full_translation_slugs),
+                "full_translation_blocker_slugs": sorted(full_translation_slugs),
+                "targeted_repair_blocker_count": len(targeted_repair_slugs),
+                "targeted_repair_blocker_slugs": sorted(targeted_repair_slugs),
+                "translated_manifest_path": translated_all_path.relative_to(root_dir).as_posix(),
+                "base_source_catalog_path": source_catalog_path.relative_to(root_dir).as_posix(),
+                "entries": entries,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return output_path
+
+
+def _is_transient_pipeline_error(message: str) -> bool:
+    lowered = str(message or "").lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "connection aborted",
+            "connectionreset",
+            "connection reset",
+            "timed out",
+            "timeout",
+            "temporarily unavailable",
+            "too many requests",
+            "rate limit",
+            "503",
+            "429",
+        )
+    )
+
+
+def _official_gold_rebuild_should_retry(
+    *,
+    payload: dict[str, Any],
+    log_errors: list[dict[str, Any]],
+    full_official_catalog: bool,
+) -> tuple[bool, str]:
+    failures = set(payload.get("failures") or [])
+    if full_official_catalog and "ko_runtime_has_no_unlocalized_english_prose" in failures:
+        return True, "ko_localization_gate_failed"
+    if full_official_catalog and any(
+        _is_transient_pipeline_error(str(error.get("message") or ""))
+        for error in log_errors
+        if isinstance(error, dict)
+    ):
+        return True, "transient_pipeline_error"
+    return False, ""
+
+
+def _run_official_gold_rebuild_pass(
+    args: argparse.Namespace,
+    *,
+    settings,
+) -> dict[str, Any]:
     settings = replace(
-        base_settings,
+        settings,
         graph_backend="local",
-        source_manifest_path_override=source_manifest_override,
+        official_html_fallback_allowed=True,
     )
     log = run_ingestion_pipeline(
         settings,
@@ -536,6 +690,88 @@ def _run_official_gold_rebuild(args: argparse.Namespace) -> int:
     report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     pipeline_ok = not log.errors
     gate_ok = payload.get("status") == "ok"
+    return {
+        "report_path": report_path,
+        "artifact_manifest_path": artifact_manifest_path,
+        "artifact_manifest": artifact_manifest,
+        "runtime_manifest_publication": runtime_manifest_publication,
+        "runtime_markdown_materialization": markdown_materialization,
+        "payload": payload,
+        "log": log,
+        "pipeline_ok": pipeline_ok,
+        "gate_ok": gate_ok,
+    }
+
+
+def _run_official_gold_rebuild(args: argparse.Namespace) -> int:
+    base_settings = load_settings(ROOT)
+    source_manifest_path: Path | None = args.source_manifest
+    if getattr(args, "full_official_catalog", False):
+        source_manifest_path = _localized_full_catalog_manifest(ROOT, base_settings)
+
+    max_repair_passes = max(0, int(getattr(args, "localization_repair_passes", 0) or 0))
+    attempts: list[dict[str, Any]] = []
+    last_result: dict[str, Any] | None = None
+    for attempt_index in range(max_repair_passes + 1):
+        source_manifest_override = str(source_manifest_path) if source_manifest_path is not None else ""
+        attempt_settings = replace(
+            base_settings,
+            source_manifest_path_override=source_manifest_override,
+        )
+        result = _run_official_gold_rebuild_pass(args, settings=attempt_settings)
+        last_result = result
+        payload = result["payload"]
+        log = result["log"]
+        pipeline_ok = bool(result["pipeline_ok"])
+        gate_ok = bool(result["gate_ok"])
+        attempts.append(
+            {
+                "attempt": attempt_index + 1,
+                "source_manifest_path": str(attempt_settings.source_manifest_path),
+                "status": "ok" if pipeline_ok and gate_ok else "fail",
+                "gate_status": payload.get("status"),
+                "pipeline_error_count": len(log.errors),
+                "failures": payload.get("failures", []),
+            }
+        )
+        if pipeline_ok and gate_ok:
+            break
+        if attempt_index >= max_repair_passes:
+            break
+        should_retry, retry_reason = _official_gold_rebuild_should_retry(
+            payload=payload,
+            log_errors=list(log.errors),
+            full_official_catalog=bool(getattr(args, "full_official_catalog", False)),
+        )
+        if not should_retry:
+            break
+        source_manifest_path = _localized_full_catalog_manifest(ROOT, base_settings)
+        print(
+            json.dumps(
+                {
+                    "status": "retrying",
+                    "reason": retry_reason,
+                    "next_attempt": attempt_index + 2,
+                    "source_manifest_path": str(source_manifest_path),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+
+    if last_result is None:
+        return 1
+    report_path = last_result["report_path"]
+    artifact_manifest_path = last_result["artifact_manifest_path"]
+    artifact_manifest = last_result["artifact_manifest"]
+    runtime_manifest_publication = last_result["runtime_manifest_publication"]
+    markdown_materialization = last_result["runtime_markdown_materialization"]
+    payload = last_result["payload"]
+    log = last_result["log"]
+    pipeline_ok = bool(last_result["pipeline_ok"])
+    gate_ok = bool(last_result["gate_ok"])
+    payload["rebuild_attempts"] = attempts
+    report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"wrote official gold gate report: {report_path}")
     print(f"wrote artifact manifest: {artifact_manifest_path}")
     print(
@@ -623,6 +859,8 @@ def main() -> int:
         return _run_runtime(args)
     if args.command == "maintenance-smoke":
         return _run_maintenance_smoke(args)
+    if args.command == "chat-matrix-smoke":
+        return _run_chat_matrix_smoke(args)
     if args.command == "private-lane-smoke":
         return _run_private_lane_smoke(args)
     if args.command == "graph-compact":

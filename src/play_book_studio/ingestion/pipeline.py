@@ -7,9 +7,17 @@ manifest -> collect -> normalize -> chunk -> embed -> qdrant
 from __future__ import annotations
 
 import json
+import os
+import time
 from pathlib import Path
 
-from play_book_studio.canonical import build_source_repo_document_ast, project_playbook_document, validate_document_ast
+from play_book_studio.canonical import (
+    build_source_repo_document_ast,
+    project_playbook_document,
+    repair_unlocalized_english_units,
+    translate_document_ast,
+    validate_document_ast,
+)
 from .audit_rules import (
     LANGUAGE_FALLBACK_RE,
     body_language_guess,
@@ -52,9 +60,21 @@ from play_book_studio.config.settings import HIGH_VALUE_SLUGS, Settings
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
+    tmp_path = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    with tmp_path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    last_exc: OSError | None = None
+    for attempt in range(6):
+        try:
+            tmp_path.replace(path)
+            return
+        except OSError as exc:
+            last_exc = exc
+            if attempt < 5:
+                time.sleep(0.5 * (attempt + 1))
+    if last_exc is not None:
+        raise last_exc
 
 
 def _write_jsonl_targets(paths: tuple[Path, ...], rows: list[dict]) -> None:
@@ -193,6 +213,48 @@ def _validate_source_repo_document(document, slug: str) -> None:
         raise ValueError(f"Invalid canonical AST for {slug}: {joined}")
 
 
+def _maybe_translate_source_first_document(document, settings: Settings, entry: SourceManifestEntry):
+    if entry.content_status == CONTENT_STATUS_TRANSLATED_KO_DRAFT:
+        return translate_document_ast(document, settings)
+    return repair_unlocalized_english_units(document, settings)
+
+
+def _maybe_repair_unlocalized_html_document(document, settings: Settings, entry: SourceManifestEntry):
+    if entry.content_status == CONTENT_STATUS_TRANSLATED_KO_DRAFT:
+        return translate_document_ast(document, settings)
+    return repair_unlocalized_english_units(document, settings)
+
+
+def _source_first_or_html_document(entry: SourceManifestEntry, settings: Settings):
+    try:
+        hydrate_source_repo_artifacts(settings, entry)
+        runtime_entry, source_paths = _source_repo_runtime_entry(settings, entry)
+        document = build_source_repo_document_ast(
+            entry=runtime_entry,
+            source_paths=source_paths,
+            fallback_title=runtime_entry.title or entry.title or entry.book_slug,
+        )
+        return _maybe_translate_source_first_document(document, settings, runtime_entry), runtime_entry
+    except Exception as source_exc:  # noqa: BLE001
+        collect_entry(entry, settings, force=False)
+        html = raw_html_path(settings, entry.book_slug).read_text(encoding="utf-8")
+        runtime_entry = entry_with_collected_metadata(settings, entry)
+        document = extract_document_ast(html, runtime_entry, settings=settings)
+        document = _maybe_repair_unlocalized_html_document(document, settings, runtime_entry)
+        runtime_entry = SourceManifestEntry(
+            **{
+                **runtime_entry.to_dict(),
+                "source_lane": runtime_entry.source_lane or "official_html_fallback",
+                "fallback_input_kind": runtime_entry.fallback_input_kind or "html_single",
+                "citation_block_reason": (
+                    runtime_entry.citation_block_reason
+                    or f"source_repo_fallback: {source_exc}"
+                ),
+            }
+        )
+        return document, runtime_entry
+
+
 def ensure_manifest(settings: Settings, refresh: bool = False) -> list[SourceManifestEntry]:
     if refresh or not settings.source_catalog_path.exists():
         previous_entries = (
@@ -273,7 +335,21 @@ def run_ingestion_pipeline(
                 _save_log(settings, log)
                 continue
             if entry.source_kind == "source-first":
-                hydrate_source_repo_artifacts(settings, entry)
+                try:
+                    hydrate_source_repo_artifacts(settings, entry)
+                except Exception as source_exc:  # noqa: BLE001
+                    if not settings.official_html_fallback_allowed:
+                        raise
+                    collect_entry(entry, settings, force=force_collect)
+                    log.collected_count += 1
+                    log.collected_sources.append(entry.book_slug)
+                    log.upsert_book_stat(entry.book_slug, collected=True, source_url=entry.source_url)
+                    _progress(
+                        f"[collect {index}/{len(collect_entries)}] "
+                        f"{entry.book_slug} source=html_fallback reason={source_exc}"
+                    )
+                    _save_log(settings, log)
+                    continue
                 log.upsert_book_stat(entry.book_slug, collected=True, source_url=entry.source_url)
                 _progress(
                     f"[collect {index}/{len(collect_entries)}] "
@@ -316,13 +392,7 @@ def run_ingestion_pipeline(
                 )
                 playbook_documents.append(approved_playbook_payload)
             elif entry.source_kind == "source-first":
-                hydrate_source_repo_artifacts(settings, entry)
-                runtime_entry, source_paths = _source_repo_runtime_entry(settings, entry)
-                document = build_source_repo_document_ast(
-                    entry=runtime_entry,
-                    source_paths=source_paths,
-                    fallback_title=runtime_entry.title or entry.title or entry.book_slug,
-                )
+                document, runtime_entry = _source_first_or_html_document(entry, settings)
                 _validate_source_repo_document(document, runtime_entry.book_slug)
                 sections = project_normalized_sections(document)
                 inferred_entry = _entry_with_inferred_runtime_status(
@@ -348,6 +418,8 @@ def run_ingestion_pipeline(
                 if inferred_entry.to_dict() != runtime_entry.to_dict():
                     document = extract_document_ast(html, inferred_entry, settings=settings)
                     sections = project_normalized_sections(document)
+                document = _maybe_repair_unlocalized_html_document(document, settings, inferred_entry)
+                sections = project_normalized_sections(document)
                 playbook_documents.append(project_playbook_document(document).to_dict())
             all_sections.extend(sections)
             log.processed_sources.append(entry.book_slug)
@@ -373,6 +445,10 @@ def run_ingestion_pipeline(
     log.stage = "write_normalized"
     log.normalized_count = len(all_sections)
     _progress(f"[normalize] total_sections={len(all_sections)}")
+    if process_entries and not all_sections:
+        raise RuntimeError(
+            "normalize produced zero sections; refusing to overwrite corpus artifacts"
+        )
     normalized_rows = [section.to_dict() for section in all_sections]
     _write_jsonl_targets(
         settings.normalized_docs_candidates,

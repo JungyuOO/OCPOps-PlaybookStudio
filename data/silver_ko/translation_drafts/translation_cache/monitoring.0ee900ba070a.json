@@ -1,0 +1,26 @@
+{
+  "book_slug": "monitoring",
+  "doc_id": "monitoring:4.20:ko:source_repo",
+  "source_fingerprint": "0ee900ba070ae495b82ab4e5cd0a2f681bc27faaae543e1c3a958a5a4190a0d7",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/monitoring/index",
+  "item_count": 7,
+  "items": {
+    "doc.title": "OpenShift Container Platform 모니터링에 대한 정보",
+    "s0.heading": "OpenShift Container Platform 모니터링에 대한 정보",
+    "s0.path.0": "OpenShift Container Platform 모니터링에 대한 정보",
+    "s0.b0.paragraph": "OpenShift Container Platform 은 핵심 플랫폼 구성 요소에 대한 모니터링을 제공하는 사전 구성, 사전 설치 및 자체 업데이트 모니터링 스택을 포함합니다.",
+    "s0.b1.paragraph": "OpenShift Container Platform 을 설치한 후 클러스터 관리자는 사용자의 정의된 프로젝트에 대한 모니터링을 선택적으로 활성화할 수 있습니다. 이 기능을 사용하면 클러스터 관리자, 개발자 및 기타 사용자가 자신의 프로젝트에서 서비스와 포드가 어떻게 모니터링되는지 지정할 수 있습니다.",
+    "s0.b2.note.title": "참고",
+    "s0.b2.note.text": "모니터링 스택 문서에 대한 정보는 [Red Hat OpenShift 를 위한 모니터링 스택](https://docs.redhat.com/en/documentation/monitoring_stack_for_red_hat_openshift/latest)이라는 별도의 문서 세트에서 사용할 수 있습니다."
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 7,
+    "total_unit_count": 7,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 7
+  }
+}

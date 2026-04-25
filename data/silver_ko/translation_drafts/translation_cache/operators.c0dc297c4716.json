@@ -1,0 +1,43 @@
+{
+  "book_slug": "operators",
+  "doc_id": "operators:4.20:ko:source_repo",
+  "source_fingerprint": "c0dc297c4716a9bebe507630c6c7a6ba2d7561550a2ffd530916d38c1bb9b91a",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/operators/index",
+  "item_count": 24,
+  "items": {
+    "doc.title": "Operators 개요",
+    "s0.heading": "OpenShift Container Platform 의 Operators",
+    "s0.path.0": "OpenShift Container Platform 의 Operators",
+    "s0.b0.paragraph": "Operators 는 OpenShift Container Platform 의 가장 중요한 구성 요소 중 하나입니다. 컨트롤 플레인에서 서비스를 패키징, 배포 및 관리하는 데 선호되는 방법이며, 사용자가 실행하는 애플리케이션에도 이점을 제공할 수 있습니다.",
+    "s0.b1.paragraph": "Operators 는 Kubernetes API 와 CLI 도구인 OpenShift CLI (oc) 와 같은 도구를 통합합니다. Operators 는 애플리케이션 모니터링, 건강 상태 확인 수행, OTA(Over-the-air) 업데이트 관리 및 애플리케이션이 지정된 상태를 유지하도록 보장하는 수단을 제공합니다.",
+    "s0.b4.paragraph": "Operators 는 더 세밀한 구성 경험을 제공합니다. 전역 설정 파일을 수정하는 대신 Operator 가 노출하는 API 를 수정하여 각 구성 요소를 구성합니다.",
+    "s0.b5.paragraph": "CRI-O 와 Kubelet 이 모든 노드에서 실행되므로, 거의 모든 다른 클러스터 기능을 Operators 를 사용하여 컨트롤 플레인에서 관리할 수 있습니다. Operators 를 사용하여 컨트롤 플레인에 추가되는 구성 요소에는 중요한 네트워킹 및 자격 증명 서비스가 포함됩니다.",
+    "s0.b6.paragraph": "Operators 는 설치 및 구성과 같은 일반적인 Day 1 작업을 구현하고 자동화하도록 특별히 Kubernetes 네이티브 애플리케이션을 위해 설계되었습니다. Operators 는 자동 확장 또는 축소 및 백업 생성과 같은 Day 2 작업도 자동화할 수 있습니다. 이러한 모든 활동은 클러스터에서 실행되는 소프트웨어 조각에 의해 지시됩니다.",
+    "s0.b7.paragraph": "둘 다 유사한 Operator 개념과 목표를 따르지만, OpenShift Container Platform 의 Operators 는 목적에 따라 두 가지 다른 시스템에 의해 관리됩니다.",
+    "s0.b8.paragraph": "Cluster Operators:: Cluster Version Operator (CVO) 에 의해 관리되며 기본적으로 설치되어 클러스터 기능을 수행합니다.\n선택적 추가 Operators:: Operator Lifecycle Manager (OLM) 에 의해 관리되며 사용자에게 애플리케이션에서 실행할 수 있도록 제공될 수 있습니다. 또한 _OLM 기반 Operators_ 로도 알려져 있습니다.",
+    "s1.heading": "개발자를 위한 내용",
+    "s1.path.0": "개발자를 위한 내용",
+    "s1.b0.paragraph": "Operator 작성자로서 OLM 기반 Operators 에 대해 다음 개발 작업을 수행할 수 있습니다:",
+    "s1.b1.paragraph": "** Namespaces 에 Operator 를 설치 및 구독합니다.\n** 웹 콘솔을 통해 설치된 Operator 로 애플리케이션을 생성합니다.",
+    "s1.b2.paragraph": ".추가 리소스\n* Operator 개발자를 위한 머신 삭제 라이프사이클 훅 예제",
+    "s2.heading": "관리자를 위한 내용",
+    "s2.path.0": "관리자를 위한 내용",
+    "s2.b0.paragraph": "클러스터 관리자로서 OLM 기반 Operators 에 대해 다음 관리 작업을 수행할 수 있습니다:",
+    "s2.b1.paragraph": "`dedicated-admin` 역할을 가진 관리자로서 다음 Operator 작업을 수행할 수 있습니다:",
+    "s2.b2.paragraph": "** 커스텀 카탈로그 관리.\n** 클러스터 관리자가 아닌 사용자가 Operator 를 설치할 수 있도록 허용.\n** 소프트웨어 카탈로그에서 Operator 를 설치.\n** 소프트웨어 카탈로그에서 Operator 를 설치.\n** Operator 상태 확인.\n** Operator 조건 관리.\n** 설치된 Operator 업그레이드.\n** 설치된 Operator 삭제.\n** 프록시 지원 구성.\n** 연결되지 않은 환경에서 Operator Lifecycle Manager 사용.",
+    "s2.b3.paragraph": "Red Hat 에서 제공하는 클러스터 Operators 에 대한 자세한 내용은 Cluster Operators 참조를 확인하세요.",
+    "s3.heading": "다음 단계",
+    "s3.path.0": "다음 단계",
+    "s3.b0.paragraph": "* Operators 란 무엇인가요?"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 24,
+    "total_unit_count": 24,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 24
+  }
+}

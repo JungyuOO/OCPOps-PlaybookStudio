@@ -88,6 +88,22 @@ def _playbooks_by_slug(path: Path) -> dict[str, dict[str, object]]:
     }
 
 
+def _resolved_source_mirror_root(settings: Settings, explicit_root: str) -> Path:
+    default_root = source_mirror_root(settings.root_dir)
+    explicit = str(explicit_root or "").strip()
+    if not explicit:
+        return default_root
+    candidate = Path(explicit)
+    try:
+        candidate.resolve().relative_to(settings.root_dir.resolve())
+        candidate_is_current_workspace = True
+    except ValueError:
+        candidate_is_current_workspace = False
+    if candidate_is_current_workspace and candidate.exists() and (candidate / "_attributes").exists():
+        return candidate
+    return default_root
+
+
 def _source_repo_runtime_entry(settings: Settings, entry: SourceManifestEntry) -> tuple[SourceManifestEntry, list[Path]]:
     source_relative_paths = [str(path).strip() for path in entry.source_relative_paths if str(path).strip()]
     source_relative_path = str(entry.source_relative_path or "").strip()
@@ -104,7 +120,7 @@ def _source_repo_runtime_entry(settings: Settings, entry: SourceManifestEntry) -
         source_binding_kind = binding.binding_kind
     if not source_relative_paths:
         raise ValueError(f"repo/AsciiDoc binding missing for {entry.book_slug}")
-    mirror_root = Path(entry.source_mirror_root or source_mirror_root(settings.root_dir))
+    mirror_root = _resolved_source_mirror_root(settings, entry.source_mirror_root)
     source_paths = [(mirror_root / relative_path).resolve() for relative_path in source_relative_paths]
     missing = [str(path) for path in source_paths if not path.exists()]
     if missing:

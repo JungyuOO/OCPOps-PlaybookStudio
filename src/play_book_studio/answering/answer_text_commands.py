@@ -318,6 +318,48 @@ def _collect_ordered_grounded_commands(citations, *, limit: int = 3) -> list[str
     return commands
 
 
+def _build_buildconfig_command_guide_answer(*, query: str, citations) -> str | None:
+    lowered_query = (query or "").lower()
+    if "buildconfig" not in lowered_query:
+        return None
+    buildconfig_citation = next(
+        (
+            citation
+            for citation in citations
+            if str(getattr(citation, "book_slug", "") or "").strip() == "builds_using_buildconfig"
+        ),
+        None,
+    )
+    if buildconfig_citation is None:
+        return None
+
+    official_index = int(getattr(buildconfig_citation, "index", 1) or 1)
+    uploaded_citation = next(
+        (
+            citation
+            for citation in citations
+            if str(getattr(citation, "source_collection", "") or "").strip() == "uploaded"
+        ),
+        None,
+    )
+    uploaded_prefix = ""
+    if uploaded_citation is not None:
+        uploaded_index = int(getattr(uploaded_citation, "index", 1) or 1)
+        uploaded_prefix = f"고객 업로드 운영 기준은 [{uploaded_index}], "
+
+    return (
+        f"답변: {uploaded_prefix}`BuildConfig` 운영 점검은 공식 BuildConfig 문서의 "
+        f"빌드 정의와 상태 확인 근거를 기준으로 시작합니다 [{official_index}].\n\n"
+        "```bash\n"
+        "oc get buildconfig -n <namespace>\n"
+        "oc describe buildconfig <name> -n <namespace>\n"
+        "oc get builds -n <namespace>\n"
+        "```\n\n"
+        f"먼저 대상 namespace의 `BuildConfig` 목록을 좁히고, 개별 `BuildConfig`의 트리거, "
+        f"전략, 출력 이미지, 최근 build 상태를 이어서 확인하면 됩니다 [{official_index}]."
+    )
+
+
 def _first_grounded_command_citation_index(citations) -> int:
     for index, citation in enumerate(citations, start=1):
         if _ordered_citation_commands(citation, limit=1):
@@ -485,6 +527,12 @@ def build_grounded_command_guide_answer(
         or has_corrective_follow_up(query)
     ):
         return None
+    buildconfig_answer = _build_buildconfig_command_guide_answer(
+        query=query,
+        citations=citations,
+    )
+    if buildconfig_answer is not None:
+        return buildconfig_answer
     if not has_sufficient_command_grounding(query=query, citations=citations):
         return None
 

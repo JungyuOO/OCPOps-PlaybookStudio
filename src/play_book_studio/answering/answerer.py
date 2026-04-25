@@ -54,7 +54,6 @@ from .models import AnswerResult, Citation
 from .pipeline_helpers import (
     build_answer_result,
     build_follow_up_clarification_answer,
-    finalize_deployment_scaling_answer,
     generate_grounded_answer_text,
 )
 from .prompt import build_messages
@@ -493,12 +492,19 @@ def _polish_blended_runtime_answer_citations(
     *,
     query: str,
     answer_text: str,
+    selected_citations: list[Citation],
     final_citations: list[Citation],
     cited_indices: list[int],
 ) -> tuple[str, list[Citation], list[int]]:
-    if not final_citations or not _is_runtime_blend_query(query):
+    if not _is_runtime_blend_query(query):
         return answer_text, final_citations, cited_indices
-    if _looks_like_missing_coverage_answer(answer_text):
+
+    final_citations = preserve_explicit_mixed_runtime_citations(
+        query,
+        selected_citations=selected_citations,
+        final_citations=final_citations,
+    )
+    if not final_citations:
         return answer_text, final_citations, cited_indices
 
     bucket_index_map: dict[str, int] = {}
@@ -530,6 +536,19 @@ def _polish_blended_runtime_answer_citations(
         polished_answer,
         final_citations,
     )
+
+
+def _has_blended_citation_coverage(
+    *,
+    final_citations: list[Citation],
+    cited_indices: list[int],
+) -> bool:
+    cited_buckets = {
+        _citation_truth_bucket_local(final_citations[index - 1])
+        for index in cited_indices
+        if 1 <= index <= len(final_citations)
+    }
+    return {"private", "official"}.issubset(cited_buckets)
 
 
 def _build_blended_runtime_fallback_answer(
@@ -593,10 +612,18 @@ def _finalize_deterministic_runtime_answer(
     answer_text: str,
     citations: list[Citation],
 ) -> tuple[str, list[Citation], list[int]]:
-    answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
+    answer_text, final_citations, cited_indices = finalize_citations(
         answer_text,
         citations,
     )
+    if not cited_indices and citations:
+        fallback_citations = select_fallback_citations(citations, limit=1)
+        if fallback_citations:
+            answer_text = inject_single_citation(answer_text, citation_index=1)
+            answer_text, final_citations, cited_indices = finalize_citations(
+                answer_text,
+                fallback_citations,
+            )
     final_citations = preserve_explicit_mixed_runtime_citations(
         query,
         selected_citations=citations,
@@ -1361,10 +1388,14 @@ class ChatAnswerer:
         answer_text, final_citations, cited_indices = _polish_blended_runtime_answer_citations(
             query=query,
             answer_text=answer_text,
+            selected_citations=context_bundle.citations,
             final_citations=final_citations,
             cited_indices=cited_indices,
         )
-        if _looks_like_missing_coverage_answer(answer_text):
+        if _looks_like_missing_coverage_answer(answer_text) and not _has_blended_citation_coverage(
+            final_citations=final_citations,
+            cited_indices=cited_indices,
+        ):
             blended_fallback = _build_blended_runtime_fallback_answer(
                 query=query,
                 citations=context_bundle.citations,
@@ -1513,7 +1544,10 @@ class ChatAnswerer:
                 llm_runtime_meta=llm_runtime_meta,
             )
 
-        if _looks_like_missing_coverage_answer(answer_text):
+        if _looks_like_missing_coverage_answer(answer_text) and not _has_blended_citation_coverage(
+            final_citations=final_citations,
+            cited_indices=cited_indices,
+        ):
             blended_fallback = _build_blended_runtime_fallback_answer(
                 query=query,
                 citations=context_bundle.citations,

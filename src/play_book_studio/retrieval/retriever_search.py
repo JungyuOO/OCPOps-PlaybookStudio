@@ -118,6 +118,18 @@ _CUSTOMER_PACK_EXPLICIT_QUERY_TOKENS = (
     "customer pack",
     "customer-pack",
 )
+_CUSTOMER_PACK_BROAD_CONTEXT_TOKENS = (
+    "자료",
+    "문서",
+    "운영",
+    "설계",
+    "ppt",
+    "pptx",
+    "ci/cd",
+    "cicd",
+    "운영북",
+)
+_OFFICIAL_RUNTIME_TOPIC_RE = re.compile(r"\b(?:ocp|openshift)\b", re.IGNORECASE)
 
 
 def _compact_customer_pack_title_text(text: str) -> str:
@@ -232,9 +244,21 @@ def _mentions_official_runtime_sources(query: str) -> bool:
     return bool(_OFFICIAL_RUNTIME_SOURCE_RE.search(query or ""))
 
 
+def _has_official_runtime_signal(query: str) -> bool:
+    return _mentions_official_runtime_sources(query) or bool(_OFFICIAL_RUNTIME_TOPIC_RE.search(query or ""))
+
+
+def _has_broad_customer_pack_signal(lowered_query: str) -> bool:
+    return "고객" in lowered_query and any(
+        token in lowered_query for token in _CUSTOMER_PACK_BROAD_CONTEXT_TOKENS
+    )
+
+
 def _is_customer_pack_explicit_query(query: str) -> bool:
     lowered = (query or "").lower()
-    return any(token in lowered for token in _CUSTOMER_PACK_EXPLICIT_QUERY_TOKENS)
+    return any(token in lowered for token in _CUSTOMER_PACK_EXPLICIT_QUERY_TOKENS) or _has_broad_customer_pack_signal(
+        lowered
+    )
 
 
 def _official_title_match_score(query: str, *, title_candidates: tuple[str, ...]) -> float:
@@ -242,7 +266,7 @@ def _official_title_match_score(query: str, *, title_candidates: tuple[str, ...]
     if not compact_query:
         return 0.0
     query_tokens = set(_official_title_tokens(query))
-    official_source_mentioned = _mentions_official_runtime_sources(query)
+    official_source_mentioned = _has_official_runtime_signal(query)
     best_score = 0.0
     for candidate in title_candidates:
         compact_candidate = _compact_customer_pack_title_text(candidate)

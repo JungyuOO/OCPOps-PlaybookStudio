@@ -1,0 +1,25 @@
+{
+  "book_slug": "installing_ibm_cloud_bare_metal_classic",
+  "doc_id": "installing_ibm_cloud_bare_metal_classic:4.20:ko",
+  "source_fingerprint": "0c4b2889c4c2b118f540ee757987a9ad012300e6f7cf2817379305fa90a45a81",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_ibm_cloud_bare_metal_classic/index",
+  "item_count": 6,
+  "items": {
+    "s18.b1.table.cell.2.0": "[CODE language=\"plaintext\" wrap_hint=\"true\" overflow_hint=\"toggle\"] platform: 베어 메탈: bootstrapExternalStaticDNS [/CODE]",
+    "s18.b1.table.cell.3.0": "[CODE language=\"plaintext\" wrap_hint=\"true\" overflow_hint=\"toggle\"] platform: 베어 메탈: bootstrapExternalStaticIP [/CODE]",
+    "s18.b1.table.cell.4.0": "[CODE language=\"plaintext\" wrap_hint=\"true\" overflow_hint=\"toggle\"] platform: 베어 메탈: bootstrapExternalStaticGateway [/CODE]",
+    "s18.b1.table.cell.9.0": "[CODE language=\"plaintext\" wrap_hint=\"true\" overflow_hint=\"toggle\"] compute: - name: worker [/CODE]",
+    "s18.b1.table.cell.11.0": "[CODE language=\"plaintext\" wrap_hint=\"true\" overflow_hint=\"toggle\"] controlPlane: name: master [/CODE]",
+    "s18.b1.table.cell.13.0": "[CODE language=\"plaintext\" wrap_hint=\"true\" overflow_hint=\"toggle\"] arbiter: name: arbiter [/CODE]"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 6,
+    "total_unit_count": 6,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

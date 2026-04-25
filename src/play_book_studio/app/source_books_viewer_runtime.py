@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from play_book_studio.config.settings import load_settings
 
@@ -42,6 +42,57 @@ def _resolve_page_mode(page_mode: str) -> str:
     return "multi" if normalized == "multi" else "single"
 
 
+def _target_anchor_from_request(viewer_path: str) -> str:
+    request = urlparse(str(viewer_path or "").strip())
+    fragment = str(request.fragment or "").strip()
+    if fragment:
+        return fragment
+    params = parse_qs(request.query, keep_blank_values=False)
+    for key in ("section", "anchor", "section_anchor"):
+        value = str((params.get(key) or [""])[0]).strip()
+        if value:
+            return value
+    return ""
+
+
+def _viewer_path_without_query_or_fragment(viewer_path: str) -> str:
+    request = urlparse(str(viewer_path or "").strip())
+    return urlunparse(request._replace(query="", fragment=""))
+
+
+def _single_section_href(viewer_path: str, anchor: str) -> str:
+    normalized_anchor = str(anchor or "").strip()
+    if not normalized_anchor:
+        return "#"
+    request = urlparse(str(viewer_path or "").strip())
+    params = parse_qs(request.query, keep_blank_values=False)
+    params["page_mode"] = ["single"]
+    params["section"] = [normalized_anchor]
+    return urlunparse(
+        request._replace(
+            query=urlencode(params, doseq=True),
+            fragment=normalized_anchor,
+        )
+    )
+
+
+def _section_outline_for_view(
+    sections: list[dict],
+    *,
+    page_mode: str,
+    viewer_path: str,
+) -> list[dict[str, str]]:
+    outline = _build_section_outline(sections)
+    if _resolve_page_mode(page_mode) != "single":
+        return outline
+    enriched: list[dict[str, str]] = []
+    for item in outline:
+        next_item = dict(item)
+        next_item["href"] = _single_section_href(viewer_path, str(item.get("anchor") or ""))
+        enriched.append(next_item)
+    return enriched
+
+
 def _select_view_sections(
     sections: list[dict],
     *,
@@ -65,6 +116,7 @@ def _build_section_navigation(
     *,
     target_anchor: str,
     page_mode: str,
+    viewer_path: str = "",
 ) -> list[dict[str, str]]:
     if _resolve_page_mode(page_mode) != "single" or not sections:
         return []
@@ -81,13 +133,25 @@ def _build_section_navigation(
         previous_anchor = str(previous_row.get("anchor") or "").strip()
         previous_heading = str(previous_row.get("heading") or previous_anchor).strip()
         if previous_anchor:
-            navigation.append({"label": "이전", "href": f"#{previous_anchor}", "title": previous_heading})
+            navigation.append(
+                {
+                    "label": "이전",
+                    "href": _single_section_href(viewer_path, previous_anchor) if viewer_path else f"#{previous_anchor}",
+                    "title": previous_heading,
+                }
+            )
     if current_index + 1 < len(sections):
         next_row = sections[current_index + 1]
         next_anchor = str(next_row.get("anchor") or "").strip()
         next_heading = str(next_row.get("heading") or next_anchor).strip()
         if next_anchor:
-            navigation.append({"label": "다음", "href": f"#{next_anchor}", "title": next_heading})
+            navigation.append(
+                {
+                    "label": "다음",
+                    "href": _single_section_href(viewer_path, next_anchor) if viewer_path else f"#{next_anchor}",
+                    "title": next_heading,
+                }
+            )
     return navigation
 
 
@@ -258,7 +322,9 @@ def internal_viewer_html(root_dir: Path, viewer_path: str, *, page_mode: str = "
 
     request = urlparse((viewer_path or "").strip())
     embedded = "embed=1" in request.query
-    book_slug, target_anchor = parsed
+    book_slug, parsed_anchor = parsed
+    target_anchor = _target_anchor_from_request(viewer_path) or parsed_anchor
+    base_viewer_path = _viewer_path_without_query_or_fragment(viewer_path)
     playbook_book = _load_playbook_book(root_dir, book_slug)
     manifest_entry = _manifest_entry_for_book(root_dir, book_slug)
     settings = load_settings(root_dir)
@@ -320,8 +386,13 @@ def internal_viewer_html(root_dir: Path, viewer_path: str, *, page_mode: str = "
         eyebrow=eyebrow,
         summary=summary,
         embedded=embedded,
-        section_outline=_build_section_outline(content_sections),
-        section_navigation=_build_section_navigation(content_sections, target_anchor=target_anchor, page_mode=page_mode),
+        section_outline=_section_outline_for_view(content_sections, page_mode=page_mode, viewer_path=base_viewer_path),
+        section_navigation=_build_section_navigation(
+            content_sections,
+            target_anchor=target_anchor,
+            page_mode=page_mode,
+            viewer_path=base_viewer_path,
+        ),
         section_metrics=_build_section_metrics(content_sections),
         page_overlay_toolbar=_render_page_overlay_toolbar(
             target_kind=overlay_target["target_kind"],
@@ -340,6 +411,8 @@ def internal_active_runtime_markdown_viewer_html(root_dir: Path, viewer_path: st
         return None
     request = urlparse((viewer_path or "").strip())
     embedded = "embed=1" in request.query
+    target_anchor = _target_anchor_from_request(viewer_path)
+    base_viewer_path = _viewer_path_without_query_or_fragment(viewer_path)
     manifest_entry = _manifest_entry_for_book(root_dir, slug)
     playbook_book = _load_playbook_book(root_dir, slug)
     if playbook_book is not None:
@@ -376,13 +449,13 @@ def internal_active_runtime_markdown_viewer_html(root_dir: Path, viewer_path: st
             summary = _markdown_summary(content_sections)
             source_url = ""
     content_sections = _sections_with_relation_figures(root_dir, slug, content_sections)
-    visible_sections = _select_view_sections(content_sections, target_anchor=request.fragment.strip(), page_mode=page_mode)
-    cards = _build_study_section_cards(visible_sections, book_slug=slug, target_anchor=request.fragment.strip(), embedded=embedded, root_dir=root_dir)
+    visible_sections = _select_view_sections(content_sections, target_anchor=target_anchor, page_mode=page_mode)
+    cards = _build_study_section_cards(visible_sections, book_slug=slug, target_anchor=target_anchor, embedded=embedded, root_dir=root_dir)
     overlay_target = _overlay_target_for_view(
         book_slug=slug,
         title=str(title),
         viewer_path=_preferred_book_href(root_dir, slug),
-        target_anchor=request.fragment.strip(),
+        target_anchor=target_anchor,
         visible_sections=visible_sections,
         page_mode=page_mode,
     )
@@ -395,8 +468,13 @@ def internal_active_runtime_markdown_viewer_html(root_dir: Path, viewer_path: st
         eyebrow=official_runtime_truth_payload(settings=load_settings(root_dir), manifest_entry=manifest_entry).get("boundary_badge") or "Source-First Candidate",
         summary=summary,
         embedded=embedded,
-        section_outline=_build_section_outline(content_sections),
-        section_navigation=_build_section_navigation(content_sections, target_anchor=request.fragment.strip(), page_mode=page_mode),
+        section_outline=_section_outline_for_view(content_sections, page_mode=page_mode, viewer_path=base_viewer_path),
+        section_navigation=_build_section_navigation(
+            content_sections,
+            target_anchor=target_anchor,
+            page_mode=page_mode,
+            viewer_path=base_viewer_path,
+        ),
         section_metrics=_build_section_metrics(content_sections),
         page_overlay_toolbar=_render_page_overlay_toolbar(
             target_kind=overlay_target["target_kind"],

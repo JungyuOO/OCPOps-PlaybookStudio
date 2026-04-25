@@ -1,0 +1,22 @@
+{
+  "book_slug": "release_notes",
+  "doc_id": "release_notes:4.20:ko",
+  "source_fingerprint": "a89e28290fa77bda0f13c4db96334065c59df9e4b34657b0b4b13bac2fc9ccf5",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/release_notes/index",
+  "item_count": 3,
+  "items": {
+    "s20.b3.table.cell.26.0": "NVMe(Non-volatile Memory express 드라이브)",
+    "s179.b29.paragraph": "NBDE(Network-bound Disk Encryption) Tang Server Operator",
+    "s179.b51.paragraph": "Zero Trust Workload Identity Manager"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

@@ -10,6 +10,7 @@ from typing import Any
 
 from play_book_studio.app.server_routes_viewer import resolve_viewer_html
 from play_book_studio.config.settings import load_settings
+from play_book_studio.ingestion.localization_quality import build_official_ko_localization_audit
 from play_book_studio.source_provenance import source_fingerprint_for_entry, source_provenance_payload, source_ref_for_entry
 
 
@@ -730,11 +731,13 @@ def build_official_gold_gate_report(root_dir: Path) -> dict[str, Any]:
     viewer_probe = _viewer_probe(root_dir, sample_slug)
     portable_paths = _portable_path_findings(root_dir)
     artifact_manifest = _artifact_manifest(root_dir)
+    ko_localization = build_official_ko_localization_audit(playbook_rows)
     smoke = _smoke(root_dir, sample_slug)
     checks = {
         "portable_paths": portable_paths["status"] == "ok",
         "chunks_and_bm25_match": bool(chunks_rows) and len(chunks_rows) == len(bm25_rows),
         "code_blocks_present": int(block_counts.get("code", 0)) > 0,
+        "ko_runtime_has_no_unlocalized_english_prose": ko_localization["status"] == "ok",
         "inline_figures_present_when_sidecar_has_figures": (
             figure_sidecar_count == 0
             or int(block_counts.get("figure", 0)) > 0
@@ -780,6 +783,7 @@ def build_official_gold_gate_report(root_dir: Path) -> dict[str, Any]:
             "viewer_probe": viewer_probe,
             "portable_paths": portable_paths,
             "official_catalog_coverage": official_catalog_coverage,
+            "ko_localization": ko_localization,
         },
         "artifact_manifest": artifact_manifest,
     }

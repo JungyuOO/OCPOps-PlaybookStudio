@@ -1,0 +1,20 @@
+{
+  "book_slug": "postinstallation_configuration",
+  "doc_id": "postinstallation_configuration:4.20:ko",
+  "source_fingerprint": "477f10421c09de432e13c6f094fa01e5aac0ccfa75a25ce2941c0eb3c5107144",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/postinstallation_configuration/index",
+  "item_count": 1,
+  "items": {
+    "s232.b5.table.cell.11.1": "하이브리드 및 멀티클라우드 리소스 관리"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

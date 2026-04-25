@@ -1,0 +1,21 @@
+{
+  "book_slug": "image_apis",
+  "doc_id": "image_apis:4.20:ko",
+  "source_fingerprint": "0da78cad7e09aaaf55f51667b9894dadf991ae8753e0ad5bc8f999c327cb138c",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/image_apis/index",
+  "item_count": 2,
+  "items": {
+    "s56.b6.table.cell.2.2": "IncludeManifest 은 각 이미지의 매니페스트가 응답에 포함되는지 여부를 결정합니다",
+    "s59.b6.table.cell.2.2": "IncludeManifest 은 각 이미지의 매니페스트가 응답에 포함되는지 여부를 결정합니다"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 2,
+    "total_unit_count": 2,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 2
+  }
+}

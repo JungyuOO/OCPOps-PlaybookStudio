@@ -1,0 +1,31 @@
+{
+  "book_slug": "security_and_compliance",
+  "doc_id": "security_and_compliance:4.20:ko",
+  "source_fingerprint": "da53c7a451d504cc76934fb7237433c9211ada72e205892ffc35dc2fd760d56a",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/security_and_compliance/index",
+  "item_count": 12,
+  "items": {
+    "s298.b0.table.cell.0.1": "호주 사이버 보안 센터 (ACSC) 필수 8",
+    "s298.b0.table.cell.1.1": "호주 사이버 보안 센터 (ACSC) 필수 8",
+    "s299.b3.table.cell.4.1": "Red Hat Enterprise Linux CoreOS 의 NIST 800-53 고영향 기준",
+    "s299.b3.table.cell.5.1": "Red Hat Enterprise Linux CoreOS 의 NIST 800-53 고영향 기준",
+    "s300.b0.table.cell.4.1": "Red Hat Enterprise Linux CoreOS 의 NIST 800-53 중간 영향력 기준",
+    "s300.b0.table.cell.5.1": "Red Hat Enterprise Linux CoreOS 의 NIST 800-53 중간 영향력 기준",
+    "s396.b1.paragraph": "RHBA-2022:1331 OpenShift File Integrity Operator 버그 수정",
+    "s399.b1.paragraph": "RHBA-2022:0142 OpenShift File Integrity Operator 버그 수정",
+    "s711.b1.table.cell.5.1": "object(keys:string, values:string)",
+    "s712.b1.table.cell.1.1": "object(keys:string, values:string)",
+    "s714.b1.table.cell.6.1": "object(keys:string, values:string)",
+    "s714.b1.table.cell.7.1": "object(keys:string, values:string)"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 12,
+    "total_unit_count": 12,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

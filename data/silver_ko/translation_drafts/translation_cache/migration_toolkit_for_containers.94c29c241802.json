@@ -1,0 +1,24 @@
+{
+  "book_slug": "migration_toolkit_for_containers",
+  "doc_id": "migration_toolkit_for_containers:4.20:ko",
+  "source_fingerprint": "94c29c241802df97c7ff6a1fea1e4615d3cf7ed923690e3414a016e3f65c2d7b",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/migration_toolkit_for_containers/index",
+  "item_count": 5,
+  "items": {
+    "doc.title": "컨테이너용 Migration Toolkit",
+    "s164.b0.paragraph": "`Unable to attach or mount volume for pod…timed out` 오류가 `rsync-server` 가 실행되는 노드의 kubelet 로그에서 `Unable to attach or mount volume for the pod…timed out waiting for the condition` 오류를 검색합니다.",
+    "s260.b0.paragraph": "`Unable to attach or mount volume for pod…timed out` 오류가 `rsync-server` 가 실행되는 노드의 kubelet 로그에서 `Unable to attach or mount volume for the pod…timed out waiting for the condition` 오류를 검색합니다.",
+    "s23.b12.paragraph": "pv_resizing_threshold 설정 후 PvCapacityAdjustmentRequired 경고가 표시되지 않음",
+    "s25.b5.paragraph": "CVE-2023-45857: Axios 크로스 사이트 요청 위조 취약점"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 5,
+    "total_unit_count": 5,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

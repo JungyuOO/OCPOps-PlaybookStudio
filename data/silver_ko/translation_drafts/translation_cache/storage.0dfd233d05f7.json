@@ -1,0 +1,20 @@
+{
+  "book_slug": "storage",
+  "doc_id": "storage:4.20:ko",
+  "source_fingerprint": "0dfd233d05f7df19e5122e064dbd7e7f33d0764eb4b73dc637b283b5ad1a3cb8",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/storage/index",
+  "item_count": 1,
+  "items": {
+    "s251.b8.paragraph": "GCP PD(Google Compute Engine Persistent Disk)"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

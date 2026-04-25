@@ -53,9 +53,10 @@ def _render_study_viewer_html(
     if section_outline:
         nav_links = "".join(
             """
-            <a class="document-nav-link" href="#{anchor}" title="{path}">{heading}</a>
+            <a class="document-nav-link" href="{href}" title="{path}">{heading}</a>
             """.format(
                 anchor=html.escape(str(item.get("anchor") or ""), quote=True),
+                href=html.escape(str(item.get("href") or f"#{item.get('anchor') or ''}"), quote=True),
                 path=html.escape(str(item.get("path") or "")),
                 heading=html.escape(str(item.get("heading") or "")),
             ).strip()

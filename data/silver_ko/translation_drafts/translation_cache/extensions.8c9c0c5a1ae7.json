@@ -1,0 +1,21 @@
+{
+  "book_slug": "extensions",
+  "doc_id": "extensions:4.20:ko",
+  "source_fingerprint": "8c9c0c5a1ae76e686300d13d56570fb55298dedc65c38872aab59741c8ad8db4",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/extensions/index",
+  "item_count": 2,
+  "items": {
+    "s73.b11.table.cell.1.5": "select(.type == \"AllNamespaces\" and .supported == true)) \\ and .spec.webhookdefinitions == null) \\",
+    "s96.b1.paragraph": "OR 또는 double vertical bar (||) 비교 연산자를 포함하여 다른 비교 문자열을 추가할 수 있습니다. 문자열 사이에 `OR` 또는 double vertical bar (`||`) 비교 연산자를 포함하여 다른 비교 문자열을 추가할 수 있습니다."
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 2,
+    "total_unit_count": 2,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

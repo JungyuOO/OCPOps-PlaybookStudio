@@ -6,7 +6,22 @@ import json
 from pathlib import Path
 import re
 
-from .models import CanonicalDocumentAst, PlaybookDocumentArtifact, PlaybookSectionArtifact
+from .models import (
+    AnchorBlock,
+    AstBlock,
+    CanonicalDocumentAst,
+    CodeBlock,
+    FigureBlock,
+    NoteBlock,
+    ParagraphBlock,
+    PlaybookDocumentArtifact,
+    PlaybookSectionArtifact,
+    PrerequisiteBlock,
+    ProcedureBlock,
+    ProcedureStep,
+    TableBlock,
+)
+from .ocp_ko_terminology import normalize_ocp_ko_terminology
 
 
 DOCS_SOURCE_URL_RE = re.compile(
@@ -31,18 +46,78 @@ def _resolved_legal_notice_url(document: CanonicalDocumentAst) -> str:
     )
 
 
+def _ko_text(text: str) -> str:
+    return normalize_ocp_ko_terminology(text)
+
+
+def _normalize_playbook_block(block: AstBlock) -> AstBlock:
+    if isinstance(block, ParagraphBlock):
+        return ParagraphBlock(text=_ko_text(block.text))
+    if isinstance(block, PrerequisiteBlock):
+        return PrerequisiteBlock(items=tuple(_ko_text(item) for item in block.items))
+    if isinstance(block, ProcedureBlock):
+        return ProcedureBlock(
+            steps=tuple(
+                ProcedureStep(
+                    ordinal=step.ordinal,
+                    text=_ko_text(step.text),
+                    substeps=tuple(_ko_text(substep) for substep in step.substeps),
+                )
+                for step in block.steps
+            )
+        )
+    if isinstance(block, CodeBlock):
+        return CodeBlock(
+            code=block.code,
+            language=block.language,
+            copy_text=block.copy_text,
+            wrap_hint=block.wrap_hint,
+            overflow_hint=block.overflow_hint,
+            caption=_ko_text(block.caption),
+        )
+    if isinstance(block, FigureBlock):
+        return FigureBlock(
+            src=block.src,
+            caption=_ko_text(block.caption),
+            alt=_ko_text(block.alt),
+            asset_ref=block.asset_ref,
+            asset_url=block.asset_url,
+            viewer_path=block.viewer_path,
+            source_file=block.source_file,
+            source_anchor=block.source_anchor,
+            asset_kind=block.asset_kind,
+            diagram_type=block.diagram_type,
+            kind_label=_ko_text(block.kind_label),
+        )
+    if isinstance(block, NoteBlock):
+        return NoteBlock(
+            text=_ko_text(block.text),
+            variant=block.variant,
+            title=_ko_text(block.title),
+        )
+    if isinstance(block, TableBlock):
+        return TableBlock(
+            headers=tuple(_ko_text(header) for header in block.headers),
+            rows=tuple(tuple(_ko_text(cell) for cell in row) for row in block.rows),
+            caption=_ko_text(block.caption),
+        )
+    if isinstance(block, AnchorBlock):
+        return AnchorBlock(anchor=block.anchor, label=_ko_text(block.label))
+    return block
+
+
 def project_playbook_document(document: CanonicalDocumentAst) -> PlaybookDocumentArtifact:
     sections = tuple(
         PlaybookSectionArtifact(
             section_id=section.section_id,
             ordinal=section.ordinal,
-            heading=section.heading,
+            heading=_ko_text(section.heading),
             level=section.level,
-            path=section.path,
+            path=tuple(_ko_text(path_item) for path_item in section.path),
             anchor=section.anchor,
             viewer_path=section.viewer_path,
             semantic_role=section.semantic_role,
-            blocks=section.blocks,
+            blocks=tuple(_normalize_playbook_block(block) for block in section.blocks),
         )
         for section in document.sections
     )
@@ -103,7 +178,7 @@ def project_playbook_document(document: CanonicalDocumentAst) -> PlaybookDocumen
     }
     return PlaybookDocumentArtifact(
         book_slug=document.book_slug,
-        title=document.title,
+        title=_ko_text(document.title),
         source_uri=document.source_url,
         source_language=document.source_language,
         language_hint=document.display_language,

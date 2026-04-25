@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import json
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 from play_book_studio.answering.llm import LLMClient
 from play_book_studio.config.settings import Settings
+from play_book_studio.ingestion.localization_quality import english_prose_reason
 
 from .ocp_ko_terminology import (
     normalize_ocp_ko_terminology,
@@ -21,6 +23,7 @@ from .models import (
     CanonicalDocumentAst,
     CanonicalSectionAst,
     CodeBlock,
+    FigureBlock,
     NoteBlock,
     ParagraphBlock,
     PrerequisiteBlock,
@@ -30,11 +33,38 @@ from .models import (
 )
 
 
-UNIT_BATCH_SIZE = 18
-UNIT_BATCH_CHAR_LIMIT = 2600
+UNIT_BATCH_SIZE = 32
+UNIT_BATCH_CHAR_LIMIT = 4800
 MAX_SINGLE_TEXT_CHARS = 1200
-TRANSLATION_BATCH_CONCURRENCY = 4
+TRANSLATION_BATCH_CONCURRENCY = 24
 OCP_KO_TERMINOLOGY_PROMPT = ocp_ko_terminology_prompt()
+STRICT_TRANSLATION_REPAIR_PASSES = 2
+
+DETERMINISTIC_TRANSLATION_OVERRIDES = {
+    "Abstract": "개요",
+    "Important": "중요",
+    "Legal Notice": "법적 고지",
+    "Red Hat OpenShift Documentation Team Legal Notice Abstract": (
+        "Red Hat OpenShift 문서 팀 법적 고지 및 개요"
+    ),
+    "Builds for OpenShift Container Platform": "OpenShift Container Platform 빌드",
+    "Tip": "팁",
+    "NooBaa, unless installed using Multicloud Object Gateway (MCG)": (
+        "Multicloud Object Gateway(MCG)를 사용하여 설치한 경우를 제외한 NooBaa"
+    ),
+    "IPL the bootstrap machine from the reader:": "리더에서 부트스트랩 머신을 IPL합니다:",
+    "Core limit range object definition": "핵심 LimitRange 객체 정의",
+    "An example network workflow showing an Ingress Controller running in an OpenShift Container Platform environment.": (
+        "OpenShift Container Platform 환경에서 실행되는 Ingress Controller의 예제 네트워크 워크플로입니다."
+    ),
+    "Istio Control Plane Dashboard showing data for bookinfo sample project": (
+        "bookinfo 샘플 프로젝트의 데이터를 보여주는 Istio Control Plane 대시보드"
+    ),
+    "Diagram showing four OpenShift workloads on top of OpenStack. Each workload is connected to an external data center via NIC using the provider network.": (
+        "OpenStack 위에서 실행되는 네 개의 OpenShift 워크로드를 보여주는 다이어그램입니다. "
+        "각 워크로드는 공급자 네트워크를 사용하는 NIC를 통해 외부 데이터 센터에 연결됩니다."
+    ),
+}
 
 
 @dataclass(slots=True, frozen=True)
@@ -91,7 +121,7 @@ def _load_translation_cache(
     if not isinstance(items, dict):
         return {}
     return {
-        str(unit_id).strip(): str(text).strip()
+        str(unit_id).strip(): normalize_ocp_ko_terminology(str(text).strip())
         for unit_id, text in items.items()
         if str(unit_id).strip() and str(text).strip()
     }
@@ -183,6 +213,10 @@ def _iter_text_units(document: CanonicalDocumentAst) -> list[_TextUnit]:
             if isinstance(block, CodeBlock):
                 add(f"{block_prefix}.code.caption", block.caption)
                 continue
+            if isinstance(block, FigureBlock):
+                add(f"{block_prefix}.figure.caption", block.caption)
+                add(f"{block_prefix}.figure.alt", block.alt)
+                continue
             if isinstance(block, NoteBlock):
                 add(f"{block_prefix}.note.title", block.title)
                 add(f"{block_prefix}.note.text", block.text)
@@ -244,6 +278,32 @@ def _parse_translated_items(payload: Any) -> dict[str, str]:
     return translated
 
 
+def _batch_max_tokens(client: LLMClient, batch: list[_TextUnit]) -> int:
+    source_chars = sum(len(unit.text[:MAX_SINGLE_TEXT_CHARS]) for unit in batch)
+    requested = 900 + int(source_chars * 0.8)
+    return max(client.max_tokens, min(requested, 4096))
+
+
+def _generate_with_retries(
+    client: LLMClient,
+    messages: list[dict[str, str]],
+    *,
+    max_tokens: int | None = None,
+    attempts: int = 3,
+) -> str:
+    last_exc: Exception | None = None
+    for attempt in range(max(1, attempts)):
+        try:
+            return client.generate(messages, max_tokens=max_tokens)
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            if attempt < attempts - 1:
+                time.sleep(min(2.0 * (attempt + 1), 5.0))
+    if last_exc is not None:
+        raise last_exc
+    return ""
+
+
 def _translate_unit_batch(client: LLMClient, batch: list[_TextUnit]) -> dict[str, str]:
     payload = {
         "items": [
@@ -273,7 +333,11 @@ def _translate_unit_batch(client: LLMClient, batch: list[_TextUnit]) -> dict[str
         },
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
     ]
-    response_text = client.generate(messages)
+    response_text = _generate_with_retries(
+        client,
+        messages,
+        max_tokens=_batch_max_tokens(client, batch),
+    )
     try:
         return _parse_translated_items(_parse_json_payload(response_text))
     except (json.JSONDecodeError, ValueError):
@@ -289,7 +353,15 @@ def _translate_unit_batch(client: LLMClient, batch: list[_TextUnit]) -> dict[str
             },
             {"role": "user", "content": response_text},
         ]
-        return _parse_translated_items(_parse_json_payload(client.generate(repair_messages)))
+        return _parse_translated_items(
+            _parse_json_payload(
+                _generate_with_retries(
+                    client,
+                    repair_messages,
+                    max_tokens=_batch_max_tokens(client, batch),
+                )
+            )
+        )
 
 
 def _translate_single_unit(client: LLMClient, unit: _TextUnit) -> str:
@@ -306,8 +378,93 @@ def _translate_single_unit(client: LLMClient, unit: _TextUnit) -> str:
         },
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
     ]
-    data = _parse_translated_items(_parse_json_payload(client.generate(messages)))
-    return data.get(unit.unit_id, "").strip() or unit.text
+    try:
+        response_text = _generate_with_retries(messages=messages, client=client)
+    except Exception:  # noqa: BLE001
+        return unit.text
+    for _attempt in range(2):
+        try:
+            data = _parse_translated_items(_parse_json_payload(response_text))
+            return data.get(unit.unit_id, "").strip() or unit.text
+        except (json.JSONDecodeError, ValueError):
+            repair_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "Repair the malformed single-item translation JSON below.\n"
+                        "Return valid JSON only with schema {\"id\":\"...\",\"text\":\"...\"}.\n"
+                        "Keep the id and translated text unchanged. Do not explain anything."
+                    ),
+                },
+                {"role": "user", "content": response_text},
+            ]
+            try:
+                response_text = _generate_with_retries(client, repair_messages)
+            except Exception:  # noqa: BLE001
+                return unit.text
+
+    retry_messages = [
+        {
+            "role": "system",
+            "content": (
+                "Translate one OpenShift documentation text snippet from English to Korean.\n"
+                "Return compact valid JSON only: {\"id\":\"...\",\"text\":\"...\"}.\n"
+                "Escape quotes and newlines correctly. Do not add markdown or explanations.\n"
+                "Keep commands, file paths, API names, env vars, URLs, and inline code literals unchanged when natural.\n"
+                f"{OCP_KO_TERMINOLOGY_PROMPT}"
+            ),
+        },
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+    ]
+    try:
+        data = _parse_translated_items(
+            _parse_json_payload(_generate_with_retries(client, retry_messages))
+        )
+        return data.get(unit.unit_id, "").strip() or unit.text
+    except (json.JSONDecodeError, ValueError, Exception):
+        return unit.text
+
+
+def _translate_single_unit_strict(
+    client: LLMClient,
+    unit: _TextUnit,
+    *,
+    previous_text: str = "",
+) -> str:
+    payload = {
+        "id": unit.unit_id,
+        "source_text": unit.text[:MAX_SINGLE_TEXT_CHARS],
+        "previous_output": previous_text[:MAX_SINGLE_TEXT_CHARS],
+    }
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "The previous Korean documentation translation still leaked English prose.\n"
+                "Translate the source_text into Korean now.\n"
+                "Return JSON only: {\"id\":\"...\",\"text\":\"...\"}.\n"
+                "Preserve product names, CLI commands, API fields, file paths, URLs, YAML/JSON keys, "
+                "and inline code literals when natural.\n"
+                "Do not return the original English sentence unless the entire snippet is a command, "
+                "API field path, URL, or code literal.\n"
+                f"{OCP_KO_TERMINOLOGY_PROMPT}"
+            ),
+        },
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+    ]
+    try:
+        translated = _parse_translated_items(
+            _parse_json_payload(
+                _generate_with_retries(
+                    client,
+                    messages,
+                    max_tokens=max(client.max_tokens, min(2200, 700 + len(unit.text))),
+                )
+            )
+        )
+    except Exception:  # noqa: BLE001
+        return previous_text.strip() or unit.text
+    return translated.get(unit.unit_id, "").strip() or previous_text.strip() or unit.text
 
 
 def _translate_batch_with_fallback(
@@ -328,6 +485,100 @@ def _translate_batch_with_fallback(
         }
 
 
+def _deterministic_translation(text: str) -> str:
+    normalized = " ".join(str(text or "").split())
+    override = DETERMINISTIC_TRANSLATION_OVERRIDES.get(normalized, "")
+    return normalize_ocp_ko_terminology(override) if override else ""
+
+
+def _translation_still_needs_repair(unit: _TextUnit, text: str) -> bool:
+    return bool(
+        english_prose_reason(
+            text,
+            field=_unit_localization_field(unit.unit_id),
+        )
+    )
+
+
+def _translate_strict_with_fresh_client(
+    settings: Settings,
+    unit: _TextUnit,
+    previous_text: str,
+) -> str:
+    return _translate_single_unit_strict(
+        LLMClient(settings),
+        unit,
+        previous_text=previous_text,
+    )
+
+
+def _repair_unusable_translations(
+    client: LLMClient,
+    units: list[_TextUnit],
+    translations: dict[str, str],
+    *,
+    settings: Settings | None = None,
+) -> dict[str, str]:
+    repaired = dict(translations)
+
+    for unit in units:
+        deterministic = _deterministic_translation(unit.text)
+        current = repaired.get(unit.unit_id, "").strip()
+        if deterministic and (
+            not current
+            or current == unit.text
+            or _translation_still_needs_repair(unit, current)
+        ):
+            repaired[unit.unit_id] = deterministic
+
+    for _pass_index in range(STRICT_TRANSLATION_REPAIR_PASSES):
+        bad_units = [
+            unit
+            for unit in units
+            if _translation_still_needs_repair(
+                unit,
+                repaired.get(unit.unit_id, "").strip() or unit.text,
+            )
+        ]
+        if not bad_units:
+            break
+        strict_units: list[_TextUnit] = []
+        for unit in bad_units:
+            deterministic = _deterministic_translation(unit.text)
+            if deterministic:
+                repaired[unit.unit_id] = deterministic
+                continue
+            strict_units.append(unit)
+        if not strict_units:
+            continue
+        if settings is not None and len(strict_units) > 1:
+            max_workers = min(TRANSLATION_BATCH_CONCURRENCY, len(strict_units))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_by_unit = {
+                    executor.submit(
+                        _translate_strict_with_fresh_client,
+                        settings,
+                        unit,
+                        repaired.get(unit.unit_id, "").strip(),
+                    ): unit
+                    for unit in strict_units
+                }
+                for future, unit in future_by_unit.items():
+                    repaired[unit.unit_id] = normalize_ocp_ko_terminology(future.result())
+            continue
+        for unit in strict_units:
+            previous_text = repaired.get(unit.unit_id, "").strip()
+            repaired[unit.unit_id] = normalize_ocp_ko_terminology(
+                _translate_single_unit_strict(
+                    client,
+                    unit,
+                    previous_text=previous_text,
+                )
+            )
+
+    return repaired
+
+
 def _translate_units(
     client: LLMClient,
     units: list[_TextUnit],
@@ -343,7 +594,10 @@ def _translate_units(
     batches = _chunk_units(pending_units)
     total_batches = len(batches)
     total_units = len(units)
-    completed_units = len(translated)
+    def completed_unit_count() -> int:
+        return sum(1 for unit in units if translated.get(unit.unit_id, "").strip())
+
+    completed_units = completed_unit_count()
 
     def persist(
         *,
@@ -379,7 +633,7 @@ def _translate_units(
     use_concurrency = (
         settings is not None
         and TRANSLATION_BATCH_CONCURRENCY > 1
-        and total_batches > TRANSLATION_BATCH_CONCURRENCY
+        and total_batches > 1
     )
     if not use_concurrency:
         for batch_index, batch in enumerate(batches):
@@ -389,7 +643,7 @@ def _translate_units(
                 if set(batch_result) != expected_ids:
                     raise ValueError("Translated unit ids do not match batch ids")
                 translated.update(batch_result)
-                completed_units = len(translated)
+                completed_units = completed_unit_count()
                 persist(
                     status="complete" if batch_index == total_batches - 1 else "running",
                     completed_batch_count=batch_index + 1,
@@ -399,13 +653,26 @@ def _translate_units(
             except Exception:  # noqa: BLE001
                 for unit in batch:
                     translated[unit.unit_id] = _translate_single_unit(client, unit)
-                completed_units = len(translated)
+                completed_units = completed_unit_count()
                 persist(
                     status="complete" if batch_index == total_batches - 1 else "running",
                     completed_batch_count=batch_index + 1,
                     current_batch_index=batch_index + 1,
                     batch_size=len(batch),
                 )
+        translated = _repair_unusable_translations(
+            client,
+            units,
+            translated,
+            settings=settings,
+        )
+        completed_units = completed_unit_count()
+        persist(
+            status="complete",
+            completed_batch_count=total_batches,
+            current_batch_index=total_batches if total_batches else None,
+            batch_size=0,
+        )
         return translated
 
     max_workers = min(TRANSLATION_BATCH_CONCURRENCY, total_batches)
@@ -426,7 +693,7 @@ def _translate_units(
                 batch_index, batch = in_flight.pop(future)
                 batch_result = future.result()
                 translated.update(batch_result)
-                completed_units = len(translated)
+                completed_units = completed_unit_count()
                 completed_batch_count += 1
                 persist(
                     status="complete" if completed_batch_count == total_batches else "running",
@@ -443,6 +710,19 @@ def _translate_units(
                     )
                     in_flight[next_future] = (next_batch_index, next_batch)
                     next_batch_index += 1
+    translated = _repair_unusable_translations(
+        client,
+        units,
+        translated,
+        settings=settings,
+    )
+    completed_units = completed_unit_count()
+    persist(
+        status="complete",
+        completed_batch_count=total_batches,
+        current_batch_index=total_batches if total_batches else None,
+        batch_size=0,
+    )
     return translated
 
 
@@ -520,6 +800,31 @@ def _apply_translations(
                             f"{block_prefix}.code.caption",
                             block.caption,
                         ),
+                    )
+                )
+                continue
+            if isinstance(block, FigureBlock):
+                translated_blocks.append(
+                    FigureBlock(
+                        src=block.src,
+                        caption=_translated_text(
+                            translations,
+                            f"{block_prefix}.figure.caption",
+                            block.caption,
+                        ),
+                        alt=_translated_text(
+                            translations,
+                            f"{block_prefix}.figure.alt",
+                            block.alt,
+                        ),
+                        asset_ref=block.asset_ref,
+                        asset_url=block.asset_url,
+                        viewer_path=block.viewer_path,
+                        source_file=block.source_file,
+                        source_anchor=block.source_anchor,
+                        asset_kind=block.asset_kind,
+                        diagram_type=block.diagram_type,
+                        kind_label=block.kind_label,
                     )
                 )
                 continue
@@ -658,7 +963,10 @@ def translate_document_ast(
     units = _iter_text_units(document)
     if not units:
         return document
-    cached_translations = _load_translation_cache(document, settings)
+    cached_translations = _filter_usable_cached_translations(
+        units,
+        _load_translation_cache(document, settings),
+    )
     if all(cached_translations.get(unit.unit_id, "").strip() for unit in units):
         return _apply_translations(document, cached_translations)
 
@@ -671,6 +979,87 @@ def translate_document_ast(
             document,
             settings,
             payload,
+            progress=progress,
+        ),
+        settings=settings,
+    )
+    return _apply_translations(document, translations)
+
+
+def _unit_localization_field(unit_id: str) -> str:
+    if unit_id == "doc.title":
+        return "title"
+    if unit_id.endswith(".heading") or ".path." in unit_id:
+        return "heading"
+    return "body"
+
+
+def _usable_cached_translation(unit: _TextUnit, text: str) -> bool:
+    normalized = (text or "").strip()
+    if not normalized:
+        return False
+    field = _unit_localization_field(unit.unit_id)
+    return not english_prose_reason(normalized, field=field)
+
+
+def _filter_usable_cached_translations(
+    units: list[_TextUnit],
+    cached_translations: dict[str, str],
+) -> dict[str, str]:
+    unit_by_id = {unit.unit_id: unit for unit in units}
+    usable: dict[str, str] = {}
+    for unit_id, text in cached_translations.items():
+        unit = unit_by_id.get(unit_id)
+        if unit is None:
+            usable[unit_id] = text
+            continue
+        deterministic = _deterministic_translation(unit.text)
+        if deterministic and (
+            text.strip() == unit.text.strip()
+            or english_prose_reason(text, field=_unit_localization_field(unit.unit_id))
+        ):
+            usable[unit_id] = deterministic
+            continue
+        if _usable_cached_translation(unit, text):
+            usable[unit_id] = text
+    return usable
+
+
+def repair_unlocalized_english_units(
+    document: CanonicalDocumentAst,
+    settings: Settings,
+) -> CanonicalDocumentAst:
+    units = [
+        unit
+        for unit in _iter_text_units(document)
+        if english_prose_reason(unit.text, field=_unit_localization_field(unit.unit_id))
+    ]
+    if not units:
+        return document
+
+    cached_translations = _load_translation_cache(document, settings)
+    usable_cached_translations = _filter_usable_cached_translations(
+        units,
+        cached_translations,
+    )
+    target_unit_ids = {unit.unit_id for unit in units}
+    relevant_cached_translations = {
+        unit_id: text
+        for unit_id, text in usable_cached_translations.items()
+        if unit_id in target_unit_ids and text.strip()
+    }
+    if all(relevant_cached_translations.get(unit.unit_id, "").strip() for unit in units):
+        return _apply_translations(document, relevant_cached_translations)
+
+    client = LLMClient(settings)
+    translations = _translate_units(
+        client,
+        units,
+        existing=relevant_cached_translations,
+        persist_callback=lambda payload, progress: _write_translation_cache(
+            document,
+            settings,
+            {**cached_translations, **payload},
             progress=progress,
         ),
         settings=settings,

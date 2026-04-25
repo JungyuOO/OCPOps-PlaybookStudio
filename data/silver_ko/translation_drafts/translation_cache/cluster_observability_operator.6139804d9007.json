@@ -1,0 +1,20 @@
+{
+  "book_slug": "cluster_observability_operator",
+  "doc_id": "cluster_observability_operator:4.20:ko",
+  "source_fingerprint": "6139804d9007764ecc3f4e87bf4df3137fa761c77e063b13f57108c3c33fed3a",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/cluster_observability_operator/index",
+  "item_count": 1,
+  "items": {
+    "doc.title": "Cluster Observability Operator"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 1
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "book_slug": "provisioning_apis",
+  "doc_id": "provisioning_apis:4.20:ko",
+  "source_fingerprint": "2e4c94e5fb35aa6f52e1d4953116964eeabf9f5e69484e4c07f42f9a7725834e",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/provisioning_apis/index",
+  "item_count": 1,
+  "items": {
+    "s189.b4.table.cell.4.2": "namespace 는 추적 중인 위치입니다."
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 1
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "book_slug": "common_object_reference",
+  "doc_id": "common_object_reference:4.20:ko",
+  "source_fingerprint": "ac0ed99b63a6dad636a75ee5c847217ecd15e4421b9fe02b07f57236500a7f29",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/common_object_reference/index",
+  "item_count": 2,
+  "items": {
+    "s249.b0.table.cell.15.11": "35\\\\d{3})\\\\d{11})$ with any non digit characters mixed in - ssn: a U.S. social security number following the regex ^\\\\d{3}[- ]?\\\\d{2}[- ]?\\\\d{4}$ - hexcolor: an hexadecimal color code like \" FFFFFF: following the regex ^ ?([0-9a-fA-F]{3}",
+    "s249.b0.table.cell.15.12": "[0-9a-fA-F]{6})$ - rgbcolor: an RGB color code like rgb like \"rgb(255,255,2559\" - byte: base64 encoded binary data - password: any kind of string - date: a date string like \"2006-01-02\" as defined by full-date in RFC3339 - duration: a duration string like \"22 ns\" as parsed by Golang time.ParseDuration or compatible with Scala duration format - datetime: a date time string like \"2014-12-15T19:30:20.000Z\" as defined by date-time in RFC3339."
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 2,
+    "total_unit_count": 2,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 2
+  }
+}

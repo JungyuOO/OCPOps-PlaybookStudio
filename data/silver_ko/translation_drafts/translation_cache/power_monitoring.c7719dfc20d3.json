@@ -1,0 +1,32 @@
+{
+  "book_slug": "power_monitoring",
+  "doc_id": "power_monitoring:4.20:ko",
+  "source_fingerprint": "c7719dfc20d3cd662f24961a94f6f308f0394f85709ab90486e8ee49cdafb3bf",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/power_monitoring_for_red_hat_openshift/0.5",
+  "item_count": 13,
+  "items": {
+    "s0.path.0": "소개",
+    "s1.path.0": "소개",
+    "s2.path.0": "설치",
+    "s3.path.0": "설치",
+    "s4.path.0": "구성",
+    "s5.heading": "전력 모니터링 지표 시각화",
+    "s5.path.0": "사용",
+    "s5.path.1": "전력 모니터링 지표 시각화",
+    "s5.b0.paragraph": "대시보드에 액세스하여 전력 모니터링 지표를 시각화하고 탐색합니다.",
+    "s7.heading": "관측 가능성",
+    "s7.path.0": "관측 가능성",
+    "s7.path.1": "관측 가능성",
+    "s7.b0.paragraph": "OpenShift 환경의 애플리케이션 및 인프라 성능을 분석하기 위한 도구 세트."
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 13,
+    "total_unit_count": 13,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "book_slug": "console_apis",
+  "doc_id": "console_apis:4.20:ko",
+  "source_fingerprint": "7cfbcff2e5b0dd4a2de82a8f209e2da62a7d1e606a3f17d0f6b9d8a47f0212c4",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/console_apis/index",
+  "item_count": 1,
+  "items": {
+    "s62.b10.table.cell.3.2": "Description 는 Quick Start 의 설명입니다. (마크다운 포함)"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 1
+  }
+}

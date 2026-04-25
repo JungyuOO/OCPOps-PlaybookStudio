@@ -1,0 +1,43 @@
+{
+  "book_slug": "cluster_observability_operator",
+  "doc_id": "cluster_observability_operator:4.20:ko",
+  "source_fingerprint": "836f0ff7f0d62875af83570949112c068ef7b24395f72f84d5e47980fc7bc931",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/cluster_observability_operator/index",
+  "item_count": 24,
+  "items": {
+    "doc.title": "Cluster Observability Operator",
+    "s0.heading": "OpenShift Container Platform 에서 Cluster Observability Operator 구성 및 사용",
+    "s0.path.0": "OpenShift Container Platform 에서 Cluster Observability Operator 구성 및 사용",
+    "s0.b0.paragraph": "Cluster Observability Operator 를 사용하여 OpenShift Container Platform 에서 관찰 가능 구성 요소를 배포하고 구성합니다.",
+    "s1.heading": "1 장. Cluster Observability Operator 개요",
+    "s1.path.0": "1 장. Cluster Observability Operator 개요",
+    "s1.b0.paragraph": "COO(Cluster Observability Operator) 는 고도의 사용자 지정 모니터링 스택을 생성하고 관리하기 위해 설계된 OpenShift Container Platform 의 선택적 구성 요소입니다.",
+    "s1.b1.paragraph": "이를 통해 클러스터 관리자는 기본 OpenShift Container Platform 모니터링 시스템에 비해 각 네임스페이스에 대한 보다 맞춤화되고 자세한 보기를 제공하여 모니터링 요구 사항을 광범위하게 자동화할 수 있습니다.",
+    "s1.b2.paragraph": "독립 실행형 COO 문서는 https://docs.redhat.com/en/documentation/red_hat_openshift_cluster_observability_operator/1-latest/html/about_red_hat_openshift_cluster_observability_operator/index 에서 확인할 수 있습니다.",
+    "s2.heading": "Legal Notice",
+    "s2.path.0": "Legal Notice",
+    "s2.b0.paragraph": "Copyright © Red Hat",
+    "s2.b1.paragraph": "OpenShift documentation 은 Apache License 2.0(https://www.apache.org/licenses/LICENSE-2.0) 에 따라 라이선스가 부여됩니다.",
+    "s2.b2.paragraph": "수정된 버전은 모든 Red Hat 상표를 제거해야 합니다.",
+    "s2.b3.paragraph": "Red Hat 이 수정한 https://github.com/kubernetes-incubator/service-catalog/ 에서 일부 내용을 차용했습니다.",
+    "s2.b4.paragraph": "Red Hat, Red Hat Enterprise Linux, Red Hat 로고, Shadowman 로고, JBoss, OpenShift, Fedora, Infinity 로고, 및 RHCE 는 미국 및 기타 국가에서 Red Hat, Inc. 의 상표로 등록되어 있습니다.",
+    "s2.b5.paragraph": "Linux® 는 미국 및 기타 국가에서 Linus Torvalds 의 등록 상표입니다.",
+    "s2.b6.paragraph": "Java® 는 Oracle 및/또는 그 제휴사의 등록 상표입니다.",
+    "s2.b7.paragraph": "XFS® 는 미국 및/또는 기타 국가에서 Silicon Graphics International Corp. 또는 그 계열사의 상표입니다.",
+    "s2.b8.paragraph": "MySQL® 는 미국, 유럽 연합 및 기타 국가에서 MySQL AB 의 등록 상표입니다.",
+    "s2.b9.paragraph": "Node.js® 는 OpenJS Foundation 의 공식 상표입니다.",
+    "s2.b10.paragraph": "OpenStack® 워드 마크 및 OpenStack 로고는 미국 및 기타 국가에서 OpenStack Foundation 의 등록 상표/서비스 상표 또는 상표/서비스 상표이며, OpenStack Foundation 의 허가를 받아 사용됩니다.",
+    "s2.b11.paragraph": "우리는 OpenStack Foundation 나 OpenStack 커뮤니티와 제휴되어 있지 않으며, 그들의 추천이나 후원을 받지 않습니다.",
+    "s2.b12.paragraph": "기타 모든 상표는 각각의 소유자의 재산입니다."
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 24,
+    "total_unit_count": 24,
+    "pending_unit_count": 0,
+    "completed_batch_count": 2,
+    "total_batch_count": 2,
+    "current_batch_index": 2,
+    "current_batch_size": 6
+  }
+}

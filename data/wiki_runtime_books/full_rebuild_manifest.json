@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-04-24T05:36:22+00:00",
+  "generated_at_utc": "2026-04-25T00:50:40+00:00",
   "runtime_count": 113,
   "promotion_group": "full_official_catalog_runtime",
   "source_strategy": "official-html-single-full-catalog",
@@ -35,7 +35,7 @@
       "translation_stage": "approved_ko",
       "quality_status": "ready",
       "quality_flags": [],
-      "updated_at": "2026-04-24T04:35:53Z",
+      "updated_at": "2026-04-24T09:58:42Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/advanced_networking.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/advanced_networking.md"
@@ -107,7 +107,7 @@
       "translation_stage": "approved_ko",
       "quality_status": "ready",
       "quality_flags": [],
-      "updated_at": "2026-04-24T04:36:01Z",
+      "updated_at": "2026-04-24T09:58:46Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/api_overview.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/api_overview.md"
@@ -215,7 +215,7 @@
       "translation_stage": "approved_ko",
       "quality_status": "ready",
       "quality_flags": [],
-      "updated_at": "2026-04-24T04:36:13Z",
+      "updated_at": "2026-04-24T09:58:50Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/authorization_apis.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/authorization_apis.md"
@@ -253,7 +253,7 @@
       "quality_flags": [
         "original"
       ],
-      "updated_at": "2026-04-24T04:36:17Z",
+      "updated_at": "2026-04-24T09:58:54Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/autoscale_apis.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/autoscale_apis.md"
@@ -262,7 +262,7 @@
     {
       "slug": "backup_and_restore",
       "book_slug": "backup_and_restore",
-      "title": "Backup and restore",
+      "title": "백업 및 복원",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/backup_and_restore/index",
@@ -285,11 +285,12 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
       "updated_at": "2026-04-24T04:36:23Z",
       "rebuild_target_paths": {
@@ -327,7 +328,7 @@
       "translation_stage": "approved_ko",
       "quality_status": "ready",
       "quality_flags": [],
-      "updated_at": "2026-04-24T04:36:30Z",
+      "updated_at": "2026-04-24T10:09:51Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/building_applications.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/building_applications.md"
@@ -336,7 +337,7 @@
     {
       "slug": "builds_using_buildconfig",
       "book_slug": "builds_using_buildconfig",
-      "title": "Builds using BuildConfig",
+      "title": "BuildConfig 을 사용한 빌드",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/builds_using_buildconfig/index",
@@ -359,13 +360,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:36:35Z",
+      "updated_at": "2026-04-24T15:52:43Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/builds_using_buildconfig.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/builds_using_buildconfig.md"
@@ -401,7 +403,7 @@
       "translation_stage": "approved_ko",
       "quality_status": "ready",
       "quality_flags": [],
-      "updated_at": "2026-04-24T04:36:38Z",
+      "updated_at": "2026-04-24T09:49:28Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/builds_using_shipwright.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/builds_using_shipwright.md"
@@ -437,7 +439,7 @@
       "translation_stage": "approved_ko",
       "quality_status": "ready",
       "quality_flags": [],
-      "updated_at": "2026-04-24T04:36:41Z",
+      "updated_at": "2026-04-24T09:50:08Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/cicd_overview.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/cicd_overview.md"
@@ -509,7 +511,7 @@
       "translation_stage": "approved_ko",
       "quality_status": "ready",
       "quality_flags": [],
-      "updated_at": "2026-04-24T04:36:48Z",
+      "updated_at": "2026-04-24T09:51:08Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/cluster_apis.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/cluster_apis.md"
@@ -518,7 +520,7 @@
     {
       "slug": "cluster_observability_operator",
       "book_slug": "cluster_observability_operator",
-      "title": "Cluster Observability Operator",
+      "title": "클러스터 관측성 Operator",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/cluster_observability_operator/index",
@@ -541,13 +543,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "mixed_review",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:36:52Z",
+      "updated_at": "2026-04-24T15:52:55Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/cluster_observability_operator.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/cluster_observability_operator.md"
@@ -583,7 +586,7 @@
       "translation_stage": "approved_ko",
       "quality_status": "ready",
       "quality_flags": [],
-      "updated_at": "2026-04-24T04:36:56Z",
+      "updated_at": "2026-04-24T09:54:39Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/common_object_reference.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/common_object_reference.md"
@@ -615,10 +618,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:37:03Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/config_apis.md",
@@ -687,10 +693,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:37:14Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/console_apis.md",
@@ -736,7 +745,7 @@
     {
       "slug": "distributed_tracing",
       "book_slug": "distributed_tracing",
-      "title": "Distributed Tracing",
+      "title": "분산 추적",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/distributed_tracing/index",
@@ -759,13 +768,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T05:23:22Z",
+      "updated_at": "2026-04-25T00:27:34Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/distributed_tracing.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/distributed_tracing.md"
@@ -797,11 +807,14 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
-      "updated_at": "2026-04-24T04:37:27Z",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
+      "updated_at": "2026-04-24T10:00:39Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/edge_computing.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/edge_computing.md"
@@ -848,7 +861,7 @@
     {
       "slug": "extension_apis",
       "book_slug": "extension_apis",
-      "title": "Extension APIs",
+      "title": "확장 API",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/extension_apis/index",
@@ -871,13 +884,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:37:39Z",
+      "updated_at": "2026-04-24T15:53:00Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/extension_apis.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/extension_apis.md"
@@ -909,10 +923,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:37:44Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/extensions.md",
@@ -1091,10 +1108,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:38:12Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/image_apis.md",
@@ -1307,10 +1327,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:38:35Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_an_on-premise_cluster_with_the_agent-based_installer.md",
@@ -1343,10 +1366,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:38:38Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_ibm_cloud_bare_metal_classic.md",
@@ -1464,7 +1490,7 @@
     {
       "slug": "installing_on_any_platform",
       "book_slug": "installing_on_any_platform",
-      "title": "Installing on any platform",
+      "title": "어떤 플랫폼에서도 설치하기",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_any_platform/index",
@@ -1487,11 +1513,12 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
       "updated_at": "2026-04-24T04:38:50Z",
       "rebuild_target_paths": {
@@ -1502,7 +1529,7 @@
     {
       "slug": "installing_on_aws",
       "book_slug": "installing_on_aws",
-      "title": "Installing on AWS",
+      "title": "AWS 에서 설치",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_aws/index",
@@ -1525,13 +1552,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:38:57Z",
+      "updated_at": "2026-04-24T15:53:11Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_on_aws.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/installing_on_aws.md"
@@ -1540,7 +1568,7 @@
     {
       "slug": "installing_on_azure",
       "book_slug": "installing_on_azure",
-      "title": "Installing on Azure",
+      "title": "Azure 에서 설치",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_azure/index",
@@ -1563,13 +1591,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:39:06Z",
+      "updated_at": "2026-04-24T15:53:20Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_on_azure.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/installing_on_azure.md"
@@ -1578,7 +1607,7 @@
     {
       "slug": "installing_on_azure_stack_hub",
       "book_slug": "installing_on_azure_stack_hub",
-      "title": "Installing on Azure Stack Hub",
+      "title": "Azure Stack Hub 에서 설치",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_azure_stack_hub/index",
@@ -1601,13 +1630,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:39:12Z",
+      "updated_at": "2026-04-24T15:53:27Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_on_azure_stack_hub.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/installing_on_azure_stack_hub.md"
@@ -1616,7 +1646,7 @@
     {
       "slug": "installing_on_bare_metal",
       "book_slug": "installing_on_bare_metal",
-      "title": "Installing on bare metal",
+      "title": "베어 메탈에서 설치",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_bare_metal/index",
@@ -1639,13 +1669,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:39:19Z",
+      "updated_at": "2026-04-24T15:53:35Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_on_bare_metal.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/installing_on_bare_metal.md"
@@ -1654,7 +1685,7 @@
     {
       "slug": "installing_on_google_cloud",
       "book_slug": "installing_on_google_cloud",
-      "title": "Installing on Google Cloud",
+      "title": "Google Cloud 에서 설치",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_google_cloud/index",
@@ -1677,13 +1708,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:39:28Z",
+      "updated_at": "2026-04-24T15:53:43Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_on_google_cloud.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/installing_on_google_cloud.md"
@@ -1692,7 +1724,7 @@
     {
       "slug": "installing_on_ibm_cloud",
       "book_slug": "installing_on_ibm_cloud",
-      "title": "Installing on IBM Cloud",
+      "title": "IBM Cloud 에서 설치하기",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_ibm_cloud/index",
@@ -1715,13 +1747,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:39:34Z",
+      "updated_at": "2026-04-24T15:53:50Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_on_ibm_cloud.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/installing_on_ibm_cloud.md"
@@ -1730,7 +1763,7 @@
     {
       "slug": "installing_on_ibm_power",
       "book_slug": "installing_on_ibm_power",
-      "title": "Installing on IBM Power",
+      "title": "IBM Power 에서 설치",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_ibm_power/index",
@@ -1753,13 +1786,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:39:39Z",
+      "updated_at": "2026-04-24T15:53:55Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_on_ibm_power.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/installing_on_ibm_power.md"
@@ -1768,7 +1802,7 @@
     {
       "slug": "installing_on_ibm_power_virtual_server",
       "book_slug": "installing_on_ibm_power_virtual_server",
-      "title": "Installing on IBM Power Virtual Server",
+      "title": "IBM Power 가상 서버에 설치",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_ibm_power_virtual_server/index",
@@ -1791,13 +1825,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:39:43Z",
+      "updated_at": "2026-04-24T15:54:00Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_on_ibm_power_virtual_server.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/installing_on_ibm_power_virtual_server.md"
@@ -1806,7 +1841,7 @@
     {
       "slug": "installing_on_ibm_z_and_ibm_linuxone",
       "book_slug": "installing_on_ibm_z_and_ibm_linuxone",
-      "title": "Installing on IBM Z and IBM LinuxONE",
+      "title": "IBM Z 및 IBM LinuxONE 에서 설치",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_ibm_z_and_ibm_linuxone/index",
@@ -1829,13 +1864,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:39:48Z",
+      "updated_at": "2026-04-24T15:54:06Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_on_ibm_z_and_ibm_linuxone.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/installing_on_ibm_z_and_ibm_linuxone.md"
@@ -1844,7 +1880,7 @@
     {
       "slug": "installing_on_nutanix",
       "book_slug": "installing_on_nutanix",
-      "title": "Installing on Nutanix",
+      "title": "Nutanix 에서 설치",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_nutanix/index",
@@ -1867,13 +1903,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:39:53Z",
+      "updated_at": "2026-04-24T15:54:12Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_on_nutanix.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/installing_on_nutanix.md"
@@ -1882,7 +1919,7 @@
     {
       "slug": "installing_on_openstack",
       "book_slug": "installing_on_openstack",
-      "title": "Installing on OpenStack",
+      "title": "OpenStack 에서 설치",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_openstack/index",
@@ -1905,13 +1942,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:39:57Z",
+      "updated_at": "2026-04-24T15:54:17Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_on_openstack.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/installing_on_openstack.md"
@@ -1992,7 +2030,7 @@
     {
       "slug": "installing_on_vmware_vsphere",
       "book_slug": "installing_on_vmware_vsphere",
-      "title": "Installing on VMware vSphere",
+      "title": "VMware vSphere 에서 설치",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_vmware_vsphere/index",
@@ -2015,13 +2053,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:40:09Z",
+      "updated_at": "2026-04-24T15:54:23Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/installing_on_vmware_vsphere.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/installing_on_vmware_vsphere.md"
@@ -2165,10 +2204,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:40:25Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/machine_apis.md",
@@ -2178,7 +2220,7 @@
     {
       "slug": "machine_configuration",
       "book_slug": "machine_configuration",
-      "title": "Machine configuration",
+      "title": "머신 구성",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/machine_configuration/index",
@@ -2201,11 +2243,12 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
       "updated_at": "2026-04-24T04:40:30Z",
       "rebuild_target_paths": {
@@ -2239,10 +2282,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:40:36Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/machine_management.md",
@@ -2324,7 +2370,7 @@
     {
       "slug": "migration_toolkit_for_containers",
       "book_slug": "migration_toolkit_for_containers",
-      "title": "Migration Toolkit for Containers",
+      "title": "컨테이너용 Migration Toolkit",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/migration_toolkit_for_containers/index",
@@ -2347,11 +2393,12 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "mixed_review",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
       "updated_at": "2026-04-24T04:40:57Z",
       "rebuild_target_paths": {
@@ -2362,7 +2409,7 @@
     {
       "slug": "monitoring",
       "book_slug": "monitoring",
-      "title": "Monitoring",
+      "title": "모니터링",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/monitoring/index",
@@ -2385,11 +2432,12 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
       "updated_at": "2026-04-24T04:41:02Z",
       "rebuild_target_paths": {
@@ -2495,10 +2543,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:41:45Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/network_apis.md",
@@ -2508,7 +2559,7 @@
     {
       "slug": "network_observability",
       "book_slug": "network_observability",
-      "title": "Network Observability",
+      "title": "네트워크 관측 가능성",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/network_observability/index",
@@ -2531,13 +2582,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:41:55Z",
+      "updated_at": "2026-04-24T15:54:30Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/network_observability.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/network_observability.md"
@@ -2582,7 +2634,7 @@
     {
       "slug": "networking_operators",
       "book_slug": "networking_operators",
-      "title": "Networking Operator",
+      "title": "네트워킹 Operator",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/networking_operators/index",
@@ -2605,13 +2657,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "mixed_review",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:42:05Z",
+      "updated_at": "2026-04-24T15:54:36Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/networking_operators.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/networking_operators.md"
@@ -2715,10 +2768,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:42:20Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/nodes.md",
@@ -2899,13 +2955,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "mixed_review",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:42:42Z",
+      "updated_at": "2026-04-24T15:54:45Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/operator_apis.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/operator_apis.md"
@@ -2943,7 +3000,7 @@
       "quality_flags": [
         "original"
       ],
-      "updated_at": "2026-04-24T04:42:54Z",
+      "updated_at": "2026-04-24T15:55:00Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/operatorhub_apis.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/operatorhub_apis.md"
@@ -2975,11 +3032,12 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "mixed_review",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
       "updated_at": "2026-04-24T04:43:03Z",
       "rebuild_target_paths": {
@@ -3157,10 +3215,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:43:22Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/postinstallation_configuration.md",
@@ -3193,13 +3254,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "mixed_review",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T05:28:03Z",
+      "updated_at": "2026-04-25T00:30:38Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/power_monitoring.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/power_monitoring.md"
@@ -3231,10 +3293,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:43:29Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/project_apis.md",
@@ -3267,10 +3332,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:43:33Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/provisioning_apis.md",
@@ -3341,13 +3409,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T05:28:04Z",
+      "updated_at": "2026-04-25T00:30:41Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/red_hat_build_of_opentelemetry.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/red_hat_build_of_opentelemetry.md"
@@ -3415,10 +3484,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:43:46Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/release_notes.md",
@@ -3464,7 +3536,7 @@
     {
       "slug": "scalability_and_performance",
       "book_slug": "scalability_and_performance",
-      "title": "Scalability and performance",
+      "title": "확장성과 성능",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/scalability_and_performance/index",
@@ -3487,11 +3559,12 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
       "updated_at": "2026-04-24T04:43:56Z",
       "rebuild_target_paths": {
@@ -3561,10 +3634,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:44:09Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/security_and_compliance.md",
@@ -3597,10 +3673,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:44:15Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/security_apis.md",
@@ -3646,7 +3725,7 @@
     {
       "slug": "service_mesh",
       "book_slug": "service_mesh",
-      "title": "Service Mesh",
+      "title": "서비스 메시",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/service_mesh/index",
@@ -3669,13 +3748,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:44:24Z",
+      "updated_at": "2026-04-24T15:55:12Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/service_mesh.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/service_mesh.md"
@@ -3815,10 +3895,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:44:47Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/support.md",
@@ -3923,10 +4006,13 @@
       "review_status": "approved",
       "approval_state": "approved",
       "publication_state": "published",
-      "translation_status": "approved_ko",
-      "translation_stage": "approved_ko",
-      "quality_status": "ready",
-      "quality_flags": [],
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
+      "quality_flags": [
+        "machine_translated_draft",
+        "translated_ko_draft"
+      ],
       "updated_at": "2026-04-24T04:45:22Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/updating_clusters.md",
@@ -4008,7 +4094,7 @@
     {
       "slug": "virtualization",
       "book_slug": "virtualization",
-      "title": "Virtualization",
+      "title": "가상화",
       "source_lane": "official_en_fallback",
       "source_type": "official_doc",
       "source_ref": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/virtualization/index",
@@ -4031,13 +4117,14 @@
       "review_status": "needs_review",
       "approval_state": "review_required",
       "publication_state": "candidate",
-      "translation_status": "original",
-      "translation_stage": "en_only",
-      "quality_status": "translation_required",
+      "translation_status": "translated_ko_draft",
+      "translation_stage": "translated_ko_draft",
+      "quality_status": "review_required",
       "quality_flags": [
-        "original"
+        "machine_translated_draft",
+        "translated_ko_draft"
       ],
-      "updated_at": "2026-04-24T04:45:36Z",
+      "updated_at": "2026-04-24T15:55:22Z",
       "rebuild_target_paths": {
         "wiki_runtime_md": "data/wiki_runtime_books/full_rebuild/virtualization.md",
         "gold_candidate_md": "data/gold_candidate_books/full_rebuild/virtualization.md"
