@@ -21,6 +21,7 @@ from play_book_studio.app.customer_master_book import (
     DEFAULT_MASTER_BOOK_TITLE,
     write_customer_master_book,
 )
+from play_book_studio.app.llmwiki_promotion_report import write_llmwiki_promotion_report
 from play_book_studio.app.private_lane_smoke import write_private_lane_smoke
 from play_book_studio.app.runtime_maintenance_smoke import write_runtime_maintenance_smoke
 from play_book_studio.app.runtime_report import (
@@ -300,6 +301,35 @@ def build_parser() -> argparse.ArgumentParser:
         "--report",
         type=Path,
         default=ROOT / ".kugnusdocs" / "reports" / f"{date.today().isoformat()}-customer-master-book-report.json",
+    )
+
+    llmwiki_promotion_parser = subparsers.add_parser(
+        "llmwiki-promotion",
+        help="Validate official docs, customer master book, live LLM/vector chat, and runtime readiness as one promotion gate",
+    )
+    llmwiki_promotion_parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT / ".kugnusdocs" / "reports" / f"{date.today().isoformat()}-llmwiki-promotion-report.json",
+    )
+    llmwiki_promotion_parser.add_argument("--ui-base-url", default=DEFAULT_PLAYBOOK_UI_BASE_URL)
+    llmwiki_promotion_parser.add_argument("--master-slug", default=DEFAULT_MASTER_BOOK_SLUG)
+    llmwiki_promotion_parser.add_argument("--master-title", default=DEFAULT_MASTER_BOOK_TITLE)
+    llmwiki_promotion_parser.add_argument(
+        "--materials-root",
+        type=Path,
+        default=ROOT / ".P_docs" / "01_검토대기_플레이북재료",
+    )
+    llmwiki_promotion_parser.add_argument(
+        "--include-test-sources",
+        action="store_true",
+        help="Include customer sources whose title/source path looks like a test run.",
+    )
+    llmwiki_promotion_parser.add_argument("--chat-matrix-timeout-seconds", type=float, default=90.0)
+    llmwiki_promotion_parser.add_argument(
+        "--skip-runtime-samples",
+        action="store_true",
+        help="Skip direct LLM/embedding samples in the runtime report; live chat matrix still runs.",
     )
 
     return parser
@@ -1036,6 +1066,39 @@ def _run_customer_master_book(args: argparse.Namespace) -> int:
     return 0 if payload["status"] == "ready" else 1
 
 
+def _run_llmwiki_promotion(args: argparse.Namespace) -> int:
+    output_path, payload = write_llmwiki_promotion_report(
+        ROOT,
+        output_path=args.output,
+        ui_base_url=args.ui_base_url,
+        master_slug=args.master_slug,
+        master_title=args.master_title,
+        materials_root=args.materials_root,
+        include_test_sources=bool(args.include_test_sources),
+        chat_matrix_timeout_seconds=float(args.chat_matrix_timeout_seconds),
+        runtime_report_sample=not bool(args.skip_runtime_samples),
+    )
+    print(f"wrote llmwiki promotion report: {output_path}")
+    print(
+        json.dumps(
+            {
+                "status": payload.get("status"),
+                "ready_for_llmwiki_promotion": payload.get("ready_for_llmwiki_promotion"),
+                "failures": payload.get("summary", {}).get("failures", []),
+                "official_gold": payload.get("official_gold", {}).get("checks", {}),
+                "customer_master": payload.get("customer_master", {}).get("checks", {}),
+                "runtime_report": payload.get("runtime_report", {}).get("checks", {}),
+                "runtime_maintenance": payload.get("runtime_maintenance", {}).get("summary", {}),
+                "chat_matrix": payload.get("chat_matrix", {}).get("runtime_requirements", {}),
+                "evidence": payload.get("evidence", {}),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if payload.get("ready_for_llmwiki_promotion") else 1
+
+
 def main() -> int:
     args = build_parser().parse_args()
     if args.command == "ui":
@@ -1064,6 +1127,8 @@ def main() -> int:
         return _run_customer_pack_batch(args)
     if args.command == "customer-master-book":
         return _run_customer_master_book(args)
+    if args.command == "llmwiki-promotion":
+        return _run_llmwiki_promotion(args)
     raise ValueError(f"unsupported command: {args.command}")
 
 
