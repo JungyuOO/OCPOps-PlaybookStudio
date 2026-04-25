@@ -17,6 +17,8 @@ from play_book_studio.canonical.html import _blocks_from_text
 from play_book_studio.canonical.models import FigureBlock
 from play_book_studio.ingestion.models import SourceManifestEntry
 from play_book_studio.ingestion.official_gold_gate import (
+    _artifact_manifest,
+    _large_jsonl_artifact_policy,
     _portable_path_findings,
     publish_runtime_manifest_from_playbooks,
     repair_portable_json_paths,
@@ -25,6 +27,103 @@ from play_book_studio.ingestion.localization_quality import build_official_ko_lo
 
 
 class OfficialGoldGateTests(unittest.TestCase):
+    def test_artifact_manifest_records_restore_contract_for_large_corpus_payloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            corpus_dir = root / "data" / "gold_corpus_ko"
+            manualbook_dir = root / "data" / "gold_manualbook_ko"
+            corpus_dir.mkdir(parents=True, exist_ok=True)
+            manualbook_dir.mkdir(parents=True, exist_ok=True)
+            (corpus_dir / "chunks.jsonl").write_text('{"chunk_id":"1"}\n', encoding="utf-8")
+            (corpus_dir / "bm25_corpus.jsonl").write_text('{"chunk_id":"1"}\n', encoding="utf-8")
+            (manualbook_dir / "playbook_documents.jsonl").write_text('{"book_slug":"demo"}\n', encoding="utf-8")
+
+            manifest = _artifact_manifest(root)
+            entries = {item["path"]: item for item in manifest["artifacts"]}
+
+            for relative_path in (
+                "data/gold_corpus_ko/chunks.jsonl",
+                "data/gold_corpus_ko/bm25_corpus.jsonl",
+            ):
+                entry = entries[relative_path]
+                self.assertEqual(relative_path, entry["restore_path"])
+                self.assertEqual("manifest_only_large_jsonl", entry["storage_policy"])
+                self.assertEqual("do_not_track_payload", entry["git_policy"])
+                self.assertTrue(entry["artifact_ref"].startswith("sha256:"))
+                self.assertEqual(entry["producer_command"], entry["restore_command"])
+
+    def test_artifact_manifest_marks_official_lane_jsonl_as_manifest_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            lane_dir = root / "artifacts" / "official_lane" / "repo_wide_official_source"
+            lane_dir.mkdir(parents=True, exist_ok=True)
+            (lane_dir / "chunks.jsonl").write_text('{"chunk_id":"1"}\n', encoding="utf-8")
+            (lane_dir / "bm25_corpus.jsonl").write_text('{"chunk_id":"1"}\n', encoding="utf-8")
+            (lane_dir / "playbook_documents.jsonl").write_text('{"book_slug":"demo"}\n', encoding="utf-8")
+            (lane_dir / "normalized_docs.jsonl").write_text('{"doc_id":"demo"}\n', encoding="utf-8")
+
+            manifest = _artifact_manifest(root)
+            entries = {item["path"]: item for item in manifest["artifacts"]}
+
+            self.assertEqual(
+                "manifest_only_large_jsonl",
+                entries["artifacts/official_lane/repo_wide_official_source/chunks.jsonl"]["storage_policy"],
+            )
+            self.assertEqual(
+                "manifest_only_large_jsonl",
+                entries["artifacts/official_lane/repo_wide_official_source/bm25_corpus.jsonl"]["storage_policy"],
+            )
+            self.assertEqual(
+                "manifest_only_large_jsonl",
+                entries["artifacts/official_lane/repo_wide_official_source/normalized_docs.jsonl"]["storage_policy"],
+            )
+
+    def test_large_jsonl_artifact_policy_fails_when_manifest_only_payload_is_tracked(self) -> None:
+        manifest = {
+            "artifacts": [
+                {
+                    "path": "data/gold_corpus_ko/chunks.jsonl",
+                    "git_policy": "do_not_track_payload",
+                    "sha256": "abc",
+                    "restore_path": "data/gold_corpus_ko/chunks.jsonl",
+                    "producer_command": "python -m play_book_studio.cli official-gold-rebuild",
+                    "restore_command": "python -m play_book_studio.cli official-gold-rebuild",
+                }
+            ]
+        }
+
+        audit = _large_jsonl_artifact_policy(
+            ROOT,
+            manifest,
+            tracked_paths={"data/gold_corpus_ko/chunks.jsonl"},
+        )
+
+        self.assertEqual("fail", audit["status"])
+        self.assertEqual(
+            ["data/gold_corpus_ko/chunks.jsonl"],
+            audit["tracked_manifest_only_paths"],
+        )
+
+    def test_large_jsonl_artifact_policy_passes_when_payload_is_untracked_with_restore_contract(self) -> None:
+        manifest = {
+            "artifacts": [
+                {
+                    "path": "data/gold_corpus_ko/chunks.jsonl",
+                    "git_policy": "do_not_track_payload",
+                    "sha256": "abc",
+                    "restore_path": "data/gold_corpus_ko/chunks.jsonl",
+                    "producer_command": "python -m play_book_studio.cli official-gold-rebuild",
+                    "restore_command": "python -m play_book_studio.cli official-gold-rebuild",
+                }
+            ]
+        }
+
+        audit = _large_jsonl_artifact_policy(ROOT, manifest, tracked_paths=set())
+
+        self.assertEqual("ok", audit["status"])
+        self.assertEqual([], audit["tracked_manifest_only_paths"])
+        self.assertEqual([], audit["missing_contract_paths"])
+
     def test_canonical_text_parser_preserves_figure_blocks(self) -> None:
         blocks = _blocks_from_text(
             '[FIGURE src="/playbooks/wiki-assets/full_rebuild/demo/diagram.png" '

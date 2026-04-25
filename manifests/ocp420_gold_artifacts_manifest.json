@@ -1,91 +1,134 @@
 {
-  "generated_at_utc": "2026-04-25T00:50:44+00:00",
+  "generated_at_utc": "2026-04-25T13:41:04+00:00",
   "policy": {
     "large_jsonl": "do_not_commit_payload_without_lfs_or_external_artifact_store",
     "tracked_truth": "track manifests, hashes, and producer commands",
-    "portable_paths": "repo-relative paths only in rebuild/runtime manifests"
+    "portable_paths": "repo-relative paths only in rebuild/runtime manifests",
+    "manifest_only_paths": [
+      "artifacts/official_lane/repo_wide_official_source/bm25_corpus.jsonl",
+      "artifacts/official_lane/repo_wide_official_source/chunks.jsonl",
+      "artifacts/official_lane/repo_wide_official_source/normalized_docs.jsonl",
+      "data/gold_corpus_ko/bm25_corpus.jsonl",
+      "data/gold_corpus_ko/chunks.jsonl"
+    ]
   },
   "artifacts": [
     {
       "path": "data/gold_corpus_ko/chunks.jsonl",
+      "restore_path": "data/gold_corpus_ko/chunks.jsonl",
       "exists": true,
       "size_bytes": 333262121,
       "sha256": "3a884903f2c1d93047b6ff3666c886cef400f52825b6e2b691a2018286aa1c16",
       "line_count": 87858,
       "producer_command": "python -m play_book_studio.cli official-gold-rebuild",
-      "storage_policy": "generated_large_artifact_manifest_only"
+      "restore_command": "python -m play_book_studio.cli official-gold-rebuild",
+      "artifact_ref": "sha256:3a884903f2c1d93047b6ff3666c886cef400f52825b6e2b691a2018286aa1c16",
+      "storage_policy": "manifest_only_large_jsonl",
+      "git_policy": "do_not_track_payload"
     },
     {
       "path": "data/gold_corpus_ko/bm25_corpus.jsonl",
+      "restore_path": "data/gold_corpus_ko/bm25_corpus.jsonl",
       "exists": true,
       "size_bytes": 183202399,
       "sha256": "5f3cf3604f2ba702a4c7cc71a2d4f0e4a87a030845d5da001476dfa8fd7805cf",
       "line_count": 87858,
       "producer_command": "python -m play_book_studio.cli official-gold-rebuild",
-      "storage_policy": "generated_large_artifact_manifest_only"
+      "restore_command": "python -m play_book_studio.cli official-gold-rebuild",
+      "artifact_ref": "sha256:5f3cf3604f2ba702a4c7cc71a2d4f0e4a87a030845d5da001476dfa8fd7805cf",
+      "storage_policy": "manifest_only_large_jsonl",
+      "git_policy": "do_not_track_payload"
     },
     {
       "path": "data/gold_manualbook_ko/playbook_documents.jsonl",
+      "restore_path": "data/gold_manualbook_ko/playbook_documents.jsonl",
       "exists": true,
       "size_bytes": 81587360,
       "sha256": "df24b040c712553db8fb5fc6ec26948b81f442455d5c05baa807ba1d7c02e691",
       "line_count": 113,
       "producer_command": "python -m play_book_studio.cli official-gold-rebuild",
-      "storage_policy": "generated_large_artifact_manifest_only"
+      "restore_command": "python -m play_book_studio.cli official-gold-rebuild",
+      "artifact_ref": "sha256:df24b040c712553db8fb5fc6ec26948b81f442455d5c05baa807ba1d7c02e691",
+      "storage_policy": "tracked_or_small_artifact",
+      "git_policy": "track_or_ignore_by_size_policy"
     },
     {
       "path": "artifacts/official_lane/repo_wide_official_source/normalized_docs.jsonl",
+      "restore_path": "artifacts/official_lane/repo_wide_official_source/normalized_docs.jsonl",
       "exists": true,
       "size_bytes": 101970907,
       "sha256": "3612be23be40b17d13dfeb2a4e1fc3f51949a3346d3139e906eb3043dd577f24",
       "line_count": 23393,
       "producer_command": "python -m play_book_studio.cli official-gold-rebuild",
-      "storage_policy": "generated_large_artifact_manifest_only"
+      "restore_command": "python -m play_book_studio.cli official-gold-rebuild",
+      "artifact_ref": "sha256:3612be23be40b17d13dfeb2a4e1fc3f51949a3346d3139e906eb3043dd577f24",
+      "storage_policy": "manifest_only_large_jsonl",
+      "git_policy": "do_not_track_payload"
     },
     {
       "path": "artifacts/retrieval/graph_sidecar_compact.json",
+      "restore_path": "artifacts/retrieval/graph_sidecar_compact.json",
       "exists": true,
       "size_bytes": 1099991,
       "sha256": "af5414ef2974bf8bfbe7092af389ca5efac54f5888b5bb9624e726a6716242a6",
       "line_count": null,
       "producer_command": "play-book-studio graph-compact",
-      "storage_policy": "tracked_or_small_artifact"
+      "restore_command": "play-book-studio graph-compact",
+      "artifact_ref": "sha256:af5414ef2974bf8bfbe7092af389ca5efac54f5888b5bb9624e726a6716242a6",
+      "storage_policy": "tracked_or_small_artifact",
+      "git_policy": "track_or_ignore_by_size_policy"
     },
     {
       "path": "data/wiki_relations/figure_assets.json",
+      "restore_path": "data/wiki_relations/figure_assets.json",
       "exists": true,
       "size_bytes": 41982,
       "sha256": "ff9fd9d36dd9f77ade5244b412ba6ccd55645d1e1863f3c64f4b20062e780930",
       "line_count": null,
       "producer_command": "official source-first figure extraction",
-      "storage_policy": "tracked_or_small_artifact"
+      "restore_command": "official source-first figure extraction",
+      "artifact_ref": "sha256:ff9fd9d36dd9f77ade5244b412ba6ccd55645d1e1863f3c64f4b20062e780930",
+      "storage_policy": "tracked_or_small_artifact",
+      "git_policy": "track_or_ignore_by_size_policy"
     },
     {
       "path": "data/wiki_relations/figure_section_index.json",
+      "restore_path": "data/wiki_relations/figure_section_index.json",
       "exists": true,
       "size_bytes": 29643,
       "sha256": "7a925c68ec95b7e1634304d4a16b1650c3dd6e2a2fa45f4ebba95454adc8ce58",
       "line_count": null,
       "producer_command": "official source-first figure extraction",
-      "storage_policy": "tracked_or_small_artifact"
+      "restore_command": "official source-first figure extraction",
+      "artifact_ref": "sha256:7a925c68ec95b7e1634304d4a16b1650c3dd6e2a2fa45f4ebba95454adc8ce58",
+      "storage_policy": "tracked_or_small_artifact",
+      "git_policy": "track_or_ignore_by_size_policy"
     },
     {
       "path": "data/wiki_runtime_books/active_manifest.json",
+      "restore_path": "data/wiki_runtime_books/active_manifest.json",
       "exists": true,
       "size_bytes": 218409,
       "sha256": "d7a0053cc3378bdd71ae7c437a8ac315ecd1ed89e05ff05c22a3e9558299431e",
       "line_count": null,
       "producer_command": "official runtime switch",
-      "storage_policy": "tracked_or_small_artifact"
+      "restore_command": "official runtime switch",
+      "artifact_ref": "sha256:d7a0053cc3378bdd71ae7c437a8ac315ecd1ed89e05ff05c22a3e9558299431e",
+      "storage_policy": "tracked_or_small_artifact",
+      "git_policy": "track_or_ignore_by_size_policy"
     },
     {
       "path": "data/wiki_runtime_books/full_rebuild_manifest.json",
+      "restore_path": "data/wiki_runtime_books/full_rebuild_manifest.json",
       "exists": true,
       "size_bytes": 218476,
       "sha256": "0c10eeb688c99bcb2735be15a3e7ec2662b6b4bdb7cec5d6db23bd162e8566aa",
       "line_count": null,
       "producer_command": "official source-first runtime materialization",
-      "storage_policy": "tracked_or_small_artifact"
+      "restore_command": "official source-first runtime materialization",
+      "artifact_ref": "sha256:0c10eeb688c99bcb2735be15a3e7ec2662b6b4bdb7cec5d6db23bd162e8566aa",
+      "storage_policy": "tracked_or_small_artifact",
+      "git_policy": "track_or_ignore_by_size_policy"
     }
   ]
 }

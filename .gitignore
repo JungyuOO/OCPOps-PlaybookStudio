@@ -16,9 +16,12 @@ data/bronze/source_bundles/
 data/silver/normalized_docs.jsonl
 data/gold_candidate_books/full_rebuild/
 data/wiki_runtime_books/full_rebuild/
-# incorporation baseline keeps the three curated datasets below in Git:
+# OCP gold corpus payloads are generated large artifacts. Keep only their
+# manifest/hash/producer contract in Git; rebuild or restore the payloads.
+data/gold_corpus_ko/chunks.jsonl
+data/gold_corpus_ko/bm25_corpus.jsonl
+# incorporation baseline keeps curated source truth below in Git:
 # - data/silver_ko
-# - data/gold_corpus_ko
 # - data/gold_manualbook_ko
 reports/build_logs/
 reports/build_logs/ui_server_stdout.log

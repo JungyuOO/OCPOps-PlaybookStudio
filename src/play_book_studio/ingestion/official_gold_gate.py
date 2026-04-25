@@ -24,6 +24,15 @@ PORTABLE_JSON_RELATIVE_PATHS = (
 ARTIFACT_MANIFEST_RELATIVE_PATH = "manifests/ocp420_gold_artifacts_manifest.json"
 ONE_CLICK_REPORT_RELATIVE_PATH = "reports/build_logs/ocp420_one_click_runtime_report.json"
 OFFICIAL_GOLD_REBUILD_COMMAND = "python -m play_book_studio.cli official-gold-rebuild"
+MANIFEST_ONLY_LARGE_JSONL_RELATIVE_PATHS = frozenset(
+    {
+        "artifacts/official_lane/repo_wide_official_source/chunks.jsonl",
+        "artifacts/official_lane/repo_wide_official_source/bm25_corpus.jsonl",
+        "artifacts/official_lane/repo_wide_official_source/normalized_docs.jsonl",
+        "data/gold_corpus_ko/chunks.jsonl",
+        "data/gold_corpus_ko/bm25_corpus.jsonl",
+    }
+)
 LOCAL_ABSOLUTE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
 SECTION_CARD_RE = re.compile(r'class="[^"]*\bsection-card\b')
 CODE_BLOCK_RE = re.compile(r'class="[^"]*\bcode-block\b')
@@ -85,14 +94,27 @@ def _relative_path(root_dir: Path, path: Path) -> str:
 
 def _artifact_entry(root_dir: Path, path: Path, *, producer_command: str) -> dict[str, Any]:
     exists = path.exists() and path.is_file()
+    relative_path = _relative_path(root_dir, path)
+    sha256 = _sha256_file(path) if exists else ""
+    manifest_only = (
+        relative_path in MANIFEST_ONLY_LARGE_JSONL_RELATIVE_PATHS
+        or (
+            relative_path.startswith("artifacts/official_lane/")
+            and relative_path.endswith(".jsonl")
+        )
+    )
     return {
-        "path": _relative_path(root_dir, path),
+        "path": relative_path,
+        "restore_path": relative_path,
         "exists": exists,
         "size_bytes": path.stat().st_size if exists else 0,
-        "sha256": _sha256_file(path) if exists else "",
+        "sha256": sha256,
         "line_count": _line_count(path) if exists and path.suffix == ".jsonl" else None,
         "producer_command": producer_command,
-        "storage_policy": "generated_large_artifact_manifest_only" if path.suffix == ".jsonl" else "tracked_or_small_artifact",
+        "restore_command": producer_command,
+        "artifact_ref": f"sha256:{sha256}" if sha256 else "",
+        "storage_policy": "manifest_only_large_jsonl" if manifest_only else "tracked_or_small_artifact",
+        "git_policy": "do_not_track_payload" if manifest_only else "track_or_ignore_by_size_policy",
     }
 
 
@@ -115,6 +137,7 @@ def _artifact_manifest(root_dir: Path) -> dict[str, Any]:
             "large_jsonl": "do_not_commit_payload_without_lfs_or_external_artifact_store",
             "tracked_truth": "track manifests, hashes, and producer commands",
             "portable_paths": "repo-relative paths only in rebuild/runtime manifests",
+            "manifest_only_paths": sorted(MANIFEST_ONLY_LARGE_JSONL_RELATIVE_PATHS),
         },
         "artifacts": artifacts,
     }
@@ -126,6 +149,68 @@ def write_artifact_manifest(root_dir: Path, output_path: Path | None = None) -> 
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return target, payload
+
+
+def _git_tracked_paths(root_dir: Path, relative_paths: set[str]) -> set[str]:
+    if not relative_paths:
+        return set()
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root_dir), "ls-files", "--", *sorted(relative_paths)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return set()
+    if result.returncode != 0:
+        return set()
+    return {
+        line.strip().replace("\\", "/")
+        for line in str(result.stdout or "").splitlines()
+        if line.strip()
+    }
+
+
+def _large_jsonl_artifact_policy(
+    root_dir: Path,
+    artifact_manifest: dict[str, Any],
+    *,
+    tracked_paths: set[str] | None = None,
+) -> dict[str, Any]:
+    artifacts = [
+        dict(item)
+        for item in artifact_manifest.get("artifacts", [])
+        if isinstance(item, dict)
+    ]
+    manifest_only_paths = {
+        str(item.get("path") or "").replace("\\", "/")
+        for item in artifacts
+        if str(item.get("git_policy") or "") == "do_not_track_payload"
+    }
+    tracked = (
+        {path.replace("\\", "/") for path in tracked_paths}
+        if tracked_paths is not None
+        else _git_tracked_paths(root_dir, manifest_only_paths)
+    )
+    tracked_manifest_only_paths = sorted(manifest_only_paths & tracked)
+    missing_contract_paths = sorted(
+        str(item.get("path") or "").replace("\\", "/")
+        for item in artifacts
+        if str(item.get("git_policy") or "") == "do_not_track_payload"
+        and (
+            not str(item.get("sha256") or "").strip()
+            or not str(item.get("restore_path") or "").strip()
+            or not str(item.get("producer_command") or "").strip()
+            or not str(item.get("restore_command") or "").strip()
+        )
+    )
+    return {
+        "status": "ok" if not tracked_manifest_only_paths and not missing_contract_paths else "fail",
+        "manifest_only_paths": sorted(manifest_only_paths),
+        "tracked_manifest_only_paths": tracked_manifest_only_paths,
+        "missing_contract_paths": missing_contract_paths,
+    }
 
 
 def _portable_path_value(root_dir: Path, value: str) -> str:
@@ -731,10 +816,12 @@ def build_official_gold_gate_report(root_dir: Path) -> dict[str, Any]:
     viewer_probe = _viewer_probe(root_dir, sample_slug)
     portable_paths = _portable_path_findings(root_dir)
     artifact_manifest = _artifact_manifest(root_dir)
+    large_jsonl_artifact_policy = _large_jsonl_artifact_policy(root_dir, artifact_manifest)
     ko_localization = build_official_ko_localization_audit(playbook_rows)
     smoke = _smoke(root_dir, sample_slug)
     checks = {
         "portable_paths": portable_paths["status"] == "ok",
+        "large_jsonl_artifacts_manifest_only": large_jsonl_artifact_policy["status"] == "ok",
         "chunks_and_bm25_match": bool(chunks_rows) and len(chunks_rows) == len(bm25_rows),
         "code_blocks_present": int(block_counts.get("code", 0)) > 0,
         "ko_runtime_has_no_unlocalized_english_prose": ko_localization["status"] == "ok",
@@ -782,6 +869,7 @@ def build_official_gold_gate_report(root_dir: Path) -> dict[str, Any]:
             "figure_sidecar_count": figure_sidecar_count,
             "viewer_probe": viewer_probe,
             "portable_paths": portable_paths,
+            "large_jsonl_artifact_policy": large_jsonl_artifact_policy,
             "official_catalog_coverage": official_catalog_coverage,
             "ko_localization": ko_localization,
         },
@@ -799,6 +887,7 @@ def write_official_gold_gate_report(root_dir: Path, output_path: Path | None = N
 
 __all__ = [
     "ARTIFACT_MANIFEST_RELATIVE_PATH",
+    "MANIFEST_ONLY_LARGE_JSONL_RELATIVE_PATHS",
     "OFFICIAL_GOLD_REBUILD_COMMAND",
     "ONE_CLICK_REPORT_RELATIVE_PATH",
     "build_official_gold_gate_report",
