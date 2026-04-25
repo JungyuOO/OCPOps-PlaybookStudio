@@ -1,0 +1,27 @@
+{
+  "book_slug": "tutorials",
+  "doc_id": "tutorials:4.20:ko",
+  "source_fingerprint": "dac419196e29601f8c940128a9724397aa10f0e016a781eab50d6c756c252dd0",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/tutorials/index",
+  "item_count": 8,
+  "items": {
+    "s11.b17.table.caption": "확대",
+    "s12.b13.table.caption": "확대",
+    "s30.b2.table.caption": "확대",
+    "s31.b2.table.caption": "확대",
+    "s31.b3.table.caption": "확대",
+    "s32.heading": "4.3. Red Hat 가짜 시트",
+    "s32.path.1": "4.3. Red Hat 가짜 시트",
+    "s32.b3.table.caption": "확대"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 8,
+    "total_unit_count": 8,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

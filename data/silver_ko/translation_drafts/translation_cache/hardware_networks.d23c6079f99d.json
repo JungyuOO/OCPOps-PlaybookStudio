@@ -1,0 +1,32 @@
+{
+  "book_slug": "hardware_networks",
+  "doc_id": "hardware_networks:4.20:ko",
+  "source_fingerprint": "d23c6079f99dc5c6cd67a5d2d08d1392489824b50edaac9857c605b5e3516e64",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/hardware_networks/index",
+  "item_count": 13,
+  "items": {
+    "s5.b1.table.caption": "확장",
+    "s28.b1.table.caption": "확장",
+    "s28.b3.table.caption": "확장",
+    "s28.b4.table.caption": "확장",
+    "s28.b5.table.caption": "확장",
+    "s31.b1.table.caption": "확장",
+    "s47.b1.table.caption": "확장",
+    "s47.b3.table.caption": "확장",
+    "s47.b4.table.caption": "확장",
+    "s47.b5.table.caption": "확장",
+    "s50.b1.table.caption": "확장",
+    "s74.b10.table.caption": "확장",
+    "s104.b1.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 13,
+    "total_unit_count": 13,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

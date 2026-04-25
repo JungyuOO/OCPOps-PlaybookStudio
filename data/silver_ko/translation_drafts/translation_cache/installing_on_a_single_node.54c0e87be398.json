@@ -1,0 +1,22 @@
+{
+  "book_slug": "installing_on_a_single_node",
+  "doc_id": "installing_on_a_single_node:4.20:ko",
+  "source_fingerprint": "54c0e87be398b7ab764faecf8a8e2cb9b6291175b1a89d3109b3fffbe4ac7d85",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_a_single_node/index",
+  "item_count": 3,
+  "items": {
+    "s3.b13.table.caption": "확대",
+    "s3.b21.table.caption": "확대",
+    "s12.b1.table.caption": "확대"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 3,
+    "total_unit_count": 3,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

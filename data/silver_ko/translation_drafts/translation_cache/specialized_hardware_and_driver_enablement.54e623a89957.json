@@ -1,0 +1,20 @@
+{
+  "book_slug": "specialized_hardware_and_driver_enablement",
+  "doc_id": "specialized_hardware_and_driver_enablement:4.20:ko",
+  "source_fingerprint": "54e623a899570349b5e5ab1cda6e81df8ac326be5881cb3f2eb47ffdbcee4222",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/specialized_hardware_and_driver_enablement/index",
+  "item_count": 1,
+  "items": {
+    "s71.b8.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

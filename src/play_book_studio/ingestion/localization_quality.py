@@ -17,11 +17,64 @@ API_FIELD_PATH_RE = re.compile(
     r"^(?:\d+(?:\.\d+)*\.\s+)?"
     r"\.[A-Za-z0-9_.\[\]-]+$"
 )
+NUMBERED_HEADING_PREFIX_RE = re.compile(
+    r"^(?:chapter\s+)?\d+(?:\.\d+)*\.?\s+",
+    re.IGNORECASE,
+)
 COMMAND_HEADING_RE = re.compile(
     r"^(?:\d+(?:\.\d+)*\.\s+)?"
     r"(?:oc|kubectl|podman|docker|helm|operator-sdk|odo|opm)\b",
     re.IGNORECASE,
 )
+CLI_ARGUMENT_HEADING_RE = re.compile(r"^[A-Za-z0-9_.-]+\s+\[[^\]]+\]$")
+OFFICIAL_NAME_MARKER_RE = re.compile(
+    r"\b(?:API|APIs|CCM|CoreOS|Foundation|HSTS|ID|Manager|Management|OLM|Operator|RHCOS|RHACM)\b"
+)
+
+ACTION_HEADING_PREFIX_WORDS = {
+    "about",
+    "adding",
+    "builds",
+    "building",
+    "configuring",
+    "creating",
+    "deploying",
+    "enabling",
+    "installing",
+    "managing",
+    "performing",
+    "replacing",
+    "troubleshooting",
+    "understanding",
+    "using",
+}
+
+PRESERVED_OFFICIAL_HEADING_PHRASES = {
+    "aws load balancer operator",
+    "cloud credential operator",
+    "cloud controller manager operator",
+    "cluster csi snapshot controller operator",
+    "cluster machine approver operator",
+    "hsts(http strict transport security)",
+    "huge page",
+    "kube controller manager",
+    "lifecycle agent",
+    "machine config operator",
+    "microsoft entra workload id",
+    "openshift api for data protection api",
+    "openshift data foundation",
+    "openstack cloud controller manager",
+    "openstack cloud controller manager (ccm) config map",
+    "openstack cloud controller manager(ccm) config map",
+    "operator lifecycle manager",
+    "olm(operator lifecycle manager) classic",
+    "red hat advanced cluster management",
+    "red hat advanced cluster management(rhacm)",
+    "red hat build of opentelemetry",
+    "rhcos(red hat enterprise linux coreos)",
+    "red hat openshift data foundation",
+    "red hat single sign-on",
+}
 
 TECHNICAL_TERMS = {
     "api",
@@ -89,6 +142,8 @@ TECHNICAL_TERMS = {
     "cidr",
     "client",
     "compute",
+    "configmap",
+    "configmaps",
     "fip",
     "fips",
     "gcp",
@@ -107,21 +162,43 @@ TECHNICAL_TERMS = {
     "total",
     "trust",
     "workload",
+    "workloads",
     "zero",
 }
 
+TRANSLATABLE_UI_PHRASES = {
+    "abstract": "개요",
+    "additional resources": "추가 리소스",
+    "example output": "예제 출력",
+    "expand": "펼치기",
+    "important": "중요",
+    "issue": "문제",
+    "note": "참고",
+    "prerequisites": "사전 요구 사항",
+    "procedure": "절차",
+    "resolution": "해결",
+    "tip": "팁",
+    "warning": "경고",
+}
+
 PROSE_TITLE_WORDS = {
+    "access",
     "about",
+    "additional",
     "advanced",
     "and",
     "backup",
+    "build",
     "builds",
     "building",
+    "certificate",
     "configuring",
     "creating",
+    "custom",
     "deploying",
     "distributed",
     "extension",
+    "failure",
     "installing",
     "managing",
     "monitoring",
@@ -144,10 +221,13 @@ PROSE_SIGNAL_WORDS = {
     "an",
     "another",
     "are",
+    "be",
     "between",
     "by",
     "can",
+    "created",
     "deprecated",
+    "fails",
     "for",
     "from",
     "has",
@@ -164,6 +244,7 @@ PROSE_SIGNAL_WORDS = {
     "their",
     "this",
     "to",
+    "update",
     "using",
     "where",
     "with",
@@ -177,6 +258,42 @@ def _clean_visible_text(text: str) -> str:
     cleaned = INLINE_CODE_RE.sub(" ", cleaned)
     cleaned = URL_RE.sub(" ", cleaned)
     return " ".join(cleaned.split())
+
+
+def _strip_numbered_heading_prefix(text: str) -> str:
+    return NUMBERED_HEADING_PREFIX_RE.sub("", str(text or "").strip()).strip()
+
+
+def _normalized_phrase(text: str) -> str:
+    cleaned = _strip_numbered_heading_prefix(_clean_visible_text(text))
+    return cleaned.lower().strip(" :.-")
+
+
+def _is_preserved_official_heading(text: str) -> bool:
+    heading = _strip_numbered_heading_prefix(_clean_visible_text(text))
+    if not heading:
+        return True
+    if CLI_ARGUMENT_HEADING_RE.match(heading):
+        return True
+    compact = " ".join(heading.lower().split()).strip(" :.-")
+    compact = compact.replace(" (", "(").replace("( ", "(")
+    compact = compact.replace(" )", ")")
+    if compact in PRESERVED_OFFICIAL_HEADING_PHRASES:
+        return True
+    first_word_match = EN_WORD_RE.search(heading)
+    first_word = first_word_match.group(0).lower() if first_word_match else ""
+    return bool(
+        first_word not in ACTION_HEADING_PREFIX_WORDS
+        and OFFICIAL_NAME_MARKER_RE.search(heading)
+        and len(EN_WORD_RE.findall(heading)) <= 10
+    )
+
+
+def _untranslated_ui_phrase_reason(text: str) -> str:
+    phrase = _normalized_phrase(text)
+    if phrase in TRANSLATABLE_UI_PHRASES:
+        return "untranslated_glossary_phrase"
+    return ""
 
 
 def _is_code_like_text(text: str) -> bool:
@@ -205,7 +322,12 @@ def _is_code_like_text(text: str) -> bool:
         and len(EN_WORD_RE.findall(cleaned)) <= 12
     ):
         return True
-    if len(cleaned) <= 80 and CODE_LIKE_RE.search(cleaned):
+    heading_stripped = _strip_numbered_heading_prefix(cleaned)
+    if (
+        len(cleaned) <= 80
+        and heading_stripped == cleaned
+        and CODE_LIKE_RE.search(cleaned)
+    ):
         return True
     words = EN_WORD_RE.findall(cleaned)
     if not words:
@@ -234,19 +356,36 @@ def _english_prose_reason(text: str, *, field: str) -> str:
         return ""
     if CYRILLIC_RE.search(cleaned):
         return "cyrillic_translation_contamination"
+    ui_phrase_reason = _untranslated_ui_phrase_reason(cleaned)
+    if ui_phrase_reason:
+        return ui_phrase_reason
+    if field in {"title", "heading"}:
+        heading_text = _strip_numbered_heading_prefix(cleaned)
+        if not heading_text:
+            return ""
+        if _is_preserved_official_heading(heading_text):
+            return ""
+        if _is_code_like_text(heading_text):
+            return ""
+        words = _prose_words(heading_text)
+        if not words:
+            return ""
+        has_hangul = bool(HANGUL_RE.search(heading_text))
+        prose_title_words = [word for word in words if word in PROSE_TITLE_WORDS]
+        if not has_hangul and (len(prose_title_words) >= 1 or len(words) >= 2):
+            return "english_title_or_heading"
+        return ""
     if _is_code_like_text(cleaned):
         return ""
     words = _prose_words(cleaned)
     if not words:
         return ""
     has_hangul = bool(HANGUL_RE.search(cleaned))
-    if field in {"title", "heading"}:
-        prose_title_words = [word for word in words if word in PROSE_TITLE_WORDS]
-        if not has_hangul and (len(prose_title_words) >= 1 or len(words) >= 3):
-            return "english_title_or_heading"
-        return ""
     signal_words = [word for word in words if word in PROSE_SIGNAL_WORDS]
-    if not has_hangul and field == "body" and len(words) >= 5:
+    if not has_hangul and field == "body" and (
+        len(words) >= 5
+        or (len(words) >= 3 and len(signal_words) >= 2)
+    ):
         return "english_body_prose"
     if not has_hangul and len(words) >= 8:
         return "english_body_prose"

@@ -42,13 +42,32 @@ STRICT_TRANSLATION_REPAIR_PASSES = 2
 
 DETERMINISTIC_TRANSLATION_OVERRIDES = {
     "Abstract": "개요",
+    "Additional resources": "추가 리소스",
+    "A build fails with:": "빌드가 다음 메시지와 함께 실패합니다:",
+    "Adding certificate authorities to the cluster": "클러스터에 인증 기관 추가",
     "Important": "중요",
+    "Issue": "문제",
     "Legal Notice": "법적 고지",
+    "Note": "참고",
+    "Prerequisites": "사전 요구 사항",
+    "Procedure": "절차",
+    "Resolution": "해결",
     "Red Hat OpenShift Documentation Team Legal Notice Abstract": (
         "Red Hat OpenShift 문서 팀 법적 고지 및 개요"
     ),
     "Builds for OpenShift Container Platform": "OpenShift Container Platform 빌드",
+    "Builds using BuildConfig": "BuildConfig 을 사용한 빌드",
+    "Configuring build settings": "빌드 설정 구성",
+    "Create a `ConfigMap`": "`ConfigMap` 생성",
+    "Example output": "예제 출력",
+    "Expand": "펼치기",
+    "Resolving denial for access to resources": "리소스 액세스 거부 해결",
+    "Service certificate generation failure": "서비스 인증서 생성 실패",
+    "The `ConfigMap` must be created in the `openshift-config` namespace.": (
+        "`ConfigMap`은 `openshift-config` 네임스페이스에 생성해야 합니다."
+    ),
     "Tip": "팁",
+    "Update the cluster image configuration:": "클러스터 이미지 구성을 업데이트합니다:",
     "NooBaa, unless installed using Multicloud Object Gateway (MCG)": (
         "Multicloud Object Gateway(MCG)를 사용하여 설치한 경우를 제외한 NooBaa"
     ),

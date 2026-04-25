@@ -3,18 +3,32 @@
   "doc_id": "building_applications:4.20:ko",
   "source_fingerprint": "39c9172ceadf49817d6736137d3711c85d6861cb279052adc789eadb4f46a857",
   "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/building_applications/index",
-  "item_count": 1,
+  "item_count": 15,
   "items": {
-    "s104.b7.paragraph": "애플리케이션에 추가 를 사용하여 애플리케이션 그룹에 서비스를 추가하는 방법을 선택합니다(예: From Git, Container Image, From Dockerfile, From Devfile, Upload JAR file, Event Source, Channel, 또는 Broker)."
+    "s104.b7.paragraph": "애플리케이션에 추가 를 사용하여 애플리케이션 그룹에 서비스를 추가하는 방법을 선택합니다(예: From Git, Container Image, From Dockerfile, From Devfile, Upload JAR file, Event Source, Channel, 또는 Broker).",
+    "s26.b3.table.caption": "확장",
+    "s49.b10.table.caption": "확장",
+    "s68.b1.table.caption": "확장",
+    "s75.b1.table.caption": "확장",
+    "s176.b4.table.caption": "확장",
+    "s178.b4.table.caption": "확장",
+    "s195.b3.table.caption": "확장",
+    "s195.b4.table.caption": "확장",
+    "s195.b5.table.caption": "확장",
+    "s196.b2.table.caption": "확장",
+    "s236.b2.table.caption": "확장",
+    "s237.b5.table.caption": "확장",
+    "s238.b2.table.caption": "확장",
+    "s248.b2.table.caption": "확장"
   },
   "progress": {
     "status": "complete",
-    "completed_unit_count": 1,
-    "total_unit_count": 1,
+    "completed_unit_count": 14,
+    "total_unit_count": 14,
     "pending_unit_count": 0,
     "completed_batch_count": 1,
     "total_batch_count": 1,
     "current_batch_index": 1,
-    "current_batch_size": 1
+    "current_batch_size": 0
   }
 }

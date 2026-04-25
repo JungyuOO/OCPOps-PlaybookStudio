@@ -1,0 +1,24 @@
+{
+  "book_slug": "installation_overview",
+  "doc_id": "installation_overview:4.20:ko",
+  "source_fingerprint": "4e4265c8bec0c53c37af53c025e9aedfa17f1372eadb18bd8f704b8efe1b520c",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installation_overview/index",
+  "item_count": 5,
+  "items": {
+    "s14.b1.table.caption": "확장",
+    "s23.b3.table.caption": "확장",
+    "s23.b4.table.caption": "확장",
+    "s25.b13.table.caption": "확장",
+    "s60.b3.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 5,
+    "total_unit_count": 5,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

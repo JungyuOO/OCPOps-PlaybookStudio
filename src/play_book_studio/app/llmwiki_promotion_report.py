@@ -154,11 +154,17 @@ def _official_gold_contract(payload: dict[str, Any]) -> dict[str, Any]:
         if isinstance(metrics.get("bm25_metadata_contract"), dict)
         else {}
     )
+    ko_localization = (
+        metrics.get("ko_localization")
+        if isinstance(metrics.get("ko_localization"), dict)
+        else {}
+    )
     checks = {
         "official_gate_ok": payload.get("status") == "ok",
         "chunks_and_bm25_match": _safe_int(metrics.get("chunks_count")) > 0
         and _safe_int(metrics.get("chunks_count")) == _safe_int(metrics.get("bm25_count")),
         "code_blocks_present": _safe_int(block_counts.get("code")) > 0,
+        "ko_localization_ready": ko_localization.get("status") in {"", None, "ok"},
         "inline_figures_preserved": figure_sidecar_count == 0 or figure_blocks > 0,
     }
     return {
@@ -176,6 +182,9 @@ def _official_gold_contract(payload: dict[str, Any]) -> dict[str, Any]:
             "figure_matched_section_count": _safe_int(figure_relation_coverage.get("matched_section_count")),
             "bm25_metadata_status": bm25_metadata_contract.get("status"),
             "bm25_metadata_missing_row_count": _safe_int(bm25_metadata_contract.get("missing_row_count")),
+            "ko_localization_status": ko_localization.get("status"),
+            "ko_localization_failing_book_count": _safe_int(ko_localization.get("failing_book_count")),
+            "ko_localization_book_count": _safe_int(ko_localization.get("book_count")),
         },
         "failures": list(payload.get("failures") or []),
     }

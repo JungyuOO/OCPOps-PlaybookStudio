@@ -38,6 +38,9 @@ def _write_report(root: Path, *, head: str = "abc123") -> Path:
                         "bm25_count": 87858,
                         "code_blocks": 27191,
                         "playbook_figure_blocks": 454,
+                        "ko_localization_status": "ok",
+                        "ko_localization_failing_book_count": 0,
+                        "ko_localization_book_count": 113,
                     },
                 },
                 "customer_master": {
@@ -144,6 +147,8 @@ class DataControlRoomLlmWikiTests(unittest.TestCase):
         self.assertEqual(5, len(status["status_rail"]))
         self.assertEqual(87858, status["metrics"]["official_chunks_count"])
         self.assertEqual(4, status["metrics"]["chat_live_pass_count"])
+        self.assertEqual("ok", status["metrics"]["official_ko_localization_status"])
+        self.assertEqual(0, status["metrics"]["official_ko_localization_failing_book_count"])
         supported_modes = status["mode_contract"]["supported_modes"]
         self.assertEqual(["learn", "ops"], [item["id"] for item in supported_modes])
 

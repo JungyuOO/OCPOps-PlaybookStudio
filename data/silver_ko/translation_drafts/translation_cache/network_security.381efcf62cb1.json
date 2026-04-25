@@ -1,0 +1,29 @@
+{
+  "book_slug": "network_security",
+  "doc_id": "network_security:4.20:ko",
+  "source_fingerprint": "381efcf62cb1b88f66d34a71c2006016c183b0bc302bc9626d45e55f25bc3146",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/network_security/index",
+  "item_count": 10,
+  "items": {
+    "s4.b1.table.caption": "확대",
+    "s15.b0.table.caption": "확대",
+    "s60.b3.table.caption": "확대",
+    "s61.b38.table.caption": "확대",
+    "s62.b6.table.caption": "확대",
+    "s62.b14.table.caption": "확대",
+    "s63.b4.table.caption": "확대",
+    "s63.b10.table.caption": "확대",
+    "s86.b1.table.caption": "확대",
+    "s88.b1.table.caption": "확대"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 10,
+    "total_unit_count": 10,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

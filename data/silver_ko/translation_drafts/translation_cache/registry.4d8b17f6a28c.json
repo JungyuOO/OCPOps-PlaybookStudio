@@ -1,0 +1,23 @@
+{
+  "book_slug": "registry",
+  "doc_id": "registry:4.20:ko",
+  "source_fingerprint": "4d8b17f6a28c00c86a40c63bdb65cfeb60f2edec35af24fb108dfcfee4327651",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/registry/index",
+  "item_count": 4,
+  "items": {
+    "s12.b1.table.caption": "확대",
+    "s20.b2.table.caption": "확대",
+    "s24.b1.table.caption": "확대",
+    "s29.b1.table.caption": "확대"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 4,
+    "total_unit_count": 4,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "book_slug": "architecture",
+  "doc_id": "architecture:4.20:ko",
+  "source_fingerprint": "d0e8636c335be7bc86ba15066ac3dc97a423fe383fb0ea17ae1fb1aaea7718a4",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/architecture/index",
+  "item_count": 4,
+  "items": {
+    "s23.b1.table.caption": "확대",
+    "s52.b4.table.caption": "확대",
+    "s54.b7.table.caption": "확대",
+    "s54.b9.table.caption": "확대"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 4,
+    "total_unit_count": 4,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

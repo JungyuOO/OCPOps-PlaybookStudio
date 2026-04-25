@@ -1919,6 +1919,11 @@ const PlaybookLibraryPage: React.FC = () => {
                   <p>{Number(llmwikiMetrics.official_bm25_metadata_missing_row_count ?? 0).toLocaleString()} metadata gaps</p>
                 </div>
                 <div>
+                  <span>KO Localization</span>
+                  <strong>{String(llmwikiMetrics.official_ko_localization_status || 'unknown')}</strong>
+                  <p>{Number(llmwikiMetrics.official_ko_localization_failing_book_count ?? 0).toLocaleString()} English blockers / {Number(llmwikiMetrics.official_ko_localization_book_count ?? 0).toLocaleString()} books</p>
+                </div>
+                <div>
                   <span>Customer Master</span>
                   <strong>{Number(llmwikiMetrics.customer_master_source_count ?? 0).toLocaleString()} sources</strong>
                   <p>{Number(llmwikiMetrics.customer_master_section_count ?? 0).toLocaleString()} sections / {Number(llmwikiMetrics.customer_master_chunk_count ?? 0).toLocaleString()} chunks</p>

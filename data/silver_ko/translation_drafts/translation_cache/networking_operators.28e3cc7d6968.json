@@ -3,18 +3,41 @@
   "doc_id": "networking_operators:4.20:ko",
   "source_fingerprint": "28e3cc7d69688eba93e1e8339dcfb938fd2ee54ae30a0068c101cdf6fccece96",
   "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/networking_operators/index",
-  "item_count": 1,
+  "item_count": 24,
   "items": {
-    "doc.title": "Networking Operator"
+    "doc.title": "네트워킹 Operator",
+    "s23.heading": "2.2.2. AWS Load Balancer Operator",
+    "s23.path.2": "2.2.2. AWS Load Balancer Operator",
+    "s71.b3.table.caption": "확대",
+    "s76.b1.table.caption": "확대",
+    "s122.b1.table.caption": "확대",
+    "s123.b1.table.caption": "확대",
+    "s124.b1.table.caption": "확대",
+    "s124.b2.table.caption": "확대",
+    "s124.b3.table.caption": "확대",
+    "s124.b4.table.caption": "확대",
+    "s124.b5.table.caption": "확대",
+    "s124.b6.table.caption": "확대",
+    "s124.b7.table.caption": "확대",
+    "s124.b8.table.caption": "확대",
+    "s143.b1.table.caption": "확대",
+    "s145.b2.table.caption": "확대",
+    "s167.b1.table.caption": "확대",
+    "s188.b1.table.caption": "확대",
+    "s190.b1.table.caption": "확대",
+    "s191.b1.table.caption": "확대",
+    "s206.b1.table.caption": "확대",
+    "s215.b4.table.caption": "확대",
+    "s221.b6.table.caption": "확대"
   },
   "progress": {
     "status": "complete",
-    "completed_unit_count": 1,
-    "total_unit_count": 1,
+    "completed_unit_count": 24,
+    "total_unit_count": 24,
     "pending_unit_count": 0,
     "completed_batch_count": 1,
     "total_batch_count": 1,
     "current_batch_index": 1,
-    "current_batch_size": 1
+    "current_batch_size": 0
   }
 }

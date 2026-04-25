@@ -23,7 +23,10 @@ from play_book_studio.ingestion.official_gold_gate import (
     publish_runtime_manifest_from_playbooks,
     repair_portable_json_paths,
 )
-from play_book_studio.ingestion.localization_quality import build_official_ko_localization_audit
+from play_book_studio.ingestion.localization_quality import (
+    build_official_ko_localization_audit,
+    english_prose_reason,
+)
 
 
 class OfficialGoldGateTests(unittest.TestCase):
@@ -398,6 +401,59 @@ class OfficialGoldGateTests(unittest.TestCase):
 
         self.assertEqual("fail", audit["status"])
         self.assertEqual(1, audit["failing_book_count"])
+
+    def test_ko_localization_audit_fails_numbered_english_headings_and_ui_labels(self) -> None:
+        self.assertEqual(
+            "english_title_or_heading",
+            english_prose_reason("12.2. Configuring build settings", field="heading"),
+        )
+        self.assertEqual(
+            "untranslated_glossary_phrase",
+            english_prose_reason("Procedure", field="body"),
+        )
+
+        audit = build_official_ko_localization_audit(
+            [
+                {
+                    "book_slug": "builds_using_buildconfig",
+                    "title": "BuildConfig를 사용한 빌드",
+                    "translation_status": "translated_ko_draft",
+                    "sections": [
+                        {
+                            "heading": "12.2. Configuring build settings",
+                            "blocks": [{"kind": "paragraph", "text": "Procedure"}],
+                        }
+                    ],
+                }
+            ]
+        )
+
+        self.assertEqual("fail", audit["status"])
+        self.assertEqual("english_title_or_heading", audit["examples"][0]["findings"][0]["reason"])
+
+    def test_ko_localization_audit_allows_preserved_official_names_and_cli_argument_headings(self) -> None:
+        for heading in (
+            "20.5.3. Microsoft Entra Workload ID",
+            "5.1.1. OpenShift API for Data Protection API",
+            "6.3.3.2. completion [shell]",
+            "2.2.2. AWS Load Balancer Operator",
+            "1.4. Red Hat build of OpenTelemetry",
+            "18.5.2.1. RHCOS(Red Hat Enterprise Linux CoreOS)",
+            "8.2. OpenStack Cloud Controller Manager (CCM) config map",
+            "6.5. Cloud Controller Manager Operator",
+            "1.6.13. Machine Config Operator",
+            "3.9.8.1. Red Hat Advanced Cluster Management",
+            "6.8. Cluster CSI Snapshot Controller Operator",
+            "1.6.24. OLM(Operator Lifecycle Manager) Classic",
+            "4.6.8. Lifecycle Agent",
+            "6.10. Cluster Machine Approver Operator",
+            "5.16.1. Red Hat Advanced Cluster Management (RHACM)",
+        ):
+            self.assertEqual("", english_prose_reason(heading, field="heading"))
+        self.assertEqual(
+            "english_title_or_heading",
+            english_prose_reason("6.1. Configuring Machine Config Operator", field="heading"),
+        )
 
     def test_ko_localization_audit_fails_cyrillic_translation_contamination(self) -> None:
         audit = build_official_ko_localization_audit(

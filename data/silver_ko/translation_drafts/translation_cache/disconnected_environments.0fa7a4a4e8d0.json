@@ -1,0 +1,32 @@
+{
+  "book_slug": "disconnected_environments",
+  "doc_id": "disconnected_environments:4.20:ko",
+  "source_fingerprint": "0fa7a4a4e8d0efc6cd93c1b631739e2725061c3032b4c1856db4138d281303ba",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/disconnected_environments/index",
+  "item_count": 13,
+  "items": {
+    "s2.b2.table.caption": "확장",
+    "s26.b1.table.caption": "확장",
+    "s53.b1.table.caption": "확장",
+    "s59.b2.table.caption": "확장",
+    "s74.b2.table.caption": "확장",
+    "s75.b6.table.caption": "확장",
+    "s76.b1.table.caption": "확장",
+    "s77.b2.table.caption": "확장",
+    "s77.b3.table.caption": "확장",
+    "s78.b2.table.caption": "확장",
+    "s110.b1.table.caption": "확장",
+    "s122.b2.table.caption": "확장",
+    "s122.b3.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 13,
+    "total_unit_count": 13,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

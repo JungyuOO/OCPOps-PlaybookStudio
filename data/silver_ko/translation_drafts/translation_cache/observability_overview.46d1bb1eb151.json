@@ -1,0 +1,21 @@
+{
+  "book_slug": "observability_overview",
+  "doc_id": "observability_overview:4.20:ko",
+  "source_fingerprint": "46d1bb1eb1517ddb6abe24d2d8e912e5bc4783cfeddd0a8c85ccf9dfceb18d7f",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/observability_overview/index",
+  "item_count": 2,
+  "items": {
+    "s5.heading": "1.4. Red Hat build of OpenTelemetry",
+    "s5.path.1": "1.4. Red Hat build of OpenTelemetry"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 2,
+    "total_unit_count": 2,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

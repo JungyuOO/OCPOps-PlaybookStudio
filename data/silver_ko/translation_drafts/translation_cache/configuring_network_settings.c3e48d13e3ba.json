@@ -1,0 +1,20 @@
+{
+  "book_slug": "configuring_network_settings",
+  "doc_id": "configuring_network_settings:4.20:ko",
+  "source_fingerprint": "c3e48d13e3bac66f2c12fe42b2328623de9aef2d4933ffec260edddb793e90f1",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/configuring_network_settings/index",
+  "item_count": 1,
+  "items": {
+    "s12.b1.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

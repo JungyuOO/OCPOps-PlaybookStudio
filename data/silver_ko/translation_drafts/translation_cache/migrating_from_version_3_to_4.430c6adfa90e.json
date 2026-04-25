@@ -1,0 +1,34 @@
+{
+  "book_slug": "migrating_from_version_3_to_4",
+  "doc_id": "migrating_from_version_3_to_4:4.20:ko",
+  "source_fingerprint": "430c6adfa90e47b9125510c7f8a121db635affb7d907e49259e5233294e40ac7",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/migrating_from_version_3_to_4/index",
+  "item_count": 15,
+  "items": {
+    "s25.heading": "3.3.1.4. Red Hat OpenShift Data Foundation",
+    "s25.path.3": "3.3.1.4. Red Hat OpenShift Data Foundation",
+    "s48.b0.table.caption": "확장",
+    "s51.b2.table.caption": "확장",
+    "s52.b2.table.caption": "확장",
+    "s55.b8.table.caption": "확장",
+    "s68.b1.table.caption": "확장",
+    "s79.b8.table.caption": "확장",
+    "s92.b1.table.caption": "확장",
+    "s119.b0.table.caption": "확장",
+    "s134.b1.table.caption": "확장",
+    "s175.b1.table.caption": "확장",
+    "s176.b1.table.caption": "확장",
+    "s177.b1.table.caption": "확장",
+    "s178.b1.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 15,
+    "total_unit_count": 15,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

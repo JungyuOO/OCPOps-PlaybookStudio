@@ -1,0 +1,23 @@
+{
+  "book_slug": "windows_container_support_for_openshift",
+  "doc_id": "windows_container_support_for_openshift:4.20:ko",
+  "source_fingerprint": "68cf082e0e50e62c4576d308a8e4f661127b5dc56db39d94392cb24976b12e9b",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/windows_container_support_for_openshift/index",
+  "item_count": 4,
+  "items": {
+    "s8.b1.table.caption": "확장",
+    "s9.b4.table.caption": "확장",
+    "s9.b5.table.caption": "확장",
+    "s14.b1.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 4,
+    "total_unit_count": 4,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "book_slug": "cicd_overview",
+  "doc_id": "cicd_overview:4.20:ko",
+  "source_fingerprint": "47cfb9473b3743207f98674ff7c8fbab75a08b3e46943e11e6bb7bd4df42752a",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/cicd_overview/index",
+  "item_count": 2,
+  "items": {
+    "s2.heading": "1.1. OpenShift 빌드",
+    "s2.path.1": "1.1. OpenShift 빌드"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 2,
+    "total_unit_count": 2,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

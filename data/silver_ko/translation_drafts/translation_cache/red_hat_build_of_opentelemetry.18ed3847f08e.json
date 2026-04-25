@@ -3,7 +3,7 @@
   "doc_id": "red_hat_build_of_opentelemetry:4.20:ko",
   "source_fingerprint": "18ed3847f08e46772c5992fd3bfca24958ac44007ee8976bc5a5925649c09416",
   "translation_source_url": "https://docs.redhat.com/en/documentation/red_hat_build_of_opentelemetry/3.9",
-  "item_count": 40,
+  "item_count": 42,
   "items": {
     "s12.heading": "Red Hat OpenTelemetry 빌드 문제 해결",
     "s12.path.0": "문제 해결",
@@ -44,12 +44,14 @@
     "s9.b0.paragraph": "텔레메트리를 관측성 백엔드 및 클라우드 플랫폼으로 내보내기",
     "s10.b0.paragraph": "OpenTelemetry Collector 성능 및 리소스 사용량 모니터링",
     "s11.b0.paragraph": "계측된 애플리케이션과 Collector 연결",
-    "s12.b0.paragraph": "Collector 및 계측 문제 진단"
+    "s12.b0.paragraph": "Collector 및 계측 문제 진단",
+    "doc.title": "Red Hat OpenTelemetry",
+    "s8.b0.paragraph": "Prometheus 와 OpenTelemetry Collector 통합"
   },
   "progress": {
     "status": "complete",
-    "completed_unit_count": 40,
-    "total_unit_count": 40,
+    "completed_unit_count": 42,
+    "total_unit_count": 42,
     "pending_unit_count": 0,
     "completed_batch_count": 1,
     "total_batch_count": 1,

@@ -1,0 +1,43 @@
+{
+  "book_slug": "ingress_and_load_balancing",
+  "doc_id": "ingress_and_load_balancing:4.20:ko",
+  "source_fingerprint": "592b70435be475886c0ea4e7600f2825496b425fe772580ede15a0a129056187",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/ingress_and_load_balancing/index",
+  "item_count": 24,
+  "items": {
+    "s3.b2.table.caption": "확장",
+    "s7.heading": "1.2.1. HSTS(HTTP Strict Transport Security)",
+    "s7.path.2": "1.2.1. HSTS(HTTP Strict Transport Security)",
+    "s8.path.2": "1.2.1. HSTS(HTTP Strict Transport Security)",
+    "s9.path.2": "1.2.1. HSTS(HTTP Strict Transport Security)",
+    "s10.path.2": "1.2.1. HSTS(HTTP Strict Transport Security)",
+    "s15.b1.table.caption": "확장",
+    "s19.b3.table.caption": "확장",
+    "s19.b18.table.caption": "확장",
+    "s19.b20.table.caption": "확장",
+    "s30.b5.table.caption": "확장",
+    "s49.b11.table.caption": "확장",
+    "s127.b1.table.caption": "확장",
+    "s127.b3.table.caption": "확장",
+    "s137.b1.table.caption": "확장",
+    "s143.b1.table.caption": "확장",
+    "s152.b1.table.caption": "확장",
+    "s162.b3.table.caption": "확장",
+    "s162.b4.table.caption": "확장",
+    "s165.b1.table.caption": "확장",
+    "s186.b7.table.caption": "확장",
+    "s192.b1.table.caption": "확장",
+    "s195.b1.table.caption": "확장",
+    "s195.b2.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 24,
+    "total_unit_count": 24,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

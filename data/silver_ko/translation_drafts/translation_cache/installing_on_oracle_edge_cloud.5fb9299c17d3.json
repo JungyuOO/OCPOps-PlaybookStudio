@@ -1,0 +1,27 @@
+{
+  "book_slug": "installing_on_oracle_edge_cloud",
+  "doc_id": "installing_on_oracle_edge_cloud:4.20:ko",
+  "source_fingerprint": "5fb9299c17d3e09377fe15489409dc0c0ec896e50cf1eae4a22953edb5794f00",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_oracle_edge_cloud/index",
+  "item_count": 8,
+  "items": {
+    "s2.b1.table.caption": "확장",
+    "s7.b8.table.caption": "확장",
+    "s16.b1.table.caption": "확장",
+    "s20.b6.table.caption": "확장",
+    "s20.b13.table.caption": "확장",
+    "s20.b15.table.caption": "확장",
+    "s20.b17.table.caption": "확장",
+    "s20.b25.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 8,
+    "total_unit_count": 8,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

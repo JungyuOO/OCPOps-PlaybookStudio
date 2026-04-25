@@ -3,7 +3,7 @@
   "doc_id": "monitoring:4.20:ko",
   "source_fingerprint": "e0b2ddb5400b8976d505b5b72a8c3661f70af06c2d2ceca9e714d039fce0ca7b",
   "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/monitoring/index",
-  "item_count": 11,
+  "item_count": 12,
   "items": {
     "doc.title": "모니터링",
     "s0.heading": "OpenShift Container Platform 에서 모니터링 스택 구성 및 사용",
@@ -15,12 +15,13 @@
     "s1.b1.paragraph": "OpenShift Container Platform 을 설치한 후 클러스터 관리자는 선택적으로 사용자 정의 프로젝트에 대한 모니터링을 활성화할 수 있습니다.",
     "s1.b2.paragraph": "이 기능을 사용하면 클러스터 관리자, 개발자 및 기타 사용자가 자신의 프로젝트에서 서비스와 포드가 어떻게 모니터링되는지 지정할 수 있습니다.",
     "s1.b4.paragraph": "모니터링 스택 문서는 Red Hat OpenShift 를 위한 모니터링 스택이라는 별도의 문서 집합에서 사용할 수 있습니다.",
-    "s0.b0.paragraph": "Red Hat OpenShift Documentation Team 법적 고지 요약"
+    "s0.b0.paragraph": "Red Hat OpenShift Documentation Team 법적 고지 요약",
+    "s1.b3.paragraph": "참고"
   },
   "progress": {
     "status": "complete",
-    "completed_unit_count": 11,
-    "total_unit_count": 11,
+    "completed_unit_count": 12,
+    "total_unit_count": 12,
     "pending_unit_count": 0,
     "completed_batch_count": 1,
     "total_batch_count": 1,

@@ -1,0 +1,20 @@
+{
+  "book_slug": "validation_and_troubleshooting",
+  "doc_id": "validation_and_troubleshooting:4.20:ko",
+  "source_fingerprint": "e434cadc7323e475a3abf0462ed1fd86852a36c94c71a11f375371632af42606",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/validation_and_troubleshooting/index",
+  "item_count": 1,
+  "items": {
+    "s6.b14.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 1,
+    "total_unit_count": 1,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

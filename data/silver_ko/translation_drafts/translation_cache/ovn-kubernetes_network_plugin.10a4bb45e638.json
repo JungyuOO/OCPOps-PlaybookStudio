@@ -1,0 +1,30 @@
+{
+  "book_slug": "ovn-kubernetes_network_plugin",
+  "doc_id": "ovn-kubernetes_network_plugin:4.20:ko",
+  "source_fingerprint": "10a4bb45e638874f7aa0c03f27870d381d4abc76ad67508fe50d6c43dc5613c8",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/ovn-kubernetes_network_plugin/index",
+  "item_count": 11,
+  "items": {
+    "s9.b3.table.caption": "확장",
+    "s11.b3.table.caption": "확장",
+    "s25.b2.table.caption": "확장",
+    "s43.b1.table.caption": "확장",
+    "s43.b2.table.caption": "확장",
+    "s43.b3.table.caption": "확장",
+    "s43.b4.table.caption": "확장",
+    "s49.b1.table.caption": "확장",
+    "s49.b3.table.caption": "확장",
+    "s61.b2.table.caption": "확장",
+    "s81.b1.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 11,
+    "total_unit_count": 11,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

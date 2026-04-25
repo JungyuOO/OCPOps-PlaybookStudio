@@ -21,6 +21,11 @@ def _official_gold_payload() -> dict[str, object]:
             "bm25_count": 100,
             "playbook_document_count": 10,
             "figure_sidecar_count": 3,
+            "ko_localization": {
+                "status": "ok",
+                "book_count": 10,
+                "failing_book_count": 0,
+            },
             "playbook_block_counts": {
                 "code": 12,
                 "figure": 3,
@@ -99,6 +104,30 @@ class LlmwikiPromotionReportTests(unittest.TestCase):
         self.assertEqual("ok", summary["status"])
         self.assertTrue(summary["ready_for_llmwiki_promotion"])
         self.assertEqual([], summary["failures"])
+        self.assertEqual(
+            0,
+            summary["contracts"]["official_gold"]["metrics"]["ko_localization_failing_book_count"],
+        )
+
+    def test_summary_fails_when_official_localization_gate_has_blockers(self) -> None:
+        official_gold = _official_gold_payload()
+        official_gold["metrics"]["ko_localization"] = {
+            "status": "fail",
+            "book_count": 10,
+            "failing_book_count": 2,
+        }
+
+        summary = build_llmwiki_promotion_summary(
+            official_gold=official_gold,
+            customer_master=_customer_master_payload(),
+            runtime_report=_runtime_report_payload(),
+            runtime_maintenance={"summary": {"ok": True}},
+            chat_matrix=_chat_matrix_payload(),
+            material_scope={"enabled": True, "deduplicated_source_count": 2},
+        )
+
+        self.assertEqual("fail", summary["status"])
+        self.assertIn("official_gold", summary["failures"])
 
     def test_summary_fails_when_chat_matrix_has_no_live_vector_contract(self) -> None:
         chat_matrix = _chat_matrix_payload()

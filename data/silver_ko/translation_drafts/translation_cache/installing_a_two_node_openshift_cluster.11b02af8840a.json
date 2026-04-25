@@ -1,0 +1,23 @@
+{
+  "book_slug": "installing_a_two_node_openshift_cluster",
+  "doc_id": "installing_a_two_node_openshift_cluster:4.20:ko",
+  "source_fingerprint": "11b02af8840ae7f2ac2a23d821c5a454c6796d63543451a9c7fd508d95a15dc6",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_a_two_node_openshift_cluster/index",
+  "item_count": 4,
+  "items": {
+    "s2.b10.table.caption": "확장",
+    "s3.b1.table.caption": "확장",
+    "s4.b11.table.caption": "확장",
+    "s6.b12.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 4,
+    "total_unit_count": 4,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}

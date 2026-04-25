@@ -1,6 +1,6 @@
 {
   "schema_version": "official_figure_relations_v2",
-  "generated_at_utc": "2026-04-25T17:02:29+00:00",
+  "generated_at_utc": "2026-04-25T20:42:49+00:00",
   "producer": "playbook_documents.figure_blocks",
   "book_count": 46,
   "figure_count": 454,
@@ -517,7 +517,7 @@
         "viewer_path": "/wiki/figures/backup_and_restore/oadp-must-gather-markdown-output.png/index.html",
         "source_file": "",
         "source_asset_ref": "oadp-must-gather-markdown-output.png",
-        "section_hint": "5.26.11.1. Using the must-gather tool",
+        "section_hint": "5.26.11.1. must-gather 도구 사용",
         "section_anchor": "5.26.11.1.-using-the-must-gather-tool",
         "source": "playbook_document_figure_block"
       },
@@ -530,7 +530,7 @@
         "viewer_path": "/wiki/figures/backup_and_restore/oadp-metrics-targets.png/index.html",
         "source_file": "",
         "source_asset_ref": "oadp-metrics-targets.png",
-        "section_hint": "5.26.12.2. Creating OADP service monitor",
+        "section_hint": "5.26.12.2. OADP 서비스 모니터 생성",
         "section_anchor": "5.26.12.2.-creating-oadp-service-monitor",
         "source": "playbook_document_figure_block"
       },
@@ -543,7 +543,7 @@
         "viewer_path": "/wiki/figures/backup_and_restore/oadp-backup-failing-alert.png/index.html",
         "source_file": "",
         "source_asset_ref": "oadp-backup-failing-alert.png",
-        "section_hint": "5.26.12.3. Creating an alerting rule",
+        "section_hint": "5.26.12.3. 경고 규칙 생성",
         "section_anchor": "5.26.12.3.-creating-an-alerting-rule",
         "source": "playbook_document_figure_block"
       },
@@ -556,7 +556,7 @@
         "viewer_path": "/wiki/figures/backup_and_restore/oadp-metrics-query.png/index.html",
         "source_file": "",
         "source_asset_ref": "oadp-metrics-query.png",
-        "section_hint": "5.26.12.5. Viewing metrics using the Observe UI",
+        "section_hint": "5.26.12.5. Observe UI 를 사용하여 지표 확인",
         "section_anchor": "5.26.12.5.-viewing-metrics-using-the-observe-ui",
         "source": "playbook_document_figure_block"
       }
@@ -1973,7 +1973,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/552_OpenShift_slb_mode_0625.png/index.html",
         "source_file": "",
         "source_asset_ref": "552_OpenShift_slb_mode_0625.png",
-        "section_hint": "2.1.4. Enabling OVS balance-slb mode for your cluster",
+        "section_hint": "2.1.4. 클러스터에 대한 OVS balance-slb 모드 활성화",
         "section_anchor": "2.1.4.-enabling-ovs-balance-slb-mode-for-your-cluster",
         "source": "playbook_document_figure_block"
       },
@@ -1986,7 +1986,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/210_OpenShift_Baremetal_IPI_Deployment_updates_0122_1.png/index.html",
         "source_file": "",
         "source_asset_ref": "210_OpenShift_Baremetal_IPI_Deployment_updates_0122_1.png",
-        "section_hint": "3.1. Overview",
+        "section_hint": "3.1. 개요",
         "section_anchor": "3.1.-overview",
         "source": "playbook_document_figure_block"
       },
@@ -1999,7 +1999,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/210_OpenShift_Baremetal_IPI_Deployment_updates_0122_2.png/index.html",
         "source_file": "",
         "source_asset_ref": "210_OpenShift_Baremetal_IPI_Deployment_updates_0122_2.png",
-        "section_hint": "3.1. Overview",
+        "section_hint": "3.1. 개요",
         "section_anchor": "3.1.-overview",
         "source": "playbook_document_figure_block"
       },
@@ -2012,7 +2012,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/210_OpenShift_Baremetal_IPI_Deployment_updates_0122_2.png/index.html",
         "source_file": "",
         "source_asset_ref": "210_OpenShift_Baremetal_IPI_Deployment_updates_0122_2.png",
-        "section_hint": "3.2.6. Network requirements",
+        "section_hint": "3.2.6. 네트워크 요구 사항",
         "section_anchor": "3.2.6.-network-requirements",
         "source": "playbook_document_figure_block"
       },
@@ -2025,7 +2025,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/210_OpenShift_Baremetal_IPI_Deployment_updates_0122_1.png/index.html",
         "source_file": "",
         "source_asset_ref": "210_OpenShift_Baremetal_IPI_Deployment_updates_0122_1.png",
-        "section_hint": "3.3.4. Configuring networking",
+        "section_hint": "3.3.4. 네트워킹 구성",
         "section_anchor": "3.3.4.-configuring-networking",
         "source": "playbook_document_figure_block"
       },
@@ -2038,7 +2038,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/external-load-balancer-default.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-default.png",
-        "section_hint": "3.3.10. Services for a user-managed load balancer",
+        "section_hint": "3.3.10. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "3.3.10.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2051,7 +2051,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/external-load-balancer-openshift-api.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-openshift-api.png",
-        "section_hint": "3.3.10. Services for a user-managed load balancer",
+        "section_hint": "3.3.10. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "3.3.10.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2064,7 +2064,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/external-load-balancer-machine-config-api.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-machine-config-api.png",
-        "section_hint": "3.3.10. Services for a user-managed load balancer",
+        "section_hint": "3.3.10. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "3.3.10.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2077,7 +2077,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/152_OpenShift_Config_NTP_0421.png/index.html",
         "source_file": "",
         "source_asset_ref": "152_OpenShift_Config_NTP_0421.png",
-        "section_hint": "3.3.14.2. Configuring NTP for disconnected clusters",
+        "section_hint": "3.3.14.2. 격리된 클러스터용 NTP 구성",
         "section_anchor": "3.3.14.2.-configuring-ntp-for-disconnected-clusters",
         "source": "playbook_document_figure_block"
       },
@@ -2090,7 +2090,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/161_OpenShift_Baremetal_IPI_Deployment_updates_0521.png/index.html",
         "source_file": "",
         "source_asset_ref": "161_OpenShift_Baremetal_IPI_Deployment_updates_0521.png",
-        "section_hint": "3.3.14.3. Configuring network components to run on the control plane",
+        "section_hint": "3.3.14.3. 컨트롤 플레인을 실행하기 위한 네트워크 구성 요소 구성",
         "section_anchor": "3.3.14.3.-configuring-network-components-to-run-on-the-control-plane",
         "source": "playbook_document_figure_block"
       },
@@ -2103,7 +2103,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/flow1.png/index.html",
         "source_file": "",
         "source_asset_ref": "flow1.png",
-        "section_hint": "3.5.1. Troubleshooting the installation program workflow",
+        "section_hint": "3.5.1. 설치 프로그램 워크플로우 문제 해결",
         "section_anchor": "3.5.1.-troubleshooting-the-installation-program-workflow",
         "source": "playbook_document_figure_block"
       },
@@ -2116,7 +2116,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/flow2.png/index.html",
         "source_file": "",
         "source_asset_ref": "flow2.png",
-        "section_hint": "3.5.1. Troubleshooting the installation program workflow",
+        "section_hint": "3.5.1. 설치 프로그램 워크플로우 문제 해결",
         "section_anchor": "3.5.1.-troubleshooting-the-installation-program-workflow",
         "source": "playbook_document_figure_block"
       },
@@ -2129,7 +2129,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/flow3.png/index.html",
         "source_file": "",
         "source_asset_ref": "flow3.png",
-        "section_hint": "3.5.1. Troubleshooting the installation program workflow",
+        "section_hint": "3.5.1. 설치 프로그램 워크플로우 문제 해결",
         "section_anchor": "3.5.1.-troubleshooting-the-installation-program-workflow",
         "source": "playbook_document_figure_block"
       },
@@ -2142,7 +2142,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/flow4.png/index.html",
         "source_file": "",
         "source_asset_ref": "flow4.png",
-        "section_hint": "3.5.1. Troubleshooting the installation program workflow",
+        "section_hint": "3.5.1. 설치 프로그램 워크플로우 문제 해결",
         "section_anchor": "3.5.1.-troubleshooting-the-installation-program-workflow",
         "source": "playbook_document_figure_block"
       },
@@ -2155,7 +2155,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/152_OpenShift_Config_NTP_0421.png/index.html",
         "source_file": "",
         "source_asset_ref": "152_OpenShift_Config_NTP_0421.png",
-        "section_hint": "4.2. Configuring NTP for disconnected clusters",
+        "section_hint": "4.2. 격리된 클러스터에 대한 NTP 구성",
         "section_anchor": "4.2.-configuring-ntp-for-disconnected-clusters",
         "source": "playbook_document_figure_block"
       },
@@ -2168,7 +2168,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/external-load-balancer-default.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-default.png",
-        "section_hint": "4.7. Services for a user-managed load balancer",
+        "section_hint": "4.7. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "4.7.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2181,7 +2181,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/external-load-balancer-openshift-api.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-openshift-api.png",
-        "section_hint": "4.7. Services for a user-managed load balancer",
+        "section_hint": "4.7. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "4.7.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2194,7 +2194,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/external-load-balancer-machine-config-api.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-machine-config-api.png",
-        "section_hint": "4.7. Services for a user-managed load balancer",
+        "section_hint": "4.7. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "4.7.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2207,7 +2207,7 @@
         "viewer_path": "/wiki/figures/installing_on_bare_metal/715_OpenShift_Bare_Metal_Operator_updates_0624.png/index.html",
         "source_file": "",
         "source_asset_ref": "715_OpenShift_Bare_Metal_Operator_updates_0624.png",
-        "section_hint": "4.8.1. Bare Metal Operator architecture",
+        "section_hint": "4.8.1. 베어 메탈 Operator 아키텍처",
         "section_anchor": "4.8.1.-bare-metal-operator-architecture",
         "source": "playbook_document_figure_block"
       }
@@ -2222,7 +2222,7 @@
         "viewer_path": "/wiki/figures/installing_on_nutanix/external-load-balancer-default.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-default.png",
-        "section_hint": "3.13. Services for a user-managed load balancer",
+        "section_hint": "3.13. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "3.13.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2235,7 +2235,7 @@
         "viewer_path": "/wiki/figures/installing_on_nutanix/external-load-balancer-openshift-api.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-openshift-api.png",
-        "section_hint": "3.13. Services for a user-managed load balancer",
+        "section_hint": "3.13. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "3.13.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2248,7 +2248,7 @@
         "viewer_path": "/wiki/figures/installing_on_nutanix/external-load-balancer-machine-config-api.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-machine-config-api.png",
-        "section_hint": "3.13. Services for a user-managed load balancer",
+        "section_hint": "3.13. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "3.13.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       }
@@ -2263,7 +2263,7 @@
         "viewer_path": "/wiki/figures/installing_on_openstack/openshift-on-openstack-provider-network.png/index.html",
         "source_file": "",
         "source_asset_ref": "openshift-on-openstack-provider-network.png",
-        "section_hint": "3.10.4. Cluster deployment on RHOSP provider networks",
+        "section_hint": "3.10.4. RHOSP 제공자 네트워크의 클러스터 배포",
         "section_anchor": "3.10.4.-cluster-deployment-on-rhosp-provider-networks",
         "source": "playbook_document_figure_block"
       },
@@ -2276,7 +2276,7 @@
         "viewer_path": "/wiki/figures/installing_on_openstack/openshift-on-openstack-provider-network.png/index.html",
         "source_file": "",
         "source_asset_ref": "openshift-on-openstack-provider-network.png",
-        "section_hint": "4.13.5. Cluster deployment on RHOSP provider networks",
+        "section_hint": "4.13.5. RHOSP 공급자 네트워크에서의 클러스터 배포",
         "section_anchor": "4.13.5.-cluster-deployment-on-rhosp-provider-networks",
         "source": "playbook_document_figure_block"
       }
@@ -2345,7 +2345,7 @@
         "viewer_path": "/wiki/figures/installing_on_vmware_vsphere/external-load-balancer-default.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-default.png",
-        "section_hint": "2.4.9. Services for a user-managed load balancer",
+        "section_hint": "2.4.9. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "2.4.9.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2358,7 +2358,7 @@
         "viewer_path": "/wiki/figures/installing_on_vmware_vsphere/external-load-balancer-openshift-api.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-openshift-api.png",
-        "section_hint": "2.4.9. Services for a user-managed load balancer",
+        "section_hint": "2.4.9. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "2.4.9.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2371,7 +2371,7 @@
         "viewer_path": "/wiki/figures/installing_on_vmware_vsphere/external-load-balancer-machine-config-api.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-machine-config-api.png",
-        "section_hint": "2.4.9. Services for a user-managed load balancer",
+        "section_hint": "2.4.9. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "2.4.9.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2384,7 +2384,7 @@
         "viewer_path": "/wiki/figures/installing_on_vmware_vsphere/325_OpenShift_vSphere_Deployment_updates_0323.png/index.html",
         "source_file": "",
         "source_asset_ref": "325_OpenShift_vSphere_Deployment_updates_0323.png",
-        "section_hint": "2.4.14. Configuring network components to run on the control plane",
+        "section_hint": "2.4.14. 컨트롤 플레인을 실행하기 위한 네트워크 구성 요소 구성",
         "section_anchor": "2.4.14.-configuring-network-components-to-run-on-the-control-plane",
         "source": "playbook_document_figure_block"
       },
@@ -2397,7 +2397,7 @@
         "viewer_path": "/wiki/figures/installing_on_vmware_vsphere/external-load-balancer-default.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-default.png",
-        "section_hint": "2.5.8. Services for a user-managed load balancer",
+        "section_hint": "2.5.8. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "2.5.8.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2410,7 +2410,7 @@
         "viewer_path": "/wiki/figures/installing_on_vmware_vsphere/external-load-balancer-openshift-api.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-openshift-api.png",
-        "section_hint": "2.5.8. Services for a user-managed load balancer",
+        "section_hint": "2.5.8. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "2.5.8.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       },
@@ -2423,7 +2423,7 @@
         "viewer_path": "/wiki/figures/installing_on_vmware_vsphere/external-load-balancer-machine-config-api.png/index.html",
         "source_file": "",
         "source_asset_ref": "external-load-balancer-machine-config-api.png",
-        "section_hint": "2.5.8. Services for a user-managed load balancer",
+        "section_hint": "2.5.8. 사용자 관리형 로드 밸런서를 위한 서비스",
         "section_anchor": "2.5.8.-services-for-a-user-managed-load-balancer",
         "source": "playbook_document_figure_block"
       }
@@ -3059,7 +3059,7 @@
         "viewer_path": "/wiki/figures/network_observability/arrow-up-long-solid.png/index.html",
         "source_file": "",
         "source_asset_ref": "arrow-up-long-solid.png",
-        "section_hint": "2.1.54.2. Web console enhancements:",
+        "section_hint": "2.1.54.2. 웹 콘솔 개선 사항:",
         "section_anchor": "2.1.54.2.-web-console-enhancements:",
         "source": "playbook_document_figure_block"
       },
@@ -3072,7 +3072,7 @@
         "viewer_path": "/wiki/figures/network_observability/arrow-up-long-solid.png/index.html",
         "source_file": "",
         "source_asset_ref": "arrow-up-long-solid.png",
-        "section_hint": "2.1.54.2. Web console enhancements:",
+        "section_hint": "2.1.54.2. 웹 콘솔 개선 사항:",
         "section_anchor": "2.1.54.2.-web-console-enhancements:",
         "source": "playbook_document_figure_block"
       },
@@ -3085,7 +3085,7 @@
         "viewer_path": "/wiki/figures/network_observability/arrow-down-long-solid.png/index.html",
         "source_file": "",
         "source_asset_ref": "arrow-down-long-solid.png",
-        "section_hint": "2.1.54.2. Web console enhancements:",
+        "section_hint": "2.1.54.2. 웹 콘솔 개선 사항:",
         "section_anchor": "2.1.54.2.-web-console-enhancements:",
         "source": "playbook_document_figure_block"
       },
@@ -3098,7 +3098,7 @@
         "viewer_path": "/wiki/figures/network_observability/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "4.7. Uninstalling the Network Observability Operator",
+        "section_hint": "4.7. 네트워킹 Operator 제거",
         "section_anchor": "4.7.-uninstalling-the-network-observability-operator",
         "source": "playbook_document_figure_block"
       },
@@ -3111,7 +3111,7 @@
         "viewer_path": "/wiki/figures/network_observability/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "4.7. Uninstalling the Network Observability Operator",
+        "section_hint": "4.7. 네트워킹 Operator 제거",
         "section_anchor": "4.7.-uninstalling-the-network-observability-operator",
         "source": "playbook_document_figure_block"
       },
@@ -3124,7 +3124,7 @@
         "viewer_path": "/wiki/figures/network_observability/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "4.7. Uninstalling the Network Observability Operator",
+        "section_hint": "4.7. 네트워킹 Operator 제거",
         "section_anchor": "4.7.-uninstalling-the-network-observability-operator",
         "source": "playbook_document_figure_block"
       },
@@ -3137,7 +3137,7 @@
         "viewer_path": "/wiki/figures/network_observability/network-observability-architecture.png/index.html",
         "source_file": "",
         "source_asset_ref": "network-observability-architecture.png",
-        "section_hint": "5.2. Network Observablity Operator architecture",
+        "section_hint": "5.2. 네트워킹 Operator 관측성 아키텍처",
         "section_anchor": "5.2.-network-observablity-operator-architecture",
         "source": "playbook_document_figure_block"
       },
@@ -3150,7 +3150,7 @@
         "viewer_path": "/wiki/figures/network_observability/network-observability-arch-kafka-FLP.png/index.html",
         "source_file": "",
         "source_asset_ref": "network-observability-arch-kafka-FLP.png",
-        "section_hint": "5.2. Network Observablity Operator architecture",
+        "section_hint": "5.2. 네트워킹 Operator 관측성 아키텍처",
         "section_anchor": "5.2.-network-observablity-operator-architecture",
         "source": "playbook_document_figure_block"
       },
@@ -3163,7 +3163,7 @@
         "viewer_path": "/wiki/figures/network_observability/arrow-up-long-solid.png/index.html",
         "source_file": "",
         "source_asset_ref": "arrow-up-long-solid.png",
-        "section_hint": "10.4. Filtering the network traffic",
+        "section_hint": "10.4. 네트워크 트래픽 필터링",
         "section_anchor": "10.4.-filtering-the-network-traffic",
         "source": "playbook_document_figure_block"
       },
@@ -3176,7 +3176,7 @@
         "viewer_path": "/wiki/figures/network_observability/arrow-up-long-solid.png/index.html",
         "source_file": "",
         "source_asset_ref": "arrow-up-long-solid.png",
-        "section_hint": "10.4. Filtering the network traffic",
+        "section_hint": "10.4. 네트워크 트래픽 필터링",
         "section_anchor": "10.4.-filtering-the-network-traffic",
         "source": "playbook_document_figure_block"
       },
@@ -3189,7 +3189,7 @@
         "viewer_path": "/wiki/figures/network_observability/arrow-down-long-solid.png/index.html",
         "source_file": "",
         "source_asset_ref": "arrow-down-long-solid.png",
-        "section_hint": "10.4. Filtering the network traffic",
+        "section_hint": "10.4. 네트워크 트래픽 필터링",
         "section_anchor": "10.4.-filtering-the-network-traffic",
         "source": "playbook_document_figure_block"
       },
@@ -3202,7 +3202,7 @@
         "viewer_path": "/wiki/figures/network_observability/arrow-up-long-solid.png/index.html",
         "source_file": "",
         "source_asset_ref": "arrow-up-long-solid.png",
-        "section_hint": "10.4. Filtering the network traffic",
+        "section_hint": "10.4. 네트워크 트래픽 필터링",
         "section_anchor": "10.4.-filtering-the-network-traffic",
         "source": "playbook_document_figure_block"
       },
@@ -3215,7 +3215,7 @@
         "viewer_path": "/wiki/figures/network_observability/arrow-up-long-solid.png/index.html",
         "source_file": "",
         "source_asset_ref": "arrow-up-long-solid.png",
-        "section_hint": "10.4. Filtering the network traffic",
+        "section_hint": "10.4. 네트워크 트래픽 필터링",
         "section_anchor": "10.4.-filtering-the-network-traffic",
         "source": "playbook_document_figure_block"
       },
@@ -3228,7 +3228,7 @@
         "viewer_path": "/wiki/figures/network_observability/arrow-down-long-solid.png/index.html",
         "source_file": "",
         "source_asset_ref": "arrow-down-long-solid.png",
-        "section_hint": "10.4. Filtering the network traffic",
+        "section_hint": "10.4. 네트워크 트래픽 필터링",
         "section_anchor": "10.4.-filtering-the-network-traffic",
         "source": "playbook_document_figure_block"
       }
@@ -3829,7 +3829,7 @@
         "viewer_path": "/wiki/figures/scalability_and_performance/openshift-5g-core-cluster-architecture-networking.png/index.html",
         "source_file": "",
         "source_asset_ref": "openshift-5g-core-cluster-architecture-networking.png",
-        "section_hint": "3.2. About the telco core cluster use model",
+        "section_hint": "3.2. 텔코 코어 클러스터 사용 모델 개요",
         "section_anchor": "3.2.-about-the-telco-core-cluster-use-model",
         "source": "playbook_document_figure_block"
       },
@@ -3842,7 +3842,7 @@
         "viewer_path": "/wiki/figures/scalability_and_performance/openshift-telco-core-rds-networking.png/index.html",
         "source_file": "",
         "source_asset_ref": "openshift-telco-core-rds-networking.png",
-        "section_hint": "3.9.4. Networking",
+        "section_hint": "3.9.4. 네트워킹",
         "section_anchor": "3.9.4.-networking",
         "source": "playbook_document_figure_block"
       },
@@ -3855,7 +3855,7 @@
         "viewer_path": "/wiki/figures/scalability_and_performance/openshift-telco-core-rds-metallb-service-separation.png/index.html",
         "source_file": "",
         "source_asset_ref": "openshift-telco-core-rds-metallb-service-separation.png",
-        "section_hint": "3.9.4. Networking",
+        "section_hint": "3.9.4. 네트워킹",
         "section_anchor": "3.9.4.-networking",
         "source": "playbook_document_figure_block"
       },
@@ -3868,7 +3868,7 @@
         "viewer_path": "/wiki/figures/scalability_and_performance/474_OpenShift_OpenShift_RAN_RDS_arch_updates_1023.png/index.html",
         "source_file": "",
         "source_asset_ref": "474_OpenShift_OpenShift_RAN_RDS_arch_updates_1023.png",
-        "section_hint": "4.1. Reference design specifications for telco RAN DU 5G deployments",
+        "section_hint": "4.1. 텔코 RAN DU 5G 배포를 위한 참조 설계 사양",
         "section_anchor": "4.1.-reference-design-specifications-for-telco-ran-du-5g-deployments",
         "source": "playbook_document_figure_block"
       },
@@ -3881,7 +3881,7 @@
         "viewer_path": "/wiki/figures/scalability_and_performance/telco-ran-du-reference-design-components.png/index.html",
         "source_file": "",
         "source_asset_ref": "telco-ran-du-reference-design-components.png",
-        "section_hint": "4.6. Telco RAN DU reference design components",
+        "section_hint": "4.6. Telco RAN DU 참조 설계 구성 요소",
         "section_anchor": "4.6.-telco-ran-du-reference-design-components",
         "source": "playbook_document_figure_block"
       },
@@ -3894,7 +3894,7 @@
         "viewer_path": "/wiki/figures/scalability_and_performance/telco-hub-cluster-reference-design-components.png/index.html",
         "source_file": "",
         "source_asset_ref": "telco-hub-cluster-reference-design-components.png",
-        "section_hint": "5.3. Hub cluster architecture overview",
+        "section_hint": "5.3. 허브 클러스터 아키텍처 개요",
         "section_anchor": "5.3.-hub-cluster-architecture-overview",
         "source": "playbook_document_figure_block"
       },
@@ -3907,7 +3907,7 @@
         "viewer_path": "/wiki/figures/scalability_and_performance/telco-hub-cluster-rds-architecture.png/index.html",
         "source_file": "",
         "source_asset_ref": "telco-hub-cluster-rds-architecture.png",
-        "section_hint": "5.3. Hub cluster architecture overview",
+        "section_hint": "5.3. 허브 클러스터 아키텍처 개요",
         "section_anchor": "5.3.-hub-cluster-architecture-overview",
         "source": "playbook_document_figure_block"
       },
@@ -3920,7 +3920,7 @@
         "viewer_path": "/wiki/figures/scalability_and_performance/493-OpenShift-0125.png/index.html",
         "source_file": "",
         "source_asset_ref": "493-OpenShift-0125.png",
-        "section_hint": "6.1.1. Overview of the cluster-compare plugin",
+        "section_hint": "6.1.1. cluster-compare 플러그인 개요",
         "section_anchor": "6.1.1.-overview-of-the-cluster-compare-plugin",
         "source": "playbook_document_figure_block"
       },
@@ -3933,7 +3933,7 @@
         "viewer_path": "/wiki/figures/scalability_and_performance/node-tuning-operator-workflow-revised.png/index.html",
         "source_file": "",
         "source_asset_ref": "node-tuning-operator-workflow-revised.png",
-        "section_hint": "10.5. Custom tuning specification",
+        "section_hint": "10.5. 사용자 정의 조정 스펙",
         "section_anchor": "10.5.-custom-tuning-specification",
         "source": "playbook_document_figure_block"
       },
@@ -3946,7 +3946,7 @@
         "viewer_path": "/wiki/figures/scalability_and_performance/216_OpenShift_Topology-aware_Scheduling_0222.png/index.html",
         "source_file": "",
         "source_asset_ref": "216_OpenShift_Topology-aware_Scheduling_0222.png",
-        "section_hint": "12.2. About NUMA-aware scheduling",
+        "section_hint": "12.2. NUMA 인식 스케줄링 개요",
         "section_anchor": "12.2.-about-numa-aware-scheduling",
         "source": "playbook_document_figure_block"
       },
@@ -3959,7 +3959,7 @@
         "viewer_path": "/wiki/figures/scalability_and_performance/before-k8s-mount-propagation.png/index.html",
         "source_file": "",
         "source_asset_ref": "before-k8s-mount-propagation.png",
-        "section_hint": "13.4.1. Encapsulating mount namespaces",
+        "section_hint": "13.4.1. 마운트 네임스페이스 캡슐화",
         "section_anchor": "13.4.1.-encapsulating-mount-namespaces",
         "source": "playbook_document_figure_block"
       },
@@ -3972,7 +3972,7 @@
         "viewer_path": "/wiki/figures/scalability_and_performance/after-k8s-mount-propagation.png/index.html",
         "source_file": "",
         "source_asset_ref": "after-k8s-mount-propagation.png",
-        "section_hint": "13.4.1. Encapsulating mount namespaces",
+        "section_hint": "13.4.1. 마운트 네임스페이스 캡슐화",
         "section_anchor": "13.4.1.-encapsulating-mount-namespaces",
         "source": "playbook_document_figure_block"
       }
@@ -4587,7 +4587,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-architecture.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-architecture.png",
-        "section_hint": "2.4.2. 서비스 메시 architecture",
+        "section_hint": "2.4.2. 서비스 메시 아키텍처",
         "section_anchor": "2.4.2.-service-mesh-architecture",
         "source": "playbook_document_figure_block"
       },
@@ -4600,7 +4600,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-kiali-overview.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-kiali-overview.png",
-        "section_hint": "2.9.4. Validating your SMCP installation with Kiali",
+        "section_hint": "2.9.4. Kiali 를 사용하여 SMCP 설치 확인",
         "section_anchor": "2.9.4.-validating-your-smcp-installation-with-kiali",
         "source": "playbook_document_figure_block"
       },
@@ -4613,7 +4613,7 @@
         "viewer_path": "/wiki/figures/service_mesh/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "2.9.4. Validating your SMCP installation with Kiali",
+        "section_hint": "2.9.4. Kiali 를 사용하여 SMCP 설치 확인",
         "section_anchor": "2.9.4.-validating-your-smcp-installation-with-kiali",
         "source": "playbook_document_figure_block"
       },
@@ -4626,7 +4626,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-grafana-control-plane-dashboard.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-grafana-control-plane-dashboard.png",
-        "section_hint": "2.9.4. Validating your SMCP installation with Kiali",
+        "section_hint": "2.9.4. Kiali 를 사용하여 SMCP 설치 확인",
         "section_anchor": "2.9.4.-validating-your-smcp-installation-with-kiali",
         "source": "playbook_document_figure_block"
       },
@@ -4639,7 +4639,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-adding-project-using-smmr.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-adding-project-using-smmr.png",
-        "section_hint": "2.10.3. About adding projects using the ServiceMeshMemberRoll resource",
+        "section_hint": "2.10.3. ServiceMeshMemberResource 리소스를 사용하여 프로젝트 추가",
         "section_anchor": "2.10.3.-about-adding-projects-using-the-servicemeshmemberroll-resource",
         "source": "playbook_document_figure_block"
       },
@@ -4652,7 +4652,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-adding-project-using-smm.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-adding-project-using-smm.png",
-        "section_hint": "2.10.4. About adding projects using the ServiceMeshMember resource",
+        "section_hint": "2.10.4. ServiceMeshMember 리소스를 사용하여 프로젝트 추가",
         "section_anchor": "2.10.4.-about-adding-projects-using-the-servicemeshmember-resource",
         "source": "playbook_document_figure_block"
       },
@@ -4665,7 +4665,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-adding-project-using-label-selector.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-adding-project-using-label-selector.png",
-        "section_hint": "2.10.5. About adding projects using label selectors",
+        "section_hint": "2.10.5. 레이블 선택기를 사용하여 프로젝트 추가",
         "section_anchor": "2.10.5.-about-adding-projects-using-label-selectors",
         "source": "playbook_document_figure_block"
       },
@@ -4678,7 +4678,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-kiali-graph-bookinfo.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-kiali-graph-bookinfo.png",
-        "section_hint": "2.10.6.3. Verifying the Bookinfo installation",
+        "section_hint": "2.10.6.3. Bookinfo 설치 확인하기",
         "section_anchor": "2.10.6.3.-verifying-the-bookinfo-installation",
         "source": "playbook_document_figure_block"
       },
@@ -4691,7 +4691,7 @@
         "viewer_path": "/wiki/figures/service_mesh/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "2.10.6.4.1. Delete the Bookinfo project",
+        "section_hint": "2.10.6.4.1. Bookinfo 프로젝트 삭제",
         "section_anchor": "2.10.6.4.1.-delete-the-bookinfo-project",
         "source": "playbook_document_figure_block"
       },
@@ -4704,7 +4704,7 @@
         "viewer_path": "/wiki/figures/service_mesh/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "2.10.6.4.2. Remove the Bookinfo project from the 서비스 메시 member roll",
+        "section_hint": "2.10.6.4.2. 서비스 메시 멤버 롤에서 Bookinfo 프로젝트 제거",
         "section_anchor": "2.10.6.4.2.-remove-the-bookinfo-project-from-the-service-mesh-member-roll",
         "source": "playbook_document_figure_block"
       },
@@ -4717,7 +4717,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-node-badge-missing-sidecar.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-node-badge-missing-sidecar.png",
-        "section_hint": "2.11.3. Validating sidecar injection",
+        "section_hint": "2.11.3. 사이드카 주입 유효성 검사",
         "section_anchor": "2.11.3.-validating-sidecar-injection",
         "source": "playbook_document_figure_block"
       },
@@ -4730,7 +4730,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-icon-missing-sidecar.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-icon-missing-sidecar.png",
-        "section_hint": "2.11.3. Validating sidecar injection",
+        "section_hint": "2.11.3. 사이드카 주입 유효성 검사",
         "section_anchor": "2.11.3.-validating-sidecar-injection",
         "source": "playbook_document_figure_block"
       },
@@ -4743,7 +4743,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-kiali-masthead-mtls-enabled.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-kiali-masthead-mtls-enabled.png",
-        "section_hint": "2.13.1.2. Validating encryption with Kiali",
+        "section_hint": "2.13.1.2. Kiali 를 사용한 암호화 유효성 검사",
         "section_anchor": "2.13.1.2.-validating-encryption-with-kiali",
         "source": "playbook_document_figure_block"
       },
@@ -4756,7 +4756,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-kiali-masthead-mtls-partial.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-kiali-masthead-mtls-partial.png",
-        "section_hint": "2.13.1.2. Validating encryption with Kiali",
+        "section_hint": "2.13.1.2. Kiali 를 사용한 암호화 유효성 검사",
         "section_anchor": "2.13.1.2.-validating-encryption-with-kiali",
         "source": "playbook_document_figure_block"
       },
@@ -4769,7 +4769,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-kiali-graph-badge-security.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-kiali-graph-badge-security.png",
-        "section_hint": "2.13.1.2. Validating encryption with Kiali",
+        "section_hint": "2.13.1.2. Kiali 를 사용한 암호화 유효성 검사",
         "section_anchor": "2.13.1.2.-validating-encryption-with-kiali",
         "source": "playbook_document_figure_block"
       },
@@ -4782,7 +4782,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-federated-mesh.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-federated-mesh.png",
-        "section_hint": "2.20.10. Joining a federated mesh",
+        "section_hint": "2.20.10. 연방 메시 참여",
         "section_anchor": "2.20.10.-joining-a-federated-mesh",
         "source": "playbook_document_figure_block"
       },
@@ -4795,7 +4795,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-federation-export-service.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-federation-export-service.png",
-        "section_hint": "2.20.11. Exporting a service from a federated mesh",
+        "section_hint": "2.20.11. 연방 메시에서 서비스 내보내기",
         "section_anchor": "2.20.11.-exporting-a-service-from-a-federated-mesh",
         "source": "playbook_document_figure_block"
       },
@@ -4808,7 +4808,7 @@
         "viewer_path": "/wiki/figures/service_mesh/ossm-federation-import-service.png/index.html",
         "source_file": "",
         "source_asset_ref": "ossm-federation-import-service.png",
-        "section_hint": "2.20.12. Importing a service into a federated mesh",
+        "section_hint": "2.20.12. 연방 메시로 서비스 가져오기",
         "section_anchor": "2.20.12.-importing-a-service-into-a-federated-mesh",
         "source": "playbook_document_figure_block"
       },
@@ -4821,7 +4821,7 @@
         "viewer_path": "/wiki/figures/service_mesh/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "2.29.1.1. Removing the 서비스 메시 control plane using the web console",
+        "section_hint": "2.29.1.1. 웹 콘솔을 사용하여 서비스 메시 컨트롤 플레인 제거",
         "section_anchor": "2.29.1.1.-removing-the-service-mesh-control-plane-using-the-web-console",
         "source": "playbook_document_figure_block"
       }
@@ -5158,7 +5158,7 @@
         "viewer_path": "/wiki/figures/virtualization/cnv_components_main.png/index.html",
         "source_file": "",
         "source_asset_ref": "cnv_components_main.png",
-        "section_hint": "1.4. OpenShift 가상화 Architecture",
+        "section_hint": "1.4. OpenShift 가상화 아키텍처",
         "section_anchor": "1.4.-openshift-virtualization-architecture",
         "source": "playbook_document_figure_block"
       },
@@ -5171,7 +5171,7 @@
         "viewer_path": "/wiki/figures/virtualization/cnv_components_hco-operator.png/index.html",
         "source_file": "",
         "source_asset_ref": "cnv_components_hco-operator.png",
-        "section_hint": "1.4.1. About the HyperConverged Operator (HCO)",
+        "section_hint": "1.4.1. HyperConverged Operator (HCO) 에 대하여",
         "section_anchor": "1.4.1.-about-the-hyperconverged-operator-(hco)",
         "source": "playbook_document_figure_block"
       },
@@ -5184,7 +5184,7 @@
         "viewer_path": "/wiki/figures/virtualization/cnv_components_cdi-operator.png/index.html",
         "source_file": "",
         "source_asset_ref": "cnv_components_cdi-operator.png",
-        "section_hint": "1.4.2. About the Containerized Data Importer (CDI) Operator",
+        "section_hint": "1.4.2. Containerized Data Importer (CDI) Operator 에 대하여",
         "section_anchor": "1.4.2.-about-the-containerized-data-importer-(cdi)-operator",
         "source": "playbook_document_figure_block"
       },
@@ -5197,7 +5197,7 @@
         "viewer_path": "/wiki/figures/virtualization/cnv_components_cluster-network-addons-operator.png/index.html",
         "source_file": "",
         "source_asset_ref": "cnv_components_cluster-network-addons-operator.png",
-        "section_hint": "1.4.3. About the Cluster Network Addons Operator",
+        "section_hint": "1.4.3. Cluster Network Addons Operator 에 대하여",
         "section_anchor": "1.4.3.-about-the-cluster-network-addons-operator",
         "source": "playbook_document_figure_block"
       },
@@ -5210,7 +5210,7 @@
         "viewer_path": "/wiki/figures/virtualization/cnv_components_hpp-operator.png/index.html",
         "source_file": "",
         "source_asset_ref": "cnv_components_hpp-operator.png",
-        "section_hint": "1.4.4. About the Hostpath Provisioner (HPP) Operator",
+        "section_hint": "1.4.4. Hostpath Provisioner (HPP) Operator 에 대하여",
         "section_anchor": "1.4.4.-about-the-hostpath-provisioner-(hpp)-operator",
         "source": "playbook_document_figure_block"
       },
@@ -5223,7 +5223,7 @@
         "viewer_path": "/wiki/figures/virtualization/cnv_components_virt-operator.png/index.html",
         "source_file": "",
         "source_asset_ref": "cnv_components_virt-operator.png",
-        "section_hint": "1.4.6. About the OpenShift 가상화 Operator",
+        "section_hint": "1.4.6. OpenShift 가상화 Operator 에 대하여",
         "section_anchor": "1.4.6.-about-the-openshift-virtualization-operator",
         "source": "playbook_document_figure_block"
       },
@@ -5236,7 +5236,7 @@
         "viewer_path": "/wiki/figures/virtualization/virt-icon.png/index.html",
         "source_file": "",
         "source_asset_ref": "virt-icon.png",
-        "section_hint": "2.1.2. About Red Hat OpenShift 가상화",
+        "section_hint": "2.1.2. Red Hat OpenShift 가상화에 대한 정보",
         "section_anchor": "2.1.2.-about-red-hat-openshift-virtualization",
         "source": "playbook_document_figure_block"
       },
@@ -5249,7 +5249,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "4.3.2. Deleting the HyperConverged custom resource",
+        "section_hint": "4.3.2. HyperConverged 사용자 정의 리소스 삭제",
         "section_anchor": "4.3.2.-deleting-the-hyperconverged-custom-resource",
         "source": "playbook_document_figure_block"
       },
@@ -5262,7 +5262,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "4.3.4. Deleting a namespace using the web console",
+        "section_hint": "4.3.4. 웹 콘솔을 사용하여 네임스페이스 삭제",
         "section_anchor": "4.3.4.-deleting-a-namespace-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5275,7 +5275,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "4.3.5. Deleting OpenShift 가상화 custom resource definitions",
+        "section_hint": "4.3.5. OpenShift 가상화 사용자 정의 리소스 정의 삭제",
         "section_anchor": "4.3.5.-deleting-openshift-virtualization-custom-resource-definitions",
         "source": "playbook_document_figure_block"
       },
@@ -5288,7 +5288,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "8.2.2.2. Creating a Windows VM",
+        "section_hint": "8.2.2.2. Windows VM 생성",
         "section_anchor": "8.2.2.2.-creating-a-windows-vm",
         "source": "playbook_document_figure_block"
       },
@@ -5301,7 +5301,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "8.2.2.2.1. Generalizing a Windows VM image",
+        "section_hint": "8.2.2.2.1. Windows VM 이미지 일반화",
         "section_anchor": "8.2.2.2.1.-generalizing-a-windows-vm-image",
         "source": "playbook_document_figure_block"
       },
@@ -5314,7 +5314,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "8.2.3.2. Creating a VM from an existing snapshot by using the web console",
+        "section_hint": "8.2.3.2. 웹 콘솔을 사용하여 기존 스냅샷에서 VM 생성",
         "section_anchor": "8.2.3.2.-creating-a-vm-from-an-existing-snapshot-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5327,7 +5327,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "9.6.2.4. Using the virtctl ssh command",
+        "section_hint": "9.6.2.4. virtctl ssh 명령어 사용",
         "section_anchor": "9.6.2.4.-using-the-virtctl-ssh-command",
         "source": "playbook_document_figure_block"
       },
@@ -5340,7 +5340,7 @@
         "viewer_path": "/wiki/figures/virtualization/delete.png/index.html",
         "source_file": "",
         "source_asset_ref": "delete.png",
-        "section_hint": "9.8.4. Removing items from a boot order list in the web console",
+        "section_hint": "9.8.4. 웹 콘솔에서 부팅 순서 목록 항목 제거",
         "section_anchor": "9.8.4.-removing-items-from-a-boot-order-list-in-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5353,7 +5353,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "9.9.1. Deleting a virtual machine using the web console",
+        "section_hint": "9.9.1. 웹 콘솔을 사용하여 가상 머신 삭제",
         "section_anchor": "9.9.1.-deleting-a-virtual-machine-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5366,7 +5366,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "9.13.3. Starting a virtual machine",
+        "section_hint": "9.13.3. 가상 머신 시작",
         "section_anchor": "9.13.3.-starting-a-virtual-machine",
         "source": "playbook_document_figure_block"
       },
@@ -5379,7 +5379,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "9.13.4. Stopping a virtual machine",
+        "section_hint": "9.13.4. 가상 머신 중지",
         "section_anchor": "9.13.4.-stopping-a-virtual-machine",
         "source": "playbook_document_figure_block"
       },
@@ -5392,7 +5392,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "9.13.5. Restarting a virtual machine",
+        "section_hint": "9.13.5. 가상 머신 재시작",
         "section_anchor": "9.13.5.-restarting-a-virtual-machine",
         "source": "playbook_document_figure_block"
       },
@@ -5405,7 +5405,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "9.13.6. Pausing a virtual machine",
+        "section_hint": "9.13.6. 가상 머신 일시 중지",
         "section_anchor": "9.13.6.-pausing-a-virtual-machine",
         "source": "playbook_document_figure_block"
       },
@@ -5418,7 +5418,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "9.13.7. Unpausing a virtual machine",
+        "section_hint": "9.13.7. 가상 머신 일시 중지 해제",
         "section_anchor": "9.13.7.-unpausing-a-virtual-machine",
         "source": "playbook_document_figure_block"
       },
@@ -5444,7 +5444,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "9.18.1.1. Hot plugging and hot unplugging a disk by using the web console",
+        "section_hint": "9.18.1.1. 웹 콘솔을 사용하여 디스크 핫 플러그 및 핫 언플러그",
         "section_anchor": "9.18.1.1.-hot-plugging-and-hot-unplugging-a-disk-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5457,7 +5457,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "9.18.1.1. Hot plugging and hot unplugging a disk by using the web console",
+        "section_hint": "9.18.1.1. 웹 콘솔을 사용하여 디스크 핫 플러그 및 핫 언플러그",
         "section_anchor": "9.18.1.1.-hot-plugging-and-hot-unplugging-a-disk-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5470,7 +5470,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "9.18.2.1. Expand a VM disk PVC by using the web console",
+        "section_hint": "9.18.2.1. 웹 콘솔을 사용하여 VM 디스크 PVC 확장",
         "section_anchor": "9.18.2.1.-expand-a-vm-disk-pvc-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5496,7 +5496,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "9.18.5.2. Inserting a CD-ROM in a live VM by using the web console",
+        "section_hint": "9.18.5.2. 웹 콘솔을 사용하여 라이브 VM 에 CD-ROM 삽입",
         "section_anchor": "9.18.5.2.-inserting-a-cd-rom-in-a-live-vm-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5509,7 +5509,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "9.18.5.2. Inserting a CD-ROM in a live VM by using the web console",
+        "section_hint": "9.18.5.2. 웹 콘솔을 사용하여 라이브 VM 에 CD-ROM 삽입",
         "section_anchor": "9.18.5.2.-inserting-a-cd-rom-in-a-live-vm-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5522,7 +5522,7 @@
         "viewer_path": "/wiki/figures/virtualization/318_OpenShift_Virtualization_Networking_0423.png/index.html",
         "source_file": "",
         "source_asset_ref": "318_OpenShift_Virtualization_Networking_0423.png",
-        "section_hint": "10.1. Networking overview",
+        "section_hint": "10.1. 네트워킹 개요",
         "section_anchor": "10.1.-networking-overview",
         "source": "playbook_document_figure_block"
       },
@@ -5535,7 +5535,7 @@
         "viewer_path": "/wiki/figures/virtualization/darkcircle-1.png/index.html",
         "source_file": "",
         "source_asset_ref": "darkcircle-1.png",
-        "section_hint": "10.1. Networking overview",
+        "section_hint": "10.1. 네트워킹 개요",
         "section_anchor": "10.1.-networking-overview",
         "source": "playbook_document_figure_block"
       },
@@ -5548,7 +5548,7 @@
         "viewer_path": "/wiki/figures/virtualization/darkcircle-2.png/index.html",
         "source_file": "",
         "source_asset_ref": "darkcircle-2.png",
-        "section_hint": "10.1. Networking overview",
+        "section_hint": "10.1. 네트워킹 개요",
         "section_anchor": "10.1.-networking-overview",
         "source": "playbook_document_figure_block"
       },
@@ -5561,7 +5561,7 @@
         "viewer_path": "/wiki/figures/virtualization/darkcircle-3.png/index.html",
         "source_file": "",
         "source_asset_ref": "darkcircle-3.png",
-        "section_hint": "10.1. Networking overview",
+        "section_hint": "10.1. 네트워킹 개요",
         "section_anchor": "10.1.-networking-overview",
         "source": "playbook_document_figure_block"
       },
@@ -5574,7 +5574,7 @@
         "viewer_path": "/wiki/figures/virtualization/darkcircle-4.png/index.html",
         "source_file": "",
         "source_asset_ref": "darkcircle-4.png",
-        "section_hint": "10.1. Networking overview",
+        "section_hint": "10.1. 네트워킹 개요",
         "section_anchor": "10.1.-networking-overview",
         "source": "playbook_document_figure_block"
       },
@@ -5587,7 +5587,7 @@
         "viewer_path": "/wiki/figures/virtualization/darkcircle-5.png/index.html",
         "source_file": "",
         "source_asset_ref": "darkcircle-5.png",
-        "section_hint": "10.1. Networking overview",
+        "section_hint": "10.1. 네트워킹 개요",
         "section_anchor": "10.1.-networking-overview",
         "source": "playbook_document_figure_block"
       },
@@ -5600,7 +5600,7 @@
         "viewer_path": "/wiki/figures/virtualization/darkcircle-6.png/index.html",
         "source_file": "",
         "source_asset_ref": "darkcircle-6.png",
-        "section_hint": "10.1. Networking overview",
+        "section_hint": "10.1. 네트워킹 개요",
         "section_anchor": "10.1.-networking-overview",
         "source": "playbook_document_figure_block"
       },
@@ -5613,7 +5613,7 @@
         "viewer_path": "/wiki/figures/virtualization/darkcircle-7.png/index.html",
         "source_file": "",
         "source_asset_ref": "darkcircle-7.png",
-        "section_hint": "10.1. Networking overview",
+        "section_hint": "10.1. 네트워킹 개요",
         "section_anchor": "10.1.-networking-overview",
         "source": "playbook_document_figure_block"
       },
@@ -5626,7 +5626,7 @@
         "viewer_path": "/wiki/figures/virtualization/darkcircle-8.png/index.html",
         "source_file": "",
         "source_asset_ref": "darkcircle-8.png",
-        "section_hint": "10.1. Networking overview",
+        "section_hint": "10.1. 네트워킹 개요",
         "section_anchor": "10.1.-networking-overview",
         "source": "playbook_document_figure_block"
       },
@@ -5652,7 +5652,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "10.12.1. Setting the VM interface link state by using the web console",
+        "section_hint": "10.12.1. 웹 콘솔을 사용하여 VM 인터페이스 링크 상태 설정",
         "section_anchor": "10.12.1.-setting-the-vm-interface-link-state-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5665,7 +5665,7 @@
         "viewer_path": "/wiki/figures/virtualization/virt-storage-csi-paradigm.png/index.html",
         "source_file": "",
         "source_asset_ref": "virt-storage-csi-paradigm.png",
-        "section_hint": "11.11.1. Virtual machine CSI storage overview",
+        "section_hint": "11.11.1. 가상 머신 CSI 스토리지 개요",
         "section_anchor": "11.11.1.-virtual-machine-csi-storage-overview",
         "source": "playbook_document_figure_block"
       },
@@ -5678,7 +5678,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "12.3.1. Initiating live migration by using the web console",
+        "section_hint": "12.3.1. 웹 콘솔을 사용하여 라이브 마이그레이션 시작",
         "section_anchor": "12.3.1.-initiating-live-migration-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5691,7 +5691,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "12.3.3. Canceling live migration by using the web console",
+        "section_hint": "12.3.3. 웹 콘솔을 사용하여 라이브 마이그레이션 취소",
         "section_anchor": "12.3.3.-canceling-live-migration-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5704,7 +5704,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "16.1.6. Restoring a VM from a snapshot by using the web console",
+        "section_hint": "16.1.6. 웹 콘솔을 사용하여 스냅샷에서 VM 복원",
         "section_anchor": "16.1.6.-restoring-a-vm-from-a-snapshot-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5717,7 +5717,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "16.1.6. Restoring a VM from a snapshot by using the web console",
+        "section_hint": "16.1.6. 웹 콘솔을 사용하여 스냅샷에서 VM 복원",
         "section_anchor": "16.1.6.-restoring-a-vm-from-a-snapshot-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5730,7 +5730,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "16.1.6. Restoring a VM from a snapshot by using the web console",
+        "section_hint": "16.1.6. 웹 콘솔을 사용하여 스냅샷에서 VM 복원",
         "section_anchor": "16.1.6.-restoring-a-vm-from-a-snapshot-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       },
@@ -5743,7 +5743,7 @@
         "viewer_path": "/wiki/figures/virtualization/kebab.png/index.html",
         "source_file": "",
         "source_asset_ref": "kebab.png",
-        "section_hint": "16.1.8. Deleting a snapshot by using the web console",
+        "section_hint": "16.1.8. 웹 콘솔을 사용하여 스냅샷 삭제",
         "section_anchor": "16.1.8.-deleting-a-snapshot-by-using-the-web-console",
         "source": "playbook_document_figure_block"
       }

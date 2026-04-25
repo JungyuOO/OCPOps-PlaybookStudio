@@ -1,0 +1,36 @@
+{
+  "book_slug": "overview",
+  "doc_id": "overview:4.20:ko",
+  "source_fingerprint": "c314bd23330d43fad827d253c4be957078a9622d8420556b4379c78870b8960e",
+  "translation_source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/overview/index",
+  "item_count": 17,
+  "items": {
+    "s6.b0.table.caption": "확장",
+    "s7.b0.table.caption": "확장",
+    "s8.b1.table.caption": "확장",
+    "s9.b0.table.caption": "확장",
+    "s10.b0.table.caption": "확장",
+    "s11.b0.table.caption": "확장",
+    "s12.b0.table.caption": "확장",
+    "s13.b0.table.caption": "확장",
+    "s14.b0.table.caption": "확장",
+    "s15.b0.table.caption": "확장",
+    "s16.b0.table.caption": "확장",
+    "s17.b0.table.caption": "확장",
+    "s18.b1.table.caption": "확장",
+    "s20.b0.table.caption": "확장",
+    "s21.b6.table.caption": "확장",
+    "s28.b1.table.caption": "확장",
+    "s43.b1.table.caption": "확장"
+  },
+  "progress": {
+    "status": "complete",
+    "completed_unit_count": 17,
+    "total_unit_count": 17,
+    "pending_unit_count": 0,
+    "completed_batch_count": 1,
+    "total_batch_count": 1,
+    "current_batch_index": 1,
+    "current_batch_size": 0
+  }
+}
