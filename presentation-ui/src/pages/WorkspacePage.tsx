@@ -86,7 +86,7 @@ import {
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../app/routes';
 import { displayCustomerDocumentTitle } from '../lib/customerDocumentTitles';
-import { WIKI_VISION_MODES, loadStoredVisionMode, persistVisionMode, type VisionMode } from '../lib/wikiVision';
+import { loadStoredVisionMode, persistVisionMode, type VisionMode } from '../lib/wikiVision';
 import { resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';
 import WorkspaceTracePanel from '../components/WorkspaceTracePanel';
 import WorkspaceHeader from './workspace/WorkspaceHeader';
@@ -129,6 +129,33 @@ interface ViewerActiveSection {
 type LeftPanelMode = 'history' | 'outline' | 'signals';
 type OutlinePanelSectionKey = 'official_manuals' | 'custom_documents' | 'test_runs' | 'uploaded_docs';
 type SignalsFavoriteFilter = 'favorites' | 'edited';
+type ChatMode = 'learn' | 'ops';
+
+const CHAT_MODE_OPTIONS: Array<{
+  id: ChatMode;
+  label: string;
+  shortLabel: string;
+  title: string;
+  cue: string;
+  summary: string;
+}> = [
+  {
+    id: 'ops',
+    label: '운영 모드',
+    shortLabel: '운영',
+    title: '운영 가이드',
+    cue: '첫 행동, 명령, 검증 포인트를 근거 기반으로 정리합니다.',
+    summary: '공식 매뉴얼과 고객 운영북을 함께 보며 지금 확인할 일, 실행할 명령, 검증 포인트를 우선합니다.',
+  },
+  {
+    id: 'learn',
+    label: '학습 모드',
+    shortLabel: '학습',
+    title: '학습 가이드',
+    cue: '개념, 구조, 학습 순서와 근거 차이를 차분히 설명합니다.',
+    summary: '공식 매뉴얼과 고객 자료를 교육 문서로 읽고 개념, 배경, 다음 학습 경로를 citation 중심으로 안내합니다.',
+  },
+];
 
 interface OutlineTocNode {
   id: string;
@@ -841,6 +868,11 @@ export default function WorkspacePage() {
   const [query, setQuery] = useState('');
   const [sessionId, setSessionId] = useState(() => makeId('ID'));
   const [testMode, setTestMode] = useState(false);
+  const [chatMode, setChatMode] = useState<ChatMode>(() => {
+    if (typeof window === 'undefined') return 'ops';
+    const saved = window.localStorage.getItem('workspace.chatMode');
+    return saved === 'learn' || saved === 'ops' ? saved : 'ops';
+  });
   const [activeTestTrace, setActiveTestTrace] = useState<WorkspaceTestTrace | null>(null);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState>({ kind: 'empty' });
@@ -870,7 +902,7 @@ export default function WorkspacePage() {
     }
     return 'history';
   });
-  const [visionMode, setVisionMode] = useState<VisionMode>(() => loadStoredVisionMode());
+  const [visionMode] = useState<VisionMode>(() => loadStoredVisionMode());
 
   // Scroll + welcome
   const [userScrolledUp, setUserScrolledUp] = useState(false);
@@ -995,9 +1027,9 @@ export default function WorkspacePage() {
     () => pickRandomStarterQuestions(STARTER_QUESTION_POOL, 4),
     [],
   );
-  const activeVision = useMemo(
-    () => WIKI_VISION_MODES.find((mode) => mode.id === visionMode) ?? WIKI_VISION_MODES[0],
-    [visionMode],
+  const activeChatMode = useMemo(
+    () => CHAT_MODE_OPTIONS.find((mode) => mode.id === chatMode) ?? CHAT_MODE_OPTIONS[0],
+    [chatMode],
   );
   const activeFooterConnection = useMemo(
     () => footerConnections.find((item) => item.connection_id === opsConnectionId) ?? footerConnections[0] ?? null,
@@ -1025,6 +1057,11 @@ export default function WorkspacePage() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('workspace.leftPanelMode', leftPanelMode);
   }, [leftPanelMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('workspace.chatMode', chatMode);
+  }, [chatMode]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -2226,7 +2263,7 @@ export default function WorkspacePage() {
       const requestPayload = {
         query: trimmed,
         sessionId,
-        mode: 'ops',
+        mode: chatMode,
         userId: WIKI_OVERLAY_USER_ID,
         selectedDraftIds: activeDraft ? [activeDraft.draft_id] : [],
         restrictUploadedSources: Boolean(activeDraft),
@@ -3129,53 +3166,40 @@ export default function WorkspacePage() {
                     <div className="welcome-icon">
                       <Sparkles size={36} />
                     </div>
-                    <h2 className="welcome-title">{visionMode === 'guided_tour' ? '투어를 시작하세요' : '질문을 시작하세요'}</h2>
+                    <h2 className="welcome-title">{activeChatMode.title}를 시작하세요</h2>
                     <p className="welcome-vision-copy">
-                      {visionMode === 'guided_tour'
-                        ? '질문을 던지면 바로 읽을 절차와 이어서 열 문서를 한 경로로 엽니다.'
-                        : activeVision.workspace.summary}
+                      {activeChatMode.summary}
                     </p>
-                    {visionMode === 'guided_tour' ? (
-                      <div className="welcome-vision-active">
-                        <div className="welcome-vision-active-title">Guided Tour Active</div>
-                        <p className="welcome-vision-active-copy">질문을 던지면 답변, 문서, 다음 절차가 한 경로로 이어집니다.</p>
-                      </div>
-                    ) : (
-                      <div className="welcome-vision-grid">
-                        {WIKI_VISION_MODES.map((mode) => (
+                    <div className="welcome-vision-grid welcome-chat-mode-grid">
+                      {CHAT_MODE_OPTIONS.map((mode) => {
+                        const Icon = mode.id === 'learn' ? BookOpen : Cpu;
+                        return (
                           <button
                             key={mode.id}
                             type="button"
-                            className={`welcome-vision-card ${visionMode === mode.id ? 'active' : ''}`}
-                            onClick={() => setVisionMode(mode.id)}
+                            className={`welcome-vision-card welcome-chat-mode-card ${chatMode === mode.id ? 'active' : ''}`}
+                            onClick={() => setChatMode(mode.id)}
                           >
+                            <Icon size={18} />
                             <strong>{mode.label}</strong>
-                            <span>{mode.workspace.cue}</span>
+                            <span>{mode.cue}</span>
                           </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className="suggested-query-label welcome-route-label">
-                      {visionMode === 'guided_tour' ? 'Start Tour' : '시작 질문'}
+                        );
+                      })}
                     </div>
-                    <div className={visionMode === 'guided_tour' ? 'welcome-question-grid guided-welcome-grid' : 'welcome-question-grid'}>
+                    <div className="suggested-query-label welcome-route-label">
+                      시작 질문
+                    </div>
+                    <div className="welcome-question-grid">
                       {welcomeQuestions.map((q, i) => (
                         <button
                           key={`welcome-q-${i}`}
                           type="button"
-                          className={visionMode === 'guided_tour' ? 'welcome-question-card glass-panel guided-welcome-card' : 'welcome-question-card glass-panel'}
+                          className="welcome-question-card glass-panel"
                           onClick={() => { void handleSend(q); }}
                           disabled={isSending}
                         >
-                          {visionMode === 'guided_tour' && (
-                            <span className="guided-welcome-index">Step {i + 1}</span>
-                          )}
                           {q}
-                          {visionMode === 'guided_tour' && (
-                            <span className="guided-welcome-arrow">
-                              <ArrowRight size={14} />
-                            </span>
-                          )}
                         </button>
                       ))}
                     </div>
@@ -3293,12 +3317,31 @@ export default function WorkspacePage() {
 
               <div className="chat-input-wrapper">
                 <div className="input-container glass-panel">
+                  <div className="chat-mode-switch" role="tablist" aria-label="chat mode">
+                    {CHAT_MODE_OPTIONS.map((mode) => {
+                      const Icon = mode.id === 'learn' ? BookOpen : Cpu;
+                      return (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={chatMode === mode.id}
+                          className={`chat-mode-btn ${chatMode === mode.id ? 'active' : ''}`}
+                          onClick={() => setChatMode(mode.id)}
+                          title={mode.cue}
+                        >
+                          <Icon size={14} />
+                          <span>{mode.shortLabel}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                   <input
                     type="text"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     onKeyDown={handleInputKeyDown}
-                    placeholder={visionMode === 'guided_tour' ? '질문을 던지면 문서 투어를 엽니다...' : '질문을 입력하거나 문서를 탐색하세요...'}
+                    placeholder={chatMode === 'learn' ? '개념, 구조, 학습 경로를 질문하세요...' : '운영 점검, 명령, 장애 대응을 질문하세요...'}
                     disabled={isSending}
                   />
                   <button className="send-btn" onClick={() => { void handleSend(); }} type="button" disabled={isSending}>

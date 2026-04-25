@@ -7,6 +7,7 @@ from typing import Any
 from play_book_studio.answering.models import AnswerResult
 from play_book_studio.app.next_play_planner import build_next_play_plan
 from play_book_studio.app.sessions import ChatSession, RUNTIME_CHAT_MODE
+from play_book_studio.chat_modes import normalize_chat_mode
 from play_book_studio.config.packs import default_core_pack
 from play_book_studio.retrieval.models import SessionContext
 from play_book_studio.retrieval.text_utils import strip_section_prefix
@@ -57,9 +58,9 @@ def context_with_request_overrides(
     mode: str,
     default_ocp_version: str = DEFAULT_CORE_VERSION,
 ) -> SessionContext:
-    del mode
+    requested_mode = normalize_chat_mode(payload.get("mode") or mode or RUNTIME_CHAT_MODE)
     context = SessionContext.from_dict(previous.to_dict() if previous else None)
-    context.mode = RUNTIME_CHAT_MODE
+    context.mode = requested_mode
     requested_user_id = str(payload.get("user_id") or "").strip()
     if requested_user_id:
         context.user_id = requested_user_id
@@ -146,9 +147,9 @@ def derive_next_context(
     default_ocp_version: str = DEFAULT_CORE_VERSION,
 ) -> SessionContext:
     # 멀티턴 채팅에서 세션과 follow-up 맥락을 이어 주는 helper.
-    del mode
+    requested_mode = normalize_chat_mode(mode or RUNTIME_CHAT_MODE)
     next_context = SessionContext.from_dict(previous.to_dict() if previous else None)
-    next_context.mode = RUNTIME_CHAT_MODE
+    next_context.mode = requested_mode
     next_context.ocp_version = next_context.ocp_version or default_ocp_version
     normalized_query = (query or "").strip()
     follow_up_reference = has_follow_up_reference(normalized_query)

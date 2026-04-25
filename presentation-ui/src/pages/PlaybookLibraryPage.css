@@ -44,6 +44,7 @@
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 40px;
+  box-sizing: border-box;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -121,6 +122,7 @@
   width: 100%;
   margin: 0 auto;
   padding: 48px 40px;
+  box-sizing: border-box;
 }
 
 .wiki-vision-lab {
@@ -233,6 +235,152 @@
   display: grid;
   gap: 18px;
   margin-bottom: 28px;
+}
+
+.llmwiki-control-panel {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+.llmwiki-control-header {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.llmwiki-control-header > div:first-child {
+  min-width: 0;
+}
+
+.llmwiki-control-header h2 {
+  margin: 6px 0 8px;
+}
+
+.llmwiki-control-header p {
+  margin: 0;
+  color: var(--pbs-text-muted);
+  max-width: 780px;
+  line-height: 1.6;
+}
+
+.llmwiki-ready-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #f5fbff;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.84rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.llmwiki-ready-badge.ready {
+  border-color: rgba(56, 189, 114, 0.36);
+  background: rgba(56, 189, 114, 0.12);
+}
+
+.llmwiki-ready-badge.stale {
+  border-color: rgba(245, 158, 11, 0.36);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.llmwiki-ready-badge.blocked {
+  border-color: rgba(248, 113, 113, 0.34);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.llmwiki-status-rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 10px;
+}
+
+.llmwiki-rail-item {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 8px;
+  min-width: 0;
+  min-height: 128px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.llmwiki-rail-item.ready {
+  border-color: rgba(56, 189, 114, 0.24);
+}
+
+.llmwiki-rail-item.stale {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.llmwiki-rail-item.blocked {
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.llmwiki-rail-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--pbs-text-muted);
+  font-size: 0.76rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.llmwiki-rail-item strong {
+  font-size: 1.08rem;
+  color: var(--pbs-text-main);
+  line-height: 1.25;
+}
+
+.llmwiki-rail-item p {
+  margin: 0;
+  color: var(--pbs-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.llmwiki-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.llmwiki-evidence-grid > div {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.llmwiki-evidence-grid span {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.llmwiki-evidence-grid strong {
+  color: var(--pbs-text-main);
+  font-size: 0.96rem;
+}
+
+.llmwiki-evidence-grid p {
+  margin: 0;
+  color: var(--pbs-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
 }
 
 .vision-compare-header {
@@ -1487,6 +1635,18 @@
 }
 
 @media (max-width: 920px) {
+  .llmwiki-control-header {
+    flex-direction: column;
+  }
+
+  .llmwiki-status-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .llmwiki-evidence-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .release-freeze-hero {
     flex-direction: column;
   }
@@ -1510,6 +1670,11 @@
 }
 
 @media (max-width: 680px) {
+  .llmwiki-status-rail,
+  .llmwiki-evidence-grid {
+    grid-template-columns: 1fr;
+  }
+
   .metrics-grid-primary {
     grid-template-columns: 1fr;
   }
@@ -1522,6 +1687,8 @@
   border: 1px solid var(--glass-border);
   border-radius: 32px;
   padding: 40px;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .section-header {

@@ -6,6 +6,7 @@ retrieval이 모델에게 무엇을 보여줄지 결정한다면, 이 파일은 
 
 from __future__ import annotations
 
+from play_book_studio.chat_modes import CHAT_MODE_LEARN, normalize_chat_mode
 from play_book_studio.retrieval.query import (
     has_backup_restore_intent,
     has_certificate_monitor_intent,
@@ -100,14 +101,27 @@ def build_messages(
     context_bundle: ContextBundle,
     session_summary: str = "",
 ) -> list[dict[str, str]]:
-    del mode
-    style = "짧고 분명하게 답하되, 사용자가 바로 따라 할 수 있게 첫 행동과 다음 확인 포인트를 먼저 안내"
+    normalized_mode = normalize_chat_mode(mode)
+    if normalized_mode == CHAT_MODE_LEARN:
+        mode_contract = (
+            "현재 모드는 학습 모드다. 개념 정의, 구성 요소, 왜 중요한지, 학습 순서를 먼저 설명하고 "
+            "공식 문서와 고객 업로드 자료의 근거 차이를 citation으로 분명히 드러내라. "
+            "근거에 없는 명령이나 절차를 운영 지시처럼 만들지 마라."
+        )
+        style = "개념과 맥락을 먼저 풀고, 사용자가 다음에 읽거나 실습할 순서를 짧게 안내"
+    else:
+        mode_contract = (
+            "현재 모드는 운영 모드다. 첫 확인 행동, 필요한 명령, 검증 포인트, 주의사항을 먼저 제시하라. "
+            "근거 없는 원인 단정이나 미검증 조치 지시는 하지 마라."
+        )
+        style = "짧고 분명하게 답하되, 사용자가 바로 따라 할 수 있게 첫 행동과 다음 확인 포인트를 먼저 안내"
     system = (
         "당신은 OCP 운영/교육 PlayBook 가이드 챗봇이다. "
         "답변의 목적은 문서를 다시 요약하는 것이 아니라, 사용자가 지금 무엇을 이해하고 무엇을 해야 하는지 안내하는 것이다. "
         "검색기가 아니라 차분한 실무 가이드처럼 답하라. "
         "반드시 제공된 근거만 사용하고, 근거에 없는 명령어, 절차, 버전, 원인, 설정값을 만들어내지 마라. "
         "답변은 항상 '답변:'으로 시작하라. "
+        f"{mode_contract} "
         "질문이 한국어면 서술은 자연스러운 한국어로만 쓰고, 명령어·옵션·상태명·고유명사 외의 불필요한 영문 단어는 섞지 마라. "
         "운영/트러블슈팅 질문이면 첫 문장에서 사용자가 해야 할 첫 행동이나 핵심 명령을 바로 제시하라. "
         "가능하면 첫 문장 다음에 바로 이어서 무엇을 확인하면 되는지도 짧게 덧붙여라. "
@@ -128,6 +142,7 @@ def build_messages(
     shape_hint = _intent_shape_hint(query)
     session_block = f"세션 맥락:\n{session_summary}\n\n" if session_summary else ""
     user = (
+        f"현재 챗봇 모드: {normalized_mode}\n"
         f"답변 스타일: {style}\n"
         f"질문: {query}\n\n"
         f"{session_block}"
@@ -138,6 +153,7 @@ def build_messages(
         "- citation 번호는 제공된 근거 번호만 사용할 것\n"
         "- 답변 본문은 현재 질문에 바로 답할 것\n"
         "- 참조문서 요약본처럼 쓰지 말고, 사용자를 위한 가이드처럼 쓸 것\n"
+        "- 현재 챗봇 모드가 학습이면 개념/맥락/학습 순서를 우선하고, 운영이면 첫 행동/명령/검증 포인트를 우선할 것\n"
         "- 운영/트러블슈팅 질문이면 '첫 행동 1문장 -> 코드 블록 또는 단계 -> 짧은 확인/주의사항' 순서를 우선할 것\n"
         "- 근거에 ordered_cli_commands가 있으면 step 순서를 바꾸지 말 것\n"
         "- 질문이 '가장 먼저/어디부터/첫 단계'를 묻는 경우 ordered_cli_commands의 step 1만 첫 행동으로 답할 것\n"

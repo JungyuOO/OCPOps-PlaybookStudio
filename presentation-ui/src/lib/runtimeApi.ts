@@ -192,11 +192,65 @@ export interface DataControlRoomSummary {
   product_gate_count?: number;
   buyer_packet_bundle_count?: number;
   release_candidate_freeze_ready?: boolean;
+  llmwiki_promotion_ready?: boolean;
+  llmwiki_promotion_status?: string;
+  llmwiki_promotion_report_stale?: boolean;
+  llmwiki_promotion_failure_count?: number;
+  official_gold_ok?: boolean;
+  customer_master_ok?: boolean;
+  runtime_live_ok?: boolean;
+  runtime_maintenance_ok?: boolean;
+  chat_matrix_ok?: boolean;
   product_gate_pass_rate?: number | null;
   topic_playbook_count: number;
   derived_playbook_count: number;
   playable_asset_count: number;
   answer_pass_rate: number;
+}
+
+export interface ChatModeContractItem {
+  id: 'learn' | 'ops' | string;
+  label: string;
+  contract: string;
+  hallucination_guard: string;
+}
+
+export interface ChatModeContract {
+  default_mode: 'learn' | 'ops' | string;
+  supported_modes: ChatModeContractItem[];
+  legacy_mode_mapping?: Record<string, string>;
+}
+
+export interface LlmWikiStatusRailItem {
+  key: 'promotion' | 'official' | 'customer' | 'runtime' | 'chat' | string;
+  label: string;
+  status: string;
+  ready: boolean;
+  detail: string;
+  count?: number;
+  total?: number;
+}
+
+export interface LlmWikiPromotionStatus {
+  status: string;
+  ready: boolean;
+  report_ready?: boolean;
+  failures: string[];
+  selected_report?: {
+    path: string;
+    exists: boolean;
+    generated_at: string;
+    git?: Record<string, unknown>;
+    current_git?: Record<string, unknown>;
+    head_matches_current?: boolean;
+    stale?: boolean;
+  };
+  contracts?: Record<string, Record<string, unknown>>;
+  metrics?: Record<string, number | string | boolean | null | unknown>;
+  status_rail?: LlmWikiStatusRailItem[];
+  evidence?: Record<string, string>;
+  commands?: Record<string, string>;
+  mode_contract?: ChatModeContract;
 }
 
 export interface DataControlRoomResponse {
@@ -240,6 +294,7 @@ export interface DataControlRoomResponse {
   product_gate?: LibraryBucket;
   buyer_packet_bundle?: BuyerPacketBucket;
   release_candidate_freeze?: ReleaseCandidateFreezeSummary;
+  llmwiki_promotion?: LlmWikiPromotionStatus;
   topic_playbooks: LibraryBucket;
   operation_playbooks: LibraryBucket;
   troubleshooting_playbooks: LibraryBucket;
@@ -460,6 +515,7 @@ export type ViewerPageMode = 'single' | 'multi';
 
 export interface ChatResponse {
   answer: string;
+  mode?: string;
   rewritten_query?: string;
   citations: ChatCitation[];
   warnings: string[];

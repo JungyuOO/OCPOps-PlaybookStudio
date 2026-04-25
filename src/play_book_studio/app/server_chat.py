@@ -8,6 +8,7 @@ from typing import Any
 from datetime import datetime
 import time
 
+from play_book_studio.chat_modes import normalize_chat_mode
 from play_book_studio.retrieval.models import SessionContext
 from play_book_studio.app.sessions import RUNTIME_CHAT_MODE, Turn
 
@@ -148,7 +149,7 @@ def handle_chat(
     active_answerer = current_answerer()
     session_id = str(payload.get("session_id") or uuid.uuid4().hex)
     session = store.get(session_id)
-    mode = RUNTIME_CHAT_MODE
+    mode = normalize_chat_mode(payload.get("mode") or session.mode or RUNTIME_CHAT_MODE)
     regenerate = bool(payload.get("regenerate", False))
     query = str(payload.get("query") or "").strip()
     request_context = context_with_request_overrides(
@@ -187,7 +188,7 @@ def handle_chat(
         )
         return
 
-    session.mode = RUNTIME_CHAT_MODE
+    session.mode = mode
     session.context = derive_next_context(
         request_context,
         query=query,
@@ -282,7 +283,7 @@ def handle_chat_stream(
     active_answerer = current_answerer()
     session_id = str(payload.get("session_id") or uuid.uuid4().hex)
     session = store.get(session_id)
-    mode = RUNTIME_CHAT_MODE
+    mode = normalize_chat_mode(payload.get("mode") or session.mode or RUNTIME_CHAT_MODE)
     regenerate = bool(payload.get("regenerate", False))
     query = str(payload.get("query") or "").strip()
     request_context = context_with_request_overrides(
@@ -333,7 +334,7 @@ def handle_chat_stream(
         handler._stream_event({"type": "error", "error": f"답변 생성 중 오류가 발생했습니다: {exc}"})
         return
 
-    session.mode = RUNTIME_CHAT_MODE
+    session.mode = mode
     session.context = derive_next_context(
         request_context,
         query=query,

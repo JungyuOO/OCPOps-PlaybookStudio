@@ -1545,6 +1545,15 @@ const PlaybookLibraryPage: React.FC = () => {
   const isProcessing = ['uploading', 'capturing', 'normalizing'].includes(pipelineStage);
 
   const summary = controlRoom?.summary;
+  const llmwikiPromotion = controlRoom?.llmwiki_promotion;
+  const llmwikiRail = llmwikiPromotion?.status_rail ?? [];
+  const llmwikiMetrics = llmwikiPromotion?.metrics ?? {};
+  const llmwikiReport = llmwikiPromotion?.selected_report;
+  const llmwikiModeContract = llmwikiPromotion?.mode_contract?.supported_modes ?? [];
+  const llmwikiStatusLabel = llmwikiPromotion?.status ?? summary?.llmwiki_promotion_status ?? 'missing';
+  const llmwikiReady = Boolean(llmwikiPromotion?.ready ?? summary?.llmwiki_promotion_ready);
+  const llmwikiStale = Boolean(llmwikiReport?.stale ?? summary?.llmwiki_promotion_report_stale);
+  const llmwikiGeneratedAt = llmwikiReport?.generated_at ? new Date(llmwikiReport.generated_at).toLocaleString() : 'No report';
   const officialCorpusBooks = [...(controlRoom?.corpus?.books ?? [])];
   const officialPlaybookBooks = [...(controlRoom?.manualbooks?.books ?? [])];
   const customDocumentBooks = [...(controlRoom?.custom_documents?.books ?? [])];
@@ -1795,9 +1804,7 @@ const PlaybookLibraryPage: React.FC = () => {
               <p className="text-muted">
                 {viewMode === 'repository'
                   ? 'Book Factory & Asset Repository'
-                  : visionMode === 'guided_tour'
-                    ? 'Guided Tour Entry & Operational Wiki'
-                    : 'Control Tower & Asset Repository'}
+                  : 'LLMWiki Runtime Control'}
               </p>
             </div>
           </div>
@@ -1834,6 +1841,67 @@ const PlaybookLibraryPage: React.FC = () => {
       <main className="library-main">
         {viewMode === 'monitoring' ? (
           <div className="monitoring-view">
+            <section className="llmwiki-control-panel box-container">
+              <div className="llmwiki-control-header">
+                <div>
+                  <span className="vision-compare-eyebrow">LLMWiki Control Tower</span>
+                  <h2>공식 매뉴얼, 고객 운영북, 챗봇 런타임 상태</h2>
+                  <p>
+                    같은 promotion report에서 공식 Gold 파이프라인, 고객 PPT master, live LLM/vector, 챗봇 검증을 함께 판단합니다.
+                  </p>
+                </div>
+                <div className={`llmwiki-ready-badge ${llmwikiReady ? 'ready' : llmwikiStale ? 'stale' : 'blocked'}`}>
+                  {llmwikiReady ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+                  <span>{llmwikiReady ? 'Ready' : llmwikiStale ? 'Stale Report' : llmwikiStatusLabel}</span>
+                </div>
+              </div>
+
+              <div className="llmwiki-status-rail" aria-label="llmwiki runtime status">
+                {(llmwikiRail.length ? llmwikiRail : [
+                  { key: 'promotion', label: 'Promotion', status: llmwikiStatusLabel, ready: llmwikiReady, detail: 'promotion report', count: llmwikiReady ? 1 : 0, total: 1 },
+                  { key: 'official', label: 'Official', status: summary?.official_gold_ok ? 'ready' : 'unknown', ready: Boolean(summary?.official_gold_ok), detail: 'official gold book', count: approvedRuntimeBooks, total: approvedRuntimeBooks },
+                  { key: 'customer', label: 'Customer', status: summary?.customer_master_ok ? 'ready' : 'unknown', ready: Boolean(summary?.customer_master_ok), detail: 'customer PPT master', count: userLibraryBookCount, total: userLibraryBookCount },
+                  { key: 'runtime', label: 'Runtime', status: summary?.runtime_live_ok ? 'ready' : 'unknown', ready: Boolean(summary?.runtime_live_ok), detail: 'LLM / vector smoke', count: summary?.runtime_live_ok ? 1 : 0, total: 1 },
+                  { key: 'chat', label: 'Chat', status: summary?.chat_matrix_ok ? 'ready' : 'unknown', ready: Boolean(summary?.chat_matrix_ok), detail: 'chat matrix', count: summary?.chat_matrix_ok ? 1 : 0, total: 1 },
+                ]).map((item) => (
+                  <div key={item.key} className={`llmwiki-rail-item ${item.ready ? 'ready' : item.status === 'stale' ? 'stale' : 'blocked'}`}>
+                    <div className="llmwiki-rail-top">
+                      <span>{item.label}</span>
+                      {item.ready ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                    </div>
+                    <strong>
+                      {typeof item.count === 'number' && typeof item.total === 'number'
+                        ? `${item.count.toLocaleString()} / ${item.total.toLocaleString()}`
+                        : item.status}
+                    </strong>
+                    <p>{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="llmwiki-evidence-grid">
+                <div>
+                  <span>Report</span>
+                  <strong>{llmwikiGeneratedAt}</strong>
+                  <p>{llmwikiReport?.head_matches_current ? 'Current HEAD matched' : 'HEAD mismatch or missing report'}</p>
+                </div>
+                <div>
+                  <span>Official Gold</span>
+                  <strong>{Number(llmwikiMetrics.official_chunks_count ?? 0).toLocaleString()} chunks</strong>
+                  <p>{Number(llmwikiMetrics.official_code_blocks ?? 0).toLocaleString()} code blocks / {Number(llmwikiMetrics.official_inline_figures ?? 0).toLocaleString()} figures</p>
+                </div>
+                <div>
+                  <span>Customer Master</span>
+                  <strong>{Number(llmwikiMetrics.customer_master_source_count ?? 0).toLocaleString()} sources</strong>
+                  <p>{Number(llmwikiMetrics.customer_master_section_count ?? 0).toLocaleString()} sections / {Number(llmwikiMetrics.customer_master_chunk_count ?? 0).toLocaleString()} chunks</p>
+                </div>
+                <div>
+                  <span>Chat Modes</span>
+                  <strong>{llmwikiModeContract.length || 2} modes</strong>
+                  <p>{llmwikiModeContract.map((mode) => mode.label).join(' / ') || '학습 모드 / 운영 모드'}</p>
+                </div>
+              </div>
+            </section>
             {comparisonBook && (
               <section className="vision-compare box-container">
                 <div className="vision-compare-header">

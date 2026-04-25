@@ -11,6 +11,7 @@ import re
 import time
 from pathlib import Path
 
+from play_book_studio.chat_modes import DEFAULT_CHAT_MODE, normalize_chat_mode
 from play_book_studio.config.settings import Settings
 from play_book_studio.retrieval import ChatRetriever, SessionContext
 from play_book_studio.retrieval.query import (
@@ -720,7 +721,7 @@ class ChatAnswerer:
         self,
         query: str,
         *,
-        mode: str = "chat",
+        mode: str = DEFAULT_CHAT_MODE,
         context: SessionContext | None = None,
         top_k: int = 5,
         candidate_k: int = 20,
@@ -729,6 +730,9 @@ class ChatAnswerer:
     ) -> AnswerResult:
         # 모든 사용자 답변에 trace/timing을 남겨 두어, 품질 문제 발생 시
         # 어디서 파이프라인이 흔들렸는지 추측이 아니라 기록으로 좁힐 수 있게 한다.
+        mode = normalize_chat_mode(mode)
+        if context is not None:
+            context.mode = normalize_chat_mode(context.mode or mode)
         answer_started_at = time.perf_counter()
         pipeline_timings_ms: dict[str, float] = {}
         pipeline_events: list[dict] = []

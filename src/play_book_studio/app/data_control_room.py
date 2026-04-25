@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import subprocess
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 
+from play_book_studio.chat_modes import chat_mode_contract
 from play_book_studio.app.data_control_room_buckets import (
     _build_approved_wiki_runtime_book_bucket,
     _build_buyer_packet_bundle_bucket,
@@ -106,12 +108,15 @@ def _path_fingerprint(path: Path | None) -> tuple[str, bool, int, int]:
 def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, int, int], ...]:
     settings = load_settings(root)
     gate_path = root / "reports" / "build_logs" / "foundry_runs" / "profiles" / "morning_gate" / "latest.json"
+    promotion_report_paths = _llmwiki_promotion_report_paths(root)
     custom_material_dir = root / ".P_docs" / "01_검토대기_플레이북재료"
     custom_material_files = sorted(path for path in custom_material_dir.rglob("*") if path.is_file()) if custom_material_dir.exists() else []
     draft_store = CustomerPackDraftStore(root)
     draft_records = draft_store.list()
     watched_paths = [
         gate_path,
+        root / ".git" / "HEAD",
+        *promotion_report_paths,
         root / ".P_docs" / "01_검토대기_플레이북재료",
         root / ".P_docs" / "_review_bucket_manifest.json",
         *custom_material_files,
@@ -133,7 +138,228 @@ def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, i
         ],
         *settings.playbook_book_dirs,
     ]
-    return tuple(_path_fingerprint(path) for path in watched_paths)
+    fingerprints = [_path_fingerprint(path) for path in watched_paths]
+    git_context = _current_git_context(root)
+    git_signature = "|".join(
+        [
+            str(git_context.get("branch") or ""),
+            str(git_context.get("head") or ""),
+            str(bool(git_context.get("dirty_tracked_files"))),
+        ]
+    )
+    fingerprints.append((f"git-state:{git_signature}", True, 0, len(git_signature)))
+    return tuple(fingerprints)
+
+
+def _llmwiki_promotion_report_paths(root: Path) -> list[Path]:
+    reports_dir = root / ".kugnusdocs" / "reports"
+    if not reports_dir.exists():
+        return []
+    return sorted(reports_dir.glob("*llmwiki-promotion*.json"), key=lambda path: path.name)
+
+
+def _latest_llmwiki_promotion_report_path(root: Path) -> Path | None:
+    candidates = [
+        path
+        for path in _llmwiki_promotion_report_paths(root)
+        if "promotion-report" in path.name
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime_ns if path.exists() else 0)
+
+
+def _git_text(root: Path, *args: str) -> str:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=str(root),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:  # noqa: BLE001
+        return ""
+    if completed.returncode != 0:
+        return ""
+    return completed.stdout.strip()
+
+
+def _current_git_context(root: Path) -> dict[str, object]:
+    dirty = bool(_git_text(root, "status", "--porcelain", "--untracked-files=no"))
+    return {
+        "branch": _git_text(root, "branch", "--show-current"),
+        "head": _git_text(root, "rev-parse", "HEAD"),
+        "dirty_tracked_files": dirty,
+    }
+
+
+def _dict_from(value: object) -> dict[str, object]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _list_from(value: object) -> list[object]:
+    return list(value) if isinstance(value, list) else []
+
+
+def _promotion_contract(report: dict[str, object], key: str) -> dict[str, object]:
+    summary = _dict_from(report.get("summary"))
+    contracts = _dict_from(summary.get("contracts"))
+    contract = _dict_from(contracts.get(key))
+    if contract:
+        return contract
+    return _dict_from(report.get(key))
+
+
+def _promotion_contract_ok(report: dict[str, object], key: str) -> bool:
+    contract = _promotion_contract(report, key)
+    return bool(contract.get("ok"))
+
+
+def _chat_matrix_total(chat_matrix: dict[str, object]) -> tuple[int, int]:
+    requirements = _dict_from(chat_matrix.get("runtime_requirements"))
+    llm_pass = _safe_int(requirements.get("llm_live_pass_count"))
+    llm_total = _safe_int(requirements.get("llm_live_total"))
+    vector_pass = _safe_int(requirements.get("vector_live_pass_count"))
+    vector_total = _safe_int(requirements.get("vector_live_total"))
+    return llm_pass + vector_pass, llm_total + vector_total
+
+
+def _build_llmwiki_promotion_control_status(root: Path) -> dict[str, object]:
+    report_path = _latest_llmwiki_promotion_report_path(root)
+    current_git = _current_git_context(root)
+    if report_path is None:
+        return {
+            "status": "missing",
+            "ready": False,
+            "report_ready": False,
+            "failures": ["llmwiki promotion report is missing"],
+            "selected_report": {
+                "path": "",
+                "exists": False,
+                "generated_at": "",
+                "git": {},
+                "current_git": current_git,
+                "head_matches_current": False,
+                "stale": True,
+            },
+            "contracts": {},
+            "metrics": {},
+            "evidence": {},
+            "commands": {},
+            "mode_contract": chat_mode_contract(),
+        }
+
+    report = _safe_read_json(report_path)
+    report_git = _dict_from(report.get("git"))
+    current_head = str(current_git.get("head") or "").strip()
+    report_head = str(report_git.get("head") or "").strip()
+    head_matches_current = bool(current_head and report_head and current_head == report_head)
+    stale = not head_matches_current or bool(current_git.get("dirty_tracked_files"))
+    summary = _dict_from(report.get("summary"))
+    raw_failures = _list_from(summary.get("failures")) or _list_from(report.get("failures"))
+    report_status = str(report.get("status") or summary.get("status") or "unknown")
+    report_ready = bool(report.get("ready_for_llmwiki_promotion") or summary.get("ready_for_llmwiki_promotion"))
+    official_gold = _promotion_contract(report, "official_gold")
+    official_metrics = _dict_from(official_gold.get("metrics"))
+    customer_master = _promotion_contract(report, "customer_master")
+    customer_validation = _dict_from(customer_master.get("validation"))
+    runtime_report = _promotion_contract(report, "runtime_report")
+    runtime_maintenance = _promotion_contract(report, "runtime_maintenance")
+    chat_matrix = _promotion_contract(report, "chat_matrix")
+    chat_pass, chat_total = _chat_matrix_total(chat_matrix)
+    status = "stale" if stale else report_status
+    failures = [str(item) for item in raw_failures if str(item).strip()]
+    if stale:
+        failures = [
+            *failures,
+            "llmwiki promotion report is stale for the current checkout",
+        ]
+    return {
+        "status": status,
+        "ready": bool(report_ready and not stale and report_status == "ok"),
+        "report_ready": report_ready,
+        "failures": failures,
+        "selected_report": {
+            "path": str(report_path),
+            "exists": report_path.exists(),
+            "generated_at": str(report.get("generated_at") or ""),
+            "git": report_git,
+            "current_git": current_git,
+            "head_matches_current": head_matches_current,
+            "stale": stale,
+        },
+        "contracts": {
+            "official_gold": official_gold,
+            "customer_master": customer_master,
+            "runtime_report": runtime_report,
+            "runtime_maintenance": runtime_maintenance,
+            "chat_matrix": chat_matrix,
+        },
+        "metrics": {
+            "official_chunks_count": _safe_int(official_metrics.get("chunks_count")),
+            "official_bm25_count": _safe_int(official_metrics.get("bm25_count")),
+            "official_code_blocks": _safe_int(official_metrics.get("code_blocks")),
+            "official_inline_figures": _safe_int(official_metrics.get("playbook_figure_blocks")),
+            "customer_master_source_count": _safe_int(customer_master.get("source_count")),
+            "customer_master_section_count": _safe_int(customer_master.get("section_count")),
+            "customer_master_chunk_count": _safe_int(customer_master.get("chunk_count")),
+            "customer_master_coverage_ratio": customer_validation.get("source_coverage_ratio"),
+            "chat_live_pass_count": chat_pass,
+            "chat_live_total": chat_total,
+        },
+        "status_rail": [
+            {
+                "key": "promotion",
+                "label": "Promotion",
+                "status": status,
+                "ready": bool(report_ready and not stale and report_status == "ok"),
+                "detail": "promotion report / current HEAD",
+                "count": 1 if report_ready else 0,
+                "total": 1,
+            },
+            {
+                "key": "official",
+                "label": "Official",
+                "status": "ready" if _promotion_contract_ok(report, "official_gold") else "blocked",
+                "ready": _promotion_contract_ok(report, "official_gold"),
+                "detail": f"{_safe_int(official_metrics.get('chunks_count')):,} chunks / {_safe_int(official_metrics.get('code_blocks')):,} code blocks",
+                "count": _safe_int(official_metrics.get("chunks_count")),
+                "total": _safe_int(official_metrics.get("bm25_count")),
+            },
+            {
+                "key": "customer",
+                "label": "Customer",
+                "status": "ready" if _promotion_contract_ok(report, "customer_master") else "blocked",
+                "ready": _promotion_contract_ok(report, "customer_master"),
+                "detail": f"{_safe_int(customer_master.get('source_count'))} PPT sources / {_safe_int(customer_master.get('section_count'))} master sections",
+                "count": _safe_int(customer_master.get("source_count")),
+                "total": _safe_int(customer_master.get("source_count")),
+            },
+            {
+                "key": "runtime",
+                "label": "Runtime",
+                "status": "ready" if _promotion_contract_ok(report, "runtime_report") and _promotion_contract_ok(report, "runtime_maintenance") else "blocked",
+                "ready": _promotion_contract_ok(report, "runtime_report") and _promotion_contract_ok(report, "runtime_maintenance"),
+                "detail": "LLM / Embedder / Vector smoke",
+                "count": int(_promotion_contract_ok(report, "runtime_report")) + int(_promotion_contract_ok(report, "runtime_maintenance")),
+                "total": 2,
+            },
+            {
+                "key": "chat",
+                "label": "Chat",
+                "status": "ready" if _promotion_contract_ok(report, "chat_matrix") else "blocked",
+                "ready": _promotion_contract_ok(report, "chat_matrix"),
+                "detail": f"{chat_pass}/{chat_total} live LLM/vector checks",
+                "count": chat_pass,
+                "total": chat_total,
+            },
+        ],
+        "evidence": _dict_from(report.get("evidence")),
+        "commands": _dict_from(report.get("commands")),
+        "mode_contract": chat_mode_contract(),
+    }
 
 
 @lru_cache(maxsize=8)
@@ -292,6 +518,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     product_rehearsal = _build_product_rehearsal_summary(root)
     buyer_packet_bundle = _build_buyer_packet_bundle_bucket(root)
     release_candidate_freeze = _build_release_candidate_freeze_summary(root)
+    llmwiki_promotion = _build_llmwiki_promotion_control_status(root)
     chunk_candidate_counts = {candidate["row_count"] for candidate in chunk_candidates if candidate.get("exists")}
     playbook_candidate_counts = {candidate["file_count"] for candidate in playbook_candidates if candidate.get("exists")}
     canonical_grade_source = {
@@ -377,6 +604,15 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "product_gate_count": len(product_gate.get("books") or []),
             "buyer_packet_bundle_count": len(buyer_packet_bundle.get("books") or []),
             "release_candidate_freeze_ready": bool(release_candidate_freeze.get("exists")),
+            "llmwiki_promotion_ready": bool(llmwiki_promotion.get("ready")),
+            "llmwiki_promotion_status": str(llmwiki_promotion.get("status") or "unknown"),
+            "llmwiki_promotion_report_stale": bool((_dict_from(llmwiki_promotion.get("selected_report"))).get("stale")),
+            "llmwiki_promotion_failure_count": len(_list_from(llmwiki_promotion.get("failures"))),
+            "official_gold_ok": _promotion_contract_ok({"summary": {"contracts": _dict_from(llmwiki_promotion.get("contracts"))}}, "official_gold"),
+            "customer_master_ok": _promotion_contract_ok({"summary": {"contracts": _dict_from(llmwiki_promotion.get("contracts"))}}, "customer_master"),
+            "runtime_live_ok": _promotion_contract_ok({"summary": {"contracts": _dict_from(llmwiki_promotion.get("contracts"))}}, "runtime_report"),
+            "runtime_maintenance_ok": _promotion_contract_ok({"summary": {"contracts": _dict_from(llmwiki_promotion.get("contracts"))}}, "runtime_maintenance"),
+            "chat_matrix_ok": _promotion_contract_ok({"summary": {"contracts": _dict_from(llmwiki_promotion.get("contracts"))}}, "chat_matrix"),
             "product_gate_pass_rate": product_rehearsal.get("critical_scenario_pass_rate"),
             "topic_playbook_count": len(topic_playbooks),
             "operation_playbook_count": len(operation_playbooks),
@@ -443,6 +679,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "buyer_packet_bundle": buyer_packet_bundle,
         "release_candidate_freeze": release_candidate_freeze,
         "product_rehearsal": product_rehearsal,
+        "llmwiki_promotion": llmwiki_promotion,
         "manual_book_library": manual_book_library,
         "topic_playbooks": {"selected_dir": str(selected_playbook_dir) if selected_playbook_dir else "", "books": topic_playbooks},
         "operation_playbooks": {"selected_dir": str(selected_playbook_dir) if selected_playbook_dir else "", "books": operation_playbooks},

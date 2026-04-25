@@ -10,11 +10,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.chat_modes import DEFAULT_CHAT_MODE, normalize_chat_mode
 from play_book_studio.config.packs import default_core_pack
 from play_book_studio.config.settings import load_settings
 from play_book_studio.retrieval.models import SessionContext
 
-RUNTIME_CHAT_MODE = "chat"
+RUNTIME_CHAT_MODE = DEFAULT_CHAT_MODE
 DEFAULT_CORE_VERSION = default_core_pack().version
 
 
@@ -82,7 +83,7 @@ def deserialize_turn(payload: dict[str, Any]) -> "Turn":
         parent_turn_id=str(payload.get("parent_turn_id") or ""),
         created_at=str(payload.get("created_at") or ""),
         query=query,
-        mode=str(payload.get("mode") or RUNTIME_CHAT_MODE),
+        mode=normalize_chat_mode(payload.get("mode") or RUNTIME_CHAT_MODE),
         answer=answer,
         rewritten_query=str(payload.get("rewritten_query") or ""),
         response_kind=str(payload.get("response_kind") or ""),
@@ -170,14 +171,16 @@ class ChatSession:
             turns = []
         history = [deserialize_turn(turn) for turn in turns if isinstance(turn, dict)]
         context_payload = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+        session_mode = normalize_chat_mode(payload.get("mode") or RUNTIME_CHAT_MODE)
         session = cls(
             session_id=str(payload.get("session_id") or ""),
-            mode=str(payload.get("mode") or RUNTIME_CHAT_MODE),
+            mode=session_mode,
             context=SessionContext.from_dict(context_payload),
             history=history,
             revision=int(payload.get("revision") or payload.get("turn_count") or len(history) or 0),
             updated_at=str(payload.get("updated_at") or ""),
         )
+        session.context.mode = normalize_chat_mode(session.context.mode or session_mode)
         return session
 
 
