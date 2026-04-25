@@ -1396,10 +1396,7 @@ class ChatAnswerer:
             final_citations=final_citations,
             cited_indices=cited_indices,
         )
-        if _looks_like_missing_coverage_answer(answer_text) and not _has_blended_citation_coverage(
-            final_citations=final_citations,
-            cited_indices=cited_indices,
-        ):
+        if _looks_like_missing_coverage_answer(answer_text):
             blended_fallback = _build_blended_runtime_fallback_answer(
                 query=query,
                 citations=context_bundle.citations,
@@ -1548,10 +1545,7 @@ class ChatAnswerer:
                 llm_runtime_meta=llm_runtime_meta,
             )
 
-        if _looks_like_missing_coverage_answer(answer_text) and not _has_blended_citation_coverage(
-            final_citations=final_citations,
-            cited_indices=cited_indices,
-        ):
+        if _looks_like_missing_coverage_answer(answer_text):
             blended_fallback = _build_blended_runtime_fallback_answer(
                 query=query,
                 citations=context_bundle.citations,
@@ -1571,7 +1565,10 @@ class ChatAnswerer:
                         "detail": "uploaded+official citations preserved",
                     }
                 )
-            else:
+            elif not _has_blended_citation_coverage(
+                final_citations=final_citations,
+                cited_indices=cited_indices,
+            ):
                 warnings.append("answer indicates missing corpus coverage")
                 emit(
                     {

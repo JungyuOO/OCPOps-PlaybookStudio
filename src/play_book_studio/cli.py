@@ -22,6 +22,7 @@ from play_book_studio.app.customer_master_book import (
     write_customer_master_book,
 )
 from play_book_studio.app.llmwiki_promotion_report import write_llmwiki_promotion_report
+from play_book_studio.app.llmwiki_validation_loop import write_llmwiki_validation_loop_report
 from play_book_studio.app.private_lane_smoke import write_private_lane_smoke
 from play_book_studio.app.runtime_maintenance_smoke import write_runtime_maintenance_smoke
 from play_book_studio.app.runtime_report import (
@@ -327,6 +328,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     llmwiki_promotion_parser.add_argument("--chat-matrix-timeout-seconds", type=float, default=90.0)
     llmwiki_promotion_parser.add_argument(
+        "--skip-runtime-samples",
+        action="store_true",
+        help="Skip direct LLM/embedding samples in the runtime report; live chat matrix still runs.",
+    )
+
+    llmwiki_loop_parser = subparsers.add_parser(
+        "llmwiki-loop",
+        help="Run repeatable LLMWiki validation loops with Surya OCR treated as optional",
+    )
+    llmwiki_loop_parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT / ".kugnusdocs" / "reports" / f"{date.today().isoformat()}-llmwiki-validation-loop.json",
+    )
+    llmwiki_loop_parser.add_argument("--ui-base-url", default=DEFAULT_PLAYBOOK_UI_BASE_URL)
+    llmwiki_loop_parser.add_argument("--iterations", type=int, default=1)
+    llmwiki_loop_parser.add_argument(
+        "--continue-after-pass",
+        action="store_true",
+        help="Continue running all requested iterations even after the first pass.",
+    )
+    llmwiki_loop_parser.add_argument("--chat-matrix-timeout-seconds", type=float, default=90.0)
+    llmwiki_loop_parser.add_argument(
         "--skip-runtime-samples",
         action="store_true",
         help="Skip direct LLM/embedding samples in the runtime report; live chat matrix still runs.",
@@ -1099,6 +1123,35 @@ def _run_llmwiki_promotion(args: argparse.Namespace) -> int:
     return 0 if payload.get("ready_for_llmwiki_promotion") else 1
 
 
+def _run_llmwiki_loop(args: argparse.Namespace) -> int:
+    output_path, payload = write_llmwiki_validation_loop_report(
+        ROOT,
+        output_path=args.output,
+        ui_base_url=args.ui_base_url,
+        iterations=int(args.iterations),
+        stop_on_pass=not bool(args.continue_after_pass),
+        chat_matrix_timeout_seconds=float(args.chat_matrix_timeout_seconds),
+        runtime_report_sample=not bool(args.skip_runtime_samples),
+    )
+    print(f"wrote llmwiki validation loop report: {output_path}")
+    print(
+        json.dumps(
+            {
+                "status": payload.get("status"),
+                "ready": payload.get("ready"),
+                "completed_iterations": payload.get("completed_iterations"),
+                "failures": payload.get("acceptance", {}).get("failures", []),
+                "essential_services": payload.get("acceptance", {}).get("essential_services", {}),
+                "surya_policy": payload.get("surya_policy", {}),
+                "final_promotion_report_path": payload.get("final_promotion_report_path"),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if payload.get("ready") else 1
+
+
 def main() -> int:
     args = build_parser().parse_args()
     if args.command == "ui":
@@ -1129,6 +1182,8 @@ def main() -> int:
         return _run_customer_master_book(args)
     if args.command == "llmwiki-promotion":
         return _run_llmwiki_promotion(args)
+    if args.command == "llmwiki-loop":
+        return _run_llmwiki_loop(args)
     raise ValueError(f"unsupported command: {args.command}")
 
 

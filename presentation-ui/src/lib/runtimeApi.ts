@@ -196,6 +196,9 @@ export interface DataControlRoomSummary {
   llmwiki_promotion_status?: string;
   llmwiki_promotion_report_stale?: boolean;
   llmwiki_promotion_failure_count?: number;
+  llmwiki_validation_loop_ready?: boolean;
+  llmwiki_validation_loop_status?: string;
+  llmwiki_validation_loop_failure_count?: number;
   official_gold_ok?: boolean;
   customer_master_ok?: boolean;
   runtime_live_ok?: boolean;
@@ -293,6 +296,49 @@ export interface DevelopmentControlStatus {
   verification_commands: string[];
 }
 
+export interface LlmWikiValidationLoopStatus {
+  status: string;
+  ready: boolean;
+  failures: string[];
+  selected_report?: {
+    path: string;
+    exists: boolean;
+    generated_at: string;
+    git?: Record<string, unknown>;
+    current_git?: Record<string, unknown>;
+    head_matches_current?: boolean;
+    stale?: boolean;
+  };
+  surya_policy?: {
+    status?: string;
+    required_for_llmwiki_runtime?: boolean;
+    required_for_chat_and_playbook_reading?: boolean;
+    qwen_ocr_fallback_configured?: boolean;
+    gate_policy?: string;
+    unaffected_when_off?: string[];
+    degraded_when_off?: string[];
+  };
+  acceptance?: {
+    ok?: boolean;
+    checks?: Record<string, boolean>;
+    failures?: string[];
+    essential_services?: Record<string, boolean | string>;
+    metrics?: Record<string, number | string | boolean | null>;
+  };
+  metrics?: {
+    completed_iterations?: number;
+    requested_iterations?: number;
+    official_chunks?: number;
+    official_code_blocks?: number;
+    official_figures?: number;
+    customer_sources?: number;
+    customer_sections?: number;
+    chat_live_pass_count?: number;
+    chat_live_total?: number;
+  };
+  commands?: Record<string, string>;
+}
+
 export interface DataControlRoomResponse {
   active_pack: {
     pack_label: string;
@@ -335,6 +381,7 @@ export interface DataControlRoomResponse {
   buyer_packet_bundle?: BuyerPacketBucket;
   release_candidate_freeze?: ReleaseCandidateFreezeSummary;
   llmwiki_promotion?: LlmWikiPromotionStatus;
+  llmwiki_validation_loop?: LlmWikiValidationLoopStatus;
   development_control?: DevelopmentControlStatus;
   topic_playbooks: LibraryBucket;
   operation_playbooks: LibraryBucket;

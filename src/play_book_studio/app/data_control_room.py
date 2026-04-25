@@ -109,6 +109,7 @@ def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, i
     settings = load_settings(root)
     gate_path = root / "reports" / "build_logs" / "foundry_runs" / "profiles" / "morning_gate" / "latest.json"
     promotion_report_paths = _llmwiki_promotion_report_paths(root)
+    validation_loop_report_paths = _llmwiki_validation_loop_report_paths(root)
     custom_material_dir = root / ".P_docs" / "01_검토대기_플레이북재료"
     custom_material_files = sorted(path for path in custom_material_dir.rglob("*") if path.is_file()) if custom_material_dir.exists() else []
     draft_store = CustomerPackDraftStore(root)
@@ -117,6 +118,7 @@ def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, i
         gate_path,
         root / ".git" / "HEAD",
         *promotion_report_paths,
+        *validation_loop_report_paths,
         root / ".P_docs" / "01_검토대기_플레이북재료",
         root / ".P_docs" / "_review_bucket_manifest.json",
         *custom_material_files,
@@ -164,6 +166,20 @@ def _latest_llmwiki_promotion_report_path(root: Path) -> Path | None:
         for path in _llmwiki_promotion_report_paths(root)
         if "promotion-report" in path.name
     ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime_ns if path.exists() else 0)
+
+
+def _llmwiki_validation_loop_report_paths(root: Path) -> list[Path]:
+    reports_dir = root / ".kugnusdocs" / "reports"
+    if not reports_dir.exists():
+        return []
+    return sorted(reports_dir.glob("*llmwiki-validation-loop*.json"), key=lambda path: path.name)
+
+
+def _latest_llmwiki_validation_loop_report_path(root: Path) -> Path | None:
+    candidates = _llmwiki_validation_loop_report_paths(root)
     if not candidates:
         return None
     return max(candidates, key=lambda path: path.stat().st_mtime_ns if path.exists() else 0)
@@ -362,6 +378,79 @@ def _build_llmwiki_promotion_control_status(root: Path) -> dict[str, object]:
     }
 
 
+def _build_llmwiki_validation_loop_control_status(root: Path) -> dict[str, object]:
+    report_path = _latest_llmwiki_validation_loop_report_path(root)
+    current_git = _current_git_context(root)
+    if report_path is None:
+        return {
+            "status": "missing",
+            "ready": False,
+            "failures": ["llmwiki validation loop report is missing"],
+            "selected_report": {
+                "path": "",
+                "exists": False,
+                "generated_at": "",
+                "git": {},
+                "current_git": current_git,
+                "head_matches_current": False,
+                "stale": True,
+            },
+            "surya_policy": {
+                "required_for_llmwiki_runtime": False,
+                "status": "offline_allowed",
+            },
+            "acceptance": {},
+            "metrics": {},
+            "commands": {},
+        }
+
+    report = _safe_read_json(report_path)
+    report_git = _dict_from(report.get("git"))
+    current_head = str(current_git.get("head") or "").strip()
+    report_head = str(report_git.get("head") or "").strip()
+    head_matches_current = bool(current_head and report_head and current_head == report_head)
+    stale = not head_matches_current or bool(current_git.get("dirty_tracked_files"))
+    acceptance = _dict_from(report.get("acceptance"))
+    failures = [
+        str(item)
+        for item in _list_from(acceptance.get("failures")) or _list_from(report.get("failures"))
+        if str(item).strip()
+    ]
+    if stale:
+        failures.append("llmwiki validation loop report is stale for the current checkout")
+    report_status = str(report.get("status") or "unknown")
+    ready = bool(report.get("ready")) and report_status == "ok" and not stale
+    metrics = _dict_from(acceptance.get("metrics"))
+    return {
+        "status": "stale" if stale else report_status,
+        "ready": ready,
+        "failures": failures,
+        "selected_report": {
+            "path": str(report_path),
+            "exists": report_path.exists(),
+            "generated_at": str(report.get("generated_at") or ""),
+            "git": report_git,
+            "current_git": current_git,
+            "head_matches_current": head_matches_current,
+            "stale": stale,
+        },
+        "surya_policy": _dict_from(report.get("surya_policy")),
+        "acceptance": acceptance,
+        "metrics": {
+            "completed_iterations": _safe_int(report.get("completed_iterations")),
+            "requested_iterations": _safe_int(report.get("requested_iterations")),
+            "official_chunks": _safe_int(metrics.get("official_chunks")),
+            "official_code_blocks": _safe_int(metrics.get("official_code_blocks")),
+            "official_figures": _safe_int(metrics.get("official_figures")),
+            "customer_sources": _safe_int(metrics.get("customer_sources")),
+            "customer_sections": _safe_int(metrics.get("customer_sections")),
+            "chat_live_pass_count": _safe_int(metrics.get("chat_live_pass_count")),
+            "chat_live_total": _safe_int(metrics.get("chat_live_total")),
+        },
+        "commands": _dict_from(report.get("commands")),
+    }
+
+
 def _rail_ready(llmwiki_promotion: dict[str, object], key: str) -> bool:
     for item in _list_from(llmwiki_promotion.get("status_rail")):
         if not isinstance(item, dict):
@@ -411,6 +500,7 @@ def _build_development_surface(
 def _build_development_control_status(
     *,
     llmwiki_promotion: dict[str, object],
+    llmwiki_validation_loop: dict[str, object] | None = None,
     official_playbook_count: int,
     customer_playbook_count: int,
     user_corpus_chunk_count: int,
@@ -419,6 +509,7 @@ def _build_development_control_status(
     source_of_truth_drift: dict[str, object],
     product_rehearsal: dict[str, object],
 ) -> dict[str, object]:
+    validation_loop = _dict_from(llmwiki_validation_loop)
     metrics = _dict_from(llmwiki_promotion.get("metrics"))
     mode_contract = _dict_from(llmwiki_promotion.get("mode_contract"))
     mode_ids = {
@@ -451,10 +542,20 @@ def _build_development_control_status(
     customer_ready = _rail_ready(llmwiki_promotion, "customer") and customer_sources > 0 and customer_sections > 0
     runtime_ready = _rail_ready(llmwiki_promotion, "runtime")
     chat_ready = _rail_ready(llmwiki_promotion, "chat") and {"learn", "ops"}.issubset(mode_ids) and chat_total > 0 and chat_pass_count == chat_total
+    validation_loop_ready = bool(validation_loop.get("ready"))
+    validation_loop_status = str(validation_loop.get("status") or "missing").strip()
+    validation_loop_metrics = _dict_from(validation_loop.get("metrics"))
+    validation_loop_failures = [
+        str(item)
+        for item in _list_from(validation_loop.get("failures"))
+        if str(item).strip()
+    ]
+    surya_policy = _dict_from(validation_loop.get("surya_policy"))
+    surya_required = bool(surya_policy.get("required_for_llmwiki_runtime"))
     viewer_ready = official_ready and official_playbook_count > 0 and official_figures > 0
     library_ready = customer_ready and customer_playbook_count > 0 and user_corpus_chunk_count > 0
     factory_ready = custom_document_count > 0 or customer_playbook_count > 0
-    harness_ready = promotion_ready and runtime_ready and not drift_mismatches
+    harness_ready = promotion_ready and runtime_ready and validation_loop_ready and not drift_mismatches and not surya_required
     surfaces = [
         _build_development_surface(
             surface_id="control_tower",
@@ -547,10 +648,36 @@ def _build_development_control_status(
             acceptance="promotion, runtime, source-of-truth drift가 한 명령/한 report에서 판정된다.",
             evidence=[
                 "runtime ready" if runtime_ready else "runtime blocked",
+                f"validation loop={validation_loop_status}",
                 f"{len(drift_mismatches)} drift mismatches",
             ],
-            next_action="fresh checkout one-command rebuild를 dev gate에 고정한다.",
-            blockers=drift_mismatches if drift_mismatches else ([] if harness_ready else ["promotion or runtime contract is not ready"]),
+            next_action="llmwiki-loop를 반복 실행해 실패 원인을 report에 남긴다.",
+            blockers=(
+                drift_mismatches
+                if drift_mismatches
+                else (
+                    []
+                    if harness_ready
+                    else [
+                        *(validation_loop_failures or []),
+                        "promotion/runtime/validation loop contract is not ready",
+                    ]
+                )
+            ),
+        ),
+        _build_development_surface(
+            surface_id="surya_optional_boundary",
+            title="Surya Optional Boundary",
+            route="/playbook-library/control-tower",
+            ready=not surya_required,
+            acceptance="Surya OCR는 신규 이미지/OCR fallback 보조장치이며 기존 LLMWiki 검색/챗봇/뷰어 런타임 필수 의존성이 아니다.",
+            evidence=[
+                f"surya={surya_policy.get('status') or 'offline_allowed'}",
+                f"loop iterations={_safe_int(validation_loop_metrics.get('completed_iterations'))}",
+            ],
+            next_action="신규 스캔 PDF나 이미지-only 문서 작업 때만 Qwen OCR 또는 Surya fallback을 별도 점검한다.",
+            blockers=[] if not surya_required else ["Surya is incorrectly marked as required for LLMWiki runtime"],
+            required=False,
         ),
         _build_development_surface(
             surface_id="product_rehearsal",
@@ -771,6 +898,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     buyer_packet_bundle = _build_buyer_packet_bundle_bucket(root)
     release_candidate_freeze = _build_release_candidate_freeze_summary(root)
     llmwiki_promotion = _build_llmwiki_promotion_control_status(root)
+    llmwiki_validation_loop = _build_llmwiki_validation_loop_control_status(root)
     chunk_candidate_counts = {candidate["row_count"] for candidate in chunk_candidates if candidate.get("exists")}
     playbook_candidate_counts = {candidate["file_count"] for candidate in playbook_candidates if candidate.get("exists")}
     canonical_grade_source = {
@@ -817,6 +945,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     }
     development_control = _build_development_control_status(
         llmwiki_promotion=llmwiki_promotion,
+        llmwiki_validation_loop=llmwiki_validation_loop,
         official_playbook_count=len(core_manualbooks),
         customer_playbook_count=len(customer_pack_runtime_books),
         user_corpus_chunk_count=user_library_corpus_chunk_count,
@@ -870,6 +999,9 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "llmwiki_promotion_status": str(llmwiki_promotion.get("status") or "unknown"),
             "llmwiki_promotion_report_stale": bool((_dict_from(llmwiki_promotion.get("selected_report"))).get("stale")),
             "llmwiki_promotion_failure_count": len(_list_from(llmwiki_promotion.get("failures"))),
+            "llmwiki_validation_loop_ready": bool(llmwiki_validation_loop.get("ready")),
+            "llmwiki_validation_loop_status": str(llmwiki_validation_loop.get("status") or "unknown"),
+            "llmwiki_validation_loop_failure_count": len(_list_from(llmwiki_validation_loop.get("failures"))),
             "development_control_status": str(development_control.get("status") or "unknown"),
             "development_control_ready": bool(development_control.get("ready")),
             "official_gold_ok": _promotion_contract_ok({"summary": {"contracts": _dict_from(llmwiki_promotion.get("contracts"))}}, "official_gold"),
@@ -944,6 +1076,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "release_candidate_freeze": release_candidate_freeze,
         "product_rehearsal": product_rehearsal,
         "llmwiki_promotion": llmwiki_promotion,
+        "llmwiki_validation_loop": llmwiki_validation_loop,
         "development_control": development_control,
         "manual_book_library": manual_book_library,
         "topic_playbooks": {"selected_dir": str(selected_playbook_dir) if selected_playbook_dir else "", "books": topic_playbooks},

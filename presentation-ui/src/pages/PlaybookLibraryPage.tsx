@@ -1554,6 +1554,15 @@ const PlaybookLibraryPage: React.FC = () => {
   const llmwikiReady = Boolean(llmwikiPromotion?.ready ?? summary?.llmwiki_promotion_ready);
   const llmwikiStale = Boolean(llmwikiReport?.stale ?? summary?.llmwiki_promotion_report_stale);
   const llmwikiGeneratedAt = llmwikiReport?.generated_at ? new Date(llmwikiReport.generated_at).toLocaleString() : 'No report';
+  const validationLoop = controlRoom?.llmwiki_validation_loop;
+  const validationLoopReport = validationLoop?.selected_report;
+  const validationLoopReady = Boolean(validationLoop?.ready ?? summary?.llmwiki_validation_loop_ready);
+  const validationLoopStale = Boolean(validationLoopReport?.stale);
+  const validationLoopGeneratedAt = validationLoopReport?.generated_at ? new Date(validationLoopReport.generated_at).toLocaleString() : 'No loop report';
+  const validationLoopMetrics = validationLoop?.metrics ?? {};
+  const validationLoopServices = validationLoop?.acceptance?.essential_services ?? {};
+  const suryaPolicy = validationLoop?.surya_policy;
+  const suryaOptional = suryaPolicy?.required_for_llmwiki_runtime === false;
   const developmentControl = controlRoom?.development_control;
   const developmentSurfaces = developmentControl?.surfaces ?? [];
   const developmentSummary = developmentControl?.summary;
@@ -1908,6 +1917,16 @@ const PlaybookLibraryPage: React.FC = () => {
                   <span>Chat Modes</span>
                   <strong>{llmwikiModeContract.length || 2} modes</strong>
                   <p>{llmwikiModeContract.map((mode) => mode.label).join(' / ') || '학습 모드 / 운영 모드'}</p>
+                </div>
+                <div>
+                  <span>Validation Loop</span>
+                  <strong>{validationLoopReady ? 'Loop Ready' : validationLoopStale ? 'Loop Stale' : validationLoop?.status ?? 'Missing'}</strong>
+                  <p>{validationLoopGeneratedAt} · {validationLoopMetrics.completed_iterations ?? 0}/{validationLoopMetrics.requested_iterations ?? 0} iterations</p>
+                </div>
+                <div>
+                  <span>Surya Boundary</span>
+                  <strong>{suryaOptional ? 'Optional' : 'Check Required'}</strong>
+                  <p>{suryaPolicy?.status ?? 'offline_allowed'} · embedder {validationLoopServices.embedding ? 'ready' : 'unknown'} · qdrant {validationLoopServices.qdrant ? 'ready' : 'unknown'}</p>
                 </div>
               </div>
             </section>

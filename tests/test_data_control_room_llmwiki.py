@@ -15,6 +15,7 @@ if str(SRC) not in sys.path:
 from play_book_studio.app.data_control_room import (
     _build_development_control_status,
     _build_llmwiki_promotion_control_status,
+    _build_llmwiki_validation_loop_control_status,
 )
 
 
@@ -59,6 +60,52 @@ def _write_report(root: Path, *, head: str = "abc123") -> Path:
                 },
                 "evidence": {"chat_matrix": "chat.json"},
                 "commands": {"promotion_report": "python -m play_book_studio.cli llmwiki-promotion"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return report_path
+
+
+def _write_loop_report(root: Path, *, head: str = "abc123") -> Path:
+    reports_dir = root / ".kugnusdocs" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report_path = reports_dir / "2026-04-26-llmwiki-validation-loop.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-26T01:00:00+09:00",
+                "git": {"branch": "feat/dev-kugnus", "head": head},
+                "status": "ok",
+                "ready": True,
+                "requested_iterations": 2,
+                "completed_iterations": 2,
+                "surya_policy": {
+                    "status": "offline_allowed",
+                    "required_for_llmwiki_runtime": False,
+                },
+                "acceptance": {
+                    "ok": True,
+                    "failures": [],
+                    "essential_services": {
+                        "embedding": True,
+                        "qdrant": True,
+                        "chat_llm": True,
+                        "chat_vector": True,
+                        "surya_ocr": "optional_offline_allowed",
+                    },
+                    "metrics": {
+                        "official_chunks": 87858,
+                        "official_code_blocks": 27191,
+                        "official_figures": 454,
+                        "customer_sources": 10,
+                        "customer_sections": 10,
+                        "chat_live_pass_count": 4,
+                        "chat_live_total": 4,
+                    },
+                },
+                "commands": {"validation_loop": "python -m play_book_studio.cli llmwiki-loop"},
             },
             ensure_ascii=False,
         ),
@@ -118,14 +165,17 @@ class DataControlRoomLlmWikiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             _write_report(root, head="abc123")
+            _write_loop_report(root, head="abc123")
             with patch(
                 "play_book_studio.app.data_control_room._current_git_context",
                 return_value={"branch": "feat/dev-kugnus", "head": "abc123", "dirty_tracked_files": False},
             ):
                 promotion = _build_llmwiki_promotion_control_status(root)
+                validation_loop = _build_llmwiki_validation_loop_control_status(root)
 
         status = _build_development_control_status(
             llmwiki_promotion=promotion,
+            llmwiki_validation_loop=validation_loop,
             official_playbook_count=70,
             customer_playbook_count=10,
             user_corpus_chunk_count=10,
@@ -141,9 +191,24 @@ class DataControlRoomLlmWikiTests(unittest.TestCase):
         surface_ids = [item["id"] for item in status["surfaces"]]
         self.assertIn("studio_chat", surface_ids)
         self.assertIn("automation_harness", surface_ids)
+        self.assertIn("surya_optional_boundary", surface_ids)
         self.assertNotIn("ops_console", surface_ids)
         excluded_ids = [item["id"] for item in status["scope"]["excluded"]]
         self.assertEqual(["ops_console"], excluded_ids)
+
+    def test_validation_loop_status_marks_report_stale_on_head_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_loop_report(root, head="old")
+            with patch(
+                "play_book_studio.app.data_control_room._current_git_context",
+                return_value={"branch": "feat/dev-kugnus", "head": "new", "dirty_tracked_files": False},
+            ):
+                status = _build_llmwiki_validation_loop_control_status(root)
+
+        self.assertEqual("stale", status["status"])
+        self.assertFalse(status["ready"])
+        self.assertTrue(status["selected_report"]["stale"])
 
 
 if __name__ == "__main__":
