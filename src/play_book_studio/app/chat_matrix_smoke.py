@@ -37,6 +37,8 @@ DEFAULT_CHAT_MATRIX_CASES: tuple[dict[str, Any], ...] = (
         },
         "expected_collections": ["uploaded", "core"],
         "expected_book_slugs": ["customer-master-kmsc-ocp-operations-playbook"],
+        "require_llm_runtime": True,
+        "require_vector_runtime": True,
         "allow_no_evidence_phrase": False,
     },
     {
@@ -78,6 +80,8 @@ DEFAULT_CHAT_MATRIX_CASES: tuple[dict[str, Any], ...] = (
         "query": "신규 운영자 교육 하루 코스를 고객 운영북과 OCP 4.20 공식문서 기준으로 짜줘",
         "payload": {"restrict_uploaded_sources": False},
         "expected_collections": ["uploaded", "core"],
+        "require_llm_runtime": True,
+        "require_vector_runtime": True,
         "allow_no_evidence_phrase": False,
     },
 )
@@ -201,6 +205,87 @@ def _has_expected_books(
     return True
 
 
+def _extract_llm_runtime(payload: dict[str, Any]) -> dict[str, Any]:
+    pipeline_trace = payload.get("pipeline_trace")
+    if isinstance(pipeline_trace, dict) and isinstance(pipeline_trace.get("llm"), dict):
+        return dict(pipeline_trace["llm"])
+    runtime = payload.get("runtime")
+    if isinstance(runtime, dict) and isinstance(runtime.get("llm"), dict):
+        return dict(runtime["llm"])
+    return {}
+
+
+def _extract_vector_runtime(payload: dict[str, Any]) -> dict[str, Any]:
+    retrieval_trace = payload.get("retrieval_trace")
+    if isinstance(retrieval_trace, dict) and isinstance(retrieval_trace.get("vector_runtime"), dict):
+        return dict(retrieval_trace["vector_runtime"])
+    runtime = payload.get("runtime")
+    if isinstance(runtime, dict) and isinstance(runtime.get("vector_runtime"), dict):
+        return dict(runtime["vector_runtime"])
+    return {}
+
+
+def _runtime_float(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _llm_runtime_live(payload: dict[str, Any], case: dict[str, Any]) -> bool:
+    if not case.get("require_llm_runtime", False):
+        return True
+    runtime = _extract_llm_runtime(payload)
+    provider = str(runtime.get("last_provider") or "").strip()
+    expected_provider = str(case.get("expected_llm_provider") or "openai-compatible").strip()
+    provider_ok = provider == expected_provider if expected_provider else bool(provider)
+    return (
+        provider_ok
+        and not bool(runtime.get("last_fallback_used", False))
+        and _runtime_float(runtime.get("provider_round_trip_ms")) > 0
+    )
+
+
+def _vector_runtime_live(payload: dict[str, Any], case: dict[str, Any]) -> bool:
+    if not case.get("require_vector_runtime", False):
+        return True
+    runtime = _extract_vector_runtime(payload)
+    endpoints_used = [
+        str(item).strip()
+        for item in (runtime.get("endpoints_used") or [])
+        if str(item).strip()
+    ]
+    endpoint_used = str(runtime.get("endpoint_used") or "").strip()
+    subquery_count = int(runtime.get("subquery_count") or len(runtime.get("subqueries") or []) or 0)
+    empty_subqueries = int(runtime.get("empty_subqueries") or 0)
+    return bool(endpoints_used or endpoint_used) and subquery_count > 0 and empty_subqueries < subquery_count
+
+
+def _llm_runtime_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    runtime = _extract_llm_runtime(payload)
+    return {
+        "provider": str(runtime.get("last_provider") or "").strip(),
+        "fallback_used": bool(runtime.get("last_fallback_used", False)),
+        "provider_round_trip_ms": runtime.get("provider_round_trip_ms"),
+        "requested_max_tokens": runtime.get("requested_max_tokens")
+        or runtime.get("last_requested_max_tokens"),
+    }
+
+
+def _vector_runtime_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    runtime = _extract_vector_runtime(payload)
+    return {
+        "endpoint_used": str(runtime.get("endpoint_used") or "").strip(),
+        "endpoints_used": [
+            str(item).strip()
+            for item in (runtime.get("endpoints_used") or [])
+            if str(item).strip()
+        ],
+        "subquery_count": int(runtime.get("subquery_count") or len(runtime.get("subqueries") or []) or 0),
+        "empty_subqueries": int(runtime.get("empty_subqueries") or 0),
+    }
+
+
 def _evaluate_payload(
     *,
     case: dict[str, Any],
@@ -265,6 +350,8 @@ def _evaluate_payload(
             if case.get("allow_no_evidence_phrase", False)
             else not NO_EVIDENCE_RE.search(answer)
         ),
+        "llm_runtime_live": _llm_runtime_live(payload, case),
+        "vector_runtime_live": _vector_runtime_live(payload, case),
     }
     passed = all(bool(value) for value in checks.values())
     retrieval_rows = _extract_retrieval_rows(payload)
@@ -280,6 +367,8 @@ def _evaluate_payload(
         "missing_terms": missing_terms,
         "answer_preview": answer[:1200],
         "citation_count": len(citations),
+        "llm_runtime": _llm_runtime_summary(payload),
+        "vector_runtime": _vector_runtime_summary(payload),
         "retrieval_top": [
             {
                 "chunk_id": row.get("chunk_id") or row.get("id"),
@@ -340,6 +429,28 @@ def build_chat_matrix_smoke(
         )
 
     pass_count = sum(1 for item in results if item.get("pass"))
+    llm_required_ids = {
+        str(case.get("id") or index)
+        for index, case in enumerate(cases, start=1)
+        if bool(case.get("require_llm_runtime", False))
+    }
+    vector_required_ids = {
+        str(case.get("id") or index)
+        for index, case in enumerate(cases, start=1)
+        if bool(case.get("require_vector_runtime", False))
+    }
+    llm_required = [
+        item
+        for item in results
+        if str(item.get("id") or "") in llm_required_ids
+        and bool((item.get("checks") or {}).get("llm_runtime_live"))
+    ]
+    vector_required = [
+        item
+        for item in results
+        if str(item.get("id") or "") in vector_required_ids
+        and bool((item.get("checks") or {}).get("vector_runtime_live"))
+    ]
     return {
         "generated_at": _iso_timestamp(),
         "branch": _git_value(root, "branch", "--show-current"),
@@ -348,6 +459,12 @@ def build_chat_matrix_smoke(
         "cases_path": str(cases_path or ""),
         "pass_count": pass_count,
         "total": len(results),
+        "runtime_requirements": {
+            "llm_live_pass_count": len(llm_required),
+            "llm_live_total": len(llm_required_ids),
+            "vector_live_pass_count": len(vector_required),
+            "vector_live_total": len(vector_required_ids),
+        },
         "status": "ok" if pass_count == len(results) else "fail",
         "results": results,
     }

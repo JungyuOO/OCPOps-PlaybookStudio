@@ -87,6 +87,116 @@ class ChatMatrixSmokeTests(unittest.TestCase):
             self.assertEqual("ok", report["status"])
             self.assertEqual(1, report["pass_count"])
             self.assertTrue(report["results"][0]["checks"]["code_block"])
+            self.assertTrue(report["results"][0]["checks"]["llm_runtime_live"])
+            self.assertTrue(report["results"][0]["checks"]["vector_runtime_live"])
+
+    def test_chat_matrix_can_require_live_llm_and_vector_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            cases_path = root / "cases.jsonl"
+            _write_cases(
+                cases_path,
+                [
+                    {
+                        "id": "live-runtime",
+                        "query": "고객 운영북과 공식문서를 같이 봐줘",
+                        "expected_collections": ["uploaded", "core"],
+                        "require_llm_runtime": True,
+                        "require_vector_runtime": True,
+                    }
+                ],
+            )
+            fake_payload = {
+                "answer": "답변: 고객 운영북과 공식 문서를 함께 확인합니다 [1][2].",
+                "response_kind": "rag",
+                "warnings": [],
+                "cited_indices": [1, 2],
+                "citations": [
+                    {
+                        "index": 1,
+                        "source_collection": "uploaded",
+                        "book_slug": "customer-master-kmsc-ocp-operations-playbook",
+                    },
+                    {
+                        "index": 2,
+                        "source_collection": "core",
+                        "book_slug": "architecture",
+                    },
+                ],
+                "pipeline_trace": {
+                    "llm": {
+                        "last_provider": "openai-compatible",
+                        "last_fallback_used": False,
+                        "provider_round_trip_ms": 321.5,
+                    }
+                },
+                "retrieval_trace": {
+                    "vector_runtime": {
+                        "subquery_count": 1,
+                        "endpoint_used": "search",
+                        "endpoints_used": ["search"],
+                        "empty_subqueries": 0,
+                    }
+                },
+            }
+
+            with patch(
+                "play_book_studio.app.chat_matrix_smoke.requests.post",
+                return_value=_FakeResponse(fake_payload),
+            ):
+                report = build_chat_matrix_smoke(
+                    root,
+                    ui_base_url="http://127.0.0.1:8896",
+                    cases_path=cases_path,
+                )
+
+            self.assertEqual("ok", report["status"])
+            self.assertEqual(1, report["runtime_requirements"]["llm_live_pass_count"])
+            self.assertEqual(1, report["runtime_requirements"]["vector_live_pass_count"])
+            self.assertTrue(report["results"][0]["checks"]["llm_runtime_live"])
+            self.assertTrue(report["results"][0]["checks"]["vector_runtime_live"])
+
+    def test_chat_matrix_fails_live_runtime_gate_when_trace_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            cases_path = root / "cases.jsonl"
+            _write_cases(
+                cases_path,
+                [
+                    {
+                        "id": "missing-runtime",
+                        "query": "고객 운영북과 공식문서를 같이 봐줘",
+                        "expected_collections": ["uploaded", "core"],
+                        "require_llm_runtime": True,
+                        "require_vector_runtime": True,
+                    }
+                ],
+            )
+            fake_payload = {
+                "answer": "답변: 고객 운영북과 공식 문서를 함께 확인합니다 [1][2].",
+                "response_kind": "rag",
+                "warnings": [],
+                "cited_indices": [1, 2],
+                "citations": [
+                    {"index": 1, "source_collection": "uploaded", "book_slug": "customer-master"},
+                    {"index": 2, "source_collection": "core", "book_slug": "architecture"},
+                ],
+                "retrieval_trace": {"selected": []},
+            }
+
+            with patch(
+                "play_book_studio.app.chat_matrix_smoke.requests.post",
+                return_value=_FakeResponse(fake_payload),
+            ):
+                report = build_chat_matrix_smoke(
+                    root,
+                    ui_base_url="http://127.0.0.1:8896",
+                    cases_path=cases_path,
+                )
+
+            self.assertEqual("fail", report["status"])
+            self.assertFalse(report["results"][0]["checks"]["llm_runtime_live"])
+            self.assertFalse(report["results"][0]["checks"]["vector_runtime_live"])
 
     def test_chat_matrix_fails_when_expected_collection_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
