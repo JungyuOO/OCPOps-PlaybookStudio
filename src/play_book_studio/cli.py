@@ -207,6 +207,42 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also upsert rebuilt embeddings to Qdrant. Implies --with-embeddings.",
     )
     official_gold_rebuild_parser.add_argument(
+        "--gold-runtime-profile",
+        action="store_true",
+        help=(
+            "Run the full gold runtime contract: embeddings, Qdrant upsert, "
+            "runtime maintenance smoke, and live chat matrix smoke."
+        ),
+    )
+    official_gold_rebuild_parser.add_argument(
+        "--ui-base-url",
+        default=DEFAULT_PLAYBOOK_UI_BASE_URL,
+        help="Runtime server base URL used by --gold-runtime-profile smoke probes.",
+    )
+    official_gold_rebuild_parser.add_argument(
+        "--runtime-smoke-output",
+        type=Path,
+        default=None,
+        help="Output path for the runtime maintenance smoke in --gold-runtime-profile.",
+    )
+    official_gold_rebuild_parser.add_argument(
+        "--runtime-smoke-query",
+        default="OpenShift architecture overview",
+        help="Probe query for the runtime maintenance smoke in --gold-runtime-profile.",
+    )
+    official_gold_rebuild_parser.add_argument(
+        "--chat-matrix-output",
+        type=Path,
+        default=None,
+        help="Output path for the live chat matrix smoke in --gold-runtime-profile.",
+    )
+    official_gold_rebuild_parser.add_argument(
+        "--chat-matrix-timeout-seconds",
+        type=float,
+        default=90.0,
+        help="Per-request timeout for the live chat matrix smoke in --gold-runtime-profile.",
+    )
+    official_gold_rebuild_parser.add_argument(
         "--output",
         type=Path,
         default=ROOT / ONE_CLICK_REPORT_RELATIVE_PATH,
@@ -648,6 +684,135 @@ def _official_gold_rebuild_should_retry(
     return False, ""
 
 
+def _official_gold_runtime_profile_enabled(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "gold_runtime_profile", False))
+
+
+def _official_gold_rebuild_uses_embeddings(args: argparse.Namespace) -> bool:
+    return bool(
+        getattr(args, "with_embeddings", False)
+        or getattr(args, "with_qdrant", False)
+        or _official_gold_runtime_profile_enabled(args)
+    )
+
+
+def _official_gold_rebuild_uses_qdrant(args: argparse.Namespace) -> bool:
+    return bool(
+        getattr(args, "with_qdrant", False)
+        or _official_gold_runtime_profile_enabled(args)
+    )
+
+
+def _official_gold_runtime_profile_output(name: str) -> Path:
+    return ROOT / ".kugnusdocs" / "reports" / f"{date.today().isoformat()}-{name}.json"
+
+
+def _runtime_maintenance_smoke_ok(payload: dict[str, Any]) -> bool:
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    return bool(summary.get("ok"))
+
+
+def _chat_matrix_smoke_ok(payload: dict[str, Any]) -> bool:
+    runtime_requirements = (
+        payload.get("runtime_requirements")
+        if isinstance(payload.get("runtime_requirements"), dict)
+        else {}
+    )
+    llm_live_total = int(runtime_requirements.get("llm_live_total") or 0)
+    vector_live_total = int(runtime_requirements.get("vector_live_total") or 0)
+    llm_live_pass_count = int(runtime_requirements.get("llm_live_pass_count") or 0)
+    vector_live_pass_count = int(runtime_requirements.get("vector_live_pass_count") or 0)
+    return bool(
+        payload.get("status") == "ok"
+        and llm_live_total > 0
+        and vector_live_total > 0
+        and llm_live_pass_count == llm_live_total
+        and vector_live_pass_count == vector_live_total
+    )
+
+
+def _run_official_gold_runtime_profile(args: argparse.Namespace) -> dict[str, Any]:
+    profile: dict[str, Any] = {
+        "enabled": True,
+        "status": "fail",
+        "ui_base_url": str(getattr(args, "ui_base_url", DEFAULT_PLAYBOOK_UI_BASE_URL)),
+        "with_embeddings": _official_gold_rebuild_uses_embeddings(args),
+        "with_qdrant": _official_gold_rebuild_uses_qdrant(args),
+        "checks": {
+            "runtime_maintenance_smoke": False,
+            "chat_matrix_smoke": False,
+        },
+        "failures": [],
+    }
+
+    runtime_smoke_output = getattr(args, "runtime_smoke_output", None) or _official_gold_runtime_profile_output(
+        "official-gold-runtime-maintenance-smoke"
+    )
+    try:
+        output_path, payload = write_runtime_maintenance_smoke(
+            ROOT,
+            output_path=runtime_smoke_output,
+            ui_base_url=profile["ui_base_url"],
+            query=str(getattr(args, "runtime_smoke_query", "OpenShift architecture overview")),
+        )
+        runtime_ok = _runtime_maintenance_smoke_ok(payload)
+        profile["checks"]["runtime_maintenance_smoke"] = runtime_ok
+        profile["runtime_maintenance_smoke"] = {
+            "path": str(output_path),
+            "summary": payload.get("summary", {}),
+        }
+        if not runtime_ok:
+            profile["failures"].append("runtime_maintenance_smoke_failed")
+    except Exception as exc:  # noqa: BLE001
+        profile["runtime_maintenance_smoke"] = {
+            "path": str(runtime_smoke_output),
+            "error": str(exc),
+        }
+        profile["failures"].append("runtime_maintenance_smoke_error")
+
+    chat_matrix_output = getattr(args, "chat_matrix_output", None) or _official_gold_runtime_profile_output(
+        "official-gold-chat-matrix-smoke"
+    )
+    try:
+        output_path, payload = write_chat_matrix_smoke(
+            ROOT,
+            output_path=chat_matrix_output,
+            ui_base_url=profile["ui_base_url"],
+            timeout_seconds=float(getattr(args, "chat_matrix_timeout_seconds", 90.0) or 90.0),
+        )
+        chat_ok = _chat_matrix_smoke_ok(payload)
+        profile["checks"]["chat_matrix_smoke"] = chat_ok
+        profile["chat_matrix_smoke"] = {
+            "path": str(output_path),
+            "status": payload.get("status"),
+            "pass_count": payload.get("pass_count"),
+            "total": payload.get("total"),
+            "runtime_requirements": payload.get("runtime_requirements", {}),
+            "failures": [
+                {
+                    "id": item.get("id"),
+                    "checks": item.get("checks"),
+                    "warnings": item.get("warnings"),
+                    "error": item.get("error"),
+                }
+                for item in payload.get("results", [])
+                if isinstance(item, dict) and not item.get("pass")
+            ],
+        }
+        if not chat_ok:
+            profile["failures"].append("chat_matrix_smoke_failed")
+    except Exception as exc:  # noqa: BLE001
+        profile["chat_matrix_smoke"] = {
+            "path": str(chat_matrix_output),
+            "error": str(exc),
+        }
+        profile["failures"].append("chat_matrix_smoke_error")
+
+    if all(bool(value) for value in profile["checks"].values()):
+        profile["status"] = "ok"
+    return profile
+
+
 def _run_official_gold_rebuild_pass(
     args: argparse.Namespace,
     *,
@@ -665,8 +830,8 @@ def _run_official_gold_rebuild_pass(
         collect_limit=args.collect_limit,
         process_limit=args.process_limit,
         force_collect=bool(args.force_collect),
-        skip_embeddings=not (bool(args.with_embeddings) or bool(args.with_qdrant)),
-        skip_qdrant=not bool(args.with_qdrant),
+        skip_embeddings=not _official_gold_rebuild_uses_embeddings(args),
+        skip_qdrant=not _official_gold_rebuild_uses_qdrant(args),
     )
     runtime_manifest_publication = publish_runtime_manifest_from_playbooks(
         ROOT,
@@ -771,6 +936,26 @@ def _run_official_gold_rebuild(args: argparse.Namespace) -> int:
     pipeline_ok = bool(last_result["pipeline_ok"])
     gate_ok = bool(last_result["gate_ok"])
     payload["rebuild_attempts"] = attempts
+    runtime_profile_ok = True
+    if _official_gold_runtime_profile_enabled(args):
+        if pipeline_ok and gate_ok:
+            payload["gold_runtime_profile"] = _run_official_gold_runtime_profile(args)
+            runtime_profile_ok = payload["gold_runtime_profile"].get("status") == "ok"
+        else:
+            payload["gold_runtime_profile"] = {
+                "enabled": True,
+                "status": "skipped",
+                "skip_reason": "pipeline_or_gate_failed",
+                "with_embeddings": _official_gold_rebuild_uses_embeddings(args),
+                "with_qdrant": _official_gold_rebuild_uses_qdrant(args),
+            }
+            runtime_profile_ok = False
+    else:
+        payload["gold_runtime_profile"] = {
+            "enabled": False,
+            "with_embeddings": _official_gold_rebuild_uses_embeddings(args),
+            "with_qdrant": _official_gold_rebuild_uses_qdrant(args),
+        }
     report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"wrote official gold gate report: {report_path}")
     print(f"wrote artifact manifest: {artifact_manifest_path}")
@@ -793,13 +978,19 @@ def _run_official_gold_rebuild(args: argparse.Namespace) -> int:
                 ),
                 "playbook_figure_blocks": payload["metrics"]["playbook_block_counts"].get("figure", 0),
                 "artifact_count": len(artifact_manifest.get("artifacts", [])),
+                "gold_runtime_profile": {
+                    "enabled": bool(payload["gold_runtime_profile"].get("enabled")),
+                    "status": payload["gold_runtime_profile"].get("status"),
+                    "checks": payload["gold_runtime_profile"].get("checks", {}),
+                    "failures": payload["gold_runtime_profile"].get("failures", []),
+                },
                 "failures": payload.get("failures", []),
             },
             ensure_ascii=False,
             indent=2,
         )
     )
-    return 0 if pipeline_ok and gate_ok else 1
+    return 0 if pipeline_ok and gate_ok and runtime_profile_ok else 1
 
 
 def _run_customer_pack_batch(args: argparse.Namespace) -> int:
