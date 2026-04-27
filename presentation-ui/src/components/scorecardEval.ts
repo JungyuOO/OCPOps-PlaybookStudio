@@ -256,8 +256,13 @@ export function evaluateScorecard(
     });
   } else {
     const hasNav = relatedLinks.length >= 1 || relatedSections.length >= 1;
+    const followups = result?.suggested_followups ?? [];
+    const followupDimensions = new Set(followups.map((item) => item.dimension).filter(Boolean));
+    const structuredOk = (
+      followupDimensions.has('next_action') && followupDimensions.has('verify') && followupDimensions.has('branch')
+    );
     const hasNextPlay = suggested.length >= 1;
-    const ok = hasNav && hasNextPlay;
+    const ok = hasNav && hasNextPlay && structuredOk;
     items.push({
       id: 'product-005',
       label: '다음 행동 유도',
@@ -267,7 +272,9 @@ export function evaluateScorecard(
         ? `related ${relatedLinks.length + relatedSections.length}건 + 추천 질문 ${suggested.length}건`
         : !hasNav
           ? 'related 경로 없음'
-          : '추천 질문(next play) 없음',
+          : !hasNextPlay
+            ? '추천 질문(next play) 없음'
+            : '추천 질문 차원(next_action/verify/branch) 누락',
       mode: 'auto',
     });
   }

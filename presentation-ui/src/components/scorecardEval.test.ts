@@ -23,6 +23,11 @@ function makeResponse(overrides: Partial<ChatResponse> = {}): ChatResponse {
     warnings: [],
     session_id: 'session-1',
     suggested_queries: ['next question'],
+    suggested_followups: [
+      { query: 'next question', dimension: 'next_action', label: '다음 행동' },
+      { query: 'verify question', dimension: 'verify', label: '검증' },
+      { query: 'branch question', dimension: 'branch', label: '분기' },
+    ],
     related_links: [{ label: 'Operators', href: '/wiki/operators', kind: 'book' }],
     related_sections: [{ label: 'Installing Operators', href: '/wiki/operators#installing-operators', kind: 'book' }],
     response_kind: 'rag',
@@ -66,5 +71,22 @@ describe('scorecardEval', () => {
 
     const items = evaluateScorecard(bad);
     expect(items.find((item) => item.id === 'product-003')?.outcome).toBe('fail');
+  });
+
+  it('fails next-play when structured follow-up dimensions are incomplete', () => {
+    const items = evaluateScorecard(makeResponse({
+      suggested_followups: [{ query: 'next question', dimension: 'next_action' }],
+    }));
+
+    expect(items.find((item) => item.id === 'product-005')?.outcome).toBe('fail');
+  });
+
+  it('fails next-play when legacy suggestions exist without structured followups', () => {
+    const items = evaluateScorecard(makeResponse({
+      suggested_queries: ['legacy next question'],
+      suggested_followups: undefined,
+    }));
+
+    expect(items.find((item) => item.id === 'product-005')?.outcome).toBe('fail');
   });
 });

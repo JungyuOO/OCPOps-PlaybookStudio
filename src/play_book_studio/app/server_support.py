@@ -21,7 +21,7 @@ from play_book_studio.app.source_books import (
     build_chat_navigation_links as _build_chat_navigation_links,
     build_chat_section_links as _build_chat_section_links,
 )
-from play_book_studio.app.session_flow import suggest_follow_up_questions as _suggest_follow_up_questions
+from play_book_studio.app.session_flow import suggest_follow_up_items as _suggest_follow_up_items
 from play_book_studio.app.sessions import ChatSession
 
 FRONTEND_DIST_DIRNAME = "presentation-ui/dist"
@@ -154,7 +154,12 @@ def _build_chat_payload(
     if timings_sink is not None:
         timings_sink["payload_related_sections"] = (time.perf_counter() - related_sections_started_at) * 1000
     suggested_queries_started_at = time.perf_counter()
-    suggested_queries = _suggest_follow_up_questions(session=session, result=result)
+    suggested_followups = _suggest_follow_up_items(session=session, result=result)
+    suggested_queries = [
+        str(item.get("query") or "").strip()
+        for item in suggested_followups
+        if str(item.get("query") or "").strip()
+    ]
     if timings_sink is not None:
         timings_sink["payload_suggested_queries"] = (time.perf_counter() - suggested_queries_started_at) * 1000
     payload = {
@@ -169,6 +174,7 @@ def _build_chat_payload(
         "related_links": related_links,
         "related_sections": related_sections,
         "suggested_queries": suggested_queries,
+        "suggested_followups": suggested_followups,
         "context": session.context.to_dict(),
         "history_size": len(session.history),
         "retrieval_trace": dict(result.retrieval_trace),

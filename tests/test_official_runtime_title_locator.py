@@ -19,7 +19,7 @@ from play_book_studio.answering.context import (
 from play_book_studio.answering.answerer import _build_doc_locator_answer, _citations_match_rbac_intent
 from play_book_studio.answering.models import Citation
 from play_book_studio.retrieval.bm25 import BM25Index
-from play_book_studio.retrieval.models import SessionContext
+from play_book_studio.retrieval.models import RetrievalHit, SessionContext
 from play_book_studio.retrieval.retriever import ChatRetriever
 from play_book_studio.retrieval.retriever_pipeline import (
     _is_customer_pack_explicit_query as retrieval_pipeline_customer_pack_explicit,
@@ -235,6 +235,93 @@ class OfficialRuntimeTitleLocatorTests(unittest.TestCase):
 
             self.assertTrue(result.hits)
             self.assertEqual("builds_using_buildconfig", result.hits[0].book_slug)
+
+    def test_decisive_title_token_routes_buildconfig_followup_queries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_active_manifest(
+                root,
+                [
+                    {"slug": "building_applications", "title": "애플리케이션 빌드"},
+                    {"slug": "builds_using_buildconfig", "title": "Builds using BuildConfig"},
+                ],
+            )
+            rows = [
+                _official_doc_row(
+                    chunk_id="building-applications",
+                    book_slug="building_applications",
+                    section="빌드 상태",
+                    text="애플리케이션 빌드 상태를 일반적으로 확인합니다.",
+                ),
+                _official_doc_row(
+                    chunk_id="buildconfig-verify",
+                    book_slug="builds_using_buildconfig",
+                    section="BuildConfig 검증",
+                    text=(
+                        "BuildConfig 적용 후 build 상태, pod 상태, 이벤트, 로그를 확인하여 "
+                        "빌드 결과를 검증합니다."
+                    ),
+                    review_status="needs_review",
+                ),
+            ]
+            settings = load_settings(root)
+            retriever = ChatRetriever(settings, BM25Index.from_rows(rows), vector_retriever=None)
+
+            result = retriever.retrieve(
+                "BuildConfig 적용 후 build와 pod 상태를 검증하는 순서를 알려줘",
+                context=SessionContext(mode="chat", ocp_version=settings.ocp_version),
+                top_k=3,
+                candidate_k=5,
+                use_vector=False,
+            )
+
+            self.assertTrue(result.hits)
+            self.assertEqual("builds_using_buildconfig", result.hits[0].book_slug)
+
+    def test_buildconfig_followup_context_keeps_citation_when_hits_are_close(self) -> None:
+        query = "BuildConfig 적용 후 build와 pod 상태를 검증하는 순서를 알려줘"
+        hits = [
+            RetrievalHit(
+                chunk_id="workload-status",
+                book_slug="workloads_apis",
+                chapter="BuildConfig API",
+                section=".status.imageChangeTriggers[]",
+                anchor="status-image-change-triggers",
+                source_url="https://docs.redhat.com/workloads_apis",
+                viewer_path="/docs/ocp/4.20/ko/workloads_apis/index.html#status-image-change-triggers",
+                text="BuildConfig status image triggers and build status reference.",
+                source="hybrid_reranked",
+                raw_score=0.0164,
+                component_scores={"pre_rerank_fused_score": 0.2069},
+            ),
+            RetrievalHit(
+                chunk_id="buildconfig-edit",
+                book_slug="builds_using_buildconfig",
+                chapter="BuildConfig",
+                section="Editing a BuildConfig",
+                anchor="editing-a-buildconfig",
+                source_url="https://docs.redhat.com/builds_using_buildconfig",
+                viewer_path="/docs/ocp/4.20/ko/builds_using_buildconfig/index.html#editing-a-buildconfig",
+                text="BuildConfig 적용 후 build 상태, pod 상태, 이벤트, 로그를 확인하여 빌드 결과를 검증합니다.",
+                source="hybrid_reranked",
+                raw_score=0.0161,
+                chunk_type="command",
+                semantic_role="procedure",
+                cli_commands=("oc describe bc <name>",),
+                verification_hints=("oc describe bc <name>",),
+                component_scores={"pre_rerank_fused_score": 0.2067},
+            ),
+        ]
+
+        bundle = assemble_context(
+            hits,
+            query=query,
+            session_context=SessionContext(mode="chat", ocp_version="4.20"),
+            max_chunks=3,
+        )
+
+        self.assertTrue(bundle.citations)
+        self.assertEqual("builds_using_buildconfig", bundle.citations[0].book_slug)
 
     def test_official_basis_operational_query_is_not_doc_locator_answer(self) -> None:
         citation = Citation(

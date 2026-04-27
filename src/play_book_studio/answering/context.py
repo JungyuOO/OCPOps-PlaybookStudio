@@ -368,6 +368,41 @@ def _rbac_signal(hit: RetrievalHit) -> bool:
     )
 
 
+def _session_mentions_buildconfig(session_context: SessionContext | None) -> bool:
+    if session_context is None:
+        return False
+    haystack = " ".join(
+        [
+            session_context.current_topic or "",
+            *session_context.open_entities,
+            session_context.user_goal or "",
+            session_context.unresolved_question or "",
+        ]
+    ).lower()
+    return "buildconfig" in haystack or "build config" in haystack
+
+
+def _buildconfig_signal(hit: RetrievalHit) -> bool:
+    haystack = " ".join(
+        (
+            str(hit.book_slug or "").lower(),
+            str(hit.section or "").lower(),
+            str(hit.anchor or "").lower(),
+            str(hit.text or "")[:1200].lower(),
+        )
+    )
+    return (
+        hit.book_slug in {"builds_using_buildconfig", "workloads_apis", "build_apis"}
+        or "buildconfig" in haystack
+        or "build config" in haystack
+    )
+
+
+def _has_buildconfig_context(query: str, session_context: SessionContext | None) -> bool:
+    normalized = str(query or "").lower()
+    return "buildconfig" in normalized or "build config" in normalized or _session_mentions_buildconfig(session_context)
+
+
 def _is_troubleshooting_doc_locator_query(query: str) -> bool:
     normalized = (query or "").lower()
     if not has_doc_locator_intent(normalized):
@@ -896,6 +931,7 @@ def _should_force_clarification(
             has_deployment_scaling_intent(normalized),
             has_registry_storage_ops_intent(normalized),
             _is_intro_recommendation_query(normalized),
+            _has_buildconfig_context(normalized, session_context),
         ]
     ):
         return False
@@ -995,6 +1031,7 @@ def _select_hits(
             has_cluster_node_usage_intent(normalized),
             has_deployment_scaling_intent(normalized),
             has_registry_storage_ops_intent(normalized),
+            _has_buildconfig_context(normalized, session_context),
         ]
     )
 
@@ -1202,6 +1239,29 @@ def _select_hits(
             ranked_hits,
             key=lambda hit: (
                 preferred_order.get(hit.book_slug, 9),
+                -_hit_score(hit),
+                hit.book_slug,
+                hit.chunk_id,
+            ),
+        )
+        support_window = ranked_hits[: max(max_chunks * 2, 8)]
+        top_score = _hit_score(support_window[0])
+        top_book = support_window[0].book_slug
+    elif _has_buildconfig_context(normalized, session_context) and any(
+        _buildconfig_signal(hit) for hit in ranked_hits[:8]
+    ):
+        preferred_order = {
+            "builds_using_buildconfig": 0,
+            "workloads_apis": 1,
+            "build_apis": 2,
+            "building_applications": 3,
+            "installation_overview": 4,
+        }
+        ranked_hits = sorted(
+            ranked_hits,
+            key=lambda hit: (
+                preferred_order.get(hit.book_slug, 9),
+                _procedure_chunk_priority(hit),
                 -_hit_score(hit),
                 hit.book_slug,
                 hit.chunk_id,
@@ -1521,6 +1581,20 @@ def _select_hits(
         ):
             if best_book_scores.get(book_slug, 0.0) >= top_score * 0.58:
                 allowed_books.add(book_slug)
+    if _has_buildconfig_context(normalized, session_context):
+        buildconfig_books = tuple(
+            book_slug
+            for book_slug in (
+                "builds_using_buildconfig",
+                "workloads_apis",
+                "build_apis",
+                "building_applications",
+                "installation_overview",
+            )
+            if best_book_scores.get(book_slug, 0.0) > 0.0
+        )
+        if buildconfig_books:
+            allowed_books.update(buildconfig_books)
     if has_project_terminating_intent(normalized):
         for book_slug in ("support", "building_applications", "project_apis", "config_apis"):
             if best_book_scores.get(book_slug, 0.0) >= top_score * 0.46:
@@ -1702,6 +1776,19 @@ def _select_hits(
                 selected.append(hit)
                 per_book_counts[hit.book_slug] += 1
                 seen_sections.add(section_signature)
+
+    if not selected and _has_buildconfig_context(normalized, session_context):
+        for hit in ranked_hits:
+            if len(selected) >= min(2, max_chunks):
+                break
+            if not _buildconfig_signal(hit):
+                continue
+            section_signature = (hit.book_slug, _section_core(hit.section))
+            if section_signature in seen_sections:
+                continue
+            selected.append(hit)
+            per_book_counts[hit.book_slug] += 1
+            seen_sections.add(section_signature)
 
     return selected[:max_chunks]
 

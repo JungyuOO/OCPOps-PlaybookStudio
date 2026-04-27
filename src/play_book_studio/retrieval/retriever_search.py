@@ -130,6 +130,13 @@ _CUSTOMER_PACK_BROAD_CONTEXT_TOKENS = (
     "운영북",
 )
 _OFFICIAL_RUNTIME_TOPIC_RE = re.compile(r"\b(?:ocp|openshift)\b", re.IGNORECASE)
+_OFFICIAL_DECISIVE_TITLE_TOKENS = frozenset(
+    {
+        "buildconfig",
+        "buildconfigs",
+        "podnetworkconnectivitycheck",
+    }
+)
 
 
 def _compact_customer_pack_title_text(text: str) -> str:
@@ -286,8 +293,12 @@ def _official_title_match_score(query: str, *, title_candidates: tuple[str, ...]
             len(token) >= 7 and re.search(r"[a-z0-9]", token, re.IGNORECASE)
             for token in overlap_tokens
         )
+        decisive_title_overlap = bool(overlap_tokens & _OFFICIAL_DECISIVE_TITLE_TOKENS)
         if overlap >= 2 and coverage >= 0.6:
             best_score = max(best_score, 7.5 + coverage + query_coverage)
+        elif decisive_title_overlap and coverage >= 0.6:
+            decisive_base = 15.0 if official_source_mentioned else 10.0
+            best_score = max(best_score, decisive_base + coverage + query_coverage)
         elif official_source_mentioned and decisive_overlap:
             best_score = max(best_score, 14.0 + query_coverage)
         elif official_source_mentioned and overlap >= 3 and query_coverage >= 0.4:

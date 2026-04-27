@@ -32,6 +32,21 @@ def _write_cases(path: Path, rows: list[dict]) -> None:
     )
 
 
+def _suggestions() -> dict[str, object]:
+    return {
+        "suggested_queries": [
+            "다음 행동을 알려줘",
+            "적용 후 검증 방법도 알려줘",
+            "실패하면 어디부터 봐야 해?",
+        ],
+        "suggested_followups": [
+            {"query": "다음 행동을 알려줘", "dimension": "next_action", "label": "다음 행동"},
+            {"query": "적용 후 검증 방법도 알려줘", "dimension": "verify", "label": "검증"},
+            {"query": "실패하면 어디부터 봐야 해?", "dimension": "branch", "label": "분기"},
+        ],
+    }
+
+
 class ChatMatrixSmokeTests(unittest.TestCase):
     def test_chat_matrix_passes_when_expected_lanes_books_and_code_are_cited(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -72,6 +87,7 @@ class ChatMatrixSmokeTests(unittest.TestCase):
                     },
                 ],
                 "retrieval_trace": {"selected": []},
+                **_suggestions(),
             }
 
             with patch(
@@ -138,6 +154,7 @@ class ChatMatrixSmokeTests(unittest.TestCase):
                         "empty_subqueries": 0,
                     }
                 },
+                **_suggestions(),
             }
 
             with patch(
@@ -182,6 +199,7 @@ class ChatMatrixSmokeTests(unittest.TestCase):
                     {"index": 2, "source_collection": "core", "book_slug": "architecture"},
                 ],
                 "retrieval_trace": {"selected": []},
+                **_suggestions(),
             }
 
             with patch(
@@ -225,6 +243,7 @@ class ChatMatrixSmokeTests(unittest.TestCase):
                     }
                 ],
                 "retrieval_trace": {"selected": []},
+                **_suggestions(),
             }
 
             with patch(
@@ -239,6 +258,98 @@ class ChatMatrixSmokeTests(unittest.TestCase):
 
             self.assertEqual("fail", report["status"])
             self.assertFalse(report["results"][0]["checks"]["expected_collections"])
+
+    def test_chat_matrix_fails_when_structured_followups_are_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            cases_path = root / "cases.jsonl"
+            _write_cases(
+                cases_path,
+                [
+                    {
+                        "id": "needs-next-play",
+                        "query": "BuildConfig 점검 순서를 알려줘",
+                        "expected_collections": ["core"],
+                        "expected_book_slugs": ["builds_using_buildconfig"],
+                    }
+                ],
+            )
+            fake_payload = {
+                "answer": "답변: BuildConfig 상태를 확인합니다 [1].",
+                "response_kind": "rag",
+                "warnings": [],
+                "cited_indices": [1],
+                "citations": [
+                    {
+                        "index": 1,
+                        "source_collection": "core",
+                        "book_slug": "builds_using_buildconfig",
+                    }
+                ],
+                "suggested_queries": ["다음 질문"],
+                "retrieval_trace": {"selected": []},
+            }
+
+            with patch(
+                "play_book_studio.app.chat_matrix_smoke.requests.post",
+                return_value=_FakeResponse(fake_payload),
+            ):
+                report = build_chat_matrix_smoke(
+                    root,
+                    ui_base_url="http://127.0.0.1:8896",
+                    cases_path=cases_path,
+                )
+
+            self.assertEqual("fail", report["status"])
+            self.assertFalse(report["results"][0]["checks"]["structured_followups"])
+
+    def test_chat_matrix_fails_when_suggested_queries_are_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            cases_path = root / "cases.jsonl"
+            _write_cases(
+                cases_path,
+                [
+                    {
+                        "id": "needs-legacy-next-play",
+                        "query": "BuildConfig 점검 순서를 알려줘",
+                        "expected_collections": ["core"],
+                        "expected_book_slugs": ["builds_using_buildconfig"],
+                    }
+                ],
+            )
+            fake_payload = {
+                "answer": "답변: BuildConfig 상태를 확인합니다 [1].",
+                "response_kind": "rag",
+                "warnings": [],
+                "cited_indices": [1],
+                "citations": [
+                    {
+                        "index": 1,
+                        "source_collection": "core",
+                        "book_slug": "builds_using_buildconfig",
+                    }
+                ],
+                "suggested_followups": [
+                    {"query": "다음 행동", "dimension": "next_action"},
+                    {"query": "검증", "dimension": "verify"},
+                    {"query": "분기", "dimension": "branch"},
+                ],
+                "retrieval_trace": {"selected": []},
+            }
+
+            with patch(
+                "play_book_studio.app.chat_matrix_smoke.requests.post",
+                return_value=_FakeResponse(fake_payload),
+            ):
+                report = build_chat_matrix_smoke(
+                    root,
+                    ui_base_url="http://127.0.0.1:8896",
+                    cases_path=cases_path,
+                )
+
+            self.assertEqual("fail", report["status"])
+            self.assertFalse(report["results"][0]["checks"]["suggested_queries_present"])
 
 
 if __name__ == "__main__":

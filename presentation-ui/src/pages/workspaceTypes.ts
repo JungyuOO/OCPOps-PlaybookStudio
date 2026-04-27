@@ -2,6 +2,7 @@ import type {
   ChatCitation,
   ChatRelatedLink,
   ChatResponse,
+  ChatSuggestedFollowup,
   ChatTraceEvent,
   CustomerPackDraft,
   LibraryBook,
@@ -20,6 +21,7 @@ export interface Message {
   content: string;
   citations?: ChatCitation[];
   suggestedQueries?: string[];
+  suggestedFollowups?: ChatSuggestedFollowup[];
   relatedLinks?: ChatRelatedLink[];
   relatedSections?: ChatRelatedLink[];
   responseKind?: string;

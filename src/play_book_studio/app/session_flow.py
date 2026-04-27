@@ -520,4 +520,124 @@ def suggest_follow_up_questions(*, session: ChatSession, result: AnswerResult) -
     merged = dedupe_suggestions(contextualized, query=query)
     return merged[:3]
 
-__all__ = ["context_with_request_overrides", "dedupe_suggestions", "derive_next_context", "fallback_follow_up_questions", "infer_explicit_topic", "infer_open_entities", "is_task_topic", "suggest_follow_up_questions"]
+def _followup_dimension(query: str, *, ordinal: int, plan_queries: dict[str, str]) -> tuple[str, str]:
+    if query == plan_queries.get("next_action"):
+        return "next_action", "다음 행동"
+    if query == plan_queries.get("verification"):
+        return "verify", "검증"
+    if query == plan_queries.get("next_branch"):
+        return "branch", "분기"
+    lowered = str(query or "").lower()
+    if any(token in query for token in ("검증", "확인", "상태", "산출물", "증거")):
+        return "verify", "검증"
+    if any(token in query for token in ("실패", "문제", "장애", "막히", "오류", "이벤트", "분기", "다를 때", "우선순위")):
+        return "branch", "분기"
+    if any(token in query for token in ("교육", "학습", "초보", "입문", "왜", "언제", "설명")):
+        return "learn", "학습"
+    if "troubleshoot" in lowered or "verify" in lowered:
+        return "verify", "검증"
+    if ordinal == 1:
+        return "next_action", "다음 행동"
+    if ordinal == 2:
+        return "verify", "검증"
+    return "branch", "분기"
+
+
+def _followup_reason(dimension: str) -> str:
+    if dimension == "verify":
+        return "답변에서 끝내지 않고 적용 후 확인 증거를 남기는 질문입니다."
+    if dimension == "branch":
+        return "실패하거나 조건이 다를 때 다음 판단 분기로 이어지는 질문입니다."
+    if dimension == "learn":
+        return "학습 맥락을 넓혀 개념과 실무 의미를 이어 보는 질문입니다."
+    return "현재 근거를 바로 작업 단위로 이어 가는 질문입니다."
+
+
+def _primary_followup_target(result: AnswerResult) -> tuple[int | None, str]:
+    if not result.citations:
+        return None, ""
+    primary = result.citations[0]
+    index = int(getattr(primary, "index", 0) or 0) or None
+    href = str(getattr(primary, "viewer_path", "") or "").strip()
+    return index, href
+
+
+def suggest_follow_up_items(*, session: ChatSession, result: AnswerResult) -> list[dict[str, Any]]:
+    """Return structured next-play suggestions while preserving legacy query strings.
+
+    The UI still accepts ``suggested_queries`` for compatibility, but the product
+    needs to know whether a suggestion is a next action, verification step, or
+    failure branch. This helper adds that contract without asking the LLM to
+    invent labels.
+    """
+    queries = suggest_follow_up_questions(session=session, result=result)
+    if not queries:
+        return []
+
+    topic = (session.context.current_topic or "").strip()
+    plan = build_next_play_plan(session_topic=topic, result=result)
+    plan_queries = (
+        {
+            "next_action": plan.next_action,
+            "verification": plan.verification,
+            "next_branch": plan.next_branch,
+        }
+        if plan is not None
+        else {}
+    )
+    citation_index, href = _primary_followup_target(result)
+    items: list[dict[str, Any]] = []
+    seen_dimensions: set[str] = set()
+    for ordinal, query in enumerate(queries, start=1):
+        dimension, label = _followup_dimension(query, ordinal=ordinal, plan_queries=plan_queries)
+        seen_dimensions.add(dimension)
+        source = "next_play_plan" if query in plan_queries.values() else "rule_or_retrieval"
+        items.append(
+            {
+                "query": query,
+                "label": label,
+                "dimension": dimension,
+                "reason": _followup_reason(dimension),
+                "source": source,
+                "citation_index": citation_index,
+                "href": href,
+            }
+        )
+
+    # Keep the visible set compact, but make sure the matrix can assert all three
+    # operational lanes when a RAG answer has enough grounding.
+    if result.response_kind == "rag" and result.citations and result.cited_indices and not result.warnings:
+        required = (
+            ("next_action", "다음 행동", plan_queries.get("next_action")),
+            ("verify", "검증", plan_queries.get("verification")),
+            ("branch", "분기", plan_queries.get("next_branch")),
+        )
+        for dimension, label, query in required:
+            if dimension in seen_dimensions or not query:
+                continue
+            items.append(
+                {
+                    "query": query,
+                    "label": label,
+                    "dimension": dimension,
+                    "reason": _followup_reason(dimension),
+                    "source": "next_play_plan",
+                    "citation_index": citation_index,
+                    "href": href,
+                }
+            )
+            seen_dimensions.add(dimension)
+    return items[:3]
+
+
+__all__ = [
+    "context_with_request_overrides",
+    "dedupe_suggestions",
+    "derive_next_context",
+    "fallback_follow_up_questions",
+    "infer_explicit_topic",
+    "infer_open_entities",
+    "is_task_topic",
+    "suggest_follow_up_items",
+    "suggest_follow_up_questions",
+]

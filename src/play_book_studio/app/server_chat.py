@@ -236,6 +236,8 @@ def handle_chat(
     turn.citations = [item for item in response_payload.get("citations") or [] if isinstance(item, dict)]
     turn.related_links = [item for item in response_payload.get("related_links") or [] if isinstance(item, dict)]
     turn.related_sections = [item for item in response_payload.get("related_sections") or [] if isinstance(item, dict)]
+    turn.suggested_queries = [str(item) for item in response_payload.get("suggested_queries") or [] if str(item).strip()]
+    turn.suggested_followups = [item for item in response_payload.get("suggested_followups") or [] if isinstance(item, dict)]
     _apply_primary_citation_truth(turn, response_payload)
     second_session_persist_started_at = time.perf_counter()
     store.update(session)
@@ -382,6 +384,8 @@ def handle_chat_stream(
     turn.citations = [item for item in response_payload.get("citations") or [] if isinstance(item, dict)]
     turn.related_links = [item for item in response_payload.get("related_links") or [] if isinstance(item, dict)]
     turn.related_sections = [item for item in response_payload.get("related_sections") or [] if isinstance(item, dict)]
+    turn.suggested_queries = [str(item) for item in response_payload.get("suggested_queries") or [] if str(item).strip()]
+    turn.suggested_followups = [item for item in response_payload.get("suggested_followups") or [] if isinstance(item, dict)]
     _apply_primary_citation_truth(turn, response_payload)
     second_session_persist_started_at = time.perf_counter()
     store.update(session)

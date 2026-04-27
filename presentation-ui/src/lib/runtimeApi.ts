@@ -610,6 +610,7 @@ export interface ChatResponse {
   session_id: string;
   response_kind?: string;
   suggested_queries: string[];
+  suggested_followups?: ChatSuggestedFollowup[];
   related_links?: ChatRelatedLink[];
   related_sections?: ChatRelatedLink[];
   acquisition?: {
@@ -629,6 +630,16 @@ export interface ChatResponse {
     llm?: Record<string, unknown>;
     events?: ChatTraceEvent[];
   } & Record<string, unknown>;
+}
+
+export interface ChatSuggestedFollowup {
+  query: string;
+  label?: string;
+  dimension?: 'next_action' | 'verify' | 'branch' | 'learn' | string;
+  reason?: string;
+  source?: string;
+  citation_index?: number | null;
+  href?: string;
 }
 
 export interface ChatStreamResultEvent {
@@ -933,6 +944,8 @@ export interface SessionTurnSnapshot {
   answer: string;
   turn_id: string;
   created_at: string;
+  suggested_queries?: string[];
+  suggested_followups?: ChatSuggestedFollowup[];
   primary_source_lane?: string;
   primary_boundary_truth?: string;
   primary_runtime_truth_label?: string;

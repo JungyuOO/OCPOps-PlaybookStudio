@@ -286,6 +286,55 @@ def _vector_runtime_summary(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _suggested_queries(payload: dict[str, Any]) -> list[str]:
+    raw = payload.get("suggested_queries")
+    if not isinstance(raw, list):
+        return []
+    return [str(item).strip() for item in raw if str(item).strip()]
+
+
+def _suggested_followups(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = payload.get("suggested_followups")
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, dict) and str(item.get("query") or "").strip()]
+
+
+def _followup_dimensions(payload: dict[str, Any]) -> set[str]:
+    return {
+        str(item.get("dimension") or "").strip()
+        for item in _suggested_followups(payload)
+        if str(item.get("dimension") or "").strip()
+    }
+
+
+def _case_requires_suggestions(case: dict[str, Any]) -> bool:
+    if "require_suggested_queries" in case:
+        return bool(case.get("require_suggested_queries"))
+    return str(case.get("response_kind", "rag")) == "rag"
+
+
+def _case_requires_structured_followups(case: dict[str, Any]) -> bool:
+    if "require_structured_followups" in case:
+        return bool(case.get("require_structured_followups"))
+    return _case_requires_suggestions(case)
+
+
+def _structured_followups_ok(payload: dict[str, Any], case: dict[str, Any]) -> bool:
+    if not _case_requires_structured_followups(case):
+        return True
+    followups = _suggested_followups(payload)
+    if len(followups) < int(case.get("min_suggested_queries", 3)):
+        return False
+    required_dimensions = {
+        str(item).strip()
+        for item in case.get("required_followup_dimensions", ["next_action", "verify", "branch"])
+        if str(item).strip()
+    }
+    dimensions = _followup_dimensions(payload)
+    return required_dimensions.issubset(dimensions)
+
+
 def _evaluate_payload(
     *,
     case: dict[str, Any],
@@ -328,6 +377,9 @@ def _evaluate_payload(
         for term in must_include_terms
         if term.lower() not in answer.lower()
     ]
+    suggested_queries = _suggested_queries(payload)
+    suggested_followups = _suggested_followups(payload)
+    min_suggested_queries = int(case.get("min_suggested_queries", 3))
     checks = {
         "http_ok": status_code < 400,
         "response_kind_rag": str(payload.get("response_kind") or "") == str(case.get("response_kind", "rag")),
@@ -350,6 +402,12 @@ def _evaluate_payload(
             if case.get("allow_no_evidence_phrase", False)
             else not NO_EVIDENCE_RE.search(answer)
         ),
+        "suggested_queries_present": (
+            len(suggested_queries) >= min_suggested_queries
+            if _case_requires_suggestions(case)
+            else True
+        ),
+        "structured_followups": _structured_followups_ok(payload, case),
         "llm_runtime_live": _llm_runtime_live(payload, case),
         "vector_runtime_live": _vector_runtime_live(payload, case),
     }
@@ -366,6 +424,9 @@ def _evaluate_payload(
         "warnings": list(payload.get("warnings") or []),
         "missing_terms": missing_terms,
         "answer_preview": answer[:1200],
+        "suggested_queries": suggested_queries,
+        "suggested_followups": suggested_followups,
+        "suggested_dimensions": sorted(_followup_dimensions(payload)),
         "citation_count": len(citations),
         "llm_runtime": _llm_runtime_summary(payload),
         "vector_runtime": _vector_runtime_summary(payload),

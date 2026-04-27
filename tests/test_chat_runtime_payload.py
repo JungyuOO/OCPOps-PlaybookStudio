@@ -65,6 +65,8 @@ class ChatRuntimePayloadTests(unittest.TestCase):
             self.assertIsInstance(runtime, dict)
             self.assertIsInstance(runtime.get("graph_compact_artifact"), dict)
             self.assertTrue(str(runtime.get("config_fingerprint") or "").strip())
+            self.assertIn("suggested_followups", payload)
+            self.assertEqual([], payload["suggested_followups"])
 
 
 if __name__ == "__main__":

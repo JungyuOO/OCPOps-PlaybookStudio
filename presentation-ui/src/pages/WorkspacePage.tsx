@@ -34,6 +34,7 @@ import {
   type ChatCitation,
   type ChatModeContractItem,
   type ChatRelatedLink,
+  type ChatSuggestedFollowup,
   type CustomerPackBook,
   type CustomerPackDraft,
   type DerivedAsset,
@@ -578,6 +579,40 @@ function primaryCitationTruth(citations?: ChatCitation[] | null): {
     publicationState: primary.publication_state,
     approvalState: primary.approval_state,
   };
+}
+
+function fallbackFollowupsFromQueries(queries?: string[] | null): ChatSuggestedFollowup[] {
+  return (queries ?? [])
+    .map((query) => String(query || '').trim())
+    .filter(Boolean)
+    .map((query, index) => ({
+      query,
+      label: index === 0 ? '다음 행동' : index === 1 ? '검증' : '분기',
+      dimension: index === 0 ? 'next_action' : index === 1 ? 'verify' : 'branch',
+    }));
+}
+
+function normalizeFollowups(
+  followups?: ChatSuggestedFollowup[] | null,
+  queries?: string[] | null,
+): ChatSuggestedFollowup[] {
+  const structured = (followups ?? [])
+    .filter((item) => String(item.query || '').trim())
+    .map((item, index) => ({
+      ...item,
+      query: String(item.query || '').trim(),
+      label: item.label || (index === 0 ? '다음 행동' : index === 1 ? '검증' : '분기'),
+      dimension: item.dimension || (index === 0 ? 'next_action' : index === 1 ? 'verify' : 'branch'),
+    }));
+  if (structured.length > 0) {
+    return structured;
+  }
+  return fallbackFollowupsFromQueries(queries);
+}
+
+function followupChipClass(dimension?: string): string {
+  const normalized = String(dimension || 'next_action').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  return `suggested-followup-chip suggested-followup-chip--${normalized || 'next_action'}`;
 }
 
 function scorePrimaryPlaybookCitation(citation: ChatCitation, index: number): number {
@@ -1199,6 +1234,8 @@ export default function WorkspacePage() {
             id: makeId('a'),
             role: 'assistant' as const,
             content: turn.answer,
+            suggestedQueries: turn.suggested_queries ?? [],
+            suggestedFollowups: normalizeFollowups(turn.suggested_followups, turn.suggested_queries),
             primarySourceLane: turn.primary_source_lane,
             primaryBoundaryTruth: turn.primary_boundary_truth,
             primaryRuntimeTruthLabel: turn.primary_runtime_truth_label,
@@ -2346,6 +2383,7 @@ export default function WorkspacePage() {
           content: response.answer,
           citations: response.citations ?? [],
           suggestedQueries: response.suggested_queries ?? [],
+          suggestedFollowups: normalizeFollowups(response.suggested_followups, response.suggested_queries),
           relatedLinks: response.related_links ?? [],
           relatedSections: response.related_sections ?? [],
           responseKind: response.response_kind,
@@ -3302,22 +3340,24 @@ export default function WorkspacePage() {
                           ))}
                         </div>
                       )}
-                      {message.role === 'assistant' && message.suggestedQueries && message.suggestedQueries.length > 0 && (
+                      {message.role === 'assistant' && normalizeFollowups(message.suggestedFollowups, message.suggestedQueries).length > 0 && (
                         <div className="suggested-query-group">
                           <div className="suggested-query-label">{visionMode === 'guided_tour' ? '다음 경로' : '이런 질문은 어떠세요?'}</div>
                           <div className={visionMode === 'guided_tour' ? 'suggested-query-list guided-tour-query-list' : 'suggested-query-list'}>
-                            {message.suggestedQueries.map((suggestedQuery, suggestedIndex) => (
+                            {normalizeFollowups(message.suggestedFollowups, message.suggestedQueries).map((followup, suggestedIndex) => (
                               <button
                                 key={`${message.id}-suggested-${suggestedIndex}`}
-                                className={visionMode === 'guided_tour' ? 'suggested-query-chip guided-tour-query-chip' : 'suggested-query-chip'}
+                                className={visionMode === 'guided_tour' ? `${followupChipClass(followup.dimension)} guided-tour-query-chip` : followupChipClass(followup.dimension)}
                                 type="button"
-                                onClick={() => { void handleSend(suggestedQuery); }}
+                                onClick={() => { void handleSend(followup.query); }}
                                 disabled={isSending}
+                                title={followup.reason ?? ''}
                               >
                                 {visionMode === 'guided_tour' && (
                                   <span className="guided-tour-query-index">{suggestedIndex + 1}</span>
                                 )}
-                                {suggestedQuery}
+                                <span className="suggested-followup-label">{followup.label || '다음'}</span>
+                                <span className="suggested-followup-query">{followup.query}</span>
                                 {visionMode === 'guided_tour' && (
                                   <span className="guided-tour-query-arrow">
                                     <ArrowRight size={12} />

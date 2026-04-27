@@ -33,8 +33,14 @@ class NextPlayPlan:
 def _subject_from(result: AnswerResult, citation: Citation | None, topic: str) -> str:
     query = (result.query or "").strip()
     lowered = query.lower()
+    if _has_buildconfig_intent(query, citation):
+        return "BuildConfig"
     if has_route_ingress_compare_intent(query):
         return "Route와 Ingress"
+    if "router" in lowered or "라우터" in lowered:
+        return "Router"
+    if "ci/cd" in lowered or "cicd" in lowered:
+        return "CI/CD 운영 구조"
     if ETCD_RE.search(query) or "etcd" in topic.lower():
         return "etcd"
     if MCO_RE.search(query) or "machine config operator" in topic.lower():
@@ -49,6 +55,123 @@ def _subject_from(result: AnswerResult, citation: Citation | None, topic: str) -
         if citation.section:
             return strip_section_prefix(citation.section)
     return "이 작업"
+
+
+def _has_buildconfig_intent(query: str, citation: Citation | None = None) -> bool:
+    haystack = " ".join(
+        [
+            str(query or ""),
+            str(getattr(citation, "book_slug", "") or ""),
+            str(getattr(citation, "section", "") or ""),
+        ]
+    ).lower()
+    return "buildconfig" in haystack or "build config" in haystack
+
+
+def _is_customer_citation(citation: Citation) -> bool:
+    source_collection = str(citation.source_collection or "").strip().lower()
+    viewer_path = str(citation.viewer_path or "").strip()
+    return source_collection == "uploaded" or viewer_path.startswith("/playbooks/customer-packs/")
+
+
+def _has_customer_runtime(result: AnswerResult) -> bool:
+    return any(_is_customer_citation(citation) for citation in result.citations)
+
+
+def _has_official_runtime(result: AnswerResult) -> bool:
+    return any(not _is_customer_citation(citation) for citation in result.citations)
+
+
+def _is_customer_context_query(query: str) -> bool:
+    normalized = str(query or "")
+    lowered = normalized.lower()
+    return any(
+        token in lowered
+        for token in (
+            "customer",
+            "uploaded",
+            "user upload",
+        )
+    ) or any(
+        token in normalized
+        for token in (
+            "고객 문서",
+            "고객문서",
+            "고객 자료",
+            "고객자료",
+            "고객 PPT",
+            "고객 운영북",
+            "운영북",
+            "업로드 문서",
+            "업로드자료",
+            "사용자 업로드",
+        )
+    )
+
+
+def _customer_subject(result: AnswerResult, fallback_subject: str) -> str:
+    query = str(result.query or "")
+    lowered = query.lower()
+    if "ci/cd" in lowered or "cicd" in lowered:
+        return "고객 CI/CD 운영 구조"
+    if "교육" in query or "신규 운영자" in query:
+        return "신규 운영자 교육 코스"
+    if "아키텍처" in query or "architecture" in lowered:
+        return "고객 목표 아키텍처"
+    for citation in result.citations:
+        if not _is_customer_citation(citation):
+            continue
+        section = strip_section_prefix(citation.section)
+        if section:
+            return f"고객 {section}"
+    return f"고객 {fallback_subject}" if fallback_subject and not fallback_subject.startswith("고객") else fallback_subject
+
+
+def _official_subject(result: AnswerResult, fallback_subject: str) -> str:
+    query = str(result.query or "")
+    lowered = query.lower()
+    if _has_buildconfig_intent(query, result.citations[0] if result.citations else None):
+        return "BuildConfig 공식문서"
+    if "router" in lowered or "라우터" in lowered:
+        return "Router 공식문서"
+    if "아키텍처" in query or "architecture" in lowered or "구성" in query:
+        return "OCP 구성 공식문서"
+    for citation in result.citations:
+        if _is_customer_citation(citation):
+            continue
+        section = strip_section_prefix(citation.section)
+        if section:
+            return section
+    return fallback_subject or "공식문서"
+
+
+def _is_training_query(query: str) -> bool:
+    return any(token in str(query or "") for token in ("교육", "학습", "신규 운영자", "온보딩", "커리큘럼"))
+
+
+def _is_blended_runtime_query(result: AnswerResult) -> bool:
+    query = str(result.query or "")
+    lowered = query.lower()
+    has_bridge_word = any(token in query for token in ("같이", "함께", "대조", "비교")) or any(
+        token in lowered for token in ("together", "alongside", "compare")
+    )
+    return _has_customer_runtime(result) and _has_official_runtime(result) and (
+        has_bridge_word or _is_customer_context_query(query)
+    )
+
+
+def _has_verification_intent(query: str) -> bool:
+    normalized = str(query or "").lower()
+    return any(token in str(query or "") for token in ("검증", "확인", "상태", "증거", "산출물")) or any(
+        token in normalized
+        for token in (
+            "verify",
+            "verification",
+            "validate",
+            "status",
+            "evidence",
+        )
+    )
 
 
 def _verification_question(subject: str, citation: Citation | None) -> str:
@@ -88,6 +211,54 @@ def build_next_play_plan(
     topic = (session_topic or "").strip()
     citation = result.citations[0] if result.citations else None
     subject = _subject_from(result, citation, topic)
+    customer_context = _has_customer_runtime(result) or _is_customer_context_query(query)
+
+    if _is_blended_runtime_query(result):
+        customer_subject = _customer_subject(result, subject)
+        official_subject = _official_subject(result, subject)
+        if _is_training_query(query):
+            return NextPlayPlan(
+                next_action=f"{customer_subject}를 오전/오후 실습 순서로 다시 짜줘",
+                verification="교육 후 운영자가 확인해야 할 산출물과 체크포인트를 표로 정리해줘",
+                next_branch=f"{official_subject}와 고객 운영북 기준이 다른 부분을 따로 표시해줘",
+            )
+        return NextPlayPlan(
+            next_action=f"{customer_subject}와 {official_subject}를 나란히 비교해서 체크리스트로 만들어줘",
+            verification=f"{customer_subject} 기준으로 실제 운영 확인 명령과 증거를 어떻게 남길지 알려줘",
+            next_branch=f"{official_subject}와 고객 운영북이 다를 때 우선순위 판단 기준을 알려줘",
+        )
+
+    if customer_context:
+        customer_subject = _customer_subject(result, subject)
+        if _is_training_query(query):
+            return NextPlayPlan(
+                next_action=f"{customer_subject}를 초급/중급/실습 순서로 다시 구성해줘",
+                verification="교육 완료 여부를 확인할 체크리스트와 산출물을 알려줘",
+                next_branch="운영자가 막히기 쉬운 구간과 보강 문서를 알려줘",
+            )
+        if "ci/cd" in query.lower() or "cicd" in query.lower():
+            return NextPlayPlan(
+                next_action=f"{customer_subject}를 빌드-배포-검증 흐름으로 다시 정리해줘",
+                verification="고객 CI/CD 운영에서 실제로 확인해야 할 로그와 산출물을 알려줘",
+                next_branch="고객 CI/CD 장애가 나면 공식 BuildConfig 문서와 어디를 대조해야 해?",
+            )
+        return NextPlayPlan(
+            next_action=f"{customer_subject} 기준으로 바로 실행할 운영 체크리스트를 만들어줘",
+            verification=f"{customer_subject} 적용 후 확인해야 할 증거와 산출물을 알려줘",
+            next_branch="고객 운영북과 공식문서가 다를 때 어떤 기준으로 판단해야 해?",
+        )
+
+    if _has_buildconfig_intent(query, citation):
+        verification = "BuildConfig 적용 후 build와 pod 상태를 검증하는 순서를 알려줘"
+        if _has_verification_intent(query):
+            verification = "BuildConfig 적용 후 oc describe bc와 oc get builds 결과를 검증 증거로 어떻게 남겨야 해?"
+            if "oc describe bc" in query.lower() or "검증 증거" in query:
+                verification = "BuildConfig 검증 결과에서 build 이벤트와 로그 확인 기준을 알려줘"
+        return NextPlayPlan(
+            next_action="BuildConfig 상태 확인 명령만 모아서 다시 보여줘",
+            verification=verification,
+            next_branch="BuildConfig 빌드가 실패하면 이벤트와 로그를 어디부터 봐야 해?",
+        )
 
     if has_rbac_intent(query) or topic == "RBAC":
         return NextPlayPlan(
