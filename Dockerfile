@@ -12,8 +12,7 @@ RUN npm run build
 FROM python:3.11-slim AS app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
@@ -23,11 +22,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md /app/
-COPY src /app/src
-COPY --from=frontend-build /app/presentation-ui/dist /app/presentation-ui/dist
 
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install -e .
+# Install heavyweight runtime dependencies from pyproject before copying source,
+# course data, manifests, or frontend assets so those changes do not invalidate
+# the expensive dependency layer. Do not upgrade pip/setuptools/wheel globally:
+# the base image and PEP 517 build isolation provide the required tooling.
+RUN python -c "import subprocess, sys, tomllib; deps = tomllib.load(open('pyproject.toml', 'rb'))['project']['dependencies']; subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--no-cache-dir', *deps])"
+
+COPY src /app/src
+RUN pip install --no-cache-dir --no-deps -e .
+
+COPY data/course_pbs /app/data/course_pbs
+COPY manifests/course_qa_cases*.jsonl manifests/course_ops_learning_golden_cases.jsonl /app/manifests/
+COPY --from=frontend-build /app/presentation-ui/dist /app/presentation-ui/dist
 
 EXPOSE 8765
 

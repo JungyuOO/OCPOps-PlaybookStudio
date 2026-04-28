@@ -1,4 +1,4 @@
-export type VisionMode = 'atlas_canvas' | 'guided_tour' | 'encyclopedia_world';
+export type VisionMode = 'atlas_canvas' | 'guided_tour' | 'course_study' | 'encyclopedia_world';
 
 export const DEFAULT_VISION_MODE: VisionMode = 'atlas_canvas';
 export const WIKI_VISION_MODE_STORAGE_KEY = 'wikiVisionMode';
@@ -26,7 +26,7 @@ export interface WikiVisionModeDescriptor {
 }
 
 export function resolveVisionMode(value: string | null | undefined): VisionMode {
-  if (value === 'atlas_canvas' || value === 'guided_tour' || value === 'encyclopedia_world') {
+  if (value === 'atlas_canvas' || value === 'guided_tour' || value === 'course_study' || value === 'encyclopedia_world') {
     return value;
   }
   return DEFAULT_VISION_MODE;
@@ -92,6 +92,29 @@ export const WIKI_VISION_MODES: WikiVisionModeDescriptor[] = [
         '챗봇과 문서가 하나의 업무 흐름으로 이어지는 경험을 노립니다.',
       ],
       cta: '투어 방식으로 열기',
+    },
+  },
+  {
+    id: 'course_study',
+    label: 'Study-docs Course',
+    workspace: {
+      summary: 'Study-docs 실운영 산출물과 공식문서를 함께 보여주는 교육용 course chat',
+      cue: '실운영 문서 + 공식문서 + 다음 단계',
+    },
+    library: {
+      eyebrow: 'Internal Course',
+      summary: 'PPT/PDF 기반 Study-docs 청크를 기존 PBS 채팅 UX에서 citation, viewer, guided route와 함께 탐색합니다.',
+      focus: '사내 교육자료를 공식문서 기준과 같이 학습',
+    },
+    compare: {
+      title: 'Study-docs Course',
+      eyebrow: 'Course mode',
+      bullets: [
+        '사내 PPT/PDF 산출물을 먼저 근거로 제시합니다.',
+        '연결된 공식문서를 함께 보여줍니다.',
+        '다음 Guided Tour 카드를 추천합니다.',
+      ],
+      cta: 'Course mode로 질문',
     },
   },
   {

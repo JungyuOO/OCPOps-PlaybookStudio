@@ -12,6 +12,9 @@ from play_book_studio.config.settings import Settings
 
 
 class EmbeddingClient:
+    _global_single_text_cache: OrderedDict[str, list[float]] = OrderedDict()
+    _global_cache_lock = threading.Lock()
+
     def __init__(self, settings: Settings) -> None:
         self.base_url = settings.embedding_base_url
         self.model = settings.embedding_model
@@ -21,34 +24,35 @@ class EmbeddingClient:
         # Query-time vector retrieval should fail fast when the embedding runtime
         # is unavailable so the chatbot can fall back to BM25 without hanging.
         self.timeout = settings.embedding_timeout_seconds
-        self._single_text_cache: OrderedDict[str, list[float]] = OrderedDict()
-        self._cache_lock = threading.Lock()
         if not self.base_url:
             raise RuntimeError(
                 "Remote embedding endpoint is not configured. "
                 "Local embedding execution is disabled."
             )
 
+    def _single_text_cache_key(self, text: str) -> str:
+        return "\n".join([str(self.base_url or ""), str(self.model or ""), str(text or "")])
+
     def _cache_get_single_text(self, text: str) -> list[float] | None:
-        normalized = str(text or "")
-        if not normalized:
+        if not str(text or ""):
             return None
-        with self._cache_lock:
-            vector = self._single_text_cache.get(normalized)
+        cache_key = self._single_text_cache_key(text)
+        with self._global_cache_lock:
+            vector = self._global_single_text_cache.get(cache_key)
             if vector is None:
                 return None
-            self._single_text_cache.move_to_end(normalized)
+            self._global_single_text_cache.move_to_end(cache_key)
             return list(vector)
 
     def _cache_put_single_text(self, text: str, vector: list[float]) -> None:
-        normalized = str(text or "")
-        if not normalized:
+        if not str(text or ""):
             return
-        with self._cache_lock:
-            self._single_text_cache[normalized] = list(vector)
-            self._single_text_cache.move_to_end(normalized)
-            while len(self._single_text_cache) > 128:
-                self._single_text_cache.popitem(last=False)
+        cache_key = self._single_text_cache_key(text)
+        with self._global_cache_lock:
+            self._global_single_text_cache[cache_key] = list(vector)
+            self._global_single_text_cache.move_to_end(cache_key)
+            while len(self._global_single_text_cache) > 256:
+                self._global_single_text_cache.popitem(last=False)
 
     def _headers(self) -> dict[str, str]:
         if not self.api_key:

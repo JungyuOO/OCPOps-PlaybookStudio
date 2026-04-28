@@ -3,8 +3,13 @@ __pycache__/
 *.py[cod]
 .env
 .pytest_cache/
+.pytest-tmp/
+.pytest-tmp-*/
+.tmp_pytest/
+pytest-cache-files-*/
 .mypy_cache/
 .ruff_cache/
+.tmp_tests/
 node_modules/
 presentation-ui/dist/
 presentation-ui/node_modules/
@@ -75,3 +80,12 @@ __pycache__
 .playwright-cli
 output/*
 study-docs/*
+data/course_pbs/
+data/course_pbs/assets/
+data/course_pbs/decks/
+data/course_pbs/slide_graphs/
+data/course_pbs/slide_graph_assets/
+data/course_pbs/manifests/*_report.json
+data/course_pbs/manifests/checkpoints.json
+data/course_pbs/manifests/review_queue.json
+data/course_pbs/manifests/visual_summary_retry_report.json

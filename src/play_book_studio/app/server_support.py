@@ -8,10 +8,8 @@ from email.parser import BytesParser
 from email.policy import default as default_email_policy
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote
-from play_book_studio.answering.answerer import ChatAnswerer
-from play_book_studio.answering.models import AnswerResult
 from play_book_studio.app.presenters import (
     _build_citation_presentation_context,
     _serialize_citation,
@@ -22,6 +20,10 @@ from play_book_studio.app.source_books import (
 )
 from play_book_studio.app.session_flow import suggest_follow_up_questions as _suggest_follow_up_questions
 from play_book_studio.app.sessions import ChatSession
+
+if TYPE_CHECKING:
+    from play_book_studio.answering.answerer import ChatAnswerer
+    from play_book_studio.answering.models import AnswerResult
 
 FRONTEND_DIST_DIRNAME = "presentation-ui/dist"
 DATA_CONTROL_ROOM_CACHE_TTL_SECONDS = 30.0

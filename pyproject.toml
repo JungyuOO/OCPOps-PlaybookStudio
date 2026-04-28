@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "play-book-studio"
 version = "0.1.0"
 description = "Play Book Studio for grounded document ingestion, retrieval, and answering"
-readme = "PROJECT.md"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "beautifulsoup4>=4.12",
@@ -16,6 +16,7 @@ dependencies = [
   "neo4j>=5.28",
   "networkx>=3.5",
   "onnxruntime>=1.20",
+  "python-pptx>=1.0.2",
   "pypdf>=6.0",
   "pypdfium2>=4.30",
   "rapidocr>=3.7.0",

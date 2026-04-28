@@ -379,6 +379,7 @@ function isViewerHref(href: string): boolean {
     return (
       parsed.pathname.startsWith('/playbooks/')
       || parsed.pathname.startsWith('/docs/ocp/')
+      || parsed.pathname.startsWith('/course/chunks/')
       || parsed.pathname.startsWith('/wiki/entities/')
       || parsed.pathname.startsWith('/wiki/figures/')
     );

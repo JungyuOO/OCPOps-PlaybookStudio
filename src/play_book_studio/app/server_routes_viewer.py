@@ -11,6 +11,7 @@ from play_book_studio.app.customer_pack_read_boundary import (
     customer_pack_draft_id_from_viewer_path,
     sanitize_customer_pack_source_meta_payload,
 )
+from play_book_studio.app.course_api import course_viewer_html, course_viewer_source_meta
 from play_book_studio.app.presenters import (
     _core_pack_payload,
     _customer_pack_meta_for_viewer_path,
@@ -91,6 +92,8 @@ def _canonicalize_viewer_path(viewer_path: str) -> str:
 def _viewer_html_for_path(root_dir: Path, viewer_path: str, *, page_mode: str = "single") -> str | None:
     viewer_path = _canonicalize_viewer_path(viewer_path)
     internal_html = (
+        course_viewer_html(root_dir, viewer_path)
+        or
         _internal_buyer_packet_viewer_html(root_dir, viewer_path)
         or _internal_customer_pack_viewer_html(root_dir, viewer_path)
         or _internal_active_runtime_markdown_viewer_html(root_dir, viewer_path, page_mode=page_mode)
@@ -204,6 +207,9 @@ def _viewer_source_meta(root_dir: Path, viewer_path: str) -> dict[str, Any] | No
     customer_pack_meta = _customer_pack_meta_for_viewer_path(root_dir, viewer_path)
     if customer_pack_meta is not None:
         return customer_pack_meta
+    course_meta = course_viewer_source_meta(root_dir, viewer_path)
+    if course_meta is not None:
+        return course_meta
     parsed = _parse_viewer_path(viewer_path)
     if parsed is not None:
         book_slug, anchor = parsed

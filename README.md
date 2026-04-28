@@ -93,3 +93,16 @@ npm --prefix presentation-ui exec vitest run src/app/handoff.test.ts
 .\.venv\Scripts\python.exe -m pytest tests/test_app_server.py tests/test_customer_pack_direct_viewer_route.py -q
 .\.venv\Scripts\python.exe -m pytest tests/test_app_viewers_routes.py -q -k "canonicalize_viewer_path or viewer_document_route_supports_entity_and_figure_paths or viewer_document_route_falls_back_to_normalized_sections_for_known_book or viewer_path_local_raw_html_fallback"
 ```
+
+## Study-docs Course QA
+
+`data/course_pbs` 기반 Guided Tour, 공식문서 매핑, 이미지 증적 추천 품질은 아래 명령으로 검증합니다.
+
+```powershell
+$env:PYTHONPATH='src'
+.\.venv\Scripts\python.exe -m play_book_studio.cli course-qa --generate --run --target-count 96
+```
+
+이 명령은 `manifests/course_qa_cases.jsonl`을 생성하고, 원본 chunk/asset/role/state/공식문서 매핑에 근거가 있는 케이스만 `manifests/course_qa_cases.accepted.jsonl`로 통과시킨 뒤, accepted 케이스만 실제 course chat 품질 평가에 사용합니다. 최종 결과는 `data/course_pbs/manifests/course_qa_report.json`에 기록됩니다.
+
+기본 품질 게이트는 rejected 케이스가 1개라도 있거나 accepted 케이스 수가 `--target-count`보다 작거나 실행 평가 실패가 있으면 실패합니다. 실행 평가는 단순 passed 여부가 아니라 답변 본문에 Study-docs 근거 섹션, 원본 제목/ID, 공식문서 섹션, Guided Tour, 이미지 증적의 역할/상태가 실제로 설명되는지도 확인합니다. 전체 케이스별 결과를 콘솔에서 확인해야 할 때만 `--verbose-results`를 추가합니다.
