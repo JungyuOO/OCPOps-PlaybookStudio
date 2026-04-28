@@ -28,20 +28,22 @@ function MiniDonutMetric({
   subtitle,
   percent,
   tooltipLabel,
+  color = '#1167ac',
 }: {
   label: string;
   value: string;
   subtitle?: string;
   percent: number;
   tooltipLabel: string;
+  color?: string;
 }) {
   const normalized = clampPercent(percent);
   const chartData = [
-    { name: 'active', value: normalized, fill: '#1167ac' },
-    { name: 'rest', value: Math.max(100 - normalized, 0), fill: 'rgba(17, 103, 172, 0.08)' },
+    { name: 'active', value: normalized, fill: color },
+    { name: 'rest', value: Math.max(100 - normalized, 0), fill: color === '#0f8479' ? 'rgba(15, 132, 121, 0.08)' : 'rgba(17, 103, 172, 0.08)' },
   ];
   return (
-    <article className="ops-metric-card ops-metric-card-chart">
+    <article className="ops-metric-card ops-metric-card-chart" title={value}>
       <div className="ops-chart-wrap">
         <ResponsiveContainer width="100%" height={110}>
           <PieChart>
@@ -70,10 +72,32 @@ function MiniDonutMetric({
       </div>
       <div className="ops-metric-copy" title={value}>
         <span>{label}</span>
-        <strong className="ops-metric-title-truncate">{value}</strong>
+        <strong className="ops-metric-title-truncate" title={value}>{value}</strong>
         {subtitle ? <p>{subtitle}</p> : null}
       </div>
     </article>
+  );
+}
+
+function truncateMiddle(value: string, maxLength = 34): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  const headLength = Math.ceil((maxLength - 3) / 2);
+  const tailLength = Math.floor((maxLength - 3) / 2);
+  return `${value.slice(0, headLength)}…${value.slice(-tailLength)}`;
+}
+
+function PodNameAxisTick({ x = 0, y = 0, payload }: { x?: number; y?: number; payload?: { value?: string } }) {
+  const name = String(payload?.value || '');
+  const label = name.length > 30 ? `${name.slice(0, 13)}...${name.slice(-14)}` : truncateMiddle(name);
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <title>{name}</title>
+      <text x={-8} y={0} dy={4} textAnchor="end" fill="#607896" fontSize={11}>
+        {label}
+      </text>
+    </g>
   );
 }
 
@@ -121,6 +145,7 @@ export default function OpsOverviewCharts({
           subtitle={overviewMetrics.summary.top_memory_pod ? formatMetricNumber(overviewMetrics.summary.top_memory_pod.memory_mib, 'MiB') : 'No metric data'}
           percent={topMemoryShare}
           tooltipLabel={overviewMetrics.summary.top_memory_pod ? formatMetricNumber(overviewMetrics.summary.top_memory_pod.memory_mib, 'MiB') : 'No metric data'}
+          color="#0f8479"
         />
         <MiniDonutMetric
           label="Degraded Deployments"
@@ -143,9 +168,9 @@ export default function OpsOverviewCharts({
           <h3>Top CPU Pods</h3>
           <div className="ops-chart-panel">
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={overviewMetrics.pod_cpu_top} layout="vertical" margin={{ top: 0, right: 10, left: 10, bottom: 0 }}>
+              <BarChart data={overviewMetrics.pod_cpu_top} layout="vertical" margin={{ top: 0, right: 10, left: 4, bottom: 0 }}>
                 <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" width={180} tick={{ fontSize: 11, fill: '#607896' }} />
+                <YAxis dataKey="name" type="category" width={190} tick={<PodNameAxisTick />} />
                 <Tooltip cursor={{ fill: 'rgba(17, 103, 172, 0.06)' }} />
                 <Bar dataKey="cpu_mcores" radius={[0, 10, 10, 0]}>
                   {overviewMetrics.pod_cpu_top.map((item) => (
@@ -158,7 +183,7 @@ export default function OpsOverviewCharts({
           {overviewMetrics.pod_cpu_top.map((item) => (
             <div key={`cpu-${item.name}`} className="ops-table-row">
               <div>
-                <strong>{item.name}</strong>
+                <strong title={item.name}>{item.name}</strong>
                 <span>{item.cpu_mcores} mcores</span>
               </div>
               <div className="ops-inline-actions">
@@ -174,9 +199,9 @@ export default function OpsOverviewCharts({
           <h3>Top Memory Pods</h3>
           <div className="ops-chart-panel">
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={overviewMetrics.pod_memory_top} layout="vertical" margin={{ top: 0, right: 10, left: 10, bottom: 0 }}>
+              <BarChart data={overviewMetrics.pod_memory_top} layout="vertical" margin={{ top: 0, right: 10, left: 4, bottom: 0 }}>
                 <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" width={180} tick={{ fontSize: 11, fill: '#607896' }} />
+                <YAxis dataKey="name" type="category" width={190} tick={<PodNameAxisTick />} />
                 <Tooltip cursor={{ fill: 'rgba(15, 132, 121, 0.06)' }} />
                 <Bar dataKey="memory_mib" radius={[0, 10, 10, 0]}>
                   {overviewMetrics.pod_memory_top.map((item) => (
@@ -189,7 +214,7 @@ export default function OpsOverviewCharts({
           {overviewMetrics.pod_memory_top.map((item) => (
             <div key={`mem-${item.name}`} className="ops-table-row">
               <div>
-                <strong>{item.name}</strong>
+                <strong title={item.name}>{item.name}</strong>
                 <span>{item.memory_mib} MiB</span>
               </div>
               <div className="ops-inline-actions">

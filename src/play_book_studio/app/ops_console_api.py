@@ -1642,6 +1642,105 @@ def _ops_live_context(root_dir: Path, state: dict[str, Any], connection: dict[st
     }
 
 
+def _resource_names_by_type(context: dict[str, Any]) -> dict[str, list[str]]:
+    resources = context.get("resources") if isinstance(context.get("resources"), dict) else {}
+    names_by_type: dict[str, list[str]] = {}
+    for resource_type in RESOURCE_TYPES:
+        items = resources.get(resource_type)
+        if not isinstance(items, list):
+            names_by_type[resource_type] = []
+            continue
+        names_by_type[resource_type] = [str(item.get("name") or "") for item in items if str(item.get("name") or "").strip()]
+    return names_by_type
+
+
+def _parse_llm_json_object(text: str) -> dict[str, Any] | None:
+    stripped = str(text or "").strip()
+    if not stripped:
+        return None
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", stripped, flags=re.DOTALL)
+        if match is None:
+            return None
+        try:
+            payload = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _classify_ops_artifact_intent(
+    answerer: Any,
+    query: str,
+    context: dict[str, Any],
+) -> dict[str, str]:
+    llm_client = getattr(answerer, "llm_client", None)
+    if llm_client is None or not hasattr(llm_client, "generate"):
+        return {"action": "none", "resource_type": "", "resource_name": ""}
+    names_by_type = _resource_names_by_type(context)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Classify whether an OpenShift chat answer should attach a UI artifact. "
+                "Return only JSON with keys action, resource_type, resource_name. "
+                "action must be one of: none, list, yaml, detail. "
+                "Use list only when the user explicitly asks to see a resource list/inventory, e.g. pod list or deployment list. "
+                "Use yaml only when the user explicitly asks for YAML/manifest/code for one exact resource. "
+                "Use detail only when the user explicitly asks to open/inspect/detail one exact resource. "
+                "For health checks, summaries, troubleshooting, status analysis, or next checks, action must be none. "
+                "resource_type must be one of pods, deployments, services, routes, events, all, or empty. "
+                "resource_name must be an exact supplied resource name when action is yaml/detail, otherwise empty."
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "question": query,
+                    "namespace": context.get("namespace"),
+                    "resource_names": names_by_type,
+                    "examples": [
+                        {"question": "demo namespace 배포 상태 점검해줘", "classification": {"action": "none", "resource_type": "", "resource_name": ""}},
+                        {"question": "현재 운영되는 Pod 리스트는 뭐야?", "classification": {"action": "list", "resource_type": "pods", "resource_name": ""}},
+                        {"question": "Deployment 리스트 보여줘", "classification": {"action": "list", "resource_type": "deployments", "resource_name": ""}},
+                        {"question": "dev-pandas-bot yaml 코드 보여줘", "classification": {"action": "yaml", "resource_type": "deployments", "resource_name": "dev-pandas-bot"}},
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+        },
+    ]
+    try:
+        raw = str(llm_client.generate(messages, max_tokens=220)).strip()
+    except Exception:  # noqa: BLE001
+        return {"action": "none", "resource_type": "", "resource_name": ""}
+    payload = _parse_llm_json_object(raw) or {}
+    action = str(payload.get("action") or "none").strip().lower()
+    resource_type = str(payload.get("resource_type") or "").strip().lower()
+    resource_name = str(payload.get("resource_name") or "").strip()
+    if action not in {"none", "list", "yaml", "detail"}:
+        action = "none"
+    if resource_type not in {*RESOURCE_TYPES, "all", ""}:
+        resource_type = ""
+    if action in {"yaml", "detail"}:
+        exact_names = {
+            name: current_type
+            for current_type, names in names_by_type.items()
+            for name in names
+        }
+        if resource_name not in exact_names:
+            return {"action": "none", "resource_type": "", "resource_name": ""}
+        resource_type = exact_names[resource_name]
+    if action == "list" and resource_type not in {*RESOURCE_TYPES, "all"}:
+        return {"action": "none", "resource_type": "", "resource_name": ""}
+    if action == "none":
+        return {"action": "none", "resource_type": "", "resource_name": ""}
+    return {"action": action, "resource_type": resource_type, "resource_name": resource_name}
+
+
 def _selected_live_resource_details(query: str, context: dict[str, Any], history: list[dict[str, Any]]) -> list[dict[str, Any]]:
     manifest_index = context.get("manifest_index") if isinstance(context.get("manifest_index"), dict) else {}
     if not manifest_index:
@@ -1671,25 +1770,35 @@ def _selected_live_resource_details(query: str, context: dict[str, Any], history
     return []
 
 
-def _ops_live_artifacts(context: dict[str, Any], selected_details: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+def _details_from_artifact_intent(context: dict[str, Any], artifact_intent: dict[str, str]) -> list[dict[str, Any]]:
+    resource_type = str(artifact_intent.get("resource_type") or "")
+    resource_name = str(artifact_intent.get("resource_name") or "")
+    if resource_type not in RESOURCE_TYPES or not resource_name:
+        return []
+    manifest_index = context.get("manifest_index") if isinstance(context.get("manifest_index"), dict) else {}
+    detail = manifest_index.get(f"{resource_type}/{resource_name}".lower())
+    return [detail] if isinstance(detail, dict) else []
+
+
+def _ops_live_artifacts(
+    context: dict[str, Any],
+    selected_details: list[dict[str, Any]] | None = None,
+    *,
+    artifact_intent: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     connection = context.get("connection") if isinstance(context.get("connection"), dict) else {}
     connection_id = str(connection.get("connection_id") or "")
     namespace = str(context.get("namespace") or "")
     resources = context.get("resources") if isinstance(context.get("resources"), dict) else {}
-    artifacts: list[dict[str, Any]] = [
-        {
-            "kind": "analysis",
-            "title": f"Live operations context in {namespace}",
-            "connection_id": connection_id,
-            "namespace": namespace,
-            "summary": {
-                "counts": {key: len(value) for key, value in resources.items() if isinstance(value, list)},
-                "metrics": context.get("metrics", {}).get("summary") if isinstance(context.get("metrics"), dict) else {},
-            },
-            "items": [],
-        }
-    ]
-    for detail in selected_details or []:
+    artifacts: list[dict[str, Any]] = []
+    intent = artifact_intent or {"action": "none", "resource_type": "", "resource_name": ""}
+    action = str(intent.get("action") or "none")
+    details = selected_details or _details_from_artifact_intent(context, intent)
+    if action in {"yaml", "detail"}:
+        details = _details_from_artifact_intent(context, intent) or details
+    else:
+        details = []
+    for detail in details:
         resource_type = str(detail.get("resource_type") or "")
         name = str(detail.get("name") or "")
         manifest_yaml = str(detail.get("manifest_yaml") or "")
@@ -1709,7 +1818,14 @@ def _ops_live_artifacts(context: dict[str, Any], selected_details: list[dict[str
                 "items": [],
             }
         )
-    for resource_type in ("deployments", "pods", "services", "routes", "events"):
+    if action != "list":
+        return artifacts
+
+    requested_type = str(intent.get("resource_type") or "")
+    resource_types = RESOURCE_TYPES if requested_type == "all" else (requested_type,)
+    for resource_type in resource_types:
+        if resource_type not in RESOURCE_TYPES:
+            continue
         items = resources.get(resource_type)
         if not isinstance(items, list) or not items:
             continue
@@ -1845,7 +1961,7 @@ def _generate_ops_live_answer(
         },
     ]
     try:
-        return str(llm_client.generate(messages, max_tokens=900)).strip()
+        return str(llm_client.generate(messages, max_tokens=2200)).strip()
     except Exception:  # noqa: BLE001
         return None
 
@@ -1883,9 +1999,10 @@ def _chat_payload(root_dir: Path, payload: dict[str, Any], *, state: dict[str, A
             ]
             return response
         selected_details = _selected_live_resource_details(query, context, history)
+        artifact_intent = _classify_ops_artifact_intent(answerer, query, context)
         generated = _generate_ops_live_answer(answerer, query, context, history, selected_details)
         response["answer"] = generated or _fallback_ops_live_answer(query, context, selected_details)
-        response["artifacts"] = _ops_live_artifacts(context, selected_details)
+        response["artifacts"] = _ops_live_artifacts(context, selected_details, artifact_intent=artifact_intent)
         response["preview_ready"] = True
         response["fallback_used"] = generated is None
         response["stages"] = [
@@ -2178,6 +2295,28 @@ def _send_bad_request(handler: Any, message: str) -> None:
     handler._send_json({"error": message}, HTTPStatus.BAD_REQUEST)
 
 
+def _stream_answer_chunks(answer: str, *, target_chars: int = 28) -> list[str]:
+    text = str(answer or "")
+    if not text.strip():
+        return []
+    chunks: list[str] = []
+    current = ""
+    for token in re.findall(r"\S+\s*", text):
+        if len(token) > target_chars * 2:
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.extend(token[index : index + target_chars] for index in range(0, len(token), target_chars))
+            continue
+        current += token
+        if len(current) >= target_chars or current.endswith("\n\n"):
+            chunks.append(current)
+            current = ""
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def _stream_chat_result(handler: Any, result: dict[str, Any]) -> None:
     handler._start_ndjson_stream()
     stages = result.get("stages") if isinstance(result.get("stages"), list) else []
@@ -2190,7 +2329,9 @@ def _stream_chat_result(handler: Any, result: dict[str, Any]) -> None:
         if isinstance(stage, dict):
             handler._stream_event({"type": "stage", "stage": stage})
     if str(result.get("answer") or "").strip():
-        handler._stream_event({"type": "answer_delta", "delta": str(result.get("answer") or "")})
+        for chunk in _stream_answer_chunks(str(result.get("answer") or "")):
+            handler._stream_event({"type": "answer_delta", "delta": chunk})
+            time.sleep(0.015)
     handler._stream_event({"type": "result", "response": result})
 
 

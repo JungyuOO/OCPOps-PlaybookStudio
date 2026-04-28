@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import {
   Activity,
   ArrowRight,
@@ -78,6 +79,19 @@ type ChatMessage = {
   artifacts?: OpsChatResponse['artifacts'];
 };
 
+type OpsChatSession = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  connectionId: string;
+  namespace: string;
+  messages: ChatMessage[];
+};
+
+type MarkdownBlock =
+  | { type: 'markdown'; text: string }
+  | { type: 'table'; header: string[]; rows: string[][] };
+
 const ROUTE_SECTIONS: Array<{
   key: OpsRouteKey;
   label: string;
@@ -96,11 +110,11 @@ const RESOURCE_OPTIONS = ['pods', 'deployments', 'services', 'routes', 'events']
 const OPS_FIXED_NAMESPACE = 'demo';
 const EDITABLE_RESOURCE_TYPES = new Set(['deployments', 'services', 'routes']);
 const ACTION_OPTIONS = ['scale_deployment', 'rollout_restart', 'log_bundle', 'yaml_apply'] as const;
-const OPS_CHAT_STARTERS = [
-  'demo namespace 배포 상태를 먼저 점검해줘',
-  '문제 있는 Pod나 Deployment가 있는지 분석해줘',
-  '현재 리소스 목록을 종류별로 정리해서 보여줘',
-  'Route와 Service 연결을 볼 때 어떤 리소스를 같이 봐야 하는지 정리해줘',
+const DEFAULT_OPS_CHAT_STARTERS = [
+  '`demo` namespace 상태를 먼저 점검해줘',
+  '`demo` namespace에서 문제 있는 Pod와 Deployment를 분석해줘',
+  '현재 운영되는 Pod 리스트를 보여줘',
+  'Service와 Route 연결 상태를 점검해줘',
 ] as const;
 const CONNECT_GUIDE_STEPS = [
   {
@@ -147,14 +161,280 @@ function makeId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function visibleChatArtifacts(artifacts?: OpsChatResponse['artifacts']): OpsChatResponse['artifacts'] | undefined {
+  if (!artifacts?.length) {
+    return artifacts;
+  }
+  const resourceListCount = artifacts.filter((artifact) => artifact.kind === 'resource_list').length;
+  if (resourceListCount <= 1) {
+    return artifacts;
+  }
+  return artifacts.filter((artifact) => artifact.kind !== 'resource_list');
+}
+
+function normalizeChatMessages(value: unknown): ChatMessage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.slice(-40).map((message) => ({
+    id: String(message?.id || makeId('message')),
+    role: message?.role === 'assistant' ? 'assistant' : 'user',
+    content: String(message?.content || ''),
+    sources: Array.isArray(message?.sources) ? message.sources : undefined,
+    artifacts: visibleChatArtifacts(Array.isArray(message?.artifacts) ? message.artifacts : undefined),
+  }));
+}
+
+function chatSessionTitle(messages: ChatMessage[]): string {
+  const firstUserMessage = messages.find((message) => message.role === 'user')?.content.trim();
+  if (!firstUserMessage) {
+    return 'New chat';
+  }
+  return firstUserMessage.length > 38 ? `${firstUserMessage.slice(0, 38)}...` : firstUserMessage;
+}
+
+function formatChatSessionTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return date.toLocaleString('ko-KR', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function pushUniqueStarter(starters: string[], value: string) {
+  if (value && !starters.includes(value)) {
+    starters.push(value);
+  }
+}
+
+function buildOpsChatStarters({
+  activeConnectionId,
+  namespace,
+  overview,
+  overviewMetrics,
+  resourceList,
+  selectedResourceType,
+  selectedResourceName,
+  recommendations,
+}: {
+  activeConnectionId: string;
+  namespace: string;
+  overview: OcpOverview | null;
+  overviewMetrics: OcpMetricsResponse | null;
+  resourceList: ResourceListResponse | null;
+  selectedResourceType: string;
+  selectedResourceName: string;
+  recommendations: RecommendationItem[];
+}): string[] {
+  const starters: string[] = [];
+  if (!activeConnectionId) {
+    return [...DEFAULT_OPS_CHAT_STARTERS];
+  }
+
+  const warningEvents = overviewMetrics?.summary.warning_events ?? 0;
+  const degradedCount = overviewMetrics?.summary.degraded_deployments ?? 0;
+  const degradedNames = (overviewMetrics?.workload_health ?? [])
+    .filter((item) => item.status.toLowerCase() !== 'healthy' || item.ready_replicas < item.replicas)
+    .map((item) => item.name)
+    .filter(Boolean)
+    .slice(0, 3);
+  const topCpuPod = overviewMetrics?.summary.top_cpu_pod?.name;
+  const topMemoryPod = overviewMetrics?.summary.top_memory_pod?.name;
+  const resourceCount = resourceList?.count ?? overview?.resource_counts?.[selectedResourceType] ?? 0;
+  const primaryRecommendation = recommendations.find((item) => item.connection_id === activeConnectionId) ?? recommendations[0];
+
+  if (degradedCount > 0) {
+    pushUniqueStarter(starters, `\`${namespace}\` namespace Degraded Deployment ${degradedCount}개 원인과 우선순위를 분석해줘`);
+  }
+  if (degradedNames.length > 0) {
+    pushUniqueStarter(starters, `${degradedNames.join(', ')} Deployment가 준비되지 않은 이유를 이벤트 기준으로 진단해줘`);
+  }
+  if (warningEvents > 0) {
+    pushUniqueStarter(starters, `\`${namespace}\` namespace Warning 이벤트 ${warningEvents}개를 최근 원인별로 정리해줘`);
+  }
+  if (topCpuPod) {
+    pushUniqueStarter(starters, `${topCpuPod} Pod CPU 사용량이 높은 이유를 관련 Deployment와 같이 분석해줘`);
+  }
+  if (topMemoryPod && topMemoryPod !== topCpuPod) {
+    pushUniqueStarter(starters, `${topMemoryPod} Pod 메모리 사용량이 높은 이유를 관련 이벤트와 같이 분석해줘`);
+  }
+  if (resourceCount > 0) {
+    pushUniqueStarter(starters, `\`${namespace}\` namespace ${selectedResourceType} ${resourceCount}개 리스트를 보여줘`);
+  }
+  if (selectedResourceName) {
+    pushUniqueStarter(starters, `${selectedResourceName} YAML 코드 보여줘`);
+  }
+  if (primaryRecommendation?.resource_name) {
+    pushUniqueStarter(
+      starters,
+      `${primaryRecommendation.resource_name} ${primaryRecommendation.resource_kind} 권고사항의 근거와 조치 순서를 설명해줘`,
+    );
+  }
+  pushUniqueStarter(starters, `\`${namespace}\` namespace 리소스 현황을 종류별로 요약하고 이상 징후를 표시해줘`);
+
+  return starters.slice(0, 4);
+}
+
 function loadSavedChatMessages(): ChatMessage[] {
   try {
     const raw = window.localStorage.getItem('opsConsole.chatMessages');
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.slice(-20) : [];
+    return normalizeChatMessages(parsed);
   } catch {
     return [];
   }
+}
+
+function loadSavedChatSessions(): OpsChatSession[] {
+  try {
+    const raw = window.localStorage.getItem('opsConsole.chatSessions.v1');
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed.slice(0, 24).map((session) => {
+        const messages = normalizeChatMessages(session?.messages);
+        return {
+          id: String(session?.id || makeId('ops-chat')),
+          title: String(session?.title || chatSessionTitle(messages)),
+          updatedAt: String(session?.updatedAt || new Date().toISOString()),
+          connectionId: String(session?.connectionId || ''),
+          namespace: String(session?.namespace || OPS_FIXED_NAMESPACE),
+          messages,
+        };
+      });
+    }
+  } catch {
+    // Fall through to legacy single transcript migration.
+  }
+  const legacyMessages = loadSavedChatMessages();
+  if (!legacyMessages.length) {
+    return [];
+  }
+  return [{
+    id: 'ops-chat-legacy',
+    title: chatSessionTitle(legacyMessages),
+    updatedAt: new Date().toISOString(),
+    connectionId: '',
+    namespace: OPS_FIXED_NAMESPACE,
+    messages: legacyMessages,
+  }];
+}
+
+function isMarkdownTableSeparator(line: string): boolean {
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+}
+
+function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
+  const lines = String(markdown || '').split(/\r?\n/);
+  const blocks: MarkdownBlock[] = [];
+  let markdownBuffer: string[] = [];
+  let inFence = false;
+
+  const flushMarkdown = () => {
+    const text = markdownBuffer.join('\n').trim();
+    if (text) {
+      blocks.push({ type: 'markdown', text });
+    }
+    markdownBuffer = [];
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    if (line.trim().startsWith('```')) {
+      inFence = !inFence;
+      markdownBuffer.push(line);
+      continue;
+    }
+    if (!inFence && line.includes('|') && isMarkdownTableSeparator(lines[index + 1] ?? '')) {
+      flushMarkdown();
+      const tableLines = [line];
+      index += 2;
+      while (index < lines.length && (lines[index] ?? '').includes('|') && (lines[index] ?? '').trim()) {
+        tableLines.push(lines[index] ?? '');
+        index += 1;
+      }
+      index -= 1;
+      const [headerLine, ...rowLines] = tableLines;
+      blocks.push({
+        type: 'table',
+        header: splitMarkdownTableRow(headerLine ?? ''),
+        rows: rowLines.map(splitMarkdownTableRow),
+      });
+      continue;
+    }
+    markdownBuffer.push(line);
+  }
+  flushMarkdown();
+  return blocks;
+}
+
+function MarkdownMessage({ content }: { content: string }) {
+  const blocks = useMemo(() => parseMarkdownBlocks(content), [content]);
+  return (
+    <div className="ops-chat-markdown">
+      {blocks.map((block, index) => (
+        block.type === 'table' ? (
+          <div key={`table-${index}`} className="ops-chat-markdown-table-wrap">
+            <table className="ops-chat-markdown-table">
+              <thead>
+                <tr>
+                  {block.header.map((cell, cellIndex) => <th key={`head-${cellIndex}`}>{cell}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {block.rows.map((row, rowIndex) => (
+                  <tr key={`row-${rowIndex}`}>
+                    {block.header.map((_, cellIndex) => <td key={`cell-${cellIndex}`}>{row[cellIndex] ?? ''}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <ReactMarkdown key={`markdown-${index}`}>{block.text}</ReactMarkdown>
+        )
+      ))}
+    </div>
+  );
+}
+
+function AssistantProgress({ stages, compact = false }: { stages: Array<{ label: string; detail: string; status: string }>; compact?: boolean }) {
+  const visibleStages = stages.length > 0
+    ? stages.slice(-4)
+    : [
+      { label: 'Connect', detail: 'Preparing OpenShift context', status: 'running' },
+      { label: 'Analyze', detail: 'Checking resources, metrics, and events', status: 'pending' },
+    ];
+  return (
+    <div className={`ops-assistant-progress ${compact ? 'compact' : ''}`} aria-live="polite">
+      <div className="ops-assistant-progress-head">
+        <span className="ops-progress-pulse" />
+        <strong>Working on cluster context</strong>
+      </div>
+      <div className="ops-assistant-progress-steps">
+        {visibleStages.map((stage, index) => (
+          <div key={`${stage.label}-${index}`} className={`ops-assistant-progress-step ${stage.status}`}>
+            <span>{stage.label}</span>
+            <small>{stage.detail}</small>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 
@@ -231,10 +511,24 @@ export default function OpsConsolePage() {
     include_subdirectories: true,
   });
 
-  const [messages, setMessages] = useState<ChatMessage[]>(() => loadSavedChatMessages());
+  const initialChatSessions = useMemo(() => loadSavedChatSessions(), []);
+  const [chatSessions, setChatSessions] = useState<OpsChatSession[]>(initialChatSessions);
+  const [activeChatSessionId, setActiveChatSessionId] = useState(() => {
+    const storedSessionId = window.localStorage.getItem('opsConsole.activeChatSessionId') ?? '';
+    return storedSessionId && initialChatSessions.some((session) => session.id === storedSessionId)
+      ? storedSessionId
+      : initialChatSessions[0]?.id ?? '';
+  });
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const storedSessionId = window.localStorage.getItem('opsConsole.activeChatSessionId') ?? '';
+    return initialChatSessions.find((session) => session.id === storedSessionId)?.messages
+      ?? initialChatSessions[0]?.messages
+      ?? [];
+  });
   const [chatDraft, setChatDraft] = useState('');
   const [chatStages, setChatStages] = useState<Array<{ label: string; detail: string; status: string }>>([]);
   const [chatSending, setChatSending] = useState(false);
+  const [activeAssistantId, setActiveAssistantId] = useState('');
   const [snippet, setSnippet] = useState<DocsPreviewSnippet | null>(null);
 
   const [actionForm, setActionForm] = useState({
@@ -258,6 +552,28 @@ export default function OpsConsolePage() {
   const modalProfile = savedProfiles.find((item) => item.connection_id === modalProfileId) ?? savedProfiles[0] ?? null;
   const sectionMeta = ROUTE_SECTIONS.find((item) => item.key === section) ?? ROUTE_SECTIONS[0];
   const resourceEditable = EDITABLE_RESOURCE_TYPES.has(selectedResourceType);
+  const chatStarters = useMemo(
+    () => buildOpsChatStarters({
+      activeConnectionId,
+      namespace: selectedNamespace,
+      overview,
+      overviewMetrics,
+      resourceList,
+      selectedResourceType,
+      selectedResourceName,
+      recommendations,
+    }),
+    [
+      activeConnectionId,
+      selectedNamespace,
+      overview,
+      overviewMetrics,
+      resourceList,
+      selectedResourceType,
+      selectedResourceName,
+      recommendations,
+    ],
+  );
 
   useEffect(() => {
     window.localStorage.setItem('opsConsole.activeWorkspaceId', activeWorkspaceId);
@@ -274,6 +590,36 @@ export default function OpsConsolePage() {
   useEffect(() => {
     window.localStorage.setItem('opsConsole.chatMessages', JSON.stringify(messages.slice(-20)));
   }, [messages]);
+
+  useEffect(() => {
+    window.localStorage.setItem('opsConsole.chatSessions.v1', JSON.stringify(chatSessions.slice(0, 24)));
+  }, [chatSessions]);
+
+  useEffect(() => {
+    window.localStorage.setItem('opsConsole.activeChatSessionId', activeChatSessionId);
+  }, [activeChatSessionId]);
+
+  useEffect(() => {
+    if (!activeChatSessionId) {
+      return;
+    }
+    setChatSessions((current) => {
+      const currentSession = current.find((session) => session.id === activeChatSessionId);
+      const derivedTitle = chatSessionTitle(messages);
+      const nextSession: OpsChatSession = {
+        id: activeChatSessionId,
+        title: derivedTitle === 'New chat' && currentSession ? currentSession.title : derivedTitle,
+        updatedAt: new Date().toISOString(),
+        connectionId: activeConnectionId,
+        namespace: selectedNamespace,
+        messages,
+      };
+      const next = current.some((session) => session.id === activeChatSessionId)
+        ? current.map((session) => (session.id === activeChatSessionId ? { ...session, ...nextSession } : session))
+        : [nextSession, ...current];
+      return next.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)).slice(0, 24);
+    });
+  }, [activeChatSessionId, activeConnectionId, messages, selectedNamespace]);
 
   useEffect(() => {
     if (!notice) {
@@ -882,18 +1228,79 @@ export default function OpsConsolePage() {
     window.URL.revokeObjectURL(url);
   }
 
+  function handleNewOpsChatSession() {
+    const sessionId = makeId('ops-chat');
+    const session: OpsChatSession = {
+      id: sessionId,
+      title: 'New chat',
+      updatedAt: new Date().toISOString(),
+      connectionId: activeConnectionId,
+      namespace: selectedNamespace,
+      messages: [],
+    };
+    setChatSessions((current) => [session, ...current].slice(0, 24));
+    setActiveChatSessionId(sessionId);
+    setMessages([]);
+    setChatDraft('');
+    setChatStages([]);
+    setActiveAssistantId('');
+    setSnippet(null);
+  }
+
+  function handleSelectOpsChatSession(session: OpsChatSession) {
+    if (chatSending) {
+      return;
+    }
+    setActiveChatSessionId(session.id);
+    setMessages(session.messages);
+    setChatDraft('');
+    setChatStages([]);
+    setActiveAssistantId('');
+    setSnippet(null);
+  }
+
+  function handleDeleteOpsChatSession(sessionId: string) {
+    if (chatSending) {
+      return;
+    }
+    const remaining = chatSessions.filter((session) => session.id !== sessionId);
+    setChatSessions(remaining);
+    if (activeChatSessionId === sessionId) {
+      const nextSession = remaining[0] ?? null;
+      setActiveChatSessionId(nextSession?.id ?? '');
+      setMessages(nextSession?.messages ?? []);
+      setChatStages([]);
+      setActiveAssistantId('');
+      setSnippet(null);
+    }
+  }
+
   async function handleSendChat() {
     const message = chatDraft.trim();
     if (!message) {
       return;
     }
+    if (!activeChatSessionId) {
+      const sessionId = makeId('ops-chat');
+      setActiveChatSessionId(sessionId);
+      setChatSessions((current) => [{
+        id: sessionId,
+        title: message.length > 38 ? `${message.slice(0, 38)}...` : message,
+        updatedAt: new Date().toISOString(),
+        connectionId: activeConnectionId,
+        namespace: selectedNamespace,
+        messages: [],
+      }, ...current].slice(0, 24));
+    }
     const userMessage: ChatMessage = { id: makeId('user'), role: 'user', content: message };
     const assistantId = makeId('assistant');
     setMessages((current) => [...current, userMessage, { id: assistantId, role: 'assistant', content: '' }]);
+    setActiveAssistantId(assistantId);
     setChatDraft('');
     setChatStages([]);
     setChatSending(true);
     setError('');
+    let streamedAnswer = '';
     try {
       const result = await sendOpsChatStream(
         {
@@ -908,7 +1315,8 @@ export default function OpsConsolePage() {
             return;
           }
           if (event.type === 'answer_delta') {
-            setMessages((current) => current.map((item) => (item.id === assistantId ? { ...item, content: item.content + event.delta } : item)));
+            streamedAnswer += event.delta;
+            setMessages((current) => current.map((item) => (item.id === assistantId ? { ...item, content: streamedAnswer } : item)));
             return;
           }
           if (event.type === 'result') {
@@ -918,7 +1326,7 @@ export default function OpsConsolePage() {
                   ...item,
                   content: event.response.answer,
                   sources: event.response.sources,
-                  artifacts: event.response.artifacts,
+                  artifacts: visibleChatArtifacts(event.response.artifacts),
                 }
                 : item
             )));
@@ -930,6 +1338,7 @@ export default function OpsConsolePage() {
       setError(caught instanceof Error ? caught.message : '채팅 처리 중 오류가 발생했습니다.');
     } finally {
       setChatSending(false);
+      setActiveAssistantId('');
     }
   }
 
@@ -1604,9 +2013,44 @@ export default function OpsConsolePage() {
             <section className="ops-panel">
               <div className="ops-panel-header">
                 <h2>Copilot Chat</h2>
+                <button type="button" className="ops-secondary-btn" onClick={handleNewOpsChatSession}>
+                  New chat
+                </button>
               </div>
-              <div className="ops-chat-shell">
-                <div className="ops-chat-transcript">
+              <div className="ops-chat-layout">
+                <aside className="ops-chat-history-panel">
+                  <div className="ops-chat-history-head">
+                    <strong>History</strong>
+                    <span>{chatSessions.length}</span>
+                  </div>
+                  <div className="ops-chat-history-list">
+                    {chatSessions.length ? chatSessions.map((session) => (
+                      <div
+                        key={session.id}
+                        className={`ops-chat-history-item ${session.id === activeChatSessionId ? 'active' : ''}`}
+                      >
+                        <button type="button" disabled={chatSending} onClick={() => handleSelectOpsChatSession(session)}>
+                          <strong title={session.title}>{session.title}</strong>
+                          <span>{formatChatSessionTime(session.updatedAt)}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="ops-chat-history-delete"
+                          aria-label="Delete chat session"
+                          disabled={chatSending}
+                          onClick={() => handleDeleteOpsChatSession(session.id)}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )) : (
+                      <div className="ops-chat-history-empty">No chat history</div>
+                    )}
+                  </div>
+                </aside>
+                <div className="ops-chat-workspace">
+                  <div className="ops-chat-shell">
+                    <div className="ops-chat-transcript">
                   {messages.length === 0 && (
                     <div className="ops-chat-welcome">
                       <div className="ops-chat-welcome-icon">
@@ -1618,14 +2062,14 @@ export default function OpsConsolePage() {
                         문서 기반 질문과 현재 연결된 클러스터 확인을 한 화면에서 이어갈 수 있습니다.
                       </p>
                       <div className="ops-chat-starter-grid">
-                        {OPS_CHAT_STARTERS.map((starter, index) => (
+                        {chatStarters.map((starter, index) => (
                           <button
                             key={`ops-starter-${index}`}
                             type="button"
                             className="ops-chat-starter-card"
                             onClick={() => setChatDraft(starter)}
                           >
-                            <span className="ops-chat-starter-index">Step {index + 1}</span>
+                            <span className="ops-chat-starter-index">Live {index + 1}</span>
                             <strong>{starter}</strong>
                             <span className="ops-chat-starter-arrow">
                               <ArrowRight size={14} />
@@ -1639,7 +2083,10 @@ export default function OpsConsolePage() {
                     <div key={message.id} className={`ops-chat-row ${message.role}`}>
                       <article className={`ops-chat-bubble ${message.role}`}>
                         <div className="ops-chat-bubble-label">{message.role === 'user' ? 'User' : 'Assistant'}</div>
-                        <p>{message.content}</p>
+                        {message.content ? <MarkdownMessage content={message.content} /> : null}
+                        {message.role === 'assistant' && message.id === activeAssistantId ? (
+                          <AssistantProgress stages={chatStages} compact={Boolean(message.content)} />
+                        ) : null}
                         {message.sources?.length ? (
                           <div className="ops-chat-chip-row">
                             {message.sources.map((source) => (
@@ -1754,6 +2201,8 @@ export default function OpsConsolePage() {
                   <pre>{snippet.snippet}</pre>
                 </div>
               ) : null}
+                </div>
+              </div>
             </section>
           )}
 
