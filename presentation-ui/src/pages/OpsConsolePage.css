@@ -956,11 +956,24 @@
 
 .ops-resource-grid {
   margin-top: 14px;
+  align-items: start;
 }
 
 .ops-list {
   display: grid;
   gap: 10px;
+}
+
+.ops-resource-grid .ops-list {
+  max-height: 430px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.ops-resource-grid .ops-editor-column textarea {
+  min-height: 430px;
+  max-height: 430px;
+  resize: none;
 }
 
 .ops-list-row {
@@ -1004,6 +1017,7 @@
 .ops-chat-shell {
   display: flex;
   flex-direction: column;
+  height: min(680px, calc(100vh - 260px));
   min-height: 560px;
   border-radius: 24px;
   border: 1px solid rgba(16, 36, 62, 0.08);
@@ -1046,10 +1060,165 @@
   color: #5f7897;
 }
 
-.ops-chat-bubble p {
+.ops-chat-bubble p,
+.ops-chat-markdown p {
   margin: 10px 0 0;
   white-space: pre-wrap;
   line-height: 1.7;
+}
+
+.ops-chat-markdown {
+  margin-top: 10px;
+  line-height: 1.7;
+}
+
+.ops-chat-markdown > :first-child,
+.ops-chat-markdown p:first-child {
+  margin-top: 0;
+}
+
+.ops-chat-markdown h1,
+.ops-chat-markdown h2,
+.ops-chat-markdown h3,
+.ops-chat-markdown h4 {
+  margin: 18px 0 8px;
+  line-height: 1.32;
+}
+
+.ops-chat-markdown h1 {
+  font-size: 1.32rem;
+}
+
+.ops-chat-markdown h2 {
+  font-size: 1.16rem;
+}
+
+.ops-chat-markdown h3 {
+  font-size: 1.04rem;
+}
+
+.ops-chat-markdown ul,
+.ops-chat-markdown ol {
+  margin: 8px 0 0;
+  padding-left: 1.35rem;
+}
+
+.ops-chat-markdown li {
+  margin: 4px 0;
+}
+
+.ops-chat-markdown code {
+  padding: 0.1rem 0.28rem;
+  border-radius: 6px;
+  background: rgba(15, 26, 42, 0.08);
+  color: #0f1a2a;
+  font-size: 0.9em;
+}
+
+.ops-chat-markdown pre {
+  margin-top: 12px;
+}
+
+.ops-chat-markdown pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.ops-chat-markdown-table-wrap {
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.ops-chat-markdown-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.ops-chat-markdown-table th,
+.ops-chat-markdown-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(16, 36, 62, 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
+.ops-chat-markdown-table th {
+  background: rgba(17, 103, 172, 0.08);
+  color: #214468;
+  font-size: 0.78rem;
+}
+
+.ops-assistant-progress {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(17, 103, 172, 0.12);
+  background: linear-gradient(135deg, rgba(17, 103, 172, 0.08), rgba(15, 132, 121, 0.08));
+}
+
+.ops-assistant-progress.compact {
+  padding: 12px;
+}
+
+.ops-assistant-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #214468;
+  font-size: 0.9rem;
+}
+
+.ops-progress-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #0f8479;
+  box-shadow: 0 0 0 0 rgba(15, 132, 121, 0.44);
+  animation: ops-progress-pulse 1.15s ease-out infinite;
+}
+
+.ops-assistant-progress-steps {
+  display: grid;
+  gap: 8px;
+}
+
+.ops-assistant-progress-step {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.ops-assistant-progress-step span {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #17395c;
+}
+
+.ops-assistant-progress-step small {
+  color: #607896;
+  line-height: 1.4;
+}
+
+.ops-assistant-progress-step.running {
+  outline: 1px solid rgba(17, 103, 172, 0.24);
+}
+
+@keyframes ops-progress-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(15, 132, 121, 0.44);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(15, 132, 121, 0);
+  }
 }
 
 .ops-chat-chip-row {
