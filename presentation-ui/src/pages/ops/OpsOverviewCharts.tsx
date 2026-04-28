@@ -83,18 +83,19 @@ function truncateMiddle(value: string, maxLength = 34): string {
   if (value.length <= maxLength) {
     return value;
   }
-  const headLength = Math.ceil((maxLength - 1) / 2);
-  const tailLength = Math.floor((maxLength - 1) / 2);
+  const headLength = Math.ceil((maxLength - 3) / 2);
+  const tailLength = Math.floor((maxLength - 3) / 2);
   return `${value.slice(0, headLength)}…${value.slice(-tailLength)}`;
 }
 
 function PodNameAxisTick({ x = 0, y = 0, payload }: { x?: number; y?: number; payload?: { value?: string } }) {
   const name = String(payload?.value || '');
+  const label = name.length > 30 ? `${name.slice(0, 13)}...${name.slice(-14)}` : truncateMiddle(name);
   return (
     <g transform={`translate(${x},${y})`}>
       <title>{name}</title>
       <text x={-8} y={0} dy={4} textAnchor="end" fill="#607896" fontSize={11}>
-        {truncateMiddle(name)}
+        {label}
       </text>
     </g>
   );
@@ -167,9 +168,9 @@ export default function OpsOverviewCharts({
           <h3>Top CPU Pods</h3>
           <div className="ops-chart-panel">
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={overviewMetrics.pod_cpu_top} layout="vertical" margin={{ top: 0, right: 10, left: 90, bottom: 0 }}>
+              <BarChart data={overviewMetrics.pod_cpu_top} layout="vertical" margin={{ top: 0, right: 10, left: 4, bottom: 0 }}>
                 <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" width={240} tick={<PodNameAxisTick />} />
+                <YAxis dataKey="name" type="category" width={190} tick={<PodNameAxisTick />} />
                 <Tooltip cursor={{ fill: 'rgba(17, 103, 172, 0.06)' }} />
                 <Bar dataKey="cpu_mcores" radius={[0, 10, 10, 0]}>
                   {overviewMetrics.pod_cpu_top.map((item) => (
@@ -198,9 +199,9 @@ export default function OpsOverviewCharts({
           <h3>Top Memory Pods</h3>
           <div className="ops-chart-panel">
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={overviewMetrics.pod_memory_top} layout="vertical" margin={{ top: 0, right: 10, left: 90, bottom: 0 }}>
+              <BarChart data={overviewMetrics.pod_memory_top} layout="vertical" margin={{ top: 0, right: 10, left: 4, bottom: 0 }}>
                 <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" width={240} tick={<PodNameAxisTick />} />
+                <YAxis dataKey="name" type="category" width={190} tick={<PodNameAxisTick />} />
                 <Tooltip cursor={{ fill: 'rgba(15, 132, 121, 0.06)' }} />
                 <Bar dataKey="memory_mib" radius={[0, 10, 10, 0]}>
                   {overviewMetrics.pod_memory_top.map((item) => (
