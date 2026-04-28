@@ -31,6 +31,7 @@ from play_book_studio.app.server_routes import (
     handle_viewer_document,
     _viewer_source_meta,
 )
+from play_book_studio.app.server_routes_viewer import _redact_sensitive_network_html_for_display
 from play_book_studio.app.server_handler_base import _HandlerBase
 from play_book_studio.app.wiki_user_overlay import (
     build_wiki_overlay_signal_payload,
@@ -221,6 +222,45 @@ class AppViewersTestSupport(unittest.TestCase):
         self.assertIn('href="#section-1"', payload["html"])
         self.assertNotIn("<script", payload["html"])
         self.assertTrue(payload["interaction_policy"]["code_copy"])
+
+    def test_viewer_document_redacts_sensitive_customer_hosts_blocks(self) -> None:
+        html = """
+        <html><body>
+          <section class="section-card">
+            <h2>운영 도메인 hosts 내용</h2>
+            <table>
+              <tr><td>Hosts</td></tr>
+              <tr><td>10.20.30.40 app-a.customer.example.com 10.20.30.41 app-b.customer.example.com</td></tr>
+            </table>
+          </section>
+        </body></html>
+        """
+
+        redacted = _redact_sensitive_network_html_for_display(html)
+
+        self.assertIn("viewer-sensitive-redaction", redacted)
+        self.assertIn("운영 도메인/hosts 원문은 보안 보호를 위해 화면에서 마스킹했습니다.", redacted)
+        self.assertNotIn("10.20.30.40", redacted)
+        self.assertNotIn("app-a.customer.example.com", redacted)
+
+    def test_viewer_document_redacts_dense_customer_dns_mapping_tables(self) -> None:
+        html = """
+        <html><body>
+          <section class="section-card">
+            <h2>도메인 구성</h2>
+            <table>
+              <tr><td>Service API</td><td>api-a.customer.example.com</td><td>api-b.customer.example.com</td></tr>
+              <tr><td>Admin API</td><td>admin-a.customer.example.com</td><td>admin-b.customer.example.com</td></tr>
+              <tr><td>Web</td><td>web-a.customer.example.com</td><td>web-b.customer.example.com</td></tr>
+            </table>
+          </section>
+        </body></html>
+        """
+
+        redacted = _redact_sensitive_network_html_for_display(html)
+
+        self.assertIn("viewer-sensitive-redaction", redacted)
+        self.assertNotIn("api-a.customer.example.com", redacted)
 
     def test_viewer_document_recovers_labeled_and_unordered_lists(self) -> None:
         with self._workspace() as root:

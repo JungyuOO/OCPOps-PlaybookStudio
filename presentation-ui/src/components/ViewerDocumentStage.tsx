@@ -122,6 +122,25 @@ const VIEWER_READER_POLISH = `
     color: var(--pbs-reader-code-text, #0f172a) !important;
   }
 
+  .viewer-root .viewer-sensitive-redaction {
+    margin: 12px 0;
+    padding: 14px 16px;
+    border: 1px solid rgba(180, 83, 9, 0.28);
+    border-radius: 12px;
+    background: rgba(255, 251, 235, 0.94);
+    color: #7c2d12 !important;
+    font-size: 0.94rem;
+    font-weight: 700;
+    line-height: 1.62;
+    white-space: normal;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root .viewer-sensitive-redaction {
+    border-color: rgba(251, 191, 36, 0.34);
+    background: rgba(69, 45, 6, 0.38);
+    color: #fde68a !important;
+  }
+
   :host([data-viewer-theme="obsidian"]) .viewer-root .code-block {
     background: rgba(255,255,255,0.03) !important;
   }
@@ -412,6 +431,101 @@ function findEditableBlock(node: HTMLElement | null): HTMLElement | null {
   return block;
 }
 
+const SENSITIVE_NETWORK_NOTICE =
+  '운영 도메인/hosts 원문은 보안 보호를 위해 화면에서 마스킹했습니다. 필요한 경우 승인된 보안 채널의 원본 문서를 확인하세요.';
+const SENSITIVE_NETWORK_CONTEXT_RE =
+  /\bhosts?\b|host\s*file|\bdns\b|\bdomain\b|운영\s*도메인|도메인\s*hosts|hosts\s*내용|도메인\s*구성|서비스\s*도메인|네트워크\s*매핑|서버\s*목록/i;
+const IPV4_RE =
+  /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
+const PRIVATE_IPV4_RE =
+  /\b(?:10\.(?:25[0-5]|2[0-4]\d|1?\d?\d)\.(?:25[0-5]|2[0-4]\d|1?\d?\d)\.(?:25[0-5]|2[0-4]\d|1?\d?\d)|192\.168\.(?:25[0-5]|2[0-4]\d|1?\d?\d)\.(?:25[0-5]|2[0-4]\d|1?\d?\d)|172\.(?:1[6-9]|2\d|3[0-1])\.(?:25[0-5]|2[0-4]\d|1?\d?\d)\.(?:25[0-5]|2[0-4]\d|1?\d?\d))\b/g;
+const DOMAIN_RE =
+  /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|dev|app|cloud|local|internal|corp|kr|co\.kr)\b/gi;
+
+function countUniqueRegexMatches(text: string, regex: RegExp): number {
+  const values = new Set<string>();
+  regex.lastIndex = 0;
+  for (const match of text.matchAll(regex)) {
+    values.add(match[0].toLowerCase());
+  }
+  return values.size;
+}
+
+export function looksLikeSensitiveNetworkBlock(text: string, context = ''): boolean {
+  const normalizedText = String(text || '').replace(/\s+/g, ' ').trim();
+  if (normalizedText.length < 24) {
+    return false;
+  }
+  const normalizedContext = String(context || '').replace(/\s+/g, ' ').trim();
+  const hasNetworkContext = SENSITIVE_NETWORK_CONTEXT_RE.test(`${normalizedContext} ${normalizedText}`);
+  const ipv4Count = countUniqueRegexMatches(normalizedText, IPV4_RE);
+  const privateIpv4Count = countUniqueRegexMatches(normalizedText, PRIVATE_IPV4_RE);
+  const domainCount = countUniqueRegexMatches(normalizedText, DOMAIN_RE);
+  const hostMappingCount = (normalizedText.match(/\b(?:\d{1,3}\.){3}\d{1,3}\s+[a-z0-9.-]+\.[a-z]{2,}\b/gi) ?? []).length;
+
+  if (hasNetworkContext && (ipv4Count > 0 || domainCount > 1 || hostMappingCount > 0)) {
+    return true;
+  }
+  if (hasNetworkContext && domainCount >= 5) {
+    return true;
+  }
+  if (domainCount >= 5 && normalizedText.length < 2000) {
+    return true;
+  }
+  if (privateIpv4Count >= 2 && domainCount > 0) {
+    return true;
+  }
+  return ipv4Count >= 3 && domainCount >= 2;
+}
+
+function createSensitiveNetworkNotice(): HTMLDivElement {
+  const notice = document.createElement('div');
+  notice.className = 'viewer-sensitive-redaction';
+  notice.dataset.redaction = 'sensitive-network-hosts';
+  notice.textContent = SENSITIVE_NETWORK_NOTICE;
+  return notice;
+}
+
+function replaceWithSensitiveNetworkNotice(node: HTMLElement): void {
+  node.replaceChildren(createSensitiveNetworkNotice());
+  node.classList.add('viewer-sensitive-redacted-block');
+  node.dataset.redaction = 'sensitive-network-hosts';
+}
+
+function redactSensitiveNetworkContent(root: HTMLElement): void {
+  const sections = Array.from(root.querySelectorAll<HTMLElement>('section.section-card, section.embedded-section, article'));
+  sections.forEach((section) => {
+    if (section.dataset.redaction === 'sensitive-network-hosts') {
+      return;
+    }
+    const headerText = Array.from(section.querySelectorAll<HTMLElement>('.section-header, h1, h2, h3'))
+      .map((node) => node.textContent || '')
+      .join(' ');
+    const body = section.querySelector<HTMLElement>('.section-body, .embedded-section-body, .content-body');
+    const target = body ?? section;
+    const text = target.textContent || '';
+    if (looksLikeSensitiveNetworkBlock(text, headerText)) {
+      replaceWithSensitiveNetworkNotice(target);
+    }
+  });
+
+  const blockNodes = Array.from(root.querySelectorAll<HTMLElement>('.code-block, pre, table, p, li, td, blockquote'));
+  blockNodes.forEach((node) => {
+    if (node.closest('[data-redaction="sensitive-network-hosts"]')) {
+      return;
+    }
+    const section = findSectionFromNode(node);
+    const context = [
+      section?.querySelector<HTMLElement>('.section-header, h1, h2, h3')?.textContent || '',
+      node.getAttribute('aria-label') || '',
+      node.getAttribute('title') || '',
+    ].join(' ');
+    if (looksLikeSensitiveNetworkBlock(node.textContent || '', context)) {
+      replaceWithSensitiveNetworkNotice(node);
+    }
+  });
+}
+
 function firstHTMLElementFromEvent(event: Event): HTMLElement | null {
   for (const node of event.composedPath()) {
     if (node instanceof HTMLElement) {
@@ -678,6 +792,7 @@ export default function ViewerDocumentStage({
       isSlideDeckSurface ? 'viewer-root--slide-deck' : '',
     ].filter(Boolean).join(' ');
     wrapper.innerHTML = viewerDocument.html;
+    redactSensitiveNetworkContent(wrapper);
     root.appendChild(wrapper);
     wrapperRef.current = wrapper;
 

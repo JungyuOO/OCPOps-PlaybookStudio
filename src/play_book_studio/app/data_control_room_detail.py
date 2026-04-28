@@ -10,6 +10,7 @@ from typing import Any
 from play_book_studio.config.settings import load_settings
 from play_book_studio.intake import CustomerPackDraftStore
 from play_book_studio.intake.private_corpus import customer_pack_private_chunks_path
+from play_book_studio.sensitive_redaction import redact_sensitive_network_text_for_display
 
 
 def _safe_int(value: Any) -> int:
@@ -100,6 +101,15 @@ def _chunk_payload_row(row: dict[str, Any]) -> dict[str, Any]:
     viewer_path = str(row.get("viewer_path") or "").strip()
     if anchor and viewer_path and "#" not in viewer_path:
         viewer_path = f"{viewer_path}#{anchor}"
+    section_context = " ".join(
+        str(value or "").strip()
+        for value in (
+            row.get("chapter"),
+            row.get("section"),
+            " ".join(str(item).strip() for item in (row.get("section_path") or []) if str(item).strip()),
+        )
+        if str(value or "").strip()
+    )
     return {
         "chunk_id": str(row.get("chunk_id") or "").strip(),
         "ordinal": _safe_int(row.get("ordinal")),
@@ -115,7 +125,10 @@ def _chunk_payload_row(row: dict[str, Any]) -> dict[str, Any]:
         "anchor": anchor,
         "viewer_path": viewer_path,
         "source_url": str(row.get("source_url") or "").strip(),
-        "text": str(row.get("text") or "").strip(),
+        "text": redact_sensitive_network_text_for_display(
+            str(row.get("text") or "").strip(),
+            context=section_context,
+        ),
         "cli_commands": [
             str(item).strip()
             for item in (row.get("cli_commands") or [])

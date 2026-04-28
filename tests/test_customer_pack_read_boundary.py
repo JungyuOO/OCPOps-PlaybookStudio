@@ -29,6 +29,7 @@ from play_book_studio.app.customer_pack_read_boundary import (
 )
 from play_book_studio.app.chat_debug import append_chat_turn_log
 from play_book_studio.app.data_control_room import build_data_control_room_payload
+from play_book_studio.app.data_control_room_detail import _chunk_payload_row
 from play_book_studio.app.server import _build_handler
 from play_book_studio.app.sessions import ChatSession, SessionStore, Turn
 from play_book_studio.config.settings import load_settings
@@ -287,6 +288,37 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
         self.assertEqual("플레이북 승급", book_payload["promotion_stage_label"])
         self.assertEqual("custom_playbook_pipeline", book_payload["pipeline_target"])
         self.assertEqual("/api/customer-packs/captured?draft_id=draft-123", book_payload["source_uri"])
+
+    def test_customer_pack_book_and_chunk_payloads_mask_sensitive_network_text(self) -> None:
+        book_payload = sanitize_customer_pack_book_payload(
+            {
+                "draft_id": "draft-123",
+                "title": "Customer Book",
+                "source_collection": "uploaded",
+                "source_origin_url": "/api/customer-packs/captured?draft_id=draft-123",
+                "sections": [
+                    {
+                        "heading": "운영 도메인 hosts 내용",
+                        "text": "10.20.30.40 app-a.customer.example.com 10.20.30.41 app-b.customer.example.com",
+                    }
+                ],
+            }
+        )
+        chunk_payload = _chunk_payload_row(
+            {
+                "chunk_id": "chunk-1",
+                "section": "도메인 구성",
+                "text": (
+                    "api-a.customer.example.com api-b.customer.example.com "
+                    "admin-a.customer.example.com admin-b.customer.example.com web.customer.example.com"
+                ),
+            }
+        )
+
+        self.assertIn("운영 도메인/hosts 원문은 보안 보호", book_payload["sections"][0]["text"])
+        self.assertNotIn("10.20.30.40", book_payload["sections"][0]["text"])
+        self.assertIn("운영 도메인/hosts 원문은 보안 보호", chunk_payload["text"])
+        self.assertNotIn("api-a.customer.example.com", chunk_payload["text"])
 
     def test_customer_pack_read_surfaces_fail_close_unreviewed_and_non_read_ready_packs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

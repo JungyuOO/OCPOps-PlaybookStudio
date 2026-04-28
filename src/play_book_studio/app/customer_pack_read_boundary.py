@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 from play_book_studio.intake import CustomerPackDraftStore
 from play_book_studio.intake.private_boundary import summarize_private_runtime_boundary
+from play_book_studio.sensitive_redaction import redact_sensitive_network_text_for_display
 from play_book_studio.source_authority import COMMUNITY_AUTHORITY, source_authority_payload
 
 
@@ -574,6 +575,16 @@ def sanitize_customer_pack_book_payload(payload: dict[str, Any]) -> dict[str, An
             continue
         normalized = dict(section)
         normalized["source_url"] = source_origin_url
+        section_context = " ".join(
+            str(normalized.get(key) or "").strip()
+            for key in ("heading", "section_path_label", "section_key")
+            if str(normalized.get(key) or "").strip()
+        )
+        if "text" in normalized:
+            normalized["text"] = redact_sensitive_network_text_for_display(
+                str(normalized.get("text") or ""),
+                context=section_context,
+            )
         sections.append(normalized)
     sanitized["sections"] = sections
     return sanitized

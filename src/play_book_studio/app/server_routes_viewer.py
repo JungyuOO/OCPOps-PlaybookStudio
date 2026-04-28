@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html as html_lib
 import json
 import re
 from http import HTTPStatus
@@ -55,6 +56,37 @@ _DOCS_DIRECTORY_VIEWER_PATH_RE = re.compile(r"^/docs/ocp/[^/]+/[^/]+/[^/]+$")
 _ACTIVE_RUNTIME_DIRECTORY_VIEWER_PATH_RE = re.compile(r"^/playbooks/wiki-runtime/active/[^/]+$")
 _ENTITY_DIRECTORY_VIEWER_PATH_RE = re.compile(r"^/wiki/entities/[^/]+$")
 _FIGURE_DIRECTORY_VIEWER_PATH_RE = re.compile(r"^/wiki/figures/[^/]+/[^/]+$")
+_SENSITIVE_NETWORK_NOTICE = (
+    "운영 도메인/hosts 원문은 보안 보호를 위해 화면에서 마스킹했습니다. "
+    "필요한 경우 승인된 보안 채널의 원본 문서를 확인하세요."
+)
+_SENSITIVE_NETWORK_CONTEXT_RE = re.compile(
+    r"\bhosts?\b|host\s*file|\bdns\b|\bdomain\b|운영\s*도메인|도메인\s*hosts|hosts\s*내용|도메인\s*구성|서비스\s*도메인|네트워크\s*매핑|서버\s*목록",
+    re.IGNORECASE,
+)
+_IPV4_RE = re.compile(
+    r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b"
+)
+_PRIVATE_IPV4_RE = re.compile(
+    r"\b(?:10\.(?:25[0-5]|2[0-4]\d|1?\d?\d)\.(?:25[0-5]|2[0-4]\d|1?\d?\d)\.(?:25[0-5]|2[0-4]\d|1?\d?\d)"
+    r"|192\.168\.(?:25[0-5]|2[0-4]\d|1?\d?\d)\.(?:25[0-5]|2[0-4]\d|1?\d?\d)"
+    r"|172\.(?:1[6-9]|2\d|3[0-1])\.(?:25[0-5]|2[0-4]\d|1?\d?\d)\.(?:25[0-5]|2[0-4]\d|1?\d?\d))\b"
+)
+_DOMAIN_RE = re.compile(
+    r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
+    r"(?:com|net|org|io|dev|app|cloud|local|internal|corp|kr|co\.kr)\b",
+    re.IGNORECASE,
+)
+_HOST_MAPPING_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\s+[a-z0-9.-]+\.[a-z]{2,}\b", re.IGNORECASE)
+_DISPLAY_REDACTION_BLOCK_RE = re.compile(
+    r"(?P<block><(?P<tag>table|pre|code|blockquote)\b[^>]*>.*?</(?P=tag)>)",
+    re.IGNORECASE | re.DOTALL,
+)
+_DISPLAY_REDACTION_INLINE_RE = re.compile(
+    r"(?P<block><(?P<tag>p|li|td)\b[^>]*>.*?</(?P=tag)>)",
+    re.IGNORECASE | re.DOTALL,
+)
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
 def _scope_viewer_style(style_text: str) -> str:
@@ -62,6 +94,57 @@ def _scope_viewer_style(style_text: str) -> str:
     scoped = scoped.replace(":root", ".viewer-root")
     scoped = re.sub(r"(?<![-\w])body\.is-embedded(?![-\w])", ".viewer-root.is-embedded", scoped)
     return re.sub(r"(?<![-\w])body(?![-\w])", ".viewer-root", scoped)
+
+
+def _html_to_search_text(html_text: str) -> str:
+    return html_lib.unescape(_HTML_TAG_RE.sub(" ", str(html_text or ""))).strip()
+
+
+def _count_unique(pattern: re.Pattern[str], text: str) -> int:
+    return len({match.group(0).lower() for match in pattern.finditer(text)})
+
+
+def _looks_like_sensitive_network_block(text: str, *, context: str = "") -> bool:
+    normalized_text = re.sub(r"\s+", " ", str(text or "")).strip()
+    if len(normalized_text) < 24:
+        return False
+    normalized_context = re.sub(r"\s+", " ", str(context or "")).strip()
+    has_network_context = bool(_SENSITIVE_NETWORK_CONTEXT_RE.search(f"{normalized_context} {normalized_text}"))
+    ipv4_count = _count_unique(_IPV4_RE, normalized_text)
+    private_ipv4_count = _count_unique(_PRIVATE_IPV4_RE, normalized_text)
+    domain_count = _count_unique(_DOMAIN_RE, normalized_text)
+    host_mapping_count = len(_HOST_MAPPING_RE.findall(normalized_text))
+    if has_network_context and (ipv4_count > 0 or domain_count > 1 or host_mapping_count > 0):
+        return True
+    if has_network_context and domain_count >= 5:
+        return True
+    if domain_count >= 5 and len(normalized_text) < 2000:
+        return True
+    if private_ipv4_count >= 2 and domain_count > 0:
+        return True
+    return ipv4_count >= 3 and domain_count >= 2
+
+
+def _sensitive_network_redaction_html() -> str:
+    return (
+        '<div class="viewer-sensitive-redaction" data-redaction="sensitive-network-hosts" '
+        'style="margin:12px 0;padding:14px 16px;border:1px solid rgba(180,83,9,.28);'
+        'border-radius:12px;background:rgba(255,251,235,.94);color:#7c2d12;'
+        'font-size:.94rem;font-weight:700;line-height:1.62;white-space:normal;">'
+        f"{html_lib.escape(_SENSITIVE_NETWORK_NOTICE)}"
+        "</div>"
+    )
+
+
+def _redact_sensitive_network_html_for_display(html_text: str) -> str:
+    def _replace_block(match: re.Match[str]) -> str:
+        block = str(match.group("block") or "")
+        if _looks_like_sensitive_network_block(_html_to_search_text(block)):
+            return _sensitive_network_redaction_html()
+        return match.group(0)
+
+    redacted = _DISPLAY_REDACTION_BLOCK_RE.sub(_replace_block, str(html_text or ""))
+    return _DISPLAY_REDACTION_INLINE_RE.sub(_replace_block, redacted)
 
 
 def _canonicalize_viewer_path(viewer_path: str) -> str:
@@ -130,7 +213,10 @@ def resolve_viewer_html(root_dir: Path, viewer_path: str, *, page_mode: str = "s
     customer_pack_draft_id = customer_pack_draft_id_from_viewer_path(viewer_path)
     if customer_pack_draft_id and not _customer_pack_read_allowed(root_dir, customer_pack_draft_id):
         return None
-    return _viewer_html_for_path(root_dir, viewer_path, page_mode=page_mode)
+    html_text = _viewer_html_for_path(root_dir, viewer_path, page_mode=page_mode)
+    if html_text is not None and customer_pack_draft_id:
+        return _redact_sensitive_network_html_for_display(html_text)
+    return html_text
 
 
 def _normalize_viewer_resource_urls(html_text: str, viewer_path: str) -> str:
@@ -349,6 +435,8 @@ def handle_viewer_document(handler: Any, query: str, *, root_dir: Path) -> None:
     if html_text is None:
         handler._send_json({"error": "viewer document를 찾을 수 없습니다."}, HTTPStatus.NOT_FOUND)
         return
+    if customer_pack_draft_id:
+        html_text = _redact_sensitive_network_html_for_display(html_text)
     handler._send_json(_build_viewer_document_payload(html_text, viewer_path))
 
 
