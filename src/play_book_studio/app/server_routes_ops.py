@@ -535,13 +535,15 @@ def handle_sessions_list(handler: Any, query: str, *, store: Any) -> None:
     handler._send_json({"sessions": summaries, "count": len(summaries)})
 
 
-def handle_session_load(handler: Any, query: str, *, store: Any) -> None:
+def handle_session_load(handler: Any, query: str, *, store: Any, legacy_store: Any | None = None) -> None:
     params = parse_qs(query, keep_blank_values=False)
     session_id = str((params.get("session_id") or [""])[0]).strip()
     if not session_id:
         handler._send_json({"error": "session_id is required"}, HTTPStatus.BAD_REQUEST)
         return
     session = store.peek(session_id)
+    if session is None and legacy_store is not None and legacy_store is not store:
+        session = legacy_store.peek(session_id)
     if session is None:
         handler._send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
         return
@@ -573,10 +575,19 @@ def handle_sessions_delete_all(handler: Any, payload: dict[str, Any], *, store: 
     handler._send_json({"success": True, "deleted_count": deleted_count})
 
 
-def handle_debug_session(handler: Any, query: str, *, store: Any, build_session_debug_payload: Any) -> None:
+def handle_debug_session(
+    handler: Any,
+    query: str,
+    *,
+    store: Any,
+    build_session_debug_payload: Any,
+    legacy_store: Any | None = None,
+) -> None:
     params = parse_qs(query, keep_blank_values=False)
     session_id = str((params.get("session_id") or [""])[0]).strip()
     session = store.peek(session_id) if session_id else store.latest()
+    if session is None and session_id and legacy_store is not None and legacy_store is not store:
+        session = legacy_store.peek(session_id)
     if session is None:
         handler._send_json({"error": "조회할 세션이 없습니다."}, HTTPStatus.NOT_FOUND)
         return

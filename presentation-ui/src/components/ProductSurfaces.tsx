@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { Link } from 'react-router-dom';
-import { MessageSquare, BookOpen, MonitorPlay } from 'lucide-react';
+import { MessageSquare, BookOpen, MonitorPlay, Cpu, Database } from 'lucide-react';
 import { ROUTES } from '../app/routes';
 import './ProductSurfaces.css';
 
@@ -11,20 +11,6 @@ export default function ProductSurfaces() {
 
   useEffect(() => {
     const ctx = gsap.context(() => {
-      // Entrance Animation
-      gsap.from(cardsRef.current, {
-        scrollTrigger: {
-          trigger: containerRef.current,
-          start: "top 70%",
-        },
-        y: 100,
-        scale: 0.9,
-        opacity: 0,
-        stagger: 0.15,
-        duration: 1.2,
-        ease: "power3.out"
-      });
-
       // 3D Magnetic Mouse Tracking
       cardsRef.current.forEach(card => {
         if (!card) return;
@@ -84,7 +70,7 @@ export default function ProductSurfaces() {
     <section className="surfaces-container" ref={containerRef}>
       <div className="surfaces-header">
         <h2 className="text-hero">Product Surfaces</h2>
-        <p className="text-subtitle">어떻게 보여줄 것인가. 세 가지의 연결된 인터페이스.</p>
+        <p className="text-subtitle">다섯가지의 연결된 인터페이스.</p>
       </div>
 
       <div className="surfaces-grid">
@@ -100,14 +86,29 @@ export default function ProductSurfaces() {
               <MessageSquare size={48} color="var(--accent-cyan)" />
             </div>
             <h3>Studio</h3>
-            <p>Playbot과 근거 문서를 함께 여는 운영 스튜디오</p>
+            <p>Playbot과 Playbook의 연계<br></br>운영과 학습을 위한 통합 스튜디오</p>
+          </div>
+        </Link>
+
+        <Link
+          to={ROUTES.opsWorkspaces}
+          className="surface-card glass-panel"
+          ref={el => { cardsRef.current[1] = el; }}
+        >
+          <div className="glow-orb"></div>
+          <div className="card-content">
+            <div className="surface-icon">
+              <Cpu size={48} color="#e68a35" />
+            </div>
+            <h3>Ops Console</h3>
+            <p>자동 복구 및 자동화, AI Ops</p>
           </div>
         </Link>
 
         <Link
           to={ROUTES.pbsPlaybookLibrary}
           className="surface-card glass-panel"
-          ref={el => { cardsRef.current[1] = el; }}
+          ref={el => { cardsRef.current[2] = el; }}
         >
           <div className="glow-orb"></div>
           <div className="card-content">
@@ -115,14 +116,29 @@ export default function ProductSurfaces() {
               <BookOpen size={48} color="var(--text-main)" />
             </div>
             <h3>Playbook Library</h3>
-            <p>Citation을 클릭하면 펼쳐지는 정확한 섹션 이동</p>
+            <p>모든 Playbook을 모아놓은 <br></br>중앙 도서관</p>
+          </div>
+        </Link>
+
+        <Link
+          to={ROUTES.pbsRepository}
+          className="surface-card glass-panel"
+          ref={el => { cardsRef.current[3] = el; }}
+        >
+          <div className="glow-orb"></div>
+          <div className="card-content">
+            <div className="surface-icon">
+              <Database size={48} color="#10b981" />
+            </div>
+            <h3>Book Factory</h3>
+            <p>공식 문서와 유저 문서를<br></br>위키형 책과 챗봇 코퍼스로 자동 변환</p>
           </div>
         </Link>
 
         <Link
           to={ROUTES.pbsControlTower}
           className="surface-card glass-panel"
-          ref={el => { cardsRef.current[2] = el; }}
+          ref={el => { cardsRef.current[4] = el; }}
         >
           <div className="glow-orb"></div>
           <div className="card-content">
@@ -130,7 +146,7 @@ export default function ProductSurfaces() {
               <MonitorPlay size={48} color="var(--accent-purple)" />
             </div>
             <h3>Control Tower</h3>
-            <p>현황과 품질, 평가 리포트를 한 눈에 점검하는 상황실</p>
+            <p>현황과 품질, 평가 리포트를<br></br>한 눈에 점검하는 상황실</p>
           </div>
         </Link>
 

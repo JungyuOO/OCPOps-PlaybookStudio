@@ -7,12 +7,17 @@ import './SharedLandingShell.css';
 export default function SharedLandingShell() {
   const [searchParams] = useSearchParams();
   const activeTab = normalizeSharedLandingTab(searchParams.get('tab'));
+  const isPartner = activeTab === 'partner';
 
   return (
-    <div className={`shared-landing-shell shared-landing-shell--${activeTab}`}>
-      <div className="shared-shell-body">
-        {activeTab === 'partner' ? <PartnerLanePanel /> : <LandingPage />}
-      </div>
+    <div className={`shared-landing-shell ${isPartner ? 'partner-mode' : 'landing-mode'}`}>
+      {isPartner ? (
+        <div className="shared-shell-body">
+          <PartnerLanePanel />
+        </div>
+      ) : (
+        <LandingPage />
+      )}
     </div>
   );
 }

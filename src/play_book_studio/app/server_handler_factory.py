@@ -415,7 +415,8 @@ def _build_handler(
             )
 
         def _handle_sessions_list(self, query: str) -> None: _handle_sessions_list_request(self, query, store=self._session_store())
-        def _handle_session_load(self, query: str) -> None: _handle_session_load_request(self, query, store=self._session_store())
+        def _handle_session_load(self, query: str) -> None:
+            _handle_session_load_request(self, query, store=self._session_store(), legacy_store=store)
         def _handle_session_delete(self, payload: dict[str, Any]) -> None: _handle_session_delete_request(self, payload, store=self._session_store())
         def _handle_sessions_delete_all(self, payload: dict[str, Any]) -> None: _handle_sessions_delete_all_request(self, payload, store=self._session_store())
 
@@ -424,6 +425,7 @@ def _build_handler(
                 self,
                 query,
                 store=self._session_store(),
+                legacy_store=store,
                 build_session_debug_payload=_build_session_debug_payload,
             )
 

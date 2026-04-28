@@ -123,6 +123,21 @@ def _write_json_object(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _default_model_profile(workspace_id: str) -> dict[str, Any]:
+    return {
+        "workspace_id": workspace_id,
+        "chat_provider": "openai-compatible",
+        "chat_base_url": "http://127.0.0.1:8876/api",
+        "chat_model": "pbs-runtime",
+        "chat_api_key_mode": "managed",
+        "embedding_provider": "tei",
+        "embedding_base_url": "http://127.0.0.1:8876/embeddings",
+        "embedding_model": "bge-m3",
+        "embedding_api_key_mode": "managed",
+        "updated_at": _now_iso(),
+    }
+
+
 def _seed_workspace_record() -> dict[str, Any]:
     timestamp = _now_iso()
     return {
@@ -141,6 +156,9 @@ def _default_state() -> dict[str, Any]:
     return {
         "version": 1,
         "workspaces": [workspace],
+        "models": {
+            workspace["workspace_id"]: _default_model_profile(workspace["workspace_id"]),
+        },
         "connections": [],
         "connection_inventory": {},
         "recommendations": [],
@@ -163,6 +181,7 @@ def _load_state(root_dir: Path) -> dict[str, Any]:
         return state
     state.setdefault("version", 1)
     state.setdefault("workspaces", [])
+    state.setdefault("models", {})
     state.setdefault("connections", [])
     state.setdefault("connection_inventory", {})
     state.setdefault("recommendations", [])
@@ -176,6 +195,7 @@ def _load_state(root_dir: Path) -> dict[str, Any]:
     if not state["workspaces"]:
         workspace = _seed_workspace_record()
         state["workspaces"].append(workspace)
+        state["models"][workspace["workspace_id"]] = _default_model_profile(workspace["workspace_id"])
         _write_json_object(path, state)
     return state
 

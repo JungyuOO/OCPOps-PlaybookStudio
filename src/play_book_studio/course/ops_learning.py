@@ -423,9 +423,28 @@ def _manifest_label(course_dir: Path) -> str:
 
 def _load_chunks(course_dir: Path) -> list[dict[str, Any]]:
     chunks: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    jsonl_path = course_dir / "chunks.jsonl"
+    if jsonl_path.exists():
+        for line in jsonl_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            payload = json.loads(line)
+            if isinstance(payload, dict):
+                chunk_id = str(payload.get("chunk_id") or "")
+                if chunk_id:
+                    seen_ids.add(chunk_id)
+                chunks.append(payload)
+
     for path in sorted((course_dir / "chunks").glob("*.json")):
         payload = _read_json(path)
         if isinstance(payload, dict):
+            chunk_id = str(payload.get("chunk_id") or "")
+            if chunk_id and chunk_id in seen_ids:
+                continue
+            if chunk_id:
+                seen_ids.add(chunk_id)
             chunks.append(payload)
     return chunks
 

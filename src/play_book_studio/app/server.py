@@ -16,12 +16,13 @@ if TYPE_CHECKING:
     from play_book_studio.answering.answerer import ChatAnswerer
 
 
-def _warmup_runtime_components(answerer: ChatAnswerer, root_dir: Path) -> None:
-    try:
-        warmup_course_runtime(root_dir)
-        print("[server] course runtime warmed")
-    except Exception as exc:  # noqa: BLE001
-        print(f"[server] course warmup failed: {exc}")
+def _warmup_runtime_components(answerer: ChatAnswerer, root_dir: Path | None = None) -> None:
+    if root_dir is not None:
+        try:
+            warmup_course_runtime(root_dir)
+            print("[server] course runtime warmed")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[server] course warmup failed: {exc}")
     reranker = getattr(getattr(answerer, "retriever", None), "reranker", None)
     if reranker is None:
         return
@@ -34,10 +35,14 @@ def _warmup_runtime_components(answerer: ChatAnswerer, root_dir: Path) -> None:
         print(f"[server] reranker warmed: {reranker.model_name}")
 
 
-def _start_runtime_warmup(answerer: ChatAnswerer, root_dir: Path) -> threading.Thread | None:
+def _start_runtime_warmup(answerer: ChatAnswerer, root_dir: Path | None = None) -> threading.Thread | None:
+    reranker = getattr(getattr(answerer, "retriever", None), "reranker", None)
+    if reranker is None and root_dir is None:
+        return None
+    args = (answerer, root_dir) if root_dir is not None else (answerer,)
     thread = threading.Thread(
         target=_warmup_runtime_components,
-        args=(answerer, root_dir),
+        args=args,
         name="pbs-runtime-warmup",
         daemon=True,
     )

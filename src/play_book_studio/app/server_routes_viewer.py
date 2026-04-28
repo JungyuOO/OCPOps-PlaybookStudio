@@ -265,8 +265,6 @@ def _viewer_source_meta(root_dir: Path, viewer_path: str) -> dict[str, Any] | No
         asset = _figure_asset_by_name(slug, asset_name)
         if asset is None:
             return None
-        settings = load_settings(root_dir)
-        truth = official_runtime_truth_payload(settings=settings, manifest_entry=_manifest_entry_for_book(root_dir, slug))
         caption = str(asset.get("caption") or asset.get("alt") or asset_name).strip() or asset_name
         section_match = _figure_section_match(slug, asset_name) or {}
         section_path = [str(section_match.get("section_heading") or "").strip(), caption]
@@ -281,13 +279,13 @@ def _viewer_source_meta(root_dir: Path, viewer_path: str) -> dict[str, Any] | No
             "source_url": str(asset.get("asset_url") or "").strip(),
             "viewer_path": viewer_path,
             "section_match_exact": True,
-            "source_lane": str(truth.get("source_lane") or ""),
-            "approval_state": str(truth.get("approval_state") or ""),
-            "publication_state": str(truth.get("publication_state") or "active"),
-            "parser_backend": str(truth.get("parser_backend") or ""),
-            "boundary_truth": str(truth.get("boundary_truth") or ""),
-            "runtime_truth_label": "{} Figure".format(str(truth.get("boundary_badge") or "Runtime")),
-            "boundary_badge": str(truth.get("boundary_badge") or ""),
+            "source_lane": "official_source_first_candidate",
+            "approval_state": "",
+            "publication_state": "published",
+            "parser_backend": "render_bound_markdown",
+            "boundary_truth": "official_candidate_runtime",
+            "runtime_truth_label": "Source-First Candidate Figure",
+            "boundary_badge": "Source-First Candidate",
             **_core_pack_payload(),
         }
     return None
