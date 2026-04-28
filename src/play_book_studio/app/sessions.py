@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -193,20 +195,82 @@ def deserialize_session_snapshot(payload: dict[str, Any]) -> ChatSession | None:
 
 
 class SessionStore:
-    def __init__(self, root_dir: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        root_dir: str | Path | None = None,
+        *,
+        owner_scope: str = "",
+        load_persisted: bool = True,
+    ) -> None:
         self._lock = threading.Lock()
         self._sessions: dict[str, ChatSession] = {}
+        self._scoped_stores: dict[str, "SessionStore"] = {}
         self._latest_session_id: str | None = None
         self._root_dir = Path(root_dir).resolve() if root_dir else None
+        self._owner_scope = self._normalize_owner_scope(owner_scope)
         self._settings = load_settings(self._root_dir) if self._root_dir is not None else None
-        if self._settings is not None:
+        if self._settings is not None and load_persisted:
             self._load_persisted_sessions()
+
+    @staticmethod
+    def _normalize_owner_scope(owner_scope: str) -> str:
+        normalized = str(owner_scope or "").strip()
+        if not normalized:
+            return ""
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", normalized):
+            raise ValueError("Invalid session owner scope")
+        return normalized
+
+    def for_owner(self, owner_scope: str) -> "SessionStore":
+        normalized = self._normalize_owner_scope(owner_scope)
+        if not normalized:
+            raise ValueError("Session owner scope is required")
+        with self._lock:
+            scoped = self._scoped_stores.get(normalized)
+            if scoped is None:
+                scoped = SessionStore(self._root_dir, owner_scope=normalized)
+                self._scoped_stores[normalized] = scoped
+            return scoped
+
+    @property
+    def _runtime_sessions_dir(self) -> Path:
+        if self._settings is None:
+            return Path()
+        if self._owner_scope:
+            return self._settings.runtime_sessions_dir / self._owner_scope
+        return self._settings.runtime_sessions_dir
+
+    @property
+    def _recent_chat_session_path(self) -> Path:
+        if self._settings is None:
+            return Path()
+        if self._owner_scope:
+            return self._runtime_sessions_dir / "recent_chat_session.json"
+        return self._settings.recent_chat_session_path
+
+    def _session_snapshot_path(self, session_id: str) -> Path:
+        if self._settings is None:
+            return Path()
+        normalized = self._session_snapshot_stem(session_id)
+        return self._runtime_sessions_dir / f"{normalized}.json"
+
+    def _session_snapshot_stem(self, session_id: str) -> str:
+        normalized = self._settings.session_snapshot_stem(session_id) if self._settings is not None else str(session_id or "")
+        normalized = str(normalized or "").strip() or "unknown-session"
+        if re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", normalized):
+            return normalized
+        digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+        return f"session-{digest}"
 
     def _session_snapshot_paths(self) -> list[Path]:
         if self._settings is None:
             return []
-        paths = list(self._settings.runtime_sessions_dir.glob("*.json"))
-        recent = self._settings.recent_chat_session_path
+        recent = self._recent_chat_session_path
+        paths = [
+            path
+            for path in self._runtime_sessions_dir.glob("*.json")
+            if path.name != recent.name
+        ]
         if recent.exists():
             paths.append(recent)
         unique: list[Path] = []
@@ -270,14 +334,14 @@ class SessionStore:
             return
         payload = serialize_session_snapshot(session)
         serialized = json.dumps(payload, ensure_ascii=False, indent=2)
-        self._settings.runtime_sessions_dir.mkdir(parents=True, exist_ok=True)
-        self._settings.session_snapshot_path(session.session_id).write_text(serialized, encoding="utf-8")
-        self._settings.recent_chat_session_path.write_text(serialized, encoding="utf-8")
+        self._runtime_sessions_dir.mkdir(parents=True, exist_ok=True)
+        self._session_snapshot_path(session.session_id).write_text(serialized, encoding="utf-8")
+        self._recent_chat_session_path.write_text(serialized, encoding="utf-8")
 
     def _recent_session_id(self) -> str | None:
         if self._settings is None:
             return None
-        recent_path = self._settings.recent_chat_session_path
+        recent_path = self._recent_chat_session_path
         if not recent_path.exists():
             return None
         session = self._load_snapshot_path(recent_path)
@@ -289,7 +353,7 @@ class SessionStore:
         with self._lock:
             session = self._sessions.get(session_id)
             if session is None and self._settings is not None:
-                snapshot_path = self._settings.session_snapshot_path(session_id)
+                snapshot_path = self._session_snapshot_path(session_id)
                 if snapshot_path.exists():
                     session = self._load_snapshot_path(snapshot_path)
                     if session is not None:
@@ -329,12 +393,12 @@ class SessionStore:
             deleted = removed is not None
 
             if self._settings is not None:
-                snapshot_path = self._settings.session_snapshot_path(session_id)
+                snapshot_path = self._session_snapshot_path(session_id)
                 if snapshot_path.exists():
                     snapshot_path.unlink()
                     deleted = True
 
-                recent_path = self._settings.recent_chat_session_path
+                recent_path = self._recent_chat_session_path
                 if recent_path.exists() and self._recent_session_id() == session_id:
                     recent_path.unlink()
 
@@ -356,13 +420,15 @@ class SessionStore:
             self._sessions.clear()
             self._latest_session_id = None
             if self._settings is not None:
-                for snapshot_path in self._settings.runtime_sessions_dir.glob("*.json"):
+                recent_path = self._recent_chat_session_path
+                for snapshot_path in self._runtime_sessions_dir.glob("*.json"):
+                    if snapshot_path.name == recent_path.name:
+                        continue
                     try:
                         snapshot_path.unlink()
                         deleted_ids.add(snapshot_path.stem)
                     except FileNotFoundError:
                         continue
-                recent_path = self._settings.recent_chat_session_path
                 if recent_path.exists():
                     recent_path.unlink()
         return len(deleted_ids)
@@ -372,7 +438,7 @@ class SessionStore:
             session = self._sessions.get(session_id)
             if session is not None or self._settings is None:
                 return session
-            snapshot_path = self._settings.session_snapshot_path(session_id)
+            snapshot_path = self._session_snapshot_path(session_id)
             if not snapshot_path.exists():
                 return None
             session = self._load_snapshot_path(snapshot_path)

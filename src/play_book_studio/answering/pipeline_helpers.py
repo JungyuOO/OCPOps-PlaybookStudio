@@ -15,9 +15,11 @@ from .answer_text import (
     normalize_answer_text,
     restore_readable_paragraphs,
     reshape_ops_answer_text,
+    strip_ungrounded_code_blocks,
     shape_actionable_ops_answer,
     shape_rbac_follow_up_answer,
     shape_certificate_monitor_answer,
+    shape_crash_loop_troubleshooting,
     shape_etcd_backup_answer,
     shape_project_termination_answer,
     shape_pod_lifecycle_explainer,
@@ -127,6 +129,16 @@ def generate_grounded_answer_text(
         answer_text,
         query=query,
         mode=mode,
+        citations=citations,
+    )
+    answer_text = shape_crash_loop_troubleshooting(
+        answer_text,
+        query=query,
+        mode=mode,
+        citations=citations,
+    )
+    answer_text = strip_ungrounded_code_blocks(
+        answer_text,
         citations=citations,
     )
     answer_text = strip_weak_additional_guidance(

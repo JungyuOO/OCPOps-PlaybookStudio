@@ -243,6 +243,8 @@ export interface ChatCitation {
   boundary_truth?: string;
   runtime_truth_label?: string;
   boundary_badge?: string;
+  cli_commands?: string[];
+  verification_hints?: string[];
 }
 
 export interface ChatTraceEvent {

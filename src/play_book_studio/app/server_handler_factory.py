@@ -8,12 +8,15 @@ import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
-from play_book_studio.answering.answerer import ChatAnswerer
 from play_book_studio.app.server_chat import (
     handle_chat as _handle_chat_request,
     handle_chat_stream as _handle_chat_stream_request,
+)
+from play_book_studio.app.course_api import (
+    handle_course_get as _handle_course_get_request,
+    handle_course_post as _handle_course_post_request,
 )
 from play_book_studio.app.ops_console_api import (
     handle_ops_console_get as _handle_ops_console_get_request,
@@ -65,6 +68,7 @@ from play_book_studio.app.server_support import (
     _resolve_frontend_asset,
 )
 from play_book_studio.app.server_handler_base import _HandlerBase
+from play_book_studio.app.session_owner import SessionOwner, resolve_session_owner
 from play_book_studio.app.chat_debug import (
     append_unanswered_question_log as _append_unanswered_question_log,
     append_chat_turn_log as _append_chat_turn_log,
@@ -76,6 +80,9 @@ from play_book_studio.app.chat_debug import (
 from play_book_studio.app.presenters import _build_health_payload, _llm_runtime_signature, _refresh_answerer_llm_settings
 from play_book_studio.app.session_flow import context_with_request_overrides as _context_with_request_overrides, derive_next_context as _derive_next_context
 from play_book_studio.app.sessions import ChatSession, SessionStore
+
+if TYPE_CHECKING:
+    from play_book_studio.answering.answerer import ChatAnswerer
 
 
 def _build_handler(
@@ -105,6 +112,19 @@ def _build_handler(
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
             return None
+
+        def _session_owner(self) -> SessionOwner:
+            owner = getattr(self, "_resolved_session_owner", None)
+            if isinstance(owner, SessionOwner):
+                return owner
+            owner = resolve_session_owner(self)
+            self._resolved_session_owner = owner
+            if owner.set_cookie_header:
+                self._queue_response_header("Set-Cookie", owner.set_cookie_header)
+            return owner
+
+        def _session_store(self) -> SessionStore:
+            return store.for_owner(self._session_owner().owner_hash)
 
         def do_GET(self) -> None:  # noqa: N802
             parsed_request = urlparse(self.path)
@@ -203,6 +223,8 @@ def _build_handler(
                 self._handle_customer_pack_captured(parsed_request.query)
                 return
             if request_path.startswith("/api/v1/"):
+                if self._handle_course_get(request_path, parsed_request.query):
+                    return
                 if self._handle_ops_console_get(request_path, parsed_request.query):
                     return
             frontend_fallback = _resolve_frontend_asset(root_dir, request_path)
@@ -275,6 +297,8 @@ def _build_handler(
                 self._handle_reset(payload)
                 return
             if parsed_request.path.startswith("/api/v1/"):
+                if self._handle_course_post(parsed_request.path, payload):
+                    return
                 if self._handle_ops_console_post(parsed_request.path, parsed_request.query, payload):
                     return
             self.send_error(HTTPStatus.NOT_FOUND, "Not found")
@@ -390,16 +414,16 @@ def _build_handler(
                 root_dir=root_dir,
             )
 
-        def _handle_sessions_list(self, query: str) -> None: _handle_sessions_list_request(self, query, store=store)
-        def _handle_session_load(self, query: str) -> None: _handle_session_load_request(self, query, store=store)
-        def _handle_session_delete(self, payload: dict[str, Any]) -> None: _handle_session_delete_request(self, payload, store=store)
-        def _handle_sessions_delete_all(self, payload: dict[str, Any]) -> None: _handle_sessions_delete_all_request(self, payload, store=store)
+        def _handle_sessions_list(self, query: str) -> None: _handle_sessions_list_request(self, query, store=self._session_store())
+        def _handle_session_load(self, query: str) -> None: _handle_session_load_request(self, query, store=self._session_store())
+        def _handle_session_delete(self, payload: dict[str, Any]) -> None: _handle_session_delete_request(self, payload, store=self._session_store())
+        def _handle_sessions_delete_all(self, payload: dict[str, Any]) -> None: _handle_sessions_delete_all_request(self, payload, store=self._session_store())
 
         def _handle_debug_session(self, query: str) -> None:
             _handle_debug_session_request(
                 self,
                 query,
-                store=store,
+                store=self._session_store(),
                 build_session_debug_payload=_build_session_debug_payload,
             )
 
@@ -447,7 +471,7 @@ def _build_handler(
                 self,
                 payload,
                 current_answerer=current_answerer,
-                store=store,
+                store=self._session_store(),
                 root_dir=root_dir,
                 build_chat_payload=_build_chat_payload,
                 context_with_request_overrides=_context_with_request_overrides,
@@ -464,7 +488,7 @@ def _build_handler(
                 self,
                 payload,
                 current_answerer=current_answerer,
-                store=store,
+                store=self._session_store(),
                 root_dir=root_dir,
                 build_chat_payload=_build_chat_payload,
                 context_with_request_overrides=_context_with_request_overrides,
@@ -478,7 +502,7 @@ def _build_handler(
 
         def _handle_reset(self, payload: dict[str, Any]) -> None:
             session_id = str(payload.get("session_id") or uuid.uuid4().hex)
-            session = store.reset(session_id)
+            session = self._session_store().reset(session_id)
             self._send_json(
                 {
                     "session_id": session.session_id,
@@ -490,8 +514,14 @@ def _build_handler(
         def _handle_ops_console_get(self, request_path: str, query: str) -> bool:
             return bool(_handle_ops_console_get_request(self, request_path, query, root_dir=root_dir))
 
+        def _handle_course_get(self, request_path: str, query: str) -> bool:
+            return bool(_handle_course_get_request(self, request_path, query, root_dir=root_dir))
+
         def _handle_ops_console_post(self, request_path: str, query: str, payload: dict[str, Any]) -> bool:
             return bool(_handle_ops_console_post_request(self, request_path, query, payload, root_dir=root_dir))
+
+        def _handle_course_post(self, request_path: str, payload: dict[str, Any]) -> bool:
+            return bool(_handle_course_post_request(self, request_path, payload, root_dir=root_dir, store=self._session_store()))
 
         def _handle_ops_console_put(self, request_path: str, payload: dict[str, Any]) -> bool:
             return bool(_handle_ops_console_put_request(self, request_path, payload, root_dir=root_dir))

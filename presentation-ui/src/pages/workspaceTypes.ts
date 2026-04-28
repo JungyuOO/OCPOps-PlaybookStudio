@@ -22,6 +22,7 @@ export interface Message {
   suggestedQueries?: string[];
   relatedLinks?: ChatRelatedLink[];
   relatedSections?: ChatRelatedLink[];
+  artifacts?: Array<Record<string, unknown>>;
   responseKind?: string;
   acquisition?: {
     kind: string;

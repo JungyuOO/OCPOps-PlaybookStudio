@@ -7,8 +7,7 @@ export type OpsRouteKey =
   | 'resources'
   | 'library'
   | 'chat'
-  | 'actions'
-  | 'scm';
+  | 'actions';
 
 export interface OpsWorkspace {
   workspace_id: string;
@@ -383,61 +382,6 @@ export interface ActionAuditItem {
   created_at: string;
 }
 
-export interface OAuthStartResponse {
-  provider: string;
-  authorize_url: string;
-  state: string;
-}
-
-export interface ScmProviderStatusItem {
-  configured: boolean;
-  client_id_present: boolean;
-  client_secret_present: boolean;
-}
-
-export interface ScmProviderStatus {
-  github: ScmProviderStatusItem;
-  gitlab: ScmProviderStatusItem;
-}
-
-export interface ScmConnection {
-  scm_connection_id: string;
-  workspace_id: string;
-  provider: string;
-  host_url: string;
-  auth_type: string;
-  account_label: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ScmRepository {
-  repository_id: string;
-  workspace_id: string;
-  scm_connection_id: string;
-  repo_full_name: string;
-  default_branch: string;
-  config_path: string;
-  delivery_mode: string;
-  manifest_kind: string;
-  target_cluster_url: string;
-  target_namespace: string;
-  auto_deploy_enabled: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface DeploymentPlanResponse {
-  files_to_change: string[];
-  suggested_updates: Array<Record<string, unknown>>;
-  trigger_kind: string;
-  summary: string;
-  commit_title: string;
-  commit_body: string;
-  requires_pull_request: boolean;
-  next_step: string;
-}
-
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers ?? {});
   const hasBody = init?.body !== undefined && init?.body !== null;
@@ -750,53 +694,4 @@ export async function listActionExecutions(limit = 20): Promise<ActionExecution[
 export async function listActionAudit(limit = 20): Promise<ActionAuditItem[]> {
   const payload = await requestJson<{ items: ActionAuditItem[] }>(`/api/v1/actions/audit?limit=${encodeURIComponent(String(limit))}`);
   return payload.items;
-}
-
-export async function startOAuth(provider: 'github' | 'gitlab', workspaceId: string): Promise<OAuthStartResponse> {
-  return requestJson(`/api/v1/oauth/${provider}/start?workspace_id=${encodeURIComponent(workspaceId)}`, {
-    method: 'POST',
-    body: JSON.stringify({}),
-  });
-}
-
-export async function loadScmProviderStatus(): Promise<ScmProviderStatus> {
-  return requestJson('/api/v1/scm/providers/status');
-}
-
-export async function listScmConnections(workspaceId: string): Promise<ScmConnection[]> {
-  const payload = await requestJson<{ items: ScmConnection[] }>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scm/connections`);
-  return payload.items;
-}
-
-export async function createScmConnection(workspaceId: string, payload: Record<string, unknown>): Promise<ScmConnection> {
-  return requestJson(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scm/connections`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function listScmRepositories(workspaceId: string): Promise<ScmRepository[]> {
-  const payload = await requestJson<{ items: ScmRepository[] }>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scm/repositories`);
-  return payload.items;
-}
-
-export async function createScmRepository(workspaceId: string, payload: Record<string, unknown>): Promise<ScmRepository> {
-  return requestJson(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scm/repositories`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function updateScmRepository(workspaceId: string, repositoryId: string, payload: Record<string, unknown>): Promise<ScmRepository> {
-  return requestJson(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scm/repositories/${encodeURIComponent(repositoryId)}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function createDeploymentPlan(workspaceId: string, repositoryId: string, payload: Record<string, unknown>): Promise<DeploymentPlanResponse> {
-  return requestJson(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scm/repositories/${encodeURIComponent(repositoryId)}/deployment-plan`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
 }

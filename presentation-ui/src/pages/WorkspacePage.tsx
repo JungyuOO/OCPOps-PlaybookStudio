@@ -12,8 +12,6 @@ import {
   ArrowDown,
   Sparkles,
   Link as LinkIcon,
-  LogOut,
-  Settings,
   Plus,
   MessageSquare,
   Trash2,
@@ -23,7 +21,6 @@ import {
   Star,
   Clock3,
   Compass,
-  GitBranch,
 } from 'lucide-react';
 import gsap from 'gsap';
 import './WorkspacePage.css';
@@ -75,16 +72,10 @@ import {
 } from '../lib/runtimeApi';
 import {
   listOcpProfiles,
-  listScmConnections,
-  listScmRepositories,
-  loadScmProviderStatus,
-  startOAuth,
   type OcpConnection,
-  type ScmConnection,
-  type ScmProviderStatus,
-  type ScmRepository,
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../app/routes';
+import { sendCourseChatStream } from '../lib/courseApi';
 import { WIKI_VISION_MODES, loadStoredVisionMode, persistVisionMode, type VisionMode } from '../lib/wikiVision';
 import { resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';
 import WorkspaceTracePanel from '../components/WorkspaceTracePanel';
@@ -97,6 +88,7 @@ import {
   truthSurfaceCopy,
 } from './workspace/WorkspaceAnswer';
 import WorkspaceViewerPanel from './workspace/WorkspaceViewerPanel';
+import CourseChatArtifacts from './CourseChatArtifacts';
 import type {
   Message,
   SourceEntry,
@@ -314,6 +306,13 @@ const STARTER_QUESTION_POOL = [
   '인증서 갱신이나 만료 문제를 볼 때 먼저 확인할 책과 절차를 알려줘',
 ];
 
+const COURSE_STARTER_QUESTION_POOL = [
+  '아키텍처 설계는 어떤 순서로 보면 전체 구성이 이해돼?',
+  '아키텍처 구성도에서 외부, DMZ, 내부망, 데이터베이스 영역은 어떻게 연결돼?',
+  '성능 테스트 결과에서 병목과 개선 포인트는 어디부터 보면 돼?',
+  '파이프라인이나 Pod가 Running 상태라는 건 화면에서 무엇으로 확인해?',
+];
+
 function pickRandomStarterQuestions(pool: string[], count: number): string[] {
   const shuffled = [...pool];
   for (let index = shuffled.length - 1; index > 0; index -= 1) {
@@ -333,6 +332,7 @@ type PreviewState =
     meta?: SourceMetaResponse;
     viewerUrl: string;
     viewerDocument?: ViewerDocumentPayload;
+    scrollTargetText?: string;
   }
   | {
     kind: 'draft';
@@ -513,11 +513,9 @@ function extractDraftIdFromViewerPath(viewerPath: string): string | null {
 
 const PACK_OPTIONS = [
   'OpenShift 4.20',
-  'GitLab Self-Managed',
-  'Harbor Registry',
 ] as const;
 
-const WIKI_OVERLAY_USER_ID = 'kugnus@cywell.co.kr';
+const FALLBACK_CLUSTER_USER_LABEL = 'Undefined';
 
 function runtimePathFromUrl(viewerUrl: string): string {
   try {
@@ -540,6 +538,12 @@ function normalizeViewerDocumentPayload(viewerDocument: Awaited<ReturnType<typeo
       anchorNavigation: viewerDocument.interaction_policy.anchor_navigation,
     },
   };
+}
+
+function firstCitationCommand(citation: ChatCitation): string {
+  return (citation.cli_commands ?? [])
+    .map((command) => String(command || '').trim())
+    .find(Boolean) ?? '';
 }
 
 function parseViewerHtml(viewerHtml: string): Document | null {
@@ -660,6 +664,7 @@ function normalizePreviewNavigationTarget(viewerPath: string): string | null {
 function buildOverlayTargetFromViewerPath(
   viewerUrl: string,
   fallbackTitle: string,
+  userId: string,
 ): OverlayTargetDescriptor | null {
   const runtimePath = runtimePathFromUrl(viewerUrl);
   const [pathWithQuery, anchorPart] = runtimePath.split('#', 2);
@@ -676,7 +681,7 @@ function buildOverlayTargetFromViewerPath(
       title: fallbackTitle,
       viewerPath: runtimePath,
       payload: {
-        user_id: WIKI_OVERLAY_USER_ID,
+        user_id: userId,
         target_kind: 'entity_hub',
         entity_slug: entitySlug,
         viewer_path: runtimePath,
@@ -693,7 +698,7 @@ function buildOverlayTargetFromViewerPath(
       title: fallbackTitle,
       viewerPath: runtimePath,
       payload: {
-        user_id: WIKI_OVERLAY_USER_ID,
+        user_id: userId,
         target_kind: 'figure',
         book_slug: bookSlug,
         asset_name: assetName,
@@ -717,7 +722,7 @@ function buildOverlayTargetFromViewerPath(
         title: fallbackTitle,
         viewerPath: runtimePath,
         payload: {
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: userId,
           target_kind: 'section',
           book_slug: bookSlug,
           anchor,
@@ -731,7 +736,7 @@ function buildOverlayTargetFromViewerPath(
       title: fallbackTitle,
       viewerPath: runtimePath,
       payload: {
-        user_id: WIKI_OVERLAY_USER_ID,
+        user_id: userId,
         target_kind: 'book',
         book_slug: bookSlug,
         viewer_path: runtimePath,
@@ -778,6 +783,14 @@ export default function WorkspacePage() {
     return 'history';
   });
   const [visionMode, setVisionMode] = useState<VisionMode>(() => loadStoredVisionMode());
+  const isGuidedSurface = visionMode === 'guided_tour' || visionMode === 'course_study';
+  const isCourseMode = visionMode === 'course_study';
+
+  useEffect(() => {
+    if (isCourseMode && testMode) {
+      setTestMode(false);
+    }
+  }, [isCourseMode, testMode]);
 
   // Scroll + welcome
   const [userScrolledUp, setUserScrolledUp] = useState(false);
@@ -822,11 +835,7 @@ export default function WorkspacePage() {
     return window.localStorage.getItem('opsConsole.activeConnectionId') || '';
   });
   const [footerConnections, setFooterConnections] = useState<OcpConnection[]>([]);
-  const [footerScmConnections, setFooterScmConnections] = useState<ScmConnection[]>([]);
-  const [footerScmRepositories, setFooterScmRepositories] = useState<ScmRepository[]>([]);
-  const [footerProviderStatus, setFooterProviderStatus] = useState<ScmProviderStatus | null>(null);
   const [isFooterProfileLoading, setIsFooterProfileLoading] = useState(false);
-  const [footerOauthPendingProvider, setFooterOauthPendingProvider] = useState<'github' | 'gitlab' | ''>('');
 
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -856,19 +865,22 @@ export default function WorkspacePage() {
     }
   }, []);
 
+  const activeFooterConnection = useMemo(
+    () => footerConnections.find((item) => item.connection_id === opsConnectionId) ?? footerConnections[0] ?? null,
+    [footerConnections, opsConnectionId],
+  );
+  const footerProfileName = useMemo(() => {
+    const username = activeFooterConnection?.username_hint?.trim();
+    const displayName = activeFooterConnection?.display_name?.trim();
+    return username || displayName || FALLBACK_CLUSTER_USER_LABEL;
+  }, [activeFooterConnection]);
+  const wikiOverlayUserId = footerProfileName;
+
   const refreshFooterProfile = useCallback(async () => {
     setIsFooterProfileLoading(true);
     try {
-      const [connections, scmConnections, scmRepositories, providerStatus] = await Promise.all([
-        listOcpProfiles(opsWorkspaceId),
-        listScmConnections(opsWorkspaceId),
-        listScmRepositories(opsWorkspaceId),
-        loadScmProviderStatus(),
-      ]);
+      const connections = await listOcpProfiles(opsWorkspaceId);
       setFooterConnections(connections);
-      setFooterScmConnections(scmConnections);
-      setFooterScmRepositories(scmRepositories);
-      setFooterProviderStatus(providerStatus);
     } catch (error) {
       console.error(error);
     } finally {
@@ -880,8 +892,8 @@ export default function WorkspacePage() {
     setIsOverlayLoading(true);
     try {
       const [overlayResult, signalResult] = await Promise.all([
-        loadWikiOverlays(WIKI_OVERLAY_USER_ID),
-        loadWikiOverlaySignals(WIKI_OVERLAY_USER_ID),
+        loadWikiOverlays(wikiOverlayUserId),
+        loadWikiOverlaySignals(wikiOverlayUserId),
       ]);
       setWikiOverlays(overlayResult.items ?? []);
       setWikiOverlaySignals(signalResult);
@@ -890,37 +902,29 @@ export default function WorkspacePage() {
     } finally {
       setIsOverlayLoading(false);
     }
-  }, []);
+  }, [wikiOverlayUserId]);
 
   const welcomeQuestions = useMemo(
     () => pickRandomStarterQuestions(STARTER_QUESTION_POOL, 4),
     [],
   );
+  const courseWelcomeQuestions = useMemo(
+    () => pickRandomStarterQuestions(COURSE_STARTER_QUESTION_POOL, 4),
+    [],
+  );
+  const displayedWelcomeQuestions = isCourseMode ? courseWelcomeQuestions : welcomeQuestions;
   const activeVision = useMemo(
     () => WIKI_VISION_MODES.find((mode) => mode.id === visionMode) ?? WIKI_VISION_MODES[0],
     [visionMode],
   );
-  const activeFooterConnection = useMemo(
-    () => footerConnections.find((item) => item.connection_id === opsConnectionId) ?? footerConnections[0] ?? null,
-    [footerConnections, opsConnectionId],
-  );
-  const footerGithubConnected = useMemo(
-    () => footerScmConnections.some((item) => item.provider === 'github'),
-    [footerScmConnections],
-  );
-  const footerGitlabConnected = useMemo(
-    () => footerScmConnections.some((item) => item.provider === 'gitlab'),
-    [footerScmConnections],
-  );
-  const footerRepoCount = footerScmRepositories.length;
   const leftPanelLabels = useMemo(() => ({
-    history: visionMode === 'guided_tour' ? 'Journey' : 'History',
-    outline: visionMode === 'guided_tour' ? 'Route Map' : 'Outline',
-    signals: visionMode === 'guided_tour' ? 'Signals' : 'Signals',
-    historyTitle: visionMode === 'guided_tour' ? 'Tour Journey' : 'Chat History',
-    outlineTitle: visionMode === 'guided_tour' ? 'Tour Map' : 'Document Outline',
-    signalsTitle: visionMode === 'guided_tour' ? 'Tour Signals' : 'Reader Signals',
-  }), [visionMode]);
+    history: isGuidedSurface ? 'Journey' : 'History',
+    outline: isGuidedSurface ? 'Route Map' : 'Outline',
+    signals: isGuidedSurface ? 'Signals' : 'Signals',
+    historyTitle: isGuidedSurface ? 'Tour Journey' : 'Chat History',
+    outlineTitle: isGuidedSurface ? 'Tour Map' : 'Document Outline',
+    signalsTitle: isGuidedSurface ? 'Tour Signals' : 'Reader Signals',
+  }), [isGuidedSurface]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -956,12 +960,18 @@ export default function WorkspacePage() {
 
   // Track user scroll-up via wheel only (not programmatic scroll)
   useEffect(() => {
+    if (isCourseMode) {
+      return;
+    }
     void refreshWikiOverlays();
-  }, [refreshWikiOverlays]);
+  }, [isCourseMode, refreshWikiOverlays]);
 
   useEffect(() => {
+    if (isCourseMode) {
+      return;
+    }
     void refreshFooterProfile();
-  }, [refreshFooterProfile]);
+  }, [isCourseMode, refreshFooterProfile]);
 
   useEffect(() => {
     const el = chatMessagesRef.current;
@@ -989,7 +999,7 @@ export default function WorkspacePage() {
     if (el) {
       el.classList.remove('scroll-locked');
       setUserScrolledUp(false);
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
     }
   }
 
@@ -1002,23 +1012,6 @@ export default function WorkspacePage() {
 
   function openOpsRoute(path: string): void {
     navigate(path);
-  }
-
-  async function handleFooterOauth(provider: 'github' | 'gitlab'): Promise<void> {
-    if (!footerProviderStatus?.[provider]?.configured) {
-      navigate(ROUTES.opsScm);
-      return;
-    }
-    setFooterOauthPendingProvider(provider);
-    try {
-      const oauth = await startOAuth(provider, opsWorkspaceId || 'ws_default');
-      window.open(oauth.authorize_url, '_blank', 'noopener,noreferrer');
-    } catch (error) {
-      console.error(error);
-      navigate(ROUTES.opsScm);
-    } finally {
-      setFooterOauthPendingProvider('');
-    }
   }
 
   async function handleSessionResume(targetSessionId: string): Promise<void> {
@@ -1159,7 +1152,7 @@ export default function WorkspacePage() {
         try {
           container.scrollTo({
             top: container.scrollHeight,
-            behavior: 'smooth'
+            behavior: 'auto'
           });
         } catch {
           // ignore
@@ -1180,7 +1173,7 @@ export default function WorkspacePage() {
       try {
         container.scrollTo({
           top: container.scrollHeight,
-          behavior: 'smooth',
+          behavior: 'auto',
         });
       } catch {
         container.scrollTop = container.scrollHeight;
@@ -1220,6 +1213,12 @@ export default function WorkspacePage() {
     let cancelled = false;
 
     const bootstrap = async () => {
+      if (isCourseMode) {
+        setManualBooks([]);
+        setDrafts([]);
+        setIsBootstrapLoading(false);
+        return;
+      }
       setIsBootstrapLoading(true);
       try {
         void refreshSessionList();
@@ -1250,7 +1249,7 @@ export default function WorkspacePage() {
     return () => {
       cancelled = true;
     };
-  }, [refreshSessionList]);
+  }, [isCourseMode, refreshSessionList]);
 
   const manualSources = useMemo<SourceEntry[]>(
     () =>
@@ -1319,11 +1318,11 @@ export default function WorkspacePage() {
       const visibleSection = viewerActiveSection ?? extractVisibleViewerSection(preview.viewerDocument.html);
       if (visibleSection && currentViewerPath) {
         const sectionViewerPath = `${currentViewerPath.split('#', 1)[0]}#${visibleSection.anchor}`;
-        return buildOverlayTargetFromViewerPath(sectionViewerPath, visibleSection.title);
+        return buildOverlayTargetFromViewerPath(sectionViewerPath, visibleSection.title, wikiOverlayUserId);
       }
     }
-    return buildOverlayTargetFromViewerPath(preview.viewerUrl, preview.title);
-  }, [currentViewerPath, preview, viewerActiveSection, viewerPageMode]);
+    return buildOverlayTargetFromViewerPath(preview.viewerUrl, preview.title, wikiOverlayUserId);
+  }, [currentViewerPath, preview, viewerActiveSection, viewerPageMode, wikiOverlayUserId]);
 
   const favoriteOverlays = useMemo(
     () => wikiOverlays.filter((item) => item.kind === 'favorite'),
@@ -1431,6 +1430,7 @@ export default function WorkspacePage() {
     title: string,
     sourceId?: string,
     pageMode: ViewerPageMode = viewerPageMode,
+    scrollTargetText = '',
   ): Promise<void> {
     const normalizedViewerPath = normalizePreviewNavigationTarget(viewerPath);
     if (!normalizedViewerPath) {
@@ -1451,6 +1451,7 @@ export default function WorkspacePage() {
         meta,
         viewerUrl,
         viewerDocument,
+        scrollTargetText,
       });
     } catch (error) {
       console.error('viewer-preview-failed', {
@@ -1462,6 +1463,7 @@ export default function WorkspacePage() {
         title,
         subtitle: '',
         viewerUrl: toRuntimeUrl(normalizedViewerPath),
+        scrollTargetText,
       });
     }
   }
@@ -1475,7 +1477,7 @@ export default function WorkspacePage() {
       return;
     }
     const targetViewerPath = preview.meta?.viewer_path || runtimePathFromUrl(preview.viewerUrl);
-    await openViewerPreview(targetViewerPath, preview.title, activeSourceId ?? undefined, nextMode);
+    await openViewerPreview(targetViewerPath, preview.title, activeSourceId ?? undefined, nextMode, preview.scrollTargetText);
   }
 
   async function openManualPreview(book: LibraryBook): Promise<void> {
@@ -1583,7 +1585,7 @@ export default function WorkspacePage() {
     if (currentOverlayTarget.kind === 'entity_hub' || currentOverlayTarget.kind === 'book' || currentOverlayTarget.kind === 'section' || currentOverlayTarget.kind === 'figure') {
       const timer = window.setTimeout(() => {
         void saveWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'recent_position',
           ...currentOverlayTarget.payload,
         })
@@ -1631,6 +1633,10 @@ export default function WorkspacePage() {
 
   async function handleCitationClick(citation: ChatCitation): Promise<void> {
     try {
+      if (rightCollapsed) {
+        rightPanelRef.current?.expand();
+        setRightCollapsed(false);
+      }
       const draftId = extractDraftIdFromViewerPath(citation.viewer_path);
       if (draftId) {
         await openDraftPreview(draftId, drafts, citation.viewer_path);
@@ -1638,9 +1644,14 @@ export default function WorkspacePage() {
         await openViewerPreview(
           citation.viewer_path,
           citation.source_label || citation.book_title || citation.section,
+          undefined,
+          viewerPageMode,
+          firstCitationCommand(citation),
         );
       }
-      animatePreviewPanel();
+      if (!isCourseMode) {
+        animatePreviewPanel();
+      }
     } catch (error) {
       console.error(error);
       window.alert(error instanceof Error ? error.message : '참조 원문을 여는 중 오류가 발생했습니다.');
@@ -1649,15 +1660,21 @@ export default function WorkspacePage() {
 
   async function handleRelatedLinkClick(link: ChatRelatedLink): Promise<void> {
     try {
+      if (rightCollapsed) {
+        rightPanelRef.current?.expand();
+        setRightCollapsed(false);
+      }
       await openViewerPreview(link.href, link.label);
-      animatePreviewPanel();
+      if (!isCourseMode) {
+        animatePreviewPanel();
+      }
     } catch (error) {
       console.error(error);
     }
   }
 
   function overlayTargetFromLink(link: ChatRelatedLink): OverlayTargetDescriptor | null {
-    return buildOverlayTargetFromViewerPath(toRuntimeUrl(link.href), link.label);
+    return buildOverlayTargetFromViewerPath(toRuntimeUrl(link.href), link.label, wikiOverlayUserId);
   }
 
   function overlayExists(kind: 'favorite' | 'check', targetRef: string): WikiOverlayRecord | null {
@@ -1672,13 +1689,13 @@ export default function WorkspacePage() {
     try {
       if (currentFavorite) {
         await removeWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'favorite',
           target_ref: currentFavorite.target_ref,
         });
       } else {
         await saveWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'favorite',
           title: currentOverlayTarget.title,
           summary: preview.kind === 'viewer' ? preview.subtitle : '',
@@ -1703,13 +1720,13 @@ export default function WorkspacePage() {
       const existing = overlayExists('favorite', target.ref);
       if (existing) {
         await removeWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'favorite',
           target_ref: existing.target_ref,
         });
       } else {
         await saveWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'favorite',
           title: link.label,
           summary: link.summary ?? '',
@@ -1732,13 +1749,13 @@ export default function WorkspacePage() {
     try {
       if (currentSectionCheck) {
         await removeWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'check',
           target_ref: currentSectionCheck.target_ref,
         });
       } else {
         await saveWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'check',
           status: 'checked',
           ...currentOverlayTarget.payload,
@@ -1762,13 +1779,13 @@ export default function WorkspacePage() {
       const existing = overlayExists('check', target.ref);
       if (existing) {
         await removeWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'check',
           target_ref: existing.target_ref,
         });
       } else {
         await saveWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'check',
           status: 'checked',
           ...target.payload,
@@ -1795,7 +1812,7 @@ export default function WorkspacePage() {
     if (!baseViewerPath) {
       return null;
     }
-    return buildOverlayTargetFromViewerPath(`${baseViewerPath}#${normalizedAnchor}`, title);
+    return buildOverlayTargetFromViewerPath(`${baseViewerPath}#${normalizedAnchor}`, title, wikiOverlayUserId);
   }
 
   async function cleanupLegacyEditOverlaysForTarget(targetRef: string): Promise<void> {
@@ -1804,13 +1821,13 @@ export default function WorkspacePage() {
     const legacyInk = inkOverlayByTarget.get(targetRef);
     if (legacyNote) {
       removals.push(removeWikiOverlay({
-        user_id: WIKI_OVERLAY_USER_ID,
+        user_id: wikiOverlayUserId,
         overlay_id: legacyNote.overlay_id,
       }));
     }
     if (legacyInk) {
       removals.push(removeWikiOverlay({
-        user_id: WIKI_OVERLAY_USER_ID,
+        user_id: wikiOverlayUserId,
         overlay_id: legacyInk.overlay_id,
       }));
     }
@@ -1849,14 +1866,14 @@ export default function WorkspacePage() {
       if (textAnnotations.length === 0 && strokes.length === 0) {
         if (existingEditedCard) {
           await removeWikiOverlay({
-            user_id: WIKI_OVERLAY_USER_ID,
+            user_id: wikiOverlayUserId,
             overlay_id: existingEditedCard.overlay_id,
           });
         }
         await cleanupLegacyEditOverlaysForTarget(target.ref);
       } else {
         await saveWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'edited_card',
           overlay_id: existingEditedCard?.overlay_id ?? '',
           title: target.title,
@@ -2065,12 +2082,44 @@ export default function WorkspacePage() {
         query: trimmed,
         sessionId,
         mode: 'ops',
-        userId: WIKI_OVERLAY_USER_ID,
+        userId: wikiOverlayUserId,
         selectedDraftIds: activeDraft ? [activeDraft.draft_id] : [],
         restrictUploadedSources: Boolean(activeDraft),
       };
       let response: ChatResponse;
-      if (testMode) {
+      let courseAssistantMessageId = '';
+      if (isCourseMode) {
+        courseAssistantMessageId = makeId('assistant');
+        let streamedAnswer = '';
+        setMessages((current) => [
+          ...current,
+          {
+            id: courseAssistantMessageId,
+            role: 'assistant',
+            content: '',
+            citations: [],
+            suggestedQueries: [],
+            relatedLinks: [],
+            relatedSections: [],
+            artifacts: [],
+            responseKind: 'rag',
+          },
+        ]);
+        response = await sendCourseChatStream({
+          message: trimmed,
+          sessionId,
+          userId: wikiOverlayUserId,
+        }, (event) => {
+          if (event.type === 'answer_delta') {
+            streamedAnswer += event.delta;
+            setMessages((current) => current.map((message) => (
+              message.id === courseAssistantMessageId
+                ? { ...message, content: streamedAnswer }
+                : message
+            )));
+          }
+        });
+      } else if (testMode) {
         setActiveTestTrace({
           query: trimmed,
           sessionId,
@@ -2101,9 +2150,7 @@ export default function WorkspacePage() {
       const primaryTruth = primaryCitationTruth(response.citations);
 
       setSessionId(response.session_id || sessionId);
-      setMessages((current) => [
-        ...current,
-        {
+      const assistantMessage = {
           id: makeId('assistant'),
           role: 'assistant',
           content: response.answer,
@@ -2111,6 +2158,9 @@ export default function WorkspacePage() {
           suggestedQueries: response.suggested_queries ?? [],
           relatedLinks: response.related_links ?? [],
           relatedSections: response.related_sections ?? [],
+          artifacts: Array.isArray((response as { artifacts?: unknown }).artifacts)
+            ? ((response as { artifacts?: Array<Record<string, unknown>> }).artifacts ?? [])
+            : [],
           responseKind: response.response_kind,
           acquisition: response.acquisition,
           primarySourceLane: primaryTruth?.sourceLane,
@@ -2123,9 +2173,17 @@ export default function WorkspacePage() {
           retrievalTrace: response.retrieval_trace,
           pipelineTrace: response.pipeline_trace,
           traceEvents: response.pipeline_trace?.events ?? (testMode ? activeTestTrace?.events ?? [] : []),
-        },
-      ]);
-      if (testMode) {
+        } satisfies Message;
+      if (courseAssistantMessageId) {
+        setMessages((current) => current.map((message) => (
+          message.id === courseAssistantMessageId
+            ? { ...assistantMessage, id: courseAssistantMessageId }
+            : message
+        )));
+      } else {
+        setMessages((current) => [...current, assistantMessage]);
+      }
+      if (testMode && !isCourseMode) {
         setActiveTestTrace((current) => ({
           query: current?.query ?? trimmed,
           sessionId: response.session_id || current?.sessionId || sessionId,
@@ -2135,7 +2193,7 @@ export default function WorkspacePage() {
       }
 
       const primaryCitation = pickPrimaryPlaybookCitation(response.citations);
-      if (primaryCitation) {
+      if (primaryCitation && !isCourseMode) {
         await handleCitationClick(primaryCitation);
       }
     } catch (error) {
@@ -2448,6 +2506,7 @@ export default function WorkspacePage() {
         packOptions={PACK_OPTIONS}
         sessionId={sessionId}
         testMode={testMode}
+        testModeDisabled={isCourseMode}
         globalTheme={globalTheme}
         onOpenLibrary={() => navigate('/playbook-library')}
         onResetSession={resetSession}
@@ -2601,7 +2660,7 @@ export default function WorkspacePage() {
                   {outlineCategoryGroups.length > 0 && (
                     <section className="outline-category-board outline-surface-card outline-surface-card--catalog">
                       <div className="outline-section-head">
-                        <strong>{visionMode === 'guided_tour' ? 'Tour Routes' : 'Categories'}</strong>
+                        <strong>{isGuidedSurface ? 'Tour Routes' : 'Categories'}</strong>
                         <span>{outlineCategoryGroups.length}</span>
                       </div>
                       <div className="outline-category-list">
@@ -2692,7 +2751,7 @@ export default function WorkspacePage() {
                   <nav className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Document outline">
                     <div className="outline-section-head">
                       <div className="outline-section-copy">
-                        <strong>{visionMode === 'guided_tour' ? 'Current Stop' : 'Current Document'}</strong>
+                        <strong>{isGuidedSurface ? 'Current Stop' : 'Current Document'}</strong>
                         {preview.kind !== 'empty' && <span>{preview.title}</span>}
                       </div>
                       {outlineTocNodes.length > 0 && <span>{outlineTocNodes.length}</span>}
@@ -2735,7 +2794,7 @@ export default function WorkspacePage() {
                     )}
                     {outlineProcedureItems.length > 0 && (
                       <div className="outline-toc-suggested">
-                        <div className="outline-toc-suggested-title">{visionMode === 'guided_tour' ? 'Then Open' : 'Suggested next'}</div>
+                        <div className="outline-toc-suggested-title">{isGuidedSurface ? 'Then Open' : 'Suggested next'}</div>
                         <div className="outline-toc-suggested-chips">
                           {outlineProcedureItems.slice(0, 3).map((item) => (
                             <button
@@ -2753,7 +2812,7 @@ export default function WorkspacePage() {
                     )}
                   </nav>
 
-                  {visionMode !== 'guided_tour' && (outlineRuntimeItems.length > 0 || outlineCustomerItems.length > 0) && (
+                  {!isGuidedSurface && (outlineRuntimeItems.length > 0 || outlineCustomerItems.length > 0) && (
                     <details className="outline-more outline-surface-card outline-surface-card--sources">
                       <summary>More sources</summary>
                       {outlineRuntimeItems.length > 0 && (
@@ -2876,62 +2935,15 @@ export default function WorkspacePage() {
                     <Cpu size={18} />
                     <div className={`status-dot-online ${activeFooterConnection ? '' : 'status-dot-idle'}`}></div>
                   </div>
-                  <div className="profile-info">
-                    <div className="profile-name">김성욱</div>
-                    <div className="profile-role">kugnus@cywell.co.kr</div>
-                  </div>
-                  <div className="profile-actions">
-                    <button className="profile-action-btn" title="Settings" type="button" onClick={(e) => e.stopPropagation()}>
-                      <Settings size={16} />
-                    </button>
-                    <button className="profile-action-btn" title="Logout" type="button" onClick={(e) => e.stopPropagation()}>
-                      <LogOut size={16} />
-                    </button>
-                  </div>
                   <div className="profile-ops-summary">
-                    <div className="profile-ops-title">
-                      {activeFooterConnection ? activeFooterConnection.display_name : 'No Cluster Connected'}
-                    </div>
-                    <div className="profile-ops-subtitle">
-                      {activeFooterConnection
-                        ? `${activeFooterConnection.default_namespace} · SSL forced off`
-                        : 'Connections에서 demo namespace 연결을 먼저 고정하세요'}
-                    </div>
-                    <div className="profile-meta-row">
-                      <span className={`profile-chip ${activeFooterConnection ? 'is-live' : ''}`}>
-                        {isFooterProfileLoading ? 'Syncing' : activeFooterConnection ? 'Cluster Live' : 'Disconnected'}
-                      </span>
-                      <span className={`profile-chip ${footerGithubConnected ? 'is-linked' : ''}`}>
-                        GitHub {footerGithubConnected ? 'linked' : footerProviderStatus?.github?.configured ? 'ready' : 'off'}
-                      </span>
-                      <span className={`profile-chip ${footerGitlabConnected ? 'is-linked' : ''}`}>
-                        GitLab {footerGitlabConnected ? 'linked' : footerProviderStatus?.gitlab?.configured ? 'ready' : 'off'}
-                      </span>
-                      <span className="profile-chip">{footerRepoCount} repos</span>
-                    </div>
-                    <div className="profile-action-stack">
-                      <button className="profile-connection-btn" type="button" onClick={() => openOpsRoute(ROUTES.opsOverview)}>
-                        Cluster
-                      </button>
-                      <button
-                        className="profile-provider-btn"
-                        type="button"
-                        disabled={footerOauthPendingProvider === 'github'}
-                        onClick={() => { void handleFooterOauth('github'); }}
-                      >
-                      <LinkIcon size={14} />
-                        <span>{footerOauthPendingProvider === 'github' ? 'Opening...' : 'GitHub'}</span>
-                      </button>
-                      <button
-                        className="profile-provider-btn"
-                        type="button"
-                        disabled={footerOauthPendingProvider === 'gitlab'}
-                        onClick={() => { void handleFooterOauth('gitlab'); }}
-                      >
-                        <GitBranch size={14} />
-                        <span>{footerOauthPendingProvider === 'gitlab' ? 'Opening...' : 'GitLab'}</span>
-                      </button>
-                    </div>
+                    <button
+                      className={`profile-ops-name-btn ${activeFooterConnection ? '' : 'is-undefined'}`}
+                      type="button"
+                      onClick={() => openOpsRoute(activeFooterConnection ? ROUTES.opsOverview : ROUTES.opsConnections)}
+                      title={activeFooterConnection ? 'Open Ops Console' : 'Connect OpenShift cluster'}
+                    >
+                      {isFooterProfileLoading ? 'Syncing' : footerProfileName}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2966,16 +2978,16 @@ export default function WorkspacePage() {
                     <div className="welcome-icon">
                       <Sparkles size={36} />
                     </div>
-                    <h2 className="welcome-title">{visionMode === 'guided_tour' ? '투어를 시작하세요' : '질문을 시작하세요'}</h2>
+                    <h2 className="welcome-title">{isGuidedSurface ? '투어를 시작하세요' : '질문을 시작하세요'}</h2>
                     <p className="welcome-vision-copy">
-                      {visionMode === 'guided_tour'
+                      {isGuidedSurface
                         ? '질문을 던지면 바로 읽을 절차와 이어서 열 문서를 한 경로로 엽니다.'
                         : activeVision.workspace.summary}
                     </p>
-                    {visionMode === 'guided_tour' ? (
+                    {isGuidedSurface ? (
                       <div className="welcome-vision-active">
-                        <div className="welcome-vision-active-title">Guided Tour Active</div>
-                        <p className="welcome-vision-active-copy">질문을 던지면 답변, 문서, 다음 절차가 한 경로로 이어집니다.</p>
+                        <div className="welcome-vision-active-title">{activeVision.label} Active</div>
+                        <p className="welcome-vision-active-copy">{activeVision.workspace.cue}</p>
                       </div>
                     ) : (
                       <div className="welcome-vision-grid">
@@ -2993,22 +3005,22 @@ export default function WorkspacePage() {
                       </div>
                     )}
                     <div className="suggested-query-label welcome-route-label">
-                      {visionMode === 'guided_tour' ? 'Start Tour' : '시작 질문'}
+                      {isGuidedSurface ? 'Start Tour' : '시작 질문'}
                     </div>
-                    <div className={visionMode === 'guided_tour' ? 'welcome-question-grid guided-welcome-grid' : 'welcome-question-grid'}>
-                      {welcomeQuestions.map((q, i) => (
+                    <div className={isGuidedSurface ? 'welcome-question-grid guided-welcome-grid' : 'welcome-question-grid'}>
+                      {displayedWelcomeQuestions.map((q, i) => (
                         <button
                           key={`welcome-q-${i}`}
                           type="button"
-                          className={visionMode === 'guided_tour' ? 'welcome-question-card glass-panel guided-welcome-card' : 'welcome-question-card glass-panel'}
+                          className={isGuidedSurface ? 'welcome-question-card glass-panel guided-welcome-card' : 'welcome-question-card glass-panel'}
                           onClick={() => { void handleSend(q); }}
                           disabled={isSending}
                         >
-                          {visionMode === 'guided_tour' && (
+                          {isGuidedSurface && (
                             <span className="guided-welcome-index">Step {i + 1}</span>
                           )}
                           {q}
-                          {visionMode === 'guided_tour' && (
+                          {isGuidedSurface && (
                             <span className="guided-welcome-arrow">
                               <ArrowRight size={14} />
                             </span>
@@ -3029,39 +3041,48 @@ export default function WorkspacePage() {
                     <div className="message-bubble glass-panel">
                       <div className="message-content">
                         {message.role === 'assistant' ? (
-                          <AssistantAnswer
-                            content={message.content}
-                            citations={message.citations ?? []}
-                            relatedLinks={message.relatedLinks ?? []}
-                            relatedSections={message.relatedSections ?? []}
-                            visionMode={visionMode}
-                            primarySourceLane={message.primarySourceLane}
-                            primaryBoundaryTruth={message.primaryBoundaryTruth}
-                            primaryRuntimeTruthLabel={message.primaryRuntimeTruthLabel}
-                            primaryBoundaryBadge={message.primaryBoundaryBadge}
-                            primaryPublicationState={message.primaryPublicationState}
-                            primaryApprovalState={message.primaryApprovalState}
-                            onCitationClick={(citation) => {
-                              void handleCitationClick(citation);
-                            }}
-                            onRelatedLinkClick={(link) => {
-                              void handleRelatedLinkClick(link);
-                            }}
-                            onToggleFavoriteLink={(link) => {
-                              void handleToggleFavoriteLink(link);
-                            }}
-                            onCheckSectionLink={(link) => {
-                              void handleToggleSectionCheckLink(link);
-                            }}
-                            isFavoriteLink={(link) => {
-                              const target = overlayTargetFromLink(link);
-                              return Boolean(target && overlayExists('favorite', target.ref));
-                            }}
-                            isCheckedSectionLink={(link) => {
-                              const target = overlayTargetFromLink(link);
-                              return Boolean(target && overlayExists('check', target.ref));
-                            }}
-                          />
+                          <>
+                            <AssistantAnswer
+                              content={message.content}
+                              citations={message.citations ?? []}
+                              relatedLinks={message.relatedLinks ?? []}
+                              relatedSections={message.relatedSections ?? []}
+                              visionMode={isCourseMode ? 'guided_tour' : visionMode}
+                              primarySourceLane={message.primarySourceLane}
+                              primaryBoundaryTruth={message.primaryBoundaryTruth}
+                              primaryRuntimeTruthLabel={message.primaryRuntimeTruthLabel}
+                              primaryBoundaryBadge={message.primaryBoundaryBadge}
+                              primaryPublicationState={message.primaryPublicationState}
+                              primaryApprovalState={message.primaryApprovalState}
+                              onCitationClick={(citation) => {
+                                void handleCitationClick(citation);
+                              }}
+                              onRelatedLinkClick={(link) => {
+                                void handleRelatedLinkClick(link);
+                              }}
+                              onToggleFavoriteLink={(link) => {
+                                void handleToggleFavoriteLink(link);
+                              }}
+                              onCheckSectionLink={(link) => {
+                                void handleToggleSectionCheckLink(link);
+                              }}
+                              isFavoriteLink={(link) => {
+                                const target = overlayTargetFromLink(link);
+                                return Boolean(target && overlayExists('favorite', target.ref));
+                              }}
+                              isCheckedSectionLink={(link) => {
+                                const target = overlayTargetFromLink(link);
+                                return Boolean(target && overlayExists('check', target.ref));
+                              }}
+                            />
+                            {isCourseMode && message.artifacts?.length ? (
+                              <CourseChatArtifacts
+                                artifacts={message.artifacts}
+                                includeKinds={['course_image_evidence']}
+                                disableLinks
+                              />
+                            ) : null}
+                          </>
                         ) : (
                           message.content
                         )}
@@ -3079,21 +3100,21 @@ export default function WorkspacePage() {
                       )}
                       {message.role === 'assistant' && message.suggestedQueries && message.suggestedQueries.length > 0 && (
                         <div className="suggested-query-group">
-                          <div className="suggested-query-label">{visionMode === 'guided_tour' ? '다음 경로' : '이런 질문은 어떠세요?'}</div>
-                          <div className={visionMode === 'guided_tour' ? 'suggested-query-list guided-tour-query-list' : 'suggested-query-list'}>
+                          <div className="suggested-query-label">{isGuidedSurface ? '다음 경로' : '이런 질문은 어떠세요?'}</div>
+                          <div className={isGuidedSurface ? 'suggested-query-list guided-tour-query-list' : 'suggested-query-list'}>
                             {message.suggestedQueries.map((suggestedQuery, suggestedIndex) => (
                               <button
                                 key={`${message.id}-suggested-${suggestedIndex}`}
-                                className={visionMode === 'guided_tour' ? 'suggested-query-chip guided-tour-query-chip' : 'suggested-query-chip'}
+                                className={isGuidedSurface ? 'suggested-query-chip guided-tour-query-chip' : 'suggested-query-chip'}
                                 type="button"
                                 onClick={() => { void handleSend(suggestedQuery); }}
                                 disabled={isSending}
                               >
-                                {visionMode === 'guided_tour' && (
+                                {isGuidedSurface && (
                                   <span className="guided-tour-query-index">{suggestedIndex + 1}</span>
                                 )}
                                 {suggestedQuery}
-                                {visionMode === 'guided_tour' && (
+                                {isGuidedSurface && (
                                   <span className="guided-tour-query-arrow">
                                     <ArrowRight size={12} />
                                   </span>
@@ -3135,7 +3156,7 @@ export default function WorkspacePage() {
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     onKeyDown={handleInputKeyDown}
-                    placeholder={visionMode === 'guided_tour' ? '질문을 던지면 문서 투어를 엽니다...' : '질문을 입력하거나 문서를 탐색하세요...'}
+                    placeholder={isGuidedSurface ? '질문을 던지면 문서 투어를 엽니다...' : '질문을 입력하거나 문서를 탐색하세요...'}
                     disabled={isSending}
                   />
                   <button className="send-btn" onClick={() => { void handleSend(); }} type="button" disabled={isSending}>
@@ -3189,7 +3210,7 @@ export default function WorkspacePage() {
                   <button className="section-header-btn" onClick={() => toggleSection('manuals')} type="button">
                     <div className="header-label-group">
                       {collapsedSections.manuals ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      <span className="list-title">{visionMode === 'guided_tour' ? 'Tour Books' : 'Source Books'}</span>
+                      <span className="list-title">{isGuidedSurface ? 'Tour Books' : 'Source Books'}</span>
                     </div>
                     <span className="item-count-badge">{manualSources.length}</span>
                   </button>
@@ -3223,7 +3244,7 @@ export default function WorkspacePage() {
                   <button className="section-header-btn" onClick={() => toggleSection('drafts')} type="button">
                     <div className="header-label-group">
                       {collapsedSections.drafts ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      <span className="list-title">{visionMode === 'guided_tour' ? 'Added Sources' : 'Customer Packs'}</span>
+                      <span className="list-title">{isGuidedSurface ? 'Added Sources' : 'Customer Packs'}</span>
                     </div>
                     <span className="item-count-badge">{draftSources.length}</span>
                   </button>
@@ -3260,7 +3281,7 @@ export default function WorkspacePage() {
             {!testMode && preview.kind === 'empty' && (
               <div className="empty-state">
                 <div className="empty-icon"><BookOpen size={48} className="text-dim" /></div>
-                <h4>{visionMode === 'guided_tour' ? '투어 문서를 여세요' : '문서를 선택하세요'}</h4>
+                <h4>{isGuidedSurface ? '투어 문서를 여세요' : '문서를 선택하세요'}</h4>
               </div>
             )}
 
@@ -3268,7 +3289,7 @@ export default function WorkspacePage() {
               <div className="empty-state">
                 <div className="loading-spinner-small"></div>
                 <h4>{preview.title}</h4>
-                <p>{visionMode === 'guided_tour' ? 'Tour is opening' : 'Loading'}</p>
+                <p>{isGuidedSurface ? 'Tour is opening' : 'Loading'}</p>
               </div>
             )}
 
@@ -3278,6 +3299,7 @@ export default function WorkspacePage() {
                   <ViewerDocumentStage
                     viewerDocument={preview.viewerDocument}
                     currentViewerPath={currentViewerPath}
+                    scrollTargetText={preview.scrollTargetText}
                     onActiveSectionChange={viewerPageMode === 'multi' ? setViewerActiveSection : undefined}
                     onNavigateViewerPath={(viewerPath) => {
                       void openViewerPreview(viewerPath, preview.title, undefined, viewerPageMode);

@@ -1,5 +1,5 @@
 import { ArrowRight, Bot, Check, Copy, Link as LinkIcon, WrapText } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatCitation, ChatRelatedLink } from '../../lib/runtimeApi';
 import type { VisionMode } from '../../lib/wikiVision';
 
@@ -571,7 +571,9 @@ export function AssistantAnswer({
   isFavoriteLink: (link: ChatRelatedLink) => boolean;
   isCheckedSectionLink: (link: ChatRelatedLink) => boolean;
 }) {
-  const [displayLength, setDisplayLength] = useState(0);
+  const shouldAnimateAnswer = visionMode !== 'guided_tour' && content.length <= 1200;
+  const [displayLength, setDisplayLength] = useState(() => (shouldAnimateAnswer ? 0 : content.length));
+  const previousContentRef = useRef(content);
 
   useEffect(() => {
     if (displayLength > 0) {
@@ -588,22 +590,44 @@ export function AssistantAnswer({
   }, [displayLength]);
 
   useEffect(() => {
-    if (displayLength < content.length) {
-      const timer = setTimeout(() => {
-        setDisplayLength((prev) => Math.min(prev + 3, content.length));
-      }, 15);
-      return () => clearTimeout(timer);
+    if (!shouldAnimateAnswer) {
+      previousContentRef.current = content;
+      setDisplayLength(content.length);
+      return undefined;
     }
-    return undefined;
-  }, [displayLength, content]);
+
+    if (previousContentRef.current !== content) {
+      previousContentRef.current = content;
+      setDisplayLength(0);
+      return undefined;
+    }
+
+    if (displayLength >= content.length) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      setDisplayLength((prev) => Math.min(prev + 48, content.length));
+    }, 16);
+    return () => clearTimeout(timer);
+  }, [displayLength, content, shouldAnimateAnswer]);
 
   const displayedContent = content.slice(0, displayLength);
   const blocks = useMemo(() => parseAnswerBlocks(displayedContent, citations), [displayedContent, citations]);
   const isGuidedTour = visionMode === 'guided_tour';
+  const isCourseStopLink = (link: ChatRelatedLink): boolean => (
+    link.kind === 'course_stop'
+    || link.source_lane === 'study_docs_course_runtime'
+    || link.boundary_truth === 'internal_course_runtime'
+  );
   const guidedTourSteps = useMemo(() => {
     const unique: ChatRelatedLink[] = [];
     const seen = new Set<string>();
-    for (const link of relatedSections) {
+    const courseCurrentLinks = relatedLinks.filter(isCourseStopLink);
+    const candidateLinks = courseCurrentLinks.length > 0
+      ? [...courseCurrentLinks, ...relatedSections]
+      : relatedSections;
+    for (const link of candidateLinks) {
       const key = normalizeRouteKey(link);
       if (seen.has(key)) {
         continue;
@@ -615,11 +639,14 @@ export function AssistantAnswer({
       }
     }
     return unique;
-  }, [relatedSections]);
+  }, [relatedLinks, relatedSections]);
   const guidedTourDocs = useMemo(() => {
     const unique: ChatRelatedLink[] = [];
     const seen = new Set<string>(guidedTourSteps.map((link) => normalizeRouteKey(link)));
     for (const link of relatedLinks) {
+      if (isCourseStopLink(link)) {
+        continue;
+      }
       const key = normalizeRouteKey(link);
       if (seen.has(key)) {
         continue;

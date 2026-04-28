@@ -1,4 +1,4 @@
-import { ChevronDown, Languages, Sparkles, Moon, Sun } from 'lucide-react';
+import { ChevronDown, Sparkles, Moon, Sun } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ROUTES, buildSharedLandingHref } from '../../app/routes';
 
@@ -8,6 +8,7 @@ type WorkspaceHeaderProps = {
   packOptions: readonly string[];
   sessionId: string;
   testMode: boolean;
+  testModeDisabled?: boolean;
   globalTheme: 'dark' | 'light';
   onOpenLibrary: () => void;
   onResetSession: () => void;
@@ -23,6 +24,7 @@ export default function WorkspaceHeader({
   packOptions,
   sessionId,
   testMode,
+  testModeDisabled = false,
   onOpenLibrary,
   onResetSession,
   onSelectPack,
@@ -31,6 +33,8 @@ export default function WorkspaceHeader({
   onToggleGlobalTheme,
   globalTheme,
 }: WorkspaceHeaderProps) {
+  const hasMultiplePackOptions = packOptions.length > 1;
+
   return (
     <header className="workspace-nav">
       <div className="nav-left">
@@ -45,12 +49,15 @@ export default function WorkspaceHeader({
           <button
             className="pack-selector-trigger"
             type="button"
+            disabled={!hasMultiplePackOptions}
             onClick={onTogglePackDropdown}
           >
             <span>{packLabel}</span>
-            <ChevronDown size={14} className={`pack-chevron ${packDropdownOpen ? 'open' : ''}`} />
+            {hasMultiplePackOptions ? (
+              <ChevronDown size={14} className={`pack-chevron ${packDropdownOpen ? 'open' : ''}`} />
+            ) : null}
           </button>
-          {packDropdownOpen && (
+          {hasMultiplePackOptions && packDropdownOpen && (
             <div className="pack-dropdown">
               {packOptions.map((label) => (
                 <button
@@ -81,16 +88,14 @@ export default function WorkspaceHeader({
         <button
           className={`nav-btn test-mode-btn ${testMode ? 'active' : ''}`}
           onClick={onToggleTestMode}
+          disabled={testModeDisabled}
+          title={testModeDisabled ? 'TEST trace is available in Atlas Canvas and Guided Tour' : 'Toggle TEST trace'}
           type="button"
         >
           TEST
         </button>
         <Link to={ROUTES.opsOverview} className="nav-btn nav-link-btn">Ops Console</Link>
         <button className="nav-btn" onClick={onOpenLibrary} type="button">Playbook Library</button>
-        <button className="nav-btn lang-btn" type="button">
-          <Languages size={18} />
-          <span>KOR</span>
-        </button>
       </div>
     </header>
   );

@@ -677,7 +677,8 @@ body.is-embedded .embedded-section.is-target {
   white-space: pre-wrap;
   overflow-x: hidden;
   overflow-y: auto;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .code-block.overflow-toggle.is-wrapped code,
 .code-block.overflow-wrap code {

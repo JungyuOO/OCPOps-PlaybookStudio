@@ -5,7 +5,7 @@ import { DEFAULT_VISION_MODE, WIKI_VISION_MODES, resolveVisionMode } from './wik
 describe('wikiVision', () => {
   it('accepts supported vision modes', () => {
     expect(resolveVisionMode('guided_tour')).toBe('guided_tour');
-    expect(resolveVisionMode('encyclopedia_world')).toBe('encyclopedia_world');
+    expect(resolveVisionMode('course_study')).toBe('course_study');
   });
 
   it('falls back to atlas canvas for invalid values', () => {
@@ -17,7 +17,7 @@ describe('wikiVision', () => {
     expect(WIKI_VISION_MODES.map((mode) => mode.id)).toEqual([
       'atlas_canvas',
       'guided_tour',
-      'encyclopedia_world',
+      'course_study',
     ]);
     expect(WIKI_VISION_MODES.every((mode) => mode.compare.bullets.length >= 3)).toBe(true);
   });

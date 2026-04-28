@@ -39,14 +39,7 @@
 
 /* Bokeh Backgrounds */
 .bokeh-bg {
-  position: absolute;
-  width: 600px;
-  height: 600px;
-  border-radius: 50%;
-  filter: blur(120px);
-  z-index: 0;
-  opacity: 0.035;
-  pointer-events: none;
+  display: none;
 }
 
 .bokeh-1 {
@@ -70,7 +63,6 @@
   align-items: center;
   z-index: 10;
   background: var(--pbs-bg-panel);
-  backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--pbs-glass-border);
   flex-shrink: 0;
   transition: var(--pbs-theme-transition);
@@ -142,6 +134,16 @@
   background: rgba(0, 209, 255, 0.08);
 }
 
+.pack-selector-trigger:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.pack-selector-trigger:disabled:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .pack-chevron {
   margin-left: auto;
   transition: transform 0.24s ease;
@@ -161,7 +163,6 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   background: rgba(14, 18, 26, 0.96);
-  backdrop-filter: blur(20px);
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.35);
 }
 
@@ -279,6 +280,16 @@
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+.nav-btn:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.nav-btn:disabled:hover {
+  background: transparent;
+  border-color: var(--glass-border);
+}
+
 .test-mode-btn {
   min-width: 64px;
   padding-inline: 14px;
@@ -341,6 +352,8 @@
 .glass-panel {
   overflow: hidden;
   transition: transform 0.5s ease;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .no-border-radius-right {
@@ -1746,11 +1759,8 @@
   display: flex;
   flex-direction: column;
   gap: 32px;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   overscroll-behavior: contain;
-  /* Prevent scroll bubble up to whole page */
-  mask-image: linear-gradient(to bottom, transparent, black 40px, black calc(100% - 40px), transparent);
-  -webkit-mask-image: linear-gradient(to bottom, transparent, black 16px, black calc(100% - 16px), transparent);
 }
 
 .message-row {
@@ -5035,7 +5045,33 @@
   flex: 1;
   min-width: 0;
   display: grid;
-  gap: 8px;
+  gap: 4px;
+}
+
+.profile-ops-name-btn {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pbs-text-main);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.profile-ops-name-btn:hover {
+  color: var(--pbs-accent-cyan);
+}
+
+.profile-ops-name-btn.is-undefined {
+  color: var(--pbs-text-muted);
 }
 
 .profile-ops-title {

@@ -421,15 +421,6 @@ function buildFigureAtlasEntries(figures: RuntimeFigureItem[]): FigureAtlasEntry
     });
 }
 
-function buildWorldKeywords(book: LibraryBook): string[] {
-  const slugBits = book.book_slug.split('_').filter(Boolean);
-  const titleBits = book.title
-    .split(/[·,:()/\s-]+/)
-    .map((bit) => bit.trim())
-    .filter((bit) => bit.length >= 2);
-  return [...new Set([...slugBits, ...titleBits])].slice(0, 5);
-}
-
 type SourceOptionRecord = {
   title: string;
   book_slug: string;
@@ -1584,10 +1575,6 @@ const PlaybookLibraryPage: React.FC = () => {
       .catch(() => setComparisonBookFigures([]));
   }, [comparisonBook]);
   const comparisonFigureEntries = useMemo(() => buildFigureAtlasEntries(comparisonBookFigures), [comparisonBookFigures]);
-  const comparisonWorldKeywords = useMemo(
-    () => (comparisonBook ? buildWorldKeywords(comparisonBook) : []),
-    [comparisonBook],
-  );
   const comparisonLinkedDocs = useMemo(
     () => operationalWikiBooks.filter((book) => book.book_slug !== comparisonBook?.book_slug).slice(0, 2),
     [comparisonBook, operationalWikiBooks],
@@ -1857,7 +1844,7 @@ const PlaybookLibraryPage: React.FC = () => {
                         <div className="vision-compare-signals">
                           <span>본문 {mode.id === 'atlas_canvas' ? '강조' : mode.id === 'guided_tour' ? '요약 후 이동' : '주제의 일부'}</span>
                           <span>절차 {mode.id === 'guided_tour' ? '전면' : '보조'}</span>
-                          <span>figure {mode.id === 'atlas_canvas' ? '같은 시야' : mode.id === 'encyclopedia_world' ? '맥락 자산' : '선택 노출'}</span>
+                          <span>figure {mode.id === 'atlas_canvas' ? '같은 시야' : '선택 노출'}</span>
                         </div>
                         {mode.id === 'atlas_canvas' && (
                           <div className="vision-compare-mini-preview">
@@ -1889,18 +1876,6 @@ const PlaybookLibraryPage: React.FC = () => {
                               <strong>Verify</strong>
                               <span>{comparisonLinkedDocs[1]?.title ?? '검증 문서 1개'}</span>
                             </div>
-                          </div>
-                        )}
-                        {mode.id === 'encyclopedia_world' && (
-                          <div className="vision-compare-mini-preview vision-compare-mini-world">
-                            <div className="vision-compare-mini-kicker">Topic world + connected knowledge</div>
-                            <strong>{comparisonBook.title}</strong>
-                            <div className="vision-compare-inline-list">
-                              {comparisonWorldKeywords.map((keyword) => (
-                                <span key={keyword}>{keyword}</span>
-                              ))}
-                            </div>
-                            <span>이 문서를 주제 세계의 한 노드로 보고 연결 키워드를 따라 탐험합니다.</span>
                           </div>
                         )}
                         <button

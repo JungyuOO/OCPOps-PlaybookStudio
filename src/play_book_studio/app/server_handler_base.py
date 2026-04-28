@@ -10,6 +10,20 @@ from play_book_studio.app.server_support import _parse_multipart_form_data
 
 
 class _HandlerBase:
+    def _extra_response_headers(self) -> list[tuple[str, str]]:
+        headers = getattr(self, "_pending_response_headers", [])
+        if not isinstance(headers, list):
+            return []
+        self._pending_response_headers = []
+        return [(str(name), str(value)) for name, value in headers if str(name).strip() and str(value).strip()]
+
+    def _queue_response_header(self, name: str, value: str) -> None:
+        headers = getattr(self, "_pending_response_headers", None)
+        if not isinstance(headers, list):
+            headers = []
+        headers.append((name, value))
+        self._pending_response_headers = headers
+
     def _debug_timing(self, label: str, started_at: float) -> None:
         elapsed = time.monotonic() - started_at
         print(f"[timing] {label} {elapsed:.3f}s", file=sys.stderr, flush=True)
@@ -21,8 +35,13 @@ class _HandlerBase:
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("Pragma", "no-cache")
+        for name, value in self._extra_response_headers():
+            self.send_header(name, value)
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            return
 
     def _send_bytes(
         self,
@@ -36,14 +55,21 @@ class _HandlerBase:
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("Pragma", "no-cache")
+        for name, value in self._extra_response_headers():
+            self.send_header(name, value)
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            return
 
     def _start_ndjson_stream(self) -> None:
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "close")
+        for name, value in self._extra_response_headers():
+            self.send_header(name, value)
         self.end_headers()
 
     def _stream_event(self, payload: dict[str, Any]) -> None:

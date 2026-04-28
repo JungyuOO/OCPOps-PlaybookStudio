@@ -19,6 +19,7 @@ services:
       - .env
     environment:
       PYTHONPATH: /app/src
+      COURSE_CHAT_LLM_REWRITE: "true"
       QDRANT_URL: http://qdrant:6333
       GRAPH_URI: bolt://host.docker.internal:7687
     depends_on:

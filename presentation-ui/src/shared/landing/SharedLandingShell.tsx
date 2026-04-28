@@ -9,7 +9,7 @@ export default function SharedLandingShell() {
   const activeTab = normalizeSharedLandingTab(searchParams.get('tab'));
 
   return (
-    <div className="shared-landing-shell">
+    <div className={`shared-landing-shell shared-landing-shell--${activeTab}`}>
       <div className="shared-shell-body">
         {activeTab === 'partner' ? <PartnerLanePanel /> : <LandingPage />}
       </div>

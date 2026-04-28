@@ -6,7 +6,6 @@ import {
   BookOpen,
   Cable,
   Database,
-  GitBranch,
   Send,
   ShieldCheck,
   Sparkles,
@@ -19,10 +18,7 @@ import {
   connectOcp,
   createActionRequest,
   createBatchJob,
-  createDeploymentPlan,
   createOpsWorkspace,
-  createScmConnection,
-  createScmRepository,
   executeActionRequest,
   listActionAudit,
   listActionExecutions,
@@ -31,8 +27,6 @@ import {
   listBatchJobs,
   listOpsWorkspaces,
   listRecommendations,
-  listScmConnections,
-  listScmRepositories,
   loadDocsPreviewSnippet,
   loadLibraryCatalog,
   loadLibraryChunks,
@@ -50,15 +44,12 @@ import {
   refreshOcpLease,
   rejectActionRequest,
   sendOpsChatStream,
-  startOAuth,
   testOcpConnection,
-  updateScmRepository,
   type ActionAuditItem,
   type ActionExecution,
   type ActionPreview,
   type ActionRequest,
   type BatchJob,
-  type DeploymentPlanResponse,
   type DocsPreviewSnippet,
   type LibraryCatalogItem,
   type LibraryChunksResponse,
@@ -75,8 +66,6 @@ import {
   type RecommendationItem,
   type ResourceDetailResponse,
   type ResourceListResponse,
-  type ScmConnection,
-  type ScmRepository,
 } from '../lib/opsConsoleApi';
 
 type ChatMessage = {
@@ -99,7 +88,6 @@ const ROUTE_SECTIONS: Array<{
   { key: 'library', label: 'Docs', path: ROUTES.opsLibrary, icon: BookOpen, description: '문서 카탈로그와 batch indexing' },
   { key: 'chat', label: 'Chat', path: ROUTES.opsChat, icon: Workflow, description: '문서와 live 결과를 함께 보는 Copilot' },
   { key: 'actions', label: 'Actions', path: ROUTES.opsActions, icon: ShieldCheck, description: 'preview/request/approve/execute/audit' },
-  { key: 'scm', label: 'SCM', path: ROUTES.opsScm, icon: GitBranch, description: 'OAuth, repo profile, deployment plan' },
 ];
 
 const RESOURCE_OPTIONS = ['pods', 'deployments', 'services', 'routes', 'events'] as const;
@@ -244,27 +232,6 @@ export default function OpsConsolePage() {
   const [actionExecutions, setActionExecutions] = useState<ActionExecution[]>([]);
   const [actionAudit, setActionAudit] = useState<ActionAuditItem[]>([]);
 
-  const [scmConnections, setScmConnections] = useState<ScmConnection[]>([]);
-  const [scmRepositories, setScmRepositories] = useState<ScmRepository[]>([]);
-  const [scmConnectionForm, setScmConnectionForm] = useState({
-    provider: 'github',
-    host_url: 'https://github.com',
-    auth_type: 'token',
-    account_label: 'customer-admin',
-  });
-  const [repositoryForm, setRepositoryForm] = useState({
-    scm_connection_id: '',
-    repo_full_name: 'org/project',
-    default_branch: 'main',
-    config_path: 'kustomization.yaml',
-    delivery_mode: 'gitops_commit',
-    manifest_kind: 'config_yaml',
-    target_cluster_url: 'https://api.cluster.example.com:6443',
-    target_namespace: 'payments',
-    auto_deploy_enabled: true,
-  });
-  const [deploymentPlan, setDeploymentPlan] = useState<DeploymentPlanResponse | null>(null);
-
   const activeConnection = connections.find((item) => item.connection_id === activeConnectionId) ?? null;
   const savedProfiles = useMemo(
     () => connections.filter((item) => item.save_profile).sort((left, right) => right.last_verified_at.localeCompare(left.last_verified_at)),
@@ -328,7 +295,6 @@ export default function OpsConsolePage() {
     void refreshConnections(activeWorkspaceId);
     void refreshRecommendationsForWorkspace(activeWorkspaceId);
     void refreshLibrary(activeWorkspaceId);
-    void refreshScm(activeWorkspaceId);
   }, [activeWorkspaceId]);
 
   useEffect(() => {
@@ -406,12 +372,6 @@ export default function OpsConsolePage() {
     }
     setYamlEditor(resourceDetail.manifest_yaml);
   }, [resourceDetail]);
-
-  useEffect(() => {
-    if (!repositoryForm.scm_connection_id && scmConnections.length > 0) {
-      setRepositoryForm((current) => ({ ...current, scm_connection_id: scmConnections[0].scm_connection_id }));
-    }
-  }, [repositoryForm.scm_connection_id, scmConnections]);
 
   async function run<T>(callback: () => Promise<T>, onSuccess?: (value: T) => void) {
     setError('');
@@ -521,11 +481,6 @@ export default function OpsConsolePage() {
     await run(async () => listActionRequests(), (value) => setActionRequests(value));
     await run(async () => listActionExecutions(), (value) => setActionExecutions(value));
     await run(async () => listActionAudit(), (value) => setActionAudit(value));
-  }
-
-  async function refreshScm(workspaceId: string) {
-    await run(async () => listScmConnections(workspaceId), (value) => setScmConnections(value));
-    await run(async () => listScmRepositories(workspaceId), (value) => setScmRepositories(value));
   }
 
   function resetConnectionDraft() {
@@ -899,66 +854,6 @@ export default function OpsConsolePage() {
       await refreshOverview(activeConnectionId);
       await refreshResources(activeConnectionId, selectedResourceType, selectedNamespace);
     }
-  }
-
-  async function handleStartOAuth(provider: 'github' | 'gitlab') {
-    if (!activeWorkspaceId) {
-      setError('먼저 active workspace를 선택하세요.');
-      return;
-    }
-    await run(async () => startOAuth(provider, activeWorkspaceId), (value) => {
-      setNotice(`OAuth start created. Redirect URL: ${value.authorize_url}`);
-      window.open(value.authorize_url, '_blank', 'noopener,noreferrer');
-    });
-  }
-
-  async function handleCreateScmConnection() {
-    if (!activeWorkspaceId) {
-      setError('먼저 active workspace를 선택하세요.');
-      return;
-    }
-    await run(async () => createScmConnection(activeWorkspaceId, scmConnectionForm), () => {
-      setNotice('SCM connection created.');
-    });
-    await refreshScm(activeWorkspaceId);
-  }
-
-  async function handleCreateRepository() {
-    if (!activeWorkspaceId) {
-      setError('먼저 active workspace를 선택하세요.');
-      return;
-    }
-    await run(async () => createScmRepository(activeWorkspaceId, repositoryForm), () => {
-      setNotice('Repository delivery profile created.');
-    });
-    await refreshScm(activeWorkspaceId);
-  }
-
-  async function handleUpdateRepository(repositoryId: string) {
-    if (!activeWorkspaceId) {
-      return;
-    }
-    await run(async () => updateScmRepository(activeWorkspaceId, repositoryId, { auto_deploy_enabled: false }), () => {
-      setNotice('Repository profile updated.');
-    });
-    await refreshScm(activeWorkspaceId);
-  }
-
-  async function handleCreateDeploymentPlan(repositoryId: string) {
-    if (!activeWorkspaceId) {
-      return;
-    }
-    await run(
-      async () => createDeploymentPlan(activeWorkspaceId, repositoryId, {
-        resource_kind: 'Deployment',
-        resource_name: actionForm.resource_name,
-        target_namespace: repositoryForm.target_namespace,
-        replicas: actionForm.replicas,
-        config_key: 'replicas',
-        reason: actionForm.reason,
-      }),
-      (value) => setDeploymentPlan(value),
-    );
   }
 
   return (
@@ -1726,69 +1621,6 @@ export default function OpsConsolePage() {
                 </div>
                 <pre>{formatJson(actionExecutions)}</pre>
                 <pre>{formatJson(actionAudit)}</pre>
-              </div>
-            </section>
-          )}
-
-          {section === 'scm' && (
-            <section className="ops-panel">
-              <div className="ops-panel-header">
-                <h2>SCM & Deployment Plan</h2>
-              </div>
-              <div className="ops-actions-row">
-                <button type="button" className="ops-secondary-btn" onClick={() => { void handleStartOAuth('github'); }}>OAuth GitHub</button>
-                <button type="button" className="ops-secondary-btn" onClick={() => { void handleStartOAuth('gitlab'); }}>OAuth GitLab</button>
-              </div>
-              <div className="ops-form-grid four">
-                {Object.entries(scmConnectionForm).map(([key, value]) => (
-                  <div key={key} className="ops-field">
-                    <label>{key}</label>
-                    <input value={value} onChange={(event) => setScmConnectionForm((current) => ({ ...current, [key]: event.target.value }))} />
-                  </div>
-                ))}
-              </div>
-              <div className="ops-actions-row">
-                <button type="button" className="ops-primary-btn" onClick={() => { void handleCreateScmConnection(); }}>Create SCM connection</button>
-              </div>
-              <div className="ops-form-grid four">
-                {Object.entries(repositoryForm).map(([key, value]) => (
-                  <div key={key} className="ops-field">
-                    <label>{key}</label>
-                    {typeof value === 'boolean' ? (
-                      <select value={String(value)} onChange={(event) => setRepositoryForm((current) => ({ ...current, [key]: event.target.value === 'true' }))}>
-                        <option value="true">true</option>
-                        <option value="false">false</option>
-                      </select>
-                    ) : (
-                      <input value={String(value)} onChange={(event) => setRepositoryForm((current) => ({ ...current, [key]: event.target.value }))} />
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="ops-actions-row">
-                <button type="button" className="ops-primary-btn" onClick={() => { void handleCreateRepository(); }}>Create repository profile</button>
-              </div>
-              <div className="ops-detail-grid">
-                <div>
-                  <h3>Connections</h3>
-                  <pre>{formatJson(scmConnections)}</pre>
-                </div>
-                <div>
-                  <h3>Repositories</h3>
-                  {scmRepositories.map((repository) => (
-                    <div key={repository.repository_id} className="ops-table-row">
-                      <div>
-                        <strong>{repository.repo_full_name}</strong>
-                        <span>{repository.default_branch}</span>
-                      </div>
-                      <div className="ops-inline-actions">
-                        <button type="button" onClick={() => { void handleUpdateRepository(repository.repository_id); }}>Disable auto deploy</button>
-                        <button type="button" onClick={() => { void handleCreateDeploymentPlan(repository.repository_id); }}>Plan</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <pre>{formatJson(deploymentPlan)}</pre>
               </div>
             </section>
           )}

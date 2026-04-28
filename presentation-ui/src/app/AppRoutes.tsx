@@ -4,6 +4,10 @@ import LlmWikiBookPage from '../pages/LlmWikiBookPage';
 import PlaybookLibraryPage from '../pages/PlaybookLibraryPage';
 import ProjectDetailsPage from '../pages/ProjectDetailsPage';
 import OpsConsolePage from '../pages/OpsConsolePage';
+import CourseTimelinePage from '../pages/CourseTimelinePage';
+import CourseStagePage from '../pages/CourseStagePage';
+import CourseChunkPage from '../pages/CourseChunkPage';
+import CourseAtlasPage from '../pages/CourseAtlasPage';
 import PartnerNamespacePage from '../partner/PartnerNamespacePage';
 import { PARTNER_ROUTE_DEFINITIONS } from '../partner/partnerLaneConfig';
 import SharedLandingShell from '../shared/landing/SharedLandingShell';
@@ -33,6 +37,10 @@ export default function AppRoutes() {
       <Route path={ROUTES.pbsPlaybookLibrary} element={<PlaybookLibraryPage />} />
       <Route path={ROUTES.pbsControlTower} element={<PlaybookLibraryPage />} />
       <Route path={ROUTES.pbsRepository} element={<PlaybookLibraryPage />} />
+      <Route path={ROUTES.courseHome} element={<CourseTimelinePage />} />
+      <Route path="/course/stages/:stageId" element={<CourseStagePage />} />
+      <Route path="/course/chunks/:chunkId" element={<CourseChunkPage />} />
+      <Route path="/course/atlas/:chunkId" element={<CourseAtlasPage />} />
       <Route path={ROUTES.opsWorkspaces} element={<OpsConsolePage />} />
       <Route path={ROUTES.opsConnections} element={<OpsConsolePage />} />
       <Route path={ROUTES.opsOverview} element={<OpsConsolePage />} />
@@ -40,7 +48,6 @@ export default function AppRoutes() {
       <Route path={ROUTES.opsLibrary} element={<OpsConsolePage />} />
       <Route path={ROUTES.opsChat} element={<OpsConsolePage />} />
       <Route path={ROUTES.opsActions} element={<OpsConsolePage />} />
-      <Route path={ROUTES.opsScm} element={<OpsConsolePage />} />
       {PARTNER_ROUTE_DEFINITIONS.map(({ path, eyebrow, title, description }) => (
         <Route
           key={path}

@@ -51,7 +51,13 @@ def _render_code_block_html(
 ) -> str:
     if _should_suppress_low_signal_code_block(code_text, language=language):
         return ""
-    copy_payload = html.escape(json.dumps(copy_text or code_text), quote=True)
+    normalized_copy_text = str(copy_text or "")
+    has_custom_copy_text = bool(normalized_copy_text.strip()) and normalized_copy_text != code_text
+    copy_payload_attr = (
+        f' data-copy="{html.escape(json.dumps(normalized_copy_text), quote=True)}"'
+        if has_custom_copy_text
+        else ""
+    )
     classes = ["code-block"]
     if len(code_text.splitlines()) >= 14:
         classes.append("is-collapsible")
@@ -96,7 +102,7 @@ def _render_code_block_html(
       <div class="code-header">
         <span class="code-label">{language}</span>
         <div class="code-actions">
-          <button type="button" class="copy-button icon-button" data-copy="{copy_payload}" data-label-default="복사" data-label-active="복사됨" title="복사" aria-label="복사">
+          <button type="button" class="copy-button icon-button"{copy_payload_attr} data-label-default="복사" data-label-active="복사됨" title="복사" aria-label="복사">
             <svg class="copy-icon-idle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
             <svg class="copy-icon-success" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
             <span class="sr-only action-label">복사</span>
@@ -111,7 +117,7 @@ def _render_code_block_html(
         classes=" ".join(classes),
         caption_html=caption_html,
         language=html.escape(display_language),
-        copy_payload=copy_payload,
+        copy_payload_attr=copy_payload_attr,
         wrap_button_html=wrap_button_html,
         code=_render_highlighted_code_html(code_text, language=display_language, preserve_layout=preserve_layout),
         collapse_button_html=collapse_button_html,

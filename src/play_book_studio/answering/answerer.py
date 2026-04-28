@@ -26,6 +26,8 @@ from play_book_studio.retrieval.query import (
     has_openshift_kubernetes_compare_intent,
     has_operator_concept_intent,
     has_pod_lifecycle_concept_intent,
+    has_crash_loop_troubleshooting_intent,
+    has_pod_pending_troubleshooting_intent,
     has_rbac_intent,
     has_route_ingress_compare_intent,
     is_explainer_query,
@@ -170,6 +172,8 @@ def _build_doc_locator_answer(*, query: str, citations: list) -> str | None:
             has_rbac_intent(query),
             has_deployment_scaling_intent(query),
             has_openshift_kubernetes_compare_intent(query),
+            has_crash_loop_troubleshooting_intent(query),
+            has_pod_pending_troubleshooting_intent(query),
         )
     ):
         return None

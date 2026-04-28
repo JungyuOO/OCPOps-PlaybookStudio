@@ -1,6 +1,6 @@
 async function copyViewerCode(button) {
   try {
-    const text = JSON.parse(button.dataset.copy || '""');
+    const text = viewerCodeCopyText(button);
     if (navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(text);
     }
@@ -21,6 +21,15 @@ async function copyViewerCode(button) {
       button.setAttribute("aria-label", label);
     }, 1400);
   }
+}
+
+function viewerCodeCopyText(button) {
+  if (button.dataset.copy) {
+    return JSON.parse(button.dataset.copy || '""');
+  }
+  const block = button.closest(".code-block");
+  const code = block ? block.querySelector("code") : null;
+  return code ? (code.textContent || "") : "";
 }
 
 function toggleViewerCodeWrap(button) {

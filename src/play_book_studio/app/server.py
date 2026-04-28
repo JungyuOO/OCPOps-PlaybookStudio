@@ -5,14 +5,23 @@ from __future__ import annotations
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from play_book_studio.answering.answerer import ChatAnswerer
+from play_book_studio.app.course_api import warmup_course_runtime
 
 from .server_handler_factory import _build_handler
 from .sessions import ChatSession, SessionStore
 
+if TYPE_CHECKING:
+    from play_book_studio.answering.answerer import ChatAnswerer
 
-def _warmup_runtime_components(answerer: ChatAnswerer) -> None:
+
+def _warmup_runtime_components(answerer: ChatAnswerer, root_dir: Path) -> None:
+    try:
+        warmup_course_runtime(root_dir)
+        print("[server] course runtime warmed")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[server] course warmup failed: {exc}")
     reranker = getattr(getattr(answerer, "retriever", None), "reranker", None)
     if reranker is None:
         return
@@ -25,13 +34,10 @@ def _warmup_runtime_components(answerer: ChatAnswerer) -> None:
         print(f"[server] reranker warmed: {reranker.model_name}")
 
 
-def _start_runtime_warmup(answerer: ChatAnswerer) -> threading.Thread | None:
-    reranker = getattr(getattr(answerer, "retriever", None), "reranker", None)
-    if reranker is None:
-        return None
+def _start_runtime_warmup(answerer: ChatAnswerer, root_dir: Path) -> threading.Thread | None:
     thread = threading.Thread(
         target=_warmup_runtime_components,
-        args=(answerer,),
+        args=(answerer, root_dir),
         name="pbs-runtime-warmup",
         daemon=True,
     )
@@ -47,12 +53,12 @@ def serve(
     port: int = 8765,
     open_browser: bool = True,
 ) -> None:
-    store = SessionStore(root_dir)
+    store = SessionStore(root_dir, load_persisted=False)
     handler = _build_handler(answerer=answerer, store=store, root_dir=root_dir)
     server = ThreadingHTTPServer((host, port), handler)
     backend_url = f"http://{host}:{port}"
     print(f"Play Book Studio runtime/API server running at {backend_url}")
-    _start_runtime_warmup(answerer)
+    _start_runtime_warmup(answerer, root_dir)
     if open_browser:
         import webbrowser
 
