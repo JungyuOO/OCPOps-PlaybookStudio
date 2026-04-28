@@ -79,6 +79,15 @@ type ChatMessage = {
   artifacts?: OpsChatResponse['artifacts'];
 };
 
+type OpsChatSession = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  connectionId: string;
+  namespace: string;
+  messages: ChatMessage[];
+};
+
 type MarkdownBlock =
   | { type: 'markdown'; text: string }
   | { type: 'table'; header: string[]; rows: string[][] };
@@ -163,16 +172,69 @@ function visibleChatArtifacts(artifacts?: OpsChatResponse['artifacts']): OpsChat
   return artifacts.filter((artifact) => artifact.kind !== 'resource_list');
 }
 
+function normalizeChatMessages(value: unknown): ChatMessage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.slice(-40).map((message) => ({
+    id: String(message?.id || makeId('message')),
+    role: message?.role === 'assistant' ? 'assistant' : 'user',
+    content: String(message?.content || ''),
+    sources: Array.isArray(message?.sources) ? message.sources : undefined,
+    artifacts: visibleChatArtifacts(Array.isArray(message?.artifacts) ? message.artifacts : undefined),
+  }));
+}
+
+function chatSessionTitle(messages: ChatMessage[]): string {
+  const firstUserMessage = messages.find((message) => message.role === 'user')?.content.trim();
+  if (!firstUserMessage) {
+    return 'New chat';
+  }
+  return firstUserMessage.length > 38 ? `${firstUserMessage.slice(0, 38)}...` : firstUserMessage;
+}
+
 function loadSavedChatMessages(): ChatMessage[] {
   try {
     const raw = window.localStorage.getItem('opsConsole.chatMessages');
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed)
-      ? parsed.slice(-20).map((message) => ({ ...message, artifacts: visibleChatArtifacts(message.artifacts) }))
-      : [];
+    return normalizeChatMessages(parsed);
   } catch {
     return [];
   }
+}
+
+function loadSavedChatSessions(): OpsChatSession[] {
+  try {
+    const raw = window.localStorage.getItem('opsConsole.chatSessions.v1');
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed.slice(0, 24).map((session) => {
+        const messages = normalizeChatMessages(session?.messages);
+        return {
+          id: String(session?.id || makeId('ops-chat')),
+          title: String(session?.title || chatSessionTitle(messages)),
+          updatedAt: String(session?.updatedAt || new Date().toISOString()),
+          connectionId: String(session?.connectionId || ''),
+          namespace: String(session?.namespace || OPS_FIXED_NAMESPACE),
+          messages,
+        };
+      });
+    }
+  } catch {
+    // Fall through to legacy single transcript migration.
+  }
+  const legacyMessages = loadSavedChatMessages();
+  if (!legacyMessages.length) {
+    return [];
+  }
+  return [{
+    id: 'ops-chat-legacy',
+    title: chatSessionTitle(legacyMessages),
+    updatedAt: new Date().toISOString(),
+    connectionId: '',
+    namespace: OPS_FIXED_NAMESPACE,
+    messages: legacyMessages,
+  }];
 }
 
 function isMarkdownTableSeparator(line: string): boolean {
