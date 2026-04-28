@@ -260,15 +260,25 @@ export function searchCourse(query: string, limit = 20): Promise<{ items: Course
 
 export function sendCourseChat(payload: {
   message: string;
+  sessionId?: string;
+  userId?: string;
   stage_id?: string;
   guide_id?: string;
   step_id?: string;
   chunk_ids?: string[];
 }): Promise<CourseChatResponse> {
   return requestJson('/api/v1/course/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: payload.message,
+        session_id: payload.sessionId,
+        user_id: payload.userId,
+        stage_id: payload.stage_id,
+        guide_id: payload.guide_id,
+        step_id: payload.step_id,
+        chunk_ids: payload.chunk_ids,
+      }),
   });
 }
 
@@ -293,11 +303,13 @@ export function emptyCourseChatResponse(answer = ''): CourseChatResponse {
 }
 
 export async function sendCourseChatStream(
-  payload: {
-    message: string;
-    stage_id?: string;
-    guide_id?: string;
-    step_id?: string;
+    payload: {
+      message: string;
+      sessionId?: string;
+      userId?: string;
+      stage_id?: string;
+      guide_id?: string;
+      step_id?: string;
     chunk_ids?: string[];
   },
   onEvent: (event: CourseChatStreamEvent) => void,
@@ -305,7 +317,15 @@ export async function sendCourseChatStream(
   const response = await fetch(`${RUNTIME_ORIGIN}/api/v1/course/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      message: payload.message,
+      session_id: payload.sessionId,
+      user_id: payload.userId,
+      stage_id: payload.stage_id,
+      guide_id: payload.guide_id,
+      step_id: payload.step_id,
+      chunk_ids: payload.chunk_ids,
+    }),
   });
   if (!response.ok || !response.body) {
     throw new Error(`${response.status} ${response.statusText}`);
@@ -357,10 +377,6 @@ export async function sendCourseChatStream(
     throw new Error('stream completed without final result');
   }
   return resultPayload;
-}
-
-export function buildCourseSlideUrl(chunkId: string, slideNo: number): string {
-  return `${RUNTIME_ORIGIN}/api/v1/course/slides/${encodeURIComponent(chunkId)}/${encodeURIComponent(String(slideNo))}.png`;
 }
 
 export function buildCourseAssetUrl(assetPath: string): string {

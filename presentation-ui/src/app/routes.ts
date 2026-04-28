@@ -19,7 +19,6 @@ export const ROUTES = {
   opsLibrary: '/library',
   opsChat: '/chat',
   opsActions: '/actions',
-  opsScm: '/scm',
   partnerHome: '/partner',
   partnerWorkspace: '/partner/workspace',
   partnerLibrary: '/partner/library',

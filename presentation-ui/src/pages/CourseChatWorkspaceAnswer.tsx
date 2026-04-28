@@ -78,7 +78,7 @@ export default function CourseChatWorkspaceAnswer({
           visionMode="guided_tour"
           primarySourceLane="study_docs_course_runtime"
           primaryBoundaryTruth="internal_course_runtime"
-          primaryRuntimeTruthLabel="Study-docs Course"
+          primaryRuntimeTruthLabel="실운영 가이드"
           primaryBoundaryBadge="Internal Course"
           primaryPublicationState="internal"
           primaryApprovalState="course_reviewed"

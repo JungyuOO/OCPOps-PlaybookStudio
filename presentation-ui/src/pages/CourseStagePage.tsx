@@ -23,6 +23,13 @@ type GroupedChunk = {
   primaryTitle: string;
 };
 
+type GuidedQuestionContext = {
+  chunkId?: string;
+  guideId?: string;
+  stageId?: string;
+  stepId?: string;
+};
+
 function groupChunksByNativeId(chunks: CourseChunkRef[]): GroupedChunk[] {
   const groups = new Map<string, CourseChunkRef[]>();
   for (const chunk of chunks) {
@@ -94,6 +101,36 @@ function guidedCardFromChunk(chunk: CourseChunkRef, role: CourseGuidedCard['role
       hidden_doc_anchor: true,
     },
   };
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function findSuggestedQuestionContext(response: CourseChatResponse | null, query: string): GuidedQuestionContext | undefined {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery || !response?.artifacts?.length) {
+    return undefined;
+  }
+
+  for (const artifact of response.artifacts) {
+    if (artifact.kind !== 'course_guided_tour' || !Array.isArray(artifact.items)) {
+      continue;
+    }
+    const items = artifact.items as Array<Record<string, unknown>>;
+    const match = items.find((item) => stringValue(item.question) === normalizedQuery);
+    if (!match) {
+      continue;
+    }
+    return {
+      chunkId: stringValue(match.chunk_id) || undefined,
+      guideId: stringValue(match.guide_id) || undefined,
+      stageId: stringValue(match.stage_id) || undefined,
+      stepId: stringValue(match.step_id) || undefined,
+    };
+  }
+
+  return undefined;
 }
 
 export default function CourseStagePage() {
@@ -191,8 +228,9 @@ export default function CourseStagePage() {
     await runGuidedQuestion(message);
   }
 
-  async function runGuidedQuestion(message: string, options?: { chunkId?: string; guideId?: string; stepId?: string }) {
-    if (!message.trim() || !stageId) {
+  async function runGuidedQuestion(message: string, options?: GuidedQuestionContext) {
+    const targetStageId = options?.stageId || stageId;
+    if (!message.trim() || !targetStageId) {
       return;
     }
     setChatDraft(message);
@@ -203,7 +241,7 @@ export default function CourseStagePage() {
       const result = await sendCourseChatStream(
         {
           message,
-          stage_id: stageId,
+          stage_id: targetStageId,
           guide_id: options?.guideId,
           step_id: options?.stepId,
           chunk_ids: options?.guideId ? undefined : options?.chunkId ? [options.chunkId] : undefined,
@@ -228,7 +266,7 @@ export default function CourseStagePage() {
       <div className="course-shell">
         <header className="course-header">
           <h1>{payload?.title || stageId}</h1>
-          <p>{STAGE_COPY[stageId] || '이 단계는 Study-docs 산출물과 공식문서를 함께 읽는 운영 학습 구간입니다.'}</p>
+          <p>{STAGE_COPY[stageId] || '이 단계는 실운영 산출물과 공식문서를 함께 읽는 운영 학습 구간입니다.'}</p>
         </header>
 
         <div className="course-inline-links">
@@ -465,7 +503,12 @@ export default function CourseStagePage() {
           </div>
           {chatResponse ? (
             <div className="course-chat-answer">
-              <CourseChatWorkspaceAnswer response={chatResponse} onSuggestedQuery={(suggestedQuery) => { void runGuidedQuestion(suggestedQuery); }} />
+              <CourseChatWorkspaceAnswer
+                response={chatResponse}
+                onSuggestedQuery={(suggestedQuery) => {
+                  void runGuidedQuestion(suggestedQuery, findSuggestedQuestionContext(chatResponse, suggestedQuery));
+                }}
+              />
             </div>
           ) : null}
         </section>

@@ -12,8 +12,6 @@ import {
   ArrowDown,
   Sparkles,
   Link as LinkIcon,
-  LogOut,
-  Settings,
   Plus,
   MessageSquare,
   Trash2,
@@ -23,7 +21,6 @@ import {
   Star,
   Clock3,
   Compass,
-  GitBranch,
 } from 'lucide-react';
 import gsap from 'gsap';
 import './WorkspacePage.css';
@@ -75,14 +72,7 @@ import {
 } from '../lib/runtimeApi';
 import {
   listOcpProfiles,
-  listScmConnections,
-  listScmRepositories,
-  loadScmProviderStatus,
-  startOAuth,
   type OcpConnection,
-  type ScmConnection,
-  type ScmProviderStatus,
-  type ScmRepository,
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../app/routes';
 import { sendCourseChatStream } from '../lib/courseApi';
@@ -342,6 +332,7 @@ type PreviewState =
     meta?: SourceMetaResponse;
     viewerUrl: string;
     viewerDocument?: ViewerDocumentPayload;
+    scrollTargetText?: string;
   }
   | {
     kind: 'draft';
@@ -522,11 +513,9 @@ function extractDraftIdFromViewerPath(viewerPath: string): string | null {
 
 const PACK_OPTIONS = [
   'OpenShift 4.20',
-  'GitLab Self-Managed',
-  'Harbor Registry',
 ] as const;
 
-const WIKI_OVERLAY_USER_ID = 'kugnus@cywell.co.kr';
+const FALLBACK_CLUSTER_USER_LABEL = 'Undefined';
 
 function runtimePathFromUrl(viewerUrl: string): string {
   try {
@@ -549,6 +538,12 @@ function normalizeViewerDocumentPayload(viewerDocument: Awaited<ReturnType<typeo
       anchorNavigation: viewerDocument.interaction_policy.anchor_navigation,
     },
   };
+}
+
+function firstCitationCommand(citation: ChatCitation): string {
+  return (citation.cli_commands ?? [])
+    .map((command) => String(command || '').trim())
+    .find(Boolean) ?? '';
 }
 
 function parseViewerHtml(viewerHtml: string): Document | null {
@@ -669,6 +664,7 @@ function normalizePreviewNavigationTarget(viewerPath: string): string | null {
 function buildOverlayTargetFromViewerPath(
   viewerUrl: string,
   fallbackTitle: string,
+  userId: string,
 ): OverlayTargetDescriptor | null {
   const runtimePath = runtimePathFromUrl(viewerUrl);
   const [pathWithQuery, anchorPart] = runtimePath.split('#', 2);
@@ -685,7 +681,7 @@ function buildOverlayTargetFromViewerPath(
       title: fallbackTitle,
       viewerPath: runtimePath,
       payload: {
-        user_id: WIKI_OVERLAY_USER_ID,
+        user_id: userId,
         target_kind: 'entity_hub',
         entity_slug: entitySlug,
         viewer_path: runtimePath,
@@ -702,7 +698,7 @@ function buildOverlayTargetFromViewerPath(
       title: fallbackTitle,
       viewerPath: runtimePath,
       payload: {
-        user_id: WIKI_OVERLAY_USER_ID,
+        user_id: userId,
         target_kind: 'figure',
         book_slug: bookSlug,
         asset_name: assetName,
@@ -726,7 +722,7 @@ function buildOverlayTargetFromViewerPath(
         title: fallbackTitle,
         viewerPath: runtimePath,
         payload: {
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: userId,
           target_kind: 'section',
           book_slug: bookSlug,
           anchor,
@@ -740,7 +736,7 @@ function buildOverlayTargetFromViewerPath(
       title: fallbackTitle,
       viewerPath: runtimePath,
       payload: {
-        user_id: WIKI_OVERLAY_USER_ID,
+        user_id: userId,
         target_kind: 'book',
         book_slug: bookSlug,
         viewer_path: runtimePath,
@@ -790,6 +786,12 @@ export default function WorkspacePage() {
   const isGuidedSurface = visionMode === 'guided_tour' || visionMode === 'course_study';
   const isCourseMode = visionMode === 'course_study';
 
+  useEffect(() => {
+    if (isCourseMode && testMode) {
+      setTestMode(false);
+    }
+  }, [isCourseMode, testMode]);
+
   // Scroll + welcome
   const [userScrolledUp, setUserScrolledUp] = useState(false);
 
@@ -833,11 +835,7 @@ export default function WorkspacePage() {
     return window.localStorage.getItem('opsConsole.activeConnectionId') || '';
   });
   const [footerConnections, setFooterConnections] = useState<OcpConnection[]>([]);
-  const [footerScmConnections, setFooterScmConnections] = useState<ScmConnection[]>([]);
-  const [footerScmRepositories, setFooterScmRepositories] = useState<ScmRepository[]>([]);
-  const [footerProviderStatus, setFooterProviderStatus] = useState<ScmProviderStatus | null>(null);
   const [isFooterProfileLoading, setIsFooterProfileLoading] = useState(false);
-  const [footerOauthPendingProvider, setFooterOauthPendingProvider] = useState<'github' | 'gitlab' | ''>('');
 
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -867,19 +865,22 @@ export default function WorkspacePage() {
     }
   }, []);
 
+  const activeFooterConnection = useMemo(
+    () => footerConnections.find((item) => item.connection_id === opsConnectionId) ?? footerConnections[0] ?? null,
+    [footerConnections, opsConnectionId],
+  );
+  const footerProfileName = useMemo(() => {
+    const username = activeFooterConnection?.username_hint?.trim();
+    const displayName = activeFooterConnection?.display_name?.trim();
+    return username || displayName || FALLBACK_CLUSTER_USER_LABEL;
+  }, [activeFooterConnection]);
+  const wikiOverlayUserId = footerProfileName;
+
   const refreshFooterProfile = useCallback(async () => {
     setIsFooterProfileLoading(true);
     try {
-      const [connections, scmConnections, scmRepositories, providerStatus] = await Promise.all([
-        listOcpProfiles(opsWorkspaceId),
-        listScmConnections(opsWorkspaceId),
-        listScmRepositories(opsWorkspaceId),
-        loadScmProviderStatus(),
-      ]);
+      const connections = await listOcpProfiles(opsWorkspaceId);
       setFooterConnections(connections);
-      setFooterScmConnections(scmConnections);
-      setFooterScmRepositories(scmRepositories);
-      setFooterProviderStatus(providerStatus);
     } catch (error) {
       console.error(error);
     } finally {
@@ -891,8 +892,8 @@ export default function WorkspacePage() {
     setIsOverlayLoading(true);
     try {
       const [overlayResult, signalResult] = await Promise.all([
-        loadWikiOverlays(WIKI_OVERLAY_USER_ID),
-        loadWikiOverlaySignals(WIKI_OVERLAY_USER_ID),
+        loadWikiOverlays(wikiOverlayUserId),
+        loadWikiOverlaySignals(wikiOverlayUserId),
       ]);
       setWikiOverlays(overlayResult.items ?? []);
       setWikiOverlaySignals(signalResult);
@@ -901,7 +902,7 @@ export default function WorkspacePage() {
     } finally {
       setIsOverlayLoading(false);
     }
-  }, []);
+  }, [wikiOverlayUserId]);
 
   const welcomeQuestions = useMemo(
     () => pickRandomStarterQuestions(STARTER_QUESTION_POOL, 4),
@@ -916,19 +917,6 @@ export default function WorkspacePage() {
     () => WIKI_VISION_MODES.find((mode) => mode.id === visionMode) ?? WIKI_VISION_MODES[0],
     [visionMode],
   );
-  const activeFooterConnection = useMemo(
-    () => footerConnections.find((item) => item.connection_id === opsConnectionId) ?? footerConnections[0] ?? null,
-    [footerConnections, opsConnectionId],
-  );
-  const footerGithubConnected = useMemo(
-    () => footerScmConnections.some((item) => item.provider === 'github'),
-    [footerScmConnections],
-  );
-  const footerGitlabConnected = useMemo(
-    () => footerScmConnections.some((item) => item.provider === 'gitlab'),
-    [footerScmConnections],
-  );
-  const footerRepoCount = footerScmRepositories.length;
   const leftPanelLabels = useMemo(() => ({
     history: isGuidedSurface ? 'Journey' : 'History',
     outline: isGuidedSurface ? 'Route Map' : 'Outline',
@@ -1024,23 +1012,6 @@ export default function WorkspacePage() {
 
   function openOpsRoute(path: string): void {
     navigate(path);
-  }
-
-  async function handleFooterOauth(provider: 'github' | 'gitlab'): Promise<void> {
-    if (!footerProviderStatus?.[provider]?.configured) {
-      navigate(ROUTES.opsScm);
-      return;
-    }
-    setFooterOauthPendingProvider(provider);
-    try {
-      const oauth = await startOAuth(provider, opsWorkspaceId || 'ws_default');
-      window.open(oauth.authorize_url, '_blank', 'noopener,noreferrer');
-    } catch (error) {
-      console.error(error);
-      navigate(ROUTES.opsScm);
-    } finally {
-      setFooterOauthPendingProvider('');
-    }
   }
 
   async function handleSessionResume(targetSessionId: string): Promise<void> {
@@ -1347,11 +1318,11 @@ export default function WorkspacePage() {
       const visibleSection = viewerActiveSection ?? extractVisibleViewerSection(preview.viewerDocument.html);
       if (visibleSection && currentViewerPath) {
         const sectionViewerPath = `${currentViewerPath.split('#', 1)[0]}#${visibleSection.anchor}`;
-        return buildOverlayTargetFromViewerPath(sectionViewerPath, visibleSection.title);
+        return buildOverlayTargetFromViewerPath(sectionViewerPath, visibleSection.title, wikiOverlayUserId);
       }
     }
-    return buildOverlayTargetFromViewerPath(preview.viewerUrl, preview.title);
-  }, [currentViewerPath, preview, viewerActiveSection, viewerPageMode]);
+    return buildOverlayTargetFromViewerPath(preview.viewerUrl, preview.title, wikiOverlayUserId);
+  }, [currentViewerPath, preview, viewerActiveSection, viewerPageMode, wikiOverlayUserId]);
 
   const favoriteOverlays = useMemo(
     () => wikiOverlays.filter((item) => item.kind === 'favorite'),
@@ -1459,6 +1430,7 @@ export default function WorkspacePage() {
     title: string,
     sourceId?: string,
     pageMode: ViewerPageMode = viewerPageMode,
+    scrollTargetText = '',
   ): Promise<void> {
     const normalizedViewerPath = normalizePreviewNavigationTarget(viewerPath);
     if (!normalizedViewerPath) {
@@ -1479,6 +1451,7 @@ export default function WorkspacePage() {
         meta,
         viewerUrl,
         viewerDocument,
+        scrollTargetText,
       });
     } catch (error) {
       console.error('viewer-preview-failed', {
@@ -1490,6 +1463,7 @@ export default function WorkspacePage() {
         title,
         subtitle: '',
         viewerUrl: toRuntimeUrl(normalizedViewerPath),
+        scrollTargetText,
       });
     }
   }
@@ -1503,7 +1477,7 @@ export default function WorkspacePage() {
       return;
     }
     const targetViewerPath = preview.meta?.viewer_path || runtimePathFromUrl(preview.viewerUrl);
-    await openViewerPreview(targetViewerPath, preview.title, activeSourceId ?? undefined, nextMode);
+    await openViewerPreview(targetViewerPath, preview.title, activeSourceId ?? undefined, nextMode, preview.scrollTargetText);
   }
 
   async function openManualPreview(book: LibraryBook): Promise<void> {
@@ -1611,7 +1585,7 @@ export default function WorkspacePage() {
     if (currentOverlayTarget.kind === 'entity_hub' || currentOverlayTarget.kind === 'book' || currentOverlayTarget.kind === 'section' || currentOverlayTarget.kind === 'figure') {
       const timer = window.setTimeout(() => {
         void saveWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'recent_position',
           ...currentOverlayTarget.payload,
         })
@@ -1670,6 +1644,9 @@ export default function WorkspacePage() {
         await openViewerPreview(
           citation.viewer_path,
           citation.source_label || citation.book_title || citation.section,
+          undefined,
+          viewerPageMode,
+          firstCitationCommand(citation),
         );
       }
       if (!isCourseMode) {
@@ -1697,7 +1674,7 @@ export default function WorkspacePage() {
   }
 
   function overlayTargetFromLink(link: ChatRelatedLink): OverlayTargetDescriptor | null {
-    return buildOverlayTargetFromViewerPath(toRuntimeUrl(link.href), link.label);
+    return buildOverlayTargetFromViewerPath(toRuntimeUrl(link.href), link.label, wikiOverlayUserId);
   }
 
   function overlayExists(kind: 'favorite' | 'check', targetRef: string): WikiOverlayRecord | null {
@@ -1712,13 +1689,13 @@ export default function WorkspacePage() {
     try {
       if (currentFavorite) {
         await removeWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'favorite',
           target_ref: currentFavorite.target_ref,
         });
       } else {
         await saveWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'favorite',
           title: currentOverlayTarget.title,
           summary: preview.kind === 'viewer' ? preview.subtitle : '',
@@ -1743,13 +1720,13 @@ export default function WorkspacePage() {
       const existing = overlayExists('favorite', target.ref);
       if (existing) {
         await removeWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'favorite',
           target_ref: existing.target_ref,
         });
       } else {
         await saveWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'favorite',
           title: link.label,
           summary: link.summary ?? '',
@@ -1772,13 +1749,13 @@ export default function WorkspacePage() {
     try {
       if (currentSectionCheck) {
         await removeWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'check',
           target_ref: currentSectionCheck.target_ref,
         });
       } else {
         await saveWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'check',
           status: 'checked',
           ...currentOverlayTarget.payload,
@@ -1802,13 +1779,13 @@ export default function WorkspacePage() {
       const existing = overlayExists('check', target.ref);
       if (existing) {
         await removeWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'check',
           target_ref: existing.target_ref,
         });
       } else {
         await saveWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'check',
           status: 'checked',
           ...target.payload,
@@ -1835,7 +1812,7 @@ export default function WorkspacePage() {
     if (!baseViewerPath) {
       return null;
     }
-    return buildOverlayTargetFromViewerPath(`${baseViewerPath}#${normalizedAnchor}`, title);
+    return buildOverlayTargetFromViewerPath(`${baseViewerPath}#${normalizedAnchor}`, title, wikiOverlayUserId);
   }
 
   async function cleanupLegacyEditOverlaysForTarget(targetRef: string): Promise<void> {
@@ -1844,13 +1821,13 @@ export default function WorkspacePage() {
     const legacyInk = inkOverlayByTarget.get(targetRef);
     if (legacyNote) {
       removals.push(removeWikiOverlay({
-        user_id: WIKI_OVERLAY_USER_ID,
+        user_id: wikiOverlayUserId,
         overlay_id: legacyNote.overlay_id,
       }));
     }
     if (legacyInk) {
       removals.push(removeWikiOverlay({
-        user_id: WIKI_OVERLAY_USER_ID,
+        user_id: wikiOverlayUserId,
         overlay_id: legacyInk.overlay_id,
       }));
     }
@@ -1889,14 +1866,14 @@ export default function WorkspacePage() {
       if (textAnnotations.length === 0 && strokes.length === 0) {
         if (existingEditedCard) {
           await removeWikiOverlay({
-            user_id: WIKI_OVERLAY_USER_ID,
+            user_id: wikiOverlayUserId,
             overlay_id: existingEditedCard.overlay_id,
           });
         }
         await cleanupLegacyEditOverlaysForTarget(target.ref);
       } else {
         await saveWikiOverlay({
-          user_id: WIKI_OVERLAY_USER_ID,
+          user_id: wikiOverlayUserId,
           kind: 'edited_card',
           overlay_id: existingEditedCard?.overlay_id ?? '',
           title: target.title,
@@ -2105,7 +2082,7 @@ export default function WorkspacePage() {
         query: trimmed,
         sessionId,
         mode: 'ops',
-        userId: WIKI_OVERLAY_USER_ID,
+        userId: wikiOverlayUserId,
         selectedDraftIds: activeDraft ? [activeDraft.draft_id] : [],
         restrictUploadedSources: Boolean(activeDraft),
       };
@@ -2128,7 +2105,11 @@ export default function WorkspacePage() {
             responseKind: 'rag',
           },
         ]);
-        response = await sendCourseChatStream({ message: trimmed }, (event) => {
+        response = await sendCourseChatStream({
+          message: trimmed,
+          sessionId,
+          userId: wikiOverlayUserId,
+        }, (event) => {
           if (event.type === 'answer_delta') {
             streamedAnswer += event.delta;
             setMessages((current) => current.map((message) => (
@@ -2168,9 +2149,7 @@ export default function WorkspacePage() {
       }
       const primaryTruth = primaryCitationTruth(response.citations);
 
-      if (!isCourseMode) {
-        setSessionId(response.session_id || sessionId);
-      }
+      setSessionId(response.session_id || sessionId);
       const assistantMessage = {
           id: makeId('assistant'),
           role: 'assistant',
@@ -2239,9 +2218,7 @@ export default function WorkspacePage() {
       window.alert(error instanceof Error ? error.message : '질문 처리 중 오류가 발생했습니다.');
     } finally {
       setIsSending(false);
-      if (!isCourseMode) {
-        void refreshSessionList();
-      }
+      void refreshSessionList();
     }
   }
 
@@ -2529,6 +2506,7 @@ export default function WorkspacePage() {
         packOptions={PACK_OPTIONS}
         sessionId={sessionId}
         testMode={testMode}
+        testModeDisabled={isCourseMode}
         globalTheme={globalTheme}
         onOpenLibrary={() => navigate('/playbook-library')}
         onResetSession={resetSession}
@@ -2957,62 +2935,15 @@ export default function WorkspacePage() {
                     <Cpu size={18} />
                     <div className={`status-dot-online ${activeFooterConnection ? '' : 'status-dot-idle'}`}></div>
                   </div>
-                  <div className="profile-info">
-                    <div className="profile-name">김성욱</div>
-                    <div className="profile-role">kugnus@cywell.co.kr</div>
-                  </div>
-                  <div className="profile-actions">
-                    <button className="profile-action-btn" title="Settings" type="button" onClick={(e) => e.stopPropagation()}>
-                      <Settings size={16} />
-                    </button>
-                    <button className="profile-action-btn" title="Logout" type="button" onClick={(e) => e.stopPropagation()}>
-                      <LogOut size={16} />
-                    </button>
-                  </div>
                   <div className="profile-ops-summary">
-                    <div className="profile-ops-title">
-                      {activeFooterConnection ? activeFooterConnection.display_name : 'No Cluster Connected'}
-                    </div>
-                    <div className="profile-ops-subtitle">
-                      {activeFooterConnection
-                        ? `${activeFooterConnection.default_namespace} · SSL forced off`
-                        : 'Connections에서 demo namespace 연결을 먼저 고정하세요'}
-                    </div>
-                    <div className="profile-meta-row">
-                      <span className={`profile-chip ${activeFooterConnection ? 'is-live' : ''}`}>
-                        {isFooterProfileLoading ? 'Syncing' : activeFooterConnection ? 'Cluster Live' : 'Disconnected'}
-                      </span>
-                      <span className={`profile-chip ${footerGithubConnected ? 'is-linked' : ''}`}>
-                        GitHub {footerGithubConnected ? 'linked' : footerProviderStatus?.github?.configured ? 'ready' : 'off'}
-                      </span>
-                      <span className={`profile-chip ${footerGitlabConnected ? 'is-linked' : ''}`}>
-                        GitLab {footerGitlabConnected ? 'linked' : footerProviderStatus?.gitlab?.configured ? 'ready' : 'off'}
-                      </span>
-                      <span className="profile-chip">{footerRepoCount} repos</span>
-                    </div>
-                    <div className="profile-action-stack">
-                      <button className="profile-connection-btn" type="button" onClick={() => openOpsRoute(ROUTES.opsOverview)}>
-                        Cluster
-                      </button>
-                      <button
-                        className="profile-provider-btn"
-                        type="button"
-                        disabled={footerOauthPendingProvider === 'github'}
-                        onClick={() => { void handleFooterOauth('github'); }}
-                      >
-                      <LinkIcon size={14} />
-                        <span>{footerOauthPendingProvider === 'github' ? 'Opening...' : 'GitHub'}</span>
-                      </button>
-                      <button
-                        className="profile-provider-btn"
-                        type="button"
-                        disabled={footerOauthPendingProvider === 'gitlab'}
-                        onClick={() => { void handleFooterOauth('gitlab'); }}
-                      >
-                        <GitBranch size={14} />
-                        <span>{footerOauthPendingProvider === 'gitlab' ? 'Opening...' : 'GitLab'}</span>
-                      </button>
-                    </div>
+                    <button
+                      className={`profile-ops-name-btn ${activeFooterConnection ? '' : 'is-undefined'}`}
+                      type="button"
+                      onClick={() => openOpsRoute(activeFooterConnection ? ROUTES.opsOverview : ROUTES.opsConnections)}
+                      title={activeFooterConnection ? 'Open Ops Console' : 'Connect OpenShift cluster'}
+                    >
+                      {isFooterProfileLoading ? 'Syncing' : footerProfileName}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -3055,8 +2986,8 @@ export default function WorkspacePage() {
                     </p>
                     {isGuidedSurface ? (
                       <div className="welcome-vision-active">
-                        <div className="welcome-vision-active-title">Guided Tour Active</div>
-                        <p className="welcome-vision-active-copy">질문을 던지면 답변, 문서, 다음 절차가 한 경로로 이어집니다.</p>
+                        <div className="welcome-vision-active-title">{activeVision.label} Active</div>
+                        <p className="welcome-vision-active-copy">{activeVision.workspace.cue}</p>
                       </div>
                     ) : (
                       <div className="welcome-vision-grid">
@@ -3368,6 +3299,7 @@ export default function WorkspacePage() {
                   <ViewerDocumentStage
                     viewerDocument={preview.viewerDocument}
                     currentViewerPath={currentViewerPath}
+                    scrollTargetText={preview.scrollTargetText}
                     onActiveSectionChange={viewerPageMode === 'multi' ? setViewerActiveSection : undefined}
                     onNavigateViewerPath={(viewerPath) => {
                       void openViewerPreview(viewerPath, preview.title, undefined, viewerPageMode);

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import './CoursePages.css';
 import { ROUTES } from '../app/routes';
-import { buildCourseAssetUrl, buildCourseSlideUrl, loadCourseChunk, type CourseChunkPayload, type CourseImageAttachment } from '../lib/courseApi';
+import { buildCourseAssetUrl, loadCourseChunk, type CourseChunkPayload, type CourseImageAttachment } from '../lib/courseApi';
 
 function shortText(value: unknown, maxLength = 260): string {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
@@ -55,9 +55,12 @@ export default function CourseAtlasPage() {
   const childIds = atlasRefs?.child_chunk_ids ?? payload?.child_chunk_ids ?? [];
   const assetIds = atlasRefs?.asset_ids ?? [];
   const zoneIds = atlasRefs?.zone_ids ?? [];
-  const slideCards = useMemo(() => (payload?.slide_refs ?? []).slice(0, 4), [payload]);
   const relatedDocs = payload?.related_official_docs ?? [];
   const attachments = useMemo(() => sortAttachments(payload?.image_attachments ?? []), [payload?.image_attachments]);
+  const evidenceCards = useMemo(
+    () => attachments.filter((attachment) => String(attachment.asset_path || '').trim()).slice(0, 4),
+    [attachments],
+  );
 
   return (
     <div className="course-page">
@@ -179,14 +182,14 @@ export default function CourseAtlasPage() {
               </div>
 
               <div className="course-panel course-detail">
-                <strong>Original Slide Context</strong>
+                <strong>Evidence Image Context</strong>
                 <div className="course-slide-grid">
-                  {slideCards.map((slideRef, index) => {
-                    const slideNo = Number(slideRef.slide_no || 0);
+                  {evidenceCards.map((attachment, index) => {
+                    const slideNo = Number(attachment.slide_no || 0);
                     return (
-                      <article key={`atlas-slide-${slideNo}-${index}`} className="course-slide-card">
-                        <img src={buildCourseSlideUrl(payload.chunk_id, slideNo)} alt={`Slide ${slideNo}`} />
-                        <span>Slide {slideNo}</span>
+                      <article key={`atlas-evidence-${attachment.asset_id || index}`} className="course-slide-card">
+                        <img src={buildCourseAssetUrl(String(attachment.asset_path || ''))} alt={attachment.visual_summary || `Slide ${slideNo}`} />
+                        <span>{slideNo ? `Slide ${slideNo}` : 'Evidence'}</span>
                       </article>
                     );
                   })}

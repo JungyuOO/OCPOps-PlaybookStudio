@@ -162,6 +162,12 @@ const VIEWER_READER_POLISH = `
     box-shadow: none !important;
     background: #ffffff !important;
   }
+
+  .viewer-root .code-block.viewer-code-scroll-target {
+    outline: 2px solid rgba(14, 116, 144, 0.46) !important;
+    outline-offset: 3px !important;
+    box-shadow: 0 0 0 6px rgba(14, 116, 144, 0.08) !important;
+  }
 `;
 
 const VIEWER_ANNOTATION_POLISH = `
@@ -342,6 +348,41 @@ function findEditableBlock(node: HTMLElement | null): HTMLElement | null {
   return block;
 }
 
+function readCodeBlockCopyText(button: Element): string {
+  const copyPayload = button.getAttribute('data-copy');
+  if (copyPayload) {
+    return JSON.parse(copyPayload) as string;
+  }
+  const codeBlock = button.closest('.code-block');
+  const code = codeBlock?.querySelector('code');
+  return code?.textContent ?? '';
+}
+
+function normalizeCodeSearchText(value: string): string {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function findCodeBlockContainingText(container: ParentNode, targetText?: string): HTMLElement | null {
+  const normalizedTarget = normalizeCodeSearchText(targetText || '');
+  if (!normalizedTarget) {
+    return null;
+  }
+  const codeNodes = Array.from(container.querySelectorAll('.code-block code, pre code'));
+  for (const node of codeNodes) {
+    const code = node instanceof HTMLElement ? node : null;
+    if (!code) {
+      continue;
+    }
+    const normalizedCode = normalizeCodeSearchText(code.textContent || '');
+    if (!normalizedCode.includes(normalizedTarget)) {
+      continue;
+    }
+    const block = code.closest('.code-block, pre');
+    return block instanceof HTMLElement ? block : code;
+  }
+  return null;
+}
+
 function elementPathWithinSection(section: HTMLElement, element: HTMLElement): string {
   const path: number[] = [];
   let current: HTMLElement | null = element;
@@ -496,6 +537,7 @@ function findSectionNodes(container: ParentNode): HTMLElement[] {
 export default function ViewerDocumentStage({
   viewerDocument,
   currentViewerPath,
+  scrollTargetText,
   onNavigateViewerPath,
   onActiveSectionChange,
   textAnnotationsByAnchor,
@@ -509,6 +551,7 @@ export default function ViewerDocumentStage({
 }: {
   viewerDocument: ViewerDocumentPayload;
   currentViewerPath?: string;
+  scrollTargetText?: string;
   onNavigateViewerPath?: (viewerPath: string) => void;
   onActiveSectionChange?: (section: { anchor: string; title: string } | null) => void;
   textAnnotationsByAnchor?: Record<string, WikiTextAnnotation[]>;
@@ -779,10 +822,9 @@ export default function ViewerDocumentStage({
         return;
       }
       if (button.classList.contains('copy-button')) {
-        const copyPayload = button.getAttribute('data-copy') ?? '""';
         const defaultLabel = button.getAttribute('data-label-default') ?? '복사';
         try {
-          const text = JSON.parse(copyPayload) as string;
+          const text = readCodeBlockCopyText(button);
           if (navigator.clipboard?.writeText) {
             await navigator.clipboard.writeText(text);
           }
@@ -864,6 +906,38 @@ export default function ViewerDocumentStage({
       scrollShadowTargetIntoView(host, targetNode);
     });
   }, [currentViewerPath, viewerDocument.html]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    const root = shadowRootRef.current;
+    if (!host || !root || !scrollTargetText) {
+      return undefined;
+    }
+    let clearTimer = 0;
+    const frameId = window.requestAnimationFrame(() => {
+      const targetId = currentViewerPath?.includes('#')
+        ? currentViewerPath.split('#').slice(1).join('#')
+        : '';
+      const sectionTarget = targetId ? findShadowTarget(root, targetId) : null;
+      const targetNode = (
+        sectionTarget ? findCodeBlockContainingText(sectionTarget, scrollTargetText) : null
+      ) ?? findCodeBlockContainingText(root, scrollTargetText);
+      if (!targetNode) {
+        return;
+      }
+      scrollShadowTargetIntoView(host, targetNode);
+      targetNode.classList.add('viewer-code-scroll-target');
+      clearTimer = window.setTimeout(() => {
+        targetNode.classList.remove('viewer-code-scroll-target');
+      }, 1800);
+    });
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      if (clearTimer) {
+        window.clearTimeout(clearTimer);
+      }
+    };
+  }, [currentViewerPath, scrollTargetText, viewerDocument.html]);
 
   useEffect(() => {
     if (!onActiveSectionChange) {

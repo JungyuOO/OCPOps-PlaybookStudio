@@ -10,6 +10,8 @@ from typing import Any
 import pytest
 
 from play_book_studio.app.course_api import (
+    _apply_course_answer_typography,
+    _course_answer_style_issues,
     _course_chat_payload,
     _load_chunk,
     _resolve_course_path,
@@ -23,6 +25,15 @@ def _write_chunk(root: Path, chunk_id: str, payload: dict) -> None:
     chunks_dir = root / "data" / "course_pbs" / "chunks"
     chunks_dir.mkdir(parents=True, exist_ok=True)
     (chunks_dir / f"{chunk_id}.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _write_chunks_jsonl(root: Path, rows: list[dict]) -> None:
+    course_dir = root / "data" / "course_pbs"
+    course_dir.mkdir(parents=True, exist_ok=True)
+    (course_dir / "chunks.jsonl").write_text(
+        "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _write_manifest(root: Path, payload: dict) -> None:
@@ -61,12 +72,45 @@ def test_load_chunk_rejects_path_traversal_ids() -> None:
             _load_chunk(root, "../secret")
 
 
+def test_load_chunk_reads_consolidated_chunks_jsonl() -> None:
+    with _temp_root() as root:
+        _write_chunks_jsonl(
+            root,
+            [
+                {
+                    "chunk_id": "chunk-01",
+                    "title": "단일 파일 청크",
+                    "body_md": "chunks.jsonl에서 읽는다.",
+                }
+            ],
+        )
+
+        payload = _load_chunk(root, "chunk-01")
+
+    assert payload["title"] == "단일 파일 청크"
+    assert payload["schema_version"] == "ppt_chunk_v1"
+
+
 def test_resolve_course_path_rejects_assets_outside_workspace() -> None:
     with _temp_root() as root:
         outside = root.parent / "outside.png"
 
         with pytest.raises(ValueError):
             _resolve_course_path(root, str(outside))
+
+
+def test_course_answer_style_issues_detects_korean_spacing_artifacts() -> None:
+    answer = "HPA 는 기본값인 15 초마다 metrics-server 로부터 대상 Pod 의 CPU를 수집하고 Pod 를 확장합니다. [1]"
+
+    issues = _course_answer_style_issues(answer)
+    cleaned = _apply_course_answer_typography(answer)
+
+    assert "HPA 는" in issues
+    assert "15 초" in issues
+    assert "metrics-server 로부터" in issues
+    assert "Pod 의" in issues
+    assert "Pod 를" in issues
+    assert cleaned == "HPA는 기본값인 15초마다 metrics-server로부터 대상 Pod의 CPU를 수집하고 Pod를 확장합니다. [1]"
 
 
 def test_course_asset_endpoint_serves_only_course_assets() -> None:
@@ -315,6 +359,16 @@ def test_course_chat_rewrites_ops_learning_answer_with_llm_prompt(monkeypatch: p
             del trace_callback
             captured["messages"] = messages
             captured["max_tokens"] = max_tokens
+            prompt_text = "\n".join(message["content"] for message in messages)
+            if "selected_learning_chunk_ids" in prompt_text and "후보(JSON)" in prompt_text:
+                return json.dumps(
+                    {
+                        "selected_learning_chunk_ids": ["performance_bottleneck_review::perf_result_bottleneck"],
+                        "rejected_learning_chunk_ids": [],
+                        "reason": "질문이 성능 병목 확인을 묻고 있습니다.",
+                    },
+                    ensure_ascii=False,
+                )
             return (
                 "Study-docs 기준 성능 병목은 먼저 DB 응답 지연과 Connection Pool 대기를 확인하고, "
                 "그 다음 HPA의 지표 수집과 scale-out 반응을 함께 보면 됩니다. [9]\n"
@@ -370,6 +424,7 @@ def test_course_chat_rewrites_ops_learning_answer_with_llm_prompt(monkeypatch: p
         response = _course_chat_payload(root, {"message": "성능 병목은 어디부터 보면 돼?", "stage_id": "perf_test"})
 
     assert response["answer_rewrite"] == {"mode": "llm"}
+    assert response["answer_generation"]["selector"]["mode"] == "fallback"
     assert not response["answer"].startswith("Study-docs 기준")
     assert "scale-out 반응" in response["answer"]
     assert "Scale-out : POD 확장" not in response["answer"]
@@ -377,7 +432,108 @@ def test_course_chat_rewrites_ops_learning_answer_with_llm_prompt(monkeypatch: p
     assert "[9]" not in response["answer"]
     prompt_text = "\n".join(message["content"] for message in captured["messages"])
     assert "청크 문장을 그대로 복사하지 말고" in prompt_text
+    assert "'HPA 는'이 아니라 'HPA는'" in prompt_text
     assert "Scale-out : POD 확장" in prompt_text
+    assert "Scale-out은 Pod를 확장하는 동작입니다" in prompt_text
+
+
+def test_course_chat_llm_selector_chooses_grounding_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeLLMClient:
+        def __init__(self, settings: Any) -> None:
+            del settings
+
+        def generate(self, messages: list[dict[str, str]], *, max_tokens: int | None = None, trace_callback=None) -> str:  # noqa: ANN001
+            del max_tokens, trace_callback
+            prompt_text = "\n".join(message["content"] for message in messages)
+            if "selected_learning_chunk_ids" in prompt_text and "후보(JSON)" in prompt_text:
+                return json.dumps(
+                    {
+                        "selected_learning_chunk_ids": ["guide::selected"],
+                        "rejected_learning_chunk_ids": ["guide::rejected"],
+                        "reason": "사용자 질문은 선택 후보의 운영 절차에 직접 연결됩니다.",
+                    },
+                    ensure_ascii=False,
+                )
+            return "선택된 근거 기준으로 운영 절차를 먼저 확인하고, 관련 지표를 이어서 점검합니다. [1]"
+
+    monkeypatch.setenv("COURSE_CHAT_LLM_REWRITE", "true")
+    monkeypatch.setenv("LLM_ENDPOINT", "http://fake-llm/v1")
+    monkeypatch.setenv("LLM_MODEL", "fake-model")
+    monkeypatch.setattr("play_book_studio.app.course_api.LLMClient", FakeLLMClient)
+    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.app.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
+
+    with _temp_root() as root:
+        _write_chunk(
+            root,
+            "source-rejected",
+            {
+                "chunk_id": "source-rejected",
+                "stage_id": "perf_test",
+                "title": "Rejected source",
+                "native_id": "PERF-1",
+                "body_md": "이 후보는 질문과 느슨하게만 관련됩니다.",
+                "search_text": "공통 질문 loose candidate",
+                "related_official_docs": [],
+            },
+        )
+        _write_chunk(
+            root,
+            "source-selected",
+            {
+                "chunk_id": "source-selected",
+                "stage_id": "perf_test",
+                "title": "Selected source",
+                "native_id": "PERF-2",
+                "body_md": "이 후보는 사용자가 묻는 운영 절차에 직접 답합니다.",
+                "search_text": "공통 질문 selected candidate",
+                "related_official_docs": [],
+            },
+        )
+        _write_learning_chunks(
+            root,
+            [
+                {
+                    "learning_chunk_id": "guide::rejected",
+                    "chunk_type": "ops_learning_step",
+                    "guide_id": "guide",
+                    "step_id": "rejected",
+                    "stage_id": "perf_test",
+                    "title": "느슨한 후보",
+                    "learning_goal": "공통 질문 후보",
+                    "operational_sequence": ["느슨한 후보 절차"],
+                    "what_to_look_for": ["loose"],
+                    "source_chunk_ids": ["source-rejected"],
+                    "hidden_native_ids": ["PERF-1"],
+                    "next_step_ids": [],
+                    "query_variants": ["공통 질문"],
+                },
+                {
+                    "learning_chunk_id": "guide::selected",
+                    "chunk_type": "ops_learning_step",
+                    "guide_id": "guide",
+                    "step_id": "selected",
+                    "stage_id": "perf_test",
+                    "title": "선택 후보",
+                    "learning_goal": "공통 질문 후보",
+                    "operational_sequence": ["선택된 운영 절차"],
+                    "what_to_look_for": ["selected"],
+                    "source_chunk_ids": ["source-selected"],
+                    "hidden_native_ids": ["PERF-2"],
+                    "next_step_ids": [],
+                    "query_variants": ["공통 질문"],
+                },
+            ],
+        )
+
+        response = _course_chat_payload(root, {"message": "공통 질문", "stage_id": "perf_test"})
+
+    assert response["sources"][0]["chunk_id"] == "source-selected"
+    assert all(source["chunk_id"] != "source-rejected" for source in response["sources"])
+    assert response["answer_generation"]["selector"]["mode"] == "llm"
+    assert response["answer_generation"]["selected_learning_chunk_ids"] == ["guide::selected"]
+    assert response["answer_generation"]["selector"]["rejected_learning_chunk_ids"] == ["guide::rejected"]
+    assert response["answer"] == "선택된 근거 기준으로 운영 절차를 먼저 확인하고, 관련 지표를 이어서 점검합니다. [1]"
 
 
 def test_course_stage_payload_prefers_ops_learning_guide_cards() -> None:
@@ -483,6 +639,9 @@ def test_load_chunk_projects_missing_index_contract_fields() -> None:
 
 def test_course_chunk_viewer_meta_and_html_support_workspace_preview() -> None:
     with _temp_root() as root:
+        assets_dir = root / "data" / "course_pbs" / "assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        (assets_dir / "chunk-01__img_01.png").write_bytes(b"not-a-real-png")
         _write_chunk(
             root,
             "chunk-01",
@@ -496,6 +655,14 @@ def test_course_chunk_viewer_meta_and_html_support_workspace_preview() -> None:
                 "search_text": "TEST-01 Running Ready",
                 "source_pptx": "study-docs/unit.pptx",
                 "slide_refs": [{"slide_no": 3, "pptx": "study-docs/unit.pptx"}],
+                "image_attachments": [
+                    {
+                        "asset_id": "chunk-01::asset:01",
+                        "asset_path": "data/course_pbs/assets/chunk-01__img_01.png",
+                        "slide_no": 3,
+                        "visual_summary": "Pod Running screen",
+                    }
+                ],
                 "structured": {"method": "oc get pods"},
             },
         )
@@ -508,7 +675,7 @@ def test_course_chunk_viewer_meta_and_html_support_workspace_preview() -> None:
     assert meta["source_lane"] == "study_docs_course_runtime"
     assert viewer_html is not None
     assert "Pod Running 확인" in viewer_html
-    assert "/api/v1/course/slides/chunk-01/3.png" in viewer_html
+    assert "/api/v1/course/assets?path=data/course_pbs/assets/chunk-01__img_01.png" in viewer_html
 
 
 def test_course_chat_separates_study_docs_official_docs_and_guided_next_step(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -521,7 +521,7 @@ def _build_handler(
             return bool(_handle_ops_console_post_request(self, request_path, query, payload, root_dir=root_dir))
 
         def _handle_course_post(self, request_path: str, payload: dict[str, Any]) -> bool:
-            return bool(_handle_course_post_request(self, request_path, payload, root_dir=root_dir))
+            return bool(_handle_course_post_request(self, request_path, payload, root_dir=root_dir, store=self._session_store()))
 
         def _handle_ops_console_put(self, request_path: str, payload: dict[str, Any]) -> bool:
             return bool(_handle_ops_console_put_request(self, request_path, payload, root_dir=root_dir))

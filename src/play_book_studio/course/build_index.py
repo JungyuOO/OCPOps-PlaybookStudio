@@ -293,9 +293,11 @@ def main() -> int:
         learning_chunks_path=DEFAULT_LEARNING_CHUNKS_PATH,
         root_dir=source_dir.parent,
     )
+    chunks_jsonl = output_dir / "chunks.jsonl"
     written_chunks = [
-        json.loads(path.read_text(encoding="utf-8"))
-        for path in sorted((output_dir / "chunks").glob("*.json"))
+        json.loads(line)
+        for line in chunks_jsonl.read_text(encoding="utf-8").splitlines()
+        if line.strip()
     ]
     _write_review_queue(output_dir, written_chunks)
     write_slide_graphs(output_dir=output_dir, slide_graphs=slide_graphs)

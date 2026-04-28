@@ -1341,6 +1341,10 @@ def assemble_context(
             prompt_lines.append("ordered_cli_commands:")
             for step_index, command in enumerate(citation.cli_commands[:MAX_PROMPT_CLI_COMMANDS], start=1):
                 prompt_lines.append(f"- step {step_index}: {command}")
+        if citation.verification_hints:
+            prompt_lines.append("verification_hints:")
+            for hint in citation.verification_hints[:3]:
+                prompt_lines.append(f"- {hint}")
         prompt_lines.append("")
 
     return ContextBundle(

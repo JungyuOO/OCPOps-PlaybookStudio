@@ -273,18 +273,21 @@ def attach_course_tour_metadata(chunks: list[dict[str, Any]], manifest: dict[str
 def write_course_outputs(*, output_dir: Path, manifest: dict[str, Any], chunks: list[dict[str, Any]], decks: list[dict[str, Any]]) -> None:
     manifests_dir = output_dir / "manifests"
     chunks_dir = output_dir / "chunks"
+    chunks_jsonl = output_dir / "chunks.jsonl"
     decks_dir = output_dir / "decks"
     assets_dir = output_dir / "assets"
     if output_dir.exists():
         for child in (chunks_dir, decks_dir, assets_dir):
             if child.exists():
                 shutil.rmtree(child)
+        if chunks_jsonl.exists():
+            chunks_jsonl.unlink()
     manifests_dir.mkdir(parents=True, exist_ok=True)
-    chunks_dir.mkdir(parents=True, exist_ok=True)
     decks_dir.mkdir(parents=True, exist_ok=True)
     assets_dir.mkdir(parents=True, exist_ok=True)
     project_root = output_dir.parent.parent.resolve()
     (manifests_dir / "course_v1.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    normalized_chunks: list[dict[str, Any]] = []
     for chunk in chunks:
         chunk_id = str(chunk.get("chunk_id") or "unknown")
         semantic_zones = chunk.get("semantic_zones") if isinstance(chunk.get("semantic_zones"), list) else []
@@ -356,9 +359,8 @@ def write_course_outputs(*, output_dir: Path, manifest: dict[str, Any], chunks: 
                 continue
             normalized_slide_refs.append(
                 {
-                    **slide_ref,
+                    **{key: value for key, value in slide_ref.items() if key != "png_path"},
                     "pptx": relative_project_path(str(slide_ref.get("pptx") or ""), project_root=project_root),
-                    "png_path": relative_project_path(str(slide_ref.get("png_path") or ""), project_root=project_root),
                 }
             )
         provenance = chunk.get("provenance") if isinstance(chunk.get("provenance"), dict) else {}
@@ -377,7 +379,11 @@ def write_course_outputs(*, output_dir: Path, manifest: dict[str, Any], chunks: 
         }
         chunk.pop("semantic_zones", None)
         chunk.pop("zone_relations", None)
-        (chunks_dir / f"{chunk_id}.json").write_text(json.dumps(chunk, ensure_ascii=False, indent=2), encoding="utf-8")
+        normalized_chunks.append(chunk)
+    chunks_jsonl.write_text(
+        "\n".join(json.dumps(chunk, ensure_ascii=False, separators=(",", ":")) for chunk in normalized_chunks) + "\n",
+        encoding="utf-8",
+    )
     normalized_decks = []
     for deck in decks:
         if not isinstance(deck, dict):

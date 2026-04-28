@@ -134,6 +134,16 @@
   background: rgba(0, 209, 255, 0.08);
 }
 
+.pack-selector-trigger:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.pack-selector-trigger:disabled:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .pack-chevron {
   margin-left: auto;
   transition: transform 0.24s ease;
@@ -268,6 +278,16 @@
 .nav-btn:hover {
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.2);
+}
+
+.nav-btn:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.nav-btn:disabled:hover {
+  background: transparent;
+  border-color: var(--glass-border);
 }
 
 .test-mode-btn {
@@ -5025,7 +5045,33 @@
   flex: 1;
   min-width: 0;
   display: grid;
-  gap: 8px;
+  gap: 4px;
+}
+
+.profile-ops-name-btn {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pbs-text-main);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.profile-ops-name-btn:hover {
+  color: var(--pbs-accent-cyan);
+}
+
+.profile-ops-name-btn.is-undefined {
+  color: var(--pbs-text-muted);
 }
 
 .profile-ops-title {

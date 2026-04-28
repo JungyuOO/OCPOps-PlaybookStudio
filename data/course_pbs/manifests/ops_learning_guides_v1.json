@@ -1,0 +1,1111 @@
+{
+  "canonical_model": "ops_learning_guide_v1",
+  "generated_at": "2026-04-27T23:51:41Z",
+  "source_manifest": "data/course_pbs/manifests/course_v1.json",
+  "guide_count": 7,
+  "step_count": 18,
+  "guides": [
+    {
+      "guide_id": "architecture_overview",
+      "stage_id": "architecture",
+      "title": "OpenShift 운영 아키텍처 큰 흐름",
+      "audience": "beginner_operator",
+      "learning_goal": "외부, DMZ, 내부망, DB, 스토리지, 모니터링 영역을 운영 관점에서 먼저 잡는다.",
+      "next_guide_id": "service_flow_network_reading",
+      "next_guide_entry_step_id": "service_request_flow",
+      "entry_step_id": "arch_big_picture",
+      "step_ids": [
+        "arch_big_picture",
+        "arch_storage_monitoring"
+      ],
+      "steps": [
+        {
+          "step_id": "arch_big_picture",
+          "guide_id": "architecture_overview",
+          "stage_id": "architecture",
+          "card_text": "운영 아키텍처 큰 그림 보기",
+          "user_query": "OpenShift 운영 아키텍처는 어떤 영역부터 순서대로 보면 돼?",
+          "learning_objective": "외부, DMZ, 내부망, DB, 스토리지, 모니터링 영역을 한 번에 잡는다.",
+          "answer_outline": [
+            "먼저 외부와 DMZ 경계에서 트래픽이 들어오는 흐름을 확인한다.",
+            "그 다음 내부망의 OpenShift 영역과 주요 플랫폼 컴포넌트를 본다.",
+            "DB, 스토리지, 모니터링 영역은 운영 영향도를 판단하는 보조 축으로 함께 본다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "architecture--DSGN-005-001--default--none--design-summary--summary--3e8f3baf",
+              "native_id": "DSGN-005-001",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "architecture",
+              "title": "아키텍처 구성도",
+              "learning_classification": "supporting_evidence",
+              "learning_score": 58
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": [
+              "diagram",
+              "main_diagram"
+            ]
+          },
+          "expected_terms": [
+            "OpenShift Container Platform",
+            "DMZ",
+            "내부망",
+            "Data Base",
+            "HAProxy"
+          ],
+          "next_step_ids": [
+            "arch_storage_monitoring"
+          ],
+          "next_guide": null,
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        },
+        {
+          "step_id": "arch_storage_monitoring",
+          "guide_id": "architecture_overview",
+          "stage_id": "architecture",
+          "card_text": "스토리지와 모니터링 연결 보기",
+          "user_query": "운영에서 스토리지와 모니터링은 어떤 순서로 확인하면 돼?",
+          "learning_objective": "PVC, Prometheus, AlertManager가 어떤 운영 근거로 쓰이는지 확인한다.",
+          "answer_outline": [
+            "서비스 저장 영역과 모니터링 저장 영역을 구분해서 본다.",
+            "PVC가 어떤 용도로 할당되는지 확인한다.",
+            "Prometheus와 AlertManager는 운영 상태 확인과 장애 대응의 근거로 연결한다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "architecture--DSGN-005-030--default--none--design-summary--summary--7c8d4892",
+              "native_id": "DSGN-005-030",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "architecture",
+              "title": "* Node에 볼륨 할당하여 Prometheus, AlertManager 사용",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 77
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": [
+              "diagram",
+              "table"
+            ]
+          },
+          "expected_terms": [
+            "PVC",
+            "Prometheus",
+            "AlertManager",
+            "Logging"
+          ],
+          "next_step_ids": [],
+          "next_guide": {
+            "guide_id": "service_flow_network_reading",
+            "step_id": "service_request_flow",
+            "card_text": "서비스 요청 흐름 따라가기",
+            "user_query": "사용자 요청이 서비스까지 가는 흐름은 어디부터 보면 돼?"
+          },
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        }
+      ],
+      "quality": {
+        "status": "draft",
+        "needs_review": []
+      }
+    },
+    {
+      "guide_id": "service_flow_network_reading",
+      "stage_id": "architecture",
+      "title": "서비스 흐름과 네트워크 읽기",
+      "audience": "beginner_operator",
+      "learning_goal": "서비스 요청, 인증/인가, 라우팅, URL 매핑을 운영자가 추적할 수 있게 한다.",
+      "next_guide_id": "cicd_change_approval_flow",
+      "next_guide_entry_step_id": "cicd_overall_flow",
+      "entry_step_id": "service_request_flow",
+      "step_ids": [
+        "service_request_flow",
+        "service_url_mapping"
+      ],
+      "steps": [
+        {
+          "step_id": "service_request_flow",
+          "guide_id": "service_flow_network_reading",
+          "stage_id": "architecture",
+          "card_text": "서비스 요청 흐름 따라가기",
+          "user_query": "사용자 요청이 서비스까지 가는 흐름은 어디부터 보면 돼?",
+          "learning_objective": "Gateway, HAProxy, Ingress Router, Envoy Proxy, Virtual Service, 서비스 Pod 흐름을 연결한다.",
+          "answer_outline": [
+            "먼저 사용자 요청이 HAProxy와 Ingress Router로 들어오는 진입 경로를 본다.",
+            "그 다음 Envoy Proxy와 Virtual Service가 서비스 Pod로 연결하는 흐름을 확인한다.",
+            "인증/인가 요청과 처리 결과 반환은 진입 경로를 이해한 뒤 별도 응답 흐름으로 읽는다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "architecture--DSGN-005-201--default--none--design-summary--summary--a4358c0d",
+              "native_id": "DSGN-005-201",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "architecture",
+              "title": "Istio Ingress Gateway POD (Envoy Proxy)",
+              "learning_classification": "supporting_evidence",
+              "learning_score": 52
+            },
+            {
+              "chunk_id": "architecture--DSGN-005-205--default--none--design-summary--summary--217a9505",
+              "native_id": "DSGN-005-205",
+              "hidden_from_user": true,
+              "anchor_role": "supporting",
+              "stage_id": "architecture",
+              "title": "3.Token 인증",
+              "learning_classification": "supporting_evidence",
+              "learning_score": 57
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": []
+          },
+          "expected_terms": [
+            "Gateway",
+            "HAProxy",
+            "Ingress Router",
+            "Virtual Service",
+            "POD",
+            "Envoy Proxy"
+          ],
+          "next_step_ids": [
+            "service_url_mapping"
+          ],
+          "next_guide": null,
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        },
+        {
+          "step_id": "service_url_mapping",
+          "guide_id": "service_flow_network_reading",
+          "stage_id": "architecture",
+          "card_text": "URL 매핑과 서비스 연결 보기",
+          "user_query": "URL 경로와 서비스 Pod 매핑은 어떻게 읽으면 돼?",
+          "learning_objective": "외부/internal URL prefix가 gateway와 서비스 Pod로 어떻게 연결되는지 본다.",
+          "answer_outline": [
+            "외부 URL과 internal URL prefix를 먼저 구분한다.",
+            "각 prefix가 gateway와 서비스 Pod 중 어디로 연결되는지 본다.",
+            "운영 확인 시에는 URL, gateway, service, pod 이름을 한 묶음으로 추적한다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "architecture--DSGN-005-209--default--none--design-summary--summary--39f5045a",
+              "native_id": "DSGN-005-209",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "architecture",
+              "title": "/lp/v1/areasrvc/ /internal/lp/v1/areasrvc/",
+              "learning_classification": "supporting_evidence",
+              "learning_score": 62
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": []
+          },
+          "expected_terms": [
+            "Virtual Service",
+            "Gateway",
+            "Pod",
+            "URL"
+          ],
+          "next_step_ids": [],
+          "next_guide": {
+            "guide_id": "cicd_change_approval_flow",
+            "step_id": "cicd_overall_flow",
+            "card_text": "운영 배포 승인 흐름 이해하기",
+            "user_query": "운영 배포 승인 흐름은 어떤 순서로 이해하면 돼?"
+          },
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        }
+      ],
+      "quality": {
+        "status": "draft",
+        "needs_review": []
+      }
+    },
+    {
+      "guide_id": "cicd_change_approval_flow",
+      "stage_id": "architecture",
+      "title": "CI/CD 변경과 운영 승인 흐름",
+      "audience": "beginner_operator",
+      "learning_goal": "소스 변경부터 운영 배포 승인, GitOps 반영까지의 실무 흐름을 이해한다.",
+      "next_guide_id": "unit_test_verification_flow",
+      "next_guide_entry_step_id": "unit_node_status",
+      "entry_step_id": "cicd_overall_flow",
+      "step_ids": [
+        "cicd_overall_flow",
+        "cicd_key_changes",
+        "cicd_staging_validation"
+      ],
+      "steps": [
+        {
+          "step_id": "cicd_overall_flow",
+          "guide_id": "cicd_change_approval_flow",
+          "stage_id": "architecture",
+          "card_text": "운영 배포 승인 흐름 이해하기",
+          "user_query": "운영 배포 승인 흐름은 어떤 순서로 이해하면 돼?",
+          "learning_objective": "형상 변경, 빌드, 검증, 운영 승인 Gate, ArgoCD 반영을 연결한다.",
+          "answer_outline": [
+            "개발 변경은 형상관리와 빌드 파이프라인에서 시작한다.",
+            "검증 환경 반영 후 운영 배포 승인 Gate를 통과해야 한다.",
+            "운영 반영은 ArgoCD와 배포 manifest 흐름으로 추적한다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "architecture--DSGN-005-401--default--none--design-summary--summary--7a897e89",
+              "native_id": "DSGN-005-401",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "architecture",
+              "title": "MR by 운영자 (운영배포 승인 Gate)",
+              "learning_classification": "supporting_evidence",
+              "learning_score": 50
+            },
+            {
+              "chunk_id": "architecture--DSGN-005-402--default--none--design-summary--summary--2a966715",
+              "native_id": "DSGN-005-402",
+              "hidden_from_user": true,
+              "anchor_role": "supporting",
+              "stage_id": "architecture",
+              "title": "CICD 관련 주요 변경 사항",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 70
+            },
+            {
+              "chunk_id": "architecture--DSGN-005-403--default--none--design-summary--summary--23f6f4dd",
+              "native_id": "DSGN-005-403",
+              "hidden_from_user": true,
+              "anchor_role": "supporting",
+              "stage_id": "architecture",
+              "title": "MR 승인, 검증반영 (STG branch)",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 70
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": []
+          },
+          "expected_terms": [
+            "Tekton",
+            "ArgoCD",
+            "Quay",
+            "운영배포 승인 Gate"
+          ],
+          "next_step_ids": [
+            "cicd_key_changes"
+          ],
+          "next_guide": null,
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        },
+        {
+          "step_id": "cicd_key_changes",
+          "guide_id": "cicd_change_approval_flow",
+          "stage_id": "architecture",
+          "card_text": "CI/CD 주요 변경사항 보기",
+          "user_query": "CI/CD 주요 변경사항은 어떤 순서로 보면 돼?",
+          "learning_objective": "GitOps, manifest 관리, Tekton 파이프라인, Kustomize 렌더링을 확인한다.",
+          "answer_outline": [
+            "애플리케이션 manifest가 Git을 통해 관리되는지 먼저 본다.",
+            "Tekton 파이프라인과 GitOps 반영 흐름을 함께 확인한다.",
+            "Kustomize 기반 렌더링은 환경별 배포 차이를 이해하는 기준으로 본다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "architecture--DSGN-005-402--default--none--design-summary--summary--2a966715",
+              "native_id": "DSGN-005-402",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "architecture",
+              "title": "CICD 관련 주요 변경 사항",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 70
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": []
+          },
+          "expected_terms": [
+            "GitOps",
+            "ArgoCD",
+            "Tekton",
+            "Kustomize",
+            "GitLab"
+          ],
+          "next_step_ids": [
+            "cicd_staging_validation"
+          ],
+          "next_guide": null,
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        },
+        {
+          "step_id": "cicd_staging_validation",
+          "guide_id": "cicd_change_approval_flow",
+          "stage_id": "architecture",
+          "card_text": "검증 반영과 승인 확인하기",
+          "user_query": "검증 환경 반영과 승인 과정은 어떤 순서로 보면 돼?",
+          "learning_objective": "SR branch, MR, DEV/STG branch, 현업 테스트, 승인 흐름을 확인한다.",
+          "answer_outline": [
+            "요청은 SR branch와 개발 작업에서 시작한다.",
+            "개발 반영 후 검증 반영 MR과 현업 테스트를 확인한다.",
+            "승인 이후 검증 서버 배포와 결과 흐름을 따라간다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "architecture--DSGN-005-403--default--none--design-summary--summary--23f6f4dd",
+              "native_id": "DSGN-005-403",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "architecture",
+              "title": "MR 승인, 검증반영 (STG branch)",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 70
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": []
+          },
+          "expected_terms": [
+            "SR branch",
+            "MR",
+            "DEV branch",
+            "STG branch",
+            "GitLab"
+          ],
+          "next_step_ids": [],
+          "next_guide": {
+            "guide_id": "unit_test_verification_flow",
+            "step_id": "unit_node_status",
+            "card_text": "노드 상태 검증부터 보기",
+            "user_query": "운영자가 기본 상태를 확인하려면 노드부터 어떻게 보면 돼?"
+          },
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        }
+      ],
+      "quality": {
+        "status": "draft",
+        "needs_review": []
+      }
+    },
+    {
+      "guide_id": "unit_test_verification_flow",
+      "stage_id": "unit_test",
+      "title": "운영 검증을 위한 단위 테스트 읽기",
+      "audience": "beginner_operator",
+      "learning_goal": "노드, 서비스 메시, HA, PVC 같은 운영 핵심 항목의 검증 방법과 기대 상태를 읽는다.",
+      "next_guide_id": "integration_cicd_flow",
+      "next_guide_entry_step_id": "integration_pipeline_success",
+      "entry_step_id": "unit_node_status",
+      "step_ids": [
+        "unit_node_status",
+        "unit_service_mesh_status",
+        "unit_pvc_mount"
+      ],
+      "steps": [
+        {
+          "step_id": "unit_node_status",
+          "guide_id": "unit_test_verification_flow",
+          "stage_id": "unit_test",
+          "card_text": "노드 상태 검증부터 보기",
+          "user_query": "운영자가 기본 상태를 확인하려면 노드부터 어떻게 보면 돼?",
+          "learning_objective": "노드 목록과 역할, CLI/Web Console 확인 기준을 잡는다.",
+          "answer_outline": [
+            "먼저 전체 노드 목록과 역할 구성을 확인한다.",
+            "CLI와 Web Console에서 동일한 상태가 보이는지 비교한다.",
+            "master, infra, router, storage, worker 역할이 기대 구성과 맞는지 본다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "unit-test--TEST-UN-OCP-01-01--plan--none--test-case-summary--summary--ca27205f",
+              "native_id": "TEST-UN-OCP-01-01",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "unit_test",
+              "title": "1. 구성 및 컴포넌트 기능 확인",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 80
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": [
+              "expected_state_indicator",
+              "command_result_evidence"
+            ]
+          },
+          "expected_terms": [
+            "oc get node",
+            "CLI",
+            "Web Console",
+            "master",
+            "worker"
+          ],
+          "next_step_ids": [
+            "unit_service_mesh_status"
+          ],
+          "next_guide": null,
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        },
+        {
+          "step_id": "unit_service_mesh_status",
+          "guide_id": "unit_test_verification_flow",
+          "stage_id": "unit_test",
+          "card_text": "Service Mesh 정상 상태 확인하기",
+          "user_query": "Service Mesh가 정상인지 화면과 명령어에서 무엇을 보면 돼?",
+          "learning_objective": "SMCP Ready, istiod, ingress endpoint 상태를 확인한다.",
+          "answer_outline": [
+            "Service Mesh Control Plane Ready 상태를 먼저 확인한다.",
+            "istiod Pod와 ingress endpoint가 기대 상태인지 본다.",
+            "명령 결과와 콘솔 화면을 함께 증적으로 사용한다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "unit-test--TEST-UN-OCP-08-07--plan--none--test-case-summary--summary--ce8971f4",
+              "native_id": "TEST-UN-OCP-08-07",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "unit_test",
+              "title": "1. 구성 및 컴포넌트 기능 확인",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 84
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": [
+              "expected_state_indicator",
+              "command_result_evidence"
+            ]
+          },
+          "expected_terms": [
+            "SMCP",
+            "Ready",
+            "istiod",
+            "ingress endpoint"
+          ],
+          "next_step_ids": [
+            "unit_pvc_mount"
+          ],
+          "next_guide": null,
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        },
+        {
+          "step_id": "unit_pvc_mount",
+          "guide_id": "unit_test_verification_flow",
+          "stage_id": "unit_test",
+          "card_text": "PVC 마운트 검증하기",
+          "user_query": "PVC가 Pod에 제대로 붙었는지는 어떤 순서로 확인해?",
+          "learning_objective": "PVC 생성, Deployment 마운트, 파일 생성 확인 흐름을 본다.",
+          "answer_outline": [
+            "PVC와 Deployment 정의를 먼저 확인한다.",
+            "Pod에 PVC가 마운트되는지 본다.",
+            "파일 생성이나 접근 결과를 통해 실제 사용 가능 여부를 확인한다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "unit-test--TEST-UN-OCP-25-01--plan--none--test-case-summary--summary--14c5fc79",
+              "native_id": "TEST-UN-OCP-25-01",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "unit_test",
+              "title": "5. OCP PV/PVC 관리 테스트",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 84
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": [
+              "expected_state_indicator",
+              "command_result_evidence"
+            ]
+          },
+          "expected_terms": [
+            "PVC",
+            "Pod",
+            "Deployment",
+            "마운트"
+          ],
+          "next_step_ids": [],
+          "next_guide": {
+            "guide_id": "integration_cicd_flow",
+            "step_id": "integration_pipeline_success",
+            "card_text": "파이프라인 성공 흐름 확인하기",
+            "user_query": "파이프라인이 성공했다는 건 화면에서 뭘 보면 돼?"
+          },
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        }
+      ],
+      "quality": {
+        "status": "draft",
+        "needs_review": []
+      }
+    },
+    {
+      "guide_id": "integration_cicd_flow",
+      "stage_id": "integration_test",
+      "title": "통합 테스트 CI/CD 흐름",
+      "audience": "beginner_operator",
+      "learning_goal": "파이프라인 시작부터 빌드, 배포, 서비스 접근 확인까지 실무 순서로 학습한다.",
+      "next_guide_id": "performance_bottleneck_review",
+      "next_guide_entry_step_id": "perf_goal_context",
+      "entry_step_id": "integration_pipeline_success",
+      "step_ids": [
+        "integration_pipeline_success",
+        "integration_failure_troubleshooting"
+      ],
+      "steps": [
+        {
+          "step_id": "integration_pipeline_success",
+          "guide_id": "integration_cicd_flow",
+          "stage_id": "integration_test",
+          "card_text": "파이프라인 성공 흐름 확인하기",
+          "user_query": "파이프라인이 성공했다는 건 화면에서 뭘 보면 돼?",
+          "learning_objective": "Trigger, Clone, S2I/build, rollout, service access 성공 증적을 확인한다.",
+          "answer_outline": [
+            "파이프라인 Trigger 이후 소스 Clone과 S2I/build가 이어지는지 본다.",
+            "Deployment rollout이 정상 완료되는지 확인한다.",
+            "서비스 접근 확인까지 이어져야 성공 흐름으로 본다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "integrat-fce72e--1--default--none--integration-s-76fdd8--summary--d6e2c5ce",
+              "native_id": "1",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "integration_test",
+              "title": "기본 CI/CD 파이프라인 기능 테스트 1.1. 파이프라인 시작(Trigger) 1.2. 소스 코드 Clone 1.3. S2I/빌드 성공 1.4. Deployment 롤아웃 1.5. 서비스 접근 확인",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 80
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": [
+              "success_state",
+              "expected_state_indicator",
+              "command_result_evidence"
+            ]
+          },
+          "expected_terms": [
+            "Trigger",
+            "Clone",
+            "S2I",
+            "Deployment",
+            "서비스 접근"
+          ],
+          "next_step_ids": [
+            "integration_failure_troubleshooting"
+          ],
+          "next_guide": null,
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        },
+        {
+          "step_id": "integration_failure_troubleshooting",
+          "guide_id": "integration_cicd_flow",
+          "stage_id": "integration_test",
+          "card_text": "실패 상태와 로그 확인하기",
+          "user_query": "파이프라인이나 배포가 실패하면 어떤 상태와 로그부터 봐야 해?",
+          "learning_objective": "Failed 파이프라인, 빌드 오류 로그, CrashLoopBackOff Pod 상태를 순서대로 확인한다.",
+          "answer_outline": [
+            "먼저 파이프라인 실행 상태가 Failed인지 확인한다.",
+            "Clone, S2I, build 단계의 콘솔 로그에서 컴파일 오류나 build failed 메시지를 찾는다.",
+            "배포 이후에는 Pod 상태가 CrashLoopBackOff인지 보고 로그와 배포 정보를 함께 확인한다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "integrat-fce72e--3--default--none--integration-s-76fdd8--summary--46ae2d9a",
+              "native_id": "3",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "integration_test",
+              "title": "실패 및 롤백 테스트",
+              "learning_classification": "supporting_evidence",
+              "learning_score": 64
+            },
+            {
+              "chunk_id": "integrat-fce72e--3--default--none--integration-s-c7171c--slide-006--cd703b45",
+              "native_id": "3",
+              "hidden_from_user": true,
+              "anchor_role": "supporting",
+              "stage_id": "integration_test",
+              "title": "3. 실패 및 롤백 테스트",
+              "learning_classification": "supporting_evidence",
+              "learning_score": 47
+            },
+            {
+              "chunk_id": "integrat-fce72e--3--default--none--integration-s-c7171c--slide-042--447feee8",
+              "native_id": "3",
+              "hidden_from_user": true,
+              "anchor_role": "supporting",
+              "stage_id": "integration_test",
+              "title": "3. 실패 및 롤백 테스트",
+              "learning_classification": "supporting_evidence",
+              "learning_score": 47
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": [
+              "failure_state",
+              "console_output",
+              "expected_state_indicator"
+            ]
+          },
+          "expected_terms": [
+            "Failed",
+            "Build failed",
+            "CrashLoopBackOff",
+            "console",
+            "Pod"
+          ],
+          "next_step_ids": [],
+          "next_guide": {
+            "guide_id": "performance_bottleneck_review",
+            "step_id": "perf_goal_context",
+            "card_text": "성능 목표와 조건 먼저 보기",
+            "user_query": "성능 테스트는 어떤 목표와 조건부터 확인해야 해?"
+          },
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        }
+      ],
+      "quality": {
+        "status": "draft",
+        "needs_review": []
+      }
+    },
+    {
+      "guide_id": "performance_bottleneck_review",
+      "stage_id": "perf_test",
+      "title": "성능 테스트 병목 분석 흐름",
+      "audience": "beginner_operator",
+      "learning_goal": "성능 목표, 결과, 병목, 개선 포인트를 운영 관점에서 순서대로 확인한다.",
+      "next_guide_id": "completion_report_reading_path",
+      "next_guide_entry_step_id": "completion_project_context",
+      "entry_step_id": "perf_goal_context",
+      "step_ids": [
+        "perf_goal_context",
+        "perf_result_bottleneck",
+        "perf_improvement_actions"
+      ],
+      "steps": [
+        {
+          "step_id": "perf_goal_context",
+          "guide_id": "performance_bottleneck_review",
+          "stage_id": "perf_test",
+          "card_text": "성능 목표와 조건 먼저 보기",
+          "user_query": "성능 테스트는 어떤 목표와 조건부터 확인해야 해?",
+          "learning_objective": "TPS 목표, 환경 차이, 테스트 반복 조건을 확인한다.",
+          "answer_outline": [
+            "성능 목표와 테스트 환경을 먼저 확인한다.",
+            "운영환경과 Staging 환경의 자원 차이를 분리해서 본다.",
+            "이슈 발생 시 튜닝 후 재테스트가 반복될 수 있음을 전제로 결과를 해석한다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "perf-test--3--default--none--perf-section-summary--summary--f90f298e",
+              "native_id": "3",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "perf_test",
+              "title": "성능 테스트 목표 및 방법론",
+              "learning_classification": "supporting_evidence",
+              "learning_score": 60
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": [
+              "table",
+              "dashboard_metric"
+            ]
+          },
+          "expected_terms": [
+            "TPS",
+            "Staging",
+            "테스트 환경",
+            "튜닝",
+            "재테스트"
+          ],
+          "next_step_ids": [
+            "perf_result_bottleneck"
+          ],
+          "next_guide": null,
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        },
+        {
+          "step_id": "perf_result_bottleneck",
+          "guide_id": "performance_bottleneck_review",
+          "stage_id": "perf_test",
+          "card_text": "병목과 개선 포인트 확인하기",
+          "user_query": "성능 테스트 결과에서 병목과 개선 포인트는 어디부터 보면 돼?",
+          "learning_objective": "DB SQL 응답 지연, Connection Pool, worker-thread, HPA, HAProxy를 순서대로 확인한다.",
+          "answer_outline": [
+            "먼저 전체 응답시간 지연이 발생한 구간을 확인한다.",
+            "DB SQL 응답 지연과 DB Connection Pool 대기 여부를 함께 본다.",
+            "worker-thread 수가 DB Connection Pool보다 과도하지 않은지 조정 포인트로 본다.",
+            "HPA scale-out과 HAProxy/Router 자원 지표를 보조 확인한다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "perf-test--4--default--none--perf-section-summary--summary--10bd6950",
+              "native_id": "4",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "perf_test",
+              "title": "성능 테스트 결과",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 100
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": [
+              "dashboard_metric",
+              "command_result_evidence"
+            ]
+          },
+          "expected_terms": [
+            "DB SQL 응답 지연",
+            "DB Connection Pool",
+            "worker-thread",
+            "HPA",
+            "HAProxy"
+          ],
+          "next_step_ids": [
+            "perf_improvement_actions"
+          ],
+          "next_guide": null,
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        },
+        {
+          "step_id": "perf_improvement_actions",
+          "guide_id": "performance_bottleneck_review",
+          "stage_id": "perf_test",
+          "card_text": "개선 권고 정리하기",
+          "user_query": "성능 개선 권고는 어떤 항목부터 정리하면 돼?",
+          "learning_objective": "DBMS 자원, DB Connection Pool, worker-thread, JVM heap, Pod 배치를 개선 후보로 정리한다.",
+          "answer_outline": [
+            "DBMS SQL 응답시간과 DB Connection Pool 상향 조정 필요성을 먼저 본다.",
+            "worker-thread와 Connection Pool의 상대 크기를 조정 포인트로 본다.",
+            "Java Heap Size, Node 부하 분산, Pod 자원 설정을 함께 검토한다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "perf-test--5--default--none--perf-section-summary--summary--9cc052ae",
+              "native_id": "5",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "perf_test",
+              "title": "결론 및 개선 사항",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 100
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": [
+              "dashboard_metric",
+              "table"
+            ]
+          },
+          "expected_terms": [
+            "DBMS",
+            "DB Connection Pool",
+            "worker-thread",
+            "Java Heap",
+            "Pod"
+          ],
+          "next_step_ids": [],
+          "next_guide": {
+            "guide_id": "completion_report_reading_path",
+            "step_id": "completion_project_context",
+            "card_text": "사업 범위와 추진 배경 보기",
+            "user_query": "완료보고서는 사업 범위와 배경을 어디부터 보면 돼?"
+          },
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        }
+      ],
+      "quality": {
+        "status": "draft",
+        "needs_review": []
+      }
+    },
+    {
+      "guide_id": "completion_report_reading_path",
+      "stage_id": "completion",
+      "title": "완료보고서 실무 읽기 순서",
+      "audience": "beginner_operator",
+      "learning_goal": "완료보고서를 사업 배경, 아키텍처 결과, 서비스 전환, 테스트 결과 순서로 읽는다.",
+      "next_guide_id": "",
+      "next_guide_entry_step_id": "",
+      "entry_step_id": "completion_project_context",
+      "step_ids": [
+        "completion_project_context",
+        "completion_architecture_result",
+        "completion_test_result"
+      ],
+      "steps": [
+        {
+          "step_id": "completion_project_context",
+          "guide_id": "completion_report_reading_path",
+          "stage_id": "completion",
+          "card_text": "사업 범위와 추진 배경 보기",
+          "user_query": "완료보고서는 사업 범위와 배경을 어디부터 보면 돼?",
+          "learning_objective": "사업 기간, 범위, 이관/재구축 범위를 먼저 잡는다.",
+          "answer_outline": [
+            "사업명, 기간, 범위를 먼저 확인한다.",
+            "컨테이너 이관과 재구축 범위를 구분한다.",
+            "기존 구성 제거와 신규 운영 구조를 다음 단계로 연결한다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "completion--CH-02--default--none--chapter-summary--summary--54364cf6",
+              "native_id": "CH-02",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "completion",
+              "title": "프로젝트 개요 요구사항 정의 과업 추진 일정",
+              "learning_classification": "supporting_evidence",
+              "learning_score": 52
+            },
+            {
+              "chunk_id": "completion--CH-03--default--none--chapter-summary--summary--52615f5f",
+              "native_id": "CH-03",
+              "hidden_from_user": true,
+              "anchor_role": "supporting",
+              "stage_id": "completion",
+              "title": "목표 아키텍처 구성 H/W 및 S/W 제반 품목 아키텍처 설계 및 구성",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 94
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": []
+          },
+          "expected_terms": [
+            "사업 기간",
+            "사업 범위",
+            "컨테이너 이관",
+            "재구축"
+          ],
+          "next_step_ids": [
+            "completion_architecture_result"
+          ],
+          "next_guide": null,
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        },
+        {
+          "step_id": "completion_architecture_result",
+          "guide_id": "completion_report_reading_path",
+          "stage_id": "completion",
+          "card_text": "아키텍처 구성 결과 확인하기",
+          "user_query": "완료보고서에서 아키텍처 구성 결과는 어떤 순서로 보면 돼?",
+          "learning_objective": "목표 아키텍처, H/W, S/W, 네트워크, 구성 결과를 확인한다.",
+          "answer_outline": [
+            "목표 아키텍처 구성도를 먼저 본다.",
+            "H/W와 S/W 제반 품목을 구성 결과와 연결한다.",
+            "네트워크와 플랫폼 구성 요소를 운영 관점으로 확인한다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "completion--CH-03--default--none--chapter-summary--summary--52615f5f",
+              "native_id": "CH-03",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "completion",
+              "title": "목표 아키텍처 구성 H/W 및 S/W 제반 품목 아키텍처 설계 및 구성",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 94
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": true,
+            "image_roles": [
+              "diagram",
+              "dashboard_metric"
+            ]
+          },
+          "expected_terms": [
+            "목표 아키텍처",
+            "H/W",
+            "S/W",
+            "OpenShift Container Platform"
+          ],
+          "next_step_ids": [
+            "completion_test_result"
+          ],
+          "next_guide": null,
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        },
+        {
+          "step_id": "completion_test_result",
+          "guide_id": "completion_report_reading_path",
+          "stage_id": "completion",
+          "card_text": "테스트 결과와 마무리 확인하기",
+          "user_query": "완료보고서에서 테스트 결과는 어떤 순서로 정리하면 돼?",
+          "learning_objective": "단위, 통합, 성능 테스트 결과와 최종 개선 포인트를 함께 본다.",
+          "answer_outline": [
+            "테스트 개요와 목적을 먼저 본다.",
+            "단위 테스트, 통합 테스트, 성능 테스트 결과를 구분해 정리한다.",
+            "성능 분석과 개선 포인트를 최종 운영 인수 관점으로 연결한다."
+          ],
+          "source_anchors": [
+            {
+              "chunk_id": "completion--CH-05--default--none--chapter-summary--summary--fe825e06",
+              "native_id": "CH-05",
+              "hidden_from_user": true,
+              "anchor_role": "primary",
+              "stage_id": "completion",
+              "title": "테스트 개요 단위 테스트 결과 통합/성능 테스트 결과",
+              "learning_classification": "primary_learning_anchor",
+              "learning_score": 86
+            },
+            {
+              "chunk_id": "completion--CH-05--default--none--chapter-slide-detail--slide-081--04bc329b",
+              "native_id": "CH-05",
+              "hidden_from_user": true,
+              "anchor_role": "supporting",
+              "stage_id": "completion",
+              "title": "OCP 구성 결과",
+              "learning_classification": "supporting_evidence",
+              "learning_score": 68
+            },
+            {
+              "chunk_id": "completion--CH-05--default--none--chapter-slide-detail--slide-082--1bb6d296",
+              "native_id": "CH-05",
+              "hidden_from_user": true,
+              "anchor_role": "supporting",
+              "stage_id": "completion",
+              "title": "OCP 구성 검토",
+              "learning_classification": "supporting_evidence",
+              "learning_score": 62
+            }
+          ],
+          "official_refs": [],
+          "evidence_requirements": {
+            "requires_citation": true,
+            "requires_next_step": false,
+            "image_roles": [
+              "table",
+              "console_output",
+              "command_result_evidence"
+            ]
+          },
+          "expected_terms": [
+            "단위 테스트",
+            "통합",
+            "성능 테스트",
+            "응답시간",
+            "DBMS"
+          ],
+          "next_step_ids": [],
+          "next_guide": null,
+          "quality": {
+            "status": "draft",
+            "needs_review": []
+          }
+        }
+      ],
+      "quality": {
+        "status": "draft",
+        "needs_review": []
+      }
+    }
+  ]
+}

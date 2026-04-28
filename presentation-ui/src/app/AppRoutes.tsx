@@ -48,7 +48,6 @@ export default function AppRoutes() {
       <Route path={ROUTES.opsLibrary} element={<OpsConsolePage />} />
       <Route path={ROUTES.opsChat} element={<OpsConsolePage />} />
       <Route path={ROUTES.opsActions} element={<OpsConsolePage />} />
-      <Route path={ROUTES.opsScm} element={<OpsConsolePage />} />
       {PARTNER_ROUTE_DEFINITIONS.map(({ path, eyebrow, title, description }) => (
         <Route
           key={path}

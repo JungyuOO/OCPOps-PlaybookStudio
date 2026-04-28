@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import './CoursePages.css';
 import { ROUTES } from '../app/routes';
-import { buildCourseAssetUrl, buildCourseSlideUrl, emptyCourseChatResponse, loadCourseChunk, loadCourseStage, sendCourseChatStream, type CourseChatResponse, type CourseChunkPayload, type CourseImageAttachment, type CourseStagePayload } from '../lib/courseApi';
+import { buildCourseAssetUrl, emptyCourseChatResponse, loadCourseChunk, loadCourseStage, sendCourseChatStream, type CourseChatResponse, type CourseChunkPayload, type CourseImageAttachment, type CourseStagePayload } from '../lib/courseApi';
 import CourseChatWorkspaceAnswer from './CourseChatWorkspaceAnswer';
 
 function shortText(value: unknown, maxLength = 420): string {
@@ -67,7 +67,6 @@ export default function CourseChunkPage() {
     void loadCourseStage(payload.stage_id).then(setStagePayload).catch(() => undefined);
   }, [payload?.stage_id]);
 
-  const slideCards = useMemo(() => (payload?.slide_refs ?? []).slice(0, 6), [payload]);
   const routeBadge = useMemo(() => {
     if (!payload || !stagePayload?.learning_route) {
       return '';
@@ -83,6 +82,10 @@ export default function CourseChunkPage() {
   const atlasRefs = payload?.tour_stop?.atlas_expand_refs;
   const atlasRefCount = (atlasRefs?.child_chunk_ids?.length ?? 0) + (atlasRefs?.asset_ids?.length ?? 0) + (atlasRefs?.zone_ids?.length ?? 0);
   const sortedAttachments = useMemo(() => sortAttachments(payload?.image_attachments ?? []), [payload?.image_attachments]);
+  const evidenceCards = useMemo(
+    () => sortedAttachments.filter((attachment) => String(attachment.asset_path || '').trim()).slice(0, 6),
+    [sortedAttachments],
+  );
   const visibleAttachments = sortedAttachments.filter((attachment) => attachment.is_default_visible !== false);
   const overflowAttachments = sortedAttachments.filter((attachment) => attachment.is_default_visible === false);
 
@@ -308,14 +311,14 @@ export default function CourseChunkPage() {
             </div>
 
             <section className="course-panel course-detail">
-              <strong>Original Slides</strong>
+              <strong>Evidence Images</strong>
               <div className="course-slide-grid">
-                {slideCards.map((slideRef, index) => {
-                  const slideNo = Number(slideRef.slide_no || 0);
+                {evidenceCards.map((attachment, index) => {
+                  const slideNo = Number(attachment.slide_no || 0);
                   return (
-                    <article key={`slide-${slideNo}-${index}`} className="course-slide-card">
-                      <img src={buildCourseSlideUrl(payload.chunk_id, slideNo)} alt={`Slide ${slideNo}`} />
-                      <span>Slide {slideNo}</span>
+                    <article key={`evidence-${attachment.asset_id || index}`} className="course-slide-card">
+                      <img src={buildCourseAssetUrl(String(attachment.asset_path || ''))} alt={attachment.visual_summary || `Slide ${slideNo}`} />
+                      <span>{slideNo ? `Slide ${slideNo}` : 'Evidence'}</span>
                     </article>
                   );
                 })}

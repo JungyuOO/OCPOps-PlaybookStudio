@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { Link } from 'react-router-dom';
-import { Sparkles, ArrowRight, Languages } from 'lucide-react';
+import { Sparkles, ArrowRight } from 'lucide-react';
 import { ROUTES } from '../app/routes';
 import './Hero.css';
 
@@ -35,12 +35,6 @@ export default function Hero() {
 
   return (
     <section className="hero-container" ref={containerRef}>
-      <div className="hero-nav">
-        <button className="lang-btn" type="button">
-          <Languages size={18} />
-          <span>KOR</span>
-        </button>
-      </div>
       <div className="hero-bokeh bokeh-cyan"></div>
       <div className="hero-bokeh bokeh-purple"></div>
 

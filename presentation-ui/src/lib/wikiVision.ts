@@ -1,4 +1,4 @@
-export type VisionMode = 'atlas_canvas' | 'guided_tour' | 'course_study' | 'encyclopedia_world';
+export type VisionMode = 'atlas_canvas' | 'guided_tour' | 'course_study';
 
 export const DEFAULT_VISION_MODE: VisionMode = 'atlas_canvas';
 export const WIKI_VISION_MODE_STORAGE_KEY = 'wikiVisionMode';
@@ -26,7 +26,7 @@ export interface WikiVisionModeDescriptor {
 }
 
 export function resolveVisionMode(value: string | null | undefined): VisionMode {
-  if (value === 'atlas_canvas' || value === 'guided_tour' || value === 'course_study' || value === 'encyclopedia_world') {
+  if (value === 'atlas_canvas' || value === 'guided_tour' || value === 'course_study') {
     return value;
   }
   return DEFAULT_VISION_MODE;
@@ -52,92 +52,69 @@ export const WIKI_VISION_MODES: WikiVisionModeDescriptor[] = [
     id: 'atlas_canvas',
     label: 'Atlas Canvas',
     workspace: {
-      summary: '문서, 관계, figure를 한 화면에서 함께 펼치는 탐험형 위키',
+      summary: '문서 본문을 중심으로 관계, figure, 주석을 한 화면에서 함께 읽는 모드입니다.',
       cue: '문서 중심 + 관계 확장',
     },
     library: {
       eyebrow: 'Document + Relation + Figure',
-      summary: '문서 본문을 중심으로 관계 지도와 figure strip을 같이 여는 탐험형 위키입니다.',
-      focus: '문서를 읽다가 바로 관계와 도해로 확장',
+      summary: '문서 본문을 중심으로 관련 문서와 figure strip을 함께 열어 흐름을 넓힙니다.',
+      focus: '문서를 읽다가 바로 근거와 연결 경로로 확장',
     },
     compare: {
-      title: '읽는 중심형',
+      title: '읽는 중심',
       eyebrow: 'Document first',
       bullets: [
-        '본문을 먼저 읽고, 옆에서 연결 문서와 절차를 확장합니다.',
-        '대표 figure와 관련 문서를 같은 시야 안에 두되 본문 몰입을 해치지 않습니다.',
-        '문서를 읽다가 자연스럽게 옆으로 퍼져 나가는 백과 경험을 노립니다.',
+        '본문을 먼저 읽고 관련 문서와 절차를 확장합니다.',
+        'figure와 관련 문서를 같은 시야에 둡니다.',
+        '문서 흐름을 유지하면서 필요한 배경을 함께 확인합니다.',
       ],
-      cta: '이 방식으로 열기',
+      cta: 'Atlas로 열기',
     },
   },
   {
     id: 'guided_tour',
     label: 'Guided Tour',
     workspace: {
-      summary: '질문에서 답으로 끝나지 않고 절차와 다음 문서로 이어지는 투어형 스튜디오',
+      summary: '질문에서 답변으로 끝나지 않고 다음 문서와 절차로 이어지는 채팅 모드입니다.',
       cue: '답변 중심 + 다음 단계 안내',
     },
     library: {
       eyebrow: 'Chat-Led Route',
-      summary: '챗봇 답변이 문서 투어를 열고 절차, 근거, 다음 문서를 route처럼 안내합니다.',
-      focus: '답변이 끝나지 않고 문서 투어로 이어짐',
+      summary: '채팅 답변에서 문서 근거, 절차, 다음 문서를 route처럼 안내합니다.',
+      focus: '답변을 실행 가능한 다음 경로로 연결',
     },
     compare: {
-      title: '행동 유도형',
+      title: '행동 유도',
       eyebrow: 'Action next',
       bullets: [
-        '질문에 답하고 끝나지 않고, 다음에 볼 문서와 절차를 바로 제시합니다.',
-        '운영자가 지금 무엇을 먼저 해야 하는지 route처럼 안내합니다.',
-        '챗봇과 문서가 하나의 업무 흐름으로 이어지는 경험을 노립니다.',
+        '질문에 답한 뒤 다음에 볼 문서와 절차를 제시합니다.',
+        '운영자가 지금 무엇을 먼저 해야 하는지 안내합니다.',
+        '채팅과 문서가 하나의 업무 흐름으로 이어집니다.',
       ],
-      cta: '투어 방식으로 열기',
+      cta: 'Tour로 질문',
     },
   },
   {
     id: 'course_study',
-    label: 'Study-docs Course',
+    label: '실운영 가이드',
     workspace: {
-      summary: 'Study-docs 실운영 산출물과 공식문서를 함께 보여주는 교육용 course chat',
-      cue: '실운영 문서 + 공식문서 + 다음 단계',
+      summary: '사내 실운영 산출물과 공식 문서를 함께 보여주는 운영 가이드 채팅 모드입니다.',
+      cue: '운영 산출물 + 공식 문서 + 다음 단계',
     },
     library: {
-      eyebrow: 'Internal Course',
-      summary: 'PPT/PDF 기반 Study-docs 청크를 기존 PBS 채팅 UX에서 citation, viewer, guided route와 함께 탐색합니다.',
-      focus: '사내 교육자료를 공식문서 기준과 같이 학습',
+      eyebrow: 'Operations Guide',
+      summary: 'PPT/PDF 기반 실운영 산출물을 PBS 채팅 UX에서 citation, viewer, guided route와 함께 탐색합니다.',
+      focus: '사내 운영 자료를 공식 문서 근거와 함께 학습',
     },
     compare: {
-      title: 'Study-docs Course',
-      eyebrow: 'Course mode',
+      title: '실운영 가이드',
+      eyebrow: 'Operations guide',
       bullets: [
-        '사내 PPT/PDF 산출물을 먼저 근거로 제시합니다.',
-        '연결된 공식문서를 함께 보여줍니다.',
+        '사내 PPT/PDF 산출물을 우선 근거로 제시합니다.',
+        '연결된 공식 문서를 함께 보여줍니다.',
         '다음 Guided Tour 카드를 추천합니다.',
       ],
-      cta: 'Course mode로 질문',
-    },
-  },
-  {
-    id: 'encyclopedia_world',
-    label: 'Topic World',
-    workspace: {
-      summary: '책보다 주제 지형도를 먼저 열고 관련 문서를 묶어 탐험하는 대백과 모드',
-      cue: '주제 세계 중심 탐색',
-    },
-    library: {
-      eyebrow: 'Encyclopedia Atlas',
-      summary: '책 단위보다 주제 세계를 먼저 열고 관련 문서와 그림을 한 번에 탐험하는 구조입니다.',
-      focus: '문서보다 주제 지형도를 먼저 보여줌',
-    },
-    compare: {
-      title: '맥락 탐험형',
-      eyebrow: 'Context world',
-      bullets: [
-        '한 문서보다 이 문서가 속한 주제 세계와 연결 고리를 먼저 보여줍니다.',
-        '키워드와 연결 문서를 중심으로 큰 그림을 탐험하게 만듭니다.',
-        '지식의 지형도를 먼저 보고 필요한 문서를 파고드는 경험을 노립니다.',
-      ],
-      cta: '맥락 중심으로 열기',
+      cta: '실운영 가이드로 질문',
     },
   },
 ];

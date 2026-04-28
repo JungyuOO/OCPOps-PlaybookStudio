@@ -6,6 +6,8 @@ import re
 import html
 import threading
 import time
+import uuid
+from datetime import datetime
 from io import BytesIO
 from http import HTTPStatus
 from pathlib import Path
@@ -13,8 +15,12 @@ from typing import Any, Iterable
 from urllib.parse import parse_qs
 
 from play_book_studio.answering.llm import LLMClient
+from play_book_studio.app.sessions import Turn
 from play_book_studio.config.settings import load_settings
 from play_book_studio.course.qdrant_course import search_course_and_official, search_ops_learning_chunks
+
+
+COURSE_RUNTIME_LABEL = "실운영 가이드"
 
 
 def _normalize_query(query: str) -> str:
@@ -170,7 +176,7 @@ def _public_course_text(value: Any, *, limit: int = 220) -> str:
 
 
 def _public_chunk_label(chunk: dict[str, Any]) -> str:
-    return _clean_beginner_title(chunk.get("title") or chunk.get("chunk_id") or "Study-docs")
+    return _clean_beginner_title(chunk.get("title") or chunk.get("chunk_id") or COURSE_RUNTIME_LABEL)
 
 
 def _chunk_beginner_question(chunk: dict[str, Any], *, intent: str = "learn") -> str:
@@ -364,6 +370,10 @@ def _course_chunks_dir(root_dir: Path) -> Path:
     return _course_root(root_dir) / "chunks"
 
 
+def _course_chunks_jsonl_path(root_dir: Path) -> Path:
+    return _course_root(root_dir) / "chunks.jsonl"
+
+
 CHUNK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 INTERNAL_DOC_ID_RE = re.compile(r"\b(?:DSGN|TEST|CH|KMSC|COCP|RTER|PLAN|RESULT|FRONT)[-A-Z0-9]*\b", re.IGNORECASE)
 OFFICIAL_DOC_MIN_SCORE = 0.65
@@ -435,6 +445,14 @@ def _course_asset_payload(path: Path) -> tuple[bytes, str]:
 
 def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _read_jsonl(path: Path) -> list[Any]:
+    rows: list[Any] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            rows.append(json.loads(line))
+    return rows
 
 
 def _load_manifest(root_dir: Path) -> dict[str, Any]:
@@ -651,17 +669,17 @@ def _course_source_to_citation(root_dir: Path, source: dict[str, Any]) -> dict[s
     return {
         "index": index,
         "book_slug": str(source.get("stage_id") or "course"),
-        "book_title": "Study-docs Course",
+            "book_title": COURSE_RUNTIME_LABEL,
         "section": str(source.get("section_title") or source.get("title") or ""),
         "section_path": str(source.get("section_title") or ""),
         "viewer_path": str(source.get("viewer_path") or ""),
-        "source_label": str(source.get("title") or source.get("chunk_id") or "Study-docs"),
+        "source_label": str(source.get("title") or source.get("chunk_id") or COURSE_RUNTIME_LABEL),
         "source_collection": "study_docs",
         "source_lane": "study_docs_course_runtime",
         "approval_state": "course_reviewed",
         "publication_state": "internal",
         "boundary_truth": "internal_course_runtime",
-        "runtime_truth_label": "Study-docs Course",
+            "runtime_truth_label": COURSE_RUNTIME_LABEL,
         "boundary_badge": "Internal Course",
     }
 
@@ -690,7 +708,7 @@ def _course_related_links_from_artifacts(artifacts: list[dict[str, Any]]) -> tup
                 "summary": str(item.get("reason") or question or ""),
                 "source_lane": "study_docs_course_runtime",
                 "boundary_truth": "internal_course_runtime",
-                "runtime_truth_label": "Study-docs Course",
+                "runtime_truth_label": COURSE_RUNTIME_LABEL,
                 "boundary_badge": "Internal Course",
             }
             if str(item.get("role") or "") == "next":
@@ -708,13 +726,82 @@ def _attach_chat_response_fields(root_dir: Path, response: dict[str, Any]) -> di
     )
     response["citations"] = citations
     response["warnings"] = list(response.get("warnings") or [])
-    response["session_id"] = "course"
+    response["session_id"] = str(response.get("session_id") or "course")
     response["response_kind"] = "rag" if citations else "no_answer"
     response["suggested_queries"] = suggested_queries
     response["related_links"] = related_links
     response["related_sections"] = related_sections
     response["citation_map"] = {str(item["index"]): item for item in citations}
     return response
+
+
+def _first_course_truth(response: dict[str, Any]) -> dict[str, str]:
+    citations = response.get("citations") if isinstance(response.get("citations"), list) else []
+    primary = next((item for item in citations if isinstance(item, dict)), None)
+    if primary is None:
+        return {}
+    return {
+        "primary_source_lane": str(primary.get("source_lane") or ""),
+        "primary_boundary_truth": str(primary.get("boundary_truth") or ""),
+        "primary_runtime_truth_label": str(primary.get("runtime_truth_label") or ""),
+        "primary_boundary_badge": str(primary.get("boundary_badge") or ""),
+        "primary_publication_state": str(primary.get("publication_state") or ""),
+        "primary_approval_state": str(primary.get("approval_state") or ""),
+    }
+
+
+def _course_session_id(payload: dict[str, Any], response: dict[str, Any]) -> str:
+    requested = str(payload.get("session_id") or "").strip()
+    if requested:
+        return requested
+    response_id = str(response.get("session_id") or "").strip()
+    if response_id and response_id != "course":
+        return response_id
+    return uuid.uuid4().hex
+
+
+def _persist_course_session_turn(store: Any | None, payload: dict[str, Any], response: dict[str, Any]) -> None:
+    if store is None:
+        return
+    query = str(payload.get("message") or "").strip()
+    if not query:
+        return
+
+    session_id = _course_session_id(payload, response)
+    response["session_id"] = session_id
+    session = store.get(session_id)
+    session.mode = "course"
+    session.context.mode = "course"
+    requested_user_id = str(payload.get("user_id") or "").strip()
+    if requested_user_id:
+        session.context.user_id = requested_user_id
+
+    now = datetime.now().isoformat(timespec="seconds")
+    truth = _first_course_truth(response)
+    turn = Turn(
+        turn_id=uuid.uuid4().hex,
+        parent_turn_id=session.history[-1].turn_id if session.history else "",
+        created_at=now,
+        query=query,
+        mode="course",
+        answer=str(response.get("answer") or ""),
+        response_kind=str(response.get("response_kind") or "rag"),
+        citations=[dict(item) for item in response.get("citations") or [] if isinstance(item, dict)],
+        related_links=[dict(item) for item in response.get("related_links") or [] if isinstance(item, dict)],
+        related_sections=[dict(item) for item in response.get("related_sections") or [] if isinstance(item, dict)],
+        warnings=[str(item) for item in response.get("warnings") or [] if str(item).strip()],
+        primary_source_lane=truth.get("primary_source_lane", ""),
+        primary_boundary_truth=truth.get("primary_boundary_truth", ""),
+        primary_runtime_truth_label=truth.get("primary_runtime_truth_label", ""),
+        primary_boundary_badge=truth.get("primary_boundary_badge", ""),
+        primary_publication_state=truth.get("primary_publication_state", ""),
+        primary_approval_state=truth.get("primary_approval_state", ""),
+    )
+    session.history.append(turn)
+    session.history = session.history[-20:]
+    session.revision += 1
+    session.updated_at = now
+    store.update(session)
 
 
 def _course_answer_llm_rewrite_enabled(settings: Any) -> bool:
@@ -741,6 +828,122 @@ def _compact_ops_learning_evidence(learning_chunks: list[dict[str, Any]]) -> lis
             }
         )
     return rows
+
+
+def _ops_learning_chunk_id(chunk: dict[str, Any]) -> str:
+    return str(chunk.get("learning_chunk_id") or "").strip()
+
+
+def _parse_llm_json_object(text: str) -> dict[str, Any]:
+    raw = str(text or "").strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE).strip()
+    raw = re.sub(r"\s*```$", "", raw).strip()
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start >= 0 and end > start:
+        raw = raw[start : end + 1]
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        raise ValueError("LLM JSON response is not an object")
+    return payload
+
+
+def _build_ops_learning_selector_messages(*, query: str, candidates: list[dict[str, Any]]) -> list[dict[str, str]]:
+    compact_candidates: list[dict[str, Any]] = []
+    for index, candidate in enumerate(candidates[:4], start=1):
+        sequence = candidate.get("operational_sequence") if isinstance(candidate.get("operational_sequence"), list) else []
+        look_for = candidate.get("what_to_look_for") if isinstance(candidate.get("what_to_look_for"), list) else []
+        compact_candidates.append(
+            {
+                "rank": index,
+                "learning_chunk_id": _ops_learning_chunk_id(candidate),
+                "guide_id": str(candidate.get("guide_id") or ""),
+                "step_id": str(candidate.get("step_id") or ""),
+                "stage_id": str(candidate.get("stage_id") or ""),
+                "title": _public_course_text(candidate.get("title") or "", limit=120),
+                "learning_goal": _public_course_text(candidate.get("learning_goal") or "", limit=260),
+                "operational_sequence": [_public_course_text(item, limit=360) for item in sequence[:3] if _public_course_text(item, limit=360)],
+                "what_to_look_for": [_public_course_text(item, limit=120) for item in look_for[:6] if _public_course_text(item, limit=120)],
+                "source_chunk_ids": _learning_source_chunk_ids(candidate)[:4],
+                "next_step_ids": [str(item) for item in candidate.get("next_step_ids", [])[:4]]
+                if isinstance(candidate.get("next_step_ids"), list)
+                else [],
+            }
+        )
+    system = (
+        "당신은 실운영 가이드 RAG의 후보 선택 agent다. "
+        "사용자 질문에 직접 답하는 ops_learning 후보만 고른다. "
+        "다음 단계 안내용 후보, 변형 후보, 질문과 느슨하게만 관련된 후보는 rejected로 둔다. "
+        "답변을 작성하지 말고 JSON object만 반환한다."
+    )
+    user = (
+        f"사용자 질문:\n{query}\n\n"
+        f"후보(JSON):\n{json.dumps(compact_candidates, ensure_ascii=False, indent=2)}\n\n"
+        "출력 JSON schema:\n"
+        "{\n"
+        "  \"selected_learning_chunk_ids\": [\"...\"],\n"
+        "  \"rejected_learning_chunk_ids\": [\"...\"],\n"
+        "  \"reason\": \"짧은 한국어 이유\"\n"
+        "}\n\n"
+        "규칙:\n"
+        "- selected는 후보 learning_chunk_id 중에서만 고른다.\n"
+        "- selected는 최대 2개다.\n"
+        "- 현재 질문에 직접 답하는 후보를 우선한다.\n"
+        "- 다음에 볼 단계나 개선 권고 후보는 사용자가 직접 묻지 않았다면 rejected로 둔다.\n"
+        "- 판단이 애매하면 rank 1 후보만 selected로 둔다.\n"
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def _fallback_selected_learning_chunks(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return candidates[:1]
+
+
+def _select_ops_learning_chunks_with_llm(
+    *,
+    settings: Any,
+    query: str,
+    candidates: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any], str]:
+    if not candidates:
+        return [], {"mode": "none", "selected_learning_chunk_ids": []}, ""
+    candidate_by_id = {_ops_learning_chunk_id(candidate): candidate for candidate in candidates if _ops_learning_chunk_id(candidate)}
+    fallback = _fallback_selected_learning_chunks(candidates)
+    fallback_ids = [_ops_learning_chunk_id(candidate) for candidate in fallback if _ops_learning_chunk_id(candidate)]
+    if not _course_answer_llm_rewrite_enabled(settings) or len(candidates) == 1:
+        return fallback, {"mode": "fallback", "reason": "selector disabled or single candidate", "selected_learning_chunk_ids": fallback_ids}, ""
+    try:
+        messages = _build_ops_learning_selector_messages(query=query, candidates=candidates)
+        raw = LLMClient(settings).generate(messages, max_tokens=500)
+        payload = _parse_llm_json_object(raw)
+        selected_ids = [
+            str(item).strip()
+            for item in payload.get("selected_learning_chunk_ids", [])
+            if str(item).strip()
+        ][:2]
+        if not selected_ids:
+            raise ValueError("selector returned no selected ids")
+        unknown_ids = [item for item in selected_ids if item not in candidate_by_id]
+        if unknown_ids:
+            raise ValueError(f"selector returned unknown ids: {', '.join(unknown_ids)}")
+        selected = [candidate_by_id[item] for item in selected_ids]
+        rejected_ids = [
+            str(item).strip()
+            for item in payload.get("rejected_learning_chunk_ids", [])
+            if str(item).strip() and str(item).strip() in candidate_by_id
+        ]
+        return selected, {
+            "mode": "llm",
+            "selected_learning_chunk_ids": selected_ids,
+            "rejected_learning_chunk_ids": rejected_ids,
+            "reason": _public_course_text(payload.get("reason") or "", limit=240),
+        }, ""
+    except Exception as exc:  # noqa: BLE001
+        return fallback, {
+            "mode": "fallback",
+            "reason": "selector fallback to top1",
+            "selected_learning_chunk_ids": fallback_ids,
+        }, f"course learning selector skipped: {exc}"
 
 
 def _build_course_answer_rewrite_messages(
@@ -775,14 +978,16 @@ def _build_course_answer_rewrite_messages(
         "guide_step": guide_payload,
     }
     system = (
-        "당신은 Study-docs Course의 마지막 답변 작성 agent다. "
+        "당신은 실운영 가이드의 마지막 답변 작성 agent다. "
         "입력으로 주어지는 초안 답변과 근거 청크를 바탕으로, 사용자가 바로 이해할 수 있는 운영 가이드 답변으로 재작성한다. "
         "청크 문장을 그대로 복사하지 말고, 의미를 유지한 채 자연스러운 한국어로 정리한다. "
         "근거에 없는 원인, 명령, 수치, 버전, 절차를 새로 만들지 않는다. "
         "내부 문서 ID, native_id, chunk_id, 파일명은 노출하지 않는다. "
         "한국어 조사 앞뒤에 어색한 공백을 넣지 말고, Pod, CPU, Memory, HPA, Scale-out, Scale-in 같은 기술 용어 표기는 일관되게 유지한다. "
+        "예를 들어 'HPA 는'이 아니라 'HPA는', 'Pod 의'가 아니라 'Pod의', '15 초'가 아니라 '15초', "
+        "'metrics-server 로부터'가 아니라 'metrics-server로부터'처럼 쓴다. "
         "citation은 반드시 제공된 번호만 [1], [2] 형식으로 유지한다. "
-        "'Study-docs 기준' 같은 시스템 prefix로 시작하지 말고, 바로 사용자 질문에 대한 답으로 시작한다. "
+        "'실운영 가이드 기준' 같은 시스템 prefix로 시작하지 말고, 바로 사용자 질문에 대한 답으로 시작한다. "
         "출력은 답변 본문만 작성한다."
     )
     user = (
@@ -794,9 +999,55 @@ def _build_course_answer_rewrite_messages(
         "- 이후 2~4개의 짧은 단계나 bullet로 확인 순서를 정리한다.\n"
         "- 원문 OCR처럼 이어진 문장은 그대로 복사하지 말고 운영자가 읽기 쉬운 문장으로 다듬는다.\n"
         "- POD처럼 대문자로 추출된 일반 리소스명은 자연스러운 기술 표기(Pod)로 정리한다.\n"
+        "- 띄어쓰기와 조사를 자연스럽게 다듬는다. 예: 'HPA는', 'Pod의', '기본값 15초', 'max 값까지', 'Scale-out은 Pod를 늘리는 동작'처럼 작성한다.\n"
+        "- 콜론으로 끊긴 원문 조각은 문장으로 풀어쓴다. 예: 'Scale-out : POD 확장' 대신 'Scale-out은 Pod를 확장하는 동작입니다.'처럼 쓴다.\n"
         "- 초안의 '확인할 것', '상태 기준', '다음에 볼 단계' 정보는 필요하면 유지하되 중복은 줄인다.\n"
         "- 각 핵심 문장이나 bullet 끝에는 관련 citation을 붙인다.\n"
         "- 근거가 부족한 내용은 쓰지 않는다.\n"
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def _course_answer_style_issues(answer: str) -> list[str]:
+    text = str(answer or "")
+    issues: list[str] = []
+    token_particle_pattern = re.compile(
+        r"\b(?:HPA|Pod|CPU|Memory|ArgoCD|HAProxy|Prometheus|JVM|DBMS|Scale-out|Scale-in)\s+(?:은|는|이|가|을|를|의|로|와|과)\b"
+    )
+    issues.extend(match.group(0) for match in token_particle_pattern.finditer(text))
+    issues.extend(match.group(0) for match in re.finditer(r"\b\d+\s+(?:초|분|개|개월|EA|GB|G)(?=\b|마다|간|을|를|의|로|와|과)", text))
+    for pattern in (r"metrics-server\s+로부터", r"\bmax\s+값\s+까지\b", r"\bmin\s+값\s+이하\b"):
+        issues.extend(match.group(0) for match in re.finditer(pattern, text, flags=re.IGNORECASE))
+    return list(dict.fromkeys(issues))[:12]
+
+
+def _apply_course_answer_typography(answer: str) -> str:
+    text = str(answer or "")
+    token_pattern = r"\b(HPA|Pod|CPU|Memory|ArgoCD|HAProxy|Prometheus|JVM|DBMS|Scale-out|Scale-in)\s+(은|는|이|가|을|를|의|로|와|과)(?=\s|[.,:;)\]\n]|$)"
+    text = re.sub(token_pattern, r"\1\2", text)
+    text = re.sub(r"\b(\d+)\s+(초|분|개|개월|EA|GB|G)(?=마다|간|을|를|의|로|와|과|\s|[.,:;)\]\n]|$)", r"\1\2", text)
+    text = re.sub(r"metrics-server\s+로부터", "metrics-server로부터", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(max|min)\s+값\s+까지\b", r"\1 값까지", text, flags=re.IGNORECASE)
+    text = re.sub(r"([가-힣])\s+\(([^)\n]+)\)", r"\1(\2)", text)
+    return text.strip()
+
+
+def _build_course_answer_copyedit_messages(*, answer: str, style_issues: list[str]) -> list[dict[str, str]]:
+    system = (
+        "당신은 실운영 가이드 답변의 최종 한국어 교정 agent다. "
+        "새 정보, 새 절차, 새 citation을 추가하지 말고 기존 답변의 의미와 citation 번호를 그대로 유지한다. "
+        "오직 한국어 조사, 띄어쓰기, 콜론으로 끊긴 원문 조각, 기술 용어 표기만 자연스럽게 교정한다. "
+        "출력은 교정된 답변 본문만 작성한다."
+    )
+    user = (
+        f"교정할 답변:\n{answer}\n\n"
+        f"반드시 없애야 하는 어색한 표기:\n{json.dumps(style_issues, ensure_ascii=False, indent=2)}\n\n"
+        "교정 기준:\n"
+        "- 'HPA 는' -> 'HPA는', 'Pod 의' -> 'Pod의', 'Pod 를' -> 'Pod를'처럼 기술 용어와 조사를 붙인다.\n"
+        "- '15 초', '5 분', '300 개' -> '15초', '5분', '300개'처럼 수량과 단위를 붙인다.\n"
+        "- 'metrics-server 로부터' -> 'metrics-server로부터'처럼 조사 표현을 붙인다.\n"
+        "- 'Scale-out : POD 확장'처럼 끊긴 표현은 'Scale-out은 Pod를 확장하는 동작입니다.'처럼 문장으로 풀어쓴다.\n"
+        "- citation 번호 [1], [2]와 bullet 구조는 유지한다.\n"
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
@@ -819,11 +1070,21 @@ def _rewrite_course_answer_with_llm(
         learning_chunks=learning_chunks,
         guide_step=guide_step,
     )
-    rewritten = LLMClient(settings).generate(messages, max_tokens=min(max(int(getattr(settings, "llm_max_tokens", 900) or 900), 600), 1200))
+    client = LLMClient(settings)
+    rewritten = client.generate(messages, max_tokens=min(max(int(getattr(settings, "llm_max_tokens", 900) or 900), 600), 1200))
     rewritten = re.sub(r"^\s*답변\s*:\s*", "", str(rewritten or "").strip(), flags=re.IGNORECASE)
-    rewritten = re.sub(r"^\s*Study-docs\s*기준\s*", "", rewritten).strip()
+    rewritten = re.sub(r"^\s*(?:Study-docs|실운영 가이드)\s*기준\s*", "", rewritten).strip()
     if len(rewritten) < 40:
         raise ValueError("course answer rewrite returned too little content")
+    style_issues = _course_answer_style_issues(rewritten)
+    if style_issues:
+        copyedit_messages = _build_course_answer_copyedit_messages(answer=rewritten, style_issues=style_issues)
+        copyedited = client.generate(copyedit_messages, max_tokens=min(max(int(getattr(settings, "llm_max_tokens", 900) or 900), 600), 1200))
+        copyedited = re.sub(r"^\s*답변\s*:\s*", "", str(copyedited or "").strip(), flags=re.IGNORECASE)
+        copyedited = re.sub(r"^\s*(?:Study-docs|실운영 가이드)\s*기준\s*", "", copyedited).strip()
+        if len(copyedited) >= 40:
+            rewritten = copyedited
+    rewritten = _apply_course_answer_typography(rewritten)
     allowed_citations = {str(source.get("index")) for source in sources if isinstance(source, dict) and source.get("index")}
     used_citations = set(re.findall(r"\[(\d+)\]", rewritten))
     if used_citations and not used_citations.issubset(allowed_citations) and len(allowed_citations) == 1:
@@ -1434,18 +1695,27 @@ def _normalize_chunk_payload(chunk: dict[str, Any]) -> dict[str, Any]:
 
 def _load_chunk(root_dir: Path, chunk_id: str) -> dict[str, Any]:
     chunk_id = _validate_chunk_id(chunk_id)
+    chunks_jsonl = _course_chunks_jsonl_path(root_dir)
     chunks_dir = _course_chunks_dir(root_dir)
-    cache_key = f"{chunks_dir}:{chunk_id}"
+    cache_source = chunks_jsonl if chunks_jsonl.exists() else chunks_dir
+    cache_key = f"{cache_source}:{chunk_id}"
     now = time.monotonic()
     with _COURSE_CHUNK_CACHE_LOCK:
         cached_single = _COURSE_SINGLE_CHUNK_CACHE.get(cache_key)
         if cached_single is not None and now - cached_single[0] < COURSE_CHUNK_CACHE_TTL_SECONDS:
             return dict(cached_single[1])
-        cached_full = _COURSE_CHUNK_CACHE.get(str(chunks_dir))
+        cached_full = _COURSE_CHUNK_CACHE.get(str(cache_source))
         if cached_full is not None and now - cached_full[0] < COURSE_CHUNK_CACHE_TTL_SECONDS:
             payload = cached_full[2].get(chunk_id)
             if payload is not None:
                 return dict(payload)
+
+    if chunks_jsonl.exists():
+        _, by_id = _course_chunk_cache(root_dir)
+        payload = by_id.get(chunk_id)
+        if payload is None:
+            raise FileNotFoundError(f"Course chunk not found: {chunk_id}")
+        return dict(payload)
 
     path = chunks_dir / f"{chunk_id}.json"
     if not path.exists():
@@ -1467,8 +1737,9 @@ def _iter_chunks(root_dir: Path) -> list[dict[str, Any]]:
 
 
 def _course_chunk_cache(root_dir: Path) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    chunks_jsonl = _course_chunks_jsonl_path(root_dir)
     chunks_dir = _course_chunks_dir(root_dir)
-    cache_key = str(chunks_dir)
+    cache_key = str(chunks_jsonl if chunks_jsonl.exists() else chunks_dir)
     now = time.monotonic()
     with _COURSE_CHUNK_CACHE_LOCK:
         cached = _COURSE_CHUNK_CACHE.get(cache_key)
@@ -1477,7 +1748,17 @@ def _course_chunk_cache(root_dir: Path) -> tuple[list[dict[str, Any]], dict[str,
 
     rows: list[dict[str, Any]] = []
     by_id: dict[str, dict[str, Any]] = {}
-    if chunks_dir.exists():
+    if chunks_jsonl.exists():
+        for payload in _read_jsonl(chunks_jsonl):
+            if not isinstance(payload, dict):
+                continue
+            normalized = _normalize_chunk_payload(payload)
+            chunk_id = str(normalized.get("chunk_id") or "").strip()
+            if not chunk_id:
+                continue
+            rows.append(normalized)
+            by_id[chunk_id] = normalized
+    elif chunks_dir.exists():
         for path in sorted(chunks_dir.glob("*.json")):
             try:
                 payload = _read_json(path)
@@ -1812,7 +2093,7 @@ def _public_course_answer_lines(
     query: str,
     show_image_evidence: bool,
 ) -> list[str]:
-    lines: list[str] = ["Study-docs 기준"]
+    lines: list[str] = [f"{COURSE_RUNTIME_LABEL} 기준"]
     for index, chunk in enumerate(chunks, start=1):
         label = _public_chunk_label(chunk)
         summary = _public_course_text(_chunk_learning_summary(chunk, query=query), limit=360)
@@ -1854,9 +2135,9 @@ def _public_ops_learning_answer_lines(
     official_doc_intent: bool,
     show_image_evidence: bool,
 ) -> list[str]:
-    lines: list[str] = ["Study-docs 기준"]
+    lines: list[str] = [f"{COURSE_RUNTIME_LABEL} 기준"]
     citation_count = max(1, len(chunks))
-    for learning_index, learning_chunk in enumerate(learning_chunks[:1], start=1):
+    for learning_index, learning_chunk in enumerate(learning_chunks[:2], start=1):
         title = _public_course_text(learning_chunk.get("title") or "운영 학습 단계", limit=120)
         goal = _public_course_text(learning_chunk.get("learning_goal") or learning_chunk.get("beginner_explanation") or "", limit=260)
         lines.append(title)
@@ -1919,7 +2200,7 @@ def _public_ops_guide_answer_lines(
     official_doc_intent: bool,
     show_image_evidence: bool,
 ) -> list[str]:
-    lines: list[str] = ["Study-docs 기준"]
+    lines: list[str] = [f"{COURSE_RUNTIME_LABEL} 기준"]
     title = _public_course_text(step.get("card_text") or step.get("user_query") or "운영 학습 단계", limit=120)
     objective = _public_course_text(step.get("learning_objective") or "", limit=240)
     lines.append(title)
@@ -2023,7 +2304,12 @@ def _course_chat_payload(root_dir: Path, payload: dict[str, Any]) -> dict[str, A
                 learning_ranked.append((float(hit.get("score") or 0.0), candidate))
         except Exception:  # noqa: BLE001
             learning_ranked = []
-    learning_chunks = [row for _, row in learning_ranked]
+    learning_candidates = [row for _, row in learning_ranked]
+    learning_chunks, learning_selector_meta, learning_selector_warning = _select_ops_learning_chunks_with_llm(
+        settings=settings,
+        query=query,
+        candidates=learning_candidates,
+    )
     if learning_chunks and not stage_id:
         stage_id = str(learning_chunks[0].get("stage_id") or "")
     resolved_guide = _resolve_ops_guide_step(
@@ -2058,7 +2344,7 @@ def _course_chat_payload(root_dir: Path, payload: dict[str, Any]) -> dict[str, A
                 continue
     elif learning_chunks:
         seen_source_ids: set[str] = set()
-        for learning_index, learning_chunk in enumerate(learning_chunks[:1], start=1):
+        for learning_index, learning_chunk in enumerate(learning_chunks[:2], start=1):
             for source_index, chunk_id in enumerate(_learning_source_chunk_ids(learning_chunk), start=1):
                 if chunk_id in seen_source_ids:
                     continue
@@ -2141,6 +2427,22 @@ def _course_chat_payload(root_dir: Path, payload: dict[str, Any]) -> dict[str, A
         "artifacts": [],
         "citation_map": {},
     }
+    if learning_candidates:
+        response["answer_generation"] = {
+            "selector": learning_selector_meta,
+            "candidate_learning_chunk_ids": [
+                _ops_learning_chunk_id(candidate)
+                for candidate in learning_candidates[:4]
+                if _ops_learning_chunk_id(candidate)
+            ],
+            "selected_learning_chunk_ids": [
+                _ops_learning_chunk_id(candidate)
+                for candidate in learning_chunks
+                if _ops_learning_chunk_id(candidate)
+            ],
+        }
+    if learning_selector_warning:
+        response.setdefault("warnings", []).append(learning_selector_warning)
     if not ranked_chunks:
         response["answer"] = "현재 코스 범위에서 직접 매칭되는 사업 산출물을 찾지 못했습니다. 더 구체적인 설계 ID, 테스트 ID, 단계명을 넣어 다시 질문해 주세요."
         return _attach_chat_response_fields(root_dir, response)
@@ -2157,7 +2459,7 @@ def _course_chat_payload(root_dir: Path, payload: dict[str, Any]) -> dict[str, A
     image_items = _image_evidence_items(ranked_chunks, query=query) if show_image_evidence else []
 
     answer_lines = [
-        "실운영 Study-docs 기준",
+        f"{COURSE_RUNTIME_LABEL} 기준",
         "질문과 직접 연결된 사내 산출물을 먼저 봅니다. 아래 항목은 PPT/PDF에서 추출된 청크와 원본 slide ref를 기준으로 한 근거입니다.",
     ]
     source_index = 1
@@ -2208,7 +2510,7 @@ def _course_chat_payload(root_dir: Path, payload: dict[str, Any]) -> dict[str, A
             )
             source_index += 1
     else:
-        answer_lines.append("- 이 질문의 상위 후보에는 신뢰 기준을 넘긴 공식문서 매핑이 없습니다. 이 경우 답변은 Study-docs 원본과 슬라이드 근거를 우선으로 봐야 합니다.")
+        answer_lines.append("- 이 질문의 상위 후보에는 신뢰 기준을 넘긴 공식문서 매핑이 없습니다. 이 경우 답변은 실운영 산출물과 슬라이드 근거를 우선으로 봐야 합니다.")
     answer_lines.append("")
     answer_lines.append("다음 Guided Tour")
     if tour_items:
@@ -2302,8 +2604,17 @@ def _course_chat_payload(root_dir: Path, payload: dict[str, Any]) -> dict[str, A
         if rewrite_mode:
             response["answer"] = rewritten_answer
             response["answer_rewrite"] = {"mode": rewrite_mode}
+            if isinstance(response.get("answer_generation"), dict):
+                response["answer_generation"]["mode"] = rewrite_mode
+                response["answer_generation"]["fallback_used"] = False
+        elif isinstance(response.get("answer_generation"), dict):
+            response["answer_generation"]["mode"] = "deterministic"
+            response["answer_generation"]["fallback_used"] = False
     except Exception as exc:  # noqa: BLE001
         response.setdefault("warnings", []).append(f"course answer LLM rewrite skipped: {exc}")
+        if isinstance(response.get("answer_generation"), dict):
+            response["answer_generation"]["mode"] = "deterministic"
+            response["answer_generation"]["fallback_used"] = True
     response["preview_ready"] = bool(response["artifacts"])
     return _attach_chat_response_fields(root_dir, response)
 
@@ -2339,7 +2650,7 @@ def course_viewer_source_meta(root_dir: Path, viewer_path: str) -> dict[str, Any
     native_id = str(chunk.get("native_id") or "")
     return {
         "book_slug": stage_id,
-        "book_title": "Study-docs Course",
+        "book_title": COURSE_RUNTIME_LABEL,
         "anchor": str(chunk.get("chunk_id") or ""),
         "section": title,
         "section_path": [stage_id, native_id or title],
@@ -2353,7 +2664,7 @@ def course_viewer_source_meta(root_dir: Path, viewer_path: str) -> dict[str, Any
         "publication_state": "internal",
         "parser_backend": "course_chunk_v1",
         "boundary_truth": "internal_course_runtime",
-        "runtime_truth_label": "Study-docs Course",
+        "runtime_truth_label": COURSE_RUNTIME_LABEL,
         "boundary_badge": "Internal Course",
     }
 
@@ -2665,6 +2976,15 @@ def _course_key_points_html(chunk: dict[str, Any]) -> str:
     return f'<ul class="reader-key-point-list">{items}</ul>'
 
 
+def _course_image_attachments_with_assets(chunk: dict[str, Any]) -> list[dict[str, Any]]:
+    attachments = chunk.get("image_attachments") if isinstance(chunk.get("image_attachments"), list) else []
+    return [
+        attachment
+        for attachment in attachments
+        if isinstance(attachment, dict) and str(attachment.get("asset_path") or "").strip()
+    ]
+
+
 def _course_relevant_slide_numbers(chunk: dict[str, Any], *, limit: int = 3) -> list[int]:
     query = " ".join(
         part
@@ -2675,7 +2995,7 @@ def _course_relevant_slide_numbers(chunk: dict[str, Any], *, limit: int = 3) -> 
         if part
     )
     profile = _image_query_profile(query)
-    attachments = chunk.get("image_attachments") if isinstance(chunk.get("image_attachments"), list) else []
+    attachments = _course_image_attachments_with_assets(chunk)
     ranked: list[tuple[float, int, int]] = []
     serial = 0
     for attachment in attachments:
@@ -2696,23 +3016,31 @@ def _course_relevant_slide_numbers(chunk: dict[str, Any], *, limit: int = 3) -> 
             slides.append(slide_no)
         if len(slides) >= limit:
             return slides
-    slide_refs = chunk.get("slide_refs") if isinstance(chunk.get("slide_refs"), list) else []
-    for slide in slide_refs:
-        if not isinstance(slide, dict):
-            continue
-        slide_no = int(slide.get("slide_no") or 0)
-        if slide_no <= 0:
-            continue
-        if slide_no not in slides:
-            slides.append(slide_no)
-        if len(slides) >= limit:
-            break
     return slides
+
+
+def _course_attachments_for_slide(chunk: dict[str, Any], slide_no: int, *, limit: int = 4) -> list[dict[str, Any]]:
+    attachments = _course_image_attachments_with_assets(chunk)
+    exact = [
+        attachment
+        for attachment in attachments
+        if int(attachment.get("slide_no") or 0) == int(slide_no)
+    ]
+    candidates = exact or attachments
+    candidates = sorted(
+        candidates,
+        key=lambda item: (
+            bool(item.get("exclude_from_default", False)),
+            not bool(item.get("is_default_visible", True)),
+            int(item.get("default_visible_order") or item.get("image_rank_order") or 9999),
+            str(item.get("asset_id") or item.get("attachment_id") or ""),
+        ),
+    )
+    return candidates[:limit]
 
 
 def _course_slides_html(chunk: dict[str, Any], *, active_slide_no: int | None = None) -> str:
     raw_chunk_id = str(chunk.get("chunk_id") or "")
-    chunk_id = html.escape(raw_chunk_id, quote=True)
     slides = _course_relevant_slide_numbers(chunk)
     if not slides:
         return ""
@@ -2724,6 +3052,22 @@ def _course_slides_html(chunk: dict[str, Any], *, active_slide_no: int | None = 
     previous_link = f'<a href="/course/chunks/{html.escape(raw_chunk_id, quote=True)}#slide-{previous_slide}">이전 슬라이드</a>'
     next_link = f'<a href="/course/chunks/{html.escape(raw_chunk_id, quote=True)}#slide-{next_slide}">다음 슬라이드</a>'
     counter = f"{index + 1} / {len(slides)}"
+    figures: list[str] = []
+    for attachment in _course_attachments_for_slide(chunk, int(active_slide_no)):
+        asset_path = str(attachment.get("asset_path") or "").strip()
+        caption = _short_text(
+            attachment.get("visual_summary") or attachment.get("ocr_text") or attachment.get("instructional_role") or "",
+            limit=220,
+        )
+        figures.append(
+            '<figure><img src="/api/v1/course/assets?path={asset_path}" alt="{alt}"><figcaption>{caption}</figcaption></figure>'.format(
+                asset_path=html.escape(asset_path, quote=True),
+                alt=html.escape(caption or f"Slide {int(active_slide_no)} evidence", quote=True),
+                caption=html.escape(caption or f"Slide {int(active_slide_no)} evidence"),
+            )
+        )
+    if not figures:
+        return ""
     return """
       <div class="course-slide-actions">
         {previous_link}
@@ -2731,17 +3075,14 @@ def _course_slides_html(chunk: dict[str, Any], *, active_slide_no: int | None = 
         {next_link}
       </div>
       <div class="course-figure-grid">
-        <figure>
-          <img src="/api/v1/course/slides/{chunk_id}/{slide_no}.png" alt="Slide {slide_no}">
-          <figcaption>Slide {slide_no}</figcaption>
-        </figure>
+        {figures}
       </div>
     """.format(
         previous_link=previous_link,
         slide_no=int(active_slide_no),
         counter=html.escape(counter),
         next_link=next_link,
-        chunk_id=chunk_id,
+        figures="".join(figures),
     ).strip()
 
 
@@ -2835,7 +3176,7 @@ def course_viewer_html(root_dir: Path, viewer_path: str) -> str | None:
       <section class="hero">
         <div class="hero-grid">
           <div class="hero-main">
-            <div class="eyebrow">Study-docs Course</div>
+            <div class="eyebrow">{COURSE_RUNTIME_LABEL}</div>
             <h1>{title}</h1>
             <p class="summary">{summary}</p>
           </div>
@@ -2874,13 +3215,8 @@ def handle_course_get(handler: Any, path: str, query: str, *, root_dir: Path) ->
         params = parse_qs(query, keep_blank_values=False)
         q = _normalize_query(str((params.get("q") or [""])[0]))
         limit = max(1, min(50, int(str((params.get("limit") or ["20"])[0]).strip() or "20")))
-        chunks_dir = _course_chunks_dir(root_dir)
-        if not chunks_dir.exists():
-            handler._send_json({"items": []})
-            return True
         matches: list[dict[str, Any]] = []
-        for chunk_path in sorted(chunks_dir.glob("*.json")):
-            chunk = _normalize_chunk_payload(_read_json(chunk_path))
+        for chunk in _iter_chunks(root_dir):
             haystack = f"{chunk.get('title') or ''} {chunk.get('search_text') or chunk.get('body_md') or ''}".lower()
             if q and q not in haystack:
                 continue
@@ -2910,7 +3246,12 @@ def handle_course_get(handler: Any, path: str, query: str, *, root_dir: Path) ->
             handler._send_json({"error": f"Course stage not found: {stage_id}"}, HTTPStatus.NOT_FOUND)
             return True
         chunk_refs = [str(item).strip() for item in (stage.get("chunk_refs") or []) if str(item).strip()]
-        full_chunks = [_load_chunk(root_dir, chunk_id) for chunk_id in chunk_refs if (_course_chunks_dir(root_dir) / f"{chunk_id}.json").exists()]
+        full_chunks: list[dict[str, Any]] = []
+        for chunk_id in chunk_refs:
+            try:
+                full_chunks.append(_load_chunk(root_dir, chunk_id))
+            except Exception:  # noqa: BLE001
+                continue
         chunks = [_chunk_summary(chunk) for chunk in full_chunks]
         by_id = {str(chunk.get("chunk_id") or ""): chunk for chunk in full_chunks}
         learning_route = stage.get("learning_route") if isinstance(stage.get("learning_route"), dict) else {}
@@ -2999,35 +3340,37 @@ def handle_course_get(handler: Any, path: str, query: str, *, root_dir: Path) ->
         except FileNotFoundError as exc:
             handler._send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
             return True
-        slide_refs = chunk.get("slide_refs") if isinstance(chunk.get("slide_refs"), list) else []
-        slide = next((item for item in slide_refs if isinstance(item, dict) and int(item.get("slide_no") or 0) == slide_no), None)
+        attachment = next(iter(_course_attachments_for_slide(chunk, slide_no, limit=1)), None)
         try:
-            png_path = _resolve_course_path(root_dir, str((slide or {}).get("png_path") or "")) if slide else None
+            asset_path = _resolve_course_path(root_dir, str((attachment or {}).get("asset_path") or "")) if attachment else None
         except ValueError as exc:
             handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return True
-        if png_path is not None and png_path.suffix.lower() != ".png":
+        if asset_path is not None and asset_path.suffix.lower() != ".png":
             handler._send_json({"error": "Course slide asset must be a PNG"}, HTTPStatus.BAD_REQUEST)
             return True
-        if png_path is None or not png_path.exists():
+        if asset_path is None or not asset_path.exists():
             handler._send_json({"error": f"Slide PNG not found for {chunk_id}:{slide_no}"}, HTTPStatus.NOT_FOUND)
             return True
-        handler._send_bytes(png_path.read_bytes(), content_type="image/png")
+        handler._send_bytes(asset_path.read_bytes(), content_type="image/png")
         return True
 
     return False
 
 
-def handle_course_post(handler: Any, path: str, payload: dict[str, Any], *, root_dir: Path) -> bool:
+def handle_course_post(handler: Any, path: str, payload: dict[str, Any], *, root_dir: Path, store: Any | None = None) -> bool:
     if path == "/api/v1/course/chat":
         try:
-            handler._send_json(_course_chat_payload(root_dir, payload))
+            result = _course_chat_payload(root_dir, payload)
+            _persist_course_session_turn(store, payload, result)
+            handler._send_json(result)
         except ValueError as exc:
             handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         return True
     if path == "/api/v1/course/chat/stream":
         try:
             result = _course_chat_payload(root_dir, payload)
+            _persist_course_session_turn(store, payload, result)
         except ValueError as exc:
             handler._start_ndjson_stream()
             handler._stream_event({"type": "error", "status_code": 400, "message": str(exc)})

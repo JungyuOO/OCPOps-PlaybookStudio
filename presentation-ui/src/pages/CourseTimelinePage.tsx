@@ -41,7 +41,7 @@ export default function CourseTimelinePage() {
           <strong>{manifest?.title || 'Loading course timeline...'}</strong>
           <span className="course-muted">총 {(manifest?.stages ?? []).length} 단계 / {totalChunks} parent chunks</span>
           <p className="course-copy">
-            각 단계는 PPT/PDF에서 추출한 Study-docs 근거를 기반으로 구성됩니다.
+            각 단계는 PPT/PDF에서 추출한 실운영 근거를 기반으로 구성됩니다.
             사용자는 내부 문서 ID를 몰라도 추천 질문 카드를 따라가며 답변, 근거, 다음 절차를 이어서 확인할 수 있습니다.
           </p>
         </section>

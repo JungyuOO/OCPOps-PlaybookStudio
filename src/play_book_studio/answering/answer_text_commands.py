@@ -11,6 +11,7 @@ from play_book_studio.retrieval.query import (
     has_corrective_follow_up,
     has_deployment_scaling_intent,
     has_first_step_intent,
+    has_crash_loop_troubleshooting_intent,
     has_node_drain_intent,
     has_openshift_kubernetes_compare_intent,
     has_project_finalizer_intent,
@@ -76,6 +77,7 @@ _COMMAND_TOKEN_RE = re.compile(
     r"\b(?:oc(?:\s+adm)?\s+[a-z0-9-]+(?:\s+[a-z0-9-]+)?|kubectl\s+[a-z0-9-]+(?:\s+[a-z0-9-]+)?|lsblk|df\s+-h|journalctl|must-gather)\b",
     re.IGNORECASE,
 )
+FENCED_CODE_BLOCK_RE = re.compile(r"\n*```[\s\S]*?```\n*", re.DOTALL)
 _DISK_QUERY_RE = re.compile(r"(디스크|disk|filesystem|파일시스템|lsblk|df\s+-h)", re.IGNORECASE)
 _NODE_ACCESS_QUERY_RE = re.compile(r"(노드.*접속|접속.*노드|host.*access|ssh|oc debug|debug\s+명령)", re.IGNORECASE)
 _LOG_QUERY_RE = re.compile(r"(로그|log|journal|node-logs|must-gather)", re.IGNORECASE)
@@ -100,6 +102,7 @@ def _should_use_generic_first_step_answer(query: str) -> bool:
         or has_deployment_scaling_intent(query)
         or has_node_drain_intent(query)
         or has_openshift_kubernetes_compare_intent(query)
+        or has_crash_loop_troubleshooting_intent(query)
         or has_pod_pending_troubleshooting_intent(query)
         or has_pod_lifecycle_concept_intent(query)
         or has_project_finalizer_intent(query)
@@ -318,6 +321,34 @@ def _collect_ordered_grounded_commands(citations, *, limit: int = 3) -> list[str
     return commands
 
 
+def _collect_verification_hints(citations, *, limit: int = 2) -> list[str]:
+    hints: list[str] = []
+    seen: set[str] = set()
+
+    for citation in citations:
+        for raw_hint in (getattr(citation, "verification_hints", ()) or ()):
+            hint = re.sub(r"\s+", " ", str(raw_hint or "")).strip(" .")
+            if not hint:
+                continue
+            key = hint.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            hints.append(hint)
+            if len(hints) >= limit:
+                return hints
+
+    return hints
+
+
+def _verification_follow_up(citations, ref: str, *, limit: int = 2) -> str:
+    hints = _collect_verification_hints(citations, limit=limit)
+    if not hints:
+        return ""
+    joined = "; ".join(hints)
+    return f"\n\n실행 후에는 {joined} 기준으로 결과를 확인하세요 {ref}."
+
+
 def _first_grounded_command_citation_index(citations) -> int:
     for index, citation in enumerate(citations, start=1):
         if _ordered_citation_commands(citation, limit=1):
@@ -345,12 +376,14 @@ def build_first_step_grounded_answer(
     follow_up = ""
     if len(commands) > 1:
         follow_up = f"\n\n첫 단계가 끝나면 같은 절차의 다음 명령으로 이어가면 됩니다 {primary_ref}."
+    verification = _verification_follow_up(citations[first_citation_index - 1 :], primary_ref, limit=2)
 
     return (
         f"답변: {section_prefix}가장 먼저 아래 명령으로 시작하면 됩니다 {primary_ref}.\n\n"
         f"```bash\n{commands[0]}\n```\n\n"
         f"질문이 첫 단계 확인형이므로 뒤 단계 명령보다 이 명령을 먼저 확인하면 됩니다 {primary_ref}."
         f"{follow_up}"
+        f"{verification}"
     )
 
 
@@ -377,6 +410,19 @@ def guard_first_step_grounding(
     if answer_commands[0].casefold() != expected_commands[0].casefold():
         return expected_answer
     return answer_text
+
+
+def strip_ungrounded_code_blocks(answer_text: str, *, citations) -> str:
+    if "```" not in (answer_text or ""):
+        return answer_text
+    if _collect_ordered_grounded_commands(citations, limit=1):
+        return answer_text
+
+    notice = "제공된 근거에는 실행 명령이나 예시 코드가 명시되어 있지 않습니다."
+    cleaned = FENCED_CODE_BLOCK_RE.sub(f"\n\n{notice}\n\n", answer_text or "")
+    cleaned = re.sub(rf"(?:{re.escape(notice)}\s*){{2,}}", notice, cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 
 def _actionable_intro(query: str) -> str:
@@ -474,6 +520,7 @@ def build_grounded_command_guide_answer(
         or has_cluster_node_usage_intent(query)
         or has_node_drain_intent(query)
         or has_rbac_intent(query)
+        or has_crash_loop_troubleshooting_intent(query)
         or has_pod_pending_troubleshooting_intent(query)
     ):
         return None
@@ -496,13 +543,15 @@ def build_grounded_command_guide_answer(
     intro = _actionable_intro(query)
     code_blocks = "\n\n".join(f"```bash\n{command}\n```" for command in commands)
     section = (primary.section or "").strip()
+    verification = _verification_follow_up(citations, "[1]", limit=2)
     if section:
         return (
             f"{intro} [1].\n\n"
             f"{section} 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다 [1].\n\n"
             f"{code_blocks}"
+            f"{verification}"
         )
-    return f"{intro} [1].\n\n{code_blocks}"
+    return f"{intro} [1].\n\n{code_blocks}{verification}"
 
 
 def _rbac_grounded_excerpt_text(citations) -> str:
@@ -964,6 +1013,50 @@ def shape_pod_pending_troubleshooting(
     )
 
 
+def _first_command_containing(citations, tokens: tuple[str, ...], fallback: str) -> str:
+    for citation in citations:
+        for command in _ordered_citation_commands(citation, limit=8):
+            lowered = command.lower()
+            if all(token in lowered for token in tokens):
+                return command
+    return fallback
+
+
+def shape_crash_loop_troubleshooting(
+    answer_text: str,
+    *,
+    query: str,
+    mode: str | None = None,
+    citations,
+) -> str:
+    del mode
+    if not has_crash_loop_troubleshooting_intent(query) or not citations:
+        return answer_text
+
+    primary_ref = citation_marker(citations, 1)
+    describe_command = _first_command_containing(
+        citations,
+        ("describe", "pod"),
+        "oc describe pod <pod-name> -n <namespace>",
+    )
+    logs_command = _first_command_containing(
+        citations,
+        ("logs", "pod"),
+        "oc logs <pod-name> -n <namespace> --previous",
+    )
+    verification = _verification_follow_up(citations, primary_ref, limit=2)
+
+    return (
+        f"답변: `CrashLoopBackOff`는 먼저 현재 Pod 상태와 이벤트를 확인한 뒤, 컨테이너 로그와 이전 종료 원인을 보는 순서로 좁히면 됩니다 {primary_ref}.\n\n"
+        f"1. 이벤트와 최근 종료 이유를 먼저 확인합니다 {primary_ref}.\n"
+        f"```bash\n{describe_command}\n```\n\n"
+        f"2. 애플리케이션 로그를 확인해 시작 실패, 설정 오류, 프로브 실패, 이미지 문제 중 어디에 가까운지 봅니다 {primary_ref}.\n"
+        f"```bash\n{logs_command}\n```\n\n"
+        f"이 두 결과에서 원인이 보이지 않으면 이미지, 환경 변수, Secret/ConfigMap 마운트, liveness/readiness probe 설정을 이어서 확인하세요 {primary_ref}."
+        f"{verification}"
+    )
+
+
 def has_grounded_deployment_scale_citation(citations) -> bool:
     for citation in citations:
         lowered_section = (citation.section or "").lower()
@@ -1058,9 +1151,11 @@ __all__ = [
     "has_sufficient_command_grounding",
     "shape_actionable_ops_answer",
     "shape_certificate_monitor_answer",
+    "shape_crash_loop_troubleshooting",
     "shape_etcd_backup_answer",
     "shape_pod_lifecycle_explainer",
     "shape_pod_pending_troubleshooting",
     "shape_project_termination_answer",
     "shape_rbac_follow_up_answer",
+    "strip_ungrounded_code_blocks",
 ]
