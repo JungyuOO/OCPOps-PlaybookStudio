@@ -1884,6 +1884,21 @@ def assemble_context(
                 chunk_type=hit.chunk_type,
                 semantic_role=hit.semantic_role,
                 source_collection=hit.source_collection,
+                source_lane=hit.source_lane,
+                source_type=hit.source_type,
+                source_authority=hit.source_authority,
+                source_authority_label=hit.source_authority_label,
+                source_authority_badge=hit.source_authority_badge,
+                source_authority_warning=hit.source_authority_warning,
+                source_requires_review=hit.source_requires_review,
+                boundary_truth=hit.boundary_truth,
+                runtime_truth_label=hit.runtime_truth_label,
+                boundary_badge=hit.boundary_badge,
+                approval_state=hit.approval_state,
+                publication_state=hit.publication_state,
+                provider_egress_policy=hit.provider_egress_policy,
+                retrieval_ready=hit.retrieval_ready,
+                read_ready=hit.read_ready,
                 block_kinds=hit.block_kinds,
                 cli_commands=hit.cli_commands,
                 error_strings=hit.error_strings,
@@ -1895,9 +1910,26 @@ def assemble_context(
 
     prompt_lines: list[str] = []
     for citation in citations:
+        source_scope = " | ".join(
+            item
+            for item in (
+                f"collection={citation.source_collection}",
+                f"lane={citation.source_lane}" if citation.source_lane else "",
+                f"authority={citation.source_authority}" if citation.source_authority else "",
+                "review_required=true" if citation.source_requires_review else "",
+                f"boundary={citation.boundary_truth}" if citation.boundary_truth else "",
+                f"approval={citation.approval_state}" if citation.approval_state else "",
+                f"publication={citation.publication_state}" if citation.publication_state else "",
+                f"read_ready={str(citation.read_ready).lower()}" if citation.read_ready else "",
+                f"retrieval_ready={str(citation.retrieval_ready).lower()}" if citation.retrieval_ready else "",
+            )
+            if item
+        )
         prompt_lines.append(
             f"[{citation.index}] book={citation.book_slug} | section={citation.section} | viewer={citation.viewer_path}"
         )
+        if source_scope:
+            prompt_lines.append(f"source_scope: {source_scope}")
         prompt_lines.append(citation.excerpt)
         if citation.cli_commands:
             prompt_lines.append("ordered_cli_commands:")

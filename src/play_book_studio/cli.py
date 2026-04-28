@@ -14,16 +14,22 @@ from pathlib import Path
 from typing import Any
 
 from play_book_studio.answering.answerer import ChatAnswerer
-from play_book_studio.app.chat_matrix_smoke import write_chat_matrix_smoke
+from play_book_studio.app.chat_matrix_smoke import write_chat_matrix_smoke, write_role_rehearsal
 from play_book_studio.app.customer_pack_batch import write_customer_pack_material_batch_report
 from play_book_studio.app.customer_master_book import (
     DEFAULT_MASTER_BOOK_SLUG,
     DEFAULT_MASTER_BOOK_TITLE,
     write_customer_master_book,
 )
+from play_book_studio.app.llmwiki_absorption_audit import write_llmwiki_absorption_audit_report
+from play_book_studio.app.llmwiki_contextual_enrichment_gate import (
+    write_llmwiki_contextual_enrichment_gate_report,
+)
+from play_book_studio.app.llmwiki_evolution_gate import write_llmwiki_evolution_gate_report
 from play_book_studio.app.llmwiki_promotion_report import write_llmwiki_promotion_report
 from play_book_studio.app.llmwiki_validation_loop import write_llmwiki_validation_loop_report
 from play_book_studio.app.private_lane_smoke import write_private_lane_smoke
+from play_book_studio.app.role_continuity_rehearsal import write_role_continuity_rehearsal
 from play_book_studio.app.runtime_maintenance_smoke import write_runtime_maintenance_smoke
 from play_book_studio.app.runtime_report import (
     DEFAULT_PLAYBOOK_UI_BASE_URL,
@@ -75,7 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ui_parser = subparsers.add_parser("ui", help="Run the local runtime/API server")
     ui_parser.add_argument("--host", default="127.0.0.1")
-    ui_parser.add_argument("--port", type=int, default=8765)
+    ui_parser.add_argument("--port", type=int, default=8876)
     ui_parser.add_argument("--no-browser", action="store_true")
     ui_parser.add_argument(
         "--warmup-reranker",
@@ -140,6 +146,23 @@ def build_parser() -> argparse.ArgumentParser:
     chat_matrix_smoke_parser.add_argument("--ui-base-url", default=DEFAULT_PLAYBOOK_UI_BASE_URL)
     chat_matrix_smoke_parser.add_argument("--cases", type=Path, default=None)
     chat_matrix_smoke_parser.add_argument("--timeout-seconds", type=float, default=90.0)
+
+    role_rehearsal_parser = subparsers.add_parser(
+        "role-rehearsal",
+        help="Validate live /api/chat as operator A and learner B product roles",
+    )
+    role_rehearsal_parser.add_argument("--output", type=Path, default=None)
+    role_rehearsal_parser.add_argument("--ui-base-url", default=DEFAULT_PLAYBOOK_UI_BASE_URL)
+    role_rehearsal_parser.add_argument("--cases", type=Path, default=None)
+    role_rehearsal_parser.add_argument("--timeout-seconds", type=float, default=90.0)
+
+    role_continuity_parser = subparsers.add_parser(
+        "role-continuity",
+        help="Validate 10-turn operator and learner continuity against live /api/chat",
+    )
+    role_continuity_parser.add_argument("--output", type=Path, default=None)
+    role_continuity_parser.add_argument("--ui-base-url", default=DEFAULT_PLAYBOOK_UI_BASE_URL)
+    role_continuity_parser.add_argument("--timeout-seconds", type=float, default=120.0)
 
     private_lane_smoke_parser = subparsers.add_parser(
         "private-lane-smoke",
@@ -356,6 +379,47 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip direct LLM/embedding samples in the runtime report; live chat matrix still runs.",
     )
 
+    llmwiki_absorption_parser = subparsers.add_parser(
+        "llmwiki-absorption-audit",
+        help="Audit whether beyond-RAG LLMWiki doctrine is locked and backed by current evidence",
+    )
+    llmwiki_absorption_parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT / ".kugnusdocs" / "reports" / f"{date.today().isoformat()}-llmwiki-absorption-audit.json",
+    )
+    llmwiki_absorption_parser.add_argument("--contract", type=Path, default=None)
+    llmwiki_absorption_parser.add_argument("--promotion-report", type=Path, default=None)
+    llmwiki_absorption_parser.add_argument("--validation-loop-report", type=Path, default=None)
+    llmwiki_absorption_parser.add_argument("--role-continuity-report", type=Path, default=None)
+    llmwiki_absorption_parser.add_argument("--evolution-gate-report", type=Path, default=None)
+    llmwiki_absorption_parser.add_argument("--contextual-enrichment-report", type=Path, default=None)
+
+    llmwiki_contextual_parser = subparsers.add_parser(
+        "llmwiki-contextual-enrichment-gate",
+        help="Run P1 contextual chunk enrichment coverage and recall gate",
+    )
+    llmwiki_contextual_parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT / ".kugnusdocs" / "reports" / f"{date.today().isoformat()}-llmwiki-contextual-enrichment-gate.json",
+    )
+    llmwiki_contextual_parser.add_argument("--official-bm25", type=Path, default=None)
+
+    llmwiki_evolution_parser = subparsers.add_parser(
+        "llmwiki-evolution-gate",
+        help="Run P0 beyond-RAG LLMWiki quality, backwrite-candidate, and anti-rot gates",
+    )
+    llmwiki_evolution_parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT / ".kugnusdocs" / "reports" / f"{date.today().isoformat()}-llmwiki-evolution-gate.json",
+    )
+    llmwiki_evolution_parser.add_argument("--chat-matrix-report", type=Path, default=None)
+    llmwiki_evolution_parser.add_argument("--role-continuity-report", type=Path, default=None)
+    llmwiki_evolution_parser.add_argument("--promotion-report", type=Path, default=None)
+    llmwiki_evolution_parser.add_argument("--validation-loop-report", type=Path, default=None)
+
     return parser
 
 
@@ -551,6 +615,82 @@ def _run_chat_matrix_smoke(args: argparse.Namespace) -> int:
                         "id": item.get("id"),
                         "checks": item.get("checks"),
                         "warnings": item.get("warnings"),
+                        "error": item.get("error"),
+                    }
+                    for item in payload.get("results", [])
+                    if not item.get("pass")
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if payload.get("status") == "ok" else 1
+
+
+def _run_role_rehearsal(args: argparse.Namespace) -> int:
+    output_path, payload = write_role_rehearsal(
+        ROOT,
+        output_path=args.output,
+        ui_base_url=args.ui_base_url,
+        cases_path=args.cases,
+        timeout_seconds=args.timeout_seconds,
+    )
+    print(f"wrote role rehearsal: {output_path}")
+    print(
+        json.dumps(
+            {
+                "status": payload.get("status"),
+                "pass_count": payload.get("pass_count"),
+                "total": payload.get("total"),
+                "roles": payload.get("roles"),
+                "failures": [
+                    {
+                        "id": item.get("id"),
+                        "role": item.get("role"),
+                        "goal": item.get("goal"),
+                        "checks": item.get("checks"),
+                        "warnings": item.get("warnings"),
+                        "missing_terms": item.get("missing_terms"),
+                        "forbidden_hits": item.get("forbidden_hits"),
+                        "answer_preview": item.get("answer_preview"),
+                        "error": item.get("error"),
+                    }
+                    for item in payload.get("results", [])
+                    if not item.get("pass")
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if payload.get("status") == "ok" else 1
+
+
+def _run_role_continuity(args: argparse.Namespace) -> int:
+    output_path, payload = write_role_continuity_rehearsal(
+        ROOT,
+        output_path=args.output,
+        ui_base_url=args.ui_base_url,
+        timeout_seconds=args.timeout_seconds,
+    )
+    print(f"wrote role continuity rehearsal: {output_path}")
+    print(
+        json.dumps(
+            {
+                "status": payload.get("status"),
+                "pass_count": payload.get("pass_count"),
+                "total": payload.get("total"),
+                "roles": payload.get("roles"),
+                "failures": [
+                    {
+                        "role": item.get("role"),
+                        "turn": item.get("turn"),
+                        "query": item.get("query"),
+                        "checks": item.get("checks"),
+                        "response_kind": item.get("response_kind"),
+                        "citation_count": item.get("citation_count"),
+                        "answer_preview": item.get("answer_preview"),
                         "error": item.get("error"),
                     }
                     for item in payload.get("results", [])
@@ -1152,6 +1292,97 @@ def _run_llmwiki_loop(args: argparse.Namespace) -> int:
     return 0 if payload.get("ready") else 1
 
 
+def _run_llmwiki_absorption_audit(args: argparse.Namespace) -> int:
+    output_path, payload = write_llmwiki_absorption_audit_report(
+        ROOT,
+        output_path=args.output,
+        contract_path=args.contract,
+        promotion_report_path=args.promotion_report,
+        validation_loop_report_path=args.validation_loop_report,
+        role_continuity_report_path=args.role_continuity_report,
+        evolution_gate_report_path=args.evolution_gate_report,
+        contextual_enrichment_report_path=args.contextual_enrichment_report,
+    )
+    print(f"wrote llmwiki absorption audit: {output_path}")
+    print(
+        json.dumps(
+            {
+                "status": payload.get("status"),
+                "ready": payload.get("ready"),
+                "beyond_rag_stage": payload.get("beyond_rag_stage"),
+                "full_self_evolving_llmwiki": payload.get("full_self_evolving_llmwiki"),
+                "checks": payload.get("checks", {}),
+                "failures": payload.get("failures", []),
+                "not_yet_absorbed_lanes": payload.get("not_yet_absorbed_lanes", []),
+                "next_required_lanes": payload.get("next_required_lanes", []),
+                "evidence": payload.get("evidence", {}),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if payload.get("ready") else 1
+
+
+def _run_llmwiki_contextual_enrichment_gate(args: argparse.Namespace) -> int:
+    output_path, payload = write_llmwiki_contextual_enrichment_gate_report(
+        ROOT,
+        output_path=args.output,
+        official_bm25_path=args.official_bm25,
+    )
+    coverage = payload.get("coverage", {}) if isinstance(payload.get("coverage"), dict) else {}
+    total = coverage.get("total", {}) if isinstance(coverage.get("total"), dict) else {}
+    print(f"wrote llmwiki contextual enrichment gate: {output_path}")
+    print(
+        json.dumps(
+            {
+                "status": payload.get("status"),
+                "ready": payload.get("ready"),
+                "checks": payload.get("checks", {}),
+                "failures": payload.get("failures", []),
+                "row_count": total.get("row_count"),
+                "runtime_contextual_count": total.get("runtime_contextual_count"),
+                "persisted_contextual_count": total.get("persisted_contextual_count"),
+                "recall_fixture": payload.get("recall_fixture", {}),
+                "evidence": payload.get("evidence", {}),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if payload.get("ready") else 1
+
+
+def _run_llmwiki_evolution_gate(args: argparse.Namespace) -> int:
+    output_path, payload = write_llmwiki_evolution_gate_report(
+        ROOT,
+        output_path=args.output,
+        chat_matrix_report_path=args.chat_matrix_report,
+        role_continuity_report_path=args.role_continuity_report,
+        promotion_report_path=args.promotion_report,
+        validation_loop_report_path=args.validation_loop_report,
+    )
+    print(f"wrote llmwiki evolution gate: {output_path}")
+    print(
+        json.dumps(
+            {
+                "status": payload.get("status"),
+                "ready": payload.get("ready"),
+                "checks": payload.get("checks", {}),
+                "failures": payload.get("failures", []),
+                "quality_blockers": payload.get("retrieval_quality_critic", {}).get("blocker_count"),
+                "quality_warnings": payload.get("retrieval_quality_critic", {}).get("warning_count"),
+                "backwrite_candidates": payload.get("wiki_backwrite_candidate", {}).get("candidate_count"),
+                "anti_rot_blockers": payload.get("wiki_lint_anti_rot", {}).get("blocker_count"),
+                "evidence": payload.get("evidence", {}),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if payload.get("ready") else 1
+
+
 def main() -> int:
     args = build_parser().parse_args()
     if args.command == "ui":
@@ -1168,6 +1399,10 @@ def main() -> int:
         return _run_maintenance_smoke(args)
     if args.command == "chat-matrix-smoke":
         return _run_chat_matrix_smoke(args)
+    if args.command == "role-rehearsal":
+        return _run_role_rehearsal(args)
+    if args.command == "role-continuity":
+        return _run_role_continuity(args)
     if args.command == "private-lane-smoke":
         return _run_private_lane_smoke(args)
     if args.command == "graph-compact":
@@ -1184,6 +1419,12 @@ def main() -> int:
         return _run_llmwiki_promotion(args)
     if args.command == "llmwiki-loop":
         return _run_llmwiki_loop(args)
+    if args.command == "llmwiki-absorption-audit":
+        return _run_llmwiki_absorption_audit(args)
+    if args.command == "llmwiki-contextual-enrichment-gate":
+        return _run_llmwiki_contextual_enrichment_gate(args)
+    if args.command == "llmwiki-evolution-gate":
+        return _run_llmwiki_evolution_gate(args)
     raise ValueError(f"unsupported command: {args.command}")
 
 

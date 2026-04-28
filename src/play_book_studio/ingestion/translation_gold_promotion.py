@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from play_book_studio.config.settings import Settings
+from play_book_studio.contextual_enrichment import contextual_search_text, enrich_contextual_row
 from play_book_studio.ingestion.validation import (
     REQUIRED_PLAYBOOK_SOURCE_METADATA_FIELDS,
     REQUIRED_ROW_METADATA_FIELDS,
@@ -137,11 +138,12 @@ def _write_playbook_payloads(
 
 def _bm25_row(chunk_row: dict[str, object]) -> dict[str, object]:
     chunk_type = str(chunk_row.get("chunk_type", "reference"))
-    return {
+    row = {
         "chunk_id": chunk_row["chunk_id"],
         "book_slug": chunk_row["book_slug"],
         "chapter": chunk_row["chapter"],
         "section": chunk_row["section"],
+        "section_id": chunk_row["section_id"],
         "anchor": chunk_row["anchor"],
         "source_url": chunk_row["source_url"],
         "viewer_path": chunk_row["viewer_path"],
@@ -158,6 +160,15 @@ def _bm25_row(chunk_row: dict[str, object]) -> dict[str, object]:
         "translation_status": chunk_row["translation_status"],
         "review_status": chunk_row["review_status"],
         "trust_score": chunk_row["trust_score"],
+        "surface_kind": chunk_row["surface_kind"],
+        "source_unit_kind": chunk_row["source_unit_kind"],
+        "source_unit_id": chunk_row["source_unit_id"],
+        "source_unit_anchor": chunk_row["source_unit_anchor"],
+        "origin_method": chunk_row["origin_method"],
+        "ocr_status": chunk_row["ocr_status"],
+        "block_kinds": list(chunk_row.get("block_kinds", [])),
+        "citation_eligible": bool(chunk_row.get("citation_eligible", False)),
+        "citation_block_reason": str(chunk_row.get("citation_block_reason", "")),
         "semantic_role": (
             "procedure"
             if chunk_type in {"procedure", "command"}
@@ -169,6 +180,7 @@ def _bm25_row(chunk_row: dict[str, object]) -> dict[str, object]:
         "operator_names": list(chunk_row.get("operator_names", [])),
         "verification_hints": list(chunk_row.get("verification_hints", [])),
     }
+    return enrich_contextual_row(row)
 
 
 def _chunk_records(rows: list[dict[str, object]]) -> list[ChunkRecord]:
@@ -690,7 +702,7 @@ def promote_translation_gold(
         chunk_records = _chunk_records(promoted_chunks)
         client = EmbeddingClient(settings)
         vectors = client.embed_texts(
-            (chunk.text for chunk in chunk_records),
+            (contextual_search_text(chunk.to_dict()) for chunk in chunk_records),
             progress_callback=lambda done, total: _emit_progress(
                 "gold_embed_progress",
                 completed_batches=done,

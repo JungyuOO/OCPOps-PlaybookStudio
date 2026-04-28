@@ -5,6 +5,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 from uuid import uuid4
 
 from play_book_studio.config.settings import load_settings
@@ -201,8 +202,26 @@ def _normalize_text_annotations(value: Any, default_anchor: str) -> list[dict[st
 def _anchor_from_target_ref(target_ref: str) -> str:
     normalized = str(target_ref or "").strip()
     if normalized.startswith("section:") and "#" in normalized:
-        return normalized.split("#", 1)[1].strip()
+        return _decode_target_anchor(normalized.split("#", 1)[1])
     return ""
+
+
+def _decode_target_anchor(anchor: str) -> str:
+    normalized = str(anchor or "").strip()
+    if not normalized:
+        return ""
+    try:
+        return unquote(normalized).strip()
+    except Exception:  # noqa: BLE001
+        return normalized
+
+
+def _canonical_target_ref_for_compare(target_ref: str) -> str:
+    normalized = str(target_ref or "").strip()
+    if normalized.startswith("section:") and "#" in normalized:
+        prefix, anchor = normalized.split("#", 1)
+        return f"{prefix}#{_decode_target_anchor(anchor)}"
+    return normalized
 
 
 def _save_overlay_document(root_dir: Path, payload: dict[str, Any]) -> None:
@@ -478,7 +497,12 @@ def save_wiki_user_overlay(root_dir: Path, payload: dict[str, Any]) -> dict[str,
     new_items: list[dict[str, Any]] = []
     for item in items:
         if _upsert_policy(kind):
-            if str(item.get("user_id") or "").strip() == user_id and str(item.get("kind") or "").strip() == kind and str(item.get("target_ref") or "").strip() == target_ref:
+            if (
+                str(item.get("user_id") or "").strip() == user_id
+                and str(item.get("kind") or "").strip() == kind
+                and _canonical_target_ref_for_compare(str(item.get("target_ref") or ""))
+                == _canonical_target_ref_for_compare(target_ref)
+            ):
                 record["overlay_id"] = str(item.get("overlay_id") or record["overlay_id"])
                 record["created_at"] = str(item.get("created_at") or record["created_at"])
                 if kind == "edited_card":
@@ -522,7 +546,13 @@ def remove_wiki_user_overlay(root_dir: Path, payload: dict[str, Any]) -> dict[st
         if overlay_id and str(item.get("overlay_id") or "").strip() == overlay_id:
             removed += 1
             continue
-        if kind and target_ref and str(item.get("kind") or "").strip() == kind and str(item.get("target_ref") or "").strip() == target_ref:
+        if (
+            kind
+            and target_ref
+            and str(item.get("kind") or "").strip() == kind
+            and _canonical_target_ref_for_compare(str(item.get("target_ref") or ""))
+            == _canonical_target_ref_for_compare(target_ref)
+        ):
             removed += 1
             continue
         remaining.append(dict(item))

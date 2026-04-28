@@ -35,9 +35,10 @@ import {
   toRuntimeUrl,
 } from '../lib/runtimeApi';
 import { displayCustomerDocumentTitle } from '../lib/customerDocumentTitles';
-import { resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';
+import { isCustomerPackRuntimeBook, resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';
 import type { SourceEntry, WorkspaceManualBook } from './workspaceTypes';
 import { buildOutlineBookFamilies, describeOutlineVariant, type OutlineBookFamily } from './workspaceOutline';
+import { dedupeDraftCatalogForDisplay } from './workspaceDraftCatalog';
 import {
   LlmWikiBookLeftRail,
   LlmWikiBookNavList,
@@ -160,7 +161,7 @@ export default function LlmWikiBookPage() {
           return;
         }
         setManualBooks(resolveWorkspaceSourceBooks(room));
-        setDrafts(draftList.drafts ?? []);
+        setDrafts(dedupeDraftCatalogForDisplay(draftList.drafts ?? []));
         setWikiOverlays(overlayResult.items ?? []);
       } catch (error) {
         console.error(error);
@@ -206,6 +207,14 @@ export default function LlmWikiBookPage() {
 
   const outlineFamilies = useMemo<OutlineBookFamily[]>(
     () => buildOutlineBookFamilies(manualBooks),
+    [manualBooks],
+  );
+  const officialOutlineFamilies = useMemo<OutlineBookFamily[]>(
+    () => buildOutlineBookFamilies(manualBooks.filter((book) => !isCustomerPackRuntimeBook(book))),
+    [manualBooks],
+  );
+  const customerOutlineFamilies = useMemo<OutlineBookFamily[]>(
+    () => buildOutlineBookFamilies(manualBooks.filter(isCustomerPackRuntimeBook)),
     [manualBooks],
   );
 
@@ -806,7 +815,7 @@ export default function LlmWikiBookPage() {
   );
 
   const officialNavItems = useMemo<LlmWikiBookNavItem[]>(() => {
-    return outlineFamilies.flatMap((family) => {
+    return officialOutlineFamilies.flatMap((family) => {
       const familyBooks = [family.primary, ...family.variants];
       return familyBooks.map((book, index) => ({
         id: `manual:${book.book_slug}`,
@@ -817,7 +826,21 @@ export default function LlmWikiBookPage() {
         depth: index === 0 ? 0 : 1,
       }));
     });
-  }, [activeSourceId, outlineFamilies]);
+  }, [activeSourceId, officialOutlineFamilies]);
+
+  const customerRuntimeNavItems = useMemo<LlmWikiBookNavItem[]>(() => {
+    return customerOutlineFamilies.flatMap((family) => {
+      const familyBooks = [family.primary, ...family.variants];
+      return familyBooks.map((book, index) => ({
+        id: `manual:${book.book_slug}`,
+        label: index === 0 ? family.primary.title : describeOutlineVariant(book),
+        summary: index === 0 ? summarizeBookMeta(book) : '',
+        badge: book.grade,
+        active: activeSourceId === `manual:${book.book_slug}`,
+        depth: index === 0 ? 0 : 1,
+      }));
+    });
+  }, [activeSourceId, customerOutlineFamilies]);
 
   const draftNavItems = useMemo<LlmWikiBookNavItem[]>(() => {
     return draftSources.map((source) => ({
@@ -966,7 +989,7 @@ export default function LlmWikiBookPage() {
         <LlmWikiBookSectionCard
           eyebrow="Library"
           title="Shelf"
-          description={`${manualSources.length} official runtime${draftSources.length > 0 ? ` · ${draftSources.length} draft` : ''}`}
+          description={`${officialOutlineFamilies.length} official groups · ${customerOutlineFamilies.length} customer groups · ${manualSources.length} runtime books${draftSources.length > 0 ? ` · ${draftSources.length} draft` : ''}`}
           compact={true}
           className="llmwikibook-page__rail-summary-card"
         />
@@ -975,7 +998,7 @@ export default function LlmWikiBookPage() {
       <LlmWikiBookSectionCard
         eyebrow="Official"
         title="Playbook Families"
-        description="family 중심으로 읽을 책을 고릅니다."
+        description="원천 family 아래 원문과 파생 runtime book을 구분합니다."
         className="llmwikibook-page__rail-card"
       >
         {officialNavItems.length > 0 ? (
@@ -995,6 +1018,28 @@ export default function LlmWikiBookPage() {
           <div className="llmwikibook-page__empty-block">공식 runtime book이 아직 없습니다.</div>
         )}
       </LlmWikiBookSectionCard>
+      {customerRuntimeNavItems.length > 0 ? (
+        <LlmWikiBookSectionCard
+          eyebrow="Customer Runtime"
+          title="PPT + Derived Playbooks"
+          description="고객 PPT 원본, master, 파생 playbook을 official shelf와 분리합니다."
+          tone="muted"
+          className="llmwikibook-page__rail-card"
+        >
+          <LlmWikiBookNavList
+            items={customerRuntimeNavItems}
+            ariaLabel="Customer runtime playbooks"
+            dense={true}
+            className="llmwikibook-page__rail-nav"
+            onItemSelect={(item) => {
+              const source = manualSources.find((entry) => entry.id === item.id);
+              if (source) {
+                void handleSourceClick(source);
+              }
+            }}
+          />
+        </LlmWikiBookSectionCard>
+      ) : null}
       {draftNavItems.length > 0 ? (
         <LlmWikiBookSectionCard
           eyebrow="Customer"
@@ -1404,6 +1449,7 @@ export default function LlmWikiBookPage() {
 
   return (
     <LlmWikiBookShell
+      className={hasReaderDocument ? 'has-reader-document' : undefined}
       mode={interactionMode}
       topBar={topBar}
       leftRail={leftRail}

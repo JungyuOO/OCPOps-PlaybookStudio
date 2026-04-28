@@ -34,6 +34,11 @@ export interface LibraryBook {
   source_options?: LibraryBookSourceOption[];
   source_collection?: string;
   source_collection_label?: string;
+  source_authority?: string;
+  source_authority_label?: string;
+  source_authority_badge?: string;
+  source_authority_warning?: string;
+  source_requires_review?: boolean;
   source_kind?: string;
   source_kind_label?: string;
   promotion_stage?: string;
@@ -71,8 +76,15 @@ export interface LibraryBook {
 export interface LibraryBucket {
   selected_dir?: string;
   selected_path?: string;
+  manifest_path?: string;
   source_count?: number;
   slot_count?: number;
+  hidden_count?: number;
+  hidden_books?: Array<{
+    book_slug?: string;
+    title?: string;
+    hidden_reason?: string;
+  }>;
   source_kind?: string;
   source_kind_label?: string;
   promotion_stage?: string;
@@ -199,6 +211,14 @@ export interface DataControlRoomSummary {
   llmwiki_validation_loop_ready?: boolean;
   llmwiki_validation_loop_status?: string;
   llmwiki_validation_loop_failure_count?: number;
+  role_rehearsal_ready?: boolean;
+  role_rehearsal_status?: string;
+  role_rehearsal_pass_count?: number;
+  role_rehearsal_total?: number;
+  role_rehearsal_failure_count?: number;
+  runtime_dependencies_ready?: boolean;
+  runtime_dependencies_status?: string;
+  runtime_dependencies_failure_count?: number;
   official_gold_ok?: boolean;
   customer_master_ok?: boolean;
   runtime_live_ok?: boolean;
@@ -339,6 +359,61 @@ export interface LlmWikiValidationLoopStatus {
   commands?: Record<string, string>;
 }
 
+export interface RoleRehearsalStatus {
+  status: string;
+  ready: boolean;
+  pass_count: number;
+  total: number;
+  roles: Record<string, {
+    pass: number;
+    total: number;
+    ready: boolean;
+    acceptance?: string;
+  }>;
+  acceptance?: Record<string, string>;
+  failures: string[];
+  selected_report?: {
+    path: string;
+    exists: boolean;
+    generated_at: string;
+    git?: Record<string, unknown>;
+    current_git?: Record<string, unknown>;
+    head_matches_current?: boolean;
+    dirty_after_report?: boolean;
+    stale?: boolean;
+  };
+  results?: Array<{
+    id: string;
+    role: string;
+    goal: string;
+    pass: boolean;
+    status: string;
+    response_kind: string;
+    collections: string[];
+    books: string[];
+    citation_count: number;
+  }>;
+}
+
+export interface RuntimeDependencyCheck {
+  id: string;
+  ready: boolean;
+  status: string;
+  url?: string;
+  collection?: string;
+  collections?: string[];
+  http_status?: number;
+  error?: string;
+}
+
+export interface RuntimeDependenciesStatus {
+  status: string;
+  ready: boolean;
+  failures: string[];
+  checks?: RuntimeDependencyCheck[];
+  qdrant?: RuntimeDependencyCheck;
+}
+
 export interface DataControlRoomResponse {
   active_pack: {
     pack_label: string;
@@ -365,6 +440,8 @@ export interface DataControlRoomResponse {
     critical_scenario_pass_rate: number | null;
     blockers: string[];
   };
+  role_rehearsal?: RoleRehearsalStatus;
+  runtime_dependencies?: RuntimeDependenciesStatus;
   known_books: LibraryBook[];
   gold_books: LibraryBook[];
   corpus: LibraryBucket;
@@ -404,8 +481,14 @@ export interface ChatCitation {
   viewer_path: string;
   source_label?: string;
   source_collection?: string;
+  source_type?: string;
   pack_label?: string;
   source_lane?: string;
+  source_authority?: string;
+  source_authority_label?: string;
+  source_authority_badge?: string;
+  source_authority_warning?: string;
+  source_requires_review?: boolean;
   approval_state?: string;
   publication_state?: string;
   parser_backend?: string;
@@ -620,6 +703,7 @@ export interface ChatResponse {
     checkbox_label: string;
     confirm_label: string;
     repository_query: string;
+    repair_plan?: Record<string, unknown>;
   };
   retrieval_trace?: Record<string, unknown>;
   pipeline_trace?: {
@@ -640,6 +724,13 @@ export interface ChatSuggestedFollowup {
   source?: string;
   citation_index?: number | null;
   href?: string;
+  selected_draft_ids?: string[];
+  restrict_uploaded_sources?: boolean;
+  source_collection?: string;
+  source_lane?: string;
+  boundary_truth?: string;
+  approval_state?: string;
+  publication_state?: string;
 }
 
 export interface ChatStreamResultEvent {
@@ -696,6 +787,9 @@ export interface CustomerPackDraft {
   quality_status: string;
   quality_score: number;
   quality_summary: string;
+  shared_grade?: string;
+  read_ready?: boolean;
+  publish_ready?: boolean;
   uploaded_file_name?: string;
   uploaded_byte_size?: number;
   capture_artifact_path?: string;
@@ -877,6 +971,7 @@ export interface RepositoryUnansweredItem {
   timestamp: string;
   response_kind: string;
   warnings: string[];
+  repair_plan?: Record<string, unknown>;
 }
 
 export interface RepositoryUnansweredResponse {
@@ -897,6 +992,11 @@ export interface SourceMetaResponse {
   source_collection?: string;
   pack_label?: string;
   source_lane?: string;
+  source_authority?: string;
+  source_authority_label?: string;
+  source_authority_badge?: string;
+  source_authority_warning?: string;
+  source_requires_review?: boolean;
   approval_state?: string;
   publication_state?: string;
   parser_backend?: string;
@@ -1336,12 +1436,14 @@ export async function normalizeCustomerPackDraft(
     publicationState?: string;
   },
 ): Promise<CustomerPackDraft> {
+  const approvalState = options?.approvalState ?? 'approved';
+  const publicationState = options?.publicationState ?? 'active';
   return requestJson<CustomerPackDraft>('/api/customer-packs/normalize', {
     method: 'POST',
     body: JSON.stringify({
       draft_id: draftId,
-      approval_state: options?.approvalState,
-      publication_state: options?.publicationState,
+      approval_state: approvalState,
+      publication_state: publicationState,
     }),
   });
 }

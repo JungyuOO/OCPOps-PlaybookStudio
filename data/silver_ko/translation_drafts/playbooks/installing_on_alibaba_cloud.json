@@ -1,0 +1,352 @@
+{
+  "canonical_model": "playbook_document_v1",
+  "source_view_strategy": "playbook_ast_v1",
+  "book_slug": "installing_on_alibaba_cloud",
+  "title": "Alibaba Cloud에 설치",
+  "version": "4.20",
+  "locale": "ko",
+  "source_uri": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_alibaba_cloud/index",
+  "source_language": "ko",
+  "language_hint": "ko",
+  "translation_status": "approved_ko",
+  "translation_stage": "approved_ko",
+  "translation_source_uri": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_alibaba_cloud/index",
+  "translation_source_language": "ko",
+  "translation_source_fingerprint": "89d7f043044c62153300de456a05db52bc327478316a55ed0d257a85653ebe5e",
+  "legal_notice_url": "https://docs.redhat.com/documentation/openshift_container_platform/4.20/html/installing_on_alibaba_cloud/legal-notice",
+  "review_status": "approved",
+  "pack_id": "openshift-4-20-core",
+  "inferred_version": "4.20",
+  "section_count": 4,
+  "source_metadata": {
+    "source_id": "openshift_container_platform:4.20:ko:installing_on_alibaba_cloud",
+    "source_type": "official_doc",
+    "source_lane": "official_ko",
+    "source_collection": "core",
+    "primary_input_kind": "",
+    "source_repo": "",
+    "source_branch": "",
+    "source_binding_kind": "",
+    "source_relative_path": "",
+    "source_relative_paths": [],
+    "source_mirror_root": "",
+    "fallback_input_kind": "",
+    "fallback_source_url": "",
+    "fallback_viewer_path": "",
+    "product": "openshift",
+    "version": "4.20",
+    "trust_score": 1.0,
+    "original_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installing_on_alibaba_cloud/index",
+    "original_title": "Alibaba Cloud에 설치",
+    "legal_notice_url": "https://docs.redhat.com/documentation/openshift_container_platform/4.20/html/installing_on_alibaba_cloud/legal-notice",
+    "license_or_terms": "Modified versions must remove all Red Hat trademarks.",
+    "review_status": "approved",
+    "verifiability": "anchor_backed",
+    "updated_at": "2026-04-27T23:32:10Z",
+    "translation_source_language": "ko",
+    "parsed_artifact_id": "parsed:openshift_container_platform:4.20:ko:installing_on_alibaba_cloud",
+    "tenant_id": "public",
+    "workspace_id": "core",
+    "pack_id": "openshift_container_platform-4.20-core",
+    "pack_version": "4.20",
+    "bundle_scope": "official",
+    "classification": "public",
+    "access_groups": [
+      "public"
+    ],
+    "provider_egress_policy": "unspecified",
+    "approval_state": "approved",
+    "publication_state": "published",
+    "redaction_state": "not_required",
+    "citation_eligible": true,
+    "citation_block_reason": ""
+  },
+  "anchor_map": {
+    "alibaba-cloud에-openshift-container-platform-설치": "/docs/ocp/4.20/ko/installing_on_alibaba_cloud/index.html#alibaba-cloud에-openshift-container-platform-설치",
+    "1장.-지원-설치-관리자를-사용하여-alibaba-cloud에-클러스터-설치": "/docs/ocp/4.20/ko/installing_on_alibaba_cloud/index.html#1장.-지원-설치-관리자를-사용하여-alibaba-cloud에-클러스터-설치",
+    "1.1.-지원-설치-관리자를-사용하여-클러스터를-생성하는-프로세스-개요": "/docs/ocp/4.20/ko/installing_on_alibaba_cloud/index.html#1.1.-지원-설치-관리자를-사용하여-클러스터를-생성하는-프로세스-개요",
+    "1.2.-검색-이미지를-qcow2-형식으로-변환": "/docs/ocp/4.20/ko/installing_on_alibaba_cloud/index.html#1.2.-검색-이미지를-qcow2-형식으로-변환"
+  },
+  "sections": [
+    {
+      "section_id": "installing_on_alibaba_cloud:alibaba-cloud에-openshift-container-platform-설치",
+      "section_key": "installing_on_alibaba_cloud:alibaba-cloud에-openshift-container-platform-설치",
+      "ordinal": 1,
+      "heading": "Alibaba Cloud에 OpenShift Container Platform 설치",
+      "level": 2,
+      "path": [
+        "Alibaba Cloud에 OpenShift Container Platform 설치"
+      ],
+      "section_path": [
+        "Alibaba Cloud에 OpenShift Container Platform 설치"
+      ],
+      "section_path_label": "Alibaba Cloud에 OpenShift Container Platform 설치",
+      "anchor": "alibaba-cloud에-openshift-container-platform-설치",
+      "anchor_id": "alibaba-cloud에-openshift-container-platform-설치",
+      "viewer_path": "/docs/ocp/4.20/ko/installing_on_alibaba_cloud/index.html#alibaba-cloud에-openshift-container-platform-설치",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "이 문서에서는 Alibaba Cloud에 OpenShift Container Platform을 설치하는 방법을 설명합니다."
+        }
+      ]
+    },
+    {
+      "section_id": "installing_on_alibaba_cloud:1장.-지원-설치-관리자를-사용하여-alibaba-cloud에-클러스터-설치",
+      "section_key": "installing_on_alibaba_cloud:1장.-지원-설치-관리자를-사용하여-alibaba-cloud에-클러스터-설치",
+      "ordinal": 2,
+      "heading": "1장. 지원 설치 관리자를 사용하여 Alibaba Cloud에 클러스터 설치",
+      "level": 2,
+      "path": [
+        "1장. 지원 설치 관리자를 사용하여 Alibaba Cloud에 클러스터 설치"
+      ],
+      "section_path": [
+        "1장. 지원 설치 관리자를 사용하여 Alibaba Cloud에 클러스터 설치"
+      ],
+      "section_path_label": "1장. 지원 설치 관리자를 사용하여 Alibaba Cloud에 클러스터 설치",
+      "anchor": "1장.-지원-설치-관리자를-사용하여-alibaba-cloud에-클러스터-설치",
+      "anchor_id": "1장.-지원-설치-관리자를-사용하여-alibaba-cloud에-클러스터-설치",
+      "viewer_path": "/docs/ocp/4.20/ko/installing_on_alibaba_cloud/index.html#1장.-지원-설치-관리자를-사용하여-alibaba-cloud에-클러스터-설치",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Alibaba Cloud는 온라인 비즈니스 및 글로벌 기업에 광범위한 클라우드 컴퓨팅 및 데이터 스토리지 서비스를 제공합니다. 지원 설치 관리자를 사용하여 Alibaba Cloud에 OpenShift Container Platform 클러스터를 설치할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "중요"
+        },
+        {
+          "kind": "paragraph",
+          "text": "지원 설치 관리자를 사용하여 Alibaba Cloud를 설치하는 것은 기술 프리뷰 기능 전용입니다. 기술 프리뷰 기능은 Red Hat 프로덕션 서비스 수준 계약(SLA)에서 지원되지 않으며 기능적으로 완전하지 않을 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "따라서 프로덕션 환경에서 사용하는 것은 권장하지 않습니다. 이러한 기능을 사용하면 향후 제품 기능을 조기에 이용할 수 있어 개발 과정에서 고객이 기능을 테스트하고 피드백을 제공할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Red Hat 기술 프리뷰 기능의 지원 범위에 대한 자세한 내용은 기술 프리뷰 기능 지원 범위 를 참조하십시오."
+        }
+      ]
+    },
+    {
+      "section_id": "installing_on_alibaba_cloud:1.1.-지원-설치-관리자를-사용하여-클러스터를-생성하는-프로세스-개요",
+      "section_key": "installing_on_alibaba_cloud:1.1.-지원-설치-관리자를-사용하여-클러스터를-생성하는-프로세스-개요",
+      "ordinal": 3,
+      "heading": "1.1. 지원 설치 관리자를 사용하여 클러스터를 생성하는 프로세스 개요",
+      "level": 3,
+      "path": [
+        "1장. 지원 설치 관리자를 사용하여 Alibaba Cloud에 클러스터 설치",
+        "1.1. 지원 설치 관리자를 사용하여 클러스터를 생성하는 프로세스 개요"
+      ],
+      "section_path": [
+        "1장. 지원 설치 관리자를 사용하여 Alibaba Cloud에 클러스터 설치",
+        "1.1. 지원 설치 관리자를 사용하여 클러스터를 생성하는 프로세스 개요"
+      ],
+      "section_path_label": "1장. 지원 설치 관리자를 사용하여 Alibaba Cloud에 클러스터 설치 > 1.1. 지원 설치 관리자를 사용하여 클러스터를 생성하는 프로세스 개요",
+      "anchor": "1.1.-지원-설치-관리자를-사용하여-클러스터를-생성하는-프로세스-개요",
+      "anchor_id": "1.1.-지원-설치-관리자를-사용하여-클러스터를-생성하는-프로세스-개요",
+      "viewer_path": "/docs/ocp/4.20/ko/installing_on_alibaba_cloud/index.html#1.1.-지원-설치-관리자를-사용하여-클러스터를-생성하는-프로세스-개요",
+      "semantic_role": "overview",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "설치 프로세스의 주요 단계는 다음과 같습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "지원 설치 프로그램으로 클러스터를 생성하고 생성된 이미지를 다운로드합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "이미지를 `QCOW2` 형식으로 변환합니다. 자세한 내용은 다음 섹션을 참조하십시오."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Alibaba Cloud의 오브젝트 스토리지 서비스 버킷에 이미지를 업로드합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Alibaba Cloud의 Elastic Compute Service로 이미지를 가져옵니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Alibaba Cloud 리소스를 프로비저닝합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "VPC(Virtual Private Cloud) 콘솔에서 네트워킹 구성을 설정합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Alibaba Cloud DNS 콘솔에서 도메인 이름 시스템을 정의합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "ECS(Elastic Compute Service) 콘솔에서 컴퓨팅 인스턴스를 프로비저닝합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "지원 설치 프로그램에서 호스트 검색을 완료합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Alibaba Cloud에서 네트워크 구성을 완료합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "지원 설치 프로그램에서 클러스터 구성 및 설치를 완료합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "추가 리소스"
+        },
+        {
+          "kind": "paragraph",
+          "text": "지원 설치 관리자를 사용하여 OpenShift Container Platform 설치"
+        }
+      ]
+    },
+    {
+      "section_id": "installing_on_alibaba_cloud:1.2.-검색-이미지를-qcow2-형식으로-변환",
+      "section_key": "installing_on_alibaba_cloud:1.2.-검색-이미지를-qcow2-형식으로-변환",
+      "ordinal": 4,
+      "heading": "1.2. 검색 이미지를 QCOW2 형식으로 변환",
+      "level": 3,
+      "path": [
+        "1장. 지원 설치 관리자를 사용하여 Alibaba Cloud에 클러스터 설치",
+        "1.2. 검색 이미지를 QCOW2 형식으로 변환"
+      ],
+      "section_path": [
+        "1장. 지원 설치 관리자를 사용하여 Alibaba Cloud에 클러스터 설치",
+        "1.2. 검색 이미지를 QCOW2 형식으로 변환"
+      ],
+      "section_path_label": "1장. 지원 설치 관리자를 사용하여 Alibaba Cloud에 클러스터 설치 > 1.2. 검색 이미지를 QCOW2 형식으로 변환",
+      "anchor": "1.2.-검색-이미지를-qcow2-형식으로-변환",
+      "anchor_id": "1.2.-검색-이미지를-qcow2-형식으로-변환",
+      "viewer_path": "/docs/ocp/4.20/ko/installing_on_alibaba_cloud/index.html#1.2.-검색-이미지를-qcow2-형식으로-변환",
+      "semantic_role": "procedure",
+      "block_kinds": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "code",
+        "paragraph",
+        "code",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "code"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Alibaba Cloud로 가져오기 전에 생성된 ISO를 `QCOW2` 형식으로 변환합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "사전 요구 사항"
+        },
+        {
+          "kind": "paragraph",
+          "text": "클러스터를 생성하고 지원 설치 프로그램에서 검색 이미지를 다운로드했습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "데스크탑 머신과 같이 클러스터 외부에 있는 Linux 시스템에 액세스할 수 있습니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "프로세스"
+        },
+        {
+          "kind": "paragraph",
+          "text": "Linux 시스템에서 명령줄 인터페이스를 엽니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "다음 명령을 실행하여 시스템에 가상화 플래그가 활성화되어 있는지 확인합니다."
+        },
+        {
+          "kind": "code",
+          "language": "shell-session",
+          "code": "$ grep -e lm -e svm -e vmx /proc/cpuinfo",
+          "copy_text": "$ grep -e lm -e svm -e vmx /proc/cpuinfo",
+          "wrap_hint": true,
+          "overflow_hint": "toggle",
+          "caption": ""
+        },
+        {
+          "kind": "paragraph",
+          "text": "다음 명령을 실행하여 RHEL 또는 Fedora 시스템에 `qemu-img` 패키지를 설치합니다."
+        },
+        {
+          "kind": "code",
+          "language": "shell-session",
+          "code": "$ sudo dnf install -y qemu-img",
+          "copy_text": "$ sudo dnf install -y qemu-img",
+          "wrap_hint": true,
+          "overflow_hint": "toggle",
+          "caption": ""
+        },
+        {
+          "kind": "paragraph",
+          "text": "참고"
+        },
+        {
+          "kind": "paragraph",
+          "text": "시스템에서 `APT` 패키지 관리자를 사용하는 경우 대신 `qemu-utils` 라는 이름으로 패키지를 설치합니다."
+        },
+        {
+          "kind": "paragraph",
+          "text": "다음 명령을 실행하여 이미지를 `QCOW2` 로 변환합니다."
+        },
+        {
+          "kind": "code",
+          "language": "shell-session",
+          "code": "$ qemu-img convert -O qcow2 ${CLUSTER_NAME}.iso ${CLUSTER_NAME}.qcow2",
+          "copy_text": "$ qemu-img convert -O qcow2 ${CLUSTER_NAME}.iso ${CLUSTER_NAME}.qcow2",
+          "wrap_hint": true,
+          "overflow_hint": "toggle",
+          "caption": ""
+        }
+      ]
+    }
+  ],
+  "quality_status": "ready",
+  "quality_score": 0.0,
+  "quality_flags": []
+}

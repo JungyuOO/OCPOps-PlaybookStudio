@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
+from difflib import SequenceMatcher
 from pathlib import Path
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, unquote, urlencode, urlparse, urlunparse
 
 from play_book_studio.config.settings import load_settings
 
@@ -25,6 +28,7 @@ from .source_books_wiki_relations import (
     _active_runtime_markdown_path,
     _figure_asset_filename,
     _figure_viewer_href,
+    _local_figure_asset_url,
     _preferred_book_href,
 )
 from .viewer_page import _render_page_overlay_toolbar
@@ -44,12 +48,12 @@ def _resolve_page_mode(page_mode: str) -> str:
 
 def _target_anchor_from_request(viewer_path: str) -> str:
     request = urlparse(str(viewer_path or "").strip())
-    fragment = str(request.fragment or "").strip()
+    fragment = unquote(str(request.fragment or "").strip())
     if fragment:
         return fragment
     params = parse_qs(request.query, keep_blank_values=False)
     for key in ("section", "anchor", "section_anchor"):
-        value = str((params.get(key) or [""])[0]).strip()
+        value = unquote(str((params.get(key) or [""])[0]).strip())
         if value:
             return value
     return ""
@@ -58,6 +62,87 @@ def _target_anchor_from_request(viewer_path: str) -> str:
 def _viewer_path_without_query_or_fragment(viewer_path: str) -> str:
     request = urlparse(str(viewer_path or "").strip())
     return urlunparse(request._replace(query="", fragment=""))
+
+
+def _normalize_anchor_value(value: object) -> str:
+    text = unquote(str(value or "").strip()).strip().lstrip("#").rstrip(":")
+    return " ".join(unicodedata.normalize("NFKC", text).lower().split())
+
+
+def _lookup_key(value: object) -> str:
+    text = _normalize_anchor_value(value)
+    return re.sub(r"[^0-9a-z가-힣]+", "", text)
+
+
+def _heading_key(value: object) -> str:
+    text = _normalize_anchor_value(value)
+    text = re.sub(r"^\s*(?:제\s*)?\d+(?:\.\d+)*\.?\s*", "", text).strip(": ")
+    return re.sub(r"[^0-9a-z가-힣]+", "", text)
+
+
+def _section_candidate_values(section: dict) -> list[str]:
+    values = [
+        str(section.get("anchor") or ""),
+        str(section.get("anchor_id") or ""),
+        str(section.get("section_id") or ""),
+        str(section.get("section_key") or ""),
+        str(section.get("heading") or ""),
+    ]
+    viewer_path = str(section.get("viewer_path") or "")
+    if "#" in viewer_path:
+        values.append(viewer_path.split("#", 1)[1])
+    for key in ("section_path", "path"):
+        for item in section.get(key) or []:
+            if str(item or "").strip():
+                values.append(str(item))
+    return values
+
+
+def _is_probable_heading_match(left: object, right: object) -> bool:
+    left_key = _heading_key(left)
+    right_key = _heading_key(right)
+    if not left_key or not right_key:
+        return False
+    if left_key == right_key:
+        return True
+    if len(left_key) >= 6 and len(right_key) >= 6 and (left_key in right_key or right_key in left_key):
+        return True
+    if len(left_key) < 6 or len(right_key) < 6:
+        return False
+    return SequenceMatcher(None, left_key, right_key).ratio() >= 0.74
+
+
+def _find_section_index(
+    sections: list[dict],
+    target_anchor: str,
+    *,
+    section_hints: list[str] | None = None,
+) -> int | None:
+    target = _normalize_anchor_value(target_anchor)
+    if not target:
+        return None
+    for index, row in enumerate(sections):
+        if _normalize_anchor_value(row.get("anchor")) == target:
+            return index
+
+    target_key = _lookup_key(target)
+    if target_key:
+        for index, row in enumerate(sections):
+            for value in _section_candidate_values(row):
+                if _lookup_key(value) == target_key:
+                    return index
+
+    for hint in section_hints or []:
+        if not str(hint or "").strip():
+            continue
+        hint_key = _lookup_key(hint)
+        for index, row in enumerate(sections):
+            for value in _section_candidate_values(row):
+                if hint_key and _lookup_key(value) == hint_key:
+                    return index
+            if _is_probable_heading_match(hint, row.get("heading")):
+                return index
+    return None
 
 
 def _single_section_href(viewer_path: str, anchor: str) -> str:
@@ -98,17 +183,59 @@ def _select_view_sections(
     *,
     target_anchor: str,
     page_mode: str,
+    section_hints: list[str] | None = None,
 ) -> list[dict]:
     if _resolve_page_mode(page_mode) == "multi":
         return sections
     if not sections:
         return sections
-    normalized_anchor = str(target_anchor or "").strip()
-    if normalized_anchor:
-        for row in sections:
-            if str(row.get("anchor") or "").strip() == normalized_anchor:
-                return [row]
+    if str(target_anchor or "").strip():
+        index = _find_section_index(sections, target_anchor, section_hints=section_hints)
+        if index is not None:
+            return [sections[index]]
     return [sections[0]]
+
+
+def _section_block_text(section: dict) -> str:
+    block_texts: list[str] = []
+    for block in section.get("blocks") or []:
+        if not isinstance(block, dict):
+            continue
+        text = str(block.get("text") or block.get("caption") or block.get("alt") or "").strip()
+        if text:
+            block_texts.append(text)
+    text = str(section.get("text") or "").strip()
+    if text:
+        block_texts.append(text)
+    return " ".join(" ".join(item.split()) for item in block_texts if item).strip()
+
+
+def _is_leading_source_cover_stub(section: dict) -> bool:
+    section_path = [str(item).strip() for item in (section.get("section_path") or []) if str(item).strip()]
+    if len(section_path) != 1:
+        return False
+    block_rows = [block for block in (section.get("blocks") or []) if isinstance(block, dict)]
+    block_kinds = {str(block.get("kind") or "").strip().lower() for block in block_rows}
+    if block_kinds - {"", "paragraph"}:
+        return False
+    text = _section_block_text(section)
+    if not text or len(text) > 260:
+        return False
+    normalized_text = text.lower()
+    return (
+        "법적 고지" in normalized_text
+        or "legal notice" in normalized_text
+        or ("red hat" in normalized_text and "overview" in normalized_text)
+    )
+
+
+def _trim_leading_runtime_cover_section(sections: list[dict], *, title: str) -> list[dict]:
+    del title
+    if len(sections) < 2:
+        return sections
+    if _is_leading_source_cover_stub(sections[0]):
+        return sections[1:]
+    return sections
 
 
 def _build_section_navigation(
@@ -117,16 +244,15 @@ def _build_section_navigation(
     target_anchor: str,
     page_mode: str,
     viewer_path: str = "",
+    section_hints: list[str] | None = None,
 ) -> list[dict[str, str]]:
     if _resolve_page_mode(page_mode) != "single" or not sections:
         return []
     current_index = 0
-    normalized_anchor = str(target_anchor or "").strip()
-    if normalized_anchor:
-        for index, row in enumerate(sections):
-            if str(row.get("anchor") or "").strip() == normalized_anchor:
-                current_index = index
-                break
+    if str(target_anchor or "").strip():
+        matched_index = _find_section_index(sections, target_anchor, section_hints=section_hints)
+        if matched_index is not None:
+            current_index = matched_index
     navigation: list[dict[str, str]] = []
     if current_index > 0:
         previous_row = sections[current_index - 1]
@@ -241,21 +367,53 @@ def _root_figure_asset_by_name(root_dir: Path, slug: str, asset_name: str) -> di
     return {}
 
 
-def _relation_figure_blocks(root_dir: Path, book_slug: str, anchor: str) -> list[dict[str, str]]:
+def _relation_section_hints(root_dir: Path, book_slug: str, anchor: str) -> list[str]:
     payload = _load_root_json(root_dir, "data/wiki_relations/figure_section_index.json")
     by_slug = payload.get("by_slug") if isinstance(payload.get("by_slug"), dict) else {}
     records = by_slug.get(str(book_slug or "").strip())
     if not isinstance(records, list):
         return []
+    hints: list[str] = []
+    target_anchor = _normalize_anchor_value(anchor)
+    target_key = _lookup_key(anchor)
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        record_anchor = str(record.get("section_anchor") or "").strip()
+        if _normalize_anchor_value(record_anchor) != target_anchor and _lookup_key(record_anchor) != target_key:
+            continue
+        hint = str(record.get("section_heading") or "").strip()
+        if hint and hint not in hints:
+            hints.append(hint)
+    return hints
+
+
+def _relation_record_matches_section(record: dict, section: dict) -> bool:
+    record_anchor = str(record.get("section_anchor") or "").strip()
+    section_anchor = str(section.get("anchor") or "").strip()
+    if record_anchor and _normalize_anchor_value(record_anchor) == _normalize_anchor_value(section_anchor):
+        return True
+    if record_anchor and _lookup_key(record_anchor) and _lookup_key(record_anchor) == _lookup_key(section_anchor):
+        return True
+    return _is_probable_heading_match(record.get("section_heading"), section.get("heading"))
+
+
+def _relation_figure_blocks_for_section(root_dir: Path, book_slug: str, section: dict) -> list[dict[str, str]]:
+    payload = _load_root_json(root_dir, "data/wiki_relations/figure_section_index.json")
+    by_slug = payload.get("by_slug") if isinstance(payload.get("by_slug"), dict) else {}
+    records = by_slug.get(str(book_slug or "").strip())
+    if not isinstance(records, list):
+        return []
+    anchor = str(section.get("anchor") or "").strip()
     blocks: list[dict[str, str]] = []
     for record in records:
         if not isinstance(record, dict):
             continue
-        if str(record.get("section_anchor") or "").strip() != str(anchor or "").strip():
+        if not _relation_record_matches_section(record, section):
             continue
         asset_name = str(record.get("asset_name") or "").strip()
         asset = _root_figure_asset_by_name(root_dir, book_slug, asset_name)
-        asset_url = str(asset.get("asset_url") or "").strip()
+        asset_url = _local_figure_asset_url(root_dir, book_slug, asset_name) or str(asset.get("asset_url") or "").strip()
         viewer_path = str(record.get("viewer_path") or "").strip() or _figure_viewer_href(book_slug, asset)
         asset_ref = str(asset.get("source_asset_ref") or asset_name or _figure_asset_filename(asset)).strip()
         blocks.append(
@@ -282,8 +440,7 @@ def _sections_with_relation_figures(root_dir: Path, book_slug: str, sections: li
     enriched: list[dict] = []
     for row in sections:
         next_row = dict(row)
-        anchor = str(next_row.get("anchor") or "").strip()
-        relation_blocks = _relation_figure_blocks(root_dir, book_slug, anchor)
+        relation_blocks = _relation_figure_blocks_for_section(root_dir, book_slug, next_row)
         if not relation_blocks:
             enriched.append(next_row)
             continue
@@ -312,8 +469,8 @@ def _overlay_target_for_view(
     page_mode: str,
 ) -> dict[str, str]:
     resolved_anchor = str(target_anchor or "").strip()
-    if not resolved_anchor and _resolve_page_mode(page_mode) == "single" and visible_sections:
-        resolved_anchor = str(visible_sections[0].get("anchor") or "").strip()
+    if _resolve_page_mode(page_mode) == "single" and visible_sections:
+        resolved_anchor = str(visible_sections[0].get("anchor") or "").strip() or resolved_anchor
     if resolved_anchor:
         return {
             "target_kind": "section",
@@ -383,8 +540,15 @@ def internal_viewer_html(root_dir: Path, viewer_path: str, *, page_mode: str = "
         eyebrow, summary = _playbook_viewer_chrome(playbook_book)
         content_sections = sections
 
+    content_sections = _trim_leading_runtime_cover_section(content_sections, title=book_title)
     content_sections = _sections_with_relation_figures(root_dir, book_slug, content_sections)
-    visible_sections = _select_view_sections(content_sections, target_anchor=target_anchor, page_mode=page_mode)
+    section_hints = _relation_section_hints(root_dir, book_slug, target_anchor)
+    visible_sections = _select_view_sections(
+        content_sections,
+        target_anchor=target_anchor,
+        page_mode=page_mode,
+        section_hints=section_hints,
+    )
     cards = _build_study_section_cards(visible_sections, book_slug=book_slug, target_anchor=target_anchor, embedded=embedded, root_dir=root_dir)
     overlay_target = _overlay_target_for_view(
         book_slug=book_slug,
@@ -408,6 +572,7 @@ def internal_viewer_html(root_dir: Path, viewer_path: str, *, page_mode: str = "
             target_anchor=target_anchor,
             page_mode=page_mode,
             viewer_path=base_viewer_path,
+            section_hints=section_hints,
         ),
         section_metrics=_build_section_metrics(content_sections),
         page_overlay_toolbar=_render_page_overlay_toolbar(
@@ -464,8 +629,15 @@ def internal_active_runtime_markdown_viewer_html(root_dir: Path, viewer_path: st
             content_sections = _trim_leading_title_section(sections, title=str(title))
             summary = _markdown_summary(content_sections)
             source_url = ""
+    content_sections = _trim_leading_runtime_cover_section(content_sections, title=str(title))
     content_sections = _sections_with_relation_figures(root_dir, slug, content_sections)
-    visible_sections = _select_view_sections(content_sections, target_anchor=target_anchor, page_mode=page_mode)
+    section_hints = _relation_section_hints(root_dir, slug, target_anchor)
+    visible_sections = _select_view_sections(
+        content_sections,
+        target_anchor=target_anchor,
+        page_mode=page_mode,
+        section_hints=section_hints,
+    )
     cards = _build_study_section_cards(visible_sections, book_slug=slug, target_anchor=target_anchor, embedded=embedded, root_dir=root_dir)
     overlay_target = _overlay_target_for_view(
         book_slug=slug,
@@ -490,6 +662,7 @@ def internal_active_runtime_markdown_viewer_html(root_dir: Path, viewer_path: st
             target_anchor=target_anchor,
             page_mode=page_mode,
             viewer_path=base_viewer_path,
+            section_hints=section_hints,
         ),
         section_metrics=_build_section_metrics(content_sections),
         page_overlay_toolbar=_render_page_overlay_toolbar(

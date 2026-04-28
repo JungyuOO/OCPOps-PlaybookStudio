@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import subprocess
+import json
+import urllib.error
+import urllib.request
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
@@ -24,6 +27,7 @@ from play_book_studio.app.data_control_room_buckets import (
 from play_book_studio.config.settings import load_settings
 from play_book_studio.intake.artifact_bundle import iter_customer_pack_book_payload_paths
 from play_book_studio.intake import CustomerPackDraftStore
+from play_book_studio.source_authority import COMMUNITY_AUTHORITY, canonical_source_authority
 
 from .customer_pack_read_boundary import customer_pack_draft_id_from_viewer_path, load_customer_pack_read_boundary
 from .data_control_room_helpers import (
@@ -80,6 +84,19 @@ def _book_customer_pack_draft_id(book: dict[str, object]) -> str:
     return slug.split("--", 1)[0].strip() if "--" in slug else ""
 
 
+def _book_is_community_runtime(book: dict[str, object]) -> bool:
+    return canonical_source_authority(book) == COMMUNITY_AUTHORITY
+
+
+def _book_is_private_customer_runtime(book: dict[str, object]) -> bool:
+    if _book_is_community_runtime(book):
+        return False
+    return (
+        str(book.get("boundary_truth") or "").strip() == "private_customer_pack_runtime"
+        or str(book.get("source_lane") or "").strip() == "customer_source_first_pack"
+    )
+
+
 def _filter_readable_customer_pack_books(
     books: list[dict[str, object]],
     *,
@@ -110,6 +127,8 @@ def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, i
     gate_path = root / "reports" / "build_logs" / "foundry_runs" / "profiles" / "morning_gate" / "latest.json"
     promotion_report_paths = _llmwiki_promotion_report_paths(root)
     validation_loop_report_paths = _llmwiki_validation_loop_report_paths(root)
+    role_rehearsal_report_paths = _role_rehearsal_report_paths(root)
+    contextual_enrichment_report_paths = _llmwiki_contextual_enrichment_report_paths(root)
     custom_material_dir = root / ".P_docs" / "01_검토대기_플레이북재료"
     custom_material_files = sorted(path for path in custom_material_dir.rglob("*") if path.is_file()) if custom_material_dir.exists() else []
     draft_store = CustomerPackDraftStore(root)
@@ -119,6 +138,8 @@ def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, i
         root / ".git" / "HEAD",
         *promotion_report_paths,
         *validation_loop_report_paths,
+        *role_rehearsal_report_paths,
+        *contextual_enrichment_report_paths,
         root / ".P_docs" / "01_검토대기_플레이북재료",
         root / ".P_docs" / "_review_bucket_manifest.json",
         *custom_material_files,
@@ -150,6 +171,8 @@ def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, i
         ]
     )
     fingerprints.append((f"git-state:{git_signature}", True, 0, len(git_signature)))
+    runtime_dependency_signature = _runtime_dependency_fingerprint(root)
+    fingerprints.append((f"runtime-deps:{runtime_dependency_signature}", True, 0, len(runtime_dependency_signature)))
     return tuple(fingerprints)
 
 
@@ -161,11 +184,27 @@ def _llmwiki_promotion_report_paths(root: Path) -> list[Path]:
 
 
 def _latest_llmwiki_promotion_report_path(root: Path) -> Path | None:
-    candidates = [
-        path
-        for path in _llmwiki_promotion_report_paths(root)
-        if "promotion-report" in path.name
-    ]
+    evidence_markers = (
+        "artifact-manifest",
+        "chat-matrix",
+        "customer-master",
+        "official-gold-gate",
+        "runtime-maintenance",
+        "runtime-report",
+    )
+    candidates: list[Path] = []
+    for path in _llmwiki_promotion_report_paths(root):
+        if any(marker in path.name for marker in evidence_markers):
+            continue
+        payload = _safe_read_json(path)
+        summary = _dict_from(payload.get("summary"))
+        is_top_level_report = bool(
+            payload.get("ready_for_llmwiki_promotion") is not None
+            or summary.get("ready_for_llmwiki_promotion") is not None
+            or _dict_from(summary.get("contracts"))
+        )
+        if is_top_level_report:
+            candidates.append(path)
     if not candidates:
         return None
     return max(candidates, key=lambda path: path.stat().st_mtime_ns if path.exists() else 0)
@@ -180,6 +219,48 @@ def _llmwiki_validation_loop_report_paths(root: Path) -> list[Path]:
 
 def _latest_llmwiki_validation_loop_report_path(root: Path) -> Path | None:
     candidates = _llmwiki_validation_loop_report_paths(root)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime_ns if path.exists() else 0)
+
+
+def _role_rehearsal_report_paths(root: Path) -> list[Path]:
+    reports_dir = root / ".kugnusdocs" / "reports"
+    if not reports_dir.exists():
+        return []
+    return sorted(reports_dir.glob("*operator-learner-role-rehearsal*.json"), key=lambda path: path.name)
+
+
+def _latest_role_rehearsal_report_path(root: Path) -> Path | None:
+    candidates = _role_rehearsal_report_paths(root)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime_ns if path.exists() else 0)
+
+
+def _llmwiki_evolution_gate_report_paths(root: Path) -> list[Path]:
+    reports_dir = root / ".kugnusdocs" / "reports"
+    if not reports_dir.exists():
+        return []
+    return sorted(reports_dir.glob("*llmwiki-evolution-gate*.json"), key=lambda path: path.name)
+
+
+def _latest_llmwiki_evolution_gate_report_path(root: Path) -> Path | None:
+    candidates = _llmwiki_evolution_gate_report_paths(root)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime_ns if path.exists() else 0)
+
+
+def _llmwiki_contextual_enrichment_report_paths(root: Path) -> list[Path]:
+    reports_dir = root / ".kugnusdocs" / "reports"
+    if not reports_dir.exists():
+        return []
+    return sorted(reports_dir.glob("*llmwiki-contextual-enrichment-gate*.json"), key=lambda path: path.name)
+
+
+def _latest_llmwiki_contextual_enrichment_report_path(root: Path) -> Path | None:
+    candidates = _llmwiki_contextual_enrichment_report_paths(root)
     if not candidates:
         return None
     return max(candidates, key=lambda path: path.stat().st_mtime_ns if path.exists() else 0)
@@ -208,7 +289,27 @@ def _current_git_context(root: Path) -> dict[str, object]:
         "branch": _git_text(root, "branch", "--show-current"),
         "head": _git_text(root, "rev-parse", "HEAD"),
         "dirty_tracked_files": dirty,
+        "dirty_tracked_latest_mtime_ns": _dirty_tracked_latest_mtime_ns(root),
     }
+
+
+def _dirty_tracked_latest_mtime_ns(root: Path) -> int:
+    latest = 0
+    status_text = _git_text(root, "status", "--porcelain", "--untracked-files=no")
+    for line in status_text.splitlines():
+        if len(line) < 4:
+            continue
+        path_text = line[3:].strip().strip('"')
+        if " -> " in path_text:
+            path_text = path_text.rsplit(" -> ", 1)[1].strip().strip('"')
+        if not path_text:
+            continue
+        path = root / path_text
+        try:
+            latest = max(latest, int(path.stat().st_mtime_ns))
+        except OSError:
+            continue
+    return latest
 
 
 def _dict_from(value: object) -> dict[str, object]:
@@ -272,7 +373,9 @@ def _build_llmwiki_promotion_control_status(root: Path) -> dict[str, object]:
     current_head = str(current_git.get("head") or "").strip()
     report_head = str(report_git.get("head") or "").strip()
     head_matches_current = bool(current_head and report_head and current_head == report_head)
-    stale = not head_matches_current or bool(current_git.get("dirty_tracked_files"))
+    report_mtime_ns = int(report_path.stat().st_mtime_ns if report_path.exists() else 0)
+    dirty_after_report = _safe_int(current_git.get("dirty_tracked_latest_mtime_ns")) > report_mtime_ns
+    stale = not head_matches_current or dirty_after_report
     summary = _dict_from(report.get("summary"))
     raw_failures = _list_from(summary.get("failures")) or _list_from(report.get("failures"))
     report_status = str(report.get("status") or summary.get("status") or "unknown")
@@ -304,6 +407,7 @@ def _build_llmwiki_promotion_control_status(root: Path) -> dict[str, object]:
             "git": report_git,
             "current_git": current_git,
             "head_matches_current": head_matches_current,
+            "dirty_after_report": dirty_after_report,
             "stale": stale,
         },
         "contracts": {
@@ -416,7 +520,9 @@ def _build_llmwiki_validation_loop_control_status(root: Path) -> dict[str, objec
     current_head = str(current_git.get("head") or "").strip()
     report_head = str(report_git.get("head") or "").strip()
     head_matches_current = bool(current_head and report_head and current_head == report_head)
-    stale = not head_matches_current or bool(current_git.get("dirty_tracked_files"))
+    report_mtime_ns = int(report_path.stat().st_mtime_ns if report_path.exists() else 0)
+    dirty_after_report = _safe_int(current_git.get("dirty_tracked_latest_mtime_ns")) > report_mtime_ns
+    stale = not head_matches_current or dirty_after_report
     acceptance = _dict_from(report.get("acceptance"))
     failures = [
         str(item)
@@ -439,6 +545,7 @@ def _build_llmwiki_validation_loop_control_status(root: Path) -> dict[str, objec
             "git": report_git,
             "current_git": current_git,
             "head_matches_current": head_matches_current,
+            "dirty_after_report": dirty_after_report,
             "stale": stale,
         },
         "surya_policy": _dict_from(report.get("surya_policy")),
@@ -455,6 +562,328 @@ def _build_llmwiki_validation_loop_control_status(root: Path) -> dict[str, objec
             "chat_live_total": _safe_int(metrics.get("chat_live_total")),
         },
         "commands": _dict_from(report.get("commands")),
+    }
+
+
+def _build_llmwiki_evolution_gate_control_status(root: Path) -> dict[str, object]:
+    report_path = _latest_llmwiki_evolution_gate_report_path(root)
+    current_git = _current_git_context(root)
+    if report_path is None:
+        return {
+            "status": "missing",
+            "ready": False,
+            "failures": ["llmwiki evolution gate report is missing"],
+            "selected_report": {
+                "path": "",
+                "exists": False,
+                "generated_at": "",
+                "git": {},
+                "current_git": current_git,
+                "head_matches_current": False,
+                "stale": True,
+            },
+            "checks": {},
+            "metrics": {},
+        }
+    report = _safe_read_json(report_path)
+    report_git = _dict_from(report.get("git"))
+    current_head = str(current_git.get("head") or "").strip()
+    report_head = str(report_git.get("head") or "").strip()
+    head_matches_current = bool(current_head and report_head and current_head == report_head)
+    report_mtime_ns = int(report_path.stat().st_mtime_ns if report_path.exists() else 0)
+    dirty_after_report = _safe_int(current_git.get("dirty_tracked_latest_mtime_ns")) > report_mtime_ns
+    stale = not head_matches_current or dirty_after_report
+    status = "stale" if stale else str(report.get("status") or "unknown")
+    failures = [str(item) for item in _list_from(report.get("failures")) if str(item).strip()]
+    if stale:
+        failures.append("llmwiki evolution gate report is stale for the current checkout")
+    quality = _dict_from(report.get("retrieval_quality_critic"))
+    backwrite = _dict_from(report.get("wiki_backwrite_candidate"))
+    anti_rot = _dict_from(report.get("wiki_lint_anti_rot"))
+    return {
+        "status": status,
+        "ready": bool(report.get("ready") and not stale and report.get("status") == "ok"),
+        "failures": failures,
+        "selected_report": {
+            "path": str(report_path),
+            "exists": report_path.exists(),
+            "generated_at": str(report.get("generated_at") or ""),
+            "git": report_git,
+            "current_git": current_git,
+            "head_matches_current": head_matches_current,
+            "dirty_after_report": dirty_after_report,
+            "stale": stale,
+        },
+        "checks": _dict_from(report.get("checks")),
+        "metrics": {
+            "quality_blockers": _safe_int(quality.get("blocker_count")),
+            "quality_warnings": _safe_int(quality.get("warning_count")),
+            "backwrite_candidates": _safe_int(backwrite.get("candidate_count")),
+            "anti_rot_blockers": _safe_int(anti_rot.get("blocker_count")),
+            "anti_rot_warnings": _safe_int(anti_rot.get("warning_count")),
+        },
+    }
+
+
+def _build_llmwiki_contextual_enrichment_control_status(root: Path) -> dict[str, object]:
+    report_path = _latest_llmwiki_contextual_enrichment_report_path(root)
+    current_git = _current_git_context(root)
+    if report_path is None:
+        return {
+            "status": "missing",
+            "ready": False,
+            "failures": ["llmwiki contextual enrichment gate report is missing"],
+            "selected_report": {
+                "path": "",
+                "exists": False,
+                "generated_at": "",
+                "git": {},
+                "current_git": current_git,
+                "head_matches_current": False,
+                "stale": True,
+            },
+            "checks": {},
+            "metrics": {},
+        }
+    report = _safe_read_json(report_path)
+    report_git = _dict_from(report.get("git"))
+    current_head = str(current_git.get("head") or "").strip()
+    report_head = str(report_git.get("head") or "").strip()
+    head_matches_current = bool(current_head and report_head and current_head == report_head)
+    report_mtime_ns = int(report_path.stat().st_mtime_ns if report_path.exists() else 0)
+    dirty_after_report = _safe_int(current_git.get("dirty_tracked_latest_mtime_ns")) > report_mtime_ns
+    stale = not head_matches_current or dirty_after_report
+    status = "stale" if stale else str(report.get("status") or "unknown")
+    failures = [str(item) for item in _list_from(report.get("failures")) if str(item).strip()]
+    if stale:
+        failures.append("llmwiki contextual enrichment gate report is stale for the current checkout")
+    coverage = _dict_from(report.get("coverage"))
+    total = _dict_from(coverage.get("total"))
+    recall_fixture = _dict_from(report.get("recall_fixture"))
+    return {
+        "status": status,
+        "ready": bool(report.get("ready") and not stale and report.get("status") == "ok"),
+        "failures": failures,
+        "selected_report": {
+            "path": str(report_path),
+            "exists": report_path.exists(),
+            "generated_at": str(report.get("generated_at") or ""),
+            "git": report_git,
+            "current_git": current_git,
+            "head_matches_current": head_matches_current,
+            "dirty_after_report": dirty_after_report,
+            "stale": stale,
+        },
+        "checks": _dict_from(report.get("checks")),
+        "metrics": {
+            "row_count": _safe_int(total.get("row_count")),
+            "runtime_contextual_count": _safe_int(total.get("runtime_contextual_count")),
+            "persisted_contextual_count": _safe_int(total.get("persisted_contextual_count")),
+            "contextual_prefix_count": _safe_int(total.get("contextual_prefix_count")),
+            "contextual_heading_path_count": _safe_int(total.get("contextual_heading_path_count")),
+            "recall_fixture_improved": bool(recall_fixture.get("improved")),
+        },
+    }
+
+
+def _role_rehearsal_git_context(report: dict[str, object]) -> dict[str, object]:
+    report_git = _dict_from(report.get("git"))
+    if report_git:
+        return report_git
+    return {
+        "branch": str(report.get("branch") or ""),
+        "head": str(report.get("head") or ""),
+    }
+
+
+def _probe_qdrant_dependency(root: Path, *, timeout: float = 1.5) -> dict[str, object]:
+    settings = load_settings(root)
+    url = f"{settings.qdrant_url.rstrip('/')}/collections"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            status_code = int(getattr(response, "status", 0) or 0)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return {
+            "id": "qdrant",
+            "ready": False,
+            "status": "down",
+            "url": url,
+            "collection": settings.qdrant_collection,
+            "collections": [],
+            "error": str(exc),
+        }
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as exc:
+        return {
+            "id": "qdrant",
+            "ready": False,
+            "status": "bad_json",
+            "url": url,
+            "collection": settings.qdrant_collection,
+            "collections": [],
+            "http_status": status_code,
+            "error": str(exc),
+        }
+    result = payload.get("result") if isinstance(payload, dict) else {}
+    rows = result.get("collections") if isinstance(result, dict) else []
+    collections = [
+        str(item.get("name") or "").strip()
+        for item in rows
+        if isinstance(item, dict) and str(item.get("name") or "").strip()
+    ]
+    collection_ready = settings.qdrant_collection in collections
+    return {
+        "id": "qdrant",
+        "ready": status_code < 400 and collection_ready,
+        "status": "ok" if status_code < 400 and collection_ready else "missing_collection",
+        "url": url,
+        "collection": settings.qdrant_collection,
+        "collections": collections,
+        "http_status": status_code,
+        "error": "" if collection_ready else f"missing collection: {settings.qdrant_collection}",
+    }
+
+
+def _runtime_dependency_fingerprint(root: Path) -> str:
+    qdrant = _probe_qdrant_dependency(root, timeout=0.5)
+    return "|".join(
+        [
+            "qdrant",
+            str(qdrant.get("status") or ""),
+            str(bool(qdrant.get("ready"))),
+            str(qdrant.get("collection") or ""),
+            str(qdrant.get("error") or "")[:120],
+        ]
+    )
+
+
+def _build_runtime_dependency_status(root: Path) -> dict[str, object]:
+    qdrant = _probe_qdrant_dependency(root)
+    checks = [qdrant]
+    failures = [
+        f"{check.get('id')}: {check.get('error') or check.get('status')}"
+        for check in checks
+        if not bool(check.get("ready"))
+    ]
+    ready = not failures
+    return {
+        "status": "ok" if ready else "blocked",
+        "ready": ready,
+        "failures": failures,
+        "checks": checks,
+        "qdrant": qdrant,
+    }
+
+
+def _build_role_rehearsal_control_status(root: Path) -> dict[str, object]:
+    report_path = _latest_role_rehearsal_report_path(root)
+    current_git = _current_git_context(root)
+    empty_roles = {
+        "operator_a": {"pass": 0, "total": 0, "ready": False},
+        "learner_b": {"pass": 0, "total": 0, "ready": False},
+    }
+    if report_path is None:
+        return {
+            "status": "missing",
+            "ready": False,
+            "pass_count": 0,
+            "total": 0,
+            "roles": empty_roles,
+            "acceptance": {},
+            "failures": ["operator/learner role rehearsal report is missing"],
+            "selected_report": {
+                "path": "",
+                "exists": False,
+                "generated_at": "",
+                "git": {},
+                "current_git": current_git,
+                "head_matches_current": False,
+                "stale": True,
+            },
+            "results": [],
+        }
+
+    report = _safe_read_json(report_path)
+    report_git = _role_rehearsal_git_context(report)
+    current_head = str(current_git.get("head") or "").strip()
+    report_head = str(report_git.get("head") or "").strip()
+    head_matches_current = bool(current_head and report_head and current_head == report_head)
+    report_mtime_ns = int(report_path.stat().st_mtime_ns if report_path.exists() else 0)
+    dirty_after_report = _safe_int(current_git.get("dirty_tracked_latest_mtime_ns")) > report_mtime_ns
+    stale = not head_matches_current or dirty_after_report
+    report_status = str(report.get("status") or "unknown").strip()
+    pass_count = _safe_int(report.get("pass_count"))
+    total = _safe_int(report.get("total"))
+    raw_roles = _dict_from(report.get("roles"))
+    acceptance = _dict_from(report.get("acceptance"))
+    roles: dict[str, object] = {}
+    failures = [str(item) for item in _list_from(report.get("failures")) if str(item).strip()]
+    for role_id in ("operator_a", "learner_b"):
+        role_payload = _dict_from(raw_roles.get(role_id))
+        role_pass = _safe_int(role_payload.get("pass"))
+        role_total = _safe_int(role_payload.get("total"))
+        role_ready = role_total > 0 and role_pass == role_total
+        roles[role_id] = {
+            "pass": role_pass,
+            "total": role_total,
+            "ready": role_ready,
+            "acceptance": str(acceptance.get(role_id) or ""),
+        }
+        if not role_ready:
+            failures.append(f"{role_id} role rehearsal is incomplete ({role_pass}/{role_total})")
+    results: list[dict[str, object]] = []
+    for result in _list_from(report.get("results")):
+        if not isinstance(result, dict):
+            continue
+        result_pass = bool(result.get("pass"))
+        result_id = str(result.get("id") or "").strip()
+        role_id = str(result.get("role") or "").strip()
+        results.append(
+            {
+                "id": result_id,
+                "role": role_id,
+                "goal": str(result.get("goal") or ""),
+                "pass": result_pass,
+                "status": str(result.get("status") or ""),
+                "response_kind": str(result.get("response_kind") or ""),
+                "collections": [str(item) for item in _list_from(result.get("collections"))],
+                "books": [str(item) for item in _list_from(result.get("books"))],
+                "citation_count": _safe_int(result.get("citation_count")),
+            }
+        )
+        if not result_pass:
+            failures.append(f"{role_id or 'unknown'}::{result_id or 'unknown'} failed role rehearsal")
+    if total <= 0:
+        failures.append("role rehearsal total case count is zero")
+    if pass_count != total:
+        failures.append(f"role rehearsal pass count mismatch ({pass_count}/{total})")
+    if report_status != "ok":
+        failures.append(f"role rehearsal report status is {report_status or 'unknown'}")
+    if stale:
+        failures.append("operator/learner role rehearsal report is stale for the current checkout")
+    status = "stale" if stale else report_status
+    ready = status == "ok" and pass_count == total and total > 0 and not failures
+    return {
+        "status": status,
+        "ready": ready,
+        "pass_count": pass_count,
+        "total": total,
+        "roles": roles,
+        "acceptance": acceptance,
+        "failures": failures,
+        "selected_report": {
+            "path": str(report_path),
+            "exists": report_path.exists(),
+            "generated_at": str(report.get("generated_at") or ""),
+            "git": report_git,
+            "current_git": current_git,
+            "head_matches_current": head_matches_current,
+            "dirty_after_report": dirty_after_report,
+            "stale": stale,
+        },
+        "results": results,
     }
 
 
@@ -515,6 +944,8 @@ def _build_development_control_status(
     playable_asset_count: int,
     source_of_truth_drift: dict[str, object],
     product_rehearsal: dict[str, object],
+    role_rehearsal: dict[str, object],
+    runtime_dependencies: dict[str, object],
 ) -> dict[str, object]:
     validation_loop = _dict_from(llmwiki_validation_loop)
     metrics = _dict_from(llmwiki_promotion.get("metrics"))
@@ -544,6 +975,25 @@ def _build_development_control_status(
         if str(item).strip()
     ]
     rehearsal_exists = bool(product_rehearsal.get("exists")) and str(product_rehearsal.get("status") or "").strip() != "missing"
+    role_rehearsal_failures = [
+        str(item)
+        for item in _list_from(role_rehearsal.get("failures"))
+        if str(item).strip()
+    ]
+    role_rehearsal_ready = bool(role_rehearsal.get("ready"))
+    role_rehearsal_report = _dict_from(role_rehearsal.get("selected_report"))
+    role_rehearsal_roles = _dict_from(role_rehearsal.get("roles"))
+    operator_a_role = _dict_from(role_rehearsal_roles.get("operator_a"))
+    learner_b_role = _dict_from(role_rehearsal_roles.get("learner_b"))
+    role_rehearsal_pass_count = _safe_int(role_rehearsal.get("pass_count"))
+    role_rehearsal_total = _safe_int(role_rehearsal.get("total"))
+    runtime_dependency_failures = [
+        str(item)
+        for item in _list_from(runtime_dependencies.get("failures"))
+        if str(item).strip()
+    ]
+    runtime_dependencies_ready = bool(runtime_dependencies.get("ready"))
+    qdrant_dependency = _dict_from(runtime_dependencies.get("qdrant"))
     promotion_ready = bool(llmwiki_promotion.get("ready"))
     official_ready = _rail_ready(llmwiki_promotion, "official") and official_chunks > 0 and official_code_blocks > 0
     customer_ready = _rail_ready(llmwiki_promotion, "customer") and customer_sources > 0 and customer_sections > 0
@@ -562,7 +1012,7 @@ def _build_development_control_status(
     viewer_ready = official_ready and official_playbook_count > 0 and official_figures > 0
     library_ready = customer_ready and customer_playbook_count > 0 and user_corpus_chunk_count > 0
     factory_ready = custom_document_count > 0 or customer_playbook_count > 0
-    harness_ready = promotion_ready and runtime_ready and validation_loop_ready and not drift_mismatches and not surya_required
+    harness_ready = promotion_ready and runtime_ready and validation_loop_ready and role_rehearsal_ready and runtime_dependencies_ready and not drift_mismatches and not surya_required
     surfaces = [
         _build_development_surface(
             surface_id="control_tower",
@@ -589,6 +1039,35 @@ def _build_development_control_status(
             ],
             next_action="질문 유형별 회귀 matrix를 늘려 모드별 hallucination guard를 강화한다.",
             blockers=[] if chat_ready else ["learn/ops mode contract or live chat matrix is incomplete"],
+        ),
+        _build_development_surface(
+            surface_id="runtime_dependencies",
+            title="Runtime Dependencies",
+            route="/playbook-library/control-tower",
+            ready=runtime_dependencies_ready,
+            acceptance="챗봇 검색 근거 레이어는 재부팅 후에도 Qdrant collection까지 살아 있어야 하며, down 상태를 숨기지 않는다.",
+            evidence=[
+                f"qdrant={qdrant_dependency.get('status') or 'unknown'}",
+                f"collection={qdrant_dependency.get('collection') or 'missing'}",
+                f"url={qdrant_dependency.get('url') or 'unknown'}",
+            ],
+            next_action="Qdrant가 down/missing이면 Docker Desktop과 qdrant 서비스를 복구한 뒤 role-rehearsal을 다시 실행한다.",
+            blockers=runtime_dependency_failures,
+        ),
+        _build_development_surface(
+            surface_id="role_rehearsal",
+            title="Operator A / Learner B Rehearsal",
+            route="/studio",
+            ready=role_rehearsal_ready,
+            acceptance="운영자A와 학습자B live rehearsal가 현재 checkout의 챗봇 답변, citation, 공식/고객 근거 계약을 통과한다.",
+            evidence=[
+                f"status={role_rehearsal.get('status') or 'missing'}",
+                f"cases={role_rehearsal_pass_count}/{role_rehearsal_total}",
+                f"operator_a={_safe_int(operator_a_role.get('pass'))}/{_safe_int(operator_a_role.get('total'))} · learner_b={_safe_int(learner_b_role.get('pass'))}/{_safe_int(learner_b_role.get('total'))}",
+                "HEAD matched" if role_rehearsal_report.get("head_matches_current") else "HEAD mismatch",
+            ],
+            next_action="역할 리허설이 stale/fail이면 role-rehearsal을 재실행하고 실패 case를 제품 회귀 테스트로 고정한다.",
+            blockers=role_rehearsal_failures,
         ),
         _build_development_surface(
             surface_id="official_manual_wiki",
@@ -667,7 +1146,9 @@ def _build_development_control_status(
                     if harness_ready
                     else [
                         *(validation_loop_failures or []),
-                        "promotion/runtime/validation loop contract is not ready",
+                        *(role_rehearsal_failures or []),
+                        *(runtime_dependency_failures or []),
+                        "promotion/runtime/validation loop/role rehearsal contract is not ready",
                     ]
                 )
             ),
@@ -742,7 +1223,8 @@ def _build_development_control_status(
         "surfaces": surfaces,
         "verification_commands": [
             "python -m unittest tests.test_chat_modes_contract tests.test_data_control_room_llmwiki",
-            "python -m play_book_studio.cli llmwiki-promotion --ui-base-url http://127.0.0.1:8896",
+            "python run_local_runtime.py role-rehearsal --ui-base-url http://127.0.0.1:8876",
+            "python -m play_book_studio.cli llmwiki-promotion --ui-base-url http://127.0.0.1:8876",
             "npm run build",
         ],
     }
@@ -782,7 +1264,10 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     source_book_count = _safe_int(source_summary.get("book_count") or len(source_approval_report.get("books") or []))
     selected_approved_runtime_count = _safe_int(source_summary.get("approved_ko_count") or verdict_summary.get("approved_runtime_count") or expected_approved_runtime_count)
     gate_translation_lane_path = _resolve_report_path(str(((source_approval_payload.get("output_targets") or {}).get("translation_lane_report_path")) or _job_report_path(gate_report, "synthesis_lane")))
-    translation_lane_path, translation_lane_report = _select_report_candidate(gate_translation_lane_path, settings.translation_lane_report_path, summary_key="active_queue_count", rows_key="active_queue", expected_count=max(source_book_count - selected_approved_runtime_count, 0))
+    if source_approval_report_path is not None:
+        translation_lane_path, translation_lane_report = _select_report_candidate(gate_translation_lane_path, settings.translation_lane_report_path, summary_key="active_queue_count", rows_key="active_queue", expected_count=max(source_book_count - selected_approved_runtime_count, 0))
+    else:
+        translation_lane_path, translation_lane_report = None, {}
     source_bundle_quality_payload = _job_payload(gate_report, "source_bundle_quality")
     retrieval_report = _safe_read_json(settings.retrieval_eval_report_path)
     answer_report = _safe_read_json(settings.answer_eval_report_path)
@@ -848,8 +1333,22 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         if draft_id not in combined_corpus_by_slug or book_viewer_path == primary_viewer_path:
             combined_corpus_by_slug[draft_id] = book
     manualbooks = _attach_corpus_status(manualbooks, corpus_by_slug=combined_corpus_by_slug)
+    community_source_runtime_books = _apply_viewer_path_fallback(
+        [book for book in manualbooks if _book_is_community_runtime(book)],
+        root=root,
+    )
+    private_customer_manualbooks = [
+        book for book in manualbooks if not _book_is_community_runtime(book)
+    ]
     derived_playbook_family_statuses = {
-        family: _derived_family_status(family, [book for book in manualbooks if str(book.get("source_type") or "").strip() == family])
+        family: _derived_family_status(
+            family,
+            [
+                book
+                for book in private_customer_manualbooks
+                if str(book.get("source_type") or "").strip() == family
+            ],
+        )
         for family in DATA_CONTROL_ROOM_DERIVED_PLAYBOOK_SOURCE_TYPES
     }
     derived_playbooks = [book for family in DATA_CONTROL_ROOM_DERIVED_PLAYBOOK_SOURCE_TYPES for book in derived_playbook_family_statuses[family]["books"]]
@@ -860,10 +1359,10 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     troubleshooting_playbooks = _apply_viewer_path_fallback(list(derived_playbook_family_statuses[TROUBLESHOOTING_PLAYBOOK_SOURCE_TYPE]["books"]), root=root)
     policy_overlay_books = _apply_viewer_path_fallback(list(derived_playbook_family_statuses[POLICY_OVERLAY_BOOK_SOURCE_TYPE]["books"]), root=root)
     synthesized_playbooks = _apply_viewer_path_fallback(list(derived_playbook_family_statuses[SYNTHESIZED_PLAYBOOK_SOURCE_TYPE]["books"]), root=root)
-    core_manualbooks = [book for book in manualbooks if str(book.get("source_type") or "").strip() not in DATA_CONTROL_ROOM_DERIVED_PLAYBOOK_SOURCE_TYPE_SET and str(book.get("book_slug") or "").strip() in manifest_slugs]
-    extra_manualbooks = [book for book in manualbooks if str(book.get("source_type") or "").strip() not in DATA_CONTROL_ROOM_DERIVED_PLAYBOOK_SOURCE_TYPE_SET and str(book.get("book_slug") or "").strip() not in manifest_slugs]
-    user_library_books = _apply_viewer_path_fallback([book for book in extra_manualbooks if str(book.get("boundary_truth") or "").strip() == "private_customer_pack_runtime" or str(book.get("source_lane") or "").strip() == "customer_source_first_pack"], root=root)
-    customer_pack_runtime_books = _apply_viewer_path_fallback([book for book in manualbooks if str(book.get("boundary_truth") or "").strip() == "private_customer_pack_runtime" or str(book.get("source_lane") or "").strip() == "customer_source_first_pack"], root=root)
+    core_manualbooks = [book for book in private_customer_manualbooks if str(book.get("source_type") or "").strip() not in DATA_CONTROL_ROOM_DERIVED_PLAYBOOK_SOURCE_TYPE_SET and str(book.get("book_slug") or "").strip() in manifest_slugs]
+    extra_manualbooks = [book for book in private_customer_manualbooks if str(book.get("source_type") or "").strip() not in DATA_CONTROL_ROOM_DERIVED_PLAYBOOK_SOURCE_TYPE_SET and str(book.get("book_slug") or "").strip() not in manifest_slugs]
+    user_library_books = _apply_viewer_path_fallback([book for book in extra_manualbooks if _book_is_private_customer_runtime(book)], root=root)
+    customer_pack_runtime_books = _apply_viewer_path_fallback([book for book in private_customer_manualbooks if _book_is_private_customer_runtime(book)], root=root)
     user_library_corpus_chunk_count = sum(int(book.get("chunk_count") or 0) for book in user_library_corpus_books)
     grade_breakdown_counter = Counter(_grade_label(book) for book in source_books)
     gold_books = [_simplify_book(book) for slug in manifest_by_slug for book in [known_books.get(slug)] if isinstance(book, dict) and _is_gold_book(book)]
@@ -886,7 +1385,12 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     extra_materialized_manualbook_slugs = materialized_manualbook_slugs - manifest_slugs
     buyer_scope = source_bundle_quality_payload.get("buyer_scope") if isinstance(source_bundle_quality_payload.get("buyer_scope"), dict) else {}
     raw_manual_count = int(buyer_scope.get("raw_manual_count") or len(manifest_by_slug))
-    playable_asset_count = len(core_manualbooks) + len(extra_manualbooks) + len(derived_playbooks)
+    playable_asset_count = (
+        len(core_manualbooks)
+        + len(extra_manualbooks)
+        + len(derived_playbooks)
+        + len(community_source_runtime_books)
+    )
     playable_asset_multiplication = {
         "raw_manual_count": raw_manual_count,
         "playable_asset_count": playable_asset_count,
@@ -902,10 +1406,14 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     wiki_usage_signals = _build_wiki_usage_signal_bucket(root)
     product_gate = _build_product_gate_bucket(root)
     product_rehearsal = _build_product_rehearsal_summary(root)
+    role_rehearsal = _build_role_rehearsal_control_status(root)
+    runtime_dependencies = _build_runtime_dependency_status(root)
     buyer_packet_bundle = _build_buyer_packet_bundle_bucket(root)
     release_candidate_freeze = _build_release_candidate_freeze_summary(root)
     llmwiki_promotion = _build_llmwiki_promotion_control_status(root)
     llmwiki_validation_loop = _build_llmwiki_validation_loop_control_status(root)
+    llmwiki_evolution_gate = _build_llmwiki_evolution_gate_control_status(root)
+    llmwiki_contextual_enrichment = _build_llmwiki_contextual_enrichment_control_status(root)
     chunk_candidate_counts = {candidate["row_count"] for candidate in chunk_candidates if candidate.get("exists")}
     playbook_candidate_counts = {candidate["file_count"] for candidate in playbook_candidates if candidate.get("exists")}
     canonical_grade_source = {
@@ -932,6 +1440,9 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     runtime_app = runtime_report.get("app") if isinstance(runtime_report.get("app"), dict) else {}
     runtime_runtime = runtime_report.get("runtime") if isinstance(runtime_report.get("runtime"), dict) else {}
     runtime_probes = runtime_report.get("probes") if isinstance(runtime_report.get("probes"), dict) else {}
+    role_rehearsal_report_path_text = str(
+        _dict_from(role_rehearsal.get("selected_report")).get("path") or ""
+    ).strip()
     report_paths = {
         "gate": str(gate_path),
         "source_approval": str(source_approval_report_path or ""),
@@ -940,6 +1451,11 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "answer_eval": str(settings.answer_eval_report_path),
         "ragas_eval": str(settings.ragas_eval_report_path),
         "runtime": str(settings.runtime_report_path),
+        "role_rehearsal": role_rehearsal_report_path_text,
+        "llmwiki_evolution_gate": str(_dict_from(llmwiki_evolution_gate.get("selected_report")).get("path") or ""),
+        "llmwiki_contextual_enrichment": str(
+            _dict_from(llmwiki_contextual_enrichment.get("selected_report")).get("path") or ""
+        ),
     }
     report_snapshots = {
         "morning_gate": _path_snapshot(gate_path),
@@ -949,6 +1465,19 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "answer_eval": _path_snapshot(settings.answer_eval_report_path),
         "ragas_eval": _path_snapshot(settings.ragas_eval_report_path),
         "runtime_report": _path_snapshot(settings.runtime_report_path),
+        "role_rehearsal": _path_snapshot_for_optional(
+            Path(role_rehearsal_report_path_text) if role_rehearsal_report_path_text else None
+        ),
+        "llmwiki_evolution_gate": _path_snapshot_for_optional(
+            Path(str(_dict_from(llmwiki_evolution_gate.get("selected_report")).get("path") or ""))
+            if str(_dict_from(llmwiki_evolution_gate.get("selected_report")).get("path") or "").strip()
+            else None
+        ),
+        "llmwiki_contextual_enrichment": _path_snapshot_for_optional(
+            Path(str(_dict_from(llmwiki_contextual_enrichment.get("selected_report")).get("path") or ""))
+            if str(_dict_from(llmwiki_contextual_enrichment.get("selected_report")).get("path") or "").strip()
+            else None
+        ),
     }
     development_control = _build_development_control_status(
         llmwiki_promotion=llmwiki_promotion,
@@ -960,6 +1489,8 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         playable_asset_count=playable_asset_count,
         source_of_truth_drift=source_of_truth_drift,
         product_rehearsal=product_rehearsal,
+        role_rehearsal=role_rehearsal,
+        runtime_dependencies=runtime_dependencies,
     )
     return {
         "generated_at": _iso_now(),
@@ -990,6 +1521,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "manualbook_count": len(materialized_core_manualbook_slugs),
             "core_manualbook_count": len(materialized_core_manualbook_slugs),
             "customer_pack_runtime_book_count": len(customer_pack_runtime_books),
+            "community_source_runtime_book_count": len(community_source_runtime_books),
             "user_library_book_count": len(user_library_books),
             "user_library_corpus_book_count": len(user_library_corpus_books),
             "user_library_corpus_chunk_count": user_library_corpus_chunk_count,
@@ -1009,6 +1541,33 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "llmwiki_validation_loop_ready": bool(llmwiki_validation_loop.get("ready")),
             "llmwiki_validation_loop_status": str(llmwiki_validation_loop.get("status") or "unknown"),
             "llmwiki_validation_loop_failure_count": len(_list_from(llmwiki_validation_loop.get("failures"))),
+            "llmwiki_evolution_gate_ready": bool(llmwiki_evolution_gate.get("ready")),
+            "llmwiki_evolution_gate_status": str(llmwiki_evolution_gate.get("status") or "unknown"),
+            "llmwiki_evolution_gate_failure_count": len(_list_from(llmwiki_evolution_gate.get("failures"))),
+            "llmwiki_evolution_backwrite_candidate_count": _safe_int(
+                _dict_from(llmwiki_evolution_gate.get("metrics")).get("backwrite_candidates")
+            ),
+            "llmwiki_evolution_quality_blocker_count": _safe_int(
+                _dict_from(llmwiki_evolution_gate.get("metrics")).get("quality_blockers")
+            ),
+            "llmwiki_contextual_enrichment_ready": bool(llmwiki_contextual_enrichment.get("ready")),
+            "llmwiki_contextual_enrichment_status": str(
+                llmwiki_contextual_enrichment.get("status") or "unknown"
+            ),
+            "llmwiki_contextual_enrichment_failure_count": len(
+                _list_from(llmwiki_contextual_enrichment.get("failures"))
+            ),
+            "llmwiki_contextual_enrichment_row_count": _safe_int(
+                _dict_from(llmwiki_contextual_enrichment.get("metrics")).get("row_count")
+            ),
+            "role_rehearsal_ready": bool(role_rehearsal.get("ready")),
+            "role_rehearsal_status": str(role_rehearsal.get("status") or "unknown"),
+            "role_rehearsal_pass_count": _safe_int(role_rehearsal.get("pass_count")),
+            "role_rehearsal_total": _safe_int(role_rehearsal.get("total")),
+            "role_rehearsal_failure_count": len(_list_from(role_rehearsal.get("failures"))),
+            "runtime_dependencies_ready": bool(runtime_dependencies.get("ready")),
+            "runtime_dependencies_status": str(runtime_dependencies.get("status") or "unknown"),
+            "runtime_dependencies_failure_count": len(_list_from(runtime_dependencies.get("failures"))),
             "development_control_status": str(development_control.get("status") or "unknown"),
             "development_control_ready": bool(development_control.get("ready")),
             "official_gold_ok": _promotion_contract_ok({"summary": {"contracts": _dict_from(llmwiki_promotion.get("contracts"))}}, "official_gold"),
@@ -1071,6 +1630,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "corpus": {"selected_path": str(selected_chunks_path) if selected_chunks_path else "", "books": core_corpus_books},
         "manualbooks": {"selected_dir": str(selected_playbook_dir) if selected_playbook_dir else "", "books": core_manualbooks},
         "customer_pack_runtime_books": {"selected_dir": str(settings.customer_pack_books_dir.resolve()), "books": customer_pack_runtime_books},
+        "community_source_runtime_books": {"selected_dir": str(settings.customer_pack_books_dir.resolve()), "books": community_source_runtime_books},
         "user_library_books": {"selected_dir": str(settings.customer_pack_books_dir.resolve()), "books": user_library_books},
         "user_library_corpus": {"selected_dir": str(settings.customer_pack_corpus_dir.resolve()), "books": user_library_corpus_books},
         "custom_documents": custom_documents,
@@ -1082,8 +1642,12 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "buyer_packet_bundle": buyer_packet_bundle,
         "release_candidate_freeze": release_candidate_freeze,
         "product_rehearsal": product_rehearsal,
+        "role_rehearsal": role_rehearsal,
+        "runtime_dependencies": runtime_dependencies,
         "llmwiki_promotion": llmwiki_promotion,
         "llmwiki_validation_loop": llmwiki_validation_loop,
+        "llmwiki_evolution_gate": llmwiki_evolution_gate,
+        "llmwiki_contextual_enrichment": llmwiki_contextual_enrichment,
         "development_control": development_control,
         "manual_book_library": manual_book_library,
         "topic_playbooks": {"selected_dir": str(selected_playbook_dir) if selected_playbook_dir else "", "books": topic_playbooks},
@@ -1101,6 +1665,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "manualbook_book_count": len(core_manualbooks),
             "core_manualbook_book_count": len(core_manualbooks),
             "customer_pack_runtime_book_count": len(customer_pack_runtime_books),
+            "community_source_runtime_book_count": len(community_source_runtime_books),
             "user_library_book_count": len(user_library_books),
             "user_library_corpus_book_count": len(user_library_corpus_books),
             "user_library_corpus_chunk_count": user_library_corpus_chunk_count,

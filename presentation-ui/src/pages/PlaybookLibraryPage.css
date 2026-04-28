@@ -5490,3 +5490,472 @@ details.factory-block:not([open]) .factory-block-toggle svg {
     flex-direction: column;
   }
 }
+
+/* Light theme contrast repair for library/control-tower surfaces. */
+[data-theme='light'] .library-wrapper {
+  background:
+    radial-gradient(circle at top left, rgba(2, 132, 168, 0.1), transparent 32rem),
+    linear-gradient(180deg, #f8fafc 0%, #edf3f9 100%);
+  color: var(--pbs-text-main);
+}
+
+[data-theme='light'] .library-header {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: var(--pbs-border-soft);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+}
+
+[data-theme='light'] .box-container {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: var(--pbs-border-soft);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.09);
+}
+
+[data-theme='light'] .back-btn,
+[data-theme='light'] .view-toggle,
+[data-theme='light'] .view-toggle button,
+[data-theme='light'] .view-toggle-link,
+[data-theme='light'] .wiki-vision-card,
+[data-theme='light'] .wiki-vision-active,
+[data-theme='light'] .llmwiki-ready-badge,
+[data-theme='light'] .llmwiki-rail-item,
+[data-theme='light'] .llmwiki-evidence-grid>div,
+[data-theme='light'] .development-ready-badge,
+[data-theme='light'] .development-summary-strip>div,
+[data-theme='light'] .development-surface-card,
+[data-theme='light'] .factory-download-item,
+[data-theme='light'] .factory-generated-catalog-intro,
+[data-theme='light'] .factory-catalog-bulk-btn,
+[data-theme='light'] .factory-catalog-legend-item,
+[data-theme='light'] .factory-catalog-item,
+[data-theme='light'] .metric-book-row-shell,
+[data-theme='light'] .chunk-card,
+[data-theme='light'] .preview-popover-chunk,
+[data-theme='light'] .factory-manual-workbench,
+[data-theme='light'] .factory-workbench-toolbar,
+[data-theme='light'] .factory-manual-input-row,
+[data-theme='light'] .factory-manual-selector,
+[data-theme='light'] .factory-manual-card {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--pbs-border-soft);
+  color: var(--pbs-text-main);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+}
+
+[data-theme='light'] .view-toggle {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+[data-theme='light'] .view-toggle button,
+[data-theme='light'] .view-toggle-link {
+  box-shadow: none;
+}
+
+[data-theme='light'] .view-toggle button.active,
+[data-theme='light'] .view-toggle-link:hover,
+[data-theme='light'] .wiki-vision-card:hover,
+[data-theme='light'] .wiki-vision-card.active,
+[data-theme='light'] .factory-catalog-bulk-btn:hover,
+[data-theme='light'] .factory-catalog-bulk-btn.is-primary {
+  background: rgba(2, 132, 168, 0.1);
+  border-color: rgba(2, 132, 168, 0.26);
+  color: var(--pbs-accent-cyan);
+}
+
+[data-theme='light'] .header-text h1,
+[data-theme='light'] .llmwiki-control-header h2,
+[data-theme='light'] .development-control-header h2,
+[data-theme='light'] .vision-compare-header h2,
+[data-theme='light'] .wiki-vision-lab-header h2,
+[data-theme='light'] .operational-library-header h2,
+[data-theme='light'] .metric-data h3 {
+  color: var(--pbs-text-main);
+}
+
+[data-theme='light'] .header-text p,
+[data-theme='light'] .llmwiki-control-header p,
+[data-theme='light'] .development-control-header p,
+[data-theme='light'] .vision-compare-header p,
+[data-theme='light'] .wiki-vision-lab-header p,
+[data-theme='light'] .metric-data p {
+  color: var(--pbs-text-muted);
+}
+
+[data-theme='light'] .wiki-vision-active-title,
+[data-theme='light'] .llmwiki-ready-badge,
+[data-theme='light'] .development-ready-badge,
+[data-theme='light'] .llmwiki-rail-item strong,
+[data-theme='light'] .development-summary-strip strong,
+[data-theme='light'] .development-surface-card h3,
+[data-theme='light'] .factory-download-title,
+[data-theme='light'] .factory-generated-catalog-copy strong,
+[data-theme='light'] .factory-catalog-main strong,
+[data-theme='light'] .chunk-card-title {
+  color: var(--pbs-text-main);
+}
+
+[data-theme='light'] .library-wrapper h1,
+[data-theme='light'] .library-wrapper h2,
+[data-theme='light'] .library-wrapper h3 {
+  color: var(--pbs-text-main);
+}
+
+[data-theme='light'] .library-wrapper p,
+[data-theme='light'] .library-wrapper .text-muted {
+  color: var(--pbs-text-muted);
+}
+
+[data-theme='light'] .wiki-vision-active-copy,
+[data-theme='light'] .llmwiki-evidence-grid span,
+[data-theme='light'] .development-summary-strip span,
+[data-theme='light'] .development-excluded-note span,
+[data-theme='light'] .factory-catalog-summary,
+[data-theme='light'] .factory-catalog-slug,
+[data-theme='light'] .factory-catalog-main>span:last-child,
+[data-theme='light'] .factory-catalog-order,
+[data-theme='light'] .factory-catalog-chevron,
+[data-theme='light'] .factory-download-meta {
+  color: var(--pbs-text-muted);
+}
+
+[data-theme='light'] .llmwiki-rail-top,
+[data-theme='light'] .development-surface-top,
+[data-theme='light'] .vision-compare-card-eyebrow,
+[data-theme='light'] .wiki-vision-card-eyebrow,
+[data-theme='light'] .metric-book-meta,
+[data-theme='light'] .metric-book-origin,
+[data-theme='light'] .log-empty,
+[data-theme='light'] .repo-empty {
+  color: var(--pbs-text-dim);
+}
+
+[data-theme='light'] .llmwiki-rail-item.blocked,
+[data-theme='light'] .llmwiki-ready-badge.blocked,
+[data-theme='light'] .development-ready-badge.blocked,
+[data-theme='light'] .development-surface-card.blocked {
+  background: rgba(254, 242, 242, 0.88);
+  border-color: rgba(220, 38, 38, 0.2);
+  color: #991b1b;
+}
+
+[data-theme='light'] .llmwiki-rail-item.ready,
+[data-theme='light'] .llmwiki-ready-badge.ready,
+[data-theme='light'] .development-ready-badge.ready,
+[data-theme='light'] .development-surface-card.ready {
+  background: rgba(240, 253, 244, 0.9);
+  border-color: rgba(22, 163, 74, 0.22);
+  color: #166534;
+}
+
+[data-theme='light'] .llmwiki-rail-item.stale,
+[data-theme='light'] .llmwiki-ready-badge.stale,
+[data-theme='light'] .development-ready-badge.watch,
+[data-theme='light'] .development-surface-card.watch {
+  background: rgba(255, 251, 235, 0.9);
+  border-color: rgba(217, 119, 6, 0.24);
+  color: #92400e;
+}
+
+[data-theme='light'] .development-surface-evidence span,
+[data-theme='light'] .vision-compare-signals span,
+[data-theme='light'] .vision-compare-inline-list span,
+[data-theme='light'] .vision-compare-route-step,
+[data-theme='light'] .metric-book-status,
+[data-theme='light'] .derived-tag.more {
+  background: rgba(241, 245, 249, 0.92);
+  border-color: rgba(15, 23, 42, 0.12);
+  color: var(--pbs-text-muted);
+}
+
+[data-theme='light'] .development-surface-blocker {
+  background: rgba(254, 242, 242, 0.9);
+  border-color: rgba(220, 38, 38, 0.18);
+  color: #991b1b;
+}
+
+[data-theme='light'] .development-surface-next,
+[data-theme='light'] .vision-compare-mini-preview,
+[data-theme='light'] .vision-compare-open-btn,
+[data-theme='light'] .release-freeze-eyebrow,
+[data-theme='light'] .wiki-vision-focus {
+  background: rgba(2, 132, 168, 0.1);
+  border-color: rgba(2, 132, 168, 0.22);
+  color: var(--pbs-accent-cyan);
+}
+
+[data-theme='light'] .library-wrapper::-webkit-scrollbar-thumb,
+[data-theme='light'] .factory-catalog-list::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(2, 132, 168, 0.3), rgba(15, 23, 42, 0.16));
+  border-color: rgba(2, 132, 168, 0.16);
+}
+
+[data-theme='light'] .chunk-card-text {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+/* Book Factory light-mode contrast pass. Dark-mode tokens above are kept intact. */
+[data-theme='light'] .factory-mode-toggle,
+[data-theme='light'] .pipeline-status,
+[data-theme='light'] .format-strip,
+[data-theme='light'] .format-strip--tools,
+[data-theme='light'] .format-strip--user,
+[data-theme='light'] .factory-fold-section,
+[data-theme='light'] .factory-block,
+[data-theme='light'] .factory-assistant-panel,
+[data-theme='light'] .factory-shared-panel,
+[data-theme='light'] .repo-toolbar,
+[data-theme='light'] .repo-meta-strip,
+[data-theme='light'] .search-bar,
+[data-theme='light'] .repo-candidate-section,
+[data-theme='light'] .repo-unanswered-row,
+[data-theme='light'] .repo-unanswered-item,
+[data-theme='light'] .repo-unanswered-item--row,
+[data-theme='light'] .factory-candidate-option,
+[data-theme='light'] .repo-candidate-row {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: var(--pbs-border-soft);
+  color: var(--pbs-text-main);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+[data-theme='light'] .factory-workbench-title-tag,
+[data-theme='light'] .factory-block-meta span,
+[data-theme='light'] .repo-subsection-badge,
+[data-theme='light'] .repo-panel-badge,
+[data-theme='light'] .format-strip-status,
+[data-theme='light'] .format-tag {
+  background: rgba(248, 250, 252, 0.98);
+  border-color: rgba(15, 23, 42, 0.12);
+  color: var(--pbs-text-muted);
+}
+
+[data-theme='light'] .factory-mode-btn {
+  color: #334155;
+}
+
+[data-theme='light'] .factory-mode-btn:hover,
+[data-theme='light'] .factory-mode-btn.active,
+[data-theme='light'] .factory-entry-btn.active {
+  background: rgba(2, 132, 168, 0.1);
+  color: var(--pbs-accent-cyan);
+  border-color: rgba(2, 132, 168, 0.24);
+}
+
+[data-theme='light'] .factory-entry-btn,
+[data-theme='light'] .repo-search-btn,
+[data-theme='light'] .repo-save-btn,
+[data-theme='light'] .repo-link-btn,
+[data-theme='light'] .favorite-remove-btn,
+[data-theme='light'] .factory-block-toggle,
+[data-theme='light'] .repo-candidate-row-btn,
+[data-theme='light'] .factory-download-action-btn,
+[data-theme='light'] .operational-source-option-link,
+[data-theme='light'] .operational-source-option-produce,
+[data-theme='light'] .operational-source-option-save {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(15, 23, 42, 0.14);
+  color: var(--pbs-text-main);
+}
+
+[data-theme='light'] .upload-trigger-btn {
+  background: rgba(2, 132, 168, 0.09);
+  border-color: rgba(2, 132, 168, 0.26);
+  color: var(--pbs-accent-cyan);
+}
+
+[data-theme='light'] .upload-trigger-btn:disabled,
+[data-theme='light'] .repo-search-btn:disabled,
+[data-theme='light'] .repo-save-btn:disabled,
+[data-theme='light'] .favorite-remove-btn:disabled,
+[data-theme='light'] .repo-candidate-row-btn:disabled,
+[data-theme='light'] .factory-download-action-btn:disabled,
+[data-theme='light'] .operational-source-option-save:disabled {
+  opacity: 1;
+  background: rgba(241, 245, 249, 0.95);
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #64748b;
+  box-shadow: none;
+}
+
+[data-theme='light'] .format-label,
+[data-theme='light'] .factory-hub-eyebrow,
+[data-theme='light'] .factory-fold-eyebrow,
+[data-theme='light'] .repo-toolbar-label,
+[data-theme='light'] .factory-manual-card-eyebrow,
+[data-theme='light'] .factory-manual-note-eyebrow {
+  color: #475569;
+}
+
+[data-theme='light'] .format-strip--tools .format-strip-status,
+[data-theme='light'] .format-strip--tools .format-tag--lane,
+[data-theme='light'] .format-tag.markitdown,
+[data-theme='light'] .format-tag.active,
+[data-theme='light'] .format-tag--active,
+[data-theme='light'] .factory-catalog-bulk-btn.is-primary,
+[data-theme='light'] .repo-candidate-row-btn--primary,
+[data-theme='light'] .factory-download-action-btn--primary {
+  background: rgba(2, 132, 168, 0.1);
+  border-color: rgba(2, 132, 168, 0.24);
+  color: var(--pbs-accent-cyan);
+}
+
+[data-theme='light'] .format-strip--user .format-strip-status,
+[data-theme='light'] .format-strip--user .format-tag--lane,
+[data-theme='light'] .operational-source-option-produce {
+  background: rgba(4, 120, 87, 0.1);
+  border-color: rgba(4, 120, 87, 0.22);
+  color: #047857;
+}
+
+[data-theme='light'] .format-tag.ocr {
+  background: rgba(109, 74, 255, 0.1);
+  border-color: rgba(109, 74, 255, 0.22);
+  color: var(--pbs-accent-purple);
+}
+
+[data-theme='light'] .format-tag.inactive,
+[data-theme='light'] .format-tag--muted {
+  opacity: 1;
+  color: #64748b;
+  background: rgba(241, 245, 249, 0.92);
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+[data-theme='light'] .step-badge,
+[data-theme='light'] .step-icon {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(15, 23, 42, 0.14);
+}
+
+[data-theme='light'] .pipeline-step--bronze .step-badge,
+[data-theme='light'] .pipeline-step--bronze .step-icon,
+[data-theme='light'] .playbook-grade-badge--bronze {
+  color: #9a3412;
+  background: rgba(154, 52, 18, 0.08);
+  border-color: rgba(154, 52, 18, 0.22);
+}
+
+[data-theme='light'] .pipeline-step--silver .step-badge,
+[data-theme='light'] .pipeline-step--silver .step-icon,
+[data-theme='light'] .playbook-grade-badge--silver {
+  color: #475569;
+  background: rgba(71, 85, 105, 0.08);
+  border-color: rgba(71, 85, 105, 0.2);
+}
+
+[data-theme='light'] .pipeline-step--gold .step-badge,
+[data-theme='light'] .pipeline-step--gold .step-icon,
+[data-theme='light'] .playbook-grade-badge--gold {
+  color: #92400e;
+  background: rgba(217, 119, 6, 0.1);
+  border-color: rgba(146, 64, 14, 0.24);
+}
+
+[data-theme='light'] .pipeline-step--judge .step-badge,
+[data-theme='light'] .pipeline-step--judge .step-icon {
+  color: #6d4aff;
+  background: rgba(109, 74, 255, 0.1);
+  border-color: rgba(109, 74, 255, 0.22);
+}
+
+[data-theme='light'] .playbook-grade-badge--blocked,
+[data-theme='light'] .factory-download-action-btn--danger {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(185, 28, 28, 0.22);
+}
+
+[data-theme='light'] .pipeline-connector {
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.12), rgba(15, 23, 42, 0.2), rgba(15, 23, 42, 0.12));
+}
+
+[data-theme='light'] .log-container {
+  background: rgba(248, 250, 252, 0.96);
+  border: 1px solid var(--pbs-border-soft);
+  color: var(--pbs-text-main);
+}
+
+[data-theme='light'] .log-msg {
+  opacity: 1;
+  color: var(--pbs-text-main);
+}
+
+[data-theme='light'] .factory-fold-header strong,
+[data-theme='light'] .factory-download-copy strong,
+[data-theme='light'] .factory-candidate-option-copy strong,
+[data-theme='light'] .factory-download-title,
+[data-theme='light'] .repo-unanswered-query,
+[data-theme='light'] .repo-candidate-row-title,
+[data-theme='light'] .repo-card h3,
+[data-theme='light'] .factory-catalog-main strong,
+[data-theme='light'] .operational-source-panel-header strong,
+[data-theme='light'] .operational-source-option-top strong {
+  color: var(--pbs-text-main);
+}
+
+[data-theme='light'] .factory-entry-caption,
+[data-theme='light'] .factory-download-copy span,
+[data-theme='light'] .factory-candidate-option-copy span,
+[data-theme='light'] .factory-download-meta,
+[data-theme='light'] .repo-unanswered-meta,
+[data-theme='light'] .repo-candidate-row-subtitle,
+[data-theme='light'] .repo-candidate-row-meta,
+[data-theme='light'] .repo-toolbar-hint,
+[data-theme='light'] .factory-assistant-copy p,
+[data-theme='light'] .factory-assistant-note,
+[data-theme='light'] .factory-generated-catalog-copy p,
+[data-theme='light'] .operational-source-panel-header span,
+[data-theme='light'] .operational-source-option-copy span:last-child {
+  color: var(--pbs-text-muted);
+}
+
+[data-theme='light'] .operational-source-basis,
+[data-theme='light'] .operational-source-trigger,
+[data-theme='light'] .operational-source-option-status,
+[data-theme='light'] .factory-catalog-status,
+[data-theme='light'] .factory-catalog-legend-item {
+  background: rgba(248, 250, 252, 0.96);
+  border-color: rgba(15, 23, 42, 0.12);
+  color: var(--pbs-text-muted);
+}
+
+[data-theme='light'] .operational-source-basis--official_homepage,
+[data-theme='light'] .operational-source-option-status.available,
+[data-theme='light'] .factory-catalog-status--live,
+[data-theme='light'] .factory-catalog-legend-item--live {
+  color: #047857;
+  background: rgba(4, 120, 87, 0.1);
+  border-color: rgba(4, 120, 87, 0.22);
+}
+
+[data-theme='light'] .operational-source-basis--official_repo,
+[data-theme='light'] .operational-source-option-status.current,
+[data-theme='light'] .factory-catalog-status--queued,
+[data-theme='light'] .factory-catalog-legend-item--queued {
+  color: #0369a1;
+  background: rgba(3, 105, 161, 0.1);
+  border-color: rgba(3, 105, 161, 0.22);
+}
+
+[data-theme='light'] .factory-catalog-status--producing,
+[data-theme='light'] .factory-catalog-legend-item--producing {
+  color: #92400e;
+  background: rgba(217, 119, 6, 0.1);
+  border-color: rgba(146, 64, 14, 0.22);
+}
+
+[data-theme='light'] .factory-catalog-status--candidate,
+[data-theme='light'] .factory-catalog-legend-item--candidate,
+[data-theme='light'] .operational-source-basis--unknown,
+[data-theme='light'] .operational-source-option-status.missing {
+  color: #475569;
+  background: rgba(241, 245, 249, 0.94);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+[data-theme='light'] .operational-source-panel {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(15, 23, 42, 0.14);
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.16);
+}

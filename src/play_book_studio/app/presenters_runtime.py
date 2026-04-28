@@ -118,10 +118,34 @@ def _build_runtime_payload(answerer: ChatAnswerer) -> dict[str, Any]:
     }
 
 
+def _build_runtime_dependency_readiness(root_dir: Path) -> dict[str, Any]:
+    try:
+        from play_book_studio.app.data_control_room import _build_runtime_dependency_status
+
+        dependencies = _build_runtime_dependency_status(root_dir)
+    except Exception as exc:  # noqa: BLE001
+        dependencies = {
+            "status": "blocked",
+            "ready": False,
+            "failures": [f"runtime dependency readiness probe failed: {exc}"],
+            "checks": [],
+        }
+    ready = bool(dependencies.get("ready"))
+    return {
+        "status": "ready" if ready else "blocked",
+        "ready": ready,
+        "dependencies": dependencies,
+    }
+
+
 def _build_health_payload(answerer: ChatAnswerer) -> dict[str, Any]:
+    runtime_payload = _build_runtime_payload(answerer)
+    readiness = _build_runtime_dependency_readiness(answerer.settings.root_dir)
+    runtime_payload["dependencies"] = readiness["dependencies"]
     return {
         "ok": True,
-        "runtime": _build_runtime_payload(answerer),
+        "readiness": readiness,
+        "runtime": runtime_payload,
     }
 
 
@@ -130,5 +154,6 @@ __all__ = [
     "_llm_runtime_signature",
     "_refresh_answerer_llm_settings",
     "_build_runtime_payload",
+    "_build_runtime_dependency_readiness",
     "_runtime_fingerprint",
 ]

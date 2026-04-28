@@ -25,6 +25,7 @@ from .answer_text import (
     strip_intro_offtopic_noise,
     strip_structured_key_extra_guidance,
     strip_weak_additional_guidance,
+    shape_learning_answer_text,
     trim_productization_noise,
 )
 from .citations import (
@@ -110,6 +111,7 @@ def generate_grounded_answer_text(
     answer_text = shape_actionable_ops_answer(
         answer_text,
         query=query,
+        mode=mode,
         citations=citations,
     )
     answer_text = guard_first_step_grounding(
@@ -124,6 +126,12 @@ def generate_grounded_answer_text(
         citations=citations,
     )
     answer_text = shape_pod_pending_troubleshooting(
+        answer_text,
+        query=query,
+        mode=mode,
+        citations=citations,
+    )
+    answer_text = shape_learning_answer_text(
         answer_text,
         query=query,
         mode=mode,

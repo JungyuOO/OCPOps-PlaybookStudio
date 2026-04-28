@@ -68,6 +68,7 @@ import {
 import { WIKI_VISION_MODES, loadStoredVisionMode, persistVisionMode, type VisionMode } from '../lib/wikiVision';
 import { displayCustomerDocumentTitle } from '../lib/customerDocumentTitles';
 import { ROUTES } from '../app/routes';
+import { dedupeDraftCatalogForDisplay } from './workspaceDraftCatalog';
 
 type PipelineStage = 'idle' | 'uploading' | 'capturing' | 'normalizing' | 'done' | 'error';
 type FactoryLane = 'tools' | 'user';
@@ -783,7 +784,7 @@ const PlaybookLibraryPage: React.FC = () => {
 
   const refreshData = useCallback(() => {
     loadDataControlRoom().then(setControlRoom).catch(() => { });
-    listCustomerPackDrafts().then((res) => setDrafts(res.drafts)).catch(() => { });
+    listCustomerPackDrafts().then((res) => setDrafts(dedupeDraftCatalogForDisplay(res.drafts ?? []))).catch(() => { });
     refreshRepositoryFavorites();
     refreshRepositoryUnanswered();
     refreshOfficialCatalog();
@@ -1649,6 +1650,13 @@ const PlaybookLibraryPage: React.FC = () => {
   const hasMetricSourceDrift = Boolean(controlRoom?.source_of_truth_drift?.status_alignment?.mismatches?.length);
   const gate = controlRoom?.gate;
   const productRehearsal = controlRoom?.product_rehearsal;
+  const roleRehearsal = controlRoom?.role_rehearsal;
+  const roleRehearsalReport = roleRehearsal?.selected_report;
+  const roleRehearsalReady = Boolean(roleRehearsal?.ready ?? summary?.role_rehearsal_ready);
+  const roleRehearsalPassCount = roleRehearsal?.pass_count ?? summary?.role_rehearsal_pass_count ?? 0;
+  const roleRehearsalTotal = roleRehearsal?.total ?? summary?.role_rehearsal_total ?? 0;
+  const operatorRole = roleRehearsal?.roles?.operator_a;
+  const learnerRole = roleRehearsal?.roles?.learner_b;
   const gateReasons = [
     ...((gate?.reasons ?? []).slice(0, 3)),
     ...((gate?.summary?.failed_validation_checks ?? []).slice(0, 2)),
@@ -1932,6 +1940,14 @@ const PlaybookLibraryPage: React.FC = () => {
                   <span>Chat Modes</span>
                   <strong>{llmwikiModeContract.length || 2} modes</strong>
                   <p>{llmwikiModeContract.map((mode) => mode.label).join(' / ') || '학습 모드 / 운영 모드'}</p>
+                </div>
+                <div>
+                  <span>Role Rehearsal</span>
+                  <strong>{roleRehearsalReady ? `${roleRehearsalPassCount}/${roleRehearsalTotal} passing` : roleRehearsal?.status ?? 'Missing'}</strong>
+                  <p>
+                    Operator A {operatorRole?.pass ?? 0}/{operatorRole?.total ?? 0} · Learner B {learnerRole?.pass ?? 0}/{learnerRole?.total ?? 0}
+                    {roleRehearsalReport?.stale ? ' · stale report' : ''}
+                  </p>
                 </div>
                 <div>
                   <span>Validation Loop</span>

@@ -15,6 +15,7 @@ from play_book_studio.ingestion.topic_playbooks import (
     TOPIC_PLAYBOOK_SOURCE_TYPE,
     TROUBLESHOOTING_PLAYBOOK_SOURCE_TYPE,
 )
+from play_book_studio.source_authority import COMMUNITY_AUTHORITY, source_authority_payload
 
 from .data_control_room_helpers import _grade_label
 
@@ -274,6 +275,20 @@ def _authoritative_value(primary: dict[str, Any], secondary: dict[str, Any], key
     return fallback
 
 
+def _apply_source_authority_surface(entry: dict[str, Any], *sources: dict[str, Any]) -> dict[str, Any]:
+    authority_input: dict[str, Any] = {}
+    for source in sources:
+        if isinstance(source, dict):
+            authority_input.update(source)
+    authority_input.update(entry)
+    entry.update(source_authority_payload(authority_input))
+    if entry.get("source_authority") == COMMUNITY_AUTHORITY:
+        entry["boundary_truth"] = "community_source_pack_runtime"
+        entry["runtime_truth_label"] = "Community Source Pack"
+        entry["boundary_badge"] = "Community Source"
+    return entry
+
+
 def _apply_customer_pack_runtime_truth(
     books: list[dict[str, Any]],
     *,
@@ -362,6 +377,7 @@ def _apply_customer_pack_runtime_truth(
                     promotion_gate.get("publish_ready"),
                 )
             )
+            _apply_source_authority_surface(entry, surface_payload)
             entry["grade"] = _grade_label(entry)
         items.append(entry)
     return items
@@ -544,7 +560,7 @@ def _aggregate_playbooks(
             **known,
             **payload,
         }
-        grouped[slug] = {
+        entry = {
             "book_slug": slug,
             "title": str(payload.get("title") or payload.get("book_title") or slug),
             "grade": grade_label(grade_source) if grade_source else ("Gold" if manifest else "Bronze"),
@@ -590,6 +606,7 @@ def _aggregate_playbooks(
             "publish_ready": bool(payload.get("publish_ready") or promotion_gate.get("publish_ready")),
             "materialized": True,
         }
+        grouped[slug] = _apply_source_authority_surface(entry, manifest, known, source_metadata, payload)
     for slug, entry in manifest_by_slug.items():
         grade_source = {
             **entry,

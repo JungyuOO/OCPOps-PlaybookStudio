@@ -248,7 +248,8 @@ def _body_to_marked_text(
             index += 1
             continue
 
-        if stripped == "----" and pending_source_language is not None:
+        if stripped == "----":
+            code_language = pending_source_language or "text"
             code_lines: list[str] = []
             index += 1
             while index < len(body_lines) and body_lines[index].strip() != "----":
@@ -258,7 +259,7 @@ def _body_to_marked_text(
             if code.strip():
                 output.extend(
                     [
-                        f'[CODE language="{pending_source_language}"]',
+                        f'[CODE language="{code_language}"]',
                         code,
                         "[/CODE]",
                         "",
@@ -349,9 +350,25 @@ def parse_asciidoc_sections(
     preamble_lines: list[str] = []
     pending_anchor = ""
     seen_document_title = False
+    in_listing_block = False
 
     for raw_line in str(text or "").splitlines():
         stripped = raw_line.strip()
+        if in_listing_block:
+            if current_heading:
+                current_lines.append(raw_line.rstrip())
+            else:
+                preamble_lines.append(raw_line.rstrip())
+            if stripped == "----":
+                in_listing_block = False
+            continue
+        if stripped == "----":
+            if current_heading:
+                current_lines.append(raw_line.rstrip())
+            else:
+                preamble_lines.append(raw_line.rstrip())
+            in_listing_block = True
+            continue
         if not stripped:
             if current_heading:
                 current_lines.append("")

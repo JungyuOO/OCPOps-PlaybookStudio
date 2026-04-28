@@ -99,7 +99,17 @@ function hasMixedLaneWithoutBoundary(citations: ChatCitation[]): boolean {
 
 function isPrivateOrMixed(citation: ChatCitation): boolean {
   const lane = (citation.source_lane || '').toLowerCase();
-  return lane === 'private' || lane === 'mixed' || lane === 'customer';
+  const collection = (citation.source_collection || '').toLowerCase();
+  const boundary = (citation.boundary_truth || '').toLowerCase();
+  return (
+    lane === 'private'
+    || lane === 'mixed'
+    || lane === 'customer'
+    || lane === 'customer_source_first_pack'
+    || lane === 'customer_master_composition'
+    || collection === 'uploaded'
+    || boundary === 'private_customer_pack_runtime'
+  );
 }
 
 export function evaluateScorecard(

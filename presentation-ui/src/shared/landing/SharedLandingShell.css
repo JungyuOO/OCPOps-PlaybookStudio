@@ -1,5 +1,8 @@
 .shared-landing-shell {
   min-height: 100vh;
+  position: relative;
+  background: var(--pbs-bg-main);
+  color: var(--pbs-text-main);
 }
 
 .shared-landing-shell.partner-mode {
@@ -83,9 +86,26 @@
 
 .partner-secondary-link {
   padding: 12px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--pbs-border-strong);
   border-radius: 999px;
   color: var(--text-main);
+}
+
+[data-theme='light'] .shared-landing-shell.partner-mode {
+  background:
+    radial-gradient(circle at top left, rgba(2, 132, 168, 0.1), transparent 28%),
+    radial-gradient(circle at top right, rgba(109, 74, 255, 0.1), transparent 24%),
+    var(--pbs-bg-main);
+}
+
+[data-theme='light'] .partner-primary-link {
+  color: #052232;
+  background: linear-gradient(135deg, #bae6fd, #67e8f9);
+  box-shadow: 0 12px 24px rgba(2, 132, 168, 0.16);
+}
+
+[data-theme='light'] .partner-secondary-link {
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .partner-surface-grid {

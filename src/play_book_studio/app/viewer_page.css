@@ -488,6 +488,9 @@ body.is-embedded h1 {
 .study-document-embedded .document-footer-nav {
   margin-bottom: 8px;
 }
+body.is-embedded .document-footer-nav {
+  display: none;
+}
 .reader-sidebar {
   position: sticky;
   top: 40px;

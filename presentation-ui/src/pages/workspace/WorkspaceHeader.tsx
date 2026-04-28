@@ -1,6 +1,8 @@
-import { ChevronDown, Languages, Sparkles, Moon, Sun } from 'lucide-react';
+import { ChevronDown, Languages, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ROUTES, buildSharedLandingHref } from '../../app/routes';
+import GlobalThemeToggle from '../../components/GlobalThemeToggle';
+import type { GlobalTheme } from '../../lib/useGlobalTheme';
 
 type WorkspaceHeaderProps = {
   packDropdownOpen: boolean;
@@ -8,7 +10,7 @@ type WorkspaceHeaderProps = {
   packOptions: readonly string[];
   sessionId: string;
   testMode: boolean;
-  globalTheme: 'dark' | 'light';
+  globalTheme: GlobalTheme;
   onOpenLibrary: () => void;
   onResetSession: () => void;
   onSelectPack: (label: string) => void;
@@ -74,9 +76,7 @@ export default function WorkspaceHeader({
           <span className="session-id-text">{sessionId}</span>
         </div>
         <div className="header-theme-controls">
-          <button className="header-action-btn" onClick={onToggleGlobalTheme} title="Toggle Dark/Light Mode">
-            {globalTheme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
+          <GlobalThemeToggle theme={globalTheme} onToggle={onToggleGlobalTheme} />
         </div>
         <button
           className={`nav-btn test-mode-btn ${testMode ? 'active' : ''}`}

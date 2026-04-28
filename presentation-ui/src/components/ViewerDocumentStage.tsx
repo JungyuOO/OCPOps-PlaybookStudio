@@ -16,7 +16,7 @@ export interface ViewerDocumentPayload {
 const VIEWER_READER_POLISH = `
   :host {
     display: block;
-    color: #0f172a;
+    color: var(--pbs-reader-text, #0f172a);
     min-width: 0;
     max-width: 100%;
   }
@@ -27,6 +27,11 @@ const VIEWER_READER_POLISH = `
     padding-bottom: 40px;
     min-width: 0;
     max-width: 100%;
+  }
+
+  .viewer-root,
+  .viewer-root * {
+    box-sizing: border-box;
   }
 
   /* 
@@ -57,21 +62,21 @@ const VIEWER_READER_POLISH = `
     margin-bottom: 20px !important;
   }
 
-  /* Constrain the main width similar to a typical book/documentation layout */
   .viewer-root main {
-    width: min(860px, 100%) !important;
-    max-width: 860px !important;
+    width: min(1080px, 100%) !important;
+    max-width: 1080px !important;
     margin: 0 auto !important;
-    padding: 28px 32px 56px !important;
+    padding: 24px clamp(18px, 3vw, 40px) 56px !important;
     min-width: 0 !important;
+    box-sizing: border-box !important;
   }
 
   .viewer-root .section-card:not(.customer-slide-card-section) {
-    background: var(--pbs-reader-card-bg) !important;
-    border: 1px solid var(--pbs-reader-border) !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.03) !important;
-    border-radius: 12px !important;
-    margin-bottom: 24px !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    margin-bottom: 30px !important;
     transition: border-color 0.3s ease, background-color 0.3s ease;
   }
 
@@ -80,12 +85,32 @@ const VIEWER_READER_POLISH = `
     color: var(--pbs-reader-text) !important;
   }
 
+  .viewer-root .section-body,
+  .viewer-root .section-body p,
+  .viewer-root .section-body li,
+  .viewer-root .section-body td,
+  .viewer-root .summary,
+  .viewer-root .reader-intro {
+    color: var(--pbs-reader-muted, #334155) !important;
+  }
+
+  .viewer-root .section-body strong,
+  .viewer-root .section-body h3,
+  .viewer-root .section-body th,
+  .viewer-root h1 {
+    color: var(--pbs-reader-text, #0f172a) !important;
+  }
+
+  .viewer-root .section-body a {
+    color: var(--pbs-reader-link, #2563eb) !important;
+  }
+
   .viewer-root .section-meta {
     color: var(--pbs-reader-dim) !important;
   }
 
   .viewer-root .code-block {
-    background: rgba(0,0,0,0.03) !important;
+    background: var(--pbs-reader-code-bg, rgba(0,0,0,0.03)) !important;
     border: 1px solid var(--pbs-reader-border) !important;
   }
 
@@ -94,7 +119,7 @@ const VIEWER_READER_POLISH = `
   .viewer-root .code-block span,
   .viewer-root pre,
   .viewer-root pre code {
-    color: #0f172a !important;
+    color: var(--pbs-reader-code-text, #0f172a) !important;
   }
 
   :host([data-viewer-theme="obsidian"]) .viewer-root .code-block {
@@ -115,9 +140,20 @@ const VIEWER_READER_POLISH = `
   .viewer-root .hero-main,
   .viewer-root .section-list,
   .viewer-root .section-body,
+  .viewer-root .section-card,
+  .viewer-root .figure-card,
+  .viewer-root .figure-frame,
   .viewer-root .table-wrap {
     min-width: 0 !important;
     max-width: 100% !important;
+  }
+
+  .viewer-root img,
+  .viewer-root svg,
+  .viewer-root video,
+  .viewer-root canvas {
+    max-width: 100% !important;
+    height: auto !important;
   }
 
   .viewer-root.viewer-root--slide-deck main {
@@ -158,8 +194,8 @@ const VIEWER_READER_POLISH = `
   }
 
   :host([data-viewer-variant="editorial"]) .viewer-root main {
-    width: min(760px, 100%) !important;
-    max-width: 760px !important;
+    width: min(960px, 100%) !important;
+    max-width: 960px !important;
     padding: 0 0 72px !important;
   }
 
@@ -180,6 +216,14 @@ const VIEWER_READER_POLISH = `
     border: 1px solid #d9e0ea !important;
     border-radius: 14px !important;
     box-shadow: none !important;
+  }
+
+  :host([data-viewer-variant="editorial"]) .viewer-root .code-block pre,
+  :host([data-viewer-variant="editorial"]) .viewer-root .code-block code,
+  :host([data-viewer-variant="editorial"]) .viewer-root .code-block span,
+  :host([data-viewer-variant="editorial"]) .viewer-root pre,
+  :host([data-viewer-variant="editorial"]) .viewer-root pre code {
+    color: #0f172a !important;
   }
 
   :host([data-viewer-variant="editorial"]) .viewer-root .table-wrap {
@@ -366,6 +410,28 @@ function findEditableBlock(node: HTMLElement | null): HTMLElement | null {
     return null;
   }
   return block;
+}
+
+function firstHTMLElementFromEvent(event: Event): HTMLElement | null {
+  for (const node of event.composedPath()) {
+    if (node instanceof HTMLElement) {
+      return node;
+    }
+  }
+  return event.target instanceof HTMLElement ? event.target : null;
+}
+
+function closestFromEventPath<T extends HTMLElement>(event: Event, selector: string): T | null {
+  for (const node of event.composedPath()) {
+    if (!(node instanceof HTMLElement)) {
+      continue;
+    }
+    const candidate = node.matches(selector) ? node : node.closest(selector);
+    if (candidate instanceof HTMLElement) {
+      return candidate as T;
+    }
+  }
+  return null;
 }
 
 function elementPathWithinSection(section: HTMLElement, element: HTMLElement): string {
@@ -657,10 +723,53 @@ export default function ViewerDocumentStage({
       };
     }
 
+    const navigateAnchor = (anchor: HTMLAnchorElement, event: Event): boolean => {
+      const href = anchor.getAttribute('href') ?? '';
+      const navMenu = anchor.closest('.document-nav-menu') as HTMLDetailsElement | null;
+      if (href.startsWith('#')) {
+        event.preventDefault();
+        event.stopPropagation();
+        const targetId = href.slice(1);
+        const targetNode = findShadowTarget(root, targetId);
+        if (targetNode instanceof HTMLElement) {
+          scrollShadowTargetIntoView(host, targetNode);
+        }
+        if (!targetNode && latestNavigateViewerPathRef.current && latestViewerPathRef.current) {
+          const basePath = latestViewerPathRef.current.split('#', 1)[0];
+          if (basePath) {
+            latestNavigateViewerPathRef.current(`${basePath}#${targetId}`);
+          }
+        }
+        if (navMenu) {
+          navMenu.open = false;
+        }
+        return true;
+      }
+      if (href && isViewerHref(href) && latestNavigateViewerPathRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        const parsed = new URL(href, window.location.origin);
+        if (navMenu) {
+          navMenu.open = false;
+        }
+        latestNavigateViewerPathRef.current(`${parsed.pathname}${parsed.search}${parsed.hash}`);
+        return true;
+      }
+      return false;
+    };
+
+    const cleanupAnchorListeners: Array<() => void> = [];
     root.querySelectorAll('a[href]').forEach((node) => {
       const anchor = node as HTMLAnchorElement;
       const href = anchor.getAttribute('href') ?? '';
       if (!href || href.startsWith('#') || isViewerHref(href)) {
+        const handleAnchorClick = (event: MouseEvent): void => {
+          if (navigateAnchor(anchor, event)) {
+            event.stopPropagation();
+          }
+        };
+        anchor.addEventListener('click', handleAnchorClick);
+        cleanupAnchorListeners.push(() => anchor.removeEventListener('click', handleAnchorClick));
         return;
       }
       if (!anchor.hasAttribute('target')) {
@@ -676,7 +785,7 @@ export default function ViewerDocumentStage({
       if (!latestTextToolEnabledRef.current || !target) {
         return null;
       }
-      if (target.closest('.copy-button, .wrap-button, .collapse-button, .document-nav-menu')) {
+      if (target.closest('a[href], .copy-button, .wrap-button, .collapse-button, .document-nav-menu, .document-footer-nav')) {
         return null;
       }
 
@@ -761,7 +870,7 @@ export default function ViewerDocumentStage({
     };
 
     const handleClick = async (event: Event): Promise<void> => {
-      const target = event.target as HTMLElement | null;
+      const target = firstHTMLElementFromEvent(event);
       if (latestTextToolEnabledRef.current) {
         const editorCandidate = buildEditorDraftFromInteraction(target, event as MouseEvent);
         if (editorCandidate) {
@@ -772,40 +881,14 @@ export default function ViewerDocumentStage({
         }
       }
 
-      const anchor = target?.closest('a[href]') as HTMLAnchorElement | null;
+      const anchor = closestFromEventPath<HTMLAnchorElement>(event, 'a[href]');
       if (anchor) {
-        const href = anchor.getAttribute('href') ?? '';
-        const navMenu = anchor.closest('.document-nav-menu') as HTMLDetailsElement | null;
-        if (href.startsWith('#')) {
-          event.preventDefault();
-          const targetId = href.slice(1);
-          const targetNode = findShadowTarget(root, targetId);
-          if (targetNode instanceof HTMLElement) {
-            scrollShadowTargetIntoView(host, targetNode);
-          }
-          if (!targetNode && latestNavigateViewerPathRef.current && latestViewerPathRef.current) {
-            const basePath = latestViewerPathRef.current.split('#', 1)[0];
-            if (basePath) {
-              latestNavigateViewerPathRef.current(`${basePath}#${targetId}`);
-            }
-          }
-          if (navMenu) {
-            navMenu.open = false;
-          }
-          return;
-        }
-        if (href && isViewerHref(href) && latestNavigateViewerPathRef.current) {
-          event.preventDefault();
-          const parsed = new URL(href, window.location.origin);
-          if (navMenu) {
-            navMenu.open = false;
-          }
-          latestNavigateViewerPathRef.current(`${parsed.pathname}${parsed.search}${parsed.hash}`);
+        if (navigateAnchor(anchor, event)) {
           return;
         }
       }
 
-      const button = target?.closest('button');
+      const button = closestFromEventPath<HTMLButtonElement>(event, 'button');
       if (!button) {
         return;
       }
@@ -873,10 +956,13 @@ export default function ViewerDocumentStage({
     };
 
     root.addEventListener('click', handleClick);
+    host.addEventListener('click', handleClick);
     return () => {
+      cleanupAnchorListeners.forEach((cleanup) => cleanup());
       cleanupSectionTracking();
       wrapperRef.current = null;
       root.removeEventListener('click', handleClick);
+      host.removeEventListener('click', handleClick);
     };
   }, [surfaceVariant, viewerDocument.bodyClassName, viewerDocument.html, inlineStylesKey]);
 

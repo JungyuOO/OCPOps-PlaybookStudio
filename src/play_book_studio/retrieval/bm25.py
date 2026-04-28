@@ -8,6 +8,9 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from play_book_studio.contextual_enrichment import contextual_search_text, enrich_contextual_row
+from play_book_studio.source_authority import source_authority_payload
+
 from .models import RetrievalHit
 
 
@@ -19,6 +22,7 @@ def tokenize_text(text: str) -> list[str]:
 
 
 def _row_to_hit(row: dict, score: float) -> RetrievalHit:
+    authority = source_authority_payload(row)
     return RetrievalHit(
         chunk_id=str(row["chunk_id"]),
         book_slug=str(row["book_slug"]),
@@ -38,6 +42,21 @@ def _row_to_hit(row: dict, score: float) -> RetrievalHit:
         source_lane=str(row.get("source_lane", "official_ko")),
         source_type=str(row.get("source_type", "official_doc")),
         source_collection=str(row.get("source_collection", "core")),
+        source_authority=str(row.get("source_authority") or authority.get("source_authority") or ""),
+        source_authority_label=str(row.get("source_authority_label") or authority.get("source_authority_label") or ""),
+        source_authority_badge=str(row.get("source_authority_badge") or authority.get("source_authority_badge") or ""),
+        source_authority_warning=str(
+            row.get("source_authority_warning") or authority.get("source_authority_warning") or ""
+        ),
+        source_requires_review=bool(row.get("source_requires_review", authority.get("source_requires_review", False))),
+        boundary_truth=str(row.get("boundary_truth", "")),
+        runtime_truth_label=str(row.get("runtime_truth_label", "")),
+        boundary_badge=str(row.get("boundary_badge", "")),
+        approval_state=str(row.get("approval_state", "")),
+        publication_state=str(row.get("publication_state", "")),
+        provider_egress_policy=str(row.get("provider_egress_policy", "")),
+        retrieval_ready=bool(row.get("retrieval_ready", False)),
+        read_ready=bool(row.get("read_ready", False)),
         surface_kind=str(row.get("surface_kind", "document")),
         source_unit_kind=str(row.get("source_unit_kind", "section")),
         source_unit_id=str(row.get("source_unit_id", "")),
@@ -61,6 +80,12 @@ def _row_to_hit(row: dict, score: float) -> RetrievalHit:
             for item in (row.get("graph_relations") or row.get("relation_question_classes") or [])
             if str(item).strip()
         ),
+        contextual_enrichment_version=str(row.get("contextual_enrichment_version", "")),
+        contextual_parent_title=str(row.get("contextual_parent_title", "")),
+        contextual_heading_path=tuple(
+            str(item) for item in (row.get("contextual_heading_path") or []) if str(item).strip()
+        ),
+        contextual_prefix=str(row.get("contextual_prefix", "")),
     )
 
 
@@ -73,15 +98,18 @@ class BM25Index:
     avg_doc_length: float
     k1: float = 1.5
     b: float = 0.75
+    contextual_index_enabled: bool = True
+    contextual_enriched_count: int = 0
 
     @classmethod
     def from_rows(cls, rows: list[dict]) -> "BM25Index":
+        enriched_rows = [enrich_contextual_row(row) for row in rows]
         term_frequencies: list[Counter[str]] = []
         doc_lengths: list[int] = []
         doc_frequencies: Counter[str] = Counter()
 
-        for row in rows:
-            tokens = tokenize_text(str(row.get("text", "")))
+        for row in enriched_rows:
+            tokens = tokenize_text(contextual_search_text(row))
             frequencies = Counter(tokens)
             term_frequencies.append(frequencies)
             doc_lengths.append(len(tokens))
@@ -90,11 +118,12 @@ class BM25Index:
 
         avg_doc_length = sum(doc_lengths) / max(len(doc_lengths), 1)
         return cls(
-            rows=rows,
+            rows=enriched_rows,
             term_frequencies=term_frequencies,
             doc_lengths=doc_lengths,
             doc_frequencies=doc_frequencies,
             avg_doc_length=avg_doc_length,
+            contextual_enriched_count=len(enriched_rows),
         )
 
     @classmethod

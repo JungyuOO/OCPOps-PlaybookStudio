@@ -293,7 +293,7 @@ def _convert_asciidoc_to_markdown(
                 output.append("")
             continue
 
-        if stripped == "----" and pending_source_language is not None:
+        if stripped == "----":
             code_language = pending_source_language or "text"
             output.append(f"```{code_language}")
             in_code_block = True

@@ -369,7 +369,8 @@ def _build_handler(
             )
 
         def _handle_data_control_room(self, query: str) -> None:
-            del query
+            if "refresh=1" in query or "fresh=1" in query:
+                data_control_room_cache.set("payload", None)
             cached_payload = data_control_room_cache.get("payload")
             if isinstance(cached_payload, dict):
                 self._send_json(cached_payload)

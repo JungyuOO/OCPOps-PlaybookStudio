@@ -10,6 +10,7 @@ from typing import Callable
 
 from play_book_studio.config.settings import Settings
 from play_book_studio.config.validation import read_jsonl
+from play_book_studio.contextual_enrichment import contextual_search_text
 
 from .collector import collect_entry
 from .curated_gold import (
@@ -156,7 +157,7 @@ def sync_curated_slug_to_qdrant(settings: Settings, slug: str) -> int:
     if not chunks:
         return 0
     client = EmbeddingClient(settings)
-    vectors = client.embed_texts(chunk.text for chunk in chunks)
+    vectors = client.embed_texts(contextual_search_text(chunk.to_dict()) for chunk in chunks)
     return upsert_chunks(settings, chunks, vectors)
 
 

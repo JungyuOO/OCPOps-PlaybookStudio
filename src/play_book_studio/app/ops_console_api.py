@@ -73,11 +73,11 @@ def _default_model_profile(workspace_id: str) -> dict[str, Any]:
     return {
         "workspace_id": workspace_id,
         "chat_provider": "openai-compatible",
-        "chat_base_url": "http://127.0.0.1:8765/api",
+        "chat_base_url": "http://127.0.0.1:8876/api",
         "chat_model": "pbs-runtime",
         "chat_api_key_mode": "managed",
         "embedding_provider": "tei",
-        "embedding_base_url": "http://127.0.0.1:8765/embeddings",
+        "embedding_base_url": "http://127.0.0.1:8876/embeddings",
         "embedding_model": "bge-m3",
         "embedding_api_key_mode": "managed",
         "updated_at": _now_iso(),
@@ -189,7 +189,7 @@ def _scm_provider_status(root_dir: Path) -> dict[str, dict[str, Any]]:
 
 def _oauth_authorize_url(handler: Any, root_dir: Path, provider: str, state_token: str) -> str:
     settings = _ops_settings(root_dir)
-    host = str(handler.headers.get("Host") or "127.0.0.1:8765").strip()
+    host = str(handler.headers.get("Host") or "127.0.0.1:8876").strip()
     redirect_uri = f"http://{host}/api/v1/oauth/{provider}/callback"
     if provider == "github" and settings.scm_github_client_id:
         return (

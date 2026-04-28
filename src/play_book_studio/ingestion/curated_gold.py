@@ -23,6 +23,7 @@ from play_book_studio.canonical import (
 )
 from play_book_studio.config.settings import Settings
 from play_book_studio.config.validation import read_jsonl
+from play_book_studio.contextual_enrichment import enrich_contextual_row
 
 from .chunking import chunk_sections
 from .graph_sidecar import (
@@ -564,7 +565,7 @@ def _upsert_book_rows_for_slug(
 
 def _bm25_row(chunk_row: dict[str, object]) -> dict[str, object]:
     chunk_type = str(chunk_row.get("chunk_type", "reference"))
-    return {
+    row = {
         "chunk_id": chunk_row["chunk_id"],
         "book_slug": chunk_row["book_slug"],
         "chapter": chunk_row["chapter"],
@@ -596,6 +597,7 @@ def _bm25_row(chunk_row: dict[str, object]) -> dict[str, object]:
         "operator_names": list(chunk_row.get("operator_names", [])),
         "verification_hints": list(chunk_row.get("verification_hints", [])),
     }
+    return enrich_contextual_row(row)
 
 
 def _upsert_playbook_payload_for_slug(

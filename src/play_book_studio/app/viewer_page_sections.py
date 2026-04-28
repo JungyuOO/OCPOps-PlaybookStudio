@@ -633,7 +633,7 @@ def _build_study_section_cards(
     return cards
 
 
-def _build_section_outline(sections: list[dict[str, Any]], *, limit: int = 5) -> list[dict[str, str]]:
+def _build_section_outline(sections: list[dict[str, Any]], *, limit: int = 0) -> list[dict[str, str]]:
     outline: list[dict[str, str]] = []
     for row in sections:
         anchor = str(row.get("anchor") or "").strip()
@@ -652,7 +652,7 @@ def _build_section_outline(sections: list[dict[str, Any]], *, limit: int = 5) ->
                 "path": " > ".join(item for item in path if item) or heading,
             }
         )
-        if len(outline) >= limit:
+        if limit > 0 and len(outline) >= limit:
             break
     return outline
 

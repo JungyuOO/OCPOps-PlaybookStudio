@@ -278,7 +278,7 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
 
         for block in blocks:
             block_tokens = token_counter.count(block)
-            if block_tokens > chunk_size and block.startswith("[CODE]"):
+            if block_tokens > chunk_size and block.startswith("[CODE"):
                 finalize()
                 current_blocks = [block]
                 current_tokens = block_tokens

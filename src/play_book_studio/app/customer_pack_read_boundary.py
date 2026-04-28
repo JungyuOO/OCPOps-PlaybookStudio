@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 from play_book_studio.intake import CustomerPackDraftStore
 from play_book_studio.intake.private_boundary import summarize_private_runtime_boundary
+from play_book_studio.source_authority import COMMUNITY_AUTHORITY, source_authority_payload
 
 
 CUSTOMER_PACK_CAPTURE_API_PREFIX = "/api/customer-packs/captured"
@@ -95,6 +96,11 @@ _SOURCE_META_ALLOWED_FIELDS = {
     "boundary_truth",
     "runtime_truth_label",
     "boundary_badge",
+    "source_authority",
+    "source_authority_label",
+    "source_authority_badge",
+    "source_authority_warning",
+    "source_requires_review",
     "quality_status",
     "shared_grade",
     "grade_gate",
@@ -199,12 +205,30 @@ def summarize_customer_pack_read_boundary(record: Any | None) -> dict[str, Any]:
     workspace_id = str(getattr(record, "workspace_id", "") or "").strip()
     approval_state = str(getattr(record, "approval_state", "") or "").strip()
     publication_state = str(getattr(record, "publication_state", "") or "").strip()
-    placeholder_security_fields = [
-        field_name
-        for field_name, placeholder_values in PRIVATE_READ_PLACEHOLDER_VALUES.items()
-        if str(getattr(record, field_name, "") or "").strip() in placeholder_values
-    ]
-    approval_ready = approval_state in PRIVATE_READ_ALLOWED_APPROVAL_STATES
+    authority = source_authority_payload(
+        {
+            "source_collection": _record_source_collection(record),
+            "source_lane": str(getattr(record, "source_lane", "") or "").strip(),
+            "classification": str(getattr(record, "classification", "") or "").strip(),
+            "approval_state": approval_state,
+        }
+    )
+    is_community_source = authority["source_authority"] == COMMUNITY_AUTHORITY
+    placeholder_security_fields = (
+        []
+        if is_community_source
+        else [
+            field_name
+            for field_name, placeholder_values in PRIVATE_READ_PLACEHOLDER_VALUES.items()
+            if str(getattr(record, field_name, "") or "").strip() in placeholder_values
+        ]
+    )
+    allowed_approval_states = (
+        PRIVATE_READ_ALLOWED_APPROVAL_STATES | {"review_required"}
+        if is_community_source
+        else PRIVATE_READ_ALLOWED_APPROVAL_STATES
+    )
+    approval_ready = approval_state in allowed_approval_states
     fail_reasons: list[str] = []
     if placeholder_security_fields:
         fail_reasons.extend(
@@ -220,12 +244,14 @@ def summarize_customer_pack_read_boundary(record: Any | None) -> dict[str, Any]:
     if manifest_path.as_posix() not in {"", "."} and manifest_path.exists():
         manifest_present = True
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        authority = source_authority_payload({**manifest, **authority})
+        is_community_source = authority["source_authority"] == COMMUNITY_AUTHORITY
         manifest_summary = summarize_private_runtime_boundary(manifest)
         grade_gate = dict(manifest.get("grade_gate") or {})
         promotion_gate = dict(grade_gate.get("promotion_gate") or {})
         citation_gate = dict(grade_gate.get("citation_gate") or {})
         retrieval_gate = dict(grade_gate.get("retrieval_gate") or {})
-        if not bool(manifest_summary.get("runtime_eligible", False)):
+        if not is_community_source and not bool(manifest_summary.get("runtime_eligible", False)):
             fail_reasons.extend(
                 f"private_manifest:{reason}"
                 for reason in (manifest_summary.get("fail_reasons") or [])
@@ -240,7 +266,12 @@ def summarize_customer_pack_read_boundary(record: Any | None) -> dict[str, Any]:
         retrieval_ready = bool(manifest.get("retrieval_ready") or retrieval_gate.get("ready"))
         read_ready = bool(manifest.get("read_ready") or promotion_gate.get("read_ready"))
         publish_ready = bool(manifest.get("publish_ready") or promotion_gate.get("publish_ready"))
-        if grade_gate and not read_ready:
+        community_materialized_for_review = (
+            is_community_source
+            and retrieval_ready
+            and citation_landing_status not in {"", "missing"}
+        )
+        if grade_gate and not read_ready and not community_materialized_for_review:
             blocked_reasons = [
                 str(reason).strip()
                 for reason in (promotion_gate.get("blocked_reasons") or [])
@@ -284,6 +315,7 @@ def summarize_customer_pack_read_boundary(record: Any | None) -> dict[str, Any]:
         "approval_state": approval_state,
         "publication_state": publication_state,
         "manifest_present": manifest_present,
+        **authority,
     }
 
 

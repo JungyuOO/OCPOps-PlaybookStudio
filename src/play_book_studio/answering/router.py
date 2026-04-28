@@ -58,6 +58,12 @@ TECHNICAL_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 STRUCTURED_QUERY_RE = re.compile(r"[/<>=:\d]")
+OCP_GROUNDED_LEARNING_PATH_RE = re.compile(
+    r"(개요|아키텍처|architecture|operator|오퍼레이터|공식\s*문서|근거).*(순서|경로|로드맵|설명|학습)|"
+    r"(순서|경로|로드맵|설명|학습).*(개요|아키텍처|architecture|operator|오퍼레이터|공식\s*문서|근거)|"
+    r"(openshift|오픈\s*시프트|오픈시프트|ocp).*(전체\s*구조|구조|아키텍처|architecture|학습\s*플랜|학습\s*경로)",
+    re.IGNORECASE,
+)
 
 
 def _friendly_intro_answer() -> str:
@@ -144,7 +150,7 @@ def route_non_rag(
                 "가벼운 인사나 입문 질문도 받을 수 있고, 근거가 필요한 실무 질문은 문서를 찾아 가이드 형태로 답합니다."
             ),
         )
-    if OCP_LEARNING_ADVICE_RE.search(normalized):
+    if OCP_LEARNING_ADVICE_RE.search(normalized) and not OCP_GROUNDED_LEARNING_PATH_RE.search(normalized):
         return RoutedResponse(route="guide", answer=_ocp_learning_advice_answer())
     # broad intro는 official overview/architecture hit를 붙여 답해야 하므로
     # 하드코딩 안내문으로 종료하지 않고 retrieval로 넘긴다.
@@ -168,7 +174,7 @@ def route_non_rag(
                 "답변: 보안 범위를 먼저 정해야 합니다. 플랫폼 보안, 인증·권한, 네트워크 보안 중 어디부터 볼까요?"
             ),
         )
-    if has_multiple_entity_ambiguity(normalized):
+    if has_multiple_entity_ambiguity(normalized) and not OCP_GROUNDED_LEARNING_PATH_RE.search(normalized):
         return RoutedResponse(
             route="clarification",
             answer=(

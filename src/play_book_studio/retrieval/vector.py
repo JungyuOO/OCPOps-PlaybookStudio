@@ -8,11 +8,13 @@ import requests
 
 from play_book_studio.config.settings import Settings
 from play_book_studio.ingestion.embedding import EmbeddingClient
+from play_book_studio.source_authority import source_authority_payload
 
 from .models import RetrievalHit
 
 
 def hit_from_payload(payload: dict[str, Any], *, source: str, score: float) -> RetrievalHit:
+    authority = source_authority_payload(payload)
     return RetrievalHit(
         chunk_id=str(payload["chunk_id"]),
         book_slug=str(payload["book_slug"]),
@@ -32,6 +34,23 @@ def hit_from_payload(payload: dict[str, Any], *, source: str, score: float) -> R
         source_lane=str(payload.get("source_lane", "official_ko")),
         source_type=str(payload.get("source_type", "official_doc")),
         source_collection=str(payload.get("source_collection", "core")),
+        source_authority=str(payload.get("source_authority") or authority.get("source_authority") or ""),
+        source_authority_label=str(payload.get("source_authority_label") or authority.get("source_authority_label") or ""),
+        source_authority_badge=str(payload.get("source_authority_badge") or authority.get("source_authority_badge") or ""),
+        source_authority_warning=str(
+            payload.get("source_authority_warning") or authority.get("source_authority_warning") or ""
+        ),
+        source_requires_review=bool(
+            payload.get("source_requires_review", authority.get("source_requires_review", False))
+        ),
+        boundary_truth=str(payload.get("boundary_truth", "")),
+        runtime_truth_label=str(payload.get("runtime_truth_label", "")),
+        boundary_badge=str(payload.get("boundary_badge", "")),
+        approval_state=str(payload.get("approval_state", "")),
+        publication_state=str(payload.get("publication_state", "")),
+        provider_egress_policy=str(payload.get("provider_egress_policy", "")),
+        retrieval_ready=bool(payload.get("retrieval_ready", False)),
+        read_ready=bool(payload.get("read_ready", False)),
         surface_kind=str(payload.get("surface_kind", "document")),
         source_unit_kind=str(payload.get("source_unit_kind", "section")),
         source_unit_id=str(payload.get("source_unit_id", "")),
@@ -55,6 +74,12 @@ def hit_from_payload(payload: dict[str, Any], *, source: str, score: float) -> R
             for item in (payload.get("graph_relations") or payload.get("relation_question_classes") or [])
             if str(item).strip()
         ),
+        contextual_enrichment_version=str(payload.get("contextual_enrichment_version", "")),
+        contextual_parent_title=str(payload.get("contextual_parent_title", "")),
+        contextual_heading_path=tuple(
+            str(item) for item in (payload.get("contextual_heading_path") or []) if str(item).strip()
+        ),
+        contextual_prefix=str(payload.get("contextual_prefix", "")),
     )
 
 

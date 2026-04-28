@@ -99,6 +99,11 @@ export function truthSurfaceCopy(payload?: {
   runtime_truth_label?: string;
   boundary_badge?: string;
   source_lane?: string;
+  source_authority?: string;
+  source_authority_label?: string;
+  source_authority_badge?: string;
+  source_authority_warning?: string;
+  source_requires_review?: boolean;
   approval_state?: string;
   publication_state?: string;
   parser_backend?: string;
@@ -112,6 +117,9 @@ export function truthSurfaceCopy(payload?: {
   }
   const boundaryTruth = String(payload.boundary_truth || '').trim();
   const sourceLane = String(payload.source_lane || '').trim();
+  const sourceAuthority = String(payload.source_authority || '').trim();
+  const sourceAuthorityLabel = String(payload.source_authority_label || '').trim();
+  const sourceAuthorityWarning = String(payload.source_authority_warning || '').trim();
   const runtimeTruthLabel = String(payload.runtime_truth_label || '').trim();
   const packLabel = String(payload.pack_label || '').trim();
 
@@ -123,6 +131,26 @@ export function truthSurfaceCopy(payload?: {
         payload.approval_state ? `approval ${payload.approval_state}` : '',
         payload.publication_state ? `publication ${payload.publication_state}` : '',
         payload.parser_backend ? `parser ${payload.parser_backend}` : '',
+      ].filter(Boolean),
+    };
+  }
+
+  if (sourceAuthority === 'community') {
+    return {
+      label: sourceAuthorityLabel || 'Community Source',
+      meta: [
+        sourceAuthorityWarning,
+        payload.source_requires_review ? 'review required' : '',
+      ].filter(Boolean),
+    };
+  }
+
+  if (sourceAuthority === 'unverified_candidate' || sourceAuthority === 'unknown') {
+    return {
+      label: sourceAuthorityLabel || 'Unverified Source',
+      meta: [
+        sourceAuthorityWarning || 'verify before operational use',
+        payload.source_requires_review ? 'review required' : '',
       ].filter(Boolean),
     };
   }
@@ -148,8 +176,9 @@ export function truthSurfaceCopy(payload?: {
   }
 
   return {
-    label: payload.boundary_badge || runtimeTruthLabel || sourceLane || '',
+    label: payload.boundary_badge || runtimeTruthLabel || sourceAuthorityLabel || sourceLane || '',
     meta: [
+      sourceAuthorityWarning,
       payload.approval_state ? `approval ${payload.approval_state}` : '',
       payload.publication_state ? `publication ${payload.publication_state}` : '',
       payload.parser_backend ? `parser ${payload.parser_backend}` : '',

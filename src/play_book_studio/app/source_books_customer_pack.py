@@ -10,6 +10,7 @@ from urllib.parse import quote, urlparse
 
 from play_book_studio.config.settings import load_settings
 from play_book_studio.intake import CustomerPackDraftStore
+from play_book_studio.source_authority import COMMUNITY_AUTHORITY, source_authority_payload
 
 from .presenters import _default_customer_pack_summary
 from .customer_pack_read_boundary import load_customer_pack_read_boundary
@@ -25,10 +26,29 @@ from .viewers import (
 CUSTOMER_PACK_VIEWER_PREFIX = "/playbooks/customer-packs/"
 
 
+def _record_source_collection(record: Any) -> str:
+    plan = getattr(record, "plan", None)
+    return str(getattr(plan, "source_collection", "") or "").strip()
+
+
 def _customer_pack_boundary_payload(record: Any) -> dict[str, Any]:
     source_lane = str(getattr(record, "source_lane", "") or "customer_source_first_pack")
+    classification = str(getattr(record, "classification", "") or "private")
+    authority = source_authority_payload(
+        {
+            "source_collection": _record_source_collection(record),
+            "source_lane": source_lane,
+            "classification": classification,
+            "approval_state": str(getattr(record, "approval_state", "") or "unreviewed"),
+        }
+    )
     truth_label = "Customer Source-First Pack"
     boundary_badge = "Private Pack Runtime"
+    boundary_truth = "private_customer_pack_runtime"
+    if authority["source_authority"] == COMMUNITY_AUTHORITY:
+        truth_label = "Community Source Pack"
+        boundary_badge = "Community Source"
+        boundary_truth = "community_source_pack_runtime"
     evidence = {
         "source_lane": source_lane,
         "source_fingerprint": str(getattr(record, "source_fingerprint", "") or ""),
@@ -45,11 +65,14 @@ def _customer_pack_boundary_payload(record: Any) -> dict[str, Any]:
         "fallback_reason": str(getattr(record, "fallback_reason", "") or ""),
         "tenant_id": str(getattr(record, "tenant_id", "") or ""),
         "workspace_id": str(getattr(record, "workspace_id", "") or ""),
+        "classification": classification,
+        "provider_egress_policy": str(getattr(record, "provider_egress_policy", "") or ""),
         "approval_state": str(getattr(record, "approval_state", "") or "unreviewed"),
         "publication_state": str(getattr(record, "publication_state", "") or "draft"),
-        "boundary_truth": "private_customer_pack_runtime",
+        "boundary_truth": boundary_truth,
         "runtime_truth_label": truth_label,
         "boundary_badge": boundary_badge,
+        **authority,
     }
     return {
         **evidence,
@@ -659,6 +682,18 @@ def _merge_customer_pack_surface_truth(
     payload["retrieval_ready"] = bool(_value("retrieval_ready", retrieval_gate.get("ready")))
     payload["read_ready"] = bool(_value("read_ready", promotion_gate.get("read_ready")))
     payload["publish_ready"] = bool(_value("publish_ready", promotion_gate.get("publish_ready")))
+    for key in (
+        "source_authority",
+        "source_authority_label",
+        "source_authority_badge",
+        "source_authority_warning",
+        "source_requires_review",
+    ):
+        value = _value(key, None)
+        if value is not None:
+            payload[key] = value
+    if not str(payload.get("source_authority") or "").strip():
+        payload.update(source_authority_payload(payload))
     return payload
 
 
@@ -913,6 +948,69 @@ def internal_customer_pack_viewer_html(root_dir: Path, viewer_path: str, *, page
     )
 
 
+def _normalized_draft_catalog_value(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _customer_pack_draft_display_key(summary: dict[str, Any]) -> tuple[str, ...]:
+    source_type = _normalized_draft_catalog_value(summary.get("source_type"))
+    fingerprint = _normalized_draft_catalog_value(summary.get("source_fingerprint"))
+    book_slug = _normalized_draft_catalog_value(summary.get("book_slug"))
+    title = _normalized_draft_catalog_value(summary.get("title"))
+    if fingerprint:
+        return ("fingerprint", source_type, fingerprint, book_slug, title)
+
+    uploaded_file_name = _normalized_draft_catalog_value(summary.get("uploaded_file_name"))
+    if uploaded_file_name:
+        return ("uploaded", source_type, uploaded_file_name)
+
+    return (
+        "logical",
+        source_type,
+        book_slug,
+        title,
+    )
+
+
+def _truthy_catalog_flag(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return _normalized_draft_catalog_value(value) == "true"
+
+
+def _customer_pack_draft_display_rank(summary: dict[str, Any]) -> tuple[int, str, str, str]:
+    status = _normalized_draft_catalog_value(summary.get("status"))
+    quality = _normalized_draft_catalog_value(summary.get("quality_status"))
+    grade = _normalized_draft_catalog_value(summary.get("shared_grade"))
+    playable_assets = int(summary.get("playable_asset_count") or 0)
+    readiness = (
+        (100 if _truthy_catalog_flag(summary.get("read_ready")) else 0)
+        + (40 if _truthy_catalog_flag(summary.get("publish_ready")) else 0)
+        + (20 if status == "normalized" else 10 if status == "captured" else 0)
+        + (5 if quality == "ready" else 0)
+        + (3 if grade == "gold" else 0)
+        + playable_assets
+    )
+    return (
+        readiness,
+        str(summary.get("updated_at") or ""),
+        str(summary.get("created_at") or ""),
+        str(summary.get("draft_id") or ""),
+    )
+
+
+def deduplicate_customer_pack_draft_summaries(
+    summaries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    selected: dict[tuple[str, ...], dict[str, Any]] = {}
+    for summary in summaries:
+        key = _customer_pack_draft_display_key(summary)
+        current = selected.get(key)
+        if current is None or _customer_pack_draft_display_rank(summary) > _customer_pack_draft_display_rank(current):
+            selected[key] = summary
+    return list(selected.values())
+
+
 def list_customer_pack_drafts(root_dir: Path) -> dict[str, Any]:
     drafts: list[dict[str, Any]] = []
     store = CustomerPackDraftStore(root_dir)
@@ -946,10 +1044,12 @@ def list_customer_pack_drafts(root_dir: Path) -> dict[str, Any]:
                 summary["slide_packet_count"] = payload.get("slide_packet_count")
                 summary["slide_asset_count"] = payload.get("slide_asset_count")
         drafts.append(summary)
+    drafts = deduplicate_customer_pack_draft_summaries(drafts)
     return {"drafts": drafts}
 
 
 __all__ = [
+    "deduplicate_customer_pack_draft_summaries",
     "internal_customer_pack_viewer_html",
     "list_customer_pack_drafts",
     "load_customer_pack_book",

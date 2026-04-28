@@ -32,6 +32,7 @@ export interface Message {
     checkbox_label: string;
     confirm_label: string;
     repository_query: string;
+    repair_plan?: Record<string, unknown>;
   };
   primarySourceLane?: string;
   primaryBoundaryTruth?: string;

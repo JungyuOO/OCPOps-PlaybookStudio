@@ -8,6 +8,8 @@ from typing import Any
 
 from play_book_studio.app.server_support import _parse_multipart_form_data
 
+_CLIENT_DISCONNECT_ERRORS = (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)
+
 
 class _HandlerBase:
     def _debug_timing(self, label: str, started_at: float) -> None:
@@ -16,13 +18,16 @@ class _HandlerBase:
 
     def _send_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Pragma", "no-cache")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Pragma", "no-cache")
+            self.end_headers()
+            self.wfile.write(body)
+        except _CLIENT_DISCONNECT_ERRORS:
+            return
 
     def _send_bytes(
         self,
@@ -31,13 +36,16 @@ class _HandlerBase:
         content_type: str,
         status: HTTPStatus = HTTPStatus.OK,
     ) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Pragma", "no-cache")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Pragma", "no-cache")
+            self.end_headers()
+            self.wfile.write(body)
+        except _CLIENT_DISCONNECT_ERRORS:
+            return
 
     def _start_ndjson_stream(self) -> None:
         self.send_response(HTTPStatus.OK)
@@ -51,7 +59,7 @@ class _HandlerBase:
             body = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
             self.wfile.write(body)
             self.wfile.flush()
-        except (BrokenPipeError, ConnectionResetError):
+        except _CLIENT_DISCONNECT_ERRORS:
             return
 
     def _parse_request_payload(self) -> dict[str, Any] | None:

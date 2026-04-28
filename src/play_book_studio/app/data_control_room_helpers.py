@@ -81,13 +81,15 @@ def _select_report_candidate(
         if not payload:
             continue
         primary_count = _report_count(payload, summary_key=summary_key, rows_key=rows_key)
+        if expected_count > 0 and primary_count != expected_count:
+            continue
         book_count = _report_count(payload, summary_key="book_count", rows_key="books")
         try:
             mtime = resolved.stat().st_mtime
         except OSError:
             mtime = 0.0
         score = (
-            1 if expected_count > 0 and primary_count == expected_count else 0,
+            1 if expected_count > 0 else 0,
             1 if primary_count > 0 else 0,
             book_count,
             mtime,

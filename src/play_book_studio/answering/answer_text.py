@@ -24,6 +24,7 @@ from .answer_text_commands import (
     shape_pod_lifecycle_explainer,
     shape_pod_pending_troubleshooting,
     shape_project_termination_answer,
+    shape_learning_answer_text,
     shape_rbac_follow_up_answer,
 )
 from .answer_text_formatting import (
@@ -101,6 +102,7 @@ __all__ = [
     "shape_pod_lifecycle_explainer",
     "shape_pod_pending_troubleshooting",
     "shape_project_termination_answer",
+    "shape_learning_answer_text",
     "shape_rbac_follow_up_answer",
     "strip_intro_offtopic_noise",
     "strip_structured_key_extra_guidance",

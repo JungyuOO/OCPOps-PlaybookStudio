@@ -145,6 +145,18 @@ def _figure_asset_by_name(slug: str, asset_name: str) -> dict[str, Any] | None:
     return None
 
 
+def _local_figure_asset_url(root_dir: Path, slug: str, asset_name: str) -> str:
+    normalized_slug = str(slug or "").strip()
+    normalized_asset_name = str(asset_name or "").strip()
+    if not normalized_slug or not normalized_asset_name:
+        return ""
+    for group in ("full_rebuild", "repo_wide_official"):
+        asset_path = root_dir / "data" / "wiki_assets" / group / normalized_slug / normalized_asset_name
+        if asset_path.exists() and asset_path.is_file():
+            return f"/playbooks/wiki-assets/{group}/{normalized_slug}/{normalized_asset_name}"
+    return ""
+
+
 def _figure_section_match(slug: str, asset_name: str) -> dict[str, Any] | None:
     payload = _figure_section_index()
     by_slug = payload.get("by_slug") if isinstance(payload.get("by_slug"), dict) else {}
@@ -478,4 +490,4 @@ def _figure_viewer_sections(slug: str, asset_name: str, asset: dict[str, Any]) -
     ]
 
 
-__all__ = ["ACTIVE_WIKI_RUNTIME_BOOK_PREFIX", "GOLD_CANDIDATE_BOOK_PREFIX", "LEGACY_WIKI_RUNTIME_BOOK_PREFIX", "_active_runtime_markdown_path", "_book_related_figures", "_book_related_sections", "_build_backlinks", "_build_entity_backlinks", "_candidate_relations", "_chat_link_truth_payload", "_chat_navigation_aliases", "_contains_hangul", "_entity_hub_sections", "_entity_hubs", "_entity_related_sections", "_figure_asset_by_name", "_figure_asset_filename", "_figure_assets", "_figure_entity_index", "_runtime_markdown_path_candidates", "_section_linked_figures", "_figure_section_index", "_figure_section_match", "_figure_viewer_href", "_figure_viewer_sections", "_is_final_runtime_href", "_link_book_slug", "_preferred_book_href", "_prefer_korean_book_links", "_relation_href_matches_slug", "_rewrite_book_href", "_runtime_markdown_path_from_entries", "_runtime_markdown_path_from_manifest", "_section_relation_index", "_wiki_relation_items"]
+__all__ = ["ACTIVE_WIKI_RUNTIME_BOOK_PREFIX", "GOLD_CANDIDATE_BOOK_PREFIX", "LEGACY_WIKI_RUNTIME_BOOK_PREFIX", "_active_runtime_markdown_path", "_book_related_figures", "_book_related_sections", "_build_backlinks", "_build_entity_backlinks", "_candidate_relations", "_chat_link_truth_payload", "_chat_navigation_aliases", "_contains_hangul", "_entity_hub_sections", "_entity_hubs", "_entity_related_sections", "_figure_asset_by_name", "_figure_asset_filename", "_figure_assets", "_figure_entity_index", "_local_figure_asset_url", "_runtime_markdown_path_candidates", "_section_linked_figures", "_figure_section_index", "_figure_section_match", "_figure_viewer_href", "_figure_viewer_sections", "_is_final_runtime_href", "_link_book_slug", "_preferred_book_href", "_prefer_korean_book_links", "_relation_href_matches_slug", "_rewrite_book_href", "_runtime_markdown_path_from_entries", "_runtime_markdown_path_from_manifest", "_section_relation_index", "_wiki_relation_items"]

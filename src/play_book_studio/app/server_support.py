@@ -17,6 +17,7 @@ from play_book_studio.app.presenters import (
     _serialize_citation,
 )
 from play_book_studio.app.presenters_runtime import _build_runtime_payload
+from play_book_studio.app.gap_repair import build_gap_repair_plan
 from play_book_studio.app.source_books import (
     build_chat_navigation_links as _build_chat_navigation_links,
     build_chat_section_links as _build_chat_section_links,
@@ -182,13 +183,15 @@ def _build_chat_payload(
         "runtime": _build_runtime_payload(answerer) if answerer is not None else {},
     }
     if result.response_kind == "no_answer":
+        repository_query = (result.rewritten_query or result.query or "").strip()
         payload["acquisition"] = {
             "kind": "repository_search",
             "title": "현재 Playbook Library에 해당 자료가 없습니다.",
             "body": "자료 추가를 원하시면 체크 후 확인을 눌러주세요.",
             "checkbox_label": "Repository에서 우선순위로 필요한 데이터 찾기",
             "confirm_label": "확인",
-            "repository_query": (result.rewritten_query or result.query or "").strip(),
+            "repository_query": repository_query,
+            "repair_plan": build_gap_repair_plan(root_dir, query=repository_query),
         }
     return payload
 

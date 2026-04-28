@@ -586,6 +586,21 @@ def suggest_follow_up_items(*, session: ChatSession, result: AnswerResult) -> li
         else {}
     )
     citation_index, href = _primary_followup_target(result)
+    primary_citation = result.citations[0] if result.citations else None
+    selected_draft_ids = [
+        str(item).strip()
+        for item in (session.context.selected_draft_ids or [])
+        if str(item).strip()
+    ]
+    source_scope = {
+        "selected_draft_ids": selected_draft_ids,
+        "restrict_uploaded_sources": bool(session.context.restrict_uploaded_sources),
+        "source_collection": str(getattr(primary_citation, "source_collection", "") or ""),
+        "source_lane": str(getattr(primary_citation, "source_lane", "") or ""),
+        "boundary_truth": str(getattr(primary_citation, "boundary_truth", "") or ""),
+        "approval_state": str(getattr(primary_citation, "approval_state", "") or ""),
+        "publication_state": str(getattr(primary_citation, "publication_state", "") or ""),
+    }
     items: list[dict[str, Any]] = []
     seen_dimensions: set[str] = set()
     for ordinal, query in enumerate(queries, start=1):
@@ -601,6 +616,7 @@ def suggest_follow_up_items(*, session: ChatSession, result: AnswerResult) -> li
                 "source": source,
                 "citation_index": citation_index,
                 "href": href,
+                **source_scope,
             }
         )
 
@@ -624,6 +640,7 @@ def suggest_follow_up_items(*, session: ChatSession, result: AnswerResult) -> li
                     "source": "next_play_plan",
                     "citation_index": citation_index,
                     "href": href,
+                    **source_scope,
                 }
             )
             seen_dimensions.add(dimension)

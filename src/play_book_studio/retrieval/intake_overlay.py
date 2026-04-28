@@ -18,6 +18,7 @@ from play_book_studio.intake.private_corpus import (
     customer_pack_private_manifest_path,
     customer_pack_private_vector_path,
 )
+from play_book_studio.source_authority import COMMUNITY_AUTHORITY, source_authority_payload
 
 from .bm25 import BM25Index
 from .models import RetrievalHit, SessionContext
@@ -85,6 +86,12 @@ def _runtime_eligible_selected_draft_ids(
         if not manifest_path.exists():
             continue
         manifest = _json_payload(manifest_path)
+        authority = source_authority_payload(manifest)
+        if authority["source_authority"] == COMMUNITY_AUTHORITY:
+            citation_landing_status = str(manifest.get("citation_landing_status") or "").strip()
+            if bool(manifest.get("retrieval_ready")) and citation_landing_status not in {"", "missing"}:
+                eligible.append(draft_id)
+            continue
         summary = summarize_private_runtime_boundary(manifest)
         if bool(summary.get("runtime_eligible")):
             eligible.append(draft_id)

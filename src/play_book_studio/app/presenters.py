@@ -14,6 +14,7 @@ from play_book_studio.config.validation import read_jsonl
 from play_book_studio.runtime_catalog_registry import official_runtime_book_entry
 from play_book_studio.answering.models import Citation
 from play_book_studio.app.viewers import _parse_viewer_path
+from play_book_studio.source_authority import COMMUNITY_AUTHORITY, source_authority_payload
 from .customer_pack_read_boundary import (
     customer_pack_draft_id_from_capture_url,
     customer_pack_draft_id_from_viewer_path,
@@ -260,6 +261,12 @@ def _merge_customer_pack_surface_truth(
     payload["retrieval_ready"] = bool(_value("retrieval_ready", retrieval_gate.get("ready")))
     payload["read_ready"] = bool(_value("read_ready", promotion_gate.get("read_ready")))
     payload["publish_ready"] = bool(_value("publish_ready", promotion_gate.get("publish_ready")))
+    authority_payload = source_authority_payload({**payload, **manifest})
+    payload.update(authority_payload)
+    if authority_payload["source_authority"] == COMMUNITY_AUTHORITY:
+        payload["boundary_truth"] = "community_source_pack_runtime"
+        payload["runtime_truth_label"] = "Community Source Pack"
+        payload["boundary_badge"] = "Community Source"
     return payload
 
 
@@ -306,6 +313,9 @@ def _customer_pack_book_for_viewer_path(
     payload.setdefault("inferred_product", record.plan.inferred_product)
     payload.setdefault("inferred_version", record.plan.inferred_version)
     payload.setdefault("source_lane", record.source_lane)
+    payload.setdefault("classification", record.classification)
+    payload.setdefault("provider_egress_policy", record.provider_egress_policy)
+    payload.setdefault("redaction_state", record.redaction_state)
     payload.setdefault("approval_state", record.approval_state)
     payload.setdefault("publication_state", record.publication_state)
     payload.setdefault("parser_backend", record.parser_backend)
@@ -381,6 +391,11 @@ def _customer_pack_meta_for_viewer_path(
         "boundary_truth": str(payload.get("boundary_truth") or "private_customer_pack_runtime"),
         "runtime_truth_label": str(payload.get("runtime_truth_label") or "Customer Source-First Pack"),
         "boundary_badge": str(payload.get("boundary_badge") or "Private Pack Runtime"),
+        "source_authority": str(payload.get("source_authority") or ""),
+        "source_authority_label": str(payload.get("source_authority_label") or ""),
+        "source_authority_badge": str(payload.get("source_authority_badge") or ""),
+        "source_authority_warning": str(payload.get("source_authority_warning") or ""),
+        "source_requires_review": bool(payload.get("source_requires_review") or False),
         "inferred_product": str(payload.get("inferred_product") or "unknown"),
         "inferred_version": str(payload.get("inferred_version") or "unknown"),
         "quality_status": str(payload.get("quality_status") or "ready"),
@@ -479,6 +494,16 @@ def _citation_from_payload(payload: dict[str, Any]) -> Citation:
         chunk_type=str(payload.get("chunk_type") or "reference"),
         semantic_role=str(payload.get("semantic_role") or "unknown"),
         source_collection=str(payload.get("source_collection") or "core"),
+        source_lane=str(payload.get("source_lane") or "official_ko"),
+        source_type=str(payload.get("source_type") or "official_doc"),
+        boundary_truth=str(payload.get("boundary_truth") or ""),
+        runtime_truth_label=str(payload.get("runtime_truth_label") or ""),
+        boundary_badge=str(payload.get("boundary_badge") or ""),
+        approval_state=str(payload.get("approval_state") or ""),
+        publication_state=str(payload.get("publication_state") or ""),
+        provider_egress_policy=str(payload.get("provider_egress_policy") or ""),
+        retrieval_ready=bool(payload.get("retrieval_ready")),
+        read_ready=bool(payload.get("read_ready")),
         block_kinds=tuple(str(item) for item in (payload.get("block_kinds") or [])),
         cli_commands=tuple(str(item) for item in (payload.get("cli_commands") or [])),
         error_strings=tuple(str(item) for item in (payload.get("error_strings") or [])),
@@ -521,6 +546,15 @@ def _serialize_citation_uncached(
     row: dict[str, Any] | None = None
 
     if row is None and customer_pack_meta is not None:
+        authority_payload = source_authority_payload(
+            {
+                **customer_pack_meta,
+                **citation.to_dict(),
+                "source_collection": str(customer_pack_meta.get("source_collection") or "uploaded"),
+                "source_lane": str(customer_pack_meta.get("source_lane") or "customer_source_first_pack"),
+                "boundary_truth": str(customer_pack_meta.get("boundary_truth") or "private_customer_pack_runtime"),
+            }
+        )
         book_title = str(customer_pack_meta.get("book_title") or "") or _humanize_book_slug(citation.book_slug)
         section_path = [
             _display_source_heading(str(item))
@@ -564,6 +598,7 @@ def _serialize_citation_uncached(
             "boundary_truth": str(customer_pack_meta.get("boundary_truth") or "private_customer_pack_runtime"),
             "runtime_truth_label": str(customer_pack_meta.get("runtime_truth_label") or "Customer Source-First Pack"),
             "boundary_badge": str(customer_pack_meta.get("boundary_badge") or "Private Pack Runtime"),
+            **authority_payload,
             "inferred_product": str(customer_pack_meta.get("inferred_product") or "unknown"),
             "inferred_version": str(customer_pack_meta.get("inferred_version") or "unknown"),
             "section_match_exact": bool(customer_pack_meta.get("section_match_exact", True)),
@@ -610,12 +645,27 @@ def _serialize_citation_uncached(
             "boundary_truth": "private_customer_pack_runtime",
             "runtime_truth_label": "Customer Source-First Pack",
             "boundary_badge": "Private Pack Runtime",
+            **source_authority_payload(
+                {
+                    **citation.to_dict(),
+                    "source_collection": "uploaded",
+                    "source_lane": "customer_source_first_pack",
+                    "boundary_truth": "private_customer_pack_runtime",
+                }
+            ),
             "inferred_product": "unknown",
             "inferred_version": "unknown",
             "section_match_exact": False,
         }
 
     if _citation_has_direct_section_metadata(citation):
+        direct_runtime_truth = _official_runtime_truth_payload(settings=settings, manifest_entry=manifest_entry)
+        direct_payload = {
+            **citation.to_dict(),
+            **manifest_entry,
+            **context.core_pack_payload,
+            **direct_runtime_truth,
+        }
         book_title = (
             str(manifest_entry.get("title") or "")
             or _humanize_book_slug(citation.book_slug)
@@ -640,11 +690,20 @@ def _serialize_citation_uncached(
             "section_path_label": section_label,
             "source_label": f"{book_title} · {section_label}" if section_label else book_title,
             **context.core_pack_payload,
-            **_official_runtime_truth_payload(settings=settings, manifest_entry=manifest_entry),
+            **direct_runtime_truth,
+            **source_authority_payload(direct_payload),
             "section_match_exact": True,
         }
 
     row, matched_exact = context.normalized_row(href)
+    row_runtime_truth = _official_runtime_truth_payload(settings=settings, manifest_entry=manifest_entry)
+    row_payload = {
+        **citation.to_dict(),
+        **manifest_entry,
+        **(row or {}),
+        **context.core_pack_payload,
+        **row_runtime_truth,
+    }
 
     book_title = (
         str((row or {}).get("book_title") or "")
@@ -671,7 +730,8 @@ def _serialize_citation_uncached(
         "section_path_label": section_label,
         "source_label": f"{book_title} · {section_label}" if section_label else book_title,
         **context.core_pack_payload,
-        **_official_runtime_truth_payload(settings=settings, manifest_entry=manifest_entry),
+        **row_runtime_truth,
+        **source_authority_payload(row_payload),
         "section_match_exact": matched_exact,
     }
 

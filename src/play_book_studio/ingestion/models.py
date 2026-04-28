@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from play_book_studio.contextual_enrichment import enrich_contextual_row
+
 SOURCE_STATE_PUBLISHED_NATIVE = "published_native"
 SOURCE_STATE_FALLBACK_TO_EN = "fallback_to_en"
 SOURCE_STATE_EN_ONLY = "en_only"
@@ -490,7 +492,7 @@ class ChunkRecord:
         payload["origin_method"] = self.origin_method
         payload["ocr_status"] = self.ocr_status
         payload["block_kinds"] = list(self.block_kinds)
-        return payload
+        return enrich_contextual_row(payload)
 
 
 @dataclass(slots=True)

@@ -7,6 +7,7 @@ from typing import Any
 
 from play_book_studio.canonical import project_playbook_document
 from play_book_studio.config.settings import Settings
+from play_book_studio.contextual_enrichment import contextual_search_text, enrich_contextual_row
 
 from .chunking import chunk_sections
 from .collector import collect_entry, entry_with_collected_metadata, raw_html_path
@@ -106,7 +107,7 @@ def _write_official_playbook_payloads(
 
 def _bm25_row(chunk_row: dict[str, Any]) -> dict[str, Any]:
     chunk_type = str(chunk_row.get("chunk_type", "reference"))
-    return {
+    row = {
         "chunk_id": chunk_row["chunk_id"],
         "book_slug": chunk_row["book_slug"],
         "chapter": chunk_row["chapter"],
@@ -138,6 +139,7 @@ def _bm25_row(chunk_row: dict[str, Any]) -> dict[str, Any]:
         "operator_names": list(chunk_row.get("operator_names", [])),
         "verification_hints": list(chunk_row.get("verification_hints", [])),
     }
+    return enrich_contextual_row(row)
 
 
 def _chunk_records(rows: list[dict[str, Any]]) -> list[ChunkRecord]:
@@ -458,7 +460,7 @@ def materialize_runtime_corpus_from_playbooks(
             qdrant_recreate_collection=(recreate_qdrant or settings.qdrant_recreate_collection),
         )
         vectors = EmbeddingClient(embedding_settings).embed_texts(
-            (chunk.text for chunk in chunk_records),
+            (contextual_search_text(chunk.to_dict()) for chunk in chunk_records),
         )
         ensure_collection(embedding_settings)
         qdrant_upserted_count = upsert_chunks(

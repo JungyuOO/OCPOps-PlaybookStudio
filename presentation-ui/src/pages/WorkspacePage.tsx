@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   FileText,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Send,
   BookOpen,
@@ -89,7 +90,10 @@ import {
 import { ROUTES } from '../app/routes';
 import { displayCustomerDocumentTitle } from '../lib/customerDocumentTitles';
 import { loadStoredVisionMode, persistVisionMode, type VisionMode } from '../lib/wikiVision';
-import { resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';
+import {
+  isCustomerPackRuntimeBook,
+  resolveWorkspaceSourceBooks,
+} from '../lib/workspaceSourceCatalog';
 import WorkspaceTracePanel from '../components/WorkspaceTracePanel';
 import WorkspaceHeader from './workspace/WorkspaceHeader';
 import {
@@ -106,14 +110,17 @@ import type {
   WorkspaceManualBook,
   WorkspaceTestTrace,
 } from './workspaceTypes';
+import { starterQuestionPoolForMode } from './workspaceStarterQuestions';
 import { buildOutlineBookFamilies, describeOutlineVariant } from './workspaceOutline';
 import {
+  dedupeDraftCatalogForDisplay,
   describeDraftCatalogSemantics,
   needsSlideDeckUpgrade,
   partitionDraftCatalog,
   resolveDraftScopedViewerSourceId,
   shouldOpenDraftAsViewer,
 } from './workspaceDraftCatalog';
+import { useGlobalTheme } from '../lib/useGlobalTheme';
 
 interface OverlayTargetDescriptor {
   kind: WikiOverlayTargetKind;
@@ -125,6 +132,11 @@ interface OverlayTargetDescriptor {
 
 interface ViewerActiveSection {
   anchor: string;
+  title: string;
+}
+
+interface ViewerFooterNavItem {
+  href: string;
   title: string;
 }
 
@@ -157,7 +169,7 @@ const CHAT_MODE_OPTIONS: ChatModeOption[] = [
     shortLabel: '학습',
     title: '학습 가이드',
     cue: '개념, 구조, 학습 순서와 근거 차이를 차분히 설명합니다.',
-    summary: '공식 매뉴얼과 고객 자료를 교육 문서로 읽고 개념, 배경, 다음 학습 경로를 citation 중심으로 안내합니다.',
+    summary: '공식 매뉴얼과 고객 자료를 교육 문서로 읽고 개념, 배경, 다음 학습 경로를 근거와 함께 안내합니다.',
   },
 ];
 
@@ -175,7 +187,7 @@ function chatModeOptionsFromContract(items: ChatModeContractItem[]): ChatModeOpt
         id,
         label: String(item.label || fallback.label),
         cue: String(item.hallucination_guard || item.contract || fallback.cue),
-        summary: String(item.contract || fallback.summary),
+        summary: fallback.summary,
       };
     })
     .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index);
@@ -352,21 +364,6 @@ function extractTextAnnotations(
     },
   ];
 }
-
-const STARTER_QUESTION_POOL = [
-  '운영 입문 기준으로 먼저 봐야 할 플레이북 3개 알려줘',
-  'Operator 장애가 났을 때 monitoring과 operators 문서를 어떻게 같이 따라가야 하나?',
-  '클러스터 네트워크 MTU 변경 전후에 어떤 절차와 검증을 확인해야 하나?',
-  '인증 문제와 Ingress 노출 문제를 같이 볼 때 어떤 책 순서로 확인해야 하나?',
-  '연결이 끊긴 환경에서 미러 레지스트리 설정을 점검할 때 운영자가 먼저 볼 문서는 무엇인가?',
-  '특정 namespace에 admin 권한을 주려면 어떤 절차를 먼저 확인해야 하나?',
-  '프로젝트가 Terminating에서 안 지워질 때 어떤 순서로 확인해야 하나?',
-  '노드가 Ready가 아니거나 머신컨피그 적용이 늦을 때 어디부터 봐야 하나?',
-  'Route나 Ingress 연결 문제를 점검할 때 먼저 볼 절차를 알려줘',
-  '모니터링 알림이 쏟아질 때 운영자가 먼저 확인할 플레이북 순서를 알려줘',
-  '클러스터 설치 후 Day-2 운영에서 먼저 읽어야 할 문서를 순서대로 알려줘',
-  '인증서 갱신이나 만료 문제를 볼 때 먼저 확인할 책과 절차를 알려줘',
-];
 
 function pickRandomStarterQuestions(pool: string[], count: number): string[] {
   const shuffled = [...pool];
@@ -545,14 +542,19 @@ function formatDraftMeta(draft: CustomerPackDraft): string {
 }
 
 function uploadedDraftCatalogChips(draft: CustomerPackDraft): string[] {
-  const semantics = describeDraftCatalogSemantics(draft);
+  const grade = String(draft.shared_grade || '').trim();
+  const readiness = draft.publish_ready
+    ? '게시 준비'
+    : draft.read_ready
+      ? '읽기 가능'
+      : draft.quality_status === 'ready'
+        ? '검증 완료'
+        : '';
   return dedupeCatalogChips([
-    semantics.audienceLabel,
-    semantics.surfaceLabel,
-    draft.source_kind_label,
+    grade ? grade.toUpperCase() : '',
+    readiness,
     draft.pipeline_target_label,
     draft.promotion_stage_label,
-    draft.source_type.toUpperCase(),
   ]);
 }
 
@@ -566,6 +568,23 @@ function primaryCitationTruth(citations?: ChatCitation[] | null): {
 } | null {
   if (!citations || citations.length === 0) {
     return null;
+  }
+  const officialTruths = new Set([
+    'official_gold_playbook_runtime',
+    'official_validated_runtime',
+    'official_candidate_runtime',
+  ]);
+  const privateCitation = citations.find((citation) => String(citation.boundary_truth || '').trim() === 'private_customer_pack_runtime');
+  const officialCitation = citations.find((citation) => officialTruths.has(String(citation.boundary_truth || '').trim()));
+  if (privateCitation && officialCitation) {
+    return {
+      sourceLane: 'mixed_runtime_bridge',
+      boundaryTruth: 'mixed_runtime_bridge',
+      runtimeTruthLabel: `${officialCitation.runtime_truth_label || 'Official Runtime'} + ${privateCitation.runtime_truth_label || 'Private Runtime'}`,
+      boundaryBadge: 'Mixed Runtime',
+      publicationState: 'mixed',
+      approvalState: 'mixed',
+    };
   }
   const primary = pickPrimaryPlaybookCitation(citations);
   if (!primary) {
@@ -624,7 +643,7 @@ function scorePrimaryPlaybookCitation(citation: ChatCitation, index: number): nu
 
   let score = 0;
 
-  if (boundaryTruth === 'official_validated_runtime') score += 40;
+  if (boundaryTruth === 'official_gold_playbook_runtime' || boundaryTruth === 'official_validated_runtime') score += 40;
   if (sourceLane.includes('wiki_runtime') || sourceLane.includes('approved')) score += 24;
   if (viewerPath.includes('/playbooks/wiki-runtime/active/')) score += 20;
   if (viewerPath.includes('/docs/ocp/')) score += 12;
@@ -653,7 +672,7 @@ function NoAnswerAcquisitionCard({
   onConfirm,
 }: {
   acquisition: NonNullable<Message['acquisition']>;
-  onConfirm: () => void;
+  onConfirm: (acquisition: NonNullable<Message['acquisition']>) => void;
 }) {
   const [checked, setChecked] = useState(true);
 
@@ -673,7 +692,7 @@ function NoAnswerAcquisitionCard({
         type="button"
         className="suggested-query-chip acquisition-confirm-btn"
         disabled={!checked}
-        onClick={() => onConfirm()}
+        onClick={() => onConfirm(acquisition)}
       >
         {acquisition.confirm_label}
       </button>
@@ -701,6 +720,51 @@ function runtimePathFromUrl(viewerUrl: string): string {
   } catch {
     return normalizeViewerPath(viewerUrl);
   }
+}
+
+function safeDecodeURIComponent(value: string): string {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return '';
+  }
+  try {
+    return decodeURIComponent(normalized);
+  } catch {
+    return normalized;
+  }
+}
+
+function overlayRefForCompare(ref: string): string {
+  const normalized = String(ref || '').trim();
+  if (normalized.startsWith('section:') && normalized.includes('#')) {
+    const [prefix, anchor] = normalized.split('#', 2);
+    return `${prefix}#${safeDecodeURIComponent(anchor)}`;
+  }
+  return normalized;
+}
+
+function overlayRefsEqual(left?: string, right?: string): boolean {
+  return overlayRefForCompare(left ?? '') === overlayRefForCompare(right ?? '');
+}
+
+function canonicalOverlayViewerPath(pathOnly: string, searchPart: string | undefined, anchor: string): string {
+  const normalizedPath = String(pathOnly || '').trim();
+  const normalizedSearch = String(searchPart || '').trim();
+  const normalizedAnchor = String(anchor || '').trim();
+  if (!normalizedPath) {
+    return '';
+  }
+  const search = normalizedPath === '/api/customer-packs/captured' && normalizedSearch
+    ? `?${normalizedSearch}`
+    : '';
+  return `${normalizedPath}${search}${normalizedAnchor ? `#${normalizedAnchor}` : ''}`;
+}
+
+function canonicalBookViewerPath(viewerUrl: string): string {
+  const runtimePath = runtimePathFromUrl(viewerUrl);
+  const [pathWithQuery] = runtimePath.split('#', 1);
+  const [pathOnly, searchPart] = pathWithQuery.split('?', 2);
+  return canonicalOverlayViewerPath(pathOnly, searchPart, '');
 }
 
 function normalizeViewerDocumentPayload(viewerDocument: Awaited<ReturnType<typeof loadViewerDocument>>): ViewerDocumentPayload {
@@ -801,6 +865,31 @@ function extractViewerQuickNavItems(viewerHtml: string, viewerPath: string): Out
   return nodes;
 }
 
+function extractViewerFooterNavItems(viewerHtml: string): { previous: ViewerFooterNavItem | null; next: ViewerFooterNavItem | null } {
+  const documentRoot = parseViewerHtml(viewerHtml);
+  if (!documentRoot) {
+    return { previous: null, next: null };
+  }
+  const readItem = (selector: string): ViewerFooterNavItem | null => {
+    const link = documentRoot.querySelector(selector);
+    if (!(link instanceof HTMLAnchorElement)) {
+      return null;
+    }
+    const href = String(link.getAttribute('href') || '').trim();
+    if (!href) {
+      return null;
+    }
+    return {
+      href: normalizeViewerPath(href),
+      title: String(link.getAttribute('title') || link.textContent || '').trim(),
+    };
+  };
+  return {
+    previous: readItem('.document-section-nav-link-previous[href]'),
+    next: readItem('.document-section-nav-link-next[href]'),
+  };
+}
+
 async function loadViewerDocumentPayload(viewerPath: string, pageMode: ViewerPageMode): Promise<ViewerDocumentPayload> {
   return normalizeViewerDocumentPayload(await loadViewerDocument(viewerPath, pageMode));
 }
@@ -840,7 +929,8 @@ function buildOverlayTargetFromViewerPath(
   const [pathWithQuery, anchorPart] = runtimePath.split('#', 2);
   const [pathOnly, searchPart] = pathWithQuery.split('?', 2);
   const searchParams = new URLSearchParams(searchPart ?? '');
-  const anchor = anchorPart?.trim() ?? '';
+  const anchor = safeDecodeURIComponent(anchorPart?.trim() ?? '');
+  const canonicalViewerPath = canonicalOverlayViewerPath(pathOnly, searchPart, anchor);
 
   const entityMatch = pathOnly.match(/^\/wiki\/entities\/([^/]+)\/index\.html$/);
   if (entityMatch) {
@@ -849,12 +939,12 @@ function buildOverlayTargetFromViewerPath(
       kind: 'entity_hub',
       ref: `entity:${entitySlug}`,
       title: fallbackTitle,
-      viewerPath: runtimePath,
+      viewerPath: canonicalViewerPath,
       payload: {
         user_id: WIKI_OVERLAY_USER_ID,
         target_kind: 'entity_hub',
         entity_slug: entitySlug,
-        viewer_path: runtimePath,
+        viewer_path: canonicalViewerPath,
       },
     };
   }
@@ -866,13 +956,13 @@ function buildOverlayTargetFromViewerPath(
       kind: 'figure',
       ref: `figure:${bookSlug}:${assetName}`,
       title: fallbackTitle,
-      viewerPath: runtimePath,
+      viewerPath: canonicalViewerPath,
       payload: {
         user_id: WIKI_OVERLAY_USER_ID,
         target_kind: 'figure',
         book_slug: bookSlug,
         asset_name: assetName,
-        viewer_path: runtimePath,
+        viewer_path: canonicalViewerPath,
       },
     };
   }
@@ -890,13 +980,13 @@ function buildOverlayTargetFromViewerPath(
         kind: 'section',
         ref: `section:${bookSlug}#${anchor}`,
         title: fallbackTitle,
-        viewerPath: runtimePath,
+        viewerPath: canonicalViewerPath,
         payload: {
           user_id: WIKI_OVERLAY_USER_ID,
           target_kind: 'section',
           book_slug: bookSlug,
           anchor,
-          viewer_path: runtimePath,
+          viewer_path: canonicalViewerPath,
         },
       };
     }
@@ -904,12 +994,12 @@ function buildOverlayTargetFromViewerPath(
       kind: 'book',
       ref: `book:${bookSlug}`,
       title: fallbackTitle,
-      viewerPath: runtimePath,
+      viewerPath: canonicalViewerPath,
       payload: {
         user_id: WIKI_OVERLAY_USER_ID,
         target_kind: 'book',
         book_slug: bookSlug,
-        viewer_path: runtimePath,
+        viewer_path: canonicalViewerPath,
       },
     };
   }
@@ -996,10 +1086,7 @@ export default function WorkspacePage() {
   const [viewerActiveSection, setViewerActiveSection] = useState<ViewerActiveSection | null>(null);
   const [signalsFavoriteFilter, setSignalsFavoriteFilter] = useState<SignalsFavoriteFilter>('favorites');
 
-  const [globalTheme, setGlobalTheme] = useState<'dark' | 'light'>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    return (window.localStorage.getItem('pbs.globalTheme') as 'dark' | 'light') || 'dark';
-  });
+  const [globalTheme, handleToggleGlobalTheme] = useGlobalTheme();
   const [opsWorkspaceId, setOpsWorkspaceId] = useState(() => {
     if (typeof window === 'undefined') {
       return 'ws_default';
@@ -1084,8 +1171,8 @@ export default function WorkspacePage() {
   }, []);
 
   const welcomeQuestions = useMemo(
-    () => pickRandomStarterQuestions(STARTER_QUESTION_POOL, 4),
-    [],
+    () => pickRandomStarterQuestions(starterQuestionPoolForMode(chatMode), 4),
+    [chatMode],
   );
   const activeChatMode = useMemo(
     () => chatModeOptionsFromContract(chatModeContractItems).find((mode) => mode.id === chatMode) ?? CHAT_MODE_OPTIONS[0],
@@ -1111,10 +1198,10 @@ export default function WorkspacePage() {
   const leftPanelLabels = useMemo(() => ({
     history: visionMode === 'guided_tour' ? 'Journey' : 'History',
     outline: visionMode === 'guided_tour' ? 'Route Map' : 'Outline',
-    signals: visionMode === 'guided_tour' ? 'Signals' : 'Signals',
+    signals: visionMode === 'guided_tour' ? 'Signals' : 'Saved',
     historyTitle: visionMode === 'guided_tour' ? 'Tour Journey' : 'Chat History',
     outlineTitle: visionMode === 'guided_tour' ? 'Tour Map' : 'Document Outline',
-    signalsTitle: visionMode === 'guided_tour' ? 'Tour Signals' : 'Reader Signals',
+    signalsTitle: visionMode === 'guided_tour' ? 'Tour Signals' : 'Saved Signals',
   }), [visionMode]);
 
   useEffect(() => {
@@ -1434,12 +1521,13 @@ export default function WorkspacePage() {
         }
 
         const sourceBooks = resolveWorkspaceSourceBooks(room) as WorkspaceManualBook[];
-        const nextDrafts = draftPayload.drafts ?? [];
+        const officialSourceBooks = sourceBooks.filter((book) => !isCustomerPackRuntimeBook(book));
+        const nextDrafts = dedupeDraftCatalogForDisplay(draftPayload.drafts ?? []);
 
         setPackLabel(room.active_pack.pack_label || 'OpenShift 4.20');
-        setManualBooks(sourceBooks);
-        setCustomDocumentBooks(room.custom_documents?.books ?? []);
-        setCustomDocumentSourceCount(room.summary.custom_document_count ?? room.custom_documents?.source_count ?? room.custom_documents?.books?.length ?? 0);
+        setManualBooks(officialSourceBooks);
+        setCustomDocumentBooks([]);
+        setCustomDocumentSourceCount(0);
         const supportedModes = room.llmwiki_promotion?.mode_contract?.supported_modes ?? [];
         setChatModeContractItems(supportedModes);
         const contractedOptions = chatModeOptionsFromContract(supportedModes);
@@ -1479,7 +1567,7 @@ export default function WorkspacePage() {
     [manualBooks],
   );
 
-  const { standardDrafts, testDrafts } = useMemo(
+  const { standardDrafts } = useMemo(
     () => partitionDraftCatalog(drafts),
     [drafts],
   );
@@ -1494,11 +1582,6 @@ export default function WorkspacePage() {
         draft,
       })),
     [],
-  );
-
-  const testDraftSources = useMemo<SourceEntry[]>(
-    () => draftSourcesFromCollection(testDrafts),
-    [draftSourcesFromCollection, testDrafts],
   );
 
   const draftSources = useMemo<SourceEntry[]>(
@@ -1543,19 +1626,25 @@ export default function WorkspacePage() {
       : []),
     [currentViewerPath, preview],
   );
+  const viewerFooterNavItems = useMemo(
+    () => (preview.kind === 'viewer' && preview.viewerDocument?.html
+      ? extractViewerFooterNavItems(preview.viewerDocument.html)
+      : { previous: null, next: null }),
+    [preview],
+  );
 
   const currentOverlayTarget = useMemo<OverlayTargetDescriptor | null>(() => {
     if ((preview.kind !== 'viewer' && preview.kind !== 'draft') || !preview.viewerUrl) {
       return null;
     }
-    if (preview.kind === 'viewer' && viewerPageMode === 'multi' && preview.viewerDocument?.html) {
+    if (preview.kind === 'viewer' && viewerPageMode === 'single' && preview.viewerDocument?.html) {
       const visibleSection = viewerActiveSection ?? extractVisibleViewerSection(preview.viewerDocument.html);
       if (visibleSection && currentViewerPath) {
-        const sectionViewerPath = `${currentViewerPath.split('#', 1)[0]}#${visibleSection.anchor}`;
+        const sectionViewerPath = `${canonicalBookViewerPath(currentViewerPath)}#${visibleSection.anchor}`;
         return buildOverlayTargetFromViewerPath(sectionViewerPath, visibleSection.title);
       }
     }
-    return buildOverlayTargetFromViewerPath(preview.viewerUrl, preview.title);
+    return buildOverlayTargetFromViewerPath(canonicalBookViewerPath(currentViewerPath || preview.viewerUrl), preview.title);
   }, [currentViewerPath, preview, viewerActiveSection, viewerPageMode]);
 
   const favoriteOverlays = useMemo(
@@ -1632,13 +1721,13 @@ export default function WorkspacePage() {
   );
 
   const currentFavorite = useMemo(
-    () => favoriteOverlays.find((item) => item.target_ref === currentOverlayTarget?.ref) ?? null,
+    () => favoriteOverlays.find((item) => overlayRefsEqual(item.target_ref, currentOverlayTarget?.ref)) ?? null,
     [currentOverlayTarget, favoriteOverlays],
   );
   const currentSectionCheck = useMemo(
     () =>
       wikiOverlays.find(
-        (item) => item.kind === 'check' && item.target_ref === currentOverlayTarget?.ref,
+        (item) => item.kind === 'check' && overlayRefsEqual(item.target_ref, currentOverlayTarget?.ref),
       ) ?? null,
     [currentOverlayTarget, wikiOverlays],
   );
@@ -1656,7 +1745,10 @@ export default function WorkspacePage() {
   );
 
   function mergeDraft(nextDraft: CustomerPackDraft, currentDrafts: CustomerPackDraft[] = drafts): CustomerPackDraft[] {
-    return [nextDraft, ...currentDrafts.filter((draft) => draft.draft_id !== nextDraft.draft_id)];
+    return dedupeDraftCatalogForDisplay([
+      nextDraft,
+      ...currentDrafts.filter((draft) => draft.draft_id !== nextDraft.draft_id),
+    ]);
   }
 
   async function openViewerPreview(
@@ -1675,14 +1767,16 @@ export default function WorkspacePage() {
     setPreview({ kind: 'loading', title });
     try {
       const meta = await loadSourceMeta(normalizedViewerPath);
-      const resolvedViewerPath = meta.viewer_path || normalizedViewerPath;
-      const viewerUrl = toRuntimeUrl(resolvedViewerPath);
-      const viewerDocument = await loadViewerDocumentPayload(resolvedViewerPath, pageMode);
+      const viewerUrl = toRuntimeUrl(normalizedViewerPath || meta.viewer_path);
+      const viewerDocument = await loadViewerDocumentPayload(normalizedViewerPath, pageMode);
       setPreview({
         kind: 'viewer',
         title: displayCustomerDocumentTitle({ title: meta.book_title || title }),
         subtitle: meta.section_path_label || meta.section || meta.source_url || '',
-        meta,
+        meta: {
+          ...meta,
+          viewer_path: normalizedViewerPath || meta.viewer_path,
+        },
         viewerUrl,
         viewerDocument,
       });
@@ -1712,6 +1806,39 @@ export default function WorkspacePage() {
     await openViewerPreview(targetViewerPath, preview.title, activeSourceId ?? undefined, nextMode);
   }
 
+  function renderEmbeddedSectionNavButton(item: ViewerFooterNavItem, direction: 'previous' | 'next') {
+    const previewTitle = preview.kind === 'viewer' || preview.kind === 'draft' || preview.kind === 'loading'
+      ? preview.title
+      : item.title;
+    return (
+      <button
+        type="button"
+        className="workspace-embedded-section-nav-button"
+        title={item.title || (direction === 'previous' ? '이전 섹션' : '다음 섹션')}
+        data-viewer-section-nav="true"
+        data-viewer-path={item.href}
+        onClick={() => {
+          void openViewerPreview(item.href, previewTitle, draftScopedSourceId, 'single');
+        }}
+      >
+        {direction === 'previous' && <ChevronLeft size={15} />}
+        {direction === 'previous' ? '이전' : '다음'}
+        {direction === 'next' && <ChevronRight size={15} />}
+      </button>
+    );
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedViewerPath = params.get('viewer_path');
+    if (!requestedViewerPath) {
+      return;
+    }
+    const requestedMode: ViewerPageMode = params.get('page_mode') === 'multi' ? 'multi' : 'single';
+    setViewerPageMode(requestedMode);
+    void openViewerPreview(requestedViewerPath, 'Wiki Viewer', undefined, requestedMode);
+  }, []);
+
   async function openManualPreview(book: LibraryBook): Promise<void> {
     await openViewerPreview(book.viewer_path, book.title, `manual:${book.book_slug}`);
   }
@@ -1735,7 +1862,7 @@ export default function WorkspacePage() {
       loadedBook = await loadCustomerPackBook(draftId);
       if (needsSlideDeckUpgrade(loadedDraft, loadedBook)) {
         const upgradedDraft = await normalizeCustomerPackDraft(draftId, {
-          approvalState: loadedDraft.approval_state,
+          approvalState: 'approved',
           publicationState: 'active',
         });
         loadedDraft = upgradedDraft;
@@ -1788,11 +1915,17 @@ export default function WorkspacePage() {
   }, [annotationColorId]);
 
   useEffect(() => {
-    if (preview.kind !== 'viewer' || viewerPageMode !== 'multi') {
+    if (preview.kind !== 'viewer') {
       setViewerActiveSection(null);
       setAnnotationEnabled(false);
       return;
     }
+    if (viewerPageMode !== 'single') {
+      setAnnotationEnabled(false);
+    }
+    const visibleSection = preview.viewerDocument?.html
+      ? extractVisibleViewerSection(preview.viewerDocument.html)
+      : null;
     setViewerActiveSection((current) => {
       if (currentViewerPath.includes('#')) {
         const anchor = currentViewerPath.split('#').slice(1).join('#').trim();
@@ -1800,23 +1933,16 @@ export default function WorkspacePage() {
           return { anchor, title: current?.title || anchor };
         }
       }
+      if (viewerPageMode === 'single' && visibleSection && current?.anchor !== visibleSection.anchor) {
+        return visibleSection;
+      }
       return current;
     });
-  }, [currentViewerPath, preview.kind, viewerPageMode]);
+  }, [currentViewerPath, preview, viewerPageMode]);
 
   useEffect(() => {
     setQuickNavOpen(false);
   }, [currentViewerPath, viewerPageMode]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    document.documentElement.setAttribute('data-theme', globalTheme);
-    window.localStorage.setItem('pbs.globalTheme', globalTheme);
-  }, [globalTheme]);
-
-  const handleToggleGlobalTheme = useCallback(() => {
-    setGlobalTheme((current) => (current === 'dark' ? 'light' : 'dark'));
-  }, []);
 
   useEffect(() => {
     if (!quickNavOpen) {
@@ -1896,7 +2022,7 @@ export default function WorkspacePage() {
       animatePreviewPanel();
     } catch (error) {
       console.error(error);
-      window.alert(error instanceof Error ? error.message : '커스텀 문서를 여는 중 오류가 발생했습니다.');
+      window.alert(error instanceof Error ? error.message : '추가 자료를 여는 중 오류가 발생했습니다.');
     }
   }
 
@@ -1932,7 +2058,7 @@ export default function WorkspacePage() {
   }
 
   function overlayExists(kind: 'favorite' | 'check', targetRef: string): WikiOverlayRecord | null {
-    return wikiOverlays.find((item) => item.kind === kind && item.target_ref === targetRef) ?? null;
+    return wikiOverlays.find((item) => item.kind === kind && overlayRefsEqual(item.target_ref, targetRef)) ?? null;
   }
 
   async function handleToggleFavoriteCurrent(): Promise<void> {
@@ -2059,9 +2185,9 @@ export default function WorkspacePage() {
       return null;
     }
     const baseViewerPath = currentViewerPath
-      ? currentViewerPath.split('#', 1)[0]
+      ? canonicalBookViewerPath(currentViewerPath)
       : preview.kind === 'viewer' || preview.kind === 'draft'
-        ? runtimePathFromUrl(preview.viewerUrl).split('#', 1)[0]
+        ? canonicalBookViewerPath(preview.viewerUrl)
         : '';
     if (!baseViewerPath) {
       return null;
@@ -2214,18 +2340,39 @@ export default function WorkspacePage() {
     });
   }
 
+  function normalizeSignalDisplayText(value: string): string {
+    const decoded = safeDecodeURIComponent(value)
+      .replace(/\s*>\s*/g, ' > ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!decoded) {
+      return '';
+    }
+    const lastPathPart = decoded.includes(' >')
+      ? decoded.split('>').map((part) => part.trim()).filter(Boolean).pop() ?? decoded
+      : decoded;
+    const slugLike = /[-_]/.test(lastPathPart) && !/\s/.test(lastPathPart);
+    const readable = slugLike ? lastPathPart.replace(/[-_]+/g, ' ') : lastPathPart;
+    return readable
+      .replace(/^\s*(?:chapter\s+\d+\.?\s*|\d+\s*장\.?\s*|(?:\d+|[A-Za-z])(?:\.\d+)*\.?\s+)/i, '')
+      .replace(/\bopenshift\b/gi, 'OpenShift')
+      .replace(/\bcontainer platform\b/gi, 'Container Platform')
+      .trim() || decoded;
+  }
+
   function getSignalDisplayTitle(item: WikiOverlayRecord): string {
-    if (item.resolved_target?.title) return item.resolved_target.title;
-    const fallback = item.title;
-    if (fallback) return fallback;
+    for (const candidate of [item.title, item.card_title, item.resolved_target?.title]) {
+      const display = normalizeSignalDisplayText(String(candidate || ''));
+      if (display) return display;
+    }
     const ref = item.target_ref || '';
     try {
       const cleanRef = ref.replace(/^section:/, '').replace(/^book:/, '');
       const parts = cleanRef.split('#');
       if (parts.length > 1) {
-        return `${parts[0]} > ${decodeURIComponent(parts[1])}`;
+        return normalizeSignalDisplayText(parts[1]) || parts[0];
       }
-      return decodeURIComponent(cleanRef);
+      return normalizeSignalDisplayText(cleanRef);
     } catch {
       return ref;
     }
@@ -2238,10 +2385,10 @@ export default function WorkspacePage() {
     if (item.target_ref) {
       if (item.target_ref.startsWith('section:')) {
         const split = item.target_ref.replace('section:', '').split('#');
-        return `/wiki-runtime/active/${split[0]}/index.html${split[1] ? '#' + split[1] : ''}`;
+        return `/playbooks/wiki-runtime/active/${split[0]}/index.html${split[1] ? '#' + split[1] : ''}`;
       }
       if (item.target_ref.startsWith('book:')) {
-        return `/wiki-runtime/active/${item.target_ref.replace('book:', '')}/index.html`;
+        return `/playbooks/wiki-runtime/active/${item.target_ref.replace('book:', '')}/index.html`;
       }
     }
     return undefined;
@@ -2304,7 +2451,7 @@ export default function WorkspacePage() {
     setIsNormalizing(true);
     try {
       const normalized = await normalizeCustomerPackDraft(activeDraft.draft_id, {
-        approvalState: activeDraft.approval_state,
+        approvalState: 'approved',
         publicationState: 'active',
       });
       setDrafts((current) => mergeDraft(normalized, current));
@@ -2317,7 +2464,10 @@ export default function WorkspacePage() {
     }
   }
 
-  async function handleSend(queryOverride?: string): Promise<void> {
+  async function handleSend(
+    queryOverride?: string,
+    followupScope?: Pick<ChatSuggestedFollowup, 'selected_draft_ids' | 'restrict_uploaded_sources'>,
+  ): Promise<void> {
     const trimmed = (queryOverride ?? query).trim();
     if (!trimmed || isSending) {
       return;
@@ -2340,8 +2490,8 @@ export default function WorkspacePage() {
         sessionId,
         mode: chatMode,
         userId: WIKI_OVERLAY_USER_ID,
-        selectedDraftIds: activeDraft ? [activeDraft.draft_id] : [],
-        restrictUploadedSources: Boolean(activeDraft),
+        selectedDraftIds: followupScope?.selected_draft_ids ?? (activeDraft ? [activeDraft.draft_id] : []),
+        restrictUploadedSources: followupScope?.restrict_uploaded_sources ?? Boolean(activeDraft),
       };
       let response: ChatResponse;
       if (testMode) {
@@ -2439,8 +2589,9 @@ export default function WorkspacePage() {
     }
   }
 
-  function handleAcquisitionConfirm(): void {
-    navigate('/playbook-library?view=repository');
+  function handleAcquisitionConfirm(acquisition?: NonNullable<Message['acquisition']>): void {
+    const repositoryQuery = String(acquisition?.repository_query || '').trim();
+    navigate(`/playbook-library/repository${repositoryQuery ? `?q=${encodeURIComponent(repositoryQuery)}` : ''}`);
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
@@ -2508,6 +2659,14 @@ export default function WorkspacePage() {
       new Map(
         outlineCategoryGroups.map((group) => [group.key, buildOutlineBookFamilies(group.books)]),
       ),
+    [outlineCategoryGroups],
+  );
+  const outlineSourceFamilyCount = useMemo(
+    () => Array.from(outlineCategoryFamilies.values()).reduce((total, families) => total + families.length, 0),
+    [outlineCategoryFamilies],
+  );
+  const outlineRuntimeCount = useMemo(
+    () => outlineCategoryGroups.reduce((total, group) => total + group.books.length, 0),
     [outlineCategoryGroups],
   );
   const autoOutlineCategoryKey = useMemo(() => {
@@ -2797,53 +2956,59 @@ export default function WorkspacePage() {
                         onClick={() => toggleOutlineSection('official_manuals')}
                       >
                         <div className="outline-section-copy">
-                          <strong>{visionMode === 'guided_tour' ? 'OCP 학습 경로' : 'OCP 공식 매뉴얼'}</strong>
-                          <span>공식 매뉴얼을 주제별로 묶어 둔 탐색 목록</span>
+                          <strong>{visionMode === 'guided_tour' ? 'OCP 학습 경로' : '공식 문서'}</strong>
+                          <span>OpenShift 4.20 공식 매뉴얼</span>
                         </div>
                         <div className="outline-section-toggle-side">
-                          <span>{`${outlineCategoryGroups.length}개 카테고리 · ${manualBooks.length}권`}</span>
+                          <span>{`${outlineCategoryGroups.length}개 카테고리 · ${outlineRuntimeCount}권`}</span>
                           {collapsedOutlineSections.official_manuals ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                         </div>
                       </button>
                       {!collapsedOutlineSections.official_manuals && (
-                        <div className="outline-category-list">
-                          {outlineCategoryGroups.map((group) => {
-                            const isActive = group.key === resolvedOutlineCategoryKey;
-                            const groupFamilies = (outlineCategoryFamilies.get(group.key) ?? []).slice(0, 14);
-                            return (
-                              <div key={group.key} className={`outline-category-card${isActive ? ' active' : ''}`}>
-                                <button
-                                  type="button"
-                                  className={`outline-category-item${isActive ? ' active' : ''}`}
-                                  onClick={() => setOutlineCategoryKey(isActive ? OUTLINE_CATEGORY_COLLAPSED : group.key)}
-                                >
-                                  <div className="outline-category-main">
-                                    <span className="outline-category-label">{group.label}</span>
-                                    <span className="outline-category-description">{group.description}</span>
-                                  </div>
-                                  <div className="outline-category-side">
-                                    <span className="outline-category-count">{groupFamilies.length}</span>
-                                    {isActive ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                  </div>
-                                </button>
-                                {isActive && (
-                                  <div className="outline-category-expand">
-                                    {groupFamilies.map((family) => {
-                                      const familyActive = [family.primary, ...family.variants].some(
-                                        (book) => book.book_slug === activeBookSlug,
-                                      );
-                                      return (
-                                        <div
-                                          key={family.key}
-                                          className={`outline-library-family${familyActive ? ' active' : ''}`}
-                                        >
-                                          <button
-                                            type="button"
-                                            className={`outline-library-item ${family.primary.book_slug === activeBookSlug ? 'active' : 'muted'}`}
-                                            onClick={() => {
-                                              void openManualPreview(family.primary);
-                                            }}
+                        <>
+                          <div className="outline-contract-strip" aria-label="official document summary">
+                            <span className="outline-contract-chip">공식 문서 {outlineRuntimeCount}권</span>
+                            <span className="outline-contract-chip">주제 {outlineCategoryGroups.length}개</span>
+                            <span className="outline-contract-chip">대표 묶음 {outlineSourceFamilyCount}개</span>
+                          </div>
+                          <div className="outline-category-list">
+                            {outlineCategoryGroups.map((group) => {
+                              const isActive = group.key === resolvedOutlineCategoryKey;
+                              const groupFamilies = outlineCategoryFamilies.get(group.key) ?? [];
+                              return (
+                                <div key={group.key} className={`outline-category-card${isActive ? ' active' : ''}`}>
+                                  <button
+                                    type="button"
+                                    className={`outline-category-item${isActive ? ' active' : ''}`}
+                                    onClick={() => setOutlineCategoryKey(isActive ? OUTLINE_CATEGORY_COLLAPSED : group.key)}
+                                  >
+                                    <div className="outline-category-main">
+                                      <span className="outline-category-label">{group.label}</span>
+                                      <span className="outline-category-description">{group.description}</span>
+                                    </div>
+                                    <div className="outline-category-side">
+                                      <span className="outline-category-count">{group.books.length}권</span>
+                                      {isActive ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                    </div>
+                                  </button>
+                                  {isActive && (
+                                    <div className="outline-category-expand">
+                                      {groupFamilies.map((family) => {
+                                        const familyActive = [family.primary, ...family.variants].some(
+                                          (book) => book.book_slug === activeBookSlug,
+                                        );
+                                        return (
+                                          <div
+                                            key={family.key}
+                                            className={`outline-library-family${familyActive ? ' active' : ''}`}
                                           >
+                                            <button
+                                              type="button"
+                                              className={`outline-library-item ${family.primary.book_slug === activeBookSlug ? 'active' : 'muted'}`}
+                                              onClick={() => {
+                                                void openManualPreview(family.primary);
+                                              }}
+                                            >
                                             <div className="outline-library-title-row">
                                               <div className="outline-library-title-group">
                                                 <span className="outline-library-title">{family.primary.title}</span>
@@ -2887,11 +3052,13 @@ export default function WorkspacePage() {
                               </div>
                             );
                           })}
-                        </div>
+                          </div>
+                        </>
                       )}
                     </section>
                   )}
 
+                  {customDocumentBooks.length > 0 && (
                   <section className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Custom documents outline">
                     <button
                       type="button"
@@ -2899,8 +3066,8 @@ export default function WorkspacePage() {
                       onClick={() => toggleOutlineSection('custom_documents')}
                     >
                       <div className="outline-section-copy">
-                        <strong>커스텀 문서</strong>
-                        <span>북팩토리 커스텀 플레이북 재료 슬롯</span>
+                        <strong>추가 자료</strong>
+                        <span>북팩토리로 만들 별도 자료</span>
                       </div>
                       <div className="outline-section-toggle-side">
                         <span>{`${customDocumentBooks.length}개 슬롯 · ${customDocumentSourceCount || customDocumentBooks.length}개 재료`}</span>
@@ -2909,7 +3076,7 @@ export default function WorkspacePage() {
                     </button>
                     {collapsedOutlineSections.custom_documents ? null : customDocumentBooks.length === 0 ? (
                       <div className="outline-empty">
-                        <p>커스텀 문서가 아직 없습니다.</p>
+                        <p>추가 자료가 아직 없습니다.</p>
                       </div>
                     ) : (
                       <>
@@ -2958,62 +3125,9 @@ export default function WorkspacePage() {
                       </>
                     )}
                   </section>
+                  )}
 
-                  <section className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Test run outline">
-                    <button
-                      type="button"
-                      className="outline-section-head outline-section-toggle"
-                      onClick={() => toggleOutlineSection('test_runs')}
-                    >
-                      <div className="outline-section-copy">
-                        <strong>테스트 런</strong>
-                        <span>같은 고객 문서를 여러 파이프라인으로 돌린 비교 실험군</span>
-                      </div>
-                      <div className="outline-section-toggle-side">
-                        <span>{`${testDraftSources.length}개`}</span>
-                        {collapsedOutlineSections.test_runs ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      </div>
-                    </button>
-                    {collapsedOutlineSections.test_runs ? null : testDraftSources.length === 0 ? (
-                      <div className="outline-empty">
-                        <p>`Test 1`, `Test 2`처럼 이름 붙인 실험군이 아직 없습니다.</p>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="outline-toc-header">
-                          <strong className="outline-toc-title">고객 문서 테스트 런</strong>
-                          <span className="outline-toc-breadcrumb">같은 파일을 다른 파이프라인으로 돌린 viewer surface 결과를 바로 비교합니다.</span>
-                          <span className="outline-toc-meta">{`${testDraftSources.length}개 실험군`}</span>
-                        </div>
-                        <div className="outline-custom-doc-list outline-custom-doc-list--toc">
-                          {testDraftSources.map((source) => {
-                            const draft = source.draft;
-                            const chips = draft ? uploadedDraftCatalogChips(draft) : [];
-                            return (
-                              <button
-                                key={`outline-test:${source.id}`}
-                                type="button"
-                                className="outline-item muted"
-                                onClick={() => { void handleSourceClick(source); }}
-                              >
-                                <span className="outline-item-label">{source.name}</span>
-                                <span className="outline-item-meta">{source.meta}</span>
-                                {chips.length > 0 && (
-                                  <div className="outline-custom-chip-row">
-                                    {chips.map((chip) => (
-                                      <span key={`${source.id}:${chip}`} className="outline-custom-chip">{chip}</span>
-                                    ))}
-                                  </div>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </>
-                    )}
-                  </section>
-
-                  <section className="outline-toc outline-surface-card outline-surface-card--document" aria-label="Customer documents outline">
+                  <section className="outline-toc outline-surface-card outline-surface-card--document" aria-label="고객 문서 목록">
                     <button
                       type="button"
                       className="outline-section-head outline-section-toggle"
@@ -3021,7 +3135,7 @@ export default function WorkspacePage() {
                     >
                       <div className="outline-section-copy">
                         <strong>고객 문서</strong>
-                        <span>테스트 런을 제외한 일반 customer doc 승급 후보</span>
+                        <span>승급 완료/검증 중 고객 문서</span>
                       </div>
                       <div className="outline-section-toggle-side">
                         <span>{`${draftSources.length}개`}</span>
@@ -3035,8 +3149,8 @@ export default function WorkspacePage() {
                     ) : (
                       <>
                          <div className="outline-toc-header">
-                           <strong className="outline-toc-title">고객 문서 초안</strong>
-                           <span className="outline-toc-breadcrumb">테스트 런을 제외한 일반 customer doc 목록입니다.</span>
+                           <strong className="outline-toc-title">고객 문서 라이브러리</strong>
+                           <span className="outline-toc-breadcrumb">승급 상태와 품질 등급이 반영된 고객 문서 목록입니다.</span>
                            <span className="outline-toc-meta">{`${draftSources.length}개 고객 문서`}</span>
                          </div>
                          <div className="outline-custom-doc-list outline-custom-doc-list--toc">
@@ -3264,7 +3378,7 @@ export default function WorkspacePage() {
                       })}
                     </div>
                     <div className="suggested-query-label welcome-route-label">
-                      시작 질문
+                      {chatMode === 'learn' ? '학습 시작 질문' : '운영 시작 질문'}
                     </div>
                     <div className="welcome-question-grid">
                       {welcomeQuestions.map((q, i) => (
@@ -3282,7 +3396,7 @@ export default function WorkspacePage() {
                     {isBootstrapLoading && (
                       <div className="welcome-loading-hint">
                         <div className="loading-spinner-small"></div>
-                        <span>runtime 문서 목록 동기화 중</span>
+                        <span>문서 목록 동기화 중</span>
                       </div>
                     )}
                   </div>
@@ -3349,7 +3463,7 @@ export default function WorkspacePage() {
                                 key={`${message.id}-suggested-${suggestedIndex}`}
                                 className={visionMode === 'guided_tour' ? `${followupChipClass(followup.dimension)} guided-tour-query-chip` : followupChipClass(followup.dimension)}
                                 type="button"
-                                onClick={() => { void handleSend(followup.query); }}
+                                onClick={() => { void handleSend(followup.query, followup); }}
                                 disabled={isSending}
                                 title={followup.reason ?? ''}
                               >
@@ -3440,22 +3554,42 @@ export default function WorkspacePage() {
             annotationColorId={annotationColorId}
             annotationEnabled={annotationEnabled}
             annotationTool={annotationTool}
-            atlasCanvasActive={visionMode === 'atlas_canvas' && viewerPageMode === 'multi'}
-            bottomToolbar={viewerBuildActionState.show ? (
-              <div className="panel-footer viewer-build-actions viewer-build-actions-docked">
-                <div className="footer-actions">
-                  {viewerBuildActionState.showPrepare ? (
-                    <button className="outline-btn" onClick={() => { void handleCapture(); }} type="button" disabled={!viewerBuildActionState.canCapture}>
-                      <Cpu size={14} />
-                      <span>{isCapturing ? 'Preparing...' : 'Prepare Pack'}</span>
-                    </button>
-                  ) : null}
-                  <button className="primary-btn" onClick={() => { void handleNormalize(); }} type="button" disabled={!viewerBuildActionState.canNormalize}>
-                    <span>{isNormalizing ? 'Saving...' : 'Save to Wiki'}</span>
-                    <ArrowRight size={14} />
-                  </button>
-                </div>
-              </div>
+            atlasCanvasActive={preview.kind === 'viewer' && visionMode === 'atlas_canvas' && viewerPageMode === 'single'}
+            bottomToolbar={(viewerBuildActionState.show || (preview.kind === 'viewer' && viewerPageMode === 'single' && (viewerFooterNavItems.previous || viewerFooterNavItems.next))) ? (
+              <>
+                {viewerBuildActionState.show ? (
+                  <div className="panel-footer viewer-build-actions viewer-build-actions-docked">
+                    <div className="footer-actions">
+                      {viewerBuildActionState.showPrepare ? (
+                        <button className="outline-btn" onClick={() => { void handleCapture(); }} type="button" disabled={!viewerBuildActionState.canCapture}>
+                          <Cpu size={14} />
+                          <span>{isCapturing ? 'Preparing...' : 'Prepare Pack'}</span>
+                        </button>
+                      ) : null}
+                      <button className="primary-btn" onClick={() => { void handleNormalize(); }} type="button" disabled={!viewerBuildActionState.canNormalize}>
+                        <span>{isNormalizing ? 'Saving...' : 'Save to Wiki'}</span>
+                        <ArrowRight size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {preview.kind === 'viewer' && viewerPageMode === 'single' && (viewerFooterNavItems.previous || viewerFooterNavItems.next) ? (
+                  <nav className="workspace-embedded-section-nav workspace-embedded-section-nav--docked" aria-label="섹션 이동">
+                    <div className="workspace-embedded-section-nav-slot workspace-embedded-section-nav-slot-start">
+                      {viewerFooterNavItems.previous
+                        ? renderEmbeddedSectionNavButton(viewerFooterNavItems.previous, 'previous')
+                        : viewerFooterNavItems.next
+                          ? renderEmbeddedSectionNavButton(viewerFooterNavItems.next, 'next')
+                          : null}
+                    </div>
+                    <div className="workspace-embedded-section-nav-slot workspace-embedded-section-nav-slot-end">
+                      {viewerFooterNavItems.previous && viewerFooterNavItems.next
+                        ? renderEmbeddedSectionNavButton(viewerFooterNavItems.next, 'next')
+                        : null}
+                    </div>
+                  </nav>
+                ) : null}
+              </>
             ) : undefined}
             savedInkStrokes={currentInkStrokes}
             isInkSaving={isOverlaySaving}
@@ -3489,7 +3623,7 @@ export default function WorkspacePage() {
                   <button className="section-header-btn" onClick={() => toggleSection('manuals')} type="button">
                     <div className="header-label-group">
                       {collapsedSections.manuals ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      <span className="list-title">{visionMode === 'guided_tour' ? 'Tour Books' : 'Source Books'}</span>
+                      <span className="list-title">{visionMode === 'guided_tour' ? '학습 문서' : '공식 문서'}</span>
                     </div>
                     <span className="item-count-badge">{manualSources.length}</span>
                   </button>
@@ -3524,7 +3658,7 @@ export default function WorkspacePage() {
                     <button className="section-header-btn" onClick={() => toggleSection('custom_documents')} type="button">
                       <div className="header-label-group">
                         {collapsedSections.custom_documents ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                        <span className="list-title">커스텀 문서 슬롯</span>
+                        <span className="list-title">추가 자료</span>
                       </div>
                       <span className="item-count-badge">{customDocumentBooks.length}</span>
                     </button>
@@ -3565,53 +3699,11 @@ export default function WorkspacePage() {
                   </div>
                 )}
 
-                <div className={`source-section ${collapsedSections.test_runs ? 'collapsed' : ''}`}>
-                  <button className="section-header-btn" onClick={() => toggleSection('test_runs')} type="button">
-                    <div className="header-label-group">
-                      {collapsedSections.test_runs ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      <span className="list-title">테스트 런</span>
-                    </div>
-                    <span className="item-count-badge">{testDraftSources.length}</span>
-                  </button>
-                  {!collapsedSections.test_runs && (
-                    <div className="section-items-container">
-                      {testDraftSources.length === 0 ? (
-                        <div className="empty-hint">`Test 1`, `Test 2` 형식의 실험군이 아직 없습니다.</div>
-                      ) : testDraftSources.map((file) => {
-                        const chips = file.draft ? uploadedDraftCatalogChips(file.draft) : [];
-                        return (
-                          <button
-                            key={file.id}
-                            type="button"
-                            className={`source-item ${activeSourceId === file.id ? 'selected' : ''}`}
-                            onClick={() => { void handleSourceClick(file); }}
-                          >
-                            <div className="item-main">
-                              <FileText size={16} className="file-icon" />
-                              <div className="item-main-copy">
-                                <span className="file-name">{file.name}</span>
-                                {chips.length > 0 ? (
-                                  <div className="source-chip-row">
-                                    {chips.map((chip) => (
-                                      <span key={`${file.id}:${chip}`} className="source-kind-chip">{chip}</span>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                            </div>
-                            <div className="item-meta">{file.meta}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
                 <div className={`source-section ${collapsedSections.drafts ? 'collapsed' : ''}`}>
                   <button className="section-header-btn" onClick={() => toggleSection('drafts')} type="button">
                     <div className="header-label-group">
                       {collapsedSections.drafts ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      <span className="list-title">{visionMode === 'guided_tour' ? 'Customer Docs' : '고객 문서'}</span>
+                      <span className="list-title">고객 문서</span>
                     </div>
                     <span className="item-count-badge">{draftSources.length}</span>
                   </button>
@@ -3676,25 +3768,27 @@ export default function WorkspacePage() {
             {!testMode && preview.kind === 'viewer' && (
               <section className="reader-stage animate-in">
                 {preview.viewerDocument?.html ? (
-                  <ViewerDocumentStage
-                    viewerDocument={preview.viewerDocument}
-                    currentViewerPath={currentViewerPath}
-                    onActiveSectionChange={viewerPageMode === 'multi' ? setViewerActiveSection : undefined}
-                    onNavigateViewerPath={(viewerPath) => {
-                      void openViewerPreview(viewerPath, preview.title, draftScopedSourceId, viewerPageMode);
-                    }}
-                    textAnnotationsByAnchor={sectionTextAnnotationsByAnchor}
-                    textToolEnabled={annotationEnabled && annotationTool === 'text' && viewerPageMode === 'multi' && visionMode === 'atlas_canvas'}
-                    textToolMode={textAnnotationMode}
-                    activeTextStyle={annotationTextStyle}
-                    onSaveTextAnnotation={(section, annotation) => {
-                      void handleUpsertSectionTextAnnotation(section, annotation);
-                    }}
-                    onRemoveTextAnnotation={(section, annotationId) => {
-                      void handleRemoveSectionTextAnnotation(section, annotationId);
-                    }}
-                    className="playbook-reader-shadow-host"
-                  />
+                  <>
+                    <ViewerDocumentStage
+                      viewerDocument={preview.viewerDocument}
+                      currentViewerPath={currentViewerPath}
+                      onActiveSectionChange={setViewerActiveSection}
+                      onNavigateViewerPath={(viewerPath) => {
+                        void openViewerPreview(viewerPath, preview.title, draftScopedSourceId, viewerPageMode);
+                      }}
+                      textAnnotationsByAnchor={sectionTextAnnotationsByAnchor}
+                      textToolEnabled={annotationEnabled && annotationTool === 'text' && viewerPageMode === 'single' && visionMode === 'atlas_canvas'}
+                      textToolMode={textAnnotationMode}
+                      activeTextStyle={annotationTextStyle}
+                      onSaveTextAnnotation={(section, annotation) => {
+                        void handleUpsertSectionTextAnnotation(section, annotation);
+                      }}
+                      onRemoveTextAnnotation={(section, annotationId) => {
+                        void handleRemoveSectionTextAnnotation(section, annotationId);
+                      }}
+                      className="playbook-reader-shadow-host"
+                    />
+                  </>
                 ) : (
                   <div className="playbook-reader-empty">문서 본문을 불러오지 못했습니다.</div>
                 )}

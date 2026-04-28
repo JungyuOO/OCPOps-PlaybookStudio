@@ -13,6 +13,7 @@ from play_book_studio.answering.models import AnswerResult
 from play_book_studio.config.settings import load_settings
 from play_book_studio.retrieval.models import SessionContext
 
+from .gap_repair import build_gap_repair_plan
 from .presenters import _build_citation_presentation_context, _build_health_payload, _serialize_citation
 from .sessions import ChatSession, Turn, serialize_session_snapshot, serialize_turn
 
@@ -357,6 +358,7 @@ def append_unanswered_question_log(
     settings = load_settings(root_dir)
     target = settings.unanswered_questions_path
     target.parent.mkdir(parents=True, exist_ok=True)
+    repository_query = (result.rewritten_query or query or "").strip()
     payload = {
         "record_kind": "unanswered_question",
         "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -367,6 +369,7 @@ def append_unanswered_question_log(
         "warnings": list(result.warnings),
         "retrieval_trace": dict(result.retrieval_trace),
         "pipeline_trace": dict(result.pipeline_trace),
+        "repair_plan": build_gap_repair_plan(root_dir, query=repository_query),
     }
     with target.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")

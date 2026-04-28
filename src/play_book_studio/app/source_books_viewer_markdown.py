@@ -91,8 +91,12 @@ def _markdown_sections(markdown_text: str) -> list[dict[str, Any]]:
     sections: list[dict[str, Any]] = []
     current: dict[str, Any] | None = None
     path_stack: list[str] = []
+    in_fenced_code = False
     for raw_line in markdown_text.splitlines():
-        heading = _parse_markdown_heading(raw_line)
+        stripped = raw_line.strip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_fenced_code = not in_fenced_code
+        heading = None if in_fenced_code else _parse_markdown_heading(raw_line)
         if heading is not None:
             level, title = heading
             while len(path_stack) >= level:

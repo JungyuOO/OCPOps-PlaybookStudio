@@ -70,6 +70,19 @@ class RetrievalHit:
     source_lane: str = "official_ko"
     source_type: str = "official_doc"
     source_collection: str = "core"
+    source_authority: str = ""
+    source_authority_label: str = ""
+    source_authority_badge: str = ""
+    source_authority_warning: str = ""
+    source_requires_review: bool = False
+    boundary_truth: str = ""
+    runtime_truth_label: str = ""
+    boundary_badge: str = ""
+    approval_state: str = ""
+    publication_state: str = ""
+    provider_egress_policy: str = ""
+    retrieval_ready: bool = False
+    read_ready: bool = False
     surface_kind: str = "document"
     source_unit_kind: str = "section"
     source_unit_id: str = ""
@@ -87,6 +100,10 @@ class RetrievalHit:
     operator_names: tuple[str, ...] = field(default_factory=tuple)
     verification_hints: tuple[str, ...] = field(default_factory=tuple)
     graph_relations: tuple[str, ...] = field(default_factory=tuple)
+    contextual_enrichment_version: str = ""
+    contextual_parent_title: str = ""
+    contextual_heading_path: tuple[str, ...] = field(default_factory=tuple)
+    contextual_prefix: str = ""
     component_scores: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

@@ -14,6 +14,8 @@ if str(SRC) not in sys.path:
 
 from play_book_studio.app.data_control_room import (
     _build_development_control_status,
+    _build_llmwiki_contextual_enrichment_control_status,
+    _build_llmwiki_evolution_gate_control_status,
     _build_llmwiki_promotion_control_status,
     _build_llmwiki_validation_loop_control_status,
 )
@@ -117,6 +119,101 @@ def _write_loop_report(root: Path, *, head: str = "abc123") -> Path:
     return report_path
 
 
+def _write_evolution_gate_report(root: Path, *, head: str = "abc123") -> Path:
+    reports_dir = root / ".kugnusdocs" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report_path = reports_dir / "2026-04-27-llmwiki-evolution-gate.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-27T02:00:00+09:00",
+                "git": {"branch": "feat/dev-kugnus", "head": head},
+                "status": "ok",
+                "ready": True,
+                "checks": {
+                    "retrieval_quality_critic_ready": True,
+                    "wiki_backwrite_candidate_ready": True,
+                    "wiki_lint_anti_rot_ready": True,
+                },
+                "failures": [],
+                "retrieval_quality_critic": {"blocker_count": 0, "warning_count": 1},
+                "wiki_backwrite_candidate": {"candidate_count": 6},
+                "wiki_lint_anti_rot": {"blocker_count": 0, "warning_count": 0},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return report_path
+
+
+def _write_contextual_enrichment_report(root: Path, *, head: str = "abc123") -> Path:
+    reports_dir = root / ".kugnusdocs" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report_path = reports_dir / "2026-04-27-llmwiki-contextual-enrichment-gate.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-27T03:00:00+09:00",
+                "git": {"branch": "feat/dev-kugnus", "head": head},
+                "status": "ok",
+                "ready": True,
+                "checks": {
+                    "runtime_contextual_prefix_ready": True,
+                    "runtime_contextual_heading_path_ready": True,
+                    "bm25_runtime_uses_contextual_search_text": True,
+                    "contextual_recall_fixture_improves": True,
+                },
+                "failures": [],
+                "coverage": {
+                    "total": {
+                        "row_count": 87858,
+                        "runtime_contextual_count": 87858,
+                        "persisted_contextual_count": 0,
+                        "contextual_prefix_count": 87858,
+                        "contextual_heading_path_count": 87858,
+                    }
+                },
+                "recall_fixture": {"improved": True},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return report_path
+
+
+def _ready_role_rehearsal_status() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "ready": True,
+        "pass_count": 4,
+        "total": 4,
+        "roles": {
+            "operator_a": {"pass": 2, "total": 2, "ready": True},
+            "learner_b": {"pass": 2, "total": 2, "ready": True},
+        },
+        "failures": [],
+        "selected_report": {"head_matches_current": True, "stale": False},
+        "results": [],
+    }
+
+
+def _ready_runtime_dependencies_status() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "ready": True,
+        "failures": [],
+        "qdrant": {
+            "id": "qdrant",
+            "ready": True,
+            "status": "ok",
+            "url": "http://127.0.0.1:6335/collections",
+            "collection": "openshift_docs",
+        },
+    }
+
+
 class DataControlRoomLlmWikiTests(unittest.TestCase):
     def test_missing_report_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -188,6 +285,8 @@ class DataControlRoomLlmWikiTests(unittest.TestCase):
             playable_asset_count=90,
             source_of_truth_drift={"status_alignment": {"mismatches": []}},
             product_rehearsal={"exists": True, "status": "ok", "blockers": []},
+            role_rehearsal=_ready_role_rehearsal_status(),
+            runtime_dependencies=_ready_runtime_dependencies_status(),
         )
 
         self.assertTrue(status["ready"])
@@ -195,6 +294,8 @@ class DataControlRoomLlmWikiTests(unittest.TestCase):
         self.assertEqual(0, status["summary"]["blocked_count"])
         surface_ids = [item["id"] for item in status["surfaces"]]
         self.assertIn("studio_chat", surface_ids)
+        self.assertIn("runtime_dependencies", surface_ids)
+        self.assertIn("role_rehearsal", surface_ids)
         self.assertIn("automation_harness", surface_ids)
         self.assertIn("surya_optional_boundary", surface_ids)
         self.assertNotIn("ops_console", surface_ids)
@@ -214,6 +315,37 @@ class DataControlRoomLlmWikiTests(unittest.TestCase):
         self.assertEqual("stale", status["status"])
         self.assertFalse(status["ready"])
         self.assertTrue(status["selected_report"]["stale"])
+
+    def test_evolution_gate_status_exposes_p0_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_evolution_gate_report(root, head="abc123")
+            with patch(
+                "play_book_studio.app.data_control_room._current_git_context",
+                return_value={"branch": "feat/dev-kugnus", "head": "abc123", "dirty_tracked_files": False},
+            ):
+                status = _build_llmwiki_evolution_gate_control_status(root)
+
+        self.assertEqual("ok", status["status"])
+        self.assertTrue(status["ready"])
+        self.assertEqual(6, status["metrics"]["backwrite_candidates"])
+        self.assertEqual(0, status["metrics"]["quality_blockers"])
+
+    def test_contextual_enrichment_status_exposes_p1_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            _write_contextual_enrichment_report(root, head="abc123")
+            with patch(
+                "play_book_studio.app.data_control_room._current_git_context",
+                return_value={"branch": "feat/dev-kugnus", "head": "abc123", "dirty_tracked_files": False},
+            ):
+                status = _build_llmwiki_contextual_enrichment_control_status(root)
+
+        self.assertEqual("ok", status["status"])
+        self.assertTrue(status["ready"])
+        self.assertEqual(87858, status["metrics"]["row_count"])
+        self.assertEqual(87858, status["metrics"]["runtime_contextual_count"])
+        self.assertTrue(status["metrics"]["recall_fixture_improved"])
 
 
 if __name__ == "__main__":

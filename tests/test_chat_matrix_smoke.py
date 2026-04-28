@@ -216,6 +216,39 @@ class ChatMatrixSmokeTests(unittest.TestCase):
             self.assertFalse(report["results"][0]["checks"]["llm_runtime_live"])
             self.assertFalse(report["results"][0]["checks"]["vector_runtime_live"])
 
+    def test_chat_matrix_blocks_before_cases_when_runtime_dependency_preflight_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            cases_path = root / "cases.jsonl"
+            _write_cases(
+                cases_path,
+                [
+                    {
+                        "id": "needs-runtime",
+                        "query": "고객 운영북과 공식문서를 같이 봐줘",
+                        "require_dependency_preflight": True,
+                    }
+                ],
+            )
+
+            with (
+                patch(
+                    "play_book_studio.app.chat_matrix_smoke._runtime_dependency_status",
+                    return_value={"status": "blocked", "ready": False, "failures": ["qdrant: connection refused"]},
+                ),
+                patch("play_book_studio.app.chat_matrix_smoke.requests.post") as post_mock,
+            ):
+                report = build_chat_matrix_smoke(
+                    root,
+                    ui_base_url="http://127.0.0.1:8896",
+                    cases_path=cases_path,
+                )
+
+            self.assertEqual("blocked", report["status"])
+            self.assertEqual(["qdrant: connection refused"], report["failures"])
+            self.assertFalse(report["results"][0]["checks"]["runtime_dependency_preflight"])
+            post_mock.assert_not_called()
+
     def test_chat_matrix_fails_when_expected_collection_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

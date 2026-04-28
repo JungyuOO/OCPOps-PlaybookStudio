@@ -13,6 +13,7 @@ from play_book_studio.intake.artifact_bundle import build_customer_pack_relation
 from play_book_studio.intake.models import CustomerPackDraftRecord
 from play_book_studio.intake.private_boundary import summarize_private_runtime_boundary
 from play_book_studio.intake.service import evaluate_canonical_book_quality
+from play_book_studio.source_authority import source_authority_payload
 
 
 PRIVATE_CORPUS_VERSION = "customer_private_corpus_v1"
@@ -198,7 +199,7 @@ def _bm25_row(chunk_row: dict[str, Any]) -> dict[str, Any]:
             if chunk_type in {"procedure", "command"}
             else ("concept" if chunk_type == "concept" else "reference")
         )
-    return {
+    row = {
         "chunk_id": chunk_row["chunk_id"],
         "book_slug": chunk_row["book_slug"],
         "chapter": chunk_row["chapter"],
@@ -219,6 +220,11 @@ def _bm25_row(chunk_row: dict[str, Any]) -> dict[str, Any]:
         "translation_status": chunk_row["translation_status"],
         "review_status": chunk_row["review_status"],
         "trust_score": chunk_row["trust_score"],
+        "classification": str(chunk_row.get("classification") or "").strip(),
+        "approval_state": str(chunk_row.get("approval_state") or "").strip(),
+        "publication_state": str(chunk_row.get("publication_state") or "").strip(),
+        "provider_egress_policy": str(chunk_row.get("provider_egress_policy") or "").strip(),
+        "redaction_state": str(chunk_row.get("redaction_state") or "").strip(),
         "semantic_role": semantic_role,
         "block_kinds": list(chunk_row.get("block_kinds") or []),
         "cli_commands": list(chunk_row.get("cli_commands") or []),
@@ -253,6 +259,8 @@ def _bm25_row(chunk_row: dict[str, Any]) -> dict[str, Any]:
         "lineage_anchor": str(chunk_row.get("lineage_anchor") or "").strip(),
         "lineage_viewer_path": str(chunk_row.get("lineage_viewer_path") or "").strip(),
     }
+    row.update(source_authority_payload(row))
+    return row
 
 
 def _chunk_semantic_role(chunk_type: str) -> str:
@@ -974,6 +982,7 @@ def materialize_customer_pack_private_corpus(
     manifest["publish_ready"] = bool(promotion_gate.get("publish_ready"))
     manifest["citation_landing_status"] = str(citation_gate.get("status") or "missing")
     manifest["retrieval_ready"] = bool(retrieval_gate.get("ready"))
+    manifest.update(source_authority_payload(manifest))
     boundary_summary = summarize_private_runtime_boundary(manifest)
     manifest["runtime_eligible"] = bool(boundary_summary["runtime_eligible"])
     manifest["boundary_fail_reasons"] = list(boundary_summary["fail_reasons"])

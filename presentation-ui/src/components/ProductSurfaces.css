@@ -40,6 +40,20 @@
   border-radius: 24px;
 }
 
+[data-theme='light'] .surfaces-container {
+  background: var(--pbs-bg-main);
+}
+
+[data-theme='light'] .surface-card {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--pbs-border-soft);
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.09);
+}
+
+[data-theme='light'] .surface-card:hover {
+  border-color: rgba(2, 132, 168, 0.3);
+}
+
 .card-content {
   position: relative;
   z-index: 2;

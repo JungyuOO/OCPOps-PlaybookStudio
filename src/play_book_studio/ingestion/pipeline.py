@@ -18,6 +18,7 @@ from play_book_studio.canonical import (
     translate_document_ast,
     validate_document_ast,
 )
+from play_book_studio.contextual_enrichment import contextual_search_text, enrich_contextual_row
 from .audit_rules import (
     LANGUAGE_FALLBACK_RE,
     body_language_guess,
@@ -112,7 +113,7 @@ def _semantic_role_for_chunk(chunk: ChunkRecord) -> str:
 
 
 def _bm25_row_from_chunk(chunk: ChunkRecord) -> dict[str, object]:
-    return {
+    row = {
         "chunk_id": chunk.chunk_id,
         "book_slug": chunk.book_slug,
         "book_title": chunk.book_title,
@@ -176,6 +177,7 @@ def _bm25_row_from_chunk(chunk: ChunkRecord) -> dict[str, object]:
         "operator_names": list(chunk.operator_names),
         "verification_hints": list(chunk.verification_hints),
     }
+    return enrich_contextual_row(row)
 
 
 def _runtime_source_lane(entry: SourceManifestEntry, content_status: str) -> str:
@@ -583,7 +585,7 @@ def run_ingestion_pipeline(
             log.stage = "embed"
             client = EmbeddingClient(settings)
             vectors = client.embed_texts(
-                (chunk.text for chunk in chunks),
+                (contextual_search_text(chunk.to_dict()) for chunk in chunks),
                 progress_callback=lambda done, total: (
                     _progress(f"[embed {done}/{total}]"),
                     _save_log(settings, log),

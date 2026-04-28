@@ -78,7 +78,22 @@ _COMMAND_TOKEN_RE = re.compile(
 )
 _DISK_QUERY_RE = re.compile(r"(디스크|disk|filesystem|파일시스템|lsblk|df\s+-h)", re.IGNORECASE)
 _NODE_ACCESS_QUERY_RE = re.compile(r"(노드.*접속|접속.*노드|host.*access|ssh|oc debug|debug\s+명령)", re.IGNORECASE)
+_OPERATOR_FIRST_CONTACT_RE = re.compile(
+    r"(operator|오퍼레이터).*(문제|장애|처음|어디부터|무엇부터|먼저|확인|점검)|"
+    r"(문제|장애|처음|어디부터|무엇부터|먼저|확인|점검).*(operator|오퍼레이터)",
+    re.IGNORECASE,
+)
+_OPERATOR_RUNTIME_TOPIC_RE = re.compile(
+    r"(operator|오퍼레이터|olm|subscription|installplan|install\s*plan|csv|clusterserviceversion|catalogsource|catalog\s*source)",
+    re.IGNORECASE,
+)
+_OPS_VERIFICATION_QUERY_RE = re.compile(
+    r"(조치\s*후|정상화|복구|검증|확인\s*신호|회복|resolved|healthy)",
+    re.IGNORECASE,
+)
+_DOC_LOCATOR_ONLY_RE = re.compile(r"(문서를\s+여는\s+것이\s+맞습니다|문서를\s+먼저\s+열)", re.IGNORECASE)
 _LOG_QUERY_RE = re.compile(r"(로그|log|journal|node-logs|must-gather)", re.IGNORECASE)
+_CITATION_CODE_BLOCK_RE = re.compile(r"\[CODE\](.*?)\[/CODE\]", re.IGNORECASE | re.DOTALL)
 
 
 def _citation_text(citation) -> str:
@@ -318,6 +333,79 @@ def _collect_ordered_grounded_commands(citations, *, limit: int = 3) -> list[str
     return commands
 
 
+def _looks_like_config_line(value: str) -> bool:
+    stripped = (value or "").strip()
+    if not stripped or _looks_like_shell_command(stripped):
+        return False
+    return ":" in stripped or stripped in {"...", "---"}
+
+
+def _extract_grounded_config_snippet(*, query: str, citations, limit: int = 8) -> str:
+    query_text = (query or "").casefold()
+    query_tokens = {
+        token
+        for token in re.findall(r"[A-Za-z][A-Za-z0-9_.-]{2,}", query or "")
+        if token.casefold() not in {"the", "and", "for", "with", "route", "ocp"}
+    }
+
+    def add_inline_route_admission_snippet(text: str) -> None:
+        match = re.search(r"routeAdmission\s*:\s*wildcardPolicy\s*:\s*([A-Za-z0-9_-]+)", text or "")
+        if not match:
+            return
+        value = match.group(1)
+        candidates.append(
+            (
+                10,
+                [
+                    "spec:",
+                    "  routeAdmission:",
+                    f"    wildcardPolicy: {value}",
+                ],
+            )
+        )
+
+    candidates: list[tuple[int, list[str]]] = []
+    for citation in citations:
+        excerpt = str(getattr(citation, "excerpt", "") or "")
+        for block in _CITATION_CODE_BLOCK_RE.findall(excerpt):
+            add_inline_route_admission_snippet(block)
+            config_lines: list[str] = []
+            for raw_line in block.splitlines():
+                line = raw_line.rstrip()
+                stripped = line.strip().lstrip("#").strip()
+                if _looks_like_shell_command(stripped):
+                    continue
+                if _looks_like_config_line(line):
+                    config_lines.append(line)
+            if not config_lines:
+                continue
+            joined = "\n".join(config_lines).casefold()
+            score = sum(1 for token in query_tokens if token.casefold() in joined)
+            if "wildcardpolicy" in joined and "wildcard" in query_text:
+                score += 3
+            if "routeadmission" in joined and "routeadmission" in query_text:
+                score += 2
+            candidates.append((score, config_lines[:limit]))
+        add_inline_route_admission_snippet(excerpt)
+
+    if not candidates:
+        return ""
+    _, selected = max(candidates, key=lambda candidate: candidate[0])
+    return "\n".join(selected).strip()
+
+
+def _grounded_config_sentence(snippet: str, *, citations) -> str:
+    ref = citation_marker(citations, 1)
+    wildcard_match = re.search(r"wildcardPolicy\s*:\s*([A-Za-z0-9_-]+)", snippet)
+    if wildcard_match and "routeAdmission" in snippet:
+        value = wildcard_match.group(1)
+        return f"편집 화면에서 `spec.routeAdmission.wildcardPolicy` 값을 `{value}`로 맞춰야 합니다 {ref}."
+    if wildcard_match:
+        value = wildcard_match.group(1)
+        return f"편집 화면에서 `wildcardPolicy` 값을 `{value}`로 맞춰야 합니다 {ref}."
+    return f"명령을 실행한 뒤 아래 설정 블록까지 같이 반영해야 조치가 끝납니다 {ref}."
+
+
 def _build_buildconfig_command_guide_answer(*, query: str, citations) -> str | None:
     lowered_query = (query or "").lower()
     if "buildconfig" not in lowered_query:
@@ -464,8 +552,45 @@ def shape_actionable_ops_answer(
     answer_text: str,
     *,
     query: str,
+    mode: str | None = None,
     citations,
 ) -> str:
+    if mode != "learn" and citations and _DOC_LOCATOR_ONLY_RE.search(answer_text or ""):
+        primary = citation_marker(citations, 1)
+        secondary = citation_marker(citations, 2)
+        if _OPERATOR_RUNTIME_TOPIC_RE.search(query or ""):
+            return (
+                f"답변: 문서 위치만 여는 것으로 끝내지 말고, Operator 설치/상태 흐름을 바로 확인해야 합니다 {primary}.\n\n"
+                f"1. 먼저 `ClusterServiceVersion(CSV)`, `Subscription`, `InstallPlan`, `CatalogSource` 중 어느 리소스가 멈췄는지 상태를 나눠 봅니다 {primary}.\n"
+                f"2. 이어서 같은 namespace의 이벤트와 관련 Pod 로그에서 이미지 pull, 권한, catalog 연결, API 오류가 반복되는지 확인합니다 {secondary or primary}.\n"
+                f"3. 조치 후에는 CSV phase, Operator 조건, 관련 Pod Ready, 이벤트 감소 여부를 같이 확인해 정상화를 검증합니다 {primary}."
+            )
+        if has_rbac_intent(query):
+            return (
+                f"답변: RBAC 가능성을 볼 때는 문서 경로보다 권한 대상과 실제 허용 여부를 먼저 분리해서 확인해야 합니다 {primary}.\n\n"
+                f"1. 문제가 난 사용자, group, serviceaccount와 대상 namespace를 먼저 확정합니다 {primary}.\n"
+                f"2. `RoleBinding`/`ClusterRoleBinding`이 어느 role을 누구에게 묶었는지 확인하고, namespace 범위 권한과 cluster 범위 권한을 구분합니다 {primary}.\n"
+                f"3. 필요하면 `SelfSubjectAccessReview` 또는 `SelfSubjectRulesReview` 계열 확인으로 실제 허용 여부를 검증합니다 {primary}."
+            )
+        if _OPS_VERIFICATION_QUERY_RE.search(query or ""):
+            return (
+                f"답변: 정상화 검증은 한 신호만 보지 말고 상태, 이벤트, 워크로드, 알림을 같이 봐야 합니다 {primary}.\n\n"
+                f"1. 대상 리소스의 condition/phase가 정상 상태로 돌아왔는지 확인합니다 {primary}.\n"
+                f"2. 같은 namespace 이벤트에서 동일 오류가 더 이상 반복되지 않는지 확인합니다 {secondary or primary}.\n"
+                f"3. 관련 Pod Ready, 재시작 수, 모니터링 알림 해소 여부를 묶어서 복구 증거로 남깁니다 {primary}."
+            )
+    if mode != "learn" and citations and _OPERATOR_FIRST_CONTACT_RE.search(query or "") and (
+        _DOC_LOCATOR_ONLY_RE.search(answer_text or "")
+        or not re.search(r"(상태|확인|점검|검증|조치)", answer_text or "")
+    ):
+        primary = citation_marker(citations, 1)
+        secondary = citation_marker(citations, 2)
+        return (
+            f"답변: 먼저 Operator 상태와 조건을 확인하고, 이벤트와 로그로 실패 범위를 좁힌 뒤 조치 후 정상 조건으로 검증합니다 {primary}.\n\n"
+            f"1. 대상 Operator의 CSV, Subscription, InstallPlan, 관련 Pod가 어느 단계에서 멈췄는지 상태를 확인합니다 {primary}.\n"
+            f"2. 이벤트와 로그에서 이미지, 권한, API 오류처럼 반복되는 실패 신호를 점검합니다 {secondary or primary}.\n"
+            f"3. 변경 후에는 Operator 조건, 관련 워크로드 상태, 모니터링 알림 해소 여부로 복구를 검증합니다 {primary}."
+        )
     if "```" in (answer_text or ""):
         return answer_text
     if not (
@@ -543,14 +668,23 @@ def build_grounded_command_guide_answer(
     primary = citations[0]
     intro = _actionable_intro(query)
     code_blocks = "\n\n".join(f"```bash\n{command}\n```" for command in commands)
+    config_snippet = _extract_grounded_config_snippet(query=query, citations=citations)
+    config_block = ""
+    if config_snippet:
+        config_block = (
+            "\n\n"
+            f"{_grounded_config_sentence(config_snippet, citations=citations)}\n\n"
+            f"```yaml\n{config_snippet}\n```"
+        )
     section = (primary.section or "").strip()
     if section:
         return (
             f"{intro} [1].\n\n"
             f"{section} 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다 [1].\n\n"
             f"{code_blocks}"
+            f"{config_block}"
         )
-    return f"{intro} [1].\n\n{code_blocks}"
+    return f"{intro} [1].\n\n{code_blocks}{config_block}"
 
 
 def _rbac_grounded_excerpt_text(citations) -> str:
@@ -720,6 +854,24 @@ def shape_rbac_follow_up_answer(
         )
 
     return answer_text
+
+
+def shape_learning_answer_text(
+    answer_text: str,
+    *,
+    query: str,
+    mode: str | None = None,
+    citations,
+) -> str:
+    if mode != "learn" or not citations:
+        return answer_text
+    if re.search(r"(학습|개념|이해|단계|차이|구조)", answer_text or ""):
+        return answer_text
+    if not re.search(r"(설명|알려|관계|차이|구조|개념|흐름|순서|로드맵|플랜)", query or ""):
+        return answer_text
+    if (answer_text or "").startswith("답변:"):
+        return re.sub(r"^답변:\s*", "답변: 학습 관점에서는 ", answer_text, count=1)
+    return f"답변: 학습 관점에서는 {answer_text}"
 
 
 def shape_etcd_backup_answer(

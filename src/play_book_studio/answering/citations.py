@@ -5,6 +5,13 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 
+from play_book_studio.source_authority import (
+    COMMUNITY_AUTHORITY,
+    CUSTOMER_PRIVATE_AUTHORITY,
+    UNVERIFIED_AUTHORITY,
+    canonical_source_authority,
+)
+
 
 CITATION_RE = re.compile(r"\[(\d+)\]")
 ADJACENT_DUPLICATE_CITATION_RE = re.compile(r"(\[\d+\])(?:\s*\1)+")
@@ -12,12 +19,23 @@ CODE_FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
 
 
 def citation_identity(citation) -> tuple[str, str]:
+    source_scope = "|".join(
+        item
+        for item in (
+            (getattr(citation, "source_collection", "") or "").strip().lower(),
+            (getattr(citation, "source_lane", "") or "").strip().lower(),
+            (getattr(citation, "boundary_truth", "") or "").strip().lower(),
+            (getattr(citation, "source_type", "") or "").strip().lower(),
+        )
+        if item
+    )
     viewer_path = (citation.viewer_path or "").strip().lower()
     if viewer_path:
-        return citation.book_slug, viewer_path
+        return citation.book_slug, f"{source_scope}#{viewer_path}" if source_scope else viewer_path
     source_url = (citation.source_url or "").strip().lower()
     anchor = (citation.anchor or "").strip().lower()
-    return citation.book_slug, f"{source_url}#{anchor}"
+    identity = f"{source_url}#{anchor}"
+    return citation.book_slug, f"{source_scope}#{identity}" if source_scope else identity
 
 
 def finalize_citations(
@@ -267,6 +285,14 @@ def _has_runtime_blend_signal(query: str) -> bool:
 
 
 def _citation_truth_bucket(citation) -> str:
+    payload = citation.to_dict() if hasattr(citation, "to_dict") else {}
+    authority = canonical_source_authority(payload)
+    if authority == CUSTOMER_PRIVATE_AUTHORITY:
+        return "private"
+    if authority == COMMUNITY_AUTHORITY:
+        return "community"
+    if authority == UNVERIFIED_AUTHORITY:
+        return "unverified"
     source_collection = str(getattr(citation, "source_collection", "") or "").strip().lower()
     if source_collection == "uploaded":
         return "private"

@@ -46,6 +46,7 @@ export function LlmWikiBookNavList({
                 item.dimmed && 'is-dimmed',
               )}
               style={style}
+              aria-current={item.active ? 'true' : undefined}
               onClick={() => onItemSelect(item)}
             >
               <NavItemBody item={item} />
@@ -63,6 +64,7 @@ export function LlmWikiBookNavList({
             )}
             style={style}
             role="listitem"
+            aria-current={item.active ? 'true' : undefined}
           >
             <NavItemBody item={item} />
           </div>

@@ -5,7 +5,16 @@ const CUSTOMER_PACK_VIEWER_RE = /\/playbooks\/customer-packs\/([^/?#]+)/i;
 
 type DraftSurfaceRecord = Pick<
   CustomerPackDraft,
-  'title' | 'status' | 'source_type' | 'surface_kind' | 'pipeline_target_label' | 'playable_asset_count'
+  'title'
+  | 'status'
+  | 'source_type'
+  | 'surface_kind'
+  | 'pipeline_target_label'
+  | 'playable_asset_count'
+  | 'quality_status'
+  | 'shared_grade'
+  | 'read_ready'
+  | 'publish_ready'
 > | null | undefined;
 
 type DraftViewerBook = Partial<Pick<CustomerPackBook, 'surface_kind' | 'target_viewer_path'>> | null | undefined;
@@ -18,6 +27,101 @@ export interface DraftCatalogPartition {
 export interface DraftCatalogSemantics {
   audienceLabel: string;
   surfaceLabel: string;
+}
+
+function normalizedDraftText(value: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isTruthyDraftFlag(value: unknown): boolean {
+  return value === true || normalizedDraftText(value) === 'true';
+}
+
+function isMaterializedDraft(draft: DraftSurfaceRecord): boolean {
+  const status = normalizedStatus(draft?.status);
+  const quality = normalizedDraftText(draft?.quality_status);
+  const grade = normalizedDraftText(draft?.shared_grade);
+  return status === 'normalized'
+    && (
+      isTruthyDraftFlag(draft?.read_ready)
+      || isTruthyDraftFlag(draft?.publish_ready)
+      || quality === 'ready'
+      || grade === 'gold'
+      || grade === 'silver'
+      || Number(draft?.playable_asset_count || 0) > 0
+    );
+}
+
+function draftReadyRank(draft: CustomerPackDraft): number {
+  const status = normalizedStatus(draft.status);
+  const quality = normalizedDraftText(draft.quality_status);
+  const grade = normalizedDraftText(draft.shared_grade);
+  const readReady = isTruthyDraftFlag(draft.read_ready);
+  const publishReady = isTruthyDraftFlag(draft.publish_ready);
+
+  return (
+    (readReady ? 100 : 0)
+    + (publishReady ? 40 : 0)
+    + (status === 'normalized' ? 20 : status === 'captured' ? 10 : 0)
+    + (quality === 'ready' ? 5 : 0)
+    + (grade === 'gold' ? 3 : 0)
+    + Number(draft.playable_asset_count || 0)
+  );
+}
+
+function draftDisplayDedupeKey(draft: CustomerPackDraft): string {
+  const sourceType = normalizedSourceType(draft.source_type);
+  const fingerprint = normalizedDraftText((draft as { source_fingerprint?: unknown }).source_fingerprint);
+  const bookSlug = normalizedDraftText(draft.book_slug);
+  const title = normalizedDraftText(draft.title);
+  if (fingerprint) {
+    return `fingerprint:${sourceType}:${fingerprint}:${bookSlug}:${title}`;
+  }
+
+  const uploadedFileName = normalizedDraftText(draft.uploaded_file_name);
+  if (uploadedFileName) {
+    return `uploaded:${sourceType}:${uploadedFileName}`;
+  }
+
+  return [
+    'logical',
+    sourceType,
+    bookSlug,
+    title,
+  ].join(':');
+}
+
+function isDraftDisplayPreferred(nextDraft: CustomerPackDraft, currentDraft: CustomerPackDraft): boolean {
+  const nextRank = draftReadyRank(nextDraft);
+  const currentRank = draftReadyRank(currentDraft);
+  if (nextRank !== currentRank) {
+    return nextRank > currentRank;
+  }
+  const nextUpdatedAt = String(nextDraft.updated_at || '');
+  const currentUpdatedAt = String(currentDraft.updated_at || '');
+  if (nextUpdatedAt !== currentUpdatedAt) {
+    return nextUpdatedAt > currentUpdatedAt;
+  }
+  const nextCreatedAt = String(nextDraft.created_at || '');
+  const currentCreatedAt = String(currentDraft.created_at || '');
+  if (nextCreatedAt !== currentCreatedAt) {
+    return nextCreatedAt > currentCreatedAt;
+  }
+  return String(nextDraft.draft_id || '') > String(currentDraft.draft_id || '');
+}
+
+export function dedupeDraftCatalogForDisplay(drafts: CustomerPackDraft[]): CustomerPackDraft[] {
+  const selected = new Map<string, CustomerPackDraft>();
+
+  for (const draft of drafts) {
+    const key = draftDisplayDedupeKey(draft);
+    const current = selected.get(key);
+    if (!current || isDraftDisplayPreferred(draft, current)) {
+      selected.set(key, draft);
+    }
+  }
+
+  return [...selected.values()];
 }
 
 export function parseDraftTestRunOrder(title: string): number | null {
@@ -100,15 +204,21 @@ export function describeDraftCatalogSemantics(
       surfaceLabel: '캡처 미리보기',
     };
   }
+  if (isMaterializedDraft(draft)) {
+    return {
+      audienceLabel,
+      surfaceLabel: '라이브러리 등록',
+    };
+  }
   if (status === 'normalized') {
     return {
       audienceLabel,
-      surfaceLabel: '정규화 초안',
+      surfaceLabel: '정규화 완료',
     };
   }
   return {
     audienceLabel,
-    surfaceLabel: '업로드 초안',
+    surfaceLabel: '업로드 대기',
   };
 }
 

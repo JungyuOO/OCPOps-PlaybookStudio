@@ -17,6 +17,24 @@
 
   --pbs-glass-bg: rgba(21, 21, 24, 0.6);
   --pbs-glass-border: rgba(255, 255, 255, 0.05);
+  --pbs-border-soft: rgba(255, 255, 255, 0.06);
+  --pbs-border-strong: rgba(255, 255, 255, 0.12);
+  --pbs-surface-raised: rgba(255, 255, 255, 0.04);
+  --pbs-surface-hover: rgba(255, 255, 255, 0.08);
+  --pbs-surface-sunken: rgba(0, 0, 0, 0.24);
+  --pbs-chip-bg: rgba(255, 255, 255, 0.04);
+  --pbs-chip-border: rgba(255, 255, 255, 0.08);
+  --pbs-chip-text: rgba(235, 246, 255, 0.82);
+  --pbs-reader-bg: #f6f2ea;
+  --pbs-reader-card-bg: #ffffff;
+  --pbs-reader-border: #d8e1ec;
+  --pbs-reader-text: #0f172a;
+  --pbs-reader-muted: #334155;
+  --pbs-reader-dim: #64748b;
+  --pbs-reader-link: #2563eb;
+  --pbs-reader-code-bg: #0f172a;
+  --pbs-reader-code-text: #f8fafc;
+  --pbs-shadow-soft: 0 18px 44px rgba(0, 0, 0, 0.22);
 
   /* --- Legacy Compatibility (To be phased out) --- */
   --bg-color: var(--pbs-bg-main);
@@ -39,21 +57,40 @@
 
 [data-theme='light'] {
   /* --- Semantic Palette (Light Mode Override) --- */
-  --pbs-bg-main: #fcfcfd;
-  --pbs-bg-surface: #f2f2f7;
-  --pbs-bg-panel: rgba(255, 255, 255, 0.9);
-  --pbs-bg-card: rgba(0, 0, 0, 0.02);
+  color-scheme: light;
+  --pbs-bg-main: #f4f7fb;
+  --pbs-bg-surface: #eef3f8;
+  --pbs-bg-panel: rgba(255, 255, 255, 0.94);
+  --pbs-bg-card: rgba(255, 255, 255, 0.86);
 
-  --pbs-text-main: #141416;
-  --pbs-text-muted: #666675;
-  --pbs-text-dim: #9ca3af;
+  --pbs-text-main: #111827;
+  --pbs-text-muted: #475569;
+  --pbs-text-dim: #64748b;
 
-  --pbs-accent-cyan: #00a3cc;
-  --pbs-accent-purple: #7236ff;
-  --pbs-accent-glow: rgba(0, 163, 204, 0.2);
+  --pbs-accent-cyan: #0284a8;
+  --pbs-accent-purple: #6d4aff;
+  --pbs-accent-glow: rgba(2, 132, 168, 0.18);
 
-  --pbs-glass-bg: rgba(255, 255, 255, 0.75);
-  --pbs-glass-border: rgba(0, 0, 0, 0.08);
+  --pbs-glass-bg: rgba(255, 255, 255, 0.9);
+  --pbs-glass-border: rgba(15, 23, 42, 0.11);
+  --pbs-border-soft: rgba(15, 23, 42, 0.12);
+  --pbs-border-strong: rgba(15, 23, 42, 0.22);
+  --pbs-surface-raised: rgba(255, 255, 255, 0.9);
+  --pbs-surface-hover: rgba(2, 132, 168, 0.08);
+  --pbs-surface-sunken: rgba(15, 23, 42, 0.06);
+  --pbs-chip-bg: rgba(248, 250, 252, 0.96);
+  --pbs-chip-border: rgba(15, 23, 42, 0.14);
+  --pbs-chip-text: #1f2937;
+  --pbs-reader-bg: #f6f2ea;
+  --pbs-reader-card-bg: #ffffff;
+  --pbs-reader-border: #d8e1ec;
+  --pbs-reader-text: #0f172a;
+  --pbs-reader-muted: #334155;
+  --pbs-reader-dim: #64748b;
+  --pbs-reader-link: #1d4ed8;
+  --pbs-reader-code-bg: #0f172a;
+  --pbs-reader-code-text: #f8fafc;
+  --pbs-shadow-soft: 0 16px 34px rgba(15, 23, 42, 0.11);
 }
 
 * {
@@ -72,6 +109,42 @@ body {
   font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+.app-theme-control {
+  position: fixed;
+  right: 18px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.app-theme-control--landing {
+  top: 14px;
+}
+
+.app-theme-control--page {
+  right: 18px;
+  bottom: 18px;
+}
+
+@media (max-width: 720px) {
+  .app-theme-control {
+    right: 10px;
+  }
+
+  .app-theme-control--landing {
+    top: 10px;
+  }
+
+  .app-theme-control--page {
+    bottom: 10px;
+  }
+
+  .app-theme-control .global-theme-toggle-label {
+    display: none;
+  }
 }
 
 

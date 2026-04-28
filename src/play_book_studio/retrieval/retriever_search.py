@@ -707,12 +707,14 @@ def search_bm25_candidates(
         _is_customer_pack_title_locator_query(subquery)
         for subquery in rewritten_queries
     )
-    if overlay_index is None and (
-        has_active_customer_pack_selection(context)
+    eligible_selected = _runtime_eligible_selected_draft_ids(retriever.settings, context)
+    selected_customer_pack_active = has_active_customer_pack_selection(context)
+    selected_customer_pack_blocked = selected_customer_pack_active and private_index is None and not eligible_selected
+    if overlay_index is None and not selected_customer_pack_blocked and (
+        selected_customer_pack_active
         or any(_is_customer_pack_explicit_query(subquery) for subquery in rewritten_queries)
     ):
         overlay_index = retriever.customer_pack_overlay_index()
-    eligible_selected = _runtime_eligible_selected_draft_ids(retriever.settings, context)
     if overlay_index is not None:
         overlay_hit_sets = [
             (
@@ -724,6 +726,8 @@ def search_bm25_candidates(
                     allowed_draft_ids=eligible_selected,
                 )
                 if eligible_selected
+                else []
+                if selected_customer_pack_blocked
                 else overlay_index.search(subquery, top_k=effective_candidate_k)
             )
             for subquery in rewritten_queries
@@ -738,6 +742,16 @@ def search_bm25_candidates(
         query=rewritten_queries[0] if rewritten_queries else "",
         top_k=effective_candidate_k,
     )
+    if selected_customer_pack_active:
+        title_locator_hits = (
+            filter_customer_pack_hits_by_selection(
+                title_locator_hits,
+                context=context,
+                allowed_draft_ids=eligible_selected,
+            )
+            if eligible_selected
+            else []
+        )
     overlay_hits = (
         _rrf_merge_named_hit_lists(
             {
@@ -781,6 +795,8 @@ def search_bm25_candidates(
             "official_title_locator_count": len(official_title_locator_hits),
             "title_locator_query": title_locator_query,
             "private_overlay_ready": private_index is not None,
+            "selected_customer_pack_blocked": selected_customer_pack_blocked,
+            "eligible_selected_draft_count": len(eligible_selected),
             "summary": _summarize_hit_list(bm25_hits),
         },
     )

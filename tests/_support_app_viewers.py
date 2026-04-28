@@ -31,6 +31,13 @@ from play_book_studio.app.server_routes import (
     handle_viewer_document,
     _viewer_source_meta,
 )
+from play_book_studio.app.server_handler_base import _HandlerBase
+from play_book_studio.app.wiki_user_overlay import (
+    build_wiki_overlay_signal_payload,
+    list_wiki_user_overlays,
+    remove_wiki_user_overlay,
+    save_wiki_user_overlay,
+)
 import play_book_studio.app.presenters as presenters_module
 from play_book_studio.app.presenters import _build_citation_presentation_context
 from play_book_studio.app.viewer_page import _render_study_viewer_html
@@ -38,6 +45,117 @@ from play_book_studio.config.settings import load_settings
 
 
 class AppViewersTestSupport(unittest.TestCase):
+    def test_handler_base_ignores_client_disconnect_during_response_write(self) -> None:
+        class _DisconnectingWriter:
+            def write(self, body: bytes) -> None:
+                del body
+                raise ConnectionAbortedError("client closed request")
+
+            def flush(self) -> None:
+                raise ConnectionAbortedError("client closed request")
+
+        class _DisconnectingHandler(_HandlerBase):
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, object]] = []
+                self.wfile = _DisconnectingWriter()
+
+            def send_response(self, status: HTTPStatus) -> None:
+                self.calls.append(("response", status))
+
+            def send_header(self, key: str, value: str) -> None:
+                self.calls.append(("header", key, value))
+
+            def end_headers(self) -> None:
+                self.calls.append(("end_headers", None))
+
+        handler = _DisconnectingHandler()
+        handler._send_json({"ok": True})
+        handler._send_bytes(b"ok", content_type="text/plain")
+        handler._stream_event({"event": "ok"})
+
+        self.assertIn(("response", HTTPStatus.OK), handler.calls)
+
+    def test_wiki_overlay_favorite_resolves_encoded_section_and_removes_by_equivalent_ref(self) -> None:
+        with self._workspace() as root:
+            settings = self._settings(root)
+            normalized_path = settings.official_lane_repo_wide_dir / "normalized_docs.jsonl"
+            normalized_path.parent.mkdir(parents=True, exist_ok=True)
+            normalized_path.write_text(
+                json.dumps(
+                    {
+                        "book_slug": "qa_overlay_book",
+                        "book_title": "QA Overlay Book",
+                        "heading": "1.1. OpenShift Container Platform 설치 정보",
+                        "section_level": 3,
+                        "section_path": [
+                            "1장. OpenShift Container Platform 설치 프로그램 개요",
+                            "1.1. OpenShift Container Platform 설치 정보",
+                        ],
+                        "anchor": "1.1.-openshift-container-platform-설치-정보",
+                        "anchor_id": "1.1.-openshift-container-platform-설치-정보",
+                        "viewer_path": "/docs/ocp/4.20/ko/qa_overlay_book/index.html#1.1.-openshift-container-platform-설치-정보",
+                        "text": "OpenShift Container Platform 설치 프로그램은 클러스터 배포 방법을 설명합니다.",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            encoded_anchor = "1.1.-openshift-container-platform-%EC%84%A4%EC%B9%98-%EC%A0%95%EB%B3%B4"
+            encoded_viewer_path = (
+                "/playbooks/wiki-runtime/active/qa_overlay_book/index.html"
+                f"?page_mode=single&section={encoded_anchor}#{encoded_anchor}"
+            )
+            saved = save_wiki_user_overlay(
+                root,
+                {
+                    "user_id": "kugnus@cywell.co.kr",
+                    "kind": "favorite",
+                    "target_kind": "section",
+                    "book_slug": "qa_overlay_book",
+                    "anchor": encoded_anchor,
+                    "viewer_path": encoded_viewer_path,
+                    "title": "OpenShift Container Platform 설치 프로그램 개요 > OpenShift Container Platform 설치 정보",
+                },
+            )
+
+            self.assertEqual(
+                "section:qa_overlay_book#1.1.-openshift-container-platform-설치-정보",
+                saved["record"]["target_ref"],
+            )
+            self.assertEqual("OpenShift Container Platform 설치 정보", saved["record"]["resolved_target"]["title"])
+
+            repeated = save_wiki_user_overlay(
+                root,
+                {
+                    "user_id": "kugnus@cywell.co.kr",
+                    "kind": "favorite",
+                    "target_kind": "section",
+                    "book_slug": "qa_overlay_book",
+                    "anchor": "1.1.-openshift-container-platform-설치-정보",
+                    "viewer_path": "/playbooks/wiki-runtime/active/qa_overlay_book/index.html#1.1.-openshift-container-platform-설치-정보",
+                },
+            )
+            listed = list_wiki_user_overlays(root, user_id="kugnus@cywell.co.kr")
+            signals = build_wiki_overlay_signal_payload(root, user_id="kugnus@cywell.co.kr")
+
+            self.assertEqual(saved["record"]["overlay_id"], repeated["record"]["overlay_id"])
+            self.assertEqual(1, listed["count"])
+            self.assertEqual(1, signals["user_focus"]["favorite_count"])
+
+            removed = remove_wiki_user_overlay(
+                root,
+                {
+                    "user_id": "kugnus@cywell.co.kr",
+                    "kind": "favorite",
+                    "target_ref": f"section:qa_overlay_book#{encoded_anchor}",
+                },
+            )
+
+            self.assertEqual(1, removed["removed"])
+            self.assertEqual(0, list_wiki_user_overlays(root, user_id="kugnus@cywell.co.kr")["count"])
+
     def _capture_json_response(self) -> object:
         class _CaptureHandler:
             def __init__(self) -> None:
@@ -538,6 +656,206 @@ class AppViewersTestSupport(unittest.TestCase):
         self.assertIn("개요 본문", multi_html)
         self.assertIn("후속 본문", multi_html)
         self.assertNotIn('class="document-footer-nav"', multi_html)
+
+    def test_viewer_document_uses_relation_hint_for_stale_single_section_anchor(self) -> None:
+        with self._workspace() as root:
+            playbook_dir = self._playbook_dir(root)
+            (playbook_dir / "network_observability.json").write_text(
+                json.dumps(
+                    {
+                        "canonical_model": "playbook_document_v1",
+                        "book_slug": "network_observability",
+                        "title": "네트워크 관측 가능성",
+                        "source_uri": "https://docs.example.test/network-observability",
+                        "sections": [
+                            {
+                                "section_id": "network_observability:release",
+                                "anchor": "network-observability-release-notes",
+                                "heading": "1. Network Observability Operator 릴리스 노트",
+                                "section_path": ["릴리스 노트"],
+                                "blocks": [{"kind": "paragraph", "text": "릴리스 본문"}],
+                            },
+                            {
+                                "section_id": "network_observability:console",
+                                "anchor": "2.1.5.3.-network-observability-console-improvements",
+                                "heading": "2.1.5.3. 관측성 콘솔 개선 사항",
+                                "section_path": ["릴리스 노트", "관측성 콘솔 개선 사항"],
+                                "blocks": [{"kind": "paragraph", "text": "관측성 콘솔 본문"}],
+                            },
+                            {
+                                "section_id": "network_observability:next",
+                                "anchor": "2.1.5.4.-next-topic",
+                                "heading": "2.1.5.4. 다음 주제",
+                                "section_path": ["릴리스 노트", "다음 주제"],
+                                "blocks": [{"kind": "paragraph", "text": "다음 본문"}],
+                            },
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            relation_dir = root / "data" / "wiki_relations"
+            relation_dir.mkdir(parents=True)
+            (relation_dir / "figure_assets.json").write_text(
+                json.dumps(
+                    {
+                        "entries": {
+                            "network_observability": [
+                                {
+                                    "asset_url": "/playbooks/wiki-assets/full_rebuild/network_observability/arrow.png",
+                                    "source_asset_ref": "arrow.png",
+                                    "caption": "웹 콘솔 개선 사항",
+                                }
+                            ]
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (relation_dir / "figure_section_index.json").write_text(
+                json.dumps(
+                    {
+                        "by_slug": {
+                            "network_observability": [
+                                {
+                                    "section_anchor": "2.1.54.2.-web-console-enhancements:",
+                                    "section_heading": "2.1.54.2. 웹 콘솔 개선 사항:",
+                                    "asset_name": "arrow.png",
+                                    "viewer_path": "/wiki/figures/network_observability/arrow.png/index.html",
+                                }
+                            ]
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            handler = self._capture_json_response()
+            handle_viewer_document(
+                handler,
+                urlencode(
+                    {
+                        "viewer_path": (
+                            "/docs/ocp/4.20/ko/network_observability/index.html"
+                            "?page_mode=single&section=2.1.54.2.-web-console-enhancements"
+                        ),
+                        "page_mode": "single",
+                    }
+                ),
+                root_dir=root,
+            )
+
+        self.assertEqual(HTTPStatus.OK, handler.calls[0][0])
+        html = str(handler.calls[0][1]["html"])
+        self.assertIn("관측성 콘솔 본문", html)
+        self.assertNotIn("릴리스 본문", html)
+        self.assertIn("/wiki/figures/network_observability/arrow.png/index.html", html)
+        self.assertIn("section=2.1.5.4.-next-topic#2.1.5.4.-next-topic", html)
+
+    def test_official_single_viewer_skips_cover_stub_and_navigates_embedded_section_query(self) -> None:
+        with self._workspace() as root:
+            playbook_dir = self._playbook_dir(root)
+            (playbook_dir / "cover_stub_book.json").write_text(
+                json.dumps(
+                    {
+                        "canonical_model": "playbook_document_v1",
+                        "book_slug": "cover_stub_book",
+                        "title": "커버 스텁 북",
+                        "source_uri": "https://docs.example.test/cover-stub-book",
+                        "sections": [
+                            {
+                                "section_id": "cover_stub_book:cover",
+                                "anchor": "cover",
+                                "heading": "커버",
+                                "section_path": ["커버"],
+                                "blocks": [
+                                    {"kind": "paragraph", "text": "Red Hat OpenShift 문서 팀 법적 고지 및 개요"},
+                                    {"kind": "paragraph", "text": "OpenShift Container Platform 커버 스텁 북"},
+                                ],
+                            },
+                            {
+                                "section_id": "cover_stub_book:first",
+                                "anchor": "first",
+                                "heading": "1.1. 첫 섹션",
+                                "section_path": ["1 장. 본문", "1.1. 첫 섹션"],
+                                "blocks": [{"kind": "paragraph", "text": "첫 실제 본문"}],
+                            },
+                            {
+                                "section_id": "cover_stub_book:second",
+                                "anchor": "second",
+                                "heading": "1.2. 두 번째 섹션",
+                                "section_path": ["1 장. 본문", "1.2. 두 번째 섹션"],
+                                "blocks": [{"kind": "paragraph", "text": "두 번째 본문"}],
+                            },
+                            {
+                                "section_id": "cover_stub_book:korean-anchor",
+                                "anchor": "두-번째",
+                                "heading": "1.3. 한글 앵커 섹션",
+                                "section_path": ["1 장. 본문", "1.3. 한글 앵커 섹션"],
+                                "blocks": [{"kind": "paragraph", "text": "한글 앵커 본문"}],
+                            },
+                        ],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            first_handler = self._capture_json_response()
+            handle_viewer_document(
+                first_handler,
+                urlencode(
+                    {
+                        "viewer_path": "/docs/ocp/4.20/ko/cover_stub_book/index.html",
+                        "page_mode": "single",
+                    }
+                ),
+                root_dir=root,
+            )
+            second_handler = self._capture_json_response()
+            handle_viewer_document(
+                second_handler,
+                urlencode(
+                    {
+                        "viewer_path": "/docs/ocp/4.20/ko/cover_stub_book/index.html?page_mode=single&section=second#second",
+                        "page_mode": "single",
+                    }
+                ),
+                root_dir=root,
+            )
+            korean_handler = self._capture_json_response()
+            handle_viewer_document(
+                korean_handler,
+                urlencode(
+                    {
+                        "viewer_path": "/docs/ocp/4.20/ko/cover_stub_book/index.html?page_mode=single&section=%EB%91%90-%EB%B2%88%EC%A7%B8#%EB%91%90-%EB%B2%88%EC%A7%B8",
+                        "page_mode": "single",
+                    }
+                ),
+                root_dir=root,
+            )
+
+        self.assertEqual(HTTPStatus.OK, first_handler.calls[0][0])
+        self.assertEqual(HTTPStatus.OK, second_handler.calls[0][0])
+        self.assertEqual(HTTPStatus.OK, korean_handler.calls[0][0])
+        first_html = str(first_handler.calls[0][1]["html"])
+        second_html = str(second_handler.calls[0][1]["html"])
+        korean_html = str(korean_handler.calls[0][1]["html"])
+        self.assertNotIn("법적 고지 및 개요", first_html)
+        self.assertIn("첫 실제 본문", first_html)
+        self.assertNotIn("두 번째 본문", first_html)
+        self.assertIn(
+            'href="/docs/ocp/4.20/ko/cover_stub_book/index.html?page_mode=single&amp;section=second#second"',
+            first_html,
+        )
+        self.assertIn("두 번째 본문", second_html)
+        self.assertNotIn("첫 실제 본문", second_html)
+        self.assertIn("한글 앵커 본문", korean_html)
+        self.assertNotIn("첫 실제 본문", korean_html)
 
     def test_active_runtime_viewer_uses_local_asciidoc_overlay_for_missing_link_metadata(self) -> None:
         with self._workspace() as root:
@@ -1273,7 +1591,7 @@ class AppViewersTestSupport(unittest.TestCase):
                     "anchor": "oke-about-ocp-stack-image.png",
                     "section": "Red Hat OpenShift Kubernetes Engine",
                     "section_path": [
-                        "Introduction to OpenShift Container Platform",
+                        "2.1. OpenShift Container Platform 이해",
                         "Red Hat OpenShift Kubernetes Engine",
                     ],
                     "viewer_path": "/wiki/figures/overview/oke-about-ocp-stack-image.png/index.html",
@@ -1283,7 +1601,7 @@ class AppViewersTestSupport(unittest.TestCase):
                     "source_lane": "official_source_first_candidate",
                     "approval_state": "",
                     "publication_state": "published",
-                    "parser_backend": "render_bound_markdown",
+                    "parser_backend": "playbook_ast_v1",
                     "boundary_badge": "Source-First Candidate",
                 },
             ),
@@ -1313,7 +1631,7 @@ class AppViewersTestSupport(unittest.TestCase):
                     "anchor": "oke-about-ocp-stack-image.png",
                     "section": "Red Hat OpenShift Kubernetes Engine",
                     "section_path": [
-                        "Introduction to OpenShift Container Platform",
+                        "2.1. OpenShift Container Platform 이해",
                         "Red Hat OpenShift Kubernetes Engine",
                     ],
                     "viewer_path": "/wiki/figures/overview/oke-about-ocp-stack-image.png/index.html",
@@ -1323,7 +1641,7 @@ class AppViewersTestSupport(unittest.TestCase):
                     "source_lane": "official_source_first_candidate",
                     "approval_state": "",
                     "publication_state": "published",
-                    "parser_backend": "render_bound_markdown",
+                    "parser_backend": "playbook_ast_v1",
                     "boundary_badge": "Source-First Candidate",
                 },
             ),
@@ -1493,8 +1811,8 @@ class AppViewersTestSupport(unittest.TestCase):
                     self.assertEqual(HTTPStatus.OK, status)
                     self.assertEqual(viewer_path, payload["viewer_path"])
                     html = str(payload["html"])
-                    self.assertIn("OpenShift Container Platform includes a preconfigured", html)
-                    self.assertIn("self-updating monitoring stack", html)
+                    self.assertIn("OpenShift Container Platform 클러스터에서 실행 중인 애플리케이션", html)
+                    self.assertIn("모니터링 스택", html)
 
     def test_viewer_path_local_raw_html_fallback_is_disabled(self) -> None:
         with self._workspace() as root:

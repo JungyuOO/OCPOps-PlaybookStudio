@@ -36,7 +36,7 @@
   left: 0;
   width: 100vw;
   height: 2px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--pbs-border-soft);
   z-index: 1;
   /* Stay behind steps-inner (20) */
   pointer-events: none;
@@ -114,12 +114,12 @@
   /* Solid background so the nerve line is fully hidden behind the card.
      backdrop-filter removed: it forces GPU compositing layers that break z-index
      ordering against sibling elements (known Chrome bug). */
-  background: rgb(18, 18, 22);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--pbs-bg-surface);
+  border: 1px solid var(--pbs-border-soft);
   border-radius: 32px;
 
   transition: all 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: var(--pbs-shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* Border Scan Beam Effect */
@@ -145,7 +145,7 @@
 .pipeline-wrapper .step-card.active-glow {
   border-color: rgba(0, 209, 255, 0.85);
   /* Use multiple backgrounds: gradient for the cyan glow, solid base to block the nerve line */
-  background: linear-gradient(0deg, rgba(0, 209, 255, 0.08), rgba(0, 209, 255, 0.08)), rgb(18, 18, 22);
+  background: linear-gradient(0deg, rgba(0, 209, 255, 0.08), rgba(0, 209, 255, 0.08)), var(--pbs-bg-surface);
   box-shadow:
     0 0 0 1px rgba(0, 209, 255, 0.55),
     0 0 28px rgba(0, 209, 255, 0.55),
@@ -216,4 +216,22 @@
 .pipeline-wrapper .highlight-card {
   border: 1px solid rgba(140, 82, 255, 0.3);
   box-shadow: 0 0 40px rgba(140, 82, 255, 0.1) inset;
+}
+
+[data-theme='light'] .pipeline-wrapper {
+  background:
+    linear-gradient(180deg, var(--pbs-bg-main), #eef5fb);
+}
+
+[data-theme='light'] .pipeline-wrapper .step-card {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+[data-theme='light'] .pipeline-wrapper .step-card.active-glow {
+  background: linear-gradient(0deg, rgba(2, 132, 168, 0.08), rgba(2, 132, 168, 0.08)), #ffffff;
+  box-shadow:
+    0 0 0 1px rgba(2, 132, 168, 0.3),
+    0 18px 38px rgba(15, 23, 42, 0.12),
+    inset 0 0 24px rgba(2, 132, 168, 0.08);
 }

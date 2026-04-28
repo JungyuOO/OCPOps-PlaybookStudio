@@ -13,6 +13,7 @@ from .source_books_wiki_relations import (
     _figure_section_match,
     _figure_viewer_href,
     _figure_viewer_sections,
+    _local_figure_asset_url,
     _preferred_book_href,
     _rewrite_book_href,
     _wiki_relation_items,
@@ -146,6 +147,9 @@ def internal_figure_viewer_html(root_dir: Path, viewer_path: str) -> str | None:
     asset = _figure_asset_by_name(slug, asset_name)
     if asset is None:
         return None
+    local_asset_url = _local_figure_asset_url(root_dir, slug, asset_name)
+    if local_asset_url:
+        asset = {**asset, "asset_url": local_asset_url}
     request = urlparse((viewer_path or "").strip())
     embedded = "embed=1" in request.query
     title = str(asset.get("caption") or asset.get("alt") or asset_name).strip() or asset_name

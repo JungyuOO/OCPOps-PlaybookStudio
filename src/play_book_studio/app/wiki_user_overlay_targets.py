@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from play_book_studio.config.settings import load_settings
 
@@ -37,7 +39,29 @@ def _parse_anchor_from_viewer_path(viewer_path: str) -> str:
     normalized = str(viewer_path or "").strip()
     if "#" not in normalized:
         return ""
-    return normalized.split("#", 1)[1].strip()
+    return _decode_overlay_anchor(normalized.split("#", 1)[1])
+
+
+def _decode_overlay_anchor(anchor: str) -> str:
+    normalized = str(anchor or "").strip()
+    if not normalized:
+        return ""
+    try:
+        return unquote(normalized).strip()
+    except Exception:  # noqa: BLE001
+        return normalized
+
+
+def _display_section_heading(value: str) -> str:
+    raw = " ".join(str(value or "").split()).strip()
+    if not raw:
+        return ""
+    return re.sub(
+        r"^\s*(?:chapter\s+\d+\.?\s*|\d+\s*장\.?\s*|(?:\d+|[A-Za-z])(?:\.\d+)*\.?\s+)",
+        "",
+        raw,
+        flags=re.IGNORECASE,
+    ).strip() or raw
 
 
 def _canonical_book_ref(slug: str) -> str:
@@ -49,7 +73,7 @@ def _canonical_entity_ref(entity_slug: str) -> str:
 
 
 def _canonical_section_ref(book_slug: str, anchor: str) -> str:
-    return f"section:{book_slug}#{anchor}"
+    return f"section:{book_slug}#{_decode_overlay_anchor(anchor)}"
 
 
 def _canonical_figure_ref(book_slug: str, asset_name: str) -> str:
@@ -117,24 +141,82 @@ def _candidate_relation_by_slug(slug: str) -> dict[str, Any]:
 
 
 def _section_record_by_ref(root_dir: Path, book_slug: str, anchor: str) -> dict[str, Any]:
-    del root_dir
+    normalized_anchor = _decode_overlay_anchor(anchor)
     payload = load_wiki_relation_assets().get("section_relation_index")
-    if not isinstance(payload, dict):
-        return {}
-    by_book = payload.get("by_book")
-    if not isinstance(by_book, dict):
-        return {}
-    items = by_book.get(book_slug)
+    by_book = payload.get("by_book") if isinstance(payload, dict) else {}
+    items = by_book.get(book_slug) if isinstance(by_book, dict) else []
     if not isinstance(items, list):
-        return {}
-    suffix = f"#{anchor}".lower()
+        items = []
+    suffix = f"#{normalized_anchor}".lower()
     for item in items:
         if not isinstance(item, dict):
             continue
-        href = str(item.get("href") or "").strip().lower()
+        href = _decode_overlay_anchor(str(item.get("href") or "").strip()).lower()
         if href.endswith(suffix):
             return dict(item)
+    for section in _normalized_sections_for_book(root_dir, book_slug):
+        section_anchor = _decode_overlay_anchor(
+            str(
+                section.get("anchor")
+                or section.get("anchor_id")
+                or section.get("source_unit_anchor")
+                or ""
+            )
+        )
+        if section_anchor != normalized_anchor:
+            continue
+        heading = _display_section_heading(str(section.get("heading") or section_anchor))
+        section_path = [
+            _display_section_heading(str(item))
+            for item in (section.get("section_path") or [])
+            if _display_section_heading(str(item))
+        ]
+        summary = " > ".join(section_path) or str(section.get("text") or "").strip().split("\n", 1)[0]
+        return {
+            "label": heading,
+            "href": str(section.get("viewer_path") or f"/playbooks/wiki-runtime/active/{book_slug}/index.html#{normalized_anchor}"),
+            "summary": summary,
+        }
     return {}
+
+
+def _normalized_sections_for_book(root_dir: Path, book_slug: str) -> list[dict[str, Any]]:
+    normalized_slug = str(book_slug or "").strip()
+    if not normalized_slug:
+        return []
+    settings = load_settings(root_dir)
+    signatures: list[tuple[str, int]] = []
+    for path in settings.normalized_docs_candidates:
+        if path.exists() and path.is_file():
+            signatures.append((str(path), path.stat().st_mtime_ns))
+    index = _normalized_section_index_cached(tuple(signatures))
+    return [dict(item) for item in index.get(normalized_slug, ())]
+
+
+@lru_cache(maxsize=16)
+def _normalized_section_index_cached(
+    signatures: tuple[tuple[str, int], ...],
+) -> dict[str, tuple[dict[str, Any], ...]]:
+    index: dict[str, list[dict[str, Any]]] = {}
+    for path_str, _mtime_ns in signatures:
+        path = Path(path_str)
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            book_slug = str(payload.get("book_slug") or "").strip()
+            if book_slug:
+                index.setdefault(book_slug, []).append(payload)
+        if index:
+            break
+    return {book_slug: tuple(sections) for book_slug, sections in index.items()}
 
 
 def _book_title_lookup(root_dir: Path) -> dict[str, str]:
@@ -173,6 +255,7 @@ def _normalize_overlay_target(payload: dict[str, Any]) -> tuple[str, str, str]:
         return target_kind, _canonical_entity_ref(entity_slug), book_slug
     if target_kind == "section":
         anchor = str(payload.get("anchor") or "").strip() or _parse_anchor_from_viewer_path(viewer_path)
+        anchor = _decode_overlay_anchor(anchor)
         if not book_slug:
             book_slug = _parse_book_slug_from_viewer_path(viewer_path)
         if not target_ref and book_slug and anchor:
@@ -181,7 +264,7 @@ def _normalize_overlay_target(payload: dict[str, Any]) -> tuple[str, str, str]:
             remainder = target_ref.split(":", 1)[1]
             if "#" in remainder:
                 book_slug = book_slug or remainder.split("#", 1)[0].strip()
-                anchor = anchor or remainder.split("#", 1)[1].strip()
+                anchor = anchor or _decode_overlay_anchor(remainder.split("#", 1)[1])
         if not book_slug or not anchor:
             raise ValueError("section target은 book_slug와 anchor 또는 viewer_path가 필요합니다.")
         return target_kind, _canonical_section_ref(book_slug, anchor), book_slug

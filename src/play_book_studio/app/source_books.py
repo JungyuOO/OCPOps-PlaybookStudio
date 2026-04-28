@@ -43,6 +43,7 @@ from .source_books_wiki_relations import (
     _entity_hubs,
     _figure_asset_by_name,
     _figure_section_match,
+    _local_figure_asset_url,
 )
 
 __all__ = [
@@ -58,6 +59,7 @@ __all__ = [
     "_entity_hubs",
     "_figure_asset_by_name",
     "_figure_section_match",
+    "_local_figure_asset_url",
     "_load_buyer_packet_entry",
     "_load_normalized_book_sections",
     "_load_playbook_book",

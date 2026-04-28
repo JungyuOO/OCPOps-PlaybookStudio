@@ -1,13 +1,6 @@
 import type { WorkspaceManualBook } from './workspaceTypes';
 
-const OUTLINE_ROOT_SUFFIXES = [
-  '_operations_playbook',
-  '_operation_playbook',
-  '_topic_playbook',
-  '_troubleshooting_playbook',
-  '_policy_overlay_book',
-  '_synthesized_playbook',
-] as const;
+const OUTLINE_ROOT_SUFFIX_PATTERN = /[-_]+(?:operations_playbook|operation_playbook|topic_playbook|troubleshooting_playbook|policy_overlay_book|synthesized_playbook)$/;
 
 const OUTLINE_VARIANT_LABELS: Record<string, string> = {
   official_doc: '원문',
@@ -38,12 +31,7 @@ export interface OutlineBookFamily {
 
 function normalizeOutlineRootSlug(bookSlug: string): string {
   const normalized = (bookSlug || '').trim();
-  for (const suffix of OUTLINE_ROOT_SUFFIXES) {
-    if (normalized.endsWith(suffix)) {
-      return normalized.slice(0, -suffix.length);
-    }
-  }
-  return normalized;
+  return normalized.replace(OUTLINE_ROOT_SUFFIX_PATTERN, '');
 }
 
 function outlineVariantRank(book: WorkspaceManualBook): number {
@@ -61,6 +49,10 @@ function compareOutlineBooks(left: WorkspaceManualBook, right: WorkspaceManualBo
 
 export function describeOutlineVariant(book: WorkspaceManualBook): string {
   return OUTLINE_VARIANT_LABELS[book.source_type] ?? book.family_label ?? book.source_type;
+}
+
+export function countOutlineFamilyBooks(family: OutlineBookFamily): number {
+  return 1 + family.variants.length;
 }
 
 export function buildOutlineBookFamilies(books: WorkspaceManualBook[]): OutlineBookFamily[] {

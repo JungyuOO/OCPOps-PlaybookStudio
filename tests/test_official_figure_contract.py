@@ -179,6 +179,63 @@ class OfficialFigureContractTests(unittest.TestCase):
         figure = enriched[0]["blocks"][0]
         self.assertEqual("/wiki/figures/advanced_networking/bgp.png/index.html", figure["viewer_path"])
 
+    def test_relation_sidecar_recovers_stale_section_anchor_by_heading(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            relation_dir = root / "data" / "wiki_relations"
+            relation_dir.mkdir(parents=True)
+            (relation_dir / "figure_assets.json").write_text(
+                json.dumps(
+                    {
+                        "entries": {
+                            "network_observability": [
+                                {
+                                    "asset_url": "/playbooks/wiki-assets/full_rebuild/network_observability/arrow.png",
+                                    "source_asset_ref": "arrow.png",
+                                    "caption": "웹 콘솔 개선 사항",
+                                }
+                            ]
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (relation_dir / "figure_section_index.json").write_text(
+                json.dumps(
+                    {
+                        "by_slug": {
+                            "network_observability": [
+                                {
+                                    "section_anchor": "2.1.54.2.-web-console-enhancements:",
+                                    "section_heading": "2.1.54.2. 웹 콘솔 개선 사항:",
+                                    "asset_name": "arrow.png",
+                                    "viewer_path": "/wiki/figures/network_observability/arrow.png/index.html",
+                                }
+                            ]
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            enriched = _sections_with_relation_figures(
+                root,
+                "network_observability",
+                [
+                    {
+                        "anchor": "2.1.5.3.-network-observability-console-improvements",
+                        "heading": "2.1.5.3. 관측성 콘솔 개선 사항",
+                        "blocks": [{"kind": "paragraph", "text": "본문"}],
+                    }
+                ],
+            )
+
+        figures = [block for block in enriched[0]["blocks"] if block.get("kind") == "figure"]
+        self.assertEqual(1, len(figures))
+        self.assertEqual("/wiki/figures/network_observability/arrow.png/index.html", figures[0]["viewer_path"])
+
 
 if __name__ == "__main__":
     unittest.main()

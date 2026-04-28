@@ -22,6 +22,7 @@ from play_book_studio.app.source_books import (
     _entity_hubs,
     _figure_asset_by_name,
     _figure_section_match,
+    _local_figure_asset_url,
     internal_active_runtime_markdown_viewer_html as _internal_active_runtime_markdown_viewer_html,
     internal_buyer_packet_viewer_html as _internal_buyer_packet_viewer_html,
     internal_entity_hub_viewer_html as _internal_entity_hub_viewer_html,
@@ -284,6 +285,7 @@ def _viewer_source_meta(root_dir: Path, viewer_path: str) -> dict[str, Any] | No
         section_match = _figure_section_match(slug, asset_name) or {}
         section_path = [str(section_match.get("section_heading") or "").strip(), caption]
         section_path = [item for item in section_path if item]
+        asset_url = _local_figure_asset_url(root_dir, slug, asset_name) or str(asset.get("asset_url") or "").strip()
         return {
             "book_slug": slug,
             "book_title": caption,
@@ -291,7 +293,7 @@ def _viewer_source_meta(root_dir: Path, viewer_path: str) -> dict[str, Any] | No
             "section": caption,
             "section_path": section_path,
             "section_path_label": " > ".join(section_path) if section_path else caption,
-            "source_url": str(asset.get("asset_url") or "").strip(),
+            "source_url": asset_url,
             "viewer_path": viewer_path,
             "section_match_exact": True,
             "source_lane": "official_source_first_candidate",

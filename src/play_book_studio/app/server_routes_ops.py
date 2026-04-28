@@ -57,6 +57,7 @@ from play_book_studio.ingestion.translation_draft_generation import (
     generate_translation_drafts,
 )
 from play_book_studio.ingestion.translation_gold_promotion import promote_translation_gold
+from play_book_studio.source_authority import source_authority_payload
 
 
 _QUERY_TOKEN_RE = re.compile(r"[^\w가-힣]+", re.UNICODE)
@@ -157,6 +158,13 @@ def _official_candidate_source_payload(entry: dict[str, Any], settings: Any) -> 
     return {
         "current_source_basis": current_basis,
         "current_source_label": current_label,
+        **source_authority_payload(
+            {
+                **entry,
+                "current_source_basis": current_basis,
+                "source_collection": "core",
+            }
+        ),
         "source_options": [
             {
                 "key": "official_homepage",
@@ -490,6 +498,8 @@ def _materialize_official_source(root_dir: Path, *, slug: str, source_basis: str
 
 
 def _list_unanswered_questions(root_dir: Path, *, limit: int = 20) -> dict[str, Any]:
+    from play_book_studio.app.gap_repair import build_gap_repair_plan
+
     settings = load_settings(root_dir)
     target = settings.unanswered_questions_path
     if not target.exists():
@@ -509,14 +519,19 @@ def _list_unanswered_questions(root_dir: Path, *, limit: int = 20) -> dict[str, 
         query = str(payload.get("query") or "").strip()
         if not query or query in seen_queries:
             continue
+        rewritten_query = str(payload.get("rewritten_query") or "").strip()
+        repair_plan = payload.get("repair_plan")
+        if not isinstance(repair_plan, dict):
+            repair_plan = build_gap_repair_plan(root_dir, query=rewritten_query or query)
         seen_queries.add(query)
         rows.append(
             {
                 "query": query,
-                "rewritten_query": str(payload.get("rewritten_query") or "").strip(),
+                "rewritten_query": rewritten_query,
                 "timestamp": str(payload.get("timestamp") or "").strip(),
                 "response_kind": str(payload.get("response_kind") or "").strip(),
                 "warnings": [str(item) for item in (payload.get("warnings") or []) if str(item).strip()],
+                "repair_plan": repair_plan,
             }
         )
         if len(rows) >= max(1, limit):

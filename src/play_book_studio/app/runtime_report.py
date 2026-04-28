@@ -19,7 +19,7 @@ from play_book_studio.config.settings import Settings, load_settings
 from play_book_studio.ingestion.embedding import EmbeddingClient
 from play_book_studio.ingestion.graph_sidecar import graph_sidecar_compact_artifact_status
 
-DEFAULT_PLAYBOOK_UI_BASE_URL = "http://127.0.0.1:8765"
+DEFAULT_PLAYBOOK_UI_BASE_URL = "http://127.0.0.1:8876"
 
 
 def _auth_headers(token: str) -> dict[str, str]:

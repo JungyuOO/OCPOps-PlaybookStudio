@@ -9,6 +9,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.app.customer_pack_read_boundary import (
+    LOCAL_CUSTOMER_PACK_TENANT_ID,
+    LOCAL_CUSTOMER_PACK_WORKSPACE_ID,
+)
 from play_book_studio.app.source_books_customer_pack import load_customer_pack_book
 from play_book_studio.intake import (
     DocSourceRequest,
@@ -24,6 +28,7 @@ from play_book_studio.intake.private_corpus import (
     delete_customer_pack_private_corpus,
 )
 from play_book_studio.config.settings import load_settings
+from play_book_studio.source_authority import source_authority_payload
 
 SUPPORTED_CUSTOMER_PACK_SOURCE_TYPES = {
     "web",
@@ -47,6 +52,7 @@ def _private_corpus_payload(root_dir: Path, draft_id: str) -> dict[str, Any] | N
         return None
     manifest = json.loads(path.read_text(encoding="utf-8"))
     boundary_summary = summarize_private_runtime_boundary(manifest)
+    authority = source_authority_payload(manifest)
     return {
         "artifact_version": str(manifest.get("artifact_version") or "").strip(),
         "truth_owner": str(manifest.get("truth_owner") or "").strip(),
@@ -95,6 +101,7 @@ def _private_corpus_payload(root_dir: Path, draft_id: str) -> dict[str, Any] | N
             or boundary_summary.get("fail_reasons")
             or []
         ),
+        **authority,
         "manifest_path": str(manifest.get("manifest_path") or path),
         "updated_at": str(manifest.get("updated_at") or "").strip(),
     }
@@ -115,7 +122,46 @@ def _normalized_access_groups(value: Any, *, tenant_id: str, workspace_id: str) 
     return tuple(item for item in fallback if item)
 
 
+def _is_local_uploaded_ppt_runtime_candidate(record: Any | None) -> bool:
+    if record is None:
+        return False
+    request = getattr(record, "request", None)
+    plan = getattr(record, "plan", None)
+    source_type = str(getattr(request, "source_type", "") or "").strip().lower()
+    source_collection = str(getattr(plan, "source_collection", "") or "").strip()
+    source_lane = str(getattr(record, "source_lane", "") or "").strip()
+    classification = str(getattr(record, "classification", "") or "").strip()
+    provider_egress_policy = str(getattr(record, "provider_egress_policy", "") or "").strip()
+    return (
+        source_type == "pptx"
+        and bool(str(getattr(record, "uploaded_file_path", "") or "").strip())
+        and source_collection == "uploaded"
+        and source_lane in {"", "customer_source_first_pack"}
+        and classification in {"", "private"}
+        and provider_egress_policy in {"", "local_only"}
+    )
+
+
+def _local_uploaded_ppt_runtime_payload(record: Any | None, payload: dict[str, Any]) -> dict[str, Any]:
+    if not _is_local_uploaded_ppt_runtime_candidate(record):
+        return payload
+    enriched = dict(payload)
+    enriched.setdefault("tenant_id", LOCAL_CUSTOMER_PACK_TENANT_ID)
+    enriched.setdefault("workspace_id", LOCAL_CUSTOMER_PACK_WORKSPACE_ID)
+    enriched.setdefault("approval_state", "approved")
+    enriched.setdefault("publication_state", "active")
+    enriched.setdefault("classification", "private")
+    enriched.setdefault("provider_egress_policy", "local_only")
+    if "access_groups" not in enriched:
+        enriched["access_groups"] = [
+            LOCAL_CUSTOMER_PACK_WORKSPACE_ID,
+            LOCAL_CUSTOMER_PACK_TENANT_ID,
+        ]
+    return enriched
+
+
 def _apply_private_runtime_overrides(root_dir: Path, record, payload: dict[str, Any]):
+    payload = _local_uploaded_ppt_runtime_payload(record, payload)
     store = CustomerPackDraftStore(root_dir)
     changed = False
     for field_name in ("tenant_id", "workspace_id", "approval_state", "publication_state"):
@@ -123,7 +169,7 @@ def _apply_private_runtime_overrides(root_dir: Path, record, payload: dict[str, 
         if value and getattr(record, field_name, "") != value:
             setattr(record, field_name, value)
             changed = True
-    for field_name in ("classification", "provider_egress_policy", "redaction_state"):
+    for field_name in ("source_lane", "classification", "provider_egress_policy", "redaction_state"):
         value = str(payload.get(field_name) or "").strip()
         if value and getattr(record, field_name, "") != value:
             setattr(record, field_name, value)
@@ -184,7 +230,7 @@ def build_customer_pack_support_matrix() -> dict[str, Any]:
 
 def customer_pack_request_from_payload(payload: dict[str, Any]) -> DocSourceRequest:
     source_type = str(payload.get("source_type") or "").strip().lower()
-    uri = str(payload.get("uri") or "").strip()
+    uri = str(payload.get("uri") or payload.get("source_url") or "").strip()
     file_name = str(payload.get("file_name") or "").strip()
     title = str(payload.get("title") or "").strip()
     language_hint = str(payload.get("language_hint") or "ko").strip() or "ko"
@@ -356,16 +402,19 @@ def normalize_customer_pack_draft(root_dir: Path, payload: dict[str, Any]) -> di
 def ingest_customer_pack(root_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
     draft_id = str(payload.get("draft_id") or "").strip()
     if draft_id:
-        captured = capture_customer_pack_draft(root_dir, {"draft_id": draft_id})
+        captured = capture_customer_pack_draft(root_dir, payload)
     elif isinstance(payload.get("file_bytes"), (bytes, bytearray)):
         uploaded = upload_customer_pack_draft(root_dir, payload)
-        captured = capture_customer_pack_draft(root_dir, {"draft_id": str(uploaded["draft_id"])})
+        captured = capture_customer_pack_draft(
+            root_dir,
+            {**payload, "draft_id": str(uploaded["draft_id"])},
+        )
     else:
         captured = capture_customer_pack_draft(root_dir, payload)
 
     normalized = normalize_customer_pack_draft(
         root_dir,
-        {"draft_id": str(captured["draft_id"])},
+        {**payload, "draft_id": str(captured["draft_id"])},
     )
     canonical_payload = load_customer_pack_book(root_dir, str(captured["draft_id"]))
     if canonical_payload is not None:

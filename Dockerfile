@@ -29,9 +29,9 @@ COPY --from=frontend-build /app/presentation-ui/dist /app/presentation-ui/dist
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -e .
 
-EXPOSE 8765
+EXPOSE 8876
 
-CMD ["python", "-m", "play_book_studio.cli", "ui", "--no-browser", "--host", "0.0.0.0", "--port", "8765"]
+CMD ["python", "-m", "play_book_studio.cli", "ui", "--no-browser", "--host", "0.0.0.0", "--port", "8876"]
 
 
 FROM nginx:1.27-alpine AS web

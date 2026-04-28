@@ -4,6 +4,8 @@ import hashlib
 import json
 from typing import Any
 
+from play_book_studio.source_authority import source_authority_payload
+
 
 def source_relative_paths_for_entry(entry: dict[str, Any]) -> list[str]:
     if not isinstance(entry, dict):
@@ -87,5 +89,5 @@ def source_provenance_payload(entry: dict[str, Any]) -> dict[str, Any]:
         "fallback_source_url": str(entry.get("fallback_source_url") or "").strip(),
         "fallback_viewer_path": str(entry.get("fallback_viewer_path") or "").strip(),
         "fallback_approved": bool(entry.get("fallback_approved", False)),
+        **source_authority_payload(entry),
     }
-

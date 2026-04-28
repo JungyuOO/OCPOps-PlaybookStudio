@@ -44,7 +44,7 @@ def serve(
     answerer: ChatAnswerer,
     root_dir: Path,
     host: str = "127.0.0.1",
-    port: int = 8765,
+    port: int = 8876,
     open_browser: bool = True,
 ) -> None:
     store = SessionStore(root_dir)

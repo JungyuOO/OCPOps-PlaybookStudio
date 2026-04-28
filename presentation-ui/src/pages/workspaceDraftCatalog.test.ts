@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CustomerPackDraft } from '../lib/runtimeApi';
 import {
+  dedupeDraftCatalogForDisplay,
   describeDraftCatalogSemantics,
   isTestRunDraft,
   needsSlideDeckUpgrade,
@@ -53,6 +54,46 @@ describe('workspaceDraftCatalog', () => {
     ]);
   });
 
+  it('deduplicates repeated uploaded customer documents and keeps the best current draft', () => {
+    const staleDuplicate = {
+      ...makeDraft('KMSC-COCP-RECR-005_아키텍처설계서_CICD_20251208_FINAL', '2026-04-23T12:43:35+09:00'),
+      draft_id: 'dtb-stale',
+      uploaded_file_name: 'KMSC-COCP-RECR-005_아키텍처설계서_CICD_20251208_FINAL.pptx',
+      read_ready: true,
+      publish_ready: true,
+      playable_asset_count: 1,
+    } as CustomerPackDraft & { read_ready: boolean; publish_ready: boolean };
+    const currentDuplicate = {
+      ...staleDuplicate,
+      draft_id: 'dtb-current',
+      updated_at: '2026-04-23T13:53:28+09:00',
+      playable_asset_count: 6,
+    };
+    const unrelated = makeDraft('Customer Operations Runbook');
+
+    const deduped = dedupeDraftCatalogForDisplay([staleDuplicate, unrelated, currentDuplicate]);
+
+    expect(deduped.map((draft) => draft.draft_id)).toEqual(['dtb-current', unrelated.draft_id]);
+  });
+
+  it('keeps intentional test runs even when they share the same source fingerprint', () => {
+    const testOne = {
+      ...makeDraft('Test 1 - Surya'),
+      draft_id: 'dtb-test-one',
+      source_fingerprint: 'same-upload',
+    } as CustomerPackDraft & { source_fingerprint: string };
+    const testTwo = {
+      ...makeDraft('Test 2 - Qwen'),
+      draft_id: 'dtb-test-two',
+      source_fingerprint: 'same-upload',
+    } as CustomerPackDraft & { source_fingerprint: string };
+
+    expect(dedupeDraftCatalogForDisplay([testOne, testTwo]).map((draft) => draft.draft_id)).toEqual([
+      'dtb-test-one',
+      'dtb-test-two',
+    ]);
+  });
+
   it('exposes a small boolean helper for sidebar grouping', () => {
     expect(isTestRunDraft(makeDraft('Test 9'))).toBe(true);
     expect(isTestRunDraft(makeDraft('Partner Architecture Pack'))).toBe(false);
@@ -102,6 +143,31 @@ describe('workspaceDraftCatalog', () => {
     ).toEqual({
       audienceLabel: '고객 문서',
       surfaceLabel: '위키 북',
+    });
+  });
+
+  it('does not call promoted normalized customer documents drafts', () => {
+    const semantics = describeDraftCatalogSemantics({
+      ...makeDraft('Promoted Customer DOCX'),
+      source_type: 'docx',
+      playable_asset_count: 0,
+      shared_grade: 'gold',
+      read_ready: true,
+      publish_ready: true,
+      quality_status: 'ready',
+    });
+
+    expect(semantics).toEqual({
+      audienceLabel: '고객 문서',
+      surfaceLabel: '라이브러리 등록',
+    });
+    expect(semantics.surfaceLabel).not.toContain('초안');
+  });
+
+  it('labels raw uploaded customer documents as waiting rather than draft inventory', () => {
+    expect(describeDraftCatalogSemantics({ ...makeDraft('Raw Upload'), source_type: 'docx', status: 'uploaded' })).toEqual({
+      audienceLabel: '고객 문서',
+      surfaceLabel: '업로드 대기',
     });
   });
 });

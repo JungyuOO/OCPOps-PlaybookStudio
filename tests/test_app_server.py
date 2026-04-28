@@ -154,6 +154,35 @@ def test_spa_deep_links_return_index_html_for_pbs_surfaces() -> None:
                 assert "pbs-shell" in response.text, route
 
 
+def test_health_reports_runtime_dependency_readiness_without_changing_http_ok() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _write_frontend_shell(root)
+
+        with (
+            patch(
+                "play_book_studio.app.presenters_runtime._build_runtime_dependency_readiness",
+                return_value={
+                    "status": "blocked",
+                    "ready": False,
+                    "dependencies": {
+                        "status": "blocked",
+                        "ready": False,
+                        "failures": ["qdrant: connection refused"],
+                    },
+                },
+            ),
+            _test_server(root) as base_url,
+        ):
+            response = requests.get(f"{base_url}/api/health", timeout=10)
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["readiness"]["status"] == "blocked"
+    assert payload["runtime"]["dependencies"]["failures"] == ["qdrant: connection refused"]
+
+
 def test_runtime_namespaces_resolve_viewer_html_instead_of_shared_spa_shell() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)

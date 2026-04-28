@@ -20,6 +20,21 @@ class Citation:
     chunk_type: str = "reference"
     semantic_role: str = "unknown"
     source_collection: str = "core"
+    source_lane: str = "official_ko"
+    source_type: str = "official_doc"
+    source_authority: str = ""
+    source_authority_label: str = ""
+    source_authority_badge: str = ""
+    source_authority_warning: str = ""
+    source_requires_review: bool = False
+    boundary_truth: str = ""
+    runtime_truth_label: str = ""
+    boundary_badge: str = ""
+    approval_state: str = ""
+    publication_state: str = ""
+    provider_egress_policy: str = ""
+    retrieval_ready: bool = False
+    read_ready: bool = False
     block_kinds: tuple[str, ...] = field(default_factory=tuple)
     cli_commands: tuple[str, ...] = field(default_factory=tuple)
     error_strings: tuple[str, ...] = field(default_factory=tuple)
