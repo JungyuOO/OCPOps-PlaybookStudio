@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import {
   Activity,
   ArrowRight,
@@ -78,6 +79,10 @@ type ChatMessage = {
   artifacts?: OpsChatResponse['artifacts'];
 };
 
+type MarkdownBlock =
+  | { type: 'markdown'; text: string }
+  | { type: 'table'; header: string[]; rows: string[][] };
+
 const ROUTE_SECTIONS: Array<{
   key: OpsRouteKey;
   label: string;
@@ -147,14 +152,139 @@ function makeId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function visibleChatArtifacts(artifacts?: OpsChatResponse['artifacts']): OpsChatResponse['artifacts'] | undefined {
+  if (!artifacts?.length) {
+    return artifacts;
+  }
+  const resourceListCount = artifacts.filter((artifact) => artifact.kind === 'resource_list').length;
+  if (resourceListCount <= 1) {
+    return artifacts;
+  }
+  return artifacts.filter((artifact) => artifact.kind !== 'resource_list');
+}
+
 function loadSavedChatMessages(): ChatMessage[] {
   try {
     const raw = window.localStorage.getItem('opsConsole.chatMessages');
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.slice(-20) : [];
+    return Array.isArray(parsed)
+      ? parsed.slice(-20).map((message) => ({ ...message, artifacts: visibleChatArtifacts(message.artifacts) }))
+      : [];
   } catch {
     return [];
   }
+}
+
+function isMarkdownTableSeparator(line: string): boolean {
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+}
+
+function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
+  const lines = String(markdown || '').split(/\r?\n/);
+  const blocks: MarkdownBlock[] = [];
+  let markdownBuffer: string[] = [];
+  let inFence = false;
+
+  const flushMarkdown = () => {
+    const text = markdownBuffer.join('\n').trim();
+    if (text) {
+      blocks.push({ type: 'markdown', text });
+    }
+    markdownBuffer = [];
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    if (line.trim().startsWith('```')) {
+      inFence = !inFence;
+      markdownBuffer.push(line);
+      continue;
+    }
+    if (!inFence && line.includes('|') && isMarkdownTableSeparator(lines[index + 1] ?? '')) {
+      flushMarkdown();
+      const tableLines = [line];
+      index += 2;
+      while (index < lines.length && (lines[index] ?? '').includes('|') && (lines[index] ?? '').trim()) {
+        tableLines.push(lines[index] ?? '');
+        index += 1;
+      }
+      index -= 1;
+      const [headerLine, ...rowLines] = tableLines;
+      blocks.push({
+        type: 'table',
+        header: splitMarkdownTableRow(headerLine ?? ''),
+        rows: rowLines.map(splitMarkdownTableRow),
+      });
+      continue;
+    }
+    markdownBuffer.push(line);
+  }
+  flushMarkdown();
+  return blocks;
+}
+
+function MarkdownMessage({ content }: { content: string }) {
+  const blocks = useMemo(() => parseMarkdownBlocks(content), [content]);
+  return (
+    <div className="ops-chat-markdown">
+      {blocks.map((block, index) => (
+        block.type === 'table' ? (
+          <div key={`table-${index}`} className="ops-chat-markdown-table-wrap">
+            <table className="ops-chat-markdown-table">
+              <thead>
+                <tr>
+                  {block.header.map((cell, cellIndex) => <th key={`head-${cellIndex}`}>{cell}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {block.rows.map((row, rowIndex) => (
+                  <tr key={`row-${rowIndex}`}>
+                    {block.header.map((_, cellIndex) => <td key={`cell-${cellIndex}`}>{row[cellIndex] ?? ''}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <ReactMarkdown key={`markdown-${index}`}>{block.text}</ReactMarkdown>
+        )
+      ))}
+    </div>
+  );
+}
+
+function AssistantProgress({ stages, compact = false }: { stages: Array<{ label: string; detail: string; status: string }>; compact?: boolean }) {
+  const visibleStages = stages.length > 0
+    ? stages.slice(-4)
+    : [
+      { label: 'Connect', detail: 'Preparing OpenShift context', status: 'running' },
+      { label: 'Analyze', detail: 'Checking resources, metrics, and events', status: 'pending' },
+    ];
+  return (
+    <div className={`ops-assistant-progress ${compact ? 'compact' : ''}`} aria-live="polite">
+      <div className="ops-assistant-progress-head">
+        <span className="ops-progress-pulse" />
+        <strong>Working on cluster context</strong>
+      </div>
+      <div className="ops-assistant-progress-steps">
+        {visibleStages.map((stage, index) => (
+          <div key={`${stage.label}-${index}`} className={`ops-assistant-progress-step ${stage.status}`}>
+            <span>{stage.label}</span>
+            <small>{stage.detail}</small>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 
@@ -235,6 +365,7 @@ export default function OpsConsolePage() {
   const [chatDraft, setChatDraft] = useState('');
   const [chatStages, setChatStages] = useState<Array<{ label: string; detail: string; status: string }>>([]);
   const [chatSending, setChatSending] = useState(false);
+  const [activeAssistantId, setActiveAssistantId] = useState('');
   const [snippet, setSnippet] = useState<DocsPreviewSnippet | null>(null);
 
   const [actionForm, setActionForm] = useState({
@@ -890,10 +1021,12 @@ export default function OpsConsolePage() {
     const userMessage: ChatMessage = { id: makeId('user'), role: 'user', content: message };
     const assistantId = makeId('assistant');
     setMessages((current) => [...current, userMessage, { id: assistantId, role: 'assistant', content: '' }]);
+    setActiveAssistantId(assistantId);
     setChatDraft('');
     setChatStages([]);
     setChatSending(true);
     setError('');
+    let streamedAnswer = '';
     try {
       const result = await sendOpsChatStream(
         {
@@ -908,7 +1041,8 @@ export default function OpsConsolePage() {
             return;
           }
           if (event.type === 'answer_delta') {
-            setMessages((current) => current.map((item) => (item.id === assistantId ? { ...item, content: item.content + event.delta } : item)));
+            streamedAnswer += event.delta;
+            setMessages((current) => current.map((item) => (item.id === assistantId ? { ...item, content: streamedAnswer } : item)));
             return;
           }
           if (event.type === 'result') {
@@ -918,7 +1052,7 @@ export default function OpsConsolePage() {
                   ...item,
                   content: event.response.answer,
                   sources: event.response.sources,
-                  artifacts: event.response.artifacts,
+                  artifacts: visibleChatArtifacts(event.response.artifacts),
                 }
                 : item
             )));
@@ -930,6 +1064,7 @@ export default function OpsConsolePage() {
       setError(caught instanceof Error ? caught.message : '채팅 처리 중 오류가 발생했습니다.');
     } finally {
       setChatSending(false);
+      setActiveAssistantId('');
     }
   }
 
@@ -1639,7 +1774,10 @@ export default function OpsConsolePage() {
                     <div key={message.id} className={`ops-chat-row ${message.role}`}>
                       <article className={`ops-chat-bubble ${message.role}`}>
                         <div className="ops-chat-bubble-label">{message.role === 'user' ? 'User' : 'Assistant'}</div>
-                        <p>{message.content}</p>
+                        {message.content ? <MarkdownMessage content={message.content} /> : null}
+                        {message.role === 'assistant' && message.id === activeAssistantId ? (
+                          <AssistantProgress stages={chatStages} compact={Boolean(message.content)} />
+                        ) : null}
                         {message.sources?.length ? (
                           <div className="ops-chat-chip-row">
                             {message.sources.map((source) => (
