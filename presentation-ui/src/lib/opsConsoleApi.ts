@@ -276,6 +276,7 @@ export interface OpsChatArtifact {
   total_count?: number;
   summary?: Record<string, unknown>;
   manifest_preview?: string;
+  manifest_yaml?: string;
   items: Array<Record<string, unknown>>;
 }
 
@@ -430,13 +431,6 @@ export async function listOpsWorkspaces(): Promise<OpsWorkspace[]> {
   return payload.items;
 }
 
-export async function createOpsWorkspace(payload: { name: string; environment: string }): Promise<OpsWorkspace> {
-  return requestJson<OpsWorkspace>('/api/v1/workspaces', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
 export async function listRecommendations(workspaceId: string): Promise<RecommendationItem[]> {
   const payload = await requestJson<{ items: RecommendationItem[] }>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/recommendations?limit=10`);
   return payload.items;
@@ -465,6 +459,13 @@ export async function testOcpConnection(connectionId: string): Promise<OcpConnec
   return requestJson('/api/v1/auth/ocp/test', {
     method: 'POST',
     body: JSON.stringify({ connection_id: connectionId }),
+  });
+}
+
+export async function testOcpConnectionDraft(payload: Record<string, unknown>): Promise<OcpConnectionTestResult> {
+  return requestJson('/api/v1/auth/ocp/test-draft', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }
 
