@@ -38,6 +38,56 @@ RESOURCE_KEYWORDS = {
 LIST_INTENT_TERMS = ("list", "show", "get", "find", "목록", "리스트", "보여", "조회", "확인")
 DETAIL_INTENT_TERMS = ("yaml", "manifest", "detail", "describe", "상세", "세부", "내용")
 EDIT_INTENT_TERMS = ("edit", "update", "patch", "apply", "modify", "수정", "변경", "편집", "적용")
+OPS_DOMAIN_TERMS = (
+    "ocp",
+    "openshift",
+    "kubernetes",
+    "cluster",
+    "namespace",
+    "yaml",
+    "manifest",
+    "pod",
+    "pods",
+    "deployment",
+    "deployments",
+    "service",
+    "services",
+    "route",
+    "routes",
+    "event",
+    "events",
+    "replica",
+    "replicas",
+    "rollout",
+    "scale",
+    "ready",
+    "status",
+    "cpu",
+    "memory",
+    "로그",
+    "운영",
+    "클러스터",
+    "네임스페이스",
+    "리소스",
+    "파드",
+    "배포",
+    "디플로이",
+    "서비스",
+    "라우트",
+    "이벤트",
+    "상태",
+    "목록",
+    "리스트",
+    "조회",
+    "확인",
+    "문제",
+    "장애",
+    "분석",
+    "수정",
+    "변경",
+    "적용",
+    "반영",
+)
 
 
 def _now_iso() -> str:
@@ -138,16 +188,31 @@ def _ops_settings(root_dir: Path):
     return load_settings(root_dir)
 
 
-def _real_ocp_config(root_dir: Path) -> dict[str, str] | None:
+def _real_ocp_config(root_dir: Path, connection: dict[str, Any] | None = None) -> dict[str, str] | None:
     settings = _ops_settings(root_dir)
-    base_url = str(getattr(settings, "ocp_api_base_url", "") or "").strip().rstrip("/")
-    token = str(getattr(settings, "ocp_api_token", "") or "").strip()
+    env_base_url = str(getattr(settings, "ocp_api_base_url", "") or "").strip().rstrip("/")
+    env_token = str(getattr(settings, "ocp_api_token", "") or "").strip()
+    if connection is None:
+        base_url = env_base_url
+        token = env_token
+        namespace = "demo"
+    else:
+        base_url = str(connection.get("cluster_url") or env_base_url).strip().rstrip("/")
+        token = str(connection.get("_token") or env_token).strip()
+        namespace = str(connection.get("default_namespace") or "demo").strip() or "demo"
     if not base_url or not token:
         return None
     return {
         "base_url": base_url,
         "token": token,
-        "namespace": "demo",
+        "namespace": namespace,
+    }
+
+
+def _public_connection(connection: dict[str, Any]) -> dict[str, Any]:
+    return {
+        str(key): value for key, value in connection.items()
+        if not str(key).startswith("_") and str(key) not in {"token", "password"}
     }
 
 
@@ -204,14 +269,17 @@ def _oauth_authorize_url(handler: Any, root_dir: Path, provider: str, state_toke
 
 
 def _is_real_ocp_connection(root_dir: Path, connection: dict[str, Any]) -> bool:
-    config = _real_ocp_config(root_dir)
+    config = _real_ocp_config(root_dir, connection)
     if config is None:
         return False
-    return str(connection.get("cluster_url") or "").strip().rstrip("/") == config["base_url"]
+    if str(connection.get("connection_mode") or "").strip() == "live":
+        return True
+    env_config = _real_ocp_config(root_dir)
+    return bool(env_config) and str(connection.get("cluster_url") or "").strip().rstrip("/") == env_config["base_url"]
 
 
-def _real_ocp_request_json(root_dir: Path, path: str) -> dict[str, Any]:
-    return _real_ocp_request(root_dir, "GET", path)
+def _real_ocp_request_json(root_dir: Path, path: str, *, connection: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _real_ocp_request(root_dir, "GET", path, connection=connection)
 
 
 def _real_ocp_request(
@@ -222,8 +290,9 @@ def _real_ocp_request(
     json_payload: dict[str, Any] | None = None,
     raw_body: str | None = None,
     extra_headers: dict[str, str] | None = None,
+    connection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    config = _real_ocp_config(root_dir)
+    config = _real_ocp_config(root_dir, connection)
     if config is None:
         raise RuntimeError("OCP API env is not configured")
     import requests
@@ -269,33 +338,33 @@ def _real_ocp_request(
     return payload if isinstance(payload, dict) else {}
 
 
-def _real_ocp_resources_payload(root_dir: Path, resource_type: str) -> dict[str, Any]:
-    namespace = (_real_ocp_config(root_dir) or {}).get("namespace", "demo")
+def _real_ocp_resources_payload(root_dir: Path, resource_type: str, connection: dict[str, Any]) -> dict[str, Any]:
+    namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
     if resource_type == "pods":
-        return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/pods")
+        return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/pods", connection=connection)
     if resource_type == "deployments":
-        return _real_ocp_request_json(root_dir, f"/apis/apps/v1/namespaces/{namespace}/deployments")
+        return _real_ocp_request_json(root_dir, f"/apis/apps/v1/namespaces/{namespace}/deployments", connection=connection)
     if resource_type == "services":
-        return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/services")
+        return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/services", connection=connection)
     if resource_type == "routes":
-        return _real_ocp_request_json(root_dir, f"/apis/route.openshift.io/v1/namespaces/{namespace}/routes")
+        return _real_ocp_request_json(root_dir, f"/apis/route.openshift.io/v1/namespaces/{namespace}/routes", connection=connection)
     if resource_type == "events":
-        return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/events")
+        return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/events", connection=connection)
     raise ValueError("Unsupported resource type")
 
 
-def _real_ocp_resource_detail_payload(root_dir: Path, resource_type: str, name: str) -> dict[str, Any]:
-    namespace = (_real_ocp_config(root_dir) or {}).get("namespace", "demo")
+def _real_ocp_resource_detail_payload(root_dir: Path, resource_type: str, name: str, connection: dict[str, Any]) -> dict[str, Any]:
+    namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
     if resource_type == "pods":
-        return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/pods/{name}")
+        return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/pods/{name}", connection=connection)
     if resource_type == "deployments":
-        return _real_ocp_request_json(root_dir, f"/apis/apps/v1/namespaces/{namespace}/deployments/{name}")
+        return _real_ocp_request_json(root_dir, f"/apis/apps/v1/namespaces/{namespace}/deployments/{name}", connection=connection)
     if resource_type == "services":
-        return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/services/{name}")
+        return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/services/{name}", connection=connection)
     if resource_type == "routes":
-        return _real_ocp_request_json(root_dir, f"/apis/route.openshift.io/v1/namespaces/{namespace}/routes/{name}")
+        return _real_ocp_request_json(root_dir, f"/apis/route.openshift.io/v1/namespaces/{namespace}/routes/{name}", connection=connection)
     if resource_type == "events":
-        return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/events/{name}")
+        return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/events/{name}", connection=connection)
     raise ValueError("Unsupported resource type")
 
 
@@ -406,9 +475,9 @@ def _parse_memory_to_mib(value: str) -> float:
     return float(text) / (1024.0 * 1024.0)
 
 
-def _real_ocp_pod_metrics_payload(root_dir: Path) -> dict[str, Any]:
-    namespace = (_real_ocp_config(root_dir) or {}).get("namespace", "demo")
-    return _real_ocp_request_json(root_dir, f"/apis/metrics.k8s.io/v1beta1/namespaces/{namespace}/pods")
+def _real_ocp_pod_metrics_payload(root_dir: Path, connection: dict[str, Any]) -> dict[str, Any]:
+    namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
+    return _real_ocp_request_json(root_dir, f"/apis/metrics.k8s.io/v1beta1/namespaces/{namespace}/pods", connection=connection)
 
 
 def _connection_metrics_summary(
@@ -421,7 +490,7 @@ def _connection_metrics_summary(
     pod_memory_top: list[dict[str, Any]] = []
     if _is_real_ocp_connection(root_dir, connection):
         try:
-            metrics_payload = _real_ocp_pod_metrics_payload(root_dir)
+            metrics_payload = _real_ocp_pod_metrics_payload(root_dir, connection)
             metric_items = metrics_payload.get("items")
             for item in metric_items if isinstance(metric_items, list) else []:
                 if not isinstance(item, dict):
@@ -737,6 +806,90 @@ def _connection_namespace(connection: dict[str, Any], requested_namespace: str) 
     return str(connection.get("default_namespace") or "default").strip() or "default"
 
 
+def _build_ocp_connection_from_payload(root_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    env_config = _real_ocp_config(root_dir)
+    workspace_id = str(payload.get("workspace_id") or "").strip() or "ws_default"
+    cluster_url = str(payload.get("cluster_url") or (env_config or {}).get("base_url") or "").strip().rstrip("/")
+    if not cluster_url:
+        cluster_url = "https://api.cluster.example.com:6443"
+    token = str(payload.get("token") or (env_config or {}).get("token") or "").strip()
+    auth_mode = str(payload.get("auth_mode") or "token").strip() or "token"
+    default_namespace = str(payload.get("default_namespace") or (env_config or {}).get("namespace") or "demo").strip() or "demo"
+    is_placeholder_cluster = "api.cluster.example.com" in cluster_url
+    is_live = bool(token and not is_placeholder_cluster)
+    connection_id = _make_id("conn")
+    connection = {
+        "workspace_id": workspace_id,
+        "connection_id": connection_id,
+        "display_name": str(payload.get("display_name") or "cluster").strip() or "cluster",
+        "cluster_url": cluster_url,
+        "auth_mode": auth_mode,
+        "verify_ssl": False,
+        "default_namespace": default_namespace,
+        "username_hint": str(payload.get("username") or "").strip() or ("token-user" if auth_mode == "token" else "developer"),
+        "secret_ref": f"vault://connections/{connection_id}",
+        "save_profile": bool(payload.get("save_profile", True)),
+        "status": "connected",
+        "connection_mode": "live" if is_live else "simulated",
+        "last_verified_at": _now_iso(),
+        "expires_at": (datetime.now(UTC) + timedelta(hours=8)).isoformat(timespec="seconds").replace("+00:00", "Z"),
+    }
+    if is_live:
+        connection["_token"] = token
+    return connection
+
+
+def _validate_ocp_connection_payload(root_dir: Path, payload: dict[str, Any], connection: dict[str, Any]) -> str:
+    if _is_real_ocp_connection(root_dir, connection):
+        return ""
+    if connection["auth_mode"] == "token" and not str(payload.get("token") or "").strip():
+        return "token is required when auth_mode=token"
+    if connection["auth_mode"] == "password" and (not str(payload.get("username") or "").strip() or not str(payload.get("password") or "").strip()):
+        return "username and password are required when auth_mode=password"
+    return ""
+
+
+def _ocp_connection_test_result(root_dir: Path, connection: dict[str, Any]) -> dict[str, Any]:
+    if _is_real_ocp_connection(root_dir, connection):
+        config = _real_ocp_config(root_dir, connection) or {"namespace": "demo"}
+        namespace = config.get("namespace", "demo")
+        user_payload = _real_ocp_request_json(root_dir, "/apis/user.openshift.io/v1/users/~", connection=connection)
+        namespace_payload = _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}", connection=connection)
+        resolved_user = str(((user_payload.get("metadata") or {}) if isinstance(user_payload.get("metadata"), dict) else {}).get("name") or "")
+        return {
+            "success": True,
+            "resolved_user": resolved_user or str(connection.get("username_hint") or "token-user"),
+            "resolved_groups": ["system:authenticated"],
+            "resolved_roles": ["cluster-reader"],
+            "identity_source": "profile-token" if str(connection.get("_token") or "").strip() else "env-token",
+            "permission_hints": [f"Namespace access checked for {namespace}."],
+            "rbac_evidence": [f"namespace/{namespace} ready: {str(namespace_payload.get('kind') or '')}"],
+            "secret_backend": "profile",
+            "secret_lease_ttl_seconds": 28800,
+            "secret_lease_expires_at": connection["expires_at"],
+            "resolved_namespace": namespace,
+            "expires_at": connection["expires_at"],
+            "message": f"Real OCP connection verified as {resolved_user or 'token-user'}.",
+            "error": "",
+        }
+    return {
+        "success": True,
+        "resolved_user": str(connection.get("username_hint") or "developer"),
+        "resolved_groups": ["cluster-admins", "system:authenticated"],
+        "resolved_roles": ["cluster-admin", "edit"],
+        "identity_source": connection["auth_mode"],
+        "permission_hints": ["Can inspect deployments, services, routes"],
+        "rbac_evidence": ["selfsubjectaccessreview: allowed"],
+        "secret_backend": "vault-simulated",
+        "secret_lease_ttl_seconds": 28800,
+        "secret_lease_expires_at": connection["expires_at"],
+        "resolved_namespace": connection["default_namespace"],
+        "expires_at": connection["expires_at"],
+        "message": "Connection verified successfully.",
+        "error": "",
+    }
+
+
 def _resource_api_path(resource_type: str, namespace: str, name: str = "") -> str:
     encoded_name = f"/{name}" if name else ""
     if resource_type == "pods":
@@ -760,7 +913,7 @@ def _connection_resource_items(
     namespace: str,
 ) -> list[dict[str, Any]]:
     if _is_real_ocp_connection(root_dir, connection):
-        return _real_ocp_items(resource_type, _real_ocp_resources_payload(root_dir, resource_type))
+        return _real_ocp_items(resource_type, _real_ocp_resources_payload(root_dir, resource_type, connection))
     inventory = _ensure_connection_inventory(state, str(connection.get("connection_id") or ""), str(connection.get("default_namespace") or "default"))
     return [
         item for item in inventory["resources"][resource_type]
@@ -777,7 +930,7 @@ def _connection_resource_detail(
     name: str,
 ) -> dict[str, Any] | None:
     if _is_real_ocp_connection(root_dir, connection):
-        payload = _real_ocp_resource_detail_payload(root_dir, resource_type, name)
+        payload = _real_ocp_resource_detail_payload(root_dir, resource_type, name, connection)
         metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
         return {
             "name": str(metadata.get("name") or name),
@@ -824,6 +977,32 @@ def _resolve_named_resource(query: str, resource_groups: dict[str, list[dict[str
     return None
 
 
+def _history_text(history: list[dict[str, Any]]) -> str:
+    fragments: list[str] = []
+    for item in history[-6:]:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text") or item.get("content") or "").strip()
+        if text:
+            fragments.append(text)
+    return "\n".join(fragments)
+
+
+def _is_ops_related_query(query: str, context: dict[str, Any], history: list[dict[str, Any]]) -> bool:
+    haystack = _normalize_ops_query(f"{query}\n{_history_text(history)}")
+    if any(term in haystack for term in OPS_DOMAIN_TERMS):
+        return True
+    resources = context.get("resources") if isinstance(context.get("resources"), dict) else {}
+    for items in resources.values():
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            name = str(item.get("name") or "").strip().lower()
+            if name and name in haystack:
+                return True
+    return False
+
+
 def _infer_manifest_resource_type(manifest_yaml: str, fallback: str = "deployments") -> str:
     match = re.search(r"^\s*kind:\s*([A-Za-z]+)\s*$", str(manifest_yaml or ""), flags=re.IGNORECASE | re.MULTILINE)
     if not match:
@@ -840,6 +1019,50 @@ def _infer_manifest_resource_type(manifest_yaml: str, fallback: str = "deploymen
     if kind == "event":
         return "events"
     return fallback
+
+
+def _strip_yaml_block(lines: list[str], start_index: int, parent_indent: int) -> int:
+    index = start_index + 1
+    while index < len(lines):
+        line = lines[index]
+        if line.strip() and (len(line) - len(line.lstrip(" "))) <= parent_indent:
+            break
+        index += 1
+    return index
+
+
+def _manifest_yaml_for_apply(manifest_yaml: str) -> str:
+    server_metadata_keys = {
+        "creationTimestamp",
+        "deletionGracePeriodSeconds",
+        "deletionTimestamp",
+        "generation",
+        "managedFields",
+        "resourceVersion",
+        "selfLink",
+        "uid",
+    }
+    lines = str(manifest_yaml or "").splitlines()
+    cleaned: list[str] = []
+    index = 0
+    in_metadata = False
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip(" "))
+        if indent == 0:
+            in_metadata = stripped == "metadata:"
+            if stripped == "status:":
+                index = _strip_yaml_block(lines, index, indent)
+                continue
+        if in_metadata and indent == 2 and ":" in stripped:
+            key = stripped.split(":", 1)[0]
+            if key in server_metadata_keys:
+                index = _strip_yaml_block(lines, index, indent) if stripped.endswith(":") else index + 1
+                continue
+        cleaned.append(line)
+        index += 1
+    return "\n".join(cleaned).strip() + "\n"
 
 
 def _classify_ops_chat_intent(
@@ -884,6 +1107,250 @@ def _classify_ops_chat_intent(
     }
 
 
+def _has_any_term(text: str, terms: tuple[str, ...]) -> bool:
+    return any(term in text for term in terms)
+
+
+def _resource_issue_lines(
+    deployments: list[dict[str, Any]],
+    pods: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> list[str]:
+    lines: list[str] = []
+    degraded = [
+        item for item in deployments
+        if int(item.get("ready_replicas") or 0) < int(item.get("replicas") or 0)
+    ]
+    non_running_pods = [
+        item for item in pods
+        if str(item.get("phase") or "").strip().lower() not in {"running", "succeeded"}
+    ]
+    warning_events = [
+        item for item in events
+        if str(item.get("phase") or "").strip().lower() == "warning"
+    ]
+    if degraded:
+        names = ", ".join(
+            f"{item.get('name')}({int(item.get('ready_replicas') or 0)}/{int(item.get('replicas') or 0)})"
+            for item in degraded[:5]
+        )
+        lines.append(f"Ready replica가 부족한 Deployment: {names}")
+    else:
+        lines.append("Deployment ready replica 기준으로는 즉시 보이는 부족 상태가 없습니다.")
+    if non_running_pods:
+        names = ", ".join(f"{item.get('name')}({item.get('phase')})" for item in non_running_pods[:5])
+        lines.append(f"Running/Succeeded가 아닌 Pod: {names}")
+    if warning_events:
+        names = ", ".join(str(item.get("name") or "") for item in warning_events[:5])
+        lines.append(f"Warning Event 후보: {names}")
+    return lines
+
+
+def _namespace_health_chat_response(
+    *,
+    root_dir: Path,
+    state: dict[str, Any],
+    connection: dict[str, Any],
+    connection_id: str,
+    namespace: str,
+) -> dict[str, Any]:
+    deployments = _connection_resource_items(root_dir, state, connection, "deployments", namespace)
+    pods = _connection_resource_items(root_dir, state, connection, "pods", namespace)
+    services = _connection_resource_items(root_dir, state, connection, "services", namespace)
+    routes = _connection_resource_items(root_dir, state, connection, "routes", namespace)
+    events = _connection_resource_items(root_dir, state, connection, "events", namespace)
+    metrics = _connection_metrics_summary(root_dir, state, connection, namespace)
+    degraded = [
+        item for item in deployments
+        if int(item.get("ready_replicas") or 0) < int(item.get("replicas") or 0)
+    ]
+    non_running_pods = [
+        item for item in pods
+        if str(item.get("phase") or "").strip().lower() not in {"running", "succeeded"}
+    ]
+    warning_events = [
+        item for item in events
+        if str(item.get("phase") or "").strip().lower() == "warning"
+    ]
+    issue_lines = _resource_issue_lines(deployments, pods, events)
+    top_cpu = ((metrics.get("summary") or {}) if isinstance(metrics.get("summary"), dict) else {}).get("top_cpu_pod")
+    top_memory = ((metrics.get("summary") or {}) if isinstance(metrics.get("summary"), dict) else {}).get("top_memory_pod")
+    metric_lines: list[str] = []
+    if isinstance(top_cpu, dict) and top_cpu.get("name"):
+        metric_lines.append(f"CPU 상위 Pod는 {top_cpu.get('name')} ({top_cpu.get('cpu_mcores')}m)입니다.")
+    if isinstance(top_memory, dict) and top_memory.get("name"):
+        metric_lines.append(f"Memory 상위 Pod는 {top_memory.get('name')} ({top_memory.get('memory_mib')}MiB)입니다.")
+    answer_lines = [
+        f"{namespace} namespace 기준으로 Deployment {len(deployments)}건, Pod {len(pods)}건, Service {len(services)}건, Route {len(routes)}건을 같이 점검했습니다.",
+        f"요약하면 degraded Deployment {len(degraded)}건, 비정상 phase Pod {len(non_running_pods)}건, Warning Event {len(warning_events)}건입니다.",
+        *issue_lines,
+    ]
+    if metric_lines:
+        answer_lines.extend(metric_lines)
+    answer_lines.append("다음 순서는 1) ready replica가 부족한 Deployment 선택, 2) 관련 Pod phase와 restart/event 확인, 3) Service selector와 Route 대상 연결 확인입니다.")
+    deployment_items = [_resource_summary("deployments", item) for item in (degraded or deployments)[:20]]
+    pod_items = [_resource_summary("pods", item) for item in (non_running_pods or pods)[:20]]
+    return {
+        "answer": "\n".join(answer_lines),
+        "artifacts": [
+            {
+                "kind": "analysis",
+                "title": f"Namespace health summary in {namespace}",
+                "connection_id": connection_id,
+                "namespace": namespace,
+                "summary": {
+                    "deployments": len(deployments),
+                    "pods": len(pods),
+                    "services": len(services),
+                    "routes": len(routes),
+                    "degraded_deployments": len(degraded),
+                    "non_running_pods": len(non_running_pods),
+                    "warning_events": len(warning_events),
+                    "metrics": metrics.get("summary"),
+                },
+                "items": [],
+            },
+            {
+                "kind": "resource_list",
+                "title": f"Deployment health in {namespace}",
+                "connection_id": connection_id,
+                "resource_type": "deployments",
+                "namespace": namespace,
+                "editable": True,
+                "total_count": len(deployments),
+                "items": deployment_items,
+            },
+            {
+                "kind": "resource_list",
+                "title": f"Pod status in {namespace}",
+                "connection_id": connection_id,
+                "resource_type": "pods",
+                "namespace": namespace,
+                "editable": False,
+                "total_count": len(pods),
+                "items": pod_items,
+            },
+        ],
+        "preview_ready": True,
+    }
+
+
+def _deployment_troubleshooting_chat_response(
+    *,
+    root_dir: Path,
+    state: dict[str, Any],
+    connection: dict[str, Any],
+    connection_id: str,
+    namespace: str,
+    resource_name: str,
+) -> dict[str, Any]:
+    deployments = _connection_resource_items(root_dir, state, connection, "deployments", namespace)
+    pods = _connection_resource_items(root_dir, state, connection, "pods", namespace)
+    events = _connection_resource_items(root_dir, state, connection, "events", namespace)
+    target = next((item for item in deployments if str(item.get("name") or "") == resource_name), None)
+    if target is None:
+        degraded = [
+            item for item in deployments
+            if int(item.get("ready_replicas") or 0) < int(item.get("replicas") or 0)
+        ]
+        target = degraded[0] if degraded else (deployments[0] if deployments else {})
+        resource_name = str(target.get("name") or resource_name or "target deployment")
+    related_pods = [
+        item for item in pods
+        if resource_name in str(item.get("name") or "") or str(item.get("phase") or "").strip().lower() not in {"running", "succeeded"}
+    ][:10]
+    warning_events = [
+        item for item in events
+        if str(item.get("phase") or "").strip().lower() == "warning"
+    ][:10]
+    ready = int(target.get("ready_replicas") or 0)
+    replicas = int(target.get("replicas") or 0)
+    answer_lines = [
+        f"{resource_name} 기준으로 ready replicas는 {ready}/{replicas}입니다.",
+        "확인 순서는 다음이 맞습니다.",
+        "1. Deployment YAML에서 replicas, selector, image, rollout condition을 먼저 확인합니다.",
+        "2. 관련 Pod의 phase, restart, image pull, scheduling 상태를 봅니다.",
+        "3. Warning Event에서 FailedScheduling, ImagePullBackOff, readiness probe 실패를 찾습니다.",
+        "4. Pod가 떠 있는데 트래픽 문제가 남으면 Service selector와 Route target을 확인합니다.",
+    ]
+    if related_pods:
+        answer_lines.append("현재 관련 Pod 후보: " + ", ".join(f"{item.get('name')}({item.get('phase')})" for item in related_pods[:5]))
+    if warning_events:
+        answer_lines.append("현재 Warning Event 후보: " + ", ".join(str(item.get("name") or "") for item in warning_events[:5]))
+    return {
+        "answer": "\n".join(answer_lines),
+        "artifacts": [
+            {
+                "kind": "resource_editor",
+                "title": f"{resource_name} deployment detail",
+                "connection_id": connection_id,
+                "resource_type": "deployments",
+                "namespace": namespace,
+                "name": resource_name,
+                "editable": True,
+                "summary": _resource_summary("deployments", target) if target else {},
+                "items": [],
+            },
+            {
+                "kind": "resource_list",
+                "title": f"Related pod candidates in {namespace}",
+                "connection_id": connection_id,
+                "resource_type": "pods",
+                "namespace": namespace,
+                "editable": False,
+                "total_count": len(related_pods),
+                "items": [_resource_summary("pods", item) for item in related_pods],
+            },
+        ],
+        "preview_ready": True,
+    }
+
+
+def _route_service_chat_response(
+    *,
+    root_dir: Path,
+    state: dict[str, Any],
+    connection: dict[str, Any],
+    connection_id: str,
+    namespace: str,
+) -> dict[str, Any]:
+    services = _connection_resource_items(root_dir, state, connection, "services", namespace)
+    routes = _connection_resource_items(root_dir, state, connection, "routes", namespace)
+    answer = "\n".join(
+        [
+            f"{namespace} namespace에서 Service {len(services)}건과 Route {len(routes)}건을 함께 봐야 합니다.",
+            "연결 확인 순서는 Route spec.to.name -> Service name -> Service selector -> 선택된 Pod label 순서입니다.",
+            "Route host가 열려 있어도 Service selector가 Pod label과 맞지 않으면 backend endpoint가 비어 장애처럼 보일 수 있습니다.",
+        ]
+    )
+    return {
+        "answer": answer,
+        "artifacts": [
+            {
+                "kind": "resource_list",
+                "title": f"Services in {namespace}",
+                "connection_id": connection_id,
+                "resource_type": "services",
+                "namespace": namespace,
+                "editable": True,
+                "total_count": len(services),
+                "items": [_resource_summary("services", item) for item in services[:20]],
+            },
+            {
+                "kind": "resource_list",
+                "title": f"Routes in {namespace}",
+                "connection_id": connection_id,
+                "resource_type": "routes",
+                "namespace": namespace,
+                "editable": True,
+                "total_count": len(routes),
+                "items": [_resource_summary("routes", item) for item in routes[:20]],
+            },
+        ],
+        "preview_ready": True,
+    }
+
+
 def _recommendations_for_connection(
     *,
     root_dir: Path,
@@ -893,7 +1360,7 @@ def _recommendations_for_connection(
 ) -> list[dict[str, Any]]:
     connection = _require_connection(state, connection_id)
     if _is_real_ocp_connection(root_dir, connection):
-        deployments = _real_ocp_items("deployments", _real_ocp_resources_payload(root_dir, "deployments"))
+        deployments = _real_ocp_items("deployments", _real_ocp_resources_payload(root_dir, "deployments", connection))
     else:
         inventory = _ensure_connection_inventory(state, connection_id, str(connection.get("default_namespace") or "default"))
         deployments = inventory["resources"]["deployments"]
@@ -1137,7 +1604,253 @@ def _docs_preview_payload(root_dir: Path, source_path: str, chunk_id: str) -> di
     }
 
 
-def _chat_payload(root_dir: Path, payload: dict[str, Any], *, state: dict[str, Any]) -> dict[str, Any]:
+def _ops_live_context(root_dir: Path, state: dict[str, Any], connection: dict[str, Any], namespace: str) -> dict[str, Any]:
+    resources: dict[str, list[dict[str, Any]]] = {}
+    manifest_index: dict[str, dict[str, Any]] = {}
+    manifest_previews: list[dict[str, str]] = []
+    for resource_type in RESOURCE_TYPES:
+        items = _connection_resource_items(root_dir, state, connection, resource_type, namespace)
+        summaries = [_resource_summary(resource_type, item) for item in items]
+        resources[resource_type] = summaries
+        for item, summary in zip(items, summaries, strict=False):
+            manifest = str(item.get("manifest_yaml") or _yaml_dump(item.get("manifest_json") or {})).strip()
+            name = str(item.get("name") or "")
+            if manifest:
+                key = f"{resource_type}/{name}".lower()
+                manifest_index[key] = {
+                    **summary,
+                    "resource_type": resource_type,
+                    "editable": resource_type in EDITABLE_RESOURCE_TYPES,
+                    "manifest_yaml": manifest,
+                }
+            if manifest and len(manifest_previews) < 24:
+                manifest_previews.append(
+                    {
+                        "resource_type": resource_type,
+                        "name": name,
+                        "yaml": "\n".join(_preview_lines(manifest, count=24)),
+                    }
+                )
+    metrics = _connection_metrics_summary(root_dir, state, connection, namespace)
+    return {
+        "connection": _public_connection(connection),
+        "namespace": namespace,
+        "resources": resources,
+        "metrics": metrics,
+        "manifest_index": manifest_index,
+        "manifest_previews": manifest_previews[:24],
+    }
+
+
+def _selected_live_resource_details(query: str, context: dict[str, Any], history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    manifest_index = context.get("manifest_index") if isinstance(context.get("manifest_index"), dict) else {}
+    if not manifest_index:
+        return []
+    text = _normalize_ops_query(f"{query}\n{_history_text(history)}")
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for key, detail in manifest_index.items():
+        if not isinstance(detail, dict):
+            continue
+        name = str(detail.get("name") or "").strip().lower()
+        if name and name in text and key not in seen:
+            selected.append(detail)
+            seen.add(key)
+    if selected:
+        return selected[:3]
+    explicit_type = _detect_resource_type(query)
+    detail_requested = any(term in _normalize_ops_query(query) for term in DETAIL_INTENT_TERMS + EDIT_INTENT_TERMS)
+    if explicit_type and detail_requested:
+        matches = [
+            detail
+            for key, detail in manifest_index.items()
+            if key.startswith(f"{explicit_type}/") and isinstance(detail, dict)
+        ]
+        if len(matches) == 1:
+            return matches
+    return []
+
+
+def _ops_live_artifacts(context: dict[str, Any], selected_details: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    connection = context.get("connection") if isinstance(context.get("connection"), dict) else {}
+    connection_id = str(connection.get("connection_id") or "")
+    namespace = str(context.get("namespace") or "")
+    resources = context.get("resources") if isinstance(context.get("resources"), dict) else {}
+    artifacts: list[dict[str, Any]] = [
+        {
+            "kind": "analysis",
+            "title": f"Live operations context in {namespace}",
+            "connection_id": connection_id,
+            "namespace": namespace,
+            "summary": {
+                "counts": {key: len(value) for key, value in resources.items() if isinstance(value, list)},
+                "metrics": context.get("metrics", {}).get("summary") if isinstance(context.get("metrics"), dict) else {},
+            },
+            "items": [],
+        }
+    ]
+    for detail in selected_details or []:
+        resource_type = str(detail.get("resource_type") or "")
+        name = str(detail.get("name") or "")
+        manifest_yaml = str(detail.get("manifest_yaml") or "")
+        if not resource_type or not name or not manifest_yaml:
+            continue
+        artifacts.append(
+            {
+                "kind": "resource_editor" if detail.get("editable") else "resource_detail",
+                "title": f"{RESOURCE_KIND_LABELS.get(resource_type, resource_type)} YAML: {name}",
+                "connection_id": connection_id,
+                "resource_type": resource_type,
+                "namespace": namespace,
+                "name": name,
+                "editable": bool(detail.get("editable")),
+                "manifest_yaml": manifest_yaml,
+                "manifest_preview": "\n".join(_preview_lines(manifest_yaml, count=32)),
+                "items": [],
+            }
+        )
+    for resource_type in ("deployments", "pods", "services", "routes", "events"):
+        items = resources.get(resource_type)
+        if not isinstance(items, list) or not items:
+            continue
+        artifacts.append(
+            {
+                "kind": "resource_list",
+                "title": f"{RESOURCE_KIND_LABELS.get(resource_type, resource_type)} context in {namespace}",
+                "connection_id": connection_id,
+                "resource_type": resource_type,
+                "namespace": namespace,
+                "editable": resource_type in EDITABLE_RESOURCE_TYPES,
+                "total_count": len(items),
+                "items": items[:20],
+            }
+        )
+    return artifacts
+
+
+def _fallback_ops_live_answer(query: str, context: dict[str, Any], selected_details: list[dict[str, Any]] | None = None) -> str:
+    namespace = str(context.get("namespace") or "")
+    resources = context.get("resources") if isinstance(context.get("resources"), dict) else {}
+    deployments = resources.get("deployments") if isinstance(resources.get("deployments"), list) else []
+    pods = resources.get("pods") if isinstance(resources.get("pods"), list) else []
+    events = resources.get("events") if isinstance(resources.get("events"), list) else []
+    metrics = context.get("metrics") if isinstance(context.get("metrics"), dict) else {}
+    degraded = [
+        item for item in deployments
+        if int(item.get("ready_replicas") or 0) < int(item.get("replicas") or 0)
+    ]
+    non_running = [
+        item for item in pods
+        if str(item.get("phase") or "").strip().lower() not in {"running", "succeeded"}
+    ]
+    warnings = [
+        item for item in events
+        if str(item.get("phase") or "").strip().lower() == "warning"
+    ]
+    summary = metrics.get("summary") if isinstance(metrics.get("summary"), dict) else {}
+    normalized = _normalize_ops_query(query)
+    if selected_details and any(term in normalized for term in DETAIL_INTENT_TERMS + EDIT_INTENT_TERMS):
+        lines = []
+        for detail in selected_details[:3]:
+            resource_type = str(detail.get("resource_type") or "")
+            name = str(detail.get("name") or "")
+            kind = RESOURCE_KIND_LABELS.get(resource_type, resource_type)
+            lines.append(f"{name} {kind} YAML을 확인했습니다. 전체 YAML은 artifact 코드 블록과 YAML Editor에서 볼 수 있습니다.")
+            if resource_type == "deployments":
+                replicas = detail.get("replicas")
+                ready = detail.get("ready_replicas")
+                if replicas is not None or ready is not None:
+                    lines.append(f"현재 replicas={replicas}, readyReplicas={ready}입니다.")
+                lines.append("replicas를 늘리면 목표 Pod 수가 증가하고 새 Pod가 스케줄링됩니다. 반영 후 rollout 상태, ready replicas, 관련 Event를 확인해야 합니다.")
+            elif resource_type == "services":
+                lines.append("Service YAML 변경은 selector, port, targetPort 연결에 영향을 줄 수 있으므로 연결된 Pod label과 Route를 같이 확인해야 합니다.")
+            elif resource_type == "routes":
+                lines.append("Route YAML 변경은 외부 host와 Service 라우팅에 영향을 줄 수 있으므로 spec.to.name과 TLS 설정을 같이 확인해야 합니다.")
+        return "\n".join(lines)
+    explicit_type = _detect_resource_type(query)
+    if explicit_type and any(term in normalized for term in LIST_INTENT_TERMS):
+        items = resources.get(explicit_type) if isinstance(resources.get(explicit_type), list) else []
+        label = RESOURCE_KIND_LABELS.get(explicit_type, explicit_type)
+        names = ", ".join(str(item.get("name") or "") for item in items[:20])
+        if len(items) > 20:
+            names += f" 외 {len(items) - 20}건"
+        return f"{namespace} namespace에서 {label} {len(items)}건을 찾았습니다.\n{names or '표시할 항목이 없습니다.'}\n원하는 이름을 말하면 YAML 상세와 편집 artifact를 이어서 열 수 있습니다."
+    lines = [
+        f"{namespace} namespace live context를 기준으로 질문을 분석했습니다.",
+        f"질문: {query}",
+        f"현재 Deployment {len(deployments)}건, Pod {len(pods)}건, Warning Event {len(warnings)}건을 확인했습니다.",
+        f"Ready replica가 부족한 Deployment는 {len(degraded)}건, Running/Succeeded가 아닌 Pod는 {len(non_running)}건입니다.",
+    ]
+    if degraded:
+        lines.append("우선 확인할 Deployment: " + ", ".join(f"{item.get('name')}({item.get('ready_replicas')}/{item.get('replicas')})" for item in degraded[:5]))
+    if non_running:
+        lines.append("우선 확인할 Pod: " + ", ".join(f"{item.get('name')}({item.get('phase')})" for item in non_running[:5]))
+    if summary.get("top_cpu_pod"):
+        top_cpu = summary["top_cpu_pod"]
+        lines.append(f"CPU 상위 Pod: {top_cpu.get('name')} ({top_cpu.get('cpu_mcores')}m)")
+    if summary.get("top_memory_pod"):
+        top_memory = summary["top_memory_pod"]
+        lines.append(f"Memory 상위 Pod: {top_memory.get('name')} ({top_memory.get('memory_mib')}MiB)")
+    if selected_details:
+        names = ", ".join(str(item.get("name") or "") for item in selected_details[:3])
+        lines.append(f"요청한 리소스 YAML은 artifact로 첨부했습니다: {names}")
+        if any(str(item.get("resource_type") or "") == "deployments" for item in selected_details):
+            lines.append("Deployment replicas를 변경하면 목표 Pod 수가 조정되고, rollout 상태와 ready replicas를 다시 확인해야 합니다.")
+    lines.append("다음에는 artifact에서 문제 후보 리소스를 열어 YAML, Pod phase, Event, Service/Route 연결을 이어서 확인하면 됩니다.")
+    return "\n".join(lines)
+
+
+def _generate_ops_live_answer(
+    answerer: Any,
+    query: str,
+    context: dict[str, Any],
+    history: list[dict[str, Any]],
+    selected_details: list[dict[str, Any]] | None = None,
+) -> str | None:
+    llm_client = getattr(answerer, "llm_client", None)
+    if llm_client is None or not hasattr(llm_client, "generate"):
+        return None
+    compact_context = {
+        "namespace": context.get("namespace"),
+        "connection": context.get("connection"),
+        "resources": context.get("resources"),
+        "metrics": context.get("metrics"),
+        "manifest_previews": context.get("manifest_previews"),
+        "selected_resource_yaml": selected_details or [],
+    }
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are an OpenShift operations agent. Answer in Korean. "
+                "Use only the supplied live cluster context. Do not invent resources. "
+                "Analyze the user's intent, pick the relevant pods/deployments/services/routes/events/metrics, "
+                "and produce an operational answer with findings, evidence, and next checks. "
+                "If the user asks for a list or inventory, provide a concise categorized list from context. "
+                "If selected_resource_yaml is provided and the user asks for YAML or editing, explain the relevant YAML and mention that it is attached as an editable artifact. "
+                "If the user asks what a change would affect, explain concrete operational impact such as replica count, rollout, service routing, or readiness. "
+                "Do not dump every resource unless the user explicitly asks for a list."
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "question": query,
+                    "recent_history": history[-6:],
+                    "live_context": compact_context,
+                },
+                ensure_ascii=False,
+            ),
+        },
+    ]
+    try:
+        return str(llm_client.generate(messages, max_tokens=900)).strip()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _chat_payload(root_dir: Path, payload: dict[str, Any], *, state: dict[str, Any], answerer: Any | None = None) -> dict[str, Any]:
     query = str(payload.get("message") or "").strip()
     connection_id = str(payload.get("connection_id") or "").strip()
     if not query:
@@ -1156,77 +1869,29 @@ def _chat_payload(root_dir: Path, payload: dict[str, Any], *, state: dict[str, A
     if live_mode:
         connection = _require_connection(state, connection_id)
         namespace = _connection_namespace(connection, str(payload.get("namespace") or "").strip())
-        intent = _classify_ops_chat_intent(root_dir, state, connection, query, namespace)
-        if intent is not None:
-            resource_type = str(intent.get("resource_type") or "")
-            action = str(intent.get("action") or "list")
-            resource_name = str(intent.get("resource_name") or "")
-            resource_groups = intent.get("resource_groups") if isinstance(intent.get("resource_groups"), dict) else {}
-            items = [_resource_summary(resource_type, item) for item in resource_groups.get(resource_type, [])]
-            if action == "list":
-                response["answer"] = (
-                    f"{namespace} 네임스페이스에서 {RESOURCE_KIND_LABELS.get(resource_type, resource_type)} {len(items)}건을 찾았습니다. "
-                    "원하는 리소스를 열어 상세 YAML을 확인하거나, 편집 가능한 리소스는 바로 YAML editor로 이어갈 수 있습니다."
-                )
-                response["artifacts"] = [
-                    {
-                        "kind": "resource_list",
-                        "title": f"{RESOURCE_KIND_LABELS.get(resource_type, resource_type)} list in {namespace}",
-                        "connection_id": connection_id,
-                        "resource_type": resource_type,
-                        "namespace": namespace,
-                        "editable": resource_type in EDITABLE_RESOURCE_TYPES,
-                        "total_count": len(items),
-                        "items": items[:20],
-                    }
-                ]
-                response["preview_ready"] = bool(items)
-                return response
-            if resource_name:
-                detail = _connection_resource_detail(root_dir, state, connection, resource_type, namespace, resource_name)
-                if detail is not None:
-                    response["answer"] = (
-                        f"{resource_name} {RESOURCE_KIND_LABELS.get(resource_type, resource_type)}를 찾았습니다. "
-                        f"{'YAML 편집이 가능한 리소스입니다.' if resource_type in EDITABLE_RESOURCE_TYPES else '상세 YAML 확인 전용 리소스입니다.'}"
-                    )
-                    response["artifacts"] = [
-                        {
-                            "kind": "resource_editor" if resource_type in EDITABLE_RESOURCE_TYPES else "resource_detail",
-                            "title": f"{resource_name} · {RESOURCE_KIND_LABELS.get(resource_type, resource_type)}",
-                            "connection_id": connection_id,
-                            "resource_type": resource_type,
-                            "namespace": namespace,
-                            "name": resource_name,
-                            "editable": resource_type in EDITABLE_RESOURCE_TYPES,
-                            "summary": _resource_summary(resource_type, detail),
-                            "manifest_preview": "\n".join(_preview_lines(str(detail.get("manifest_yaml") or ""), count=10)),
-                            "items": [],
-                        }
-                    ]
-                    response["preview_ready"] = True
-                    return response
-    if live_mode and False:
-        connection = _require_connection(state, connection_id)
-        inventory = _ensure_connection_inventory(state, connection_id, str(connection.get("default_namespace") or "default"))
-        namespace_items = [
-            item
-            for resource_type in ("deployments", "pods", "services", "routes")
-            for item in inventory["resources"][resource_type]
-            if str(item.get("namespace") or "") == namespace
+        context = _ops_live_context(root_dir, state, connection, namespace)
+        history = payload.get("history") if isinstance(payload.get("history"), list) else []
+        if not _is_ops_related_query(query, context, history):
+            response["mode"] = "ops-guard"
+            response["answer"] = (
+                "저는 OpenShift/OCP 운영 전용 챗봇입니다. "
+                "클러스터 상태, Pod/Deployment/Service/Route/Event, YAML 조회/수정, "
+                "scale/rollout 같은 운영 작업 질문만 처리할 수 있습니다."
+            )
+            response["stages"] = [
+                {"key": "guard", "label": "Ops guard", "detail": "Non-OCP question rejected", "status": "done"},
+            ]
+            return response
+        selected_details = _selected_live_resource_details(query, context, history)
+        generated = _generate_ops_live_answer(answerer, query, context, history, selected_details)
+        response["answer"] = generated or _fallback_ops_live_answer(query, context, selected_details)
+        response["artifacts"] = _ops_live_artifacts(context, selected_details)
+        response["preview_ready"] = True
+        response["fallback_used"] = generated is None
+        response["stages"] = [
+            {"key": "live", "label": "Live context", "detail": f"{namespace} resources, metrics, events, and YAML previews collected", "status": "done"},
+            {"key": "agent", "label": "Agent analysis", "detail": "Question interpreted against live OpenShift context", "status": "done" if generated else "fallback"},
         ]
-        response["answer"] = (
-            f"{namespace} 네임스페이스 기준으로 샘플 라이브 리소스 {len(namespace_items)}건을 확인했습니다. "
-            "배포/서비스/라우트 상태를 먼저 검토한 뒤 YAML 상세 보기로 이어갈 수 있습니다."
-        )
-        artifact_items = [_resource_summary("deployments", item) for item in inventory["resources"]["deployments"] if str(item.get("namespace") or "") == namespace]
-        response["artifacts"] = [
-            {
-                "kind": "resource_list",
-                "title": f"Deployments in {namespace}",
-                "items": artifact_items,
-            }
-        ]
-        response["preview_ready"] = bool(artifact_items)
         return response
 
     document_rows = _iter_document_rows(root_dir)
@@ -1274,6 +1939,7 @@ def _action_preview_from_payload(root_dir: Path, state: dict[str, Any], payload:
     namespace = _connection_namespace(connection, str(payload.get("namespace") or "").strip())
     risk_level = "medium"
     blocked_reasons: list[str] = []
+    validation_messages: list[str] = []
     diff_unified = ""
     summary = f"{action_type} preview ready."
     if action_type == "scale_deployment":
@@ -1300,6 +1966,9 @@ def _action_preview_from_payload(root_dir: Path, state: dict[str, Any], payload:
         if target is None:
             blocked_reasons.append("Target resource not found.")
         else:
+            apply_yaml = _manifest_yaml_for_apply(manifest_yaml)
+            if apply_yaml.strip() != manifest_yaml.strip():
+                validation_messages.append("Server-managed metadata/status fields will be stripped before apply.")
             diff_unified = "\n".join(
                 difflib.unified_diff(
                     [line + "\n" for line in str(target.get("manifest_yaml") or "").splitlines()],
@@ -1330,7 +1999,7 @@ def _action_preview_from_payload(root_dir: Path, state: dict[str, Any], payload:
         "approval_rules": ["operator"] if risk_level in {"medium", "high"} else [],
         "policy_checks": ["simulated_preview"],
         "blocked_reasons": blocked_reasons,
-        "validation_messages": [] if allowed else blocked_reasons,
+        "validation_messages": validation_messages if allowed else blocked_reasons,
         "diff_unified": diff_unified,
         "dry_run_status": "passed" if allowed else "blocked",
         "dry_run_messages": ["Preview generated locally."],
@@ -1362,20 +2031,23 @@ def _execute_request(root_dir: Path, state: dict[str, Any], request_row: dict[st
                 f"/apis/apps/v1/namespaces/{namespace}/deployments/{resource_name}/scale",
                 raw_body=json.dumps({"spec": {"replicas": replicas}}, ensure_ascii=False),
                 extra_headers={"Content-Type": "application/merge-patch+json"},
+                connection=connection,
             )
             output_lines = [f"Scaled deployment {resource_name} to {replicas}", f"namespace={namespace}"]
         elif action_type == "yaml_apply":
             manifest_yaml = str(request_row.get("manifest_yaml") or "").strip()
+            apply_yaml = _manifest_yaml_for_apply(manifest_yaml)
             target_type = resource_type or _infer_manifest_resource_type(manifest_yaml)
             _real_ocp_request(
                 root_dir,
                 "PATCH",
-                _resource_api_path(target_type, namespace, resource_name),
-                raw_body=manifest_yaml,
+                f"{_resource_api_path(target_type, namespace, resource_name)}?fieldManager=ops-console&force=true",
+                raw_body=apply_yaml,
                 extra_headers={
                     "Content-Type": "application/apply-patch+yaml",
                     "Accept": "application/json",
                 },
+                connection=connection,
             )
             output_lines = [f"Applied YAML to {resource_name}", f"resource_type={target_type}", f"namespace={namespace}"]
         elif action_type == "rollout_restart":
@@ -1398,6 +2070,7 @@ def _execute_request(root_dir: Path, state: dict[str, Any], request_row: dict[st
                     ensure_ascii=False,
                 ),
                 extra_headers={"Content-Type": "application/merge-patch+json"},
+                connection=connection,
             )
             output_lines = [f"Restarted rollout for {resource_name}", f"namespace={namespace}"]
         elif action_type == "log_bundle":
@@ -1507,8 +2180,15 @@ def _send_bad_request(handler: Any, message: str) -> None:
 
 def _stream_chat_result(handler: Any, result: dict[str, Any]) -> None:
     handler._start_ndjson_stream()
-    handler._stream_event({"type": "stage", "stage": {"key": "retrieve", "label": "Retrieve", "detail": "Searching local playbook corpus", "status": "running"}})
-    handler._stream_event({"type": "stage", "stage": {"key": "retrieve", "label": "Retrieve", "detail": "Candidates prepared", "status": "done"}})
+    stages = result.get("stages") if isinstance(result.get("stages"), list) else []
+    if not stages:
+        stages = [
+            {"key": "retrieve", "label": "Retrieve", "detail": "Searching local playbook corpus", "status": "done"},
+            {"key": "ground", "label": "Ground", "detail": "Document candidates prepared", "status": "done"},
+        ]
+    for stage in stages:
+        if isinstance(stage, dict):
+            handler._stream_event({"type": "stage", "stage": stage})
     if str(result.get("answer") or "").strip():
         handler._stream_event({"type": "answer_delta", "delta": str(result.get("answer") or "")})
     handler._stream_event({"type": "result", "response": result})
@@ -1549,7 +2229,7 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
         if connection is None:
             _send_not_found(handler, "Connection not found")
             return True
-        handler._send_json(connection)
+        handler._send_json(_public_connection(connection))
         return True
 
     if path == "/api/v1/auth/ocp/lease/status":
@@ -1578,7 +2258,7 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
         params = parse_qs(query, keep_blank_values=False)
         workspace_id = str((params.get("workspace_id") or [""])[0]).strip()
         items = [
-            item for item in state["connections"]
+            _public_connection(item) for item in state["connections"]
             if not workspace_id or str(item.get("workspace_id") or "").strip() == workspace_id
         ]
         handler._send_json({"items": items})
@@ -1593,11 +2273,11 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
             _send_not_found(handler, str(exc))
             return True
         if _is_real_ocp_connection(root_dir, connection):
-            namespace = (_real_ocp_config(root_dir) or {}).get("namespace", "demo")
+            namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
             counts: dict[str, int] = {}
             try:
                 for resource_type in RESOURCE_TYPES:
-                    counts[resource_type] = len(_real_ocp_items(resource_type, _real_ocp_resources_payload(root_dir, resource_type)))
+                    counts[resource_type] = len(_real_ocp_items(resource_type, _real_ocp_resources_payload(root_dir, resource_type, connection)))
             except Exception as exc:  # noqa: BLE001
                 handler._send_json({"error": f"Real OCP overview failed: {exc}"}, HTTPStatus.BAD_GATEWAY)
                 return True
@@ -1639,7 +2319,7 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
             _send_not_found(handler, str(exc))
             return True
         if _is_real_ocp_connection(root_dir, connection):
-            namespace = (_real_ocp_config(root_dir) or {}).get("namespace", "demo")
+            namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
             handler._send_json(
                 {
                     "connection_id": connection_id,
@@ -1696,12 +2376,12 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
             _send_not_found(handler, str(exc))
             return True
         if _is_real_ocp_connection(root_dir, connection):
-            enforced_namespace = (_real_ocp_config(root_dir) or {}).get("namespace", "demo")
+            enforced_namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
             if namespace != enforced_namespace:
                 _send_bad_request(handler, f"namespace is fixed to {enforced_namespace}")
                 return True
             try:
-                items = [_resource_summary(resource_type, item) for item in _real_ocp_items(resource_type, _real_ocp_resources_payload(root_dir, resource_type))]
+                items = [_resource_summary(resource_type, item) for item in _real_ocp_items(resource_type, _real_ocp_resources_payload(root_dir, resource_type, connection))]
             except Exception as exc:  # noqa: BLE001
                 handler._send_json({"error": f"Real OCP resource list failed: {exc}"}, HTTPStatus.BAD_GATEWAY)
                 return True
@@ -1750,12 +2430,12 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
             _send_not_found(handler, str(exc))
             return True
         if _is_real_ocp_connection(root_dir, connection):
-            enforced_namespace = (_real_ocp_config(root_dir) or {}).get("namespace", "demo")
+            enforced_namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
             if namespace != enforced_namespace:
                 _send_bad_request(handler, f"namespace is fixed to {enforced_namespace}")
                 return True
             try:
-                target = _real_ocp_resource_detail_payload(root_dir, resource_type, name)
+                target = _real_ocp_resource_detail_payload(root_dir, resource_type, name, connection)
             except Exception as exc:  # noqa: BLE001
                 handler._send_json({"error": f"Real OCP resource detail failed: {exc}"}, HTTPStatus.BAD_GATEWAY)
                 return True
@@ -1976,7 +2656,7 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
     return False
 
 
-def handle_ops_console_post(handler: Any, path: str, query: str, payload: dict[str, Any], *, root_dir: Path) -> bool:
+def handle_ops_console_post(handler: Any, path: str, query: str, payload: dict[str, Any], *, root_dir: Path, answerer: Any | None = None) -> bool:
     state = _load_state(root_dir)
     if path == "/api/v1/workspaces":
         name = str(payload.get("name") or "").strip()
@@ -2001,35 +2681,36 @@ def handle_ops_console_post(handler: Any, path: str, query: str, payload: dict[s
         return True
 
     if path == "/api/v1/auth/ocp/connect":
-        workspace_id = str(payload.get("workspace_id") or "").strip() or "ws_default"
-        real_config = _real_ocp_config(root_dir)
-        auth_mode = "token" if real_config else str(payload.get("auth_mode") or "").strip() or "token"
-        if auth_mode == "token" and not real_config and not str(payload.get("token") or "").strip():
-            _send_bad_request(handler, "token is required when auth_mode=token")
+        connection = _build_ocp_connection_from_payload(root_dir, payload)
+        validation_error = _validate_ocp_connection_payload(root_dir, payload, connection)
+        if validation_error:
+            _send_bad_request(handler, validation_error)
             return True
-        if not real_config and auth_mode == "password" and (not str(payload.get("username") or "").strip() or not str(payload.get("password") or "").strip()):
-            _send_bad_request(handler, "username and password are required when auth_mode=password")
-            return True
-        now = _now_iso()
-        connection = {
-            "workspace_id": workspace_id,
-            "connection_id": _make_id("conn"),
-            "display_name": "managed-ocp-demo" if real_config else str(payload.get("display_name") or "cluster").strip() or "cluster",
-            "cluster_url": real_config["base_url"] if real_config else str(payload.get("cluster_url") or "").strip() or "https://api.cluster.example.com:6443",
-            "auth_mode": auth_mode,
-            "verify_ssl": False,
-            "default_namespace": "demo" if real_config else str(payload.get("default_namespace") or "default").strip() or "default",
-            "username_hint": "rag-reader" if real_config else str(payload.get("username") or "developer").strip(),
-            "secret_ref": "env://OCP_API_TOKEN" if real_config else f"vault://connections/{uuid.uuid4().hex[:8]}",
-            "save_profile": bool(payload.get("save_profile", True)),
-            "status": "connected",
-            "last_verified_at": now,
-            "expires_at": (datetime.now(UTC) + timedelta(hours=8)).isoformat(timespec="seconds").replace("+00:00", "Z"),
-        }
+        if _is_real_ocp_connection(root_dir, connection):
+            try:
+                test_result = _ocp_connection_test_result(root_dir, connection)
+                connection["username_hint"] = str(test_result.get("resolved_user") or connection.get("username_hint") or "token-user")
+            except Exception as exc:  # noqa: BLE001
+                handler._send_json({"error": f"OCP connection test failed: {exc}"}, HTTPStatus.BAD_GATEWAY)
+                return True
         state["connections"].insert(0, connection)
         _ensure_connection_inventory(state, connection["connection_id"], connection["default_namespace"])
         _save_state(root_dir, state)
-        _send_json_created(handler, {"connected": True, "connection": connection, "message": "Connection profile created."})
+        _send_json_created(handler, {"connected": True, "connection": _public_connection(connection), "message": "Connection profile created."})
+        return True
+
+    if path == "/api/v1/auth/ocp/test-draft":
+        connection = _build_ocp_connection_from_payload(root_dir, payload)
+        validation_error = _validate_ocp_connection_payload(root_dir, payload, connection)
+        if validation_error:
+            _send_bad_request(handler, validation_error)
+            return True
+        try:
+            result = _ocp_connection_test_result(root_dir, connection)
+        except Exception as exc:  # noqa: BLE001
+            handler._send_json({"error": f"OCP draft connection test failed: {exc}"}, HTTPStatus.BAD_GATEWAY)
+            return True
+        handler._send_json(result)
         return True
 
     if path == "/api/v1/auth/ocp/test" or path == "/api/v1/auth/ocp/lease/refresh":
@@ -2039,49 +2720,11 @@ def handle_ops_console_post(handler: Any, path: str, query: str, payload: dict[s
         except ValueError as exc:
             _send_not_found(handler, str(exc))
             return True
-        if _is_real_ocp_connection(root_dir, connection):
-            try:
-                user_payload = _real_ocp_request_json(root_dir, "/apis/user.openshift.io/v1/users/~")
-                namespace_payload = _real_ocp_request_json(root_dir, "/api/v1/namespaces/demo")
-            except Exception as exc:  # noqa: BLE001
-                handler._send_json({"error": f"Real OCP connection test failed: {exc}"}, HTTPStatus.BAD_GATEWAY)
-                return True
-            result = {
-                "success": True,
-                "resolved_user": str(((user_payload.get("metadata") or {}) if isinstance(user_payload.get("metadata"), dict) else {}).get("name") or "rag-reader"),
-                "resolved_groups": ["demo"],
-                "resolved_roles": ["view", "read-demo"],
-                "identity_source": "env-token",
-                "permission_hints": ["Namespace access is fixed to demo."],
-                "rbac_evidence": [f"namespace/demo ready: {str(namespace_payload.get('kind') or '')}"],
-                "secret_backend": "env",
-                "secret_lease_ttl_seconds": 28800,
-                "secret_lease_expires_at": connection["expires_at"],
-                "resolved_namespace": "demo",
-                "expires_at": connection["expires_at"],
-                "message": "Real OCP connection verified successfully.",
-                "error": "",
-            }
-            connection["last_verified_at"] = _now_iso()
-            _save_state(root_dir, state)
-            handler._send_json(result)
+        try:
+            result = _ocp_connection_test_result(root_dir, connection)
+        except Exception as exc:  # noqa: BLE001
+            handler._send_json({"error": f"OCP connection test failed: {exc}"}, HTTPStatus.BAD_GATEWAY)
             return True
-        result = {
-            "success": True,
-            "resolved_user": str(connection.get("username_hint") or "developer"),
-            "resolved_groups": ["cluster-admins", "system:authenticated"],
-            "resolved_roles": ["cluster-admin", "edit"],
-            "identity_source": connection["auth_mode"],
-            "permission_hints": ["Can inspect deployments, services, routes"],
-            "rbac_evidence": ["selfsubjectaccessreview: allowed"],
-            "secret_backend": "vault-simulated",
-            "secret_lease_ttl_seconds": 28800,
-            "secret_lease_expires_at": connection["expires_at"],
-            "resolved_namespace": connection["default_namespace"],
-            "expires_at": connection["expires_at"],
-            "message": "Connection verified successfully.",
-            "error": "",
-        }
         connection["last_verified_at"] = _now_iso()
         _save_state(root_dir, state)
         handler._send_json(result)
@@ -2172,7 +2815,7 @@ def handle_ops_console_post(handler: Any, path: str, query: str, payload: dict[s
 
     if path == "/api/v1/chat/query":
         try:
-            result = _chat_payload(root_dir, payload, state=state)
+            result = _chat_payload(root_dir, payload, state=state, answerer=answerer)
         except ValueError as exc:
             _send_bad_request(handler, str(exc))
             return True
@@ -2181,7 +2824,7 @@ def handle_ops_console_post(handler: Any, path: str, query: str, payload: dict[s
 
     if path == "/api/v1/chat/query/stream":
         try:
-            result = _chat_payload(root_dir, payload, state=state)
+            result = _chat_payload(root_dir, payload, state=state, answerer=answerer)
         except ValueError as exc:
             handler._start_ndjson_stream()
             handler._stream_event({"type": "error", "status_code": 400, "message": str(exc)})
