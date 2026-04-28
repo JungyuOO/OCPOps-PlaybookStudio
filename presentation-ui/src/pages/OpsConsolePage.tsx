@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Sparkles,
   Workflow,
+  X,
 } from 'lucide-react';
 import './OpsConsolePage.css';
 import { ROUTES } from '../app/routes';
@@ -18,7 +19,7 @@ import {
   connectOcp,
   createActionRequest,
   createBatchJob,
-  createOpsWorkspace,
+  disconnectOcp,
   executeActionRequest,
   listActionAudit,
   listActionExecutions,
@@ -45,6 +46,7 @@ import {
   rejectActionRequest,
   sendOpsChatStream,
   testOcpConnection,
+  testOcpConnectionDraft,
   type ActionAuditItem,
   type ActionExecution,
   type ActionPreview,
@@ -91,13 +93,14 @@ const ROUTE_SECTIONS: Array<{
 ];
 
 const RESOURCE_OPTIONS = ['pods', 'deployments', 'services', 'routes', 'events'] as const;
+const OPS_FIXED_NAMESPACE = 'demo';
 const EDITABLE_RESOURCE_TYPES = new Set(['deployments', 'services', 'routes']);
 const ACTION_OPTIONS = ['scale_deployment', 'rollout_restart', 'log_bundle', 'yaml_apply'] as const;
 const OPS_CHAT_STARTERS = [
   'demo namespace 배포 상태를 먼저 점검해줘',
-  'payments-api가 왜 ready replicas가 부족한지 확인 순서를 알려줘',
+  '문제 있는 Pod나 Deployment가 있는지 분석해줘',
+  '현재 리소스 목록을 종류별로 정리해서 보여줘',
   'Route와 Service 연결을 볼 때 어떤 리소스를 같이 봐야 하는지 정리해줘',
-  '현재 문서 라이브러리 기준으로 OpenShift 운영 입문 순서를 추천해줘',
 ] as const;
 const CONNECT_GUIDE_STEPS = [
   {
@@ -130,6 +133,9 @@ function sectionFromPath(pathname: string): OpsRouteKey {
   if (pathname === ROUTES.opsWorkspaces) {
     return 'overview';
   }
+  if (pathname === ROUTES.opsLibrary) {
+    return 'overview';
+  }
   return ROUTE_SECTIONS.find((item) => item.path === pathname)?.key ?? 'overview';
 }
 
@@ -139,6 +145,16 @@ function formatJson(value: unknown): string {
 
 function makeId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function loadSavedChatMessages(): ChatMessage[] {
+  try {
+    const raw = window.localStorage.getItem('opsConsole.chatMessages');
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.slice(-20) : [];
+  } catch {
+    return [];
+  }
 }
 
 
@@ -151,14 +167,13 @@ export default function OpsConsolePage() {
 
   const [workspaces, setWorkspaces] = useState<OpsWorkspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => window.localStorage.getItem('opsConsole.activeWorkspaceId') ?? '');
-  const [workspaceForm, setWorkspaceForm] = useState({ name: '', environment: 'dev' });
-  const [showWorkspaceCreateForm, setShowWorkspaceCreateForm] = useState(false);
 
   const [connections, setConnections] = useState<OcpConnection[]>([]);
   const [activeConnectionId, setActiveConnectionId] = useState(() => window.localStorage.getItem('opsConsole.activeConnectionId') ?? '');
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [connectStep, setConnectStep] = useState<1 | 2>(1);
   const [modalProfileId, setModalProfileId] = useState('');
+  const [deletingProfileId, setDeletingProfileId] = useState('');
   const [guideStepIndex, setGuideStepIndex] = useState(0);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [connectionForm, setConnectionForm] = useState({
@@ -188,14 +203,17 @@ export default function OpsConsolePage() {
   const [overviewLastUpdatedAt, setOverviewLastUpdatedAt] = useState('');
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
 
-  const [namespaces, setNamespaces] = useState<NamespaceListResponse | null>(null);
-  const [selectedNamespace, setSelectedNamespace] = useState(() => window.localStorage.getItem('opsConsole.selectedNamespace') ?? '');
+  const [, setNamespaces] = useState<NamespaceListResponse | null>(null);
+  const [selectedNamespace, setSelectedNamespace] = useState(OPS_FIXED_NAMESPACE);
   const [selectedResourceType, setSelectedResourceType] = useState<typeof RESOURCE_OPTIONS[number]>('deployments');
   const [resourceList, setResourceList] = useState<ResourceListResponse | null>(null);
   const [selectedResourceName, setSelectedResourceName] = useState('');
   const [resourceDetail, setResourceDetail] = useState<ResourceDetailResponse | null>(null);
   const [yamlEditor, setYamlEditor] = useState('');
   const [yamlPreview, setYamlPreview] = useState<ActionPreview | null>(null);
+  const [yamlApplyRequest, setYamlApplyRequest] = useState<ActionRequest | null>(null);
+  const [yamlApplyExecution, setYamlApplyExecution] = useState<ActionExecution | null>(null);
+  const [yamlEditorOpen, setYamlEditorOpen] = useState(false);
   const [resourcesLoading, setResourcesLoading] = useState(false);
   const [resourceDetailLoading, setResourceDetailLoading] = useState(false);
 
@@ -213,7 +231,7 @@ export default function OpsConsolePage() {
     include_subdirectories: true,
   });
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadSavedChatMessages());
   const [chatDraft, setChatDraft] = useState('');
   const [chatStages, setChatStages] = useState<Array<{ label: string; detail: string; status: string }>>([]);
   const [chatSending, setChatSending] = useState(false);
@@ -252,6 +270,18 @@ export default function OpsConsolePage() {
   useEffect(() => {
     window.localStorage.setItem('opsConsole.selectedNamespace', selectedNamespace);
   }, [selectedNamespace]);
+
+  useEffect(() => {
+    window.localStorage.setItem('opsConsole.chatMessages', JSON.stringify(messages.slice(-20)));
+  }, [messages]);
+
+  useEffect(() => {
+    if (!notice) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setNotice(''), 3200);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   useEffect(() => {
     if (location.pathname === ROUTES.opsWorkspaces || location.pathname === ROUTES.opsConnections) {
@@ -371,6 +401,9 @@ export default function OpsConsolePage() {
       return;
     }
     setYamlEditor(resourceDetail.manifest_yaml);
+    setYamlPreview(null);
+    setYamlApplyRequest(null);
+    setYamlApplyExecution(null);
   }, [resourceDetail]);
 
   async function run<T>(callback: () => Promise<T>, onSuccess?: (value: T) => void) {
@@ -403,7 +436,7 @@ export default function OpsConsolePage() {
 
   async function refreshConnectionStatus(connectionId: string) {
     return run(async () => loadOcpStatus(connectionId), (value) => {
-      setSelectedNamespace((current) => current || value.default_namespace || 'demo');
+      setSelectedNamespace(OPS_FIXED_NAMESPACE);
       setConnections((current) => {
         const exists = current.some((item) => item.connection_id === value.connection_id);
         if (exists) {
@@ -432,11 +465,8 @@ export default function OpsConsolePage() {
 
   async function refreshNamespaces(connectionId: string) {
     return run(async () => loadNamespaces(connectionId), (value) => {
-      setNamespaces(value);
-      if (!value.items.includes(selectedNamespace)) {
-        const preferredNamespace = activeConnection?.default_namespace || value.items[0] || 'demo';
-        setSelectedNamespace(preferredNamespace);
-      }
+      setNamespaces({ ...value, items: [OPS_FIXED_NAMESPACE] });
+      setSelectedNamespace(OPS_FIXED_NAMESPACE);
     });
   }
 
@@ -514,7 +544,7 @@ export default function OpsConsolePage() {
     setActiveWorkspaceId(connection.workspace_id);
     setActiveConnectionId(connection.connection_id);
     setModalProfileId(connection.connection_id);
-    setSelectedNamespace(connection.default_namespace || 'demo');
+    setSelectedNamespace(OPS_FIXED_NAMESPACE);
     syncConnectionForm(connection);
     setProfileMenuOpen(false);
     setShowConnectModal(false);
@@ -539,6 +569,8 @@ export default function OpsConsolePage() {
     setResourceDetail(null);
     setYamlEditor('');
     setYamlPreview(null);
+    setYamlApplyRequest(null);
+    setYamlApplyExecution(null);
     try {
       const value = await loadResourceDetail(connectionId, resourceType, namespace, name);
       setResourceDetail(value);
@@ -551,54 +583,86 @@ export default function OpsConsolePage() {
     }
   }
 
+  function openYamlEditor() {
+    if (!resourceDetail) {
+      setError('리소스를 먼저 선택하세요.');
+      return;
+    }
+    if (!EDITABLE_RESOURCE_TYPES.has(selectedResourceType)) {
+      setError('이 리소스는 YAML 편집을 지원하지 않습니다.');
+      return;
+    }
+    setYamlEditor(resourceDetail.manifest_yaml);
+    setYamlPreview(null);
+    setYamlApplyRequest(null);
+    setYamlApplyExecution(null);
+    setYamlEditorOpen(true);
+  }
+
   async function openChatArtifactResource(artifact: {
     connection_id?: string;
     resource_type?: string;
     namespace?: string;
     name?: string;
+    open_editor?: boolean;
   }) {
     const connectionId = String(artifact.connection_id || activeConnectionId || '').trim();
     const resourceType = String(artifact.resource_type || '').trim();
-    const namespace = String(artifact.namespace || selectedNamespace || '').trim();
+    const namespace = OPS_FIXED_NAMESPACE;
     const name = String(artifact.name || '').trim();
     if (!connectionId || !resourceType || !namespace) {
       setError('Artifact에 필요한 리소스 정보가 부족합니다.');
       return;
     }
     setActiveConnectionId(connectionId);
-    setSelectedNamespace(namespace);
+    setSelectedNamespace(OPS_FIXED_NAMESPACE);
     if (RESOURCE_OPTIONS.includes(resourceType as typeof RESOURCE_OPTIONS[number])) {
       setSelectedResourceType(resourceType as typeof RESOURCE_OPTIONS[number]);
     }
-    navigate(ROUTES.opsResources);
+    if (!artifact.open_editor) {
+      navigate(ROUTES.opsResources);
+    }
     if (name) {
-      await openResourceDetail(connectionId, resourceType, namespace, name);
+      const detail = await openResourceDetail(connectionId, resourceType, namespace, name);
+      if (detail && artifact.open_editor && EDITABLE_RESOURCE_TYPES.has(resourceType)) {
+        setYamlEditor(detail.manifest_yaml);
+        setYamlEditorOpen(true);
+      }
     } else {
       await refreshResources(connectionId, resourceType, namespace);
     }
   }
 
-  async function handleCreateConnection() {
-    if (!activeWorkspaceId) {
-      setError('먼저 workspace를 선택하세요.');
-      return;
-    }
-    const payload = {
+  function buildConnectionPayload() {
+    return {
       ...connectionForm,
+      workspace_id: activeWorkspaceId || 'ws_default',
       cluster_url: connectionDraft.cluster_url.trim() || connectionForm.cluster_url,
       display_name: connectionDraft.display_name.trim() || connectionForm.display_name,
       token: connectionDraft.token.trim() || connectionForm.token,
       username: connectionDraft.username.trim() || connectionForm.username,
       password: connectionDraft.password || connectionForm.password,
     };
+  }
+
+  function hasConnectionDraftInput() {
+    return Object.values(connectionDraft).some((value) => String(value || '').trim());
+  }
+
+  async function handleCreateConnection() {
+    if (!activeWorkspaceId) {
+      setError('기본 workspace를 불러오지 못했습니다. 잠시 후 다시 시도하세요.');
+      return;
+    }
+    const payload = buildConnectionPayload();
     const created = await run(
-      async () => connectOcp({ workspace_id: activeWorkspaceId, ...payload }),
+      async () => connectOcp(payload),
       (value) => {
         setNotice(value.message);
         setConnections((current) => [value.connection, ...current.filter((item) => item.connection_id !== value.connection.connection_id)]);
         setActiveConnectionId(value.connection.connection_id);
         setModalProfileId(value.connection.connection_id);
-        setSelectedNamespace(value.connection.default_namespace || 'demo');
+        setSelectedNamespace(OPS_FIXED_NAMESPACE);
         setShowConnectModal(false);
         setConnectStep(1);
         setProfileMenuOpen(false);
@@ -612,32 +676,59 @@ export default function OpsConsolePage() {
     }
   }
 
-  async function handleCreateWorkspace() {
-    const created = await run(
-      async () => createOpsWorkspace(workspaceForm),
-      (value) => {
-        setNotice(`Workspace "${value.name}" created.`);
-        setWorkspaces((current) => [value, ...current]);
-        setActiveWorkspaceId(value.workspace_id);
-        setWorkspaceForm({ name: '', environment: 'dev' });
-        setShowWorkspaceCreateForm(false);
-      },
-    );
-    if (created) {
-      await refreshWorkspaces();
-    }
-  }
-
   async function handleTestConnection() {
     const targetConnectionId = activeConnectionId || modalProfile?.connection_id || '';
+    if (hasConnectionDraftInput() || !targetConnectionId) {
+      setConnectionTest(null);
+      await run(async () => testOcpConnectionDraft(buildConnectionPayload()), (value) => {
+        setConnectionTest(value);
+        setNotice(value.message);
+      });
+      return;
+    }
     if (!targetConnectionId) {
       setError('저장된 프로필을 선택하거나 먼저 연결을 생성하세요.');
       return;
     }
+    setConnectionTest(null);
     await run(async () => testOcpConnection(targetConnectionId), (value) => {
       setConnectionTest(value);
       setNotice(value.message);
     });
+  }
+
+  async function handleDeleteSavedProfile(profile: OcpConnection) {
+    setDeletingProfileId(profile.connection_id);
+    await run(
+      async () => disconnectOcp(profile.connection_id),
+      () => {
+        setConnections((current) => current.filter((item) => item.connection_id !== profile.connection_id));
+        if (activeConnectionId === profile.connection_id) {
+          setActiveConnectionId('');
+          setOverview(null);
+          setOverviewMetrics(null);
+          setNamespaces(null);
+          setResourceList(null);
+          setResourceDetail(null);
+          setYamlEditor('');
+          setYamlPreview(null);
+          setSelectedResourceName('');
+        }
+        if (modalProfileId === profile.connection_id) {
+          const nextProfile = savedProfiles.find((item) => item.connection_id !== profile.connection_id);
+          setModalProfileId(nextProfile?.connection_id ?? '');
+          if (nextProfile) {
+            syncConnectionForm(nextProfile);
+          } else {
+            setConnectStep(2);
+            resetConnectionDraft();
+          }
+        }
+        setConnectionTest(null);
+        setNotice(`Profile "${profile.display_name}" deleted.`);
+      },
+    );
+    setDeletingProfileId('');
   }
 
   async function handleRefreshLease() {
@@ -664,6 +755,9 @@ export default function OpsConsolePage() {
     setResourceDetail(null);
     setYamlEditor('');
     setYamlPreview(null);
+    setYamlApplyRequest(null);
+    setYamlApplyExecution(null);
+    setYamlEditorOpen(false);
     setProfileMenuOpen(false);
     setShowConnectModal(true);
     setConnectStep(savedProfiles.length > 0 ? 1 : 2);
@@ -674,6 +768,8 @@ export default function OpsConsolePage() {
       setError('리소스를 먼저 선택하세요.');
       return;
     }
+    setYamlApplyRequest(null);
+    setYamlApplyExecution(null);
     await run(
       async () => previewAction({
         connection_id: activeConnectionId,
@@ -688,6 +784,58 @@ export default function OpsConsolePage() {
       }),
       (value) => setYamlPreview(value),
     );
+  }
+
+  async function handleCreateYamlApplyRequest() {
+    if (!activeConnectionId || !selectedResourceName) {
+      setError('리소스를 먼저 선택하세요.');
+      return null;
+    }
+    const created = await run(
+      async () => createActionRequest({
+        connection_id: activeConnectionId,
+        actor_id: actionForm.actor_id,
+        actor_roles: actionForm.actor_roles.split(',').map((item) => item.trim()).filter(Boolean),
+        action_type: 'yaml_apply',
+        resource_type: selectedResourceType,
+        namespace: selectedNamespace,
+        resource_name: selectedResourceName,
+        reason: 'apply YAML editor change',
+        manifest_yaml: yamlEditor,
+      }),
+      (value) => {
+        setYamlApplyRequest(value);
+        setActionRequests((current) => [value, ...current]);
+        setNotice('YAML apply request created.');
+      },
+    );
+    await refreshActions();
+    return created;
+  }
+
+  async function handleApplyYamlNow() {
+    const request = yamlApplyRequest ?? await handleCreateYamlApplyRequest();
+    if (!request) {
+      return;
+    }
+    await run(async () => approveActionRequest(request.request_id, { actor_id: actionForm.actor_id, actor_roles: ['operator'], decision_note: 'approved from YAML editor' }));
+    const execution = await run(
+      async () => executeActionRequest(request.request_id, { actor_id: actionForm.actor_id, actor_roles: ['operator'], execution_note: 'applied from YAML editor', force: false }),
+      (value) => {
+        setYamlApplyExecution(value);
+        setNotice(value.simulated ? 'YAML change applied to simulated inventory.' : 'YAML change applied to cluster.');
+      },
+    );
+    await refreshActions();
+    if (activeConnectionId) {
+      await refreshResources(activeConnectionId, selectedResourceType, selectedNamespace);
+      if (selectedResourceName) {
+        await openResourceDetail(activeConnectionId, selectedResourceType, selectedNamespace, selectedResourceName);
+      }
+    }
+    if (execution) {
+      setYamlEditorOpen(false);
+    }
   }
 
   async function handleCreateBatchJob() {
@@ -907,7 +1055,7 @@ export default function OpsConsolePage() {
       </header>
 
       <nav className="ops-console-nav ops-console-nav-compact">
-        {ROUTE_SECTIONS.map((item) => {
+        {ROUTE_SECTIONS.filter((item) => item.key !== 'library').map((item) => {
           const Icon = item.icon;
           return (
             <Link key={item.key} to={item.path} className={`ops-nav-pill ${item.key === section ? 'active' : ''}`}>
@@ -950,59 +1098,42 @@ export default function OpsConsolePage() {
               </div>
               <div className="ops-connect-profile-list">
                 {savedProfiles.length > 0 ? savedProfiles.map((profile) => (
-                  <button
+                  <div
                     key={profile.connection_id}
-                    type="button"
                     className={`ops-connect-profile-card ${modalProfile?.connection_id === profile.connection_id ? 'selected' : ''}`}
-                    onClick={() => {
-                      setModalProfileId(profile.connection_id);
-                      syncConnectionForm(profile);
-                      setActiveWorkspaceId(profile.workspace_id);
-                      setConnectionTest(null);
-                      setConnectStep(1);
-                    }}
                   >
-                    <strong>{profile.display_name}</strong>
-                    <span>{profile.default_namespace}</span>
-                    <span>{profile.status}</span>
-                  </button>
+                    <button
+                      type="button"
+                      className="ops-connect-profile-select"
+                      onClick={() => {
+                        setModalProfileId(profile.connection_id);
+                        syncConnectionForm(profile);
+                        setActiveWorkspaceId(profile.workspace_id);
+                        setConnectionTest(null);
+                        setConnectStep(1);
+                      }}
+                    >
+                      <strong>{profile.display_name}</strong>
+                      <span>{profile.default_namespace}</span>
+                      <span>{profile.status}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ops-connect-profile-delete"
+                      aria-label={`Delete ${profile.display_name}`}
+                      title="Delete profile"
+                      disabled={deletingProfileId === profile.connection_id}
+                      onClick={() => { void handleDeleteSavedProfile(profile); }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 )) : (
                   <div className="ops-connect-empty">
                     <strong>No saved profile</strong>
                     <span>Create your first cluster profile.</span>
                   </div>
                 )}
-              </div>
-              <div className="ops-connect-sidebar-foot">
-                <label className="ops-field">
-                  <span>Workspace</span>
-                  <select value={activeWorkspaceId} onChange={(event) => setActiveWorkspaceId(event.target.value)}>
-                    {workspaces.map((workspace) => (
-                      <option key={workspace.workspace_id} value={workspace.workspace_id}>{workspace.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <div className="ops-inline-actions">
-                  <button type="button" className="ops-secondary-btn" onClick={() => { void refreshWorkspaces(); }}>Refresh</button>
-                  <button type="button" className="ops-secondary-btn" onClick={() => setShowWorkspaceCreateForm((current) => !current)}>
-                    {showWorkspaceCreateForm ? 'Hide form' : 'New workspace'}
-                  </button>
-                </div>
-                {showWorkspaceCreateForm ? (
-                  <div className="ops-connect-workspace-form">
-                    <label className="ops-field">
-                      <span>Name</span>
-                      <input value={workspaceForm.name} onChange={(event) => setWorkspaceForm((current) => ({ ...current, name: event.target.value }))} placeholder="Platform Ops" />
-                    </label>
-                    <label className="ops-field">
-                      <span>Environment</span>
-                      <input value={workspaceForm.environment} onChange={(event) => setWorkspaceForm((current) => ({ ...current, environment: event.target.value }))} placeholder="dev" />
-                    </label>
-                    <button type="button" className="ops-primary-btn" onClick={() => { void handleCreateWorkspace(); }}>
-                      Create workspace
-                    </button>
-                  </div>
-                ) : null}
               </div>
             </aside>
             <div className="ops-connect-main">
@@ -1173,6 +1304,14 @@ export default function OpsConsolePage() {
                       <button type="button" className="ops-secondary-btn" onClick={() => { void handleTestConnection(); }}>Test current profile</button>
                       <button type="button" className="ops-secondary-btn" onClick={() => { void handleRefreshLease(); }}>Refresh lease</button>
                     </div>
+                    {connectionTest ? (
+                      <div className="ops-guide-card ops-connection-test-card">
+                        <strong>{connectionTest.success ? 'Connection verified' : 'Connection issue'}</strong>
+                        <p>{connectionTest.message || connectionTest.error}</p>
+                        <span>{connectionTest.resolved_user ? `user=${connectionTest.resolved_user}` : ''}</span>
+                        <span>{connectionTest.resolved_namespace ? `namespace=${connectionTest.resolved_namespace}` : ''}</span>
+                      </div>
+                    ) : null}
                     <div className="ops-connect-guide-nav ops-connect-guide-nav-compact">
                       <button type="button" className="ops-secondary-btn" onClick={() => setConnectStep(1)}>
                         Back to guide
@@ -1212,6 +1351,52 @@ export default function OpsConsolePage() {
         </div>
       ) : null}
 
+      {yamlEditorOpen && resourceDetail ? (
+        <div className="ops-modal-backdrop" onClick={() => setYamlEditorOpen(false)}>
+          <section className="ops-yaml-modal" role="dialog" aria-modal="true" aria-label="YAML editor" onClick={(event) => event.stopPropagation()}>
+            <div className="ops-yaml-modal-head">
+              <div>
+                <h2>YAML Editor</h2>
+                <p>{resourceDetail.kind} · {resourceDetail.namespace} · {resourceDetail.name}</p>
+              </div>
+              <button type="button" className="ops-secondary-btn" onClick={() => setYamlEditorOpen(false)}>
+                Close
+              </button>
+            </div>
+            <textarea className="ops-yaml-editor" value={yamlEditor} onChange={(event) => setYamlEditor(event.target.value)} />
+            <div className="ops-actions-row">
+              <button type="button" className="ops-primary-btn" onClick={() => { void handlePreviewYaml(); }}>
+                Preview
+              </button>
+              <button type="button" className="ops-secondary-btn" onClick={() => { void handleCreateYamlApplyRequest(); }}>
+                Create request
+              </button>
+              <button type="button" className="ops-secondary-btn" onClick={() => { void handleApplyYamlNow(); }}>
+                Apply now
+              </button>
+            </div>
+            {yamlPreview ? (
+              <div className="ops-yaml-preview">
+                <strong>{yamlPreview.summary}</strong>
+                <pre>{yamlPreview.diff_unified || yamlPreview.dry_run_messages.join('\n')}</pre>
+              </div>
+            ) : null}
+            {yamlApplyRequest ? (
+              <div className="ops-yaml-preview">
+                <strong>Request {yamlApplyRequest.request_id}</strong>
+                <span>{yamlApplyRequest.status}</span>
+              </div>
+            ) : null}
+            {yamlApplyExecution ? (
+              <div className="ops-yaml-preview">
+                <strong>{yamlApplyExecution.simulated ? 'Simulated apply complete' : 'Cluster apply complete'}</strong>
+                <pre>{yamlApplyExecution.output_lines.join('\n')}</pre>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
+
       <main className="ops-main ops-main-full">
 
           {section === 'overview' && (
@@ -1220,7 +1405,7 @@ export default function OpsConsolePage() {
                 <h2>Cluster Overview</h2>
                 <div className="ops-inline-actions">
                   <span className="ops-live-status">
-                    {overviewRefreshing ? 'Refreshing…' : overviewLastUpdatedAt ? `Updated ${overviewLastUpdatedAt}` : 'Waiting'}
+                    {overviewRefreshing ? 'Refreshing' : overviewLastUpdatedAt ? `Updated ${overviewLastUpdatedAt}` : 'Waiting'}
                   </span>
                 </div>
               </div>
@@ -1246,7 +1431,7 @@ export default function OpsConsolePage() {
                 ))}
               </div>
               {overviewMetrics ? (
-                <Suspense fallback={<div className="ops-chart-loading">Loading charts…</div>}>
+                <Suspense fallback={<div className="ops-chart-loading">Loading charts</div>}>
                   <OpsOverviewCharts
                     overview={overview}
                     overviewMetrics={overviewMetrics}
@@ -1265,10 +1450,8 @@ export default function OpsConsolePage() {
                 <h2>Resource Explorer</h2>
               </div>
               <div className="ops-actions-row">
-                <select value={selectedNamespace} onChange={(event) => setSelectedNamespace(event.target.value)}>
-                  {(namespaces?.items ?? []).map((namespace) => (
-                    <option key={namespace} value={namespace}>{namespace}</option>
-                  ))}
+                <select value={OPS_FIXED_NAMESPACE} disabled aria-label="Namespace">
+                  <option value={OPS_FIXED_NAMESPACE}>{OPS_FIXED_NAMESPACE}</option>
                 </select>
                 <div className="ops-chip-group">
                   {RESOURCE_OPTIONS.map((resourceType) => (
@@ -1285,7 +1468,7 @@ export default function OpsConsolePage() {
                   </div>
                 </div>
               ) : (
-                <div className="ops-split-grid">
+                <div className="ops-split-grid ops-resource-grid">
                   <div className="ops-list">
                     {(resourceList?.items ?? []).map((item) => (
                       <button key={item.name} type="button" className={`ops-list-row ${selectedResourceName === item.name ? 'selected' : ''}`} onClick={() => { if (activeConnectionId) { void openResourceDetail(activeConnectionId, selectedResourceType, selectedNamespace, item.name); } }}>
@@ -1299,26 +1482,33 @@ export default function OpsConsolePage() {
                       <div className="ops-loading-state ops-loading-state-inline" aria-live="polite">
                         <span className="ops-loading-spinner" aria-hidden="true" />
                       </div>
-                    ) : (
+                    ) : resourceDetail ? (
                       <>
-                        <textarea value={yamlEditor} onChange={(event) => setYamlEditor(event.target.value)} />
-                        <div className="ops-actions-row">
-                          <button type="button" className="ops-primary-btn" disabled={!resourceEditable} onClick={() => { void handlePreviewYaml(); }}>
-                            {resourceEditable ? 'Preview apply' : 'Read-only resource'}
-                          </button>
-                          <button
-                            type="button"
-                            className="ops-secondary-btn"
-                            onClick={() => {
-                              const copyRequest = navigator.clipboard?.writeText?.(yamlEditor);
-                              copyRequest?.catch(() => undefined);
-                            }}
-                          >
-                            Copy YAML
-                          </button>
+                        <div className="ops-yaml-viewer-head">
+                          <div>
+                            <strong>{resourceDetail.name}</strong>
+                            <span>{resourceDetail.kind} · {resourceDetail.namespace}</span>
+                          </div>
+                          <div className="ops-actions-row">
+                            <button type="button" className="ops-primary-btn" disabled={!resourceEditable} onClick={openYamlEditor}>
+                              {resourceEditable ? 'Edit YAML' : 'Read-only'}
+                            </button>
+                            <button
+                              type="button"
+                              className="ops-secondary-btn"
+                              onClick={() => {
+                                const copyRequest = navigator.clipboard?.writeText?.(resourceDetail.manifest_yaml);
+                                copyRequest?.catch(() => undefined);
+                              }}
+                            >
+                              Copy YAML
+                            </button>
+                          </div>
                         </div>
-                        {yamlPreview ? <pre>{yamlPreview.diff_unified || yamlPreview.summary}</pre> : null}
+                        <pre className="ops-yaml-viewer">{resourceDetail.manifest_yaml}</pre>
                       </>
+                    ) : (
+                      <div className="ops-empty-state">리소스를 선택하면 YAML을 읽기 전용으로 확인할 수 있습니다.</div>
                     )}
                   </div>
                 </div>
@@ -1495,10 +1685,11 @@ export default function OpsConsolePage() {
                                                     resource_type: String(artifact.resource_type || ''),
                                                     namespace: itemNamespace,
                                                     name: itemName,
+                                                    open_editor: Boolean(artifact.editable),
                                                   });
                                                 }}
                                               >
-                                                {artifact.editable ? 'Open YAML' : 'Open Detail'}
+                                                {artifact.editable ? 'Edit YAML' : 'Open Detail'}
                                               </button>
                                             </div>
                                           </div>
@@ -1508,7 +1699,8 @@ export default function OpsConsolePage() {
                                   ) : (
                                     <div className="ops-chat-artifact-items">
                                       {artifact.summary ? <pre>{formatJson(artifact.summary)}</pre> : null}
-                                      {artifact.manifest_preview ? <pre>{artifact.manifest_preview}</pre> : null}
+                                      {artifact.manifest_yaml ? <pre className="ops-chat-yaml-block">{artifact.manifest_yaml}</pre> : null}
+                                      {!artifact.manifest_yaml && artifact.manifest_preview ? <pre>{artifact.manifest_preview}</pre> : null}
                                       <div className="ops-inline-actions">
                                         <button
                                           type="button"
@@ -1518,10 +1710,11 @@ export default function OpsConsolePage() {
                                               resource_type: String(artifact.resource_type || ''),
                                               namespace: String(artifact.namespace || ''),
                                               name: String(artifact.name || ''),
+                                              open_editor: Boolean(artifact.editable),
                                             });
                                           }}
                                         >
-                                          {artifact.editable ? 'Open YAML Editor' : 'Open Detail'}
+                                          {artifact.editable ? 'Edit YAML' : 'Open Detail'}
                                         </button>
                                       </div>
                                     </div>
@@ -1619,8 +1812,8 @@ export default function OpsConsolePage() {
                     </div>
                   ))}
                 </div>
-                <pre>{formatJson(actionExecutions)}</pre>
-                <pre>{formatJson(actionAudit)}</pre>
+                {actionExecutions.length > 0 ? <pre>{formatJson(actionExecutions)}</pre> : null}
+                {actionAudit.length > 0 ? <pre>{formatJson(actionAudit)}</pre> : null}
               </div>
             </section>
           )}
