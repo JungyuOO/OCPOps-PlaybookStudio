@@ -191,17 +191,34 @@ def finalize_deployment_scaling_answer(
     answer_text: str,
     citations: list[dict],
 ) -> tuple[str, list[dict], list[int]]:
-    final_citations = select_fallback_citations(citations, limit=1)
     answer_text, final_citations, cited_indices = finalize_citations(
         answer_text,
-        final_citations,
+        citations,
     )
-    if not cited_indices and final_citations:
+    if not cited_indices and citations:
+        final_citations = select_fallback_citations(citations, limit=1)
         answer_text = inject_single_citation(answer_text, citation_index=1)
         answer_text, final_citations, cited_indices = finalize_citations(
             answer_text,
             final_citations,
         )
+    guarded_answer_text = strip_ungrounded_code_blocks(
+        answer_text,
+        citations=final_citations or citations,
+    )
+    if guarded_answer_text != answer_text:
+        answer_text = guarded_answer_text
+        answer_text, final_citations, cited_indices = finalize_citations(
+            answer_text,
+            final_citations or citations,
+        )
+        if not cited_indices and (final_citations or citations):
+            final_citations = final_citations or select_fallback_citations(citations, limit=1)
+            answer_text = inject_single_citation(answer_text, citation_index=1)
+            answer_text, final_citations, cited_indices = finalize_citations(
+                answer_text,
+                final_citations,
+            )
     return answer_text, final_citations, cited_indices
 
 

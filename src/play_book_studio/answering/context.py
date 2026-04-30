@@ -34,6 +34,7 @@ from play_book_studio.retrieval.query import (
     is_generic_intro_query,
 )
 
+from .doc_locator_intent import is_cross_document_follow_query
 from .models import Citation, ContextBundle
 
 
@@ -41,10 +42,85 @@ SPACE_RE = re.compile(r"\s+")
 SECTION_PREFIX_RE = re.compile(r"^\d+(?:\.\d+)*\.?\s*")
 INTRO_RECOMMENDATION_COUNT_RE = re.compile(r"(\d+\s*개|세\s*개|3\s*개|목록|리스트|top\s*\d+)", re.IGNORECASE)
 MAX_PROMPT_CLI_COMMANDS = 4
+OC_LOGIN_QUERY_RE = re.compile(
+    r"(?:\boc\s+login|로그인|login).*(?:token|토큰|server|서버|url|api)"
+    r"|(?:token|토큰|server|서버|url|api).*(?:\boc\s+login|로그인|login)",
+    re.IGNORECASE,
+)
+AUTH_CAN_I_QUERY_RE = re.compile(
+    r"(can-i|권한.*(?:확인|검증)|(?:delete|삭제).*(?:pods?|pod|파드).*(?:가능|권한|할 수)|(?:pods?|pod|파드).*(?:delete|삭제).*(?:가능|권한|할 수))",
+    re.IGNORECASE,
+)
 
 
 def _normalize_excerpt(text: str) -> str:
     return SPACE_RE.sub(" ", (text or "").strip())
+
+
+def _trim_command_candidate(value: str) -> str:
+    command = SPACE_RE.sub(" ", str(value or "").strip()).strip()
+    command = command.removeprefix("$ ").strip()
+    for marker in (
+        " [/CODE]",
+        " [CODE",
+        " Procedure ",
+        " Example ",
+        " Note ",
+        " Important ",
+        " Verification ",
+        " You ",
+        " If ",
+        " The ",
+    ):
+        marker_index = command.find(marker)
+        if marker_index > 0:
+            command = command[:marker_index].strip()
+    command = command.strip("` ")
+    if not re.search(r"^(?:oc|kubectl|etcdctl|/[A-Za-z0-9_./-]*cluster-backup\.sh|cluster-backup\.sh)\b", command):
+        return ""
+    return command[:240].strip()
+
+
+def _commands_from_excerpt(excerpt: str) -> tuple[str, ...]:
+    commands: list[str] = []
+    for match in re.finditer(
+        r"\[CODE[^\]]*\]\s*(.*?)(?=\s+\[/CODE\]|\s+\[CODE|\s+(?:Procedure|Example|Note|Important|Verification|You|If|The)\b|$)",
+        excerpt or "",
+        re.IGNORECASE,
+    ):
+        command = _trim_command_candidate(match.group(1))
+        if command:
+            commands.append(command)
+    for match in re.finditer(
+        r"(?:(?:oc|kubectl|etcdctl)\s+[^`\[]+|/[A-Za-z0-9_./-]*cluster-backup\.sh\s+[^`\[]+|cluster-backup\.sh\s+[^`\[]+)",
+        excerpt or "",
+    ):
+        command = _trim_command_candidate(match.group(0))
+        if command:
+            commands.append(command)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for command in commands:
+        lowered = command.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        deduped.append(command)
+    return tuple(deduped[:4])
+
+
+def _citation_cli_commands(hit: RetrievalHit, excerpt: str) -> tuple[str, ...]:
+    extracted = list(_commands_from_excerpt(excerpt))
+    existing = [str(command or "").strip() for command in hit.cli_commands if str(command or "").strip()]
+    merged: list[str] = []
+    seen: set[str] = set()
+    for command in [*extracted, *existing]:
+        key = command.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(command)
+    return tuple(merged)
 
 
 def _section_core(section: str) -> str:
@@ -72,11 +148,27 @@ def _hit_score(hit: RetrievalHit) -> float:
 def _crash_loop_priority(hit: RetrievalHit) -> int:
     lowered_section = (hit.section or "").lower()
     lowered_text = (hit.text or "").lower()
+    crash_signal = (
+        "crashloopbackoff" in lowered_text
+        or "crash loop" in lowered_text
+        or "back-off restarting failed container" in lowered_text
+        or "backoff" in lowered_text
+        or "restartcount" in lowered_text
+        or "oomkilled" in lowered_text
+        or "livenessprobe" in lowered_text
+        or "readinessprobe" in lowered_text
+    )
+    if not crash_signal and (
+        "source-to-image" in lowered_section
+        or "source-to-image" in lowered_text
+        or "s2i" in lowered_section
+    ):
+        return 6
     if (
         "애플리케이션 오류 조사" in hit.section
         or "애플리케이션 진단 데이터 수집" in hit.section
-        or "oc describe pod/" in lowered_text
-        or "oc logs -f pod/" in lowered_text
+        or ("oc describe pod/" in lowered_text and crash_signal)
+        or ("oc logs -f pod/" in lowered_text and crash_signal)
         or "애플리케이션 pod와 관련된 이벤트" in hit.text
     ):
         return 0
@@ -212,6 +304,130 @@ def _rbac_signal(hit: RetrievalHit) -> bool:
             )
         )
     )
+
+
+def _scc_signal(hit: RetrievalHit) -> bool:
+    haystack = " ".join((hit.book_slug or "", hit.section or "", hit.anchor or "", hit.text or "")).lower()
+    return any(
+        token in haystack
+        for token in (
+            "securitycontextconstraints",
+            "security context constraints",
+            "scc",
+        )
+    )
+
+
+def _is_oc_login_query(query: str) -> bool:
+    return bool(OC_LOGIN_QUERY_RE.search(query or ""))
+
+
+def _is_auth_can_i_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return bool(AUTH_CAN_I_QUERY_RE.search(query or "")) or (
+        ("oc auth can-i" in lowered or ("delete" in lowered and ("pod" in lowered or "pods" in lowered)))
+        and ("namespace" in lowered or "권한" in lowered or "할 수" in lowered)
+    )
+
+
+def _is_scc_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return "scc" in lowered or "securitycontextconstraints" in lowered
+
+
+def _oc_login_hit_priority(hit: RetrievalHit) -> tuple[int, int, int]:
+    haystack = " ".join((hit.section or "", hit.anchor or "", hit.text or "")).lower()
+    if "oc login" not in haystack and "oauth" not in haystack:
+        return (9, 9, 9)
+    book_rank = {
+        "cli_tools": 0,
+        "authentication_and_authorization": 1,
+        "postinstallation_configuration": 2,
+        "release_notes": 8,
+    }.get(hit.book_slug, 6)
+    release_note_noise = 1 if hit.book_slug == "release_notes" and "oc adm node-image" in haystack else 0
+    command_rank = 0 if "oc login" in haystack else 1
+    return (release_note_noise, book_rank, command_rank)
+
+
+def _auth_can_i_hit_priority(hit: RetrievalHit) -> tuple[int, int, int]:
+    haystack = " ".join((hit.section or "", hit.anchor or "", hit.text or "")).lower()
+    if "oc auth can-i" in haystack:
+        command_rank = 0
+    elif any(
+        token in haystack
+        for token in (
+            "selfsubjectaccessreview",
+            "selfsubjectrulesreview",
+            "subjectaccessreview",
+            "authorization",
+            "rolebinding",
+            "rbac",
+        )
+    ):
+        command_rank = 1
+    else:
+        command_rank = 9
+    book_rank = {
+        "cli_tools": 0,
+        "authentication_and_authorization": 1,
+        "postinstallation_configuration": 2,
+    }.get(hit.book_slug, 7)
+    delete_noise = 1 if hit.section.strip().lower().endswith("oc delete") else 0
+    return (command_rank, book_rank, delete_noise)
+
+
+def _topic_preferred_books(query: str) -> tuple[str, ...]:
+    lowered = (query or "").lower()
+    if "route" in lowered and any(token in lowered for token in ("tls", "인증서", "certificate", "cert")):
+        return ("ingress_and_load_balancing", "security_and_compliance", "authentication_and_authorization")
+    if any(token in lowered for token in ("ocp-certificates", "인증서", "certificate", "cert")):
+        return ("security_and_compliance", "authentication_and_authorization", "cli_tools")
+    if "dns" in lowered:
+        return ("networking_overview", "networking_operators", "ingress_and_load_balancing")
+    if "networkpolicy" in lowered or "network policy" in lowered:
+        return ("network_security", "networking_overview")
+    if "service endpoint" in lowered or ("service" in lowered and "route" in lowered):
+        return ("networking_overview", "ingress_and_load_balancing", "nodes")
+    if "route" in lowered or "ingress" in lowered:
+        return ("ingress_and_load_balancing", "networking_overview", "networking_operators")
+    if "egress" in lowered:
+        return ("networking_overview", "network_security", "egress")
+    if any(token in lowered for token in ("internal registry", "image registry", "내부 image registry", "내부 이미지 레지스트리", "레지스트리")):
+        return ("registry", "images", "storage", "postinstallation_configuration")
+    if "clusteroperator" in lowered or "cluster operator" in lowered:
+        return ("updating_clusters", "operators", "cli_tools", "nodes")
+    if any(token in lowered for token in ("업데이트", "update", "upgrade")) and any(token in lowered for token in ("노드", "node", "clusteroperator", "clusteroperator")):
+        return ("updating_clusters", "operators", "nodes", "cli_tools")
+    if "terminating" in lowered or "finalizer" in lowered:
+        return ("applications", "support", "nodes")
+    if any(token in lowered for token in ("prometheus", "alertmanager", "firing alert", "경고", "alert")):
+        return ("monitoring", "observability_overview", "support")
+    if any(token in lowered for token in ("이전 로그", "--previous", "previous log", "재시작한 컨테이너")):
+        return ("cli_tools", "support", "nodes")
+    if "event" in lowered or "이벤트" in lowered:
+        return ("cli_tools", "nodes", "support")
+    if _is_scc_query(query):
+        return ("authentication_and_authorization", "security_and_compliance")
+    if _is_auth_can_i_query(query):
+        return ("cli_tools", "authentication_and_authorization", "postinstallation_configuration")
+    if "serviceaccount" in lowered or "service account" in lowered:
+        return ("authentication_and_authorization", "postinstallation_configuration")
+    if "audit" in lowered or "감사" in lowered:
+        return ("security_and_compliance", "logging")
+    if "resourcequota" in lowered or "quota" in lowered:
+        return ("applications", "building_applications", "nodes", "quota")
+    if "limitrange" in lowered or "limit range" in lowered:
+        return ("applications", "building_applications", "nodes")
+    if "hpa" in lowered or "horizontalpodautoscaler" in lowered:
+        return ("nodes", "applications", "monitoring")
+    if "pdb" in lowered or "poddisruptionbudget" in lowered:
+        return ("nodes", "applications", "building_applications")
+    if "day-2" in lowered or "day2" in lowered:
+        return ("postinstallation_configuration", "updating_clusters", "monitoring")
+    if all(token in lowered for token in ("monitoring", "logging")) or "observability" in lowered:
+        return ("monitoring", "logging", "observability_overview")
+    return ()
 
 
 def _is_troubleshooting_doc_locator_query(query: str) -> bool:
@@ -582,6 +798,8 @@ def _select_hits(
     )
     is_procedure_query = any(
         [
+            _is_oc_login_query(normalized),
+            _is_auth_can_i_query(normalized),
             has_backup_restore_intent(normalized),
             has_crash_loop_troubleshooting_intent(normalized),
             has_rbac_intent(normalized),
@@ -599,18 +817,63 @@ def _select_hits(
     top_score = _hit_score(support_window[0])
     top_book = support_window[0].book_slug
 
-    if has_operator_concept_intent(normalized):
+    cross_document_follow = is_cross_document_follow_query(normalized)
+    topic_preferred_books = _topic_preferred_books(normalized)
+
+    if _is_oc_login_query(normalized):
+        ranked_hits = sorted(
+            ranked_hits,
+            key=lambda hit: (
+                *_oc_login_hit_priority(hit),
+                -_hit_score(hit),
+                hit.book_slug,
+                hit.chunk_id,
+            ),
+        )
+        support_window = ranked_hits[: max(max_chunks * 2, 8)]
+        top_score = _hit_score(support_window[0])
+        top_book = support_window[0].book_slug
+    elif _is_auth_can_i_query(normalized):
+        ranked_hits = sorted(
+            ranked_hits,
+            key=lambda hit: (
+                *_auth_can_i_hit_priority(hit),
+                -_hit_score(hit),
+                hit.book_slug,
+                hit.chunk_id,
+            ),
+        )
+        support_window = ranked_hits[: max(max_chunks * 2, 8)]
+        top_score = _hit_score(support_window[0])
+        top_book = support_window[0].book_slug
+    elif topic_preferred_books:
+        preferred_order = {book_slug: index for index, book_slug in enumerate(topic_preferred_books)}
+        ranked_hits = sorted(
+            ranked_hits,
+            key=lambda hit: (
+                preferred_order.get(hit.book_slug, 20),
+                _procedure_chunk_priority(hit),
+                -_hit_score(hit),
+                hit.book_slug,
+                hit.chunk_id,
+            ),
+        )
+        support_window = ranked_hits[: max(max_chunks * 2, 8)]
+        top_score = _hit_score(support_window[0])
+        top_book = support_window[0].book_slug
+    elif has_operator_concept_intent(normalized):
         preferred_order = {
-            "operators": 0,
-            "extensions": 1,
-            "overview": 2,
-            "architecture": 3,
-            "installation_overview": 4,
+            "monitoring": 0,
+            "operators": 1,
+            "extensions": 2,
+            "overview": 3,
+            "architecture": 4,
+            "installation_overview": 5,
         }
         ranked_hits = sorted(
             ranked_hits,
             key=lambda hit: (
-                preferred_order.get(hit.book_slug, 9),
+                preferred_order.get(hit.book_slug, 9 if cross_document_follow else 8),
                 -_hit_score(hit),
                 hit.book_slug,
                 hit.chunk_id,
@@ -914,18 +1177,33 @@ def _select_hits(
     allowed_books = {top_book}
     locked_allowed_books = False
     if has_operator_concept_intent(normalized):
-        operator_family = tuple(
-            book_slug
-            for book_slug in ("operators", "extensions", "overview")
-            if best_book_scores.get(book_slug, 0.0) > 0.0
-        )
-        if operator_family:
-            allowed_books = set(operator_family)
-            locked_allowed_books = True
+        if cross_document_follow:
+            operator_family = tuple(
+                book_slug
+                for book_slug in ("monitoring", "operators", "extensions", "overview")
+                if best_book_scores.get(book_slug, 0.0) > 0.0
+            )
+            if operator_family:
+                allowed_books = set(operator_family)
+                locked_allowed_books = True
+            else:
+                for book_slug in ("monitoring", "operators", "extensions", "overview"):
+                    if best_book_scores.get(book_slug, 0.0) >= top_score * 0.50:
+                        allowed_books.add(book_slug)
+            locked_allowed_books = bool(allowed_books)
         else:
-            for book_slug in ("operators", "extensions", "overview", "architecture", "installation_overview"):
-                if best_book_scores.get(book_slug, 0.0) >= top_score * 0.62:
-                    allowed_books.add(book_slug)
+            operator_family = tuple(
+                book_slug
+                for book_slug in ("operators", "extensions", "overview")
+                if best_book_scores.get(book_slug, 0.0) > 0.0
+            )
+            if operator_family:
+                allowed_books = set(operator_family)
+                locked_allowed_books = True
+            else:
+                for book_slug in ("operators", "extensions", "overview", "architecture", "installation_overview"):
+                    if best_book_scores.get(book_slug, 0.0) >= top_score * 0.62:
+                        allowed_books.add(book_slug)
     if has_openshift_kubernetes_compare_intent(normalized):
         compare_books = tuple(
             book_slug
@@ -980,6 +1258,45 @@ def _select_hits(
                 "cli_tools",
             ):
                 if best_book_scores.get(book_slug, 0.0) >= top_score * 0.5:
+                    allowed_books.add(book_slug)
+    if _is_oc_login_query(normalized):
+        login_books = tuple(
+            book_slug
+            for book_slug in ("cli_tools", "authentication_and_authorization", "postinstallation_configuration")
+            if best_book_scores.get(book_slug, 0.0) > 0.0
+        )
+        if login_books:
+            allowed_books = set(login_books)
+            locked_allowed_books = True
+        else:
+            for book_slug in ("cli_tools", "authentication_and_authorization", "postinstallation_configuration"):
+                if best_book_scores.get(book_slug, 0.0) >= top_score * 0.44:
+                    allowed_books.add(book_slug)
+    if _is_auth_can_i_query(normalized):
+        can_i_books = tuple(
+            book_slug
+            for book_slug in ("cli_tools", "authentication_and_authorization", "postinstallation_configuration")
+            if best_book_scores.get(book_slug, 0.0) > 0.0
+        )
+        if can_i_books:
+            allowed_books = set(can_i_books)
+            locked_allowed_books = True
+        else:
+            for book_slug in ("cli_tools", "authentication_and_authorization", "postinstallation_configuration"):
+                if best_book_scores.get(book_slug, 0.0) >= top_score * 0.44:
+                    allowed_books.add(book_slug)
+    if topic_preferred_books:
+        topic_books = tuple(
+            book_slug
+            for book_slug in topic_preferred_books
+            if best_book_scores.get(book_slug, 0.0) > 0.0
+        )
+        if topic_books:
+            allowed_books = set(topic_books)
+            locked_allowed_books = True
+        else:
+            for book_slug in topic_preferred_books:
+                if best_book_scores.get(book_slug, 0.0) >= top_score * 0.44:
                     allowed_books.add(book_slug)
     if has_pod_lifecycle_concept_intent(normalized):
         for book_slug in ("nodes", "overview", "architecture", "building_applications"):
@@ -1135,6 +1452,8 @@ def _select_hits(
         score_cutoff = top_score * 0.5
     if has_registry_storage_ops_intent(normalized) and top_score > 0:
         score_cutoff = top_score * 0.46
+    if _is_scc_query(normalized) or _is_auth_can_i_query(normalized):
+        score_cutoff = -999.0
     selected: list[RetrievalHit] = []
     per_book_counts: Counter[str] = Counter()
     per_book_limit = 2 if has_crash_loop_troubleshooting_intent(normalized) else 3 if is_procedure_query else 2
@@ -1261,6 +1580,26 @@ def assemble_context(
         session_context=session_context,
         max_chunks=max_chunks,
     )
+    if not selected_hits and _is_scc_query(query):
+        selected_hits = sorted(
+            [hit for hit in hits if _scc_signal(hit)],
+            key=lambda hit: (
+                0 if hit.book_slug == "authentication_and_authorization" else 1,
+                -_hit_score(hit),
+                hit.book_slug,
+                hit.chunk_id,
+            ),
+        )[:max_chunks]
+    if not selected_hits and _is_auth_can_i_query(query):
+        selected_hits = sorted(
+            [hit for hit in hits if _auth_can_i_hit_priority(hit)[0] < 9],
+            key=lambda hit: (
+                _auth_can_i_hit_priority(hit),
+                -_hit_score(hit),
+                hit.book_slug,
+                hit.chunk_id,
+            ),
+        )[:max_chunks]
     if overlay_exact_scores or overlay_book_scores:
         selected_hits = sorted(
             selected_hits,
@@ -1307,6 +1646,7 @@ def assemble_context(
         seen_signatures.add(signature)
         if section_core and anchor_root:
             seen_mirror_sections.setdefault(mirror_signature, hit.book_slug)
+        citation_excerpt = excerpt[:max_chars_per_chunk].strip()
         citations.append(
             Citation(
                 index=len(citations) + 1,
@@ -1316,14 +1656,14 @@ def assemble_context(
                 anchor=hit.anchor,
                 source_url=hit.source_url,
                 viewer_path=hit.viewer_path,
-                excerpt=excerpt[:max_chars_per_chunk].strip(),
+                excerpt=citation_excerpt,
                 section_path=hit.section_path,
                 section_path_label=" > ".join(hit.section_path) if hit.section_path else hit.section,
                 chunk_type=hit.chunk_type,
                 semantic_role=hit.semantic_role,
                 source_collection=hit.source_collection,
                 block_kinds=hit.block_kinds,
-                cli_commands=hit.cli_commands,
+                cli_commands=_citation_cli_commands(hit, citation_excerpt),
                 error_strings=hit.error_strings,
                 k8s_objects=hit.k8s_objects,
                 operator_names=hit.operator_names,

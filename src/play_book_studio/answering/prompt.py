@@ -115,6 +115,9 @@ def build_messages(
         "명령이나 절차가 근거에 있으면 코드 블록이나 단계형 설명으로 보여라. "
         "bare command만 던지지 말고, 한 줄 설명 -> 코드 블록 -> 짧은 범위/예시 순서로 답하라. "
         "트러블슈팅은 필요한 흐름과 이유와 확인 포인트를 충분히 설명하라. "
+        "모니터링 알림, 플레이북 순서, 학습형 질문은 하나의 명령으로 축약하지 말고 추천 순서, 그 순서의 이유, 각 단계에서 보는 신호를 함께 설명하라. "
+        "If the user asks how to follow monitoring and operators documents together during an Operator incident, do not answer with only one document path. Explain the joint flow: monitoring first for symptom/scope, then operators for OLM/CSV/OperatorCondition diagnosis, then loop back to monitoring/events to confirm recovery. "
+        "이미지, 화면, 다이어그램을 명시적으로 묻지 않으면 이미지 캡션이나 그림 설명을 답변 본문에 끌어오지 마라. "
         "관련 문서를 찾았는데 세부가 일부 비어 있어도, 근거가 허용하는 첫 확인 단계와 첫 명령부터 안내하라. "
         "개념 질문이면 정의 1문장 뒤에 실제 사용 맥락과 운영상 의미를 짧게 붙여라. "
         "질문이 애매하면 무엇이 불명확한지 한 줄로 말하고, 한 개의 짧은 확인 질문만 붙여라. "
@@ -139,6 +142,8 @@ def build_messages(
         "- 답변 본문은 현재 질문에 바로 답할 것\n"
         "- 참조문서 요약본처럼 쓰지 말고, 사용자를 위한 가이드처럼 쓸 것\n"
         "- 운영/트러블슈팅 질문이면 '첫 행동 1문장 -> 코드 블록 또는 단계 -> 짧은 확인/주의사항' 순서를 우선할 것\n"
+        "- 모니터링 알림/플레이북 순서/학습형 질문은 단일 명령 답변으로 끝내지 말고, 운영자가 보는 순서와 판단 기준을 풀이할 것\n"
+        "- 이미지/화면/다이어그램을 직접 묻지 않으면 이미지 캡션이나 그림 설명은 답변에서 제외할 것\n"
         "- 근거에 ordered_cli_commands가 있으면 step 순서를 바꾸지 말 것\n"
         "- 질문이 '가장 먼저/어디부터/첫 단계'를 묻는 경우 ordered_cli_commands의 step 1만 첫 행동으로 답할 것\n"
         "- 개념 질문이면 '정의 -> 실제 사용 맥락 -> 운영상 의미' 순서로 짧게 답할 것\n"
@@ -150,7 +155,7 @@ def build_messages(
         "- annotation/key/flag 값을 묻는 질문에서는 값과 근거만 답하고, 문서에 없는 후속 명령은 만들지 말 것\n"
         "- 질문이 애매하면 한 줄 clarification만 할 것\n"
         "- 질문이 한국어면 서술 문장은 한국어로만 쓸 것\n"
-        "- 답변은 보통 3개 이하의 짧은 문단이나 bullet 안에서 끝낼 것\n"
+        "- 답변은 보통 3~5개의 읽기 쉬운 문단이나 bullet 안에서 끝낼 것\n"
     )
     if shape_hint:
         user += f"- 답변 구조 힌트: {shape_hint}\n"

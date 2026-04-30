@@ -58,6 +58,11 @@ TECHNICAL_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 STRUCTURED_QUERY_RE = re.compile(r"[/<>=:\d]")
+OBSERVABILITY_COMPARE_RE = re.compile(
+    r"(monitoring|모니터링).*(logging|로깅).*(observability|관측|옵저버빌리티).*(구분|차이|설명|비교)"
+    r"|(?:구분|차이|설명|비교).*(monitoring|모니터링).*(logging|로깅).*(observability|관측|옵저버빌리티)",
+    re.IGNORECASE,
+)
 
 
 def _friendly_intro_answer() -> str:
@@ -145,7 +150,7 @@ def route_non_rag(
             ),
         )
     if OCP_LEARNING_ADVICE_RE.search(normalized):
-        return RoutedResponse(route="guide", answer=_ocp_learning_advice_answer())
+        return None
     # broad intro는 official overview/architecture hit를 붙여 답해야 하므로
     # 하드코딩 안내문으로 종료하지 않고 retrieval로 넘긴다.
     if OCP_BASIC_INTRO_RE.match(normalized):
@@ -165,10 +170,10 @@ def route_non_rag(
         return RoutedResponse(
             route="clarification",
             answer=(
-                "답변: 보안 범위를 먼저 정해야 합니다. 플랫폼 보안, 인증·권한, 네트워크 보안 중 어디부터 볼까요?"
+                "답변: 어떤 보안 문제인지 범위를 먼저 정해야 합니다. 플랫폼 보안, 인증·권한, 네트워크 보안 중 어디부터 볼까요?"
             ),
         )
-    if has_multiple_entity_ambiguity(normalized):
+    if has_multiple_entity_ambiguity(normalized) and not OBSERVABILITY_COMPARE_RE.search(normalized):
         return RoutedResponse(
             route="clarification",
             answer=(
@@ -186,7 +191,7 @@ def route_non_rag(
         return RoutedResponse(
             route="clarification",
             answer=(
-                "답변: 설치 후 작업 범위를 먼저 정해야 합니다. 네트워크, 보안·인증, 레지스트리·스토리지, 노드·머신셋, 모니터링 중 어디부터 볼까요?"
+                "답변: 설치 후 무엇을 먼저 할지 작업 범위를 먼저 정해야 합니다. 네트워크, 보안·인증, 레지스트리·스토리지, 노드·머신셋, 모니터링 중 어디부터 볼까요?"
             ),
         )
     out_of_corpus_version = detect_out_of_corpus_version(normalized, corpus_version=corpus_version)
@@ -202,7 +207,7 @@ def route_non_rag(
         return RoutedResponse(
             route="no_answer",
             answer=(
-                f"답변: 현재 코퍼스에는 {unsupported_product} 관련 설치나 비교 절차를 답할 근거가 없습니다."
+                "답변: 현재 코퍼스에는 해당 외부 제품 또는 리소스 절차를 답할 근거가 없습니다."
             ),
         )
     if has_doc_locator_intent(normalized) or has_rbac_intent(normalized):

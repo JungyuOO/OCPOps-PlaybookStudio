@@ -6,10 +6,113 @@ from .models import RetrievalHit
 from .scoring_signals import ScoreSignals
 
 
+def _has_operator_status_signal(query: str) -> bool:
+    lowered = (query or "").lower()
+    if "operator" not in lowered:
+        return False
+    return any(
+        token in lowered
+        for token in (
+            "degraded",
+            "csv",
+            "clusterserviceversion",
+            "subscription",
+            "installplan",
+            "operatorcondition",
+            "상태",
+            "확인",
+            "장애",
+            "준비",
+        )
+    )
+
+
+def _has_mco_status_signal(query: str) -> bool:
+    lowered = (query or "").lower()
+    has_mco = (
+        "machine config operator" in lowered
+        or "machineconfigpool" in lowered
+        or "machine config pool" in lowered
+        or "mco" in lowered
+        or "머신컨피그" in query
+        or "머신 구성" in query
+    )
+    if not has_mco:
+        return False
+    return any(
+        token in lowered
+        for token in (
+            "status",
+            "state",
+            "ready",
+            "notready",
+            "degraded",
+            "명령",
+            "상태",
+            "확인",
+            "늦",
+            "적용",
+            "어디부터",
+            "먼저",
+        )
+    )
+
+
 def apply_operator_core_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
     lowered_text = hit.text.lower()
     lowered_section = hit.section.lower()
     context_text = signals.context_text
+    query_text = signals.query or ""
+    lowered_query = query_text.lower()
+    operator_status_signal = _has_operator_status_signal(query_text)
+    mco_status_signal = _has_mco_status_signal(query_text)
+
+    if operator_status_signal and not mco_status_signal:
+        if hit.book_slug in {"operators", "postinstallation_configuration"}:
+            hit.fused_score *= 1.18
+        if any(
+            token in lowered_text or token in lowered_section
+            for token in (
+                "clusterserviceversion",
+                "cluster service version",
+                "csv",
+                "subscription",
+                "installplan",
+                "operatorcondition",
+                "operator group",
+                "operatorgroup",
+            )
+        ):
+            hit.fused_score *= 1.24
+        if "packagemanifests" in lowered_text and not any(
+            token in lowered_query for token in ("package", "catalog", "카탈로그", "설치")
+        ):
+            hit.fused_score *= 0.62
+        if hit.book_slug in {"installation_overview", "web_console", "release_notes"}:
+            hit.fused_score *= 0.58
+
+    if mco_status_signal:
+        if hit.book_slug in {"machine_configuration", "nodes", "operators", "machine_management"}:
+            hit.fused_score *= 1.24
+        if any(
+            token in lowered_text or token in lowered_section
+            for token in (
+                "machine config operator",
+                "machineconfigpool",
+                "machine config pool",
+                "machine config daemon",
+                "clusteroperator",
+                "node status",
+                "notready",
+            )
+        ):
+            hit.fused_score *= 1.22
+        if hit.book_slug == "etcd" and "etcd" not in lowered_query:
+            hit.fused_score *= 0.28
+        if hit.book_slug == "advanced_networking" and "mtu" in f"{lowered_section} {lowered_text}" and "mtu" not in lowered_query:
+            hit.fused_score *= 0.32
+        if hit.book_slug in {"backup_and_restore", "disconnected_environments"}:
+            hit.fused_score *= 0.55
 
     if signals.operator_concept_intent:
         if hit.book_slug == "extensions":

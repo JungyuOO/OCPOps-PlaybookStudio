@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from play_book_studio.answering.answerer import ChatAnswerer
 from play_book_studio.retrieval.models import SessionContext
+
+if TYPE_CHECKING:
+    from play_book_studio.answering.answerer import ChatAnswerer
 
 
 HANGUL_RE = re.compile(r"[\uac00-\ud7a3]")
@@ -35,8 +37,30 @@ def _ordered_unique_books(rows: list[dict[str, Any]]) -> list[str]:
     return ordered
 
 
+def _citation_search_text(citation: Any) -> str:
+    if isinstance(citation, dict):
+        values = [
+            citation.get("book_slug"),
+            citation.get("section"),
+            citation.get("section_path_label"),
+            citation.get("excerpt"),
+            " ".join(str(item) for item in citation.get("cli_commands", []) if str(item).strip()),
+            " ".join(str(item) for item in citation.get("verification_hints", []) if str(item).strip()),
+        ]
+    else:
+        values = [
+            getattr(citation, "book_slug", ""),
+            getattr(citation, "section", ""),
+            getattr(citation, "section_path_label", ""),
+            getattr(citation, "excerpt", ""),
+            " ".join(str(item) for item in (getattr(citation, "cli_commands", ()) or ()) if str(item).strip()),
+            " ".join(str(item) for item in (getattr(citation, "verification_hints", ()) or ()) if str(item).strip()),
+        ]
+    return _normalize_for_contains(" ".join(str(value or "") for value in values))
+
+
 def evaluate_case(
-    answerer: ChatAnswerer,
+    answerer: "ChatAnswerer",
     case: dict[str, Any],
     *,
     top_k: int,
@@ -63,7 +87,11 @@ def evaluate_case(
     forbidden_books = list(case.get("forbidden_book_slugs", []))
     must_include_terms = [str(term) for term in case.get("must_include_terms", [])]
     must_not_include_terms = [str(term) for term in case.get("must_not_include_terms", [])]
+    expected_citation_terms = [str(term) for term in case.get("expected_citation_terms", [])]
+    forbidden_citation_terms = [str(term) for term in case.get("forbidden_citation_terms", [])]
+    expected_primary_books = [str(book_slug) for book_slug in case.get("expected_primary_book_slugs", [])]
     expected_book_set = set(expected_books)
+    expected_primary_book_set = set(expected_primary_books)
     forbidden_book_set = set(forbidden_books)
     clarification_expected = bool(case.get("clarification_expected", False))
     no_answer_expected = bool(case.get("no_answer_expected", False))
@@ -89,8 +117,23 @@ def evaluate_case(
     ]
     must_include_pass = not missing_required_terms
     must_exclude_pass = not forbidden_answer_terms
+    citation_search_text = "\n".join(_citation_search_text(citation) for citation in result.citations)
+    missing_citation_terms = [
+        term for term in expected_citation_terms if _normalize_for_contains(term) not in citation_search_text
+    ]
+    forbidden_citation_term_hits = [
+        term for term in forbidden_citation_terms if _normalize_for_contains(term) in citation_search_text
+    ]
+    citation_terms_pass = not missing_citation_terms
+    citation_forbidden_terms_pass = not forbidden_citation_term_hits
 
     cited_expected_book = any(book_slug in expected_book_set for book_slug in cited_books)
+    primary_cited_book = cited_books[0] if cited_books else ""
+    primary_expected_book = (
+        primary_cited_book in expected_primary_book_set
+        if expected_primary_book_set
+        else True
+    )
     unexpected_cited_books = [
         book_slug for book_slug in cited_books if book_slug not in expected_book_set
     ]
@@ -125,6 +168,9 @@ def evaluate_case(
             not forbidden_cited_books,
             must_include_pass,
             must_exclude_pass,
+            citation_terms_pass,
+            citation_forbidden_terms_pass,
+            primary_expected_book,
         ]
     )
     clarification_pass = all(
@@ -137,6 +183,9 @@ def evaluate_case(
             not forbidden_cited_books,
             must_include_pass,
             must_exclude_pass,
+            citation_terms_pass,
+            citation_forbidden_terms_pass,
+            primary_expected_book,
         ]
     )
     no_answer_pass = all(
@@ -150,6 +199,9 @@ def evaluate_case(
             not forbidden_cited_books,
             must_include_pass,
             must_exclude_pass,
+            citation_terms_pass,
+            citation_forbidden_terms_pass,
+            primary_expected_book,
         ]
     )
     pass_all = standard_pass or clarification_pass or no_answer_pass
@@ -167,9 +219,12 @@ def evaluate_case(
         "question": case["query"],
         "query": case["query"],
         "expected_book_slugs": expected_books,
+        "expected_primary_book_slugs": expected_primary_books,
         "forbidden_book_slugs": forbidden_books,
         "must_include_terms": must_include_terms,
         "must_not_include_terms": must_not_include_terms,
+        "expected_citation_terms": expected_citation_terms,
+        "forbidden_citation_terms": forbidden_citation_terms,
         "clarification_expected": clarification_expected,
         "no_answer_expected": no_answer_expected,
         "rewritten_query": result.rewritten_query,
@@ -187,6 +242,12 @@ def evaluate_case(
         "must_exclude_pass": must_exclude_pass,
         "missing_required_terms": missing_required_terms,
         "forbidden_answer_terms": forbidden_answer_terms,
+        "citation_terms_pass": citation_terms_pass,
+        "citation_forbidden_terms_pass": citation_forbidden_terms_pass,
+        "missing_citation_terms": missing_citation_terms,
+        "forbidden_citation_term_hits": forbidden_citation_term_hits,
+        "primary_expected_book": primary_expected_book,
+        "primary_cited_book": primary_cited_book,
         "cited_expected_book": cited_expected_book,
         "unexpected_cited_books": unexpected_cited_books,
         "forbidden_cited_books": forbidden_cited_books,
@@ -250,6 +311,10 @@ def _classify_failure_root_cause(detail: dict[str, Any]) -> tuple[str, str]:
         return ("provenance", "retrieval found the right family but final citations did not preserve it")
     if detail.get("missing_required_terms") or detail.get("forbidden_answer_terms"):
         return ("generation", "answer text violated the required or forbidden term contract")
+    if detail.get("missing_citation_terms") or detail.get("forbidden_citation_term_hits"):
+        return ("provenance", "final citation chunks did not satisfy the expected grounding terms")
+    if detail.get("primary_expected_book") is False:
+        return ("provenance", "primary citation came from an unexpected playbook family")
     return ("generation", "answer quality failed after retrieval without a provenance miss")
 
 
@@ -308,6 +373,9 @@ def summarize_case_results(details: list[dict[str, Any]]) -> dict[str, Any]:
             ),
             "must_include_rate": _rate(bucket, "must_include_pass"),
             "must_exclude_rate": _rate(bucket, "must_exclude_pass"),
+            "citation_terms_rate": _rate(bucket, "citation_terms_pass"),
+            "citation_forbidden_terms_rate": _rate(bucket, "citation_forbidden_terms_pass"),
+            "primary_expected_book_rate": _rate(bucket, "primary_expected_book"),
             "warning_free_rate": _rate(bucket, "warning_free"),
             "pass_rate": _rate(bucket, "pass"),
         }
@@ -330,9 +398,12 @@ def summarize_case_results(details: list[dict[str, Any]]) -> dict[str, Any]:
             "question": detail["question"],
             "rewritten_query": detail.get("rewritten_query", ""),
             "expected_book_slugs": detail["expected_book_slugs"],
+            "expected_primary_book_slugs": detail.get("expected_primary_book_slugs", []),
             "forbidden_book_slugs": detail.get("forbidden_book_slugs", []),
             "must_include_terms": detail.get("must_include_terms", []),
             "must_not_include_terms": detail.get("must_not_include_terms", []),
+            "expected_citation_terms": detail.get("expected_citation_terms", []),
+            "forbidden_citation_terms": detail.get("forbidden_citation_terms", []),
             "clarification_expected": detail.get("clarification_expected", False),
             "no_answer_expected": detail.get("no_answer_expected", False),
             "retrieved_books": detail.get("retrieved_books", []),
@@ -341,6 +412,9 @@ def summarize_case_results(details: list[dict[str, Any]]) -> dict[str, Any]:
             "forbidden_cited_books": detail.get("forbidden_cited_books", []),
             "missing_required_terms": detail.get("missing_required_terms", []),
             "forbidden_answer_terms": detail.get("forbidden_answer_terms", []),
+            "missing_citation_terms": detail.get("missing_citation_terms", []),
+            "forbidden_citation_term_hits": detail.get("forbidden_citation_term_hits", []),
+            "primary_cited_book": detail.get("primary_cited_book", ""),
             "citation_precision": detail.get("citation_precision", 0.0),
             "cited_indices": detail.get("cited_indices", []),
             "warnings": detail.get("warnings", []),

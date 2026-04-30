@@ -605,12 +605,41 @@ def _rebalance_mco_concept_hits(
     hybrid_hits: list[RetrievalHit],
     reranked_hits: list[RetrievalHit],
 ) -> list[RetrievalHit]:
+    lowered_query = (query or "").lower()
+    mco_ops_signal = (
+        (
+            "machine config operator" in lowered_query
+            or "machineconfigpool" in lowered_query
+            or "machine config pool" in lowered_query
+            or "mco" in lowered_query
+            or "머신컨피그" in query
+            or "머신 구성" in query
+        )
+        and any(
+            token in lowered_query
+            for token in (
+                "status",
+                "state",
+                "ready",
+                "notready",
+                "degraded",
+                "상태",
+                "명령",
+                "확인",
+                "늦",
+                "적용",
+                "어디부터",
+                "먼저",
+            )
+        )
+    )
     preferred_order = {
         "machine_configuration": 0,
         "operators": 1,
-        "machine_management": 2,
-        "architecture": 3,
-        "overview": 4,
+        "nodes": 2,
+        "machine_management": 3,
+        "architecture": 4,
+        "overview": 5,
     }
 
     def _mco_signal(hit: RetrievalHit) -> bool:
@@ -629,7 +658,7 @@ def _rebalance_mco_concept_hits(
             or lowered_anchor.endswith("mco")
         )
 
-    explicit_mco_intent = has_mco_concept_intent(query)
+    explicit_mco_intent = has_mco_concept_intent(query) or mco_ops_signal
     follow_up_mco_intent = has_follow_up_reference(query) and any(
         _mco_signal(hit) for hit in hybrid_hits[:8]
     )
@@ -645,11 +674,28 @@ def _rebalance_mco_concept_hits(
         lowered_section = (hit.section or "").lower()
         lowered_anchor = (hit.anchor or "").lower()
         lowered_text = (hit.text or "").lower()
+        hit_text = f"{lowered_section} {lowered_anchor} {lowered_text}"
         book_priority = preferred_order.get(hit.book_slug, 9)
+        if mco_ops_signal and hit.book_slug == "updating_clusters" and "machine config operator" in hit_text:
+            book_priority = 1
+        elif mco_ops_signal and hit.book_slug == "operators" and "machine config" not in hit_text:
+            book_priority = 8
+
         if hit.book_slug == "release_notes":
             noise_priority = 5
         elif hit.book_slug == "support":
             noise_priority = 4
+        elif mco_ops_signal and hit.book_slug == "operators" and "machine config" not in hit_text:
+            noise_priority = 7
+        elif mco_ops_signal and hit.book_slug == "etcd" and "etcd" not in lowered_query:
+            noise_priority = 8
+        elif (
+            mco_ops_signal
+            and hit.book_slug == "advanced_networking"
+            and "mtu" not in lowered_query
+            and "mtu" in f"{lowered_section} {lowered_text}"
+        ):
+            noise_priority = 7
         elif hit.book_slug == "updating_clusters" and (
             "일반 용어" in hit.section or "glossary" in lowered_section
         ):
@@ -716,6 +762,23 @@ def _rebalance_certificate_monitor_hits(
 ) -> list[RetrievalHit]:
     if not has_certificate_monitor_intent(query):
         return reranked_hits
+    lowered_query = (query or "").lower()
+    if "route" in lowered_query and any(token in lowered_query for token in ("tls", "cert", "certificate", "인증서")):
+        route_cert_books = {"ingress_and_load_balancing", "security_and_compliance"}
+        if any(hit.book_slug in route_cert_books for hit in hybrid_hits[:8]):
+            hybrid_rank = {hit.chunk_id: index for index, hit in enumerate(hybrid_hits)}
+            reordered = list(reranked_hits)
+            reordered.sort(
+                key=lambda hit: (
+                    0 if hit.book_slug == "ingress_and_load_balancing" else 1 if hit.book_slug == "security_and_compliance" else 9,
+                    hybrid_rank.get(hit.chunk_id, 999),
+                    -hit.component_scores.get("pre_rerank_fused_score", 0.0),
+                    -hit.component_scores.get("reranker_score", hit.fused_score),
+                    hit.book_slug,
+                    hit.chunk_id,
+                )
+            )
+            return reordered
     preferred_books = {"cli_tools", "security_and_compliance"}
     if not hybrid_hits or not any(hit.book_slug in preferred_books for hit in hybrid_hits[:5]):
         return reranked_hits
