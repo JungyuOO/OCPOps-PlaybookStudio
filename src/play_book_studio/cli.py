@@ -116,6 +116,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compact_graph_parser.add_argument("--output", type=Path, default=None)
 
+    db_migrate_parser = subparsers.add_parser(
+        "db-migrate",
+        help="Apply PostgreSQL migrations for ingestion runtime tables",
+    )
+    db_migrate_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    db_migrate_parser.add_argument("--database-url", default="")
+    db_migrate_parser.add_argument("--migrations-dir", type=Path, default=Path("db/migrations"))
+    db_migrate_parser.add_argument("--dry-run", action="store_true")
+
     course_qa_parser = subparsers.add_parser(
         "course-qa",
         help="Generate, quality-gate, and run Study-docs course chat QA cases",
@@ -430,6 +439,59 @@ def _run_graph_compact(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_db_migrate(args: argparse.Namespace) -> int:
+    from play_book_studio.db.migrations import apply_migrations, list_migrations
+
+    root_dir = args.root_dir.resolve()
+    migrations_dir = args.migrations_dir
+    if not migrations_dir.is_absolute():
+        migrations_dir = root_dir / migrations_dir
+    migrations_dir = migrations_dir.resolve()
+
+    if args.dry_run:
+        migrations = list_migrations(migrations_dir)
+        print(
+            json.dumps(
+                {
+                    "dry_run": True,
+                    "migrations_dir": str(migrations_dir),
+                    "migration_count": len(migrations),
+                    "migrations": [
+                        {
+                            "version": migration.version,
+                            "checksum": migration.checksum,
+                            "path": str(migration.path),
+                        }
+                        for migration in migrations
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    result = apply_migrations(database_url, migrations_dir)
+    print(
+        json.dumps(
+            {
+                "dry_run": False,
+                "migrations_dir": str(migrations_dir),
+                **result,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
 def main() -> int:
     args = build_parser().parse_args()
     if args.command == "ui":
@@ -448,6 +510,8 @@ def main() -> int:
         return _run_private_lane_smoke(args)
     if args.command == "graph-compact":
         return _run_graph_compact(args)
+    if args.command == "db-migrate":
+        return _run_db_migrate(args)
     if args.command == "course-qa":
         from play_book_studio.course.quality_eval import run_quality_eval
 
