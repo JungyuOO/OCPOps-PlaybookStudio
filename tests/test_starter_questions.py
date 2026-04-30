@@ -13,7 +13,7 @@ def test_starter_questions_are_loaded_from_manifests() -> None:
     manifests = TEST_TMP / "manifests"
     course_manifests = TEST_TMP / "data" / "course_pbs" / "manifests"
     manifests.mkdir(parents=True, exist_ok=True)
-    course_manifests.mkdir(parents=True)
+    course_manifests.mkdir(parents=True, exist_ok=True)
     (manifests / "pbs_chat_quality_cases.jsonl").write_text(
         json.dumps(
             {

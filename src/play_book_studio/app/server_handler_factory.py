@@ -25,6 +25,7 @@ from play_book_studio.app.ops_console_api import (
     handle_ops_console_put as _handle_ops_console_put_request,
 )
 from play_book_studio.app.upload_api import handle_upload_ingest as _handle_upload_ingest_request
+from play_book_studio.app.learning_api import handle_learning_paths as _handle_learning_paths_request
 from play_book_studio.app.server_routes import (
     resolve_viewer_html as _resolve_viewer_html,
     handle_data_control_room as _handle_data_control_room_request,
@@ -172,6 +173,9 @@ def _build_handler(
                 return
             if request_path == "/api/studio/starter-questions":
                 _handle_studio_starter_questions(self, parsed_request.query, root_dir=root_dir)
+                return
+            if request_path == "/api/learning-paths":
+                _handle_learning_paths_request(self, parsed_request.query, root_dir=root_dir)
                 return
             if request_path == "/api/buyer-packet":
                 self._handle_buyer_packet(parsed_request.query)

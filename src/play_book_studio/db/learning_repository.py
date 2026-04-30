@@ -285,6 +285,168 @@ def load_ops_learning_guides_payload(
     }
 
 
+def load_learning_path_catalog(
+    connection,
+    *,
+    workspace_slug: str = "default",
+    slug: str = "",
+    limit: int = 50,
+) -> dict[str, Any]:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                lp.id,
+                lp.slug,
+                lp.title,
+                lp.description,
+                lp.audience,
+                lp.ocp_version,
+                lp.language,
+                lp.source_kind,
+                lp.source_ref,
+                lp.metadata,
+                ls.id,
+                ls.step_key,
+                ls.ordinal,
+                ls.title,
+                ls.objective,
+                ls.concept_slugs,
+                ls.prerequisite_step_keys,
+                ls.estimated_minutes,
+                ls.difficulty,
+                ls.lesson_markdown,
+                ls.metadata,
+                lt.id,
+                lt.task_key,
+                lt.ordinal,
+                lt.title,
+                lt.goal_markdown,
+                lt.starter_context,
+                lt.expected_outcome,
+                lt.hint_markdown,
+                lt.metadata,
+                cc.id,
+                cc.check_key,
+                cc.ordinal,
+                cc.command_pattern,
+                cc.expected_command,
+                cc.validation_kind,
+                cc.validation_payload,
+                cc.success_message,
+                cc.failure_hint,
+                cc.metadata
+            FROM learning_paths lp
+            LEFT JOIN workspaces w ON w.id = lp.workspace_id
+            LEFT JOIN learning_steps ls ON ls.learning_path_id = lp.id
+            LEFT JOIN lab_tasks lt ON lt.learning_step_id = ls.id
+            LEFT JOIN command_checks cc ON cc.lab_task_id = lt.id
+            WHERE (w.slug = %s OR lp.workspace_id IS NULL)
+              AND (%s = '' OR lp.slug = %s)
+            ORDER BY lp.updated_at DESC, lp.created_at DESC, ls.ordinal ASC, lt.ordinal ASC, cc.ordinal ASC
+            LIMIT %s
+            """,
+            (workspace_slug, slug, slug, max(1, int(limit)) * 1000),
+        )
+        rows = cursor.fetchall()
+
+    paths: dict[str, dict[str, Any]] = {}
+    steps_by_path: dict[str, dict[str, dict[str, Any]]] = {}
+    tasks_by_step: dict[str, dict[str, dict[str, Any]]] = {}
+    checks_by_task: dict[str, set[str]] = {}
+    for row in rows:
+        path_id = str(row[0] or "")
+        if not path_id:
+            continue
+        path = paths.setdefault(
+            path_id,
+            {
+                "id": path_id,
+                "slug": str(row[1] or ""),
+                "title": str(row[2] or ""),
+                "description": str(row[3] or ""),
+                "audience": str(row[4] or ""),
+                "ocp_version": str(row[5] or ""),
+                "language": str(row[6] or ""),
+                "source_kind": str(row[7] or ""),
+                "source_ref": str(row[8] or ""),
+                "metadata": _json_value(row[9], {}),
+                "steps": [],
+            },
+        )
+        step_id = str(row[10] or "")
+        if not step_id:
+            continue
+        path_steps = steps_by_path.setdefault(path_id, {})
+        step = path_steps.get(step_id)
+        if step is None:
+            step = {
+                "id": step_id,
+                "step_key": str(row[11] or ""),
+                "ordinal": int(row[12] or 0),
+                "title": str(row[13] or ""),
+                "objective": str(row[14] or ""),
+                "concept_slugs": _json_value(row[15], []),
+                "prerequisite_step_keys": _json_value(row[16], []),
+                "estimated_minutes": int(row[17] or 0),
+                "difficulty": str(row[18] or ""),
+                "lesson_markdown": str(row[19] or ""),
+                "metadata": _json_value(row[20], {}),
+                "lab_tasks": [],
+            }
+            path_steps[step_id] = step
+            path["steps"].append(step)
+
+        task_id = str(row[21] or "")
+        if not task_id:
+            continue
+        step_tasks = tasks_by_step.setdefault(step_id, {})
+        task = step_tasks.get(task_id)
+        if task is None:
+            task = {
+                "id": task_id,
+                "task_key": str(row[22] or ""),
+                "ordinal": int(row[23] or 0),
+                "title": str(row[24] or ""),
+                "goal_markdown": str(row[25] or ""),
+                "starter_context": _json_value(row[26], {}),
+                "expected_outcome": _json_value(row[27], {}),
+                "hint_markdown": str(row[28] or ""),
+                "metadata": _json_value(row[29], {}),
+                "command_checks": [],
+            }
+            step_tasks[task_id] = task
+            step["lab_tasks"].append(task)
+
+        check_id = str(row[30] or "")
+        if not check_id:
+            continue
+        task_checks = checks_by_task.setdefault(task_id, set())
+        if check_id in task_checks:
+            continue
+        task_checks.add(check_id)
+        task["command_checks"].append(
+            {
+                "id": check_id,
+                "check_key": str(row[31] or ""),
+                "ordinal": int(row[32] or 0),
+                "command_pattern": str(row[33] or ""),
+                "expected_command": str(row[34] or ""),
+                "validation_kind": str(row[35] or ""),
+                "validation_payload": _json_value(row[36], {}),
+                "success_message": str(row[37] or ""),
+                "failure_hint": str(row[38] or ""),
+                "metadata": _json_value(row[39], {}),
+            }
+        )
+    return {
+        "schema": "learning_path_catalog_v1",
+        "source": "postgres.learning_paths",
+        "count": len(paths),
+        "paths": list(paths.values())[: max(1, int(limit))],
+    }
+
+
 def persist_learning_path(
     connection,
     seed: LearningPathSeed,
@@ -336,6 +498,17 @@ def persist_learning_path(
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _json_value(value: Any, fallback: Any) -> Any:
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return fallback
+    return value
 
 
 def _outline_from_lesson_markdown(markdown: str) -> list[str]:
@@ -528,6 +701,7 @@ __all__ = [
     "StoredLearningPath",
     "build_learning_path_rows",
     "list_learning_path_summaries",
+    "load_learning_path_catalog",
     "load_ops_learning_guides_payload",
     "persist_learning_path",
 ]
