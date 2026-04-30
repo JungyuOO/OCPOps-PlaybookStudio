@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from play_book_studio.app.course_api import warmup_course_runtime
+from play_book_studio.config.settings import load_settings
 
 from .server_handler_factory import _build_handler
 from .sessions import ChatSession, SessionStore
@@ -53,11 +54,16 @@ def serve(
     port: int = 8765,
     open_browser: bool = True,
 ) -> None:
+    settings = load_settings(root_dir)
     store = SessionStore(root_dir, load_persisted=False)
     handler = _build_handler(answerer=answerer, store=store, root_dir=root_dir)
     server = ThreadingHTTPServer((host, port), handler)
     backend_url = f"http://{host}:{port}"
     print(f"Play Book Studio runtime/API server running at {backend_url}")
+    if settings.terminal_enabled:
+        from .terminal_ws import start_terminal_websocket_server
+
+        start_terminal_websocket_server(settings=settings, root_dir=root_dir)
     _start_runtime_warmup(answerer, root_dir)
     if open_browser:
         import webbrowser

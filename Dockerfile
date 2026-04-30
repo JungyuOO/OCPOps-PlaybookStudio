@@ -17,6 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
     build-essential \
     git \
     && rm -rf /var/lib/apt/lists/*
@@ -37,7 +38,7 @@ COPY data/course_pbs /app/data/course_pbs
 COPY manifests/course_qa_cases*.jsonl manifests/course_ops_learning_golden_cases.jsonl /app/manifests/
 COPY --from=frontend-build /app/presentation-ui/dist /app/presentation-ui/dist
 
-EXPOSE 8765
+EXPOSE 8765 8770
 
 CMD ["python", "-m", "play_book_studio.cli", "ui", "--no-browser", "--host", "0.0.0.0", "--port", "8765"]
 

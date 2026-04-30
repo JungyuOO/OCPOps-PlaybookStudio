@@ -38,6 +38,10 @@ services:
       COURSE_CHAT_LLM_REWRITE: "true"
       DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
       QDRANT_URL: http://qdrant:6333
+      TERMINAL_ENABLED: ${TERMINAL_ENABLED:-false}
+      TERMINAL_HOST: 0.0.0.0
+      TERMINAL_WS_PORT: ${TERMINAL_WS_PORT:-8770}
+      TERMINAL_SHELL: ${TERMINAL_SHELL:-/bin/bash}
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,6 +51,8 @@ services:
         condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "${TERMINAL_WS_PORT:-8770}:8770"
     volumes:
       - ./src:/app/src
       - ./artifacts:/app/artifacts

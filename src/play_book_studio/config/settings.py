@@ -146,6 +146,13 @@ class Settings(SettingsPathMixin):
     qwen_vision_timeout_seconds: float = 30.0
     ocp_api_base_url: str = ""
     ocp_api_token: str = ""
+    terminal_enabled: bool = False
+    terminal_host: str = "127.0.0.1"
+    terminal_ws_port: int = 8770
+    terminal_shell: str = ""
+    terminal_workdir_override: str = ""
+    terminal_session_ttl_seconds: int = 1800
+    terminal_max_output_bytes: int = 1048576
     scm_github_client_id: str = ""
     scm_github_client_secret: str = ""
     scm_gitlab_client_id: str = ""
@@ -369,6 +376,14 @@ def load_settings(root_dir: str | Path) -> Settings:
         qwen_vision_timeout_seconds=float(effective_env.get("QWEN_VISION_TIMEOUT_SECONDS", "30")),
         ocp_api_base_url=effective_env.get("OCP_API_BASE_URL", "").strip().rstrip("/"),
         ocp_api_token=effective_env.get("OCP_API_TOKEN", "").strip(),
+        terminal_enabled=effective_env.get("TERMINAL_ENABLED", "false").lower()
+        in {"1", "true", "yes", "on"},
+        terminal_host=effective_env.get("TERMINAL_HOST", "127.0.0.1").strip() or "127.0.0.1",
+        terminal_ws_port=int(effective_env.get("TERMINAL_WS_PORT", "8770")),
+        terminal_shell=effective_env.get("TERMINAL_SHELL", "").strip(),
+        terminal_workdir_override=effective_env.get("TERMINAL_WORKDIR", "").strip(),
+        terminal_session_ttl_seconds=int(effective_env.get("TERMINAL_SESSION_TTL_SECONDS", "1800")),
+        terminal_max_output_bytes=int(effective_env.get("TERMINAL_MAX_OUTPUT_BYTES", "1048576")),
         scm_github_client_id=effective_env.get("SCM_GITHUB_CLIENT_ID", "").strip(),
         scm_github_client_secret=effective_env.get("SCM_GITHUB_CLIENT_SECRET", "").strip(),
         scm_gitlab_client_id=effective_env.get("SCM_GITLAB_CLIENT_ID", "").strip(),
