@@ -125,6 +125,23 @@ def build_parser() -> argparse.ArgumentParser:
     db_migrate_parser.add_argument("--migrations-dir", type=Path, default=Path("db/migrations"))
     db_migrate_parser.add_argument("--dry-run", action="store_true")
 
+    upload_ingest_parser = subparsers.add_parser(
+        "upload-ingest",
+        help="Parse an uploaded document and persist its blocks/assets/chunks to PostgreSQL",
+    )
+    upload_ingest_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    upload_ingest_parser.add_argument("--path", type=Path, required=True)
+    upload_ingest_parser.add_argument("--database-url", default="")
+    upload_ingest_parser.add_argument("--tenant-slug", default="public")
+    upload_ingest_parser.add_argument("--tenant-name", default="Public")
+    upload_ingest_parser.add_argument("--workspace-slug", default="default")
+    upload_ingest_parser.add_argument("--workspace-name", default="Default")
+    upload_ingest_parser.add_argument("--created-by", default="")
+    upload_ingest_parser.add_argument("--storage-key", default="")
+    upload_ingest_parser.add_argument("--chunk-max-chars", type=int, default=1800)
+    upload_ingest_parser.add_argument("--chunk-overlap-blocks", type=int, default=1)
+    upload_ingest_parser.add_argument("--dry-run", action="store_true")
+
     course_qa_parser = subparsers.add_parser(
         "course-qa",
         help="Generate, quality-gate, and run Study-docs course chat QA cases",
@@ -492,6 +509,82 @@ def _run_db_migrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _upload_ingest_summary(parsed, chunks, *, persisted=None) -> dict:
+    return {
+        "filename": parsed.filename,
+        "document_format": parsed.document_format,
+        "mime_type": parsed.mime_type,
+        "sha256": parsed.sha256,
+        "status": parsed.status,
+        "warning_count": len(parsed.warnings),
+        "warnings": list(parsed.warnings),
+        "block_count": len(parsed.blocks),
+        "asset_count": len(parsed.assets),
+        "chunk_count": len(chunks),
+        "sections": [
+            list(chunk.section_path)
+            for chunk in chunks
+            if chunk.section_path
+        ],
+        "persisted": None if persisted is None else {
+            "document_source_id": persisted.document_source_id,
+            "document_version_id": persisted.document_version_id,
+            "parse_job_id": persisted.parse_job_id,
+            "parsed_document_id": persisted.parsed_document_id,
+            "block_count": len(persisted.block_ids),
+            "asset_count": len(persisted.asset_ids),
+            "chunk_count": len(persisted.chunk_ids),
+        },
+    }
+
+
+def _run_upload_ingest(args: argparse.Namespace) -> int:
+    from play_book_studio.db.document_repository import persist_parsed_upload_document
+    from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
+
+    root_dir = args.root_dir.resolve()
+    source_path = args.path
+    if not source_path.is_absolute():
+        source_path = root_dir / source_path
+    source_path = source_path.resolve()
+    if not source_path.exists():
+        print(f"upload source does not exist: {source_path}")
+        return 1
+
+    parsed = parse_upload_document(source_path)
+    chunks = build_document_chunks(
+        parsed,
+        max_chars=args.chunk_max_chars,
+        overlap_blocks=args.chunk_overlap_blocks,
+    )
+    if args.dry_run:
+        print(json.dumps(_upload_ingest_summary(parsed, chunks), ensure_ascii=False, indent=2))
+        return 0
+
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        persisted = persist_parsed_upload_document(
+            connection,
+            parsed,
+            chunks,
+            tenant_slug=args.tenant_slug,
+            tenant_name=args.tenant_name,
+            workspace_slug=args.workspace_slug,
+            workspace_name=args.workspace_name,
+            storage_key=args.storage_key,
+            created_by=args.created_by,
+        )
+    print(json.dumps(_upload_ingest_summary(parsed, chunks, persisted=persisted), ensure_ascii=False, indent=2))
+    return 0
+
+
 def main() -> int:
     args = build_parser().parse_args()
     if args.command == "ui":
@@ -512,6 +605,8 @@ def main() -> int:
         return _run_graph_compact(args)
     if args.command == "db-migrate":
         return _run_db_migrate(args)
+    if args.command == "upload-ingest":
+        return _run_upload_ingest(args)
     if args.command == "course-qa":
         from play_book_studio.course.quality_eval import run_quality_eval
 
