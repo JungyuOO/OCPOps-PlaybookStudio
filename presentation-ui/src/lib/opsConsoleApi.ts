@@ -391,6 +391,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set('Content-Type', 'application/json');
   }
   const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
+    credentials: 'include',
     headers,
     ...init,
   });
@@ -410,7 +411,10 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function requestResponse(path: string, init?: RequestInit): Promise<Response> {
-  const response = await fetch(`${RUNTIME_ORIGIN}${path}`, init);
+  const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
+    credentials: 'include',
+    ...init,
+  });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
     try {
@@ -590,6 +594,7 @@ export async function sendOpsChatStream(
 ): Promise<OpsChatResponse> {
   const response = await fetch(`${RUNTIME_ORIGIN}/api/v1/chat/query/stream`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });

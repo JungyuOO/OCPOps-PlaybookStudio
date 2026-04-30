@@ -1741,6 +1741,39 @@ def _classify_ops_artifact_intent(
     return {"action": action, "resource_type": resource_type, "resource_name": resource_name}
 
 
+def _infer_ops_artifact_intent_from_query(
+    query: str,
+    context: dict[str, Any],
+    selected_details: list[dict[str, Any]] | None = None,
+) -> dict[str, str]:
+    normalized = _normalize_ops_query(query)
+    resources = context.get("resources") if isinstance(context.get("resources"), dict) else {}
+    if selected_details and any(term in normalized for term in DETAIL_INTENT_TERMS + EDIT_INTENT_TERMS):
+        first = selected_details[0]
+        return {
+            "action": "yaml" if any(term in normalized for term in ("yaml", "manifest", "code", "코드")) else "detail",
+            "resource_type": str(first.get("resource_type") or ""),
+            "resource_name": str(first.get("name") or ""),
+        }
+    explicit_type = _detect_resource_type(query)
+    if explicit_type and any(term in normalized for term in LIST_INTENT_TERMS):
+        return {"action": "list", "resource_type": explicit_type, "resource_name": ""}
+    if any(term in normalized for term in ("list", "목록", "리스트")) and any(term in normalized for term in ("resource", "resources", "리소스")):
+        return {"action": "list", "resource_type": "all", "resource_name": ""}
+    for resource_type, items in resources.items():
+        if resource_type not in RESOURCE_TYPES or not isinstance(items, list):
+            continue
+        for item in items:
+            name = str(item.get("name") or "").strip()
+            if name and name.lower() in normalized and any(term in normalized for term in DETAIL_INTENT_TERMS + EDIT_INTENT_TERMS):
+                return {
+                    "action": "yaml" if any(term in normalized for term in ("yaml", "manifest", "code", "코드")) else "detail",
+                    "resource_type": resource_type,
+                    "resource_name": name,
+                }
+    return {"action": "none", "resource_type": "", "resource_name": ""}
+
+
 def _selected_live_resource_details(query: str, context: dict[str, Any], history: list[dict[str, Any]]) -> list[dict[str, Any]]:
     manifest_index = context.get("manifest_index") if isinstance(context.get("manifest_index"), dict) else {}
     if not manifest_index:
@@ -1926,13 +1959,60 @@ def _generate_ops_live_answer(
     llm_client = getattr(answerer, "llm_client", None)
     if llm_client is None or not hasattr(llm_client, "generate"):
         return None
+    resources = context.get("resources") if isinstance(context.get("resources"), dict) else {}
+    deployments = resources.get("deployments") if isinstance(resources.get("deployments"), list) else []
+    pods = resources.get("pods") if isinstance(resources.get("pods"), list) else []
+    services = resources.get("services") if isinstance(resources.get("services"), list) else []
+    routes = resources.get("routes") if isinstance(resources.get("routes"), list) else []
+    events = resources.get("events") if isinstance(resources.get("events"), list) else []
+    degraded = [
+        item for item in deployments
+        if int(item.get("ready_replicas") or 0) < int(item.get("replicas") or 0)
+    ][:8]
+    non_running = [
+        item for item in pods
+        if str(item.get("phase") or "").strip().lower() not in {"running", "succeeded"}
+    ][:8]
+    warnings = [
+        item for item in events
+        if str(item.get("phase") or "").strip().lower() == "warning"
+    ][:12]
+    explicit_type = _detect_resource_type(query)
+    normalized = _normalize_ops_query(query)
+    requested_list = bool(explicit_type and any(term in normalized for term in LIST_INTENT_TERMS))
+    requested_items = resources.get(explicit_type)[:20] if requested_list and isinstance(resources.get(explicit_type), list) else []
     compact_context = {
         "namespace": context.get("namespace"),
-        "connection": context.get("connection"),
-        "resources": context.get("resources"),
-        "metrics": context.get("metrics"),
-        "manifest_previews": context.get("manifest_previews"),
-        "selected_resource_yaml": selected_details or [],
+        "connection": {
+            "connection_id": (context.get("connection") or {}).get("connection_id") if isinstance(context.get("connection"), dict) else "",
+            "display_name": (context.get("connection") or {}).get("display_name") if isinstance(context.get("connection"), dict) else "",
+            "status": (context.get("connection") or {}).get("status") if isinstance(context.get("connection"), dict) else "",
+        },
+        "counts": {
+            "deployments": len(deployments),
+            "pods": len(pods),
+            "services": len(services),
+            "routes": len(routes),
+            "events": len(events),
+            "degraded_deployments": len(degraded),
+            "non_running_pods": len(non_running),
+            "warning_events": len(warnings),
+        },
+        "metrics_summary": (context.get("metrics") or {}).get("summary") if isinstance(context.get("metrics"), dict) else {},
+        "degraded_deployments": degraded,
+        "non_running_pods": non_running,
+        "warning_events": warnings,
+        "requested_resource_list": requested_items,
+        "selected_resource_yaml_preview": [
+            {
+                "resource_type": item.get("resource_type"),
+                "name": item.get("name"),
+                "replicas": item.get("replicas"),
+                "ready_replicas": item.get("ready_replicas"),
+                "manifest_preview": "\n".join(_preview_lines(str(item.get("manifest_yaml") or ""), count=24)),
+            }
+            for item in (selected_details or [])[:3]
+        ],
     }
     messages = [
         {
@@ -1940,12 +2020,14 @@ def _generate_ops_live_answer(
             "content": (
                 "You are an OpenShift operations agent. Answer in Korean. "
                 "Use only the supplied live cluster context. Do not invent resources. "
-                "Analyze the user's intent, pick the relevant pods/deployments/services/routes/events/metrics, "
-                "and produce an operational answer with findings, evidence, and next checks. "
-                "If the user asks for a list or inventory, provide a concise categorized list from context. "
+                "Keep the answer concise: 700 Korean characters max, 5 bullets max, no long preamble. "
+                "Analyze the user's intent and pick only relevant pods/deployments/services/routes/events/metrics. "
+                "Produce findings, evidence, and next checks. "
+                "If the user asks for a list or inventory, provide only the requested resource list from context. "
                 "If selected_resource_yaml is provided and the user asks for YAML or editing, explain the relevant YAML and mention that it is attached as an editable artifact. "
                 "If the user asks what a change would affect, explain concrete operational impact such as replica count, rollout, service routing, or readiness. "
-                "Do not dump every resource unless the user explicitly asks for a list."
+                "Do not dump every resource unless the user explicitly asks for a list. "
+                "Do not use markdown tables unless the user asks for a table."
             ),
         },
         {
@@ -1961,7 +2043,7 @@ def _generate_ops_live_answer(
         },
     ]
     try:
-        return str(llm_client.generate(messages, max_tokens=2200)).strip()
+        return str(llm_client.generate(messages, max_tokens=850)).strip()
     except Exception:  # noqa: BLE001
         return None
 
@@ -1999,9 +2081,11 @@ def _chat_payload(root_dir: Path, payload: dict[str, Any], *, state: dict[str, A
             ]
             return response
         selected_details = _selected_live_resource_details(query, context, history)
-        artifact_intent = _classify_ops_artifact_intent(answerer, query, context)
+        artifact_intent = _infer_ops_artifact_intent_from_query(query, context, selected_details)
         generated = _generate_ops_live_answer(answerer, query, context, history, selected_details)
         response["answer"] = generated or _fallback_ops_live_answer(query, context, selected_details)
+        if not str(response.get("answer") or "").strip():
+            response["answer"] = _fallback_ops_live_answer(query, context, selected_details)
         response["artifacts"] = _ops_live_artifacts(context, selected_details, artifact_intent=artifact_intent)
         response["preview_ready"] = True
         response["fallback_used"] = generated is None
@@ -2317,8 +2401,9 @@ def _stream_answer_chunks(answer: str, *, target_chars: int = 28) -> list[str]:
     return chunks
 
 
-def _stream_chat_result(handler: Any, result: dict[str, Any]) -> None:
-    handler._start_ndjson_stream()
+def _stream_chat_result(handler: Any, result: dict[str, Any], *, start_stream: bool = True) -> None:
+    if start_stream:
+        handler._start_ndjson_stream()
     stages = result.get("stages") if isinstance(result.get("stages"), list) else []
     if not stages:
         stages = [
@@ -2964,13 +3049,25 @@ def handle_ops_console_post(handler: Any, path: str, query: str, payload: dict[s
         return True
 
     if path == "/api/v1/chat/query/stream":
+        handler._start_ndjson_stream()
+        handler._stream_event({
+            "type": "stage",
+            "stage": {
+                "key": "accepted",
+                "label": "Request accepted",
+                "detail": "Preparing compact live cluster context",
+                "status": "running",
+            },
+        })
         try:
             result = _chat_payload(root_dir, payload, state=state, answerer=answerer)
         except ValueError as exc:
-            handler._start_ndjson_stream()
             handler._stream_event({"type": "error", "status_code": 400, "message": str(exc)})
             return True
-        _stream_chat_result(handler, result)
+        except Exception as exc:  # noqa: BLE001
+            handler._stream_event({"type": "error", "status_code": 500, "message": f"Chat stream failed: {exc}"})
+            return True
+        _stream_chat_result(handler, result, start_stream=False)
         return True
 
     if path == "/api/v1/actions/preview":

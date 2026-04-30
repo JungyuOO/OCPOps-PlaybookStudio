@@ -281,6 +281,71 @@ function buildOpsChatStarters({
   return starters.slice(0, 4);
 }
 
+function buildOpsChatClientFallback({
+  query,
+  namespace,
+  overviewMetrics,
+  resourceList,
+  selectedResourceType,
+  errorMessage,
+}: {
+  query: string;
+  namespace: string;
+  overviewMetrics: OcpMetricsResponse | null;
+  resourceList: ResourceListResponse | null;
+  selectedResourceType: string;
+  errorMessage?: string;
+}): string {
+  const degraded = (overviewMetrics?.workload_health ?? [])
+    .filter((item) => item.status.toLowerCase() !== 'healthy' || item.ready_replicas < item.replicas);
+  const warnings = overviewMetrics?.event_summary ?? [];
+  const lines = [
+    '응답 생성 스트림이 비어 있어 현재 화면에 로드된 Live Cluster 지표로 우선 요약합니다.',
+    '',
+    `질문: ${query}`,
+    `namespace: \`${namespace}\``,
+  ];
+  if (errorMessage) {
+    lines.push(`stream error: ${errorMessage}`);
+  }
+  if (overviewMetrics) {
+    lines.push('');
+    lines.push('### 현재 확인된 신호');
+    lines.push(`- Degraded Deployment: ${overviewMetrics.summary.degraded_deployments}개`);
+    lines.push(`- Warning Event: ${overviewMetrics.summary.warning_events}개`);
+    if (overviewMetrics.summary.top_cpu_pod) {
+      lines.push(`- Top CPU Pod: \`${overviewMetrics.summary.top_cpu_pod.name}\` (${overviewMetrics.summary.top_cpu_pod.cpu_mcores ?? 0} mcores)`);
+    }
+    if (overviewMetrics.summary.top_memory_pod) {
+      lines.push(`- Top Memory Pod: \`${overviewMetrics.summary.top_memory_pod.name}\` (${overviewMetrics.summary.top_memory_pod.memory_mib ?? 0} MiB)`);
+    }
+  }
+  if (degraded.length > 0) {
+    lines.push('');
+    lines.push('### 우선 점검할 Deployment');
+    degraded.slice(0, 6).forEach((item) => {
+      lines.push(`- \`${item.name}\`: ${item.ready_replicas}/${item.replicas} ready, status=${item.status}`);
+    });
+  }
+  if (warnings.length > 0) {
+    lines.push('');
+    lines.push('### 관련 Warning Event 후보');
+    warnings.slice(0, 6).forEach((item) => {
+      lines.push(`- \`${item.name}\`: ${item.phase}`);
+    });
+  }
+  if (resourceList?.items.length) {
+    lines.push('');
+    lines.push(`### 현재 선택된 ${selectedResourceType} 목록 일부`);
+    resourceList.items.slice(0, 6).forEach((item) => {
+      lines.push(`- \`${item.name}\` (${item.kind}, ${item.namespace})`);
+    });
+  }
+  lines.push('');
+  lines.push('다음 확인 순서는 해당 Deployment의 Events, ReplicaSet/Pod 생성 여부, 이미지 Pull/스케줄링/Probe 실패 여부입니다.');
+  return lines.join('\n');
+}
+
 function loadSavedChatMessages(): ChatMessage[] {
   try {
     const raw = window.localStorage.getItem('opsConsole.chatMessages');
@@ -455,7 +520,6 @@ export default function OpsConsolePage() {
   const [modalProfileId, setModalProfileId] = useState('');
   const [deletingProfileId, setDeletingProfileId] = useState('');
   const [guideStepIndex, setGuideStepIndex] = useState(0);
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [connectionForm, setConnectionForm] = useState({
     cluster_url: 'https://api.cluster.example.com:6443',
     auth_mode: 'token',
@@ -892,7 +956,6 @@ export default function OpsConsolePage() {
     setModalProfileId(connection.connection_id);
     setSelectedNamespace(OPS_FIXED_NAMESPACE);
     syncConnectionForm(connection);
-    setProfileMenuOpen(false);
     setShowConnectModal(false);
     navigate(ROUTES.opsOverview);
     await refreshConnectionStatus(connection.connection_id);
@@ -905,7 +968,6 @@ export default function OpsConsolePage() {
     }
     resetConnectionDraft();
     setModalProfileId(activeConnectionId || savedProfiles[0]?.connection_id || '');
-    setProfileMenuOpen(false);
     setShowConnectModal(true);
   }
 
@@ -1011,7 +1073,6 @@ export default function OpsConsolePage() {
         setSelectedNamespace(OPS_FIXED_NAMESPACE);
         setShowConnectModal(false);
         setConnectStep(1);
-        setProfileMenuOpen(false);
         resetConnectionDraft();
       },
     );
@@ -1088,25 +1149,6 @@ export default function OpsConsolePage() {
       setNotice('Lease metadata refreshed.');
     });
     await refreshLeaseStatus();
-  }
-
-  async function handleDisconnect() {
-    const previousConnectionId = activeConnectionId || savedProfiles[0]?.connection_id || '';
-    setNotice('Active profile cleared. Reconnect to continue.');
-    setActiveConnectionId('');
-    setModalProfileId(previousConnectionId);
-    setConnectionTest(null);
-    setOverview(null);
-    setOverviewMetrics(null);
-    setResourceDetail(null);
-    setYamlEditor('');
-    setYamlPreview(null);
-    setYamlApplyRequest(null);
-    setYamlApplyExecution(null);
-    setYamlEditorOpen(false);
-    setProfileMenuOpen(false);
-    setShowConnectModal(true);
-    setConnectStep(savedProfiles.length > 0 ? 1 : 2);
   }
 
   async function handlePreviewYaml() {
@@ -1320,11 +1362,20 @@ export default function OpsConsolePage() {
             return;
           }
           if (event.type === 'result') {
+            const answer = event.response.answer?.trim()
+              ? event.response.answer
+              : buildOpsChatClientFallback({
+                query: message,
+                namespace: selectedNamespace,
+                overviewMetrics,
+                resourceList,
+                selectedResourceType,
+              });
             setMessages((current) => current.map((item) => (
               item.id === assistantId
                 ? {
                   ...item,
-                  content: event.response.answer,
+                  content: answer,
                   sources: event.response.sources,
                   artifacts: visibleChatArtifacts(event.response.artifacts),
                 }
@@ -1335,7 +1386,23 @@ export default function OpsConsolePage() {
       );
       setNotice(`Chat completed in ${result.mode} mode.`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '채팅 처리 중 오류가 발생했습니다.');
+      const messageText = caught instanceof Error ? caught.message : '채팅 처리 중 오류가 발생했습니다.';
+      setError(messageText);
+      setMessages((current) => current.map((item) => (
+        item.id === assistantId
+          ? {
+            ...item,
+            content: buildOpsChatClientFallback({
+              query: message,
+              namespace: selectedNamespace,
+              overviewMetrics,
+              resourceList,
+              selectedResourceType,
+              errorMessage: messageText,
+            }),
+          }
+          : item
+      )));
     } finally {
       setChatSending(false);
       setActiveAssistantId('');
@@ -1424,35 +1491,10 @@ export default function OpsConsolePage() {
           <Link to={ROUTES.pbsStudio} className="ops-nav-pill ops-nav-pill-utility">Studio</Link>
           {activeConnection ? (
             <div className="ops-profile-shell">
-              <button type="button" className="ops-nav-pill ops-nav-pill-profile" onClick={() => setProfileMenuOpen((current) => !current)}>
+              <button type="button" className="ops-nav-pill ops-nav-pill-profile" onClick={() => openConnectModal(savedProfiles.length > 0 ? 1 : 2)}>
                 <Cable size={16} />
                 <span>{activeConnection.display_name}</span>
               </button>
-              {profileMenuOpen ? (
-                <div className="ops-profile-menu">
-                  <div className="ops-profile-menu-head">
-                    <strong>{activeConnection.display_name}</strong>
-                    <span>{activeConnection.default_namespace} · {activeConnection.status}</span>
-                  </div>
-                  {savedProfiles.length > 1 ? (
-                    <div className="ops-profile-switch-list">
-                      {savedProfiles
-                        .filter((item) => item.connection_id !== activeConnection.connection_id)
-                        .slice(0, 4)
-                        .map((item) => (
-                          <button key={item.connection_id} type="button" className="ops-profile-switch-item" onClick={() => { void activateSavedProfile(item); }}>
-                            <strong>{item.display_name}</strong>
-                            <span>{item.default_namespace}</span>
-                          </button>
-                        ))}
-                    </div>
-                  ) : null}
-                  <div className="ops-inline-actions">
-                    <button type="button" onClick={() => openConnectModal(1)}>Manage profiles</button>
-                    <button type="button" onClick={() => { void handleDisconnect(); }}>Log out</button>
-                  </div>
-                </div>
-              ) : null}
             </div>
           ) : (
             <button type="button" className="ops-nav-pill ops-nav-pill-profile" onClick={() => openConnectModal(savedProfiles.length > 0 ? 1 : 2)}>
@@ -1481,6 +1523,15 @@ export default function OpsConsolePage() {
       {showConnectModal ? (
         <div className="ops-modal-backdrop" onClick={() => { if (activeConnectionId) { setShowConnectModal(false); } }}>
           <section className="ops-connect-modal" role="dialog" aria-modal="true" aria-label="Connect OpenShift cluster" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="ops-modal-close"
+              aria-label="Close connect modal"
+              title="Close"
+              onClick={() => setShowConnectModal(false)}
+            >
+              <X size={18} />
+            </button>
             <aside className="ops-connect-sidebar">
               <div className="ops-connect-sidebar-head">
                 <strong>Saved Profiles</strong>
@@ -1551,11 +1602,6 @@ export default function OpsConsolePage() {
                   <h2>Connect Cluster</h2>
                   <p>저장 프로필을 선택하거나 새 연결을 만들어 바로 Overview로 진입합니다.</p>
                 </div>
-                {activeConnectionId ? (
-                  <button type="button" className="ops-secondary-btn" onClick={() => setShowConnectModal(false)}>
-                    Close
-                  </button>
-                ) : null}
               </div>
               <div className="ops-connect-stepbar">
                 <button type="button" className={`ops-step-chip ${connectStep === 1 ? 'active' : ''}`} onClick={() => setConnectStep(1)}>1. Guide</button>

@@ -500,6 +500,7 @@
 }
 
 .ops-connect-modal {
+  position: relative;
   display: grid;
   grid-template-columns: 250px minmax(0, 1fr);
   width: min(1040px, calc(100vw - 64px));
@@ -509,6 +510,29 @@
   background: rgba(248, 251, 255, 0.96);
   box-shadow: 0 30px 80px rgba(16, 36, 62, 0.22);
   overflow: hidden;
+}
+
+.ops-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(16, 36, 62, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #17395c;
+  box-shadow: 0 12px 28px rgba(16, 36, 62, 0.08);
+  cursor: pointer;
+}
+
+.ops-modal-close:hover {
+  background: #fff;
+  border-color: rgba(17, 103, 172, 0.18);
 }
 
 .ops-yaml-modal {
