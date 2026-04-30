@@ -13,6 +13,17 @@ interface TerminalSocketEvent {
   exit_code?: number;
 }
 
+export interface TerminalLearningContext {
+  learnerId?: string;
+  learningPathId?: string;
+  learningStepId?: string;
+  labTaskId?: string;
+}
+
+interface TerminalSessionPanelProps {
+  learningContext?: TerminalLearningContext;
+}
+
 function defaultTerminalWebSocketUrl(): string {
   const configured = String(import.meta.env.VITE_TERMINAL_WS_URL ?? '').trim();
   if (configured) {
@@ -23,7 +34,7 @@ function defaultTerminalWebSocketUrl(): string {
   return `${protocol}//${host}:8770`;
 }
 
-export default function TerminalSessionPanel() {
+export default function TerminalSessionPanel({ learningContext }: TerminalSessionPanelProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -93,6 +104,9 @@ export default function TerminalSessionPanel() {
 
     socket.addEventListener('open', () => {
       setState('connected');
+      if (learningContext) {
+        socket.send(JSON.stringify({ type: 'context', ...learningContext }));
+      }
     });
 
     socket.addEventListener('message', (event) => {
@@ -147,7 +161,7 @@ export default function TerminalSessionPanel() {
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [connectionKey, wsUrl]);
+  }, [connectionKey, learningContext, wsUrl]);
 
   return (
     <section className="terminal-session-shell" aria-label="Terminal Session">

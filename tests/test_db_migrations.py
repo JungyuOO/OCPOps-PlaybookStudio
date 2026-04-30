@@ -13,12 +13,19 @@ def test_list_migrations_includes_ingestion_foundation():
 
     versions = [migration.version for migration in migrations]
 
-    assert versions == ["0000_schema_migrations", "0001_ingestion_foundation", "0002_learning_foundation"]
+    assert versions == [
+        "0000_schema_migrations",
+        "0001_ingestion_foundation",
+        "0002_learning_foundation",
+        "0003_terminal_learning_runtime",
+    ]
     assert all(len(migration.checksum) == 64 for migration in migrations)
     assert "document_chunks" in migrations[1].sql
     assert "qwen_description" in migrations[1].sql
-    assert "learning_paths" in migrations[-1].sql
-    assert "command_checks" in migrations[-1].sql
+    assert "learning_paths" in migrations[2].sql
+    assert "command_checks" in migrations[2].sql
+    assert "terminal_sessions" in migrations[-1].sql
+    assert "command_check_results" in migrations[-1].sql
 
 
 def test_db_migrate_parser_accepts_dry_run_args():
