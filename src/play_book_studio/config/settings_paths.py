@@ -17,6 +17,7 @@ class SettingsPathMixin:
             self.data_dir,
             self.bronze_dir,
             self.artifacts_dir,
+            self.object_storage_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)
 
@@ -71,6 +72,20 @@ class SettingsPathMixin:
     @property
     def data_dir(self) -> Path:
         return self.root_dir / "data"
+
+    @property
+    def corpus_seed_dir(self) -> Path:
+        return self._resolve_optional_dir(
+            self.corpus_seed_dir_override,
+            self.root_dir / "corpus",
+        )
+
+    @property
+    def object_storage_dir(self) -> Path:
+        return self._resolve_optional_dir(
+            self.object_storage_root_override,
+            self.root_dir / "storage",
+        )
 
     @property
     def bronze_dir(self) -> Path:

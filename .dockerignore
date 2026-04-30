@@ -1,5 +1,20 @@
 *
 
+/.git/
+/.omx/
+/.venv/
+/.playwright-cli/
+/.pytest_cache/
+/.pytest-tmp/
+/.tmp_pytest/
+/artifacts/
+/reports/
+/tmp/
+/tmp_source/
+/output/
+/presentation-ui/node_modules/
+/presentation-ui/dist/
+
 !Dockerfile
 !README.md
 !pyproject.toml

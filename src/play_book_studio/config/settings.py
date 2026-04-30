@@ -85,6 +85,9 @@ class Settings(SettingsPathMixin):
     source_catalog_versions_override: str = ""
     source_catalog_languages_override: str = ""
     source_catalog_kinds_override: str = ""
+    database_url: str = ""
+    object_storage_root_override: str = ""
+    corpus_seed_dir_override: str = ""
     ocp_version: str = DEFAULT_OCP_VERSION
     docs_language: str = DEFAULT_DOCS_LANGUAGE
     docs_index_url_template: str = DEFAULT_CORE_PACK.docs_index_url_template
@@ -137,6 +140,10 @@ class Settings(SettingsPathMixin):
     surya_ocr_endpoint: str = ""
     surya_health_endpoint: str = ""
     surya_timeout_seconds: float = 30.0
+    qwen_vision_endpoint: str = ""
+    qwen_vision_api_key: str = ""
+    qwen_vision_model: str = ""
+    qwen_vision_timeout_seconds: float = 30.0
     ocp_api_base_url: str = ""
     ocp_api_token: str = ""
     scm_github_client_id: str = ""
@@ -293,6 +300,9 @@ def load_settings(root_dir: str | Path) -> Settings:
         source_catalog_versions_override=effective_env.get("SOURCE_CATALOG_VERSIONS", "").strip(),
         source_catalog_languages_override=effective_env.get("SOURCE_CATALOG_LANGUAGES", "").strip(),
         source_catalog_kinds_override=effective_env.get("SOURCE_CATALOG_KINDS", "").strip(),
+        database_url=effective_env.get("DATABASE_URL", "").strip(),
+        object_storage_root_override=effective_env.get("OBJECT_STORAGE_ROOT", "").strip(),
+        corpus_seed_dir_override=effective_env.get("CORPUS_SEED_DIR", "").strip(),
         ocp_version=effective_env.get("OCP_VERSION", DEFAULT_OCP_VERSION).strip(),
         docs_language=effective_env.get("DOCS_LANGUAGE", DEFAULT_DOCS_LANGUAGE).strip(),
         book_url_template_str=effective_env.get("BOOK_URL_TEMPLATE", DEFAULT_BOOK_URL_TEMPLATE),
@@ -353,6 +363,10 @@ def load_settings(root_dir: str | Path) -> Settings:
         surya_ocr_endpoint=effective_env.get("SURYA_OCR", "").strip().rstrip("/"),
         surya_health_endpoint=effective_env.get("SURYA_HEALTH", "").strip().rstrip("/"),
         surya_timeout_seconds=float(effective_env.get("SURYA_TIMEOUT_SECONDS", "30")),
+        qwen_vision_endpoint=effective_env.get("QWEN_VISION_ENDPOINT", "").strip().rstrip("/"),
+        qwen_vision_api_key=effective_env.get("QWEN_VISION_API_KEY", "").strip(),
+        qwen_vision_model=effective_env.get("QWEN_VISION_MODEL", "").strip(),
+        qwen_vision_timeout_seconds=float(effective_env.get("QWEN_VISION_TIMEOUT_SECONDS", "30")),
         ocp_api_base_url=effective_env.get("OCP_API_BASE_URL", "").strip().rstrip("/"),
         ocp_api_token=effective_env.get("OCP_API_TOKEN", "").strip(),
         scm_github_client_id=effective_env.get("SCM_GITHUB_CLIENT_ID", "").strip(),

@@ -14,6 +14,8 @@ node_modules/
 presentation-ui/dist/
 presentation-ui/node_modules/
 artifacts/
+storage/*
+!storage/.gitignore
 /archive/
 /_quarantine/
 data/bronze/raw_html/

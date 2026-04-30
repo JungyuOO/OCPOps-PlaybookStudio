@@ -21,7 +21,6 @@ services:
       PYTHONPATH: /app/src
       COURSE_CHAT_LLM_REWRITE: "true"
       QDRANT_URL: http://qdrant:6333
-      GRAPH_URI: bolt://host.docker.internal:7687
     depends_on:
       - qdrant
     extra_hosts:
@@ -41,6 +40,33 @@ services:
       retries: 8
       start_period: 60s
     restart: unless-stopped
+
+  qdrant-seed:
+    profiles:
+      - seed
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/src
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_RECREATE_COLLECTION: "false"
+    depends_on:
+      - qdrant
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./src:/app/src
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./manifests:/app/manifests
+      - ./reports:/app/reports
+      - ./tmp:/app/tmp
+    command: ["python", "-m", "play_book_studio.cli", "course-qdrant-upsert", "--root-dir", "/app", "--course-dir", "data/course_pbs"]
+    restart: "no"
 
   web:
     build:

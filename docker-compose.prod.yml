@@ -1,0 +1,128 @@
+name: ocpops-playbookstudio
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-playbookstudio}
+      POSTGRES_USER: ${POSTGRES_USER:-playbookstudio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_BIND:-127.0.0.1:5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-playbookstudio} -d $${POSTGRES_DB:-playbookstudio}"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    ports:
+      - "${QDRANT_HTTP_BIND:-127.0.0.1:6335}:6333"
+      - "${QDRANT_GRPC_BIND:-127.0.0.1:6336}:6334"
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    environment:
+      PYTHONPATH: /app/src
+      COURSE_CHAT_LLM_REWRITE: "${COURSE_CHAT_LLM_REWRITE:-true}"
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_RECREATE_COLLECTION: "false"
+      ARTIFACTS_DIR: /app/artifacts
+      OBJECT_STORAGE_ROOT: /app/storage
+      CORPUS_SEED_DIR: /app/corpus
+      SOURCE_MANIFEST_PATH: /app/manifests/ocp_ko_4_20_approved_ko.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data:ro
+      - ./manifests:/app/manifests:ro
+      - ./corpus:/app/corpus:ro
+      - ./artifacts:/app/artifacts
+      - ./storage:/app/storage
+      - ./reports:/app/reports
+      - app_tmp:/app/tmp
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 90s
+    restart: unless-stopped
+
+  qdrant-seed:
+    profiles:
+      - seed
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    environment:
+      PYTHONPATH: /app/src
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_RECREATE_COLLECTION: "false"
+      ARTIFACTS_DIR: /app/artifacts
+      OBJECT_STORAGE_ROOT: /app/storage
+      CORPUS_SEED_DIR: /app/corpus
+      SOURCE_MANIFEST_PATH: /app/manifests/ocp_ko_4_20_approved_ko.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    volumes:
+      - ./data:/app/data:ro
+      - ./manifests:/app/manifests:ro
+      - ./corpus:/app/corpus:ro
+      - ./artifacts:/app/artifacts
+      - ./storage:/app/storage
+      - ./reports:/app/reports
+      - app_tmp:/app/tmp
+    command: ["python", "-m", "play_book_studio.cli", "course-qdrant-upsert", "--root-dir", "/app", "--course-dir", "data/course_pbs"]
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "${WEB_BIND:-0.0.0.0:8080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: ${POSTGRES_VOLUME_NAME:-ocpops_playbookstudio_postgres_data}
+  qdrant_storage:
+    name: ${QDRANT_VOLUME_NAME:-ocp-rag-chatbot_qdrant_storage}
+  app_tmp:
