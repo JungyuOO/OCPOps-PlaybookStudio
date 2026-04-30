@@ -38,6 +38,8 @@ export interface Message {
   primaryBoundaryBadge?: string;
   primaryPublicationState?: string;
   primaryApprovalState?: string;
+  routeKind?: 'official' | 'learning' | 'course';
+  learningIndex?: number;
   rewrittenQuery?: string;
   retrievalTrace?: Record<string, unknown>;
   pipelineTrace?: Record<string, unknown>;

@@ -73,6 +73,9 @@ const VIEWER_READER_POLISH = `
     border-radius: 12px !important;
     margin-bottom: 24px !important;
     transition: border-color 0.3s ease, background-color 0.3s ease;
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 520px;
+    contain: layout paint style;
   }
 
   .viewer-root .section-header h2,
@@ -147,6 +150,15 @@ const VIEWER_READER_POLISH = `
     box-shadow: none !important;
     border-radius: 0 !important;
     margin-bottom: 34px !important;
+  }
+
+  .viewer-root img,
+  .viewer-root figure,
+  .viewer-root .course-slide-card,
+  .viewer-root .table-wrap,
+  .viewer-root .code-block {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 360px;
   }
 
   :host([data-viewer-variant="editorial"]) .viewer-root .code-block {
@@ -374,7 +386,9 @@ function findCodeBlockContainingText(container: ParentNode, targetText?: string)
       continue;
     }
     const normalizedCode = normalizeCodeSearchText(code.textContent || '');
-    if (!normalizedCode.includes(normalizedTarget)) {
+    const codeMatchesTarget = normalizedCode.includes(normalizedTarget)
+      || (normalizedCode.length > 8 && normalizedTarget.includes(normalizedCode));
+    if (!codeMatchesTarget) {
       continue;
     }
     const block = code.closest('.code-block, pre');
@@ -540,6 +554,7 @@ export default function ViewerDocumentStage({
   scrollTargetText,
   onNavigateViewerPath,
   onActiveSectionChange,
+  suspendActiveSectionTracking = false,
   textAnnotationsByAnchor,
   textToolEnabled = false,
   textToolMode = 'add',
@@ -554,6 +569,7 @@ export default function ViewerDocumentStage({
   scrollTargetText?: string;
   onNavigateViewerPath?: (viewerPath: string) => void;
   onActiveSectionChange?: (section: { anchor: string; title: string } | null) => void;
+  suspendActiveSectionTracking?: boolean;
   textAnnotationsByAnchor?: Record<string, WikiTextAnnotation[]>;
   textToolEnabled?: boolean;
   textToolMode?: WikiTextAnnotationMode;
@@ -627,47 +643,11 @@ export default function ViewerDocumentStage({
     root.appendChild(wrapper);
     wrapperRef.current = wrapper;
 
-    let cleanupSectionTracking = (): void => { };
-    const sections = findSectionNodes(wrapper);
-    if (sections.length === 0) {
-      latestActiveSectionChangeRef.current?.(null);
-    } else {
-      const scrollContainer = findScrollContainer(host);
-      const scrollTarget = scrollContainer === window ? window : scrollContainer;
-      let frameId = 0;
-      let lastAnchor = '';
-      const syncActiveSection = (): void => {
-        if (frameId) {
-          window.cancelAnimationFrame(frameId);
-        }
-        frameId = window.requestAnimationFrame(() => {
-          const nextSection = sectionDescriptor(pickActiveSection(sections, scrollContainer));
-          const nextAnchor = nextSection?.anchor || '';
-          if (nextAnchor === lastAnchor) {
-            return;
-          }
-          lastAnchor = nextAnchor;
-          latestActiveSectionChangeRef.current?.(nextSection);
-        });
-      };
-      syncActiveSection();
-      scrollTarget.addEventListener('scroll', syncActiveSection, { passive: true });
-      window.addEventListener('resize', syncActiveSection);
-      const resizeObserver = new ResizeObserver(() => {
-        syncActiveSection();
-      });
-      resizeObserver.observe(host);
-      sections.forEach((section) => resizeObserver.observe(section));
-      cleanupSectionTracking = (): void => {
-        if (frameId) {
-          window.cancelAnimationFrame(frameId);
-        }
-        scrollTarget.removeEventListener('scroll', syncActiveSection);
-        window.removeEventListener('resize', syncActiveSection);
-        resizeObserver.disconnect();
-        latestActiveSectionChangeRef.current?.(null);
-      };
-    }
+    wrapper.querySelectorAll('img').forEach((node) => {
+      const image = node as HTMLImageElement;
+      image.loading = 'lazy';
+      image.decoding = 'async';
+    });
 
     root.querySelectorAll('a[href]').forEach((node) => {
       const anchor = node as HTMLAnchorElement;
@@ -885,11 +865,71 @@ export default function ViewerDocumentStage({
 
     root.addEventListener('click', handleClick);
     return () => {
-      cleanupSectionTracking();
       wrapperRef.current = null;
       root.removeEventListener('click', handleClick);
     };
   }, [surfaceVariant, viewerDocument.bodyClassName, viewerDocument.html, inlineStylesKey]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    const wrapper = wrapperRef.current;
+    if (!host || !wrapper || suspendActiveSectionTracking || !onActiveSectionChange) {
+      latestActiveSectionChangeRef.current?.(null);
+      return undefined;
+    }
+    const sections = findSectionNodes(wrapper);
+    if (sections.length === 0) {
+      latestActiveSectionChangeRef.current?.(null);
+      return undefined;
+    }
+
+    const scrollContainer = findScrollContainer(host);
+    let frameId = 0;
+    let lastAnchor = '';
+
+    const publishSection = (section: HTMLElement | null): void => {
+      if (frameId) {
+        return;
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+        const nextSection = sectionDescriptor(section);
+        const nextAnchor = nextSection?.anchor || '';
+        if (nextAnchor === lastAnchor) {
+          return;
+        }
+        lastAnchor = nextAnchor;
+        latestActiveSectionChangeRef.current?.(nextSection);
+      });
+    };
+
+    publishSection(pickActiveSection(sections, scrollContainer));
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting && entry.target instanceof HTMLElement)
+          .map((entry) => entry.target as HTMLElement)
+          .sort((left, right) => left.getBoundingClientRect().top - right.getBoundingClientRect().top);
+        publishSection(visible[0] ?? null);
+      },
+      {
+        root: scrollContainer === window ? null : scrollContainer as HTMLElement,
+        rootMargin: '-96px 0px -62% 0px',
+        threshold: [0, 0.01],
+      },
+    );
+
+    sections.forEach((section) => observer.observe(section));
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+      observer.disconnect();
+      latestActiveSectionChangeRef.current?.(null);
+    };
+  }, [onActiveSectionChange, suspendActiveSectionTracking, viewerDocument.html]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -940,7 +980,7 @@ export default function ViewerDocumentStage({
   }, [currentViewerPath, scrollTargetText, viewerDocument.html]);
 
   useEffect(() => {
-    if (!onActiveSectionChange) {
+    if (!onActiveSectionChange || suspendActiveSectionTracking) {
       return;
     }
     const host = hostRef.current;
@@ -956,7 +996,7 @@ export default function ViewerDocumentStage({
     }
     const scrollContainer = findScrollContainer(host);
     onActiveSectionChange(sectionDescriptor(pickActiveSection(sections, scrollContainer)));
-  }, [currentViewerPath, onActiveSectionChange, viewerDocument.html]);
+  }, [currentViewerPath, onActiveSectionChange, viewerDocument.html, suspendActiveSectionTracking]);
 
   useEffect(() => {
     setEditorDraft(null);

@@ -1,5 +1,5 @@
 import { ArrowRight, Bot, Check, Copy, Link as LinkIcon, WrapText } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ChatCitation, ChatRelatedLink } from '../../lib/runtimeApi';
 import type { VisionMode } from '../../lib/wikiVision';
 
@@ -571,49 +571,7 @@ export function AssistantAnswer({
   isFavoriteLink: (link: ChatRelatedLink) => boolean;
   isCheckedSectionLink: (link: ChatRelatedLink) => boolean;
 }) {
-  const shouldAnimateAnswer = visionMode !== 'guided_tour' && content.length <= 1200;
-  const [displayLength, setDisplayLength] = useState(() => (shouldAnimateAnswer ? 0 : content.length));
-  const previousContentRef = useRef(content);
-
-  useEffect(() => {
-    if (displayLength > 0) {
-      const chatContainer = document.querySelector('.chat-messages');
-      if (chatContainer && !chatContainer.classList.contains('scroll-locked')) {
-        requestAnimationFrame(() => {
-          chatContainer.scrollTo({
-            top: chatContainer.scrollHeight,
-            behavior: 'auto',
-          });
-        });
-      }
-    }
-  }, [displayLength]);
-
-  useEffect(() => {
-    if (!shouldAnimateAnswer) {
-      previousContentRef.current = content;
-      setDisplayLength(content.length);
-      return undefined;
-    }
-
-    if (previousContentRef.current !== content) {
-      previousContentRef.current = content;
-      setDisplayLength(0);
-      return undefined;
-    }
-
-    if (displayLength >= content.length) {
-      return undefined;
-    }
-
-    const timer = setTimeout(() => {
-      setDisplayLength((prev) => Math.min(prev + 48, content.length));
-    }, 16);
-    return () => clearTimeout(timer);
-  }, [displayLength, content, shouldAnimateAnswer]);
-
-  const displayedContent = content.slice(0, displayLength);
-  const blocks = useMemo(() => parseAnswerBlocks(displayedContent, citations), [displayedContent, citations]);
+  const blocks = useMemo(() => parseAnswerBlocks(content, citations), [content, citations]);
   const isGuidedTour = visionMode === 'guided_tour';
   const isCourseStopLink = (link: ChatRelatedLink): boolean => (
     link.kind === 'course_stop'

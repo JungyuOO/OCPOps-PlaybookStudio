@@ -231,8 +231,10 @@ export interface ChatCitation {
   book_slug: string;
   book_title?: string;
   section: string;
+  anchor?: string;
   section_path?: string;
   viewer_path: string;
+  excerpt?: string;
   source_label?: string;
   source_collection?: string;
   pack_label?: string;
@@ -245,6 +247,35 @@ export interface ChatCitation {
   boundary_badge?: string;
   cli_commands?: string[];
   verification_hints?: string[];
+}
+
+export type StudioStarterQuestionLane = 'faq' | 'learning' | 'operations' | string;
+
+export interface StudioStarterQuestion {
+  lane: StudioStarterQuestionLane;
+  question: string;
+  route_kind?: 'official' | 'learning' | 'course' | string;
+  source?: string;
+  learning_index?: number;
+  category_key?: string;
+  category_label?: string;
+  target_book_slug?: string;
+  target_title?: string;
+  target_viewer_path?: string;
+}
+
+export interface StudioStarterQuestionGroup {
+  key: StudioStarterQuestionLane;
+  title: string;
+  description: string;
+  questions: StudioStarterQuestion[];
+}
+
+export interface StudioStarterQuestionsResponse {
+  schema: string;
+  groups: StudioStarterQuestionGroup[];
+  learning_sequence: StudioStarterQuestion[];
+  sources?: Record<string, string>;
 }
 
 export interface ChatTraceEvent {
@@ -472,12 +503,21 @@ export interface ChatStreamTraceEnvelope extends ChatTraceEvent {
   type: 'trace';
 }
 
+export interface ChatStreamAnswerDeltaEvent {
+  type: 'answer_delta';
+  delta: string;
+}
+
 export interface ChatStreamErrorEvent {
   type: 'error';
   error: string;
 }
 
-export type ChatStreamEvent = ChatStreamResultEvent | ChatStreamTraceEnvelope | ChatStreamErrorEvent;
+export type ChatStreamEvent =
+  | ChatStreamResultEvent
+  | ChatStreamTraceEnvelope
+  | ChatStreamAnswerDeltaEvent
+  | ChatStreamErrorEvent;
 
 export interface DerivedAsset {
   asset_slug: string;
@@ -760,6 +800,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set('Content-Type', 'application/json');
   }
   const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
+    credentials: 'include',
     headers,
     ...init,
   });
@@ -781,6 +822,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 async function requestResponse(path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers ?? {});
   const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
+    credentials: 'include',
     headers,
     ...init,
   });
@@ -840,6 +882,10 @@ export function toRuntimeUrl(path: string): string {
 
 export async function loadDataControlRoom(): Promise<DataControlRoomResponse> {
   return requestJson<DataControlRoomResponse>('/api/data-control-room');
+}
+
+export async function loadStudioStarterQuestions(): Promise<StudioStarterQuestionsResponse> {
+  return requestJson<StudioStarterQuestionsResponse>('/api/studio/starter-questions');
 }
 
 export async function loadDataControlRoomChunks(payload: {
@@ -940,6 +986,13 @@ export async function sendChat(payload: {
   userId?: string;
   selectedDraftIds?: string[];
   restrictUploadedSources?: boolean;
+  routeKind?: string;
+  learningIndex?: number;
+  learningCategoryKey?: string;
+  learningCategoryLabel?: string;
+  learningTargetBookSlug?: string;
+  learningTargetTitle?: string;
+  learningTargetViewerPath?: string;
 }): Promise<ChatResponse> {
   return requestJson<ChatResponse>('/api/chat', {
     method: 'POST',
@@ -950,6 +1003,13 @@ export async function sendChat(payload: {
       user_id: payload.userId ?? '',
       selected_draft_ids: payload.selectedDraftIds ?? [],
       restrict_uploaded_sources: payload.restrictUploadedSources ?? false,
+      route_kind: payload.routeKind ?? '',
+      learning_index: payload.learningIndex,
+      learning_category_key: payload.learningCategoryKey ?? '',
+      learning_category_label: payload.learningCategoryLabel ?? '',
+      learning_target_book_slug: payload.learningTargetBookSlug ?? '',
+      learning_target_title: payload.learningTargetTitle ?? '',
+      learning_target_viewer_path: payload.learningTargetViewerPath ?? '',
     }),
   });
 }
@@ -962,11 +1022,19 @@ export async function sendChatStream(
     userId?: string;
     selectedDraftIds?: string[];
     restrictUploadedSources?: boolean;
+    routeKind?: string;
+    learningIndex?: number;
+    learningCategoryKey?: string;
+    learningCategoryLabel?: string;
+    learningTargetBookSlug?: string;
+    learningTargetTitle?: string;
+    learningTargetViewerPath?: string;
   },
   onEvent: (event: ChatStreamEvent) => void,
 ): Promise<ChatResponse> {
   const response = await fetch(`${RUNTIME_ORIGIN}/api/chat/stream`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },
@@ -977,6 +1045,13 @@ export async function sendChatStream(
       user_id: payload.userId ?? '',
       selected_draft_ids: payload.selectedDraftIds ?? [],
       restrict_uploaded_sources: payload.restrictUploadedSources ?? false,
+      route_kind: payload.routeKind ?? '',
+      learning_index: payload.learningIndex,
+      learning_category_key: payload.learningCategoryKey ?? '',
+      learning_category_label: payload.learningCategoryLabel ?? '',
+      learning_target_book_slug: payload.learningTargetBookSlug ?? '',
+      learning_target_title: payload.learningTargetTitle ?? '',
+      learning_target_viewer_path: payload.learningTargetViewerPath ?? '',
     }),
   });
   if (!response.ok || !response.body) {

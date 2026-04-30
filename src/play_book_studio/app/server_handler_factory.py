@@ -67,6 +67,7 @@ from play_book_studio.app.server_support import (
     _build_chat_payload,
     _resolve_frontend_asset,
 )
+from play_book_studio.app.starter_questions import handle_studio_starter_questions as _handle_studio_starter_questions
 from play_book_studio.app.server_handler_base import _HandlerBase
 from play_book_studio.app.session_owner import SessionOwner, resolve_session_owner
 from play_book_studio.app.chat_debug import (
@@ -167,6 +168,9 @@ def _build_handler(
                 return
             if request_path == "/api/data-control-room/chunks":
                 self._handle_data_control_room_chunks(parsed_request.query)
+                return
+            if request_path == "/api/studio/starter-questions":
+                _handle_studio_starter_questions(self, parsed_request.query, root_dir=root_dir)
                 return
             if request_path == "/api/buyer-packet":
                 self._handle_buyer_packet(parsed_request.query)

@@ -55,6 +55,7 @@ type WorkspaceViewerPanelProps = {
   headerToolbar?: ReactNode;
   inkSurfaceKey: string;
   isInkSaving: boolean;
+  isPanelResizing: boolean;
   rightCollapsed: boolean;
   savedInkStrokes: WikiInkStroke[];
   sourcesDrawerOpen: boolean;
@@ -87,6 +88,7 @@ export default function WorkspaceViewerPanel({
   headerToolbar,
   inkSurfaceKey,
   isInkSaving,
+  isPanelResizing,
   rightCollapsed,
   savedInkStrokes,
   sourcesDrawerOpen,
@@ -181,10 +183,16 @@ export default function WorkspaceViewerPanel({
 
   useEffect(() => {
     const stage = stageRef.current;
-    if (!stage) {
+    if (!stage || !annotationAvailable || !inkToolActive || isPanelResizing) {
+      setInkViewport((current) => (
+        current.width === 0 && current.height === 0
+          ? current
+          : { width: 0, height: 0 }
+      ));
       return undefined;
     }
 
+    let frameId = 0;
     const updateViewport = (): void => {
       const width = Math.max(Math.ceil(stage.getBoundingClientRect().width), 1);
       const height = Math.max(stage.scrollHeight, stage.clientHeight, 1);
@@ -194,24 +202,31 @@ export default function WorkspaceViewerPanel({
           : { width, height }
       ));
     };
+    const scheduleUpdateViewport = (): void => {
+      if (frameId) {
+        return;
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+        updateViewport();
+      });
+    };
 
-    updateViewport();
+    scheduleUpdateViewport();
     const resizeObserver = new ResizeObserver(() => {
-      updateViewport();
+      scheduleUpdateViewport();
     });
     resizeObserver.observe(stage);
-    Array.from(stage.children).forEach((child) => {
-      if (child instanceof HTMLElement && !child.classList.contains('atlas-ink-overlay')) {
-        resizeObserver.observe(child);
-      }
-    });
-    window.addEventListener('resize', updateViewport);
+    window.addEventListener('resize', scheduleUpdateViewport);
 
     return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
       resizeObserver.disconnect();
-      window.removeEventListener('resize', updateViewport);
+      window.removeEventListener('resize', scheduleUpdateViewport);
     };
-  }, [children, annotationAvailable, inkSurfaceKey]);
+  }, [children, annotationAvailable, inkSurfaceKey, inkToolActive, isPanelResizing]);
 
   function pointFromEvent(
     event: React.PointerEvent<SVGSVGElement>,
@@ -512,7 +527,7 @@ export default function WorkspaceViewerPanel({
           </>
         )}
 
-        <div className="source-viewer-content viewer-surface">
+        <div className={`source-viewer-content viewer-surface ${isPanelResizing ? 'is-panel-resizing' : ''}`}>
           <div
             ref={stageRef}
             className={`atlas-ink-stage ${inkEnabled ? 'is-inking' : ''}`}

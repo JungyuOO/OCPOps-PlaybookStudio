@@ -35,6 +35,8 @@ import {
   type DerivedAsset,
   type LibraryBook,
   type SessionSummary,
+  type StudioStarterQuestion,
+  type StudioStarterQuestionGroup,
   type WikiOverlayRecommendedPlay,
   type WikiOverlaySignalsResponse,
   type SourceMetaResponse,
@@ -57,6 +59,7 @@ import {
   loadWikiOverlaySignals,
   loadWikiOverlays,
   loadSession,
+  loadStudioStarterQuestions,
   deleteAllSessions,
   deleteSession,
   loadSourceMeta,
@@ -65,7 +68,6 @@ import {
   normalizeCustomerPackDraft,
   removeWikiOverlay,
   saveWikiOverlay,
-  sendChat,
   sendChatStream,
   toRuntimeUrl,
   uploadCustomerPackDraft,
@@ -76,7 +78,7 @@ import {
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../app/routes';
 import { sendCourseChatStream } from '../lib/courseApi';
-import { WIKI_VISION_MODES, loadStoredVisionMode, persistVisionMode, type VisionMode } from '../lib/wikiVision';
+import { loadStoredVisionMode, type VisionMode } from '../lib/wikiVision';
 import { resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';
 import WorkspaceTracePanel from '../components/WorkspaceTracePanel';
 import WorkspaceHeader from './workspace/WorkspaceHeader';
@@ -291,35 +293,135 @@ function extractTextAnnotations(
   ];
 }
 
-const STARTER_QUESTION_POOL = [
-  '운영 입문 기준으로 먼저 봐야 할 플레이북 3개 알려줘',
-  'Operator 장애가 났을 때 monitoring과 operators 문서를 어떻게 같이 따라가야 하나?',
-  '클러스터 네트워크 MTU 변경 전후에 어떤 절차와 검증을 확인해야 하나?',
-  '인증 문제와 Ingress 노출 문제를 같이 볼 때 어떤 책 순서로 확인해야 하나?',
-  '연결이 끊긴 환경에서 미러 레지스트리 설정을 점검할 때 운영자가 먼저 볼 문서는 무엇인가?',
-  '특정 namespace에 admin 권한을 주려면 어떤 절차를 먼저 확인해야 하나?',
-  '프로젝트가 Terminating에서 안 지워질 때 어떤 순서로 확인해야 하나?',
-  '노드가 Ready가 아니거나 머신컨피그 적용이 늦을 때 어디부터 봐야 하나?',
-  'Route나 Ingress 연결 문제를 점검할 때 먼저 볼 절차를 알려줘',
-  '모니터링 알림이 쏟아질 때 운영자가 먼저 확인할 플레이북 순서를 알려줘',
-  '클러스터 설치 후 Day-2 운영에서 먼저 읽어야 할 문서를 순서대로 알려줘',
-  '인증서 갱신이나 만료 문제를 볼 때 먼저 확인할 책과 절차를 알려줘',
-];
+type WelcomeQuestion = {
+  lane: 'faq' | 'learning' | 'operations';
+  question: string;
+  routeKind?: Message['routeKind'];
+  learningIndex?: number;
+  categoryKey?: string;
+  categoryLabel?: string;
+  targetBookSlug?: string;
+  targetTitle?: string;
+  targetViewerPath?: string;
+};
 
-const COURSE_STARTER_QUESTION_POOL = [
-  '아키텍처 설계는 어떤 순서로 보면 전체 구성이 이해돼?',
-  '아키텍처 구성도에서 외부, DMZ, 내부망, 데이터베이스 영역은 어떻게 연결돼?',
-  '성능 테스트 결과에서 병목과 개선 포인트는 어디부터 보면 돼?',
-  '파이프라인이나 Pod가 Running 상태라는 건 화면에서 무엇으로 확인해?',
-];
+type WelcomeQuestionGroup = {
+  key: WelcomeQuestion['lane'];
+  title: string;
+  description: string;
+  questions: WelcomeQuestion[];
+};
 
-function pickRandomStarterQuestions(pool: string[], count: number): string[] {
-  const shuffled = [...pool];
-  for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+type SendOptions = {
+  forceCourseMode?: boolean;
+  routeKind?: Message['routeKind'];
+  learningIndex?: number;
+  categoryKey?: string;
+  categoryLabel?: string;
+  targetBookSlug?: string;
+  targetTitle?: string;
+  targetViewerPath?: string;
+};
+
+const EMPTY_WELCOME_QUESTION_GROUPS: WelcomeQuestionGroup[] = [];
+
+function normalizeWelcomeLane(value: string): WelcomeQuestion['lane'] {
+  if (value === 'faq' || value === 'learning' || value === 'operations') {
+    return value;
   }
-  return shuffled.slice(0, count);
+  return 'faq';
+}
+
+function normalizeWelcomeRouteKind(value?: string): Message['routeKind'] {
+  if (value === 'learning' || value === 'course' || value === 'official') {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeWelcomeQuestion(item: StudioStarterQuestion): WelcomeQuestion | null {
+  const question = String(item.question || '').trim();
+  if (!question) {
+    return null;
+  }
+  return {
+    lane: normalizeWelcomeLane(String(item.lane || 'faq')),
+    question,
+    routeKind: normalizeWelcomeRouteKind(item.route_kind),
+    learningIndex: typeof item.learning_index === 'number' ? item.learning_index : undefined,
+    categoryKey: typeof item.category_key === 'string' ? item.category_key : undefined,
+    categoryLabel: typeof item.category_label === 'string' ? item.category_label : undefined,
+    targetBookSlug: typeof item.target_book_slug === 'string' ? item.target_book_slug : undefined,
+    targetTitle: typeof item.target_title === 'string' ? item.target_title : undefined,
+    targetViewerPath: typeof item.target_viewer_path === 'string' ? item.target_viewer_path : undefined,
+  };
+}
+
+function normalizeWelcomeQuestionGroup(group: StudioStarterQuestionGroup): WelcomeQuestionGroup | null {
+  const key = normalizeWelcomeLane(String(group.key || 'faq'));
+  const questions = (group.questions || [])
+    .map(normalizeWelcomeQuestion)
+    .filter((item): item is WelcomeQuestion => Boolean(item));
+  if (!questions.length) {
+    return null;
+  }
+  return {
+    key,
+    title: String(group.title || key).trim() || key,
+    description: String(group.description || '').trim(),
+    questions,
+  };
+}
+
+function mergeLearningFollowUps(
+  serverSuggestions: string[],
+  learningIndex?: number,
+  learningSequence: WelcomeQuestion[] = [],
+): string[] {
+  if (learningIndex === undefined) {
+    return serverSuggestions;
+  }
+  const nextLearningQuestions = learningSequence
+    .filter((item) => typeof item.learningIndex === 'number' && item.learningIndex > learningIndex)
+    .slice(0, 2)
+    .map((item) => item.question);
+  return [...nextLearningQuestions, ...serverSuggestions]
+    .map((item) => item.trim())
+    .filter((item, index, items) => item && items.indexOf(item) === index)
+    .slice(0, 4);
+}
+
+const CONTINUATION_QUERY_RE = /^(응|네|예|ㅇㅇ|좋아|안내해줘|계속|다음|이어줘|이어 줘|진행해줘|해줘|알려줘)[\s.!?。]*$/i;
+
+function isContinuationQuery(value: string): boolean {
+  return CONTINUATION_QUERY_RE.test(value.trim());
+}
+
+function resolveContinuationQuestion(
+  value: string,
+  messages: Message[],
+  learningQuestionByText: Map<string, WelcomeQuestion>,
+): { query: string; routeKind?: Message['routeKind']; learningIndex?: number; questionMeta?: WelcomeQuestion } {
+  if (!isContinuationQuery(value)) {
+    return { query: value };
+  }
+  const lastAssistantWithSuggestions = [...messages]
+    .reverse()
+    .find((message) => message.role === 'assistant' && (message.suggestedQueries?.length ?? 0) > 0);
+  const nextQuestion = lastAssistantWithSuggestions?.suggestedQueries?.[0]?.trim();
+  if (!nextQuestion) {
+    return { query: value };
+  }
+  const routeKind = lastAssistantWithSuggestions?.routeKind;
+  const questionMeta = learningQuestionByText.get(nextQuestion);
+  return {
+    query: nextQuestion,
+    routeKind,
+    learningIndex: routeKind === 'learning'
+      ? questionMeta?.learningIndex
+      : undefined,
+    questionMeta,
+  };
 }
 
 type PreviewState =
@@ -440,6 +542,11 @@ function primaryCitationTruth(citations?: ChatCitation[] | null): {
   };
 }
 
+function isCourseSourceLane(sourceLane?: string): boolean {
+  const normalized = String(sourceLane || '').trim().toLowerCase();
+  return normalized === 'course' || normalized === 'operations' || normalized === 'study_docs';
+}
+
 function scorePrimaryPlaybookCitation(citation: ChatCitation, index: number): number {
   const slug = String(citation.book_slug || '').trim().toLowerCase();
   const title = String(citation.book_title || citation.source_label || citation.section || '').trim().toLowerCase();
@@ -511,10 +618,6 @@ function extractDraftIdFromViewerPath(viewerPath: string): string | null {
   return match?.[1] ?? null;
 }
 
-const PACK_OPTIONS = [
-  'OpenShift 4.20',
-] as const;
-
 const FALLBACK_CLUSTER_USER_LABEL = 'Undefined';
 
 function runtimePathFromUrl(viewerUrl: string): string {
@@ -544,6 +647,115 @@ function firstCitationCommand(citation: ChatCitation): string {
   return (citation.cli_commands ?? [])
     .map((command) => String(command || '').trim())
     .find(Boolean) ?? '';
+}
+
+function answerCodeBlocks(answer: string): string[] {
+  const blocks: string[] = [];
+  const fenceRe = /```[^\n`]*\n([\s\S]*?)```/g;
+  let match: RegExpExecArray | null;
+  while ((match = fenceRe.exec(answer)) !== null) {
+    const block = String(match[1] || '').trim();
+    if (block) {
+      blocks.push(block);
+    }
+  }
+  return blocks;
+}
+
+function citationScrollTarget(citation: ChatCitation, answerContent = ''): string {
+  const codeBlocks = answerCodeBlocks(answerContent);
+  const citationCommands = (citation.cli_commands ?? [])
+    .map((command) => String(command || '').trim())
+    .filter(Boolean);
+  const excerpt = String(citation.excerpt || '').toLowerCase();
+  const backupBlock = codeBlocks.find((block) => /cluster-backup\.sh|etcdctl|snapshot/i.test(block));
+
+  const excerptMatchedBlock = codeBlocks.find((block) => excerpt.includes(block.toLowerCase()));
+  if (excerptMatchedBlock) {
+    return excerptMatchedBlock;
+  }
+
+  const citationHasBackupSignal = /cluster-backup\.sh|etcdctl|snapshot/i.test(
+    `${citationCommands.join('\n')}\n${citation.excerpt || ''}\n${citation.section || ''}`,
+  );
+  if (citationHasBackupSignal && backupBlock) {
+    return backupBlock;
+  }
+
+  for (const command of citationCommands) {
+    const matchedAnswerBlock = codeBlocks.find((block) => block.trim() === command || block.includes(command));
+    if (matchedAnswerBlock) {
+      return matchedAnswerBlock;
+    }
+  }
+
+  if (backupBlock) {
+    return backupBlock;
+  }
+
+  return codeBlocks[0] || citationCommands[0] || '';
+}
+
+type MessageStateUpdater = (updater: (current: Message[]) => Message[]) => void;
+
+function createThrottledMessageContentUpdater(
+  messageId: string,
+  updateMessages: MessageStateUpdater,
+  delayMs = 90,
+): { push: (content: string) => void; flush: () => void; cancel: () => void } {
+  let latestContent = '';
+  let timerId = 0;
+  let frameId = 0;
+
+  const applyLatest = (): void => {
+    updateMessages((current) => current.map((message) => (
+      message.id === messageId
+        ? { ...message, content: latestContent }
+        : message
+    )));
+  };
+
+  const clearScheduled = (): void => {
+    if (timerId) {
+      window.clearTimeout(timerId);
+      timerId = 0;
+    }
+    if (frameId) {
+      window.cancelAnimationFrame(frameId);
+      frameId = 0;
+    }
+  };
+
+  return {
+    push(content: string): void {
+      latestContent = content;
+      if (typeof window === 'undefined') {
+        applyLatest();
+        return;
+      }
+      if (timerId || frameId) {
+        return;
+      }
+      timerId = window.setTimeout(() => {
+        timerId = 0;
+        frameId = window.requestAnimationFrame(() => {
+          frameId = 0;
+          applyLatest();
+        });
+      }, delayMs);
+    },
+    flush(): void {
+      if (typeof window !== 'undefined') {
+        clearScheduled();
+      }
+      applyLatest();
+    },
+    cancel(): void {
+      if (typeof window !== 'undefined') {
+        clearScheduled();
+      }
+    },
+  };
 }
 
 function parseViewerHtml(viewerHtml: string): Document | null {
@@ -748,8 +960,6 @@ function buildOverlayTargetFromViewerPath(
 }
 
 export default function WorkspacePage() {
-  const [packLabel, setPackLabel] = useState('OpenShift 4.20');
-  const [packDropdownOpen, setPackDropdownOpen] = useState(false);
   const [manualBooks, setManualBooks] = useState<WorkspaceManualBook[]>([]);
   const [drafts, setDrafts] = useState<CustomerPackDraft[]>([]);
   const [isBootstrapLoading, setIsBootstrapLoading] = useState(true);
@@ -761,6 +971,7 @@ export default function WorkspacePage() {
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState>({ kind: 'empty' });
   const [viewerPageMode, setViewerPageMode] = useState<ViewerPageMode>('single');
+  const [isPanelResizing, setIsPanelResizing] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isNormalizing, setIsNormalizing] = useState(false);
@@ -782,7 +993,7 @@ export default function WorkspacePage() {
     }
     return 'history';
   });
-  const [visionMode, setVisionMode] = useState<VisionMode>(() => loadStoredVisionMode());
+  const [visionMode] = useState<VisionMode>(() => loadStoredVisionMode());
   const isGuidedSurface = visionMode === 'guided_tour' || visionMode === 'course_study';
   const isCourseMode = visionMode === 'course_study';
 
@@ -794,6 +1005,9 @@ export default function WorkspacePage() {
 
   // Scroll + welcome
   const [userScrolledUp, setUserScrolledUp] = useState(false);
+  const [welcomeQuestionGroups, setWelcomeQuestionGroups] = useState<WelcomeQuestionGroup[]>(EMPTY_WELCOME_QUESTION_GROUPS);
+  const [welcomeLearningSequence, setWelcomeLearningSequence] = useState<WelcomeQuestion[]>([]);
+  const [isWelcomeQuestionLoading, setIsWelcomeQuestionLoading] = useState(true);
 
   // Collapsible panels
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -904,19 +1118,12 @@ export default function WorkspacePage() {
     }
   }, [wikiOverlayUserId]);
 
-  const welcomeQuestions = useMemo(
-    () => pickRandomStarterQuestions(STARTER_QUESTION_POOL, 4),
-    [],
-  );
-  const courseWelcomeQuestions = useMemo(
-    () => pickRandomStarterQuestions(COURSE_STARTER_QUESTION_POOL, 4),
-    [],
-  );
-  const displayedWelcomeQuestions = isCourseMode ? courseWelcomeQuestions : welcomeQuestions;
-  const activeVision = useMemo(
-    () => WIKI_VISION_MODES.find((mode) => mode.id === visionMode) ?? WIKI_VISION_MODES[0],
-    [visionMode],
-  );
+  const learningQuestionByText = useMemo(() => {
+    const pairs = welcomeLearningSequence
+      .filter((item) => typeof item.learningIndex === 'number')
+      .map((item) => [item.question, item] as const);
+    return new Map<string, WelcomeQuestion>(pairs);
+  }, [welcomeLearningSequence]);
   const leftPanelLabels = useMemo(() => ({
     history: isGuidedSurface ? 'Journey' : 'History',
     outline: isGuidedSurface ? 'Route Map' : 'Outline',
@@ -933,13 +1140,88 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    persistVisionMode(visionMode);
-  }, [visionMode]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
     window.localStorage.setItem('workspace.outlineCategoryKey', outlineCategoryKey);
   }, [outlineCategoryKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadWelcomeQuestions(): Promise<void> {
+      setIsWelcomeQuestionLoading(true);
+      try {
+        const payload = await loadStudioStarterQuestions();
+        if (cancelled) {
+          return;
+        }
+        const groups = (payload.groups || [])
+          .map(normalizeWelcomeQuestionGroup)
+          .filter((item): item is WelcomeQuestionGroup => Boolean(item));
+        const learningSequence = (payload.learning_sequence || [])
+          .map(normalizeWelcomeQuestion)
+          .filter((item): item is WelcomeQuestion => Boolean(item));
+        setWelcomeQuestionGroups(groups);
+        setWelcomeLearningSequence(learningSequence);
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setWelcomeQuestionGroups(EMPTY_WELCOME_QUESTION_GROUPS);
+          setWelcomeLearningSequence([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsWelcomeQuestionLoading(false);
+        }
+      }
+    }
+    void loadWelcomeQuestions();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+    let resizePointerId: number | null = null;
+    let releaseTimer = 0;
+
+    const finishResize = (): void => {
+      resizePointerId = null;
+      window.clearTimeout(releaseTimer);
+      releaseTimer = window.setTimeout(() => setIsPanelResizing(false), 80);
+    };
+
+    const handlePointerDown = (event: PointerEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('.custom-resize-handle')) {
+        return;
+      }
+      resizePointerId = event.pointerId;
+      window.clearTimeout(releaseTimer);
+      setIsPanelResizing(true);
+    };
+
+    const handlePointerUp = (event: PointerEvent): void => {
+      if (resizePointerId === null || event.pointerId === resizePointerId) {
+        finishResize();
+      }
+    };
+
+    const handleWindowBlur = (): void => finishResize();
+
+    window.addEventListener('pointerdown', handlePointerDown, true);
+    window.addEventListener('pointerup', handlePointerUp, true);
+    window.addEventListener('pointercancel', handlePointerUp, true);
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      window.clearTimeout(releaseTimer);
+      window.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('pointerup', handlePointerUp, true);
+      window.removeEventListener('pointercancel', handlePointerUp, true);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -977,22 +1259,35 @@ export default function WorkspacePage() {
     const el = chatMessagesRef.current;
     if (!el) return;
 
-    function handleWheel(): void {
-      requestAnimationFrame(() => {
-        if (!el) return;
-        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-        setUserScrolledUp(!atBottom);
-        if (atBottom) {
-          el.classList.remove('scroll-locked');
-        } else {
-          el.classList.add('scroll-locked');
-        }
-      });
+    let frameId = 0;
+    let lastLocked = userScrolledUp;
+    function syncScrollLock(): void {
+      frameId = 0;
+      if (!el) return;
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      const nextLocked = !atBottom;
+      if (nextLocked !== lastLocked) {
+        lastLocked = nextLocked;
+        setUserScrolledUp(nextLocked);
+      }
+      el.classList.toggle('scroll-locked', nextLocked);
     }
 
-    el.addEventListener('wheel', handleWheel, { passive: true });
-    return () => el.removeEventListener('wheel', handleWheel);
-  }, [refreshSessionList]);
+    function handleScroll(): void {
+      if (frameId) {
+        return;
+      }
+      frameId = requestAnimationFrame(syncScrollLock);
+    }
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      if (frameId) {
+        cancelAnimationFrame(frameId);
+      }
+      el.removeEventListener('scroll', handleScroll);
+    };
+  }, [userScrolledUp]);
 
   function scrollToBottom(): void {
     const el = chatMessagesRef.current;
@@ -1128,24 +1423,6 @@ export default function WorkspacePage() {
   }, [sourcesDrawerOpen]);
 
   useEffect(() => {
-    if (!packDropdownOpen) {
-      return undefined;
-    }
-
-    function handleWindowPointerDown(event: MouseEvent): void {
-      const target = event.target as HTMLElement | null;
-      if (!target?.closest('.pack-selector-wrapper')) {
-        setPackDropdownOpen(false);
-      }
-    }
-
-    window.addEventListener('mousedown', handleWindowPointerDown);
-    return () => {
-      window.removeEventListener('mousedown', handleWindowPointerDown);
-    };
-  }, [packDropdownOpen]);
-
-  useEffect(() => {
     const container = chatMessagesRef.current;
     if (messages.length > 0 && container && !userScrolledUp) {
       requestAnimationFrame(() => {
@@ -1233,7 +1510,6 @@ export default function WorkspacePage() {
         const sourceBooks = resolveWorkspaceSourceBooks(room) as WorkspaceManualBook[];
         const nextDrafts = draftPayload.drafts ?? [];
 
-        setPackLabel(room.active_pack.pack_label || 'OpenShift 4.20');
         setManualBooks(sourceBooks);
         setDrafts(nextDrafts);
       } catch (error) {
@@ -1589,13 +1865,12 @@ export default function WorkspacePage() {
           kind: 'recent_position',
           ...currentOverlayTarget.payload,
         })
-          .then(() => refreshWikiOverlays())
           .catch((error) => console.error(error));
-      }, 500);
+      }, 1500);
       return () => window.clearTimeout(timer);
     }
     return;
-  }, [currentOverlayTarget, refreshWikiOverlays]);
+  }, [currentOverlayTarget, wikiOverlayUserId]);
 
   function resetParentScroll(): void {
     requestAnimationFrame(() => {
@@ -1631,7 +1906,7 @@ export default function WorkspacePage() {
     }
   }
 
-  async function handleCitationClick(citation: ChatCitation): Promise<void> {
+  async function handleCitationClick(citation: ChatCitation, answerContent = ''): Promise<void> {
     try {
       if (rightCollapsed) {
         rightPanelRef.current?.expand();
@@ -1645,8 +1920,8 @@ export default function WorkspacePage() {
           citation.viewer_path,
           citation.source_label || citation.book_title || citation.section,
           undefined,
-          viewerPageMode,
-          firstCitationCommand(citation),
+          'single',
+          citationScrollTarget(citation, answerContent) || firstCitationCommand(citation),
         );
       }
       if (!isCourseMode) {
@@ -2060,16 +2335,35 @@ export default function WorkspacePage() {
     }
   }
 
-  async function handleSend(queryOverride?: string): Promise<void> {
-    const trimmed = (queryOverride ?? query).trim();
-    if (!trimmed || isSending) {
+  async function handleSend(queryOverride?: string, options: SendOptions = {}): Promise<void> {
+    const visibleQuery = (queryOverride ?? query).trim();
+    if (!visibleQuery || isSending) {
       return;
     }
+    const continuation = queryOverride
+      ? { query: visibleQuery, routeKind: options.routeKind, learningIndex: options.learningIndex, questionMeta: undefined }
+      : resolveContinuationQuestion(visibleQuery, messages, learningQuestionByText);
+    const trimmed = continuation.query.trim();
+    const questionMeta = continuation.questionMeta || learningQuestionByText.get(trimmed);
+    const resolvedRouteKind = continuation.routeKind || options.routeKind;
+    const resolvedLearningIndex = continuation.learningIndex ?? options.learningIndex;
+    const resolvedCategoryKey = options.categoryKey ?? questionMeta?.categoryKey;
+    const resolvedCategoryLabel = options.categoryLabel ?? questionMeta?.categoryLabel;
+    const resolvedTargetBookSlug = options.targetBookSlug ?? questionMeta?.targetBookSlug;
+    const resolvedTargetTitle = options.targetTitle ?? questionMeta?.targetTitle;
+    const resolvedTargetViewerPath = options.targetViewerPath ?? questionMeta?.targetViewerPath;
+    const shouldUseCourseMode = options.forceCourseMode || resolvedRouteKind === 'course' || isCourseMode;
+    const messageRouteKind: Message['routeKind'] = shouldUseCourseMode
+      ? 'course'
+      : resolvedRouteKind || 'official';
 
     const nextUserMessage: Message = {
       id: makeId('user'),
       role: 'user',
-      content: trimmed,
+      content: visibleQuery,
+      routeKind: messageRouteKind,
+      learningIndex: resolvedLearningIndex,
+      rewrittenQuery: trimmed !== visibleQuery ? trimmed : undefined,
     };
     setMessages((current) => [...current, nextUserMessage]);
     if (!queryOverride) {
@@ -2085,10 +2379,20 @@ export default function WorkspacePage() {
         userId: wikiOverlayUserId,
         selectedDraftIds: activeDraft ? [activeDraft.draft_id] : [],
         restrictUploadedSources: Boolean(activeDraft),
+        routeKind: messageRouteKind,
+        learningIndex: resolvedLearningIndex,
+        learningCategoryKey: resolvedCategoryKey,
+        learningCategoryLabel: resolvedCategoryLabel,
+        learningTargetBookSlug: resolvedTargetBookSlug,
+        learningTargetTitle: resolvedTargetTitle,
+        learningTargetViewerPath: resolvedTargetViewerPath,
       };
       let response: ChatResponse;
       let courseAssistantMessageId = '';
-      if (isCourseMode) {
+      let courseStreamUpdater: ReturnType<typeof createThrottledMessageContentUpdater> | null = null;
+      let assistantStreamMessageId = '';
+      let assistantStreamUpdater: ReturnType<typeof createThrottledMessageContentUpdater> | null = null;
+      if (shouldUseCourseMode) {
         courseAssistantMessageId = makeId('assistant');
         let streamedAnswer = '';
         setMessages((current) => [
@@ -2103,8 +2407,10 @@ export default function WorkspacePage() {
             relatedSections: [],
             artifacts: [],
             responseKind: 'rag',
+            routeKind: 'course',
           },
         ]);
+        courseStreamUpdater = createThrottledMessageContentUpdater(courseAssistantMessageId, setMessages, 90);
         response = await sendCourseChatStream({
           message: trimmed,
           sessionId,
@@ -2112,22 +2418,44 @@ export default function WorkspacePage() {
         }, (event) => {
           if (event.type === 'answer_delta') {
             streamedAnswer += event.delta;
-            setMessages((current) => current.map((message) => (
-              message.id === courseAssistantMessageId
-                ? { ...message, content: streamedAnswer }
-                : message
-            )));
+            courseStreamUpdater?.push(streamedAnswer);
           }
         });
-      } else if (testMode) {
-        setActiveTestTrace({
-          query: trimmed,
-          sessionId,
-          events: [],
-          result: null,
-        });
+        courseStreamUpdater.flush();
+      } else {
+        assistantStreamMessageId = makeId('assistant');
+        let streamedAnswer = '';
+        setMessages((current) => [
+          ...current,
+          {
+            id: assistantStreamMessageId,
+            role: 'assistant',
+            content: '',
+            citations: [],
+            suggestedQueries: [],
+            relatedLinks: [],
+            relatedSections: [],
+            artifacts: [],
+            responseKind: 'rag',
+            routeKind: messageRouteKind,
+            learningIndex: resolvedLearningIndex,
+          },
+        ]);
+        assistantStreamUpdater = createThrottledMessageContentUpdater(assistantStreamMessageId, setMessages, 70);
+        if (testMode) {
+          setActiveTestTrace({
+            query: trimmed,
+            sessionId,
+            events: [],
+            result: null,
+          });
+        }
         response = await sendChatStream(requestPayload, (event) => {
-          if (event.type === 'trace') {
+          if (event.type === 'answer_delta') {
+            streamedAnswer += event.delta;
+            assistantStreamUpdater?.push(streamedAnswer);
+          }
+          if (testMode && event.type === 'trace') {
             setActiveTestTrace((current) => ({
               query: current?.query ?? trimmed,
               sessionId: current?.sessionId ?? sessionId,
@@ -2135,7 +2463,7 @@ export default function WorkspacePage() {
               result: current?.result ?? null,
             }));
           }
-          if (event.type === 'result') {
+          if (testMode && event.type === 'result') {
             setActiveTestTrace((current) => ({
               query: current?.query ?? trimmed,
               sessionId: event.payload.session_id || current?.sessionId || sessionId,
@@ -2144,8 +2472,7 @@ export default function WorkspacePage() {
             }));
           }
         });
-      } else {
-        response = await sendChat(requestPayload);
+        assistantStreamUpdater.flush();
       }
       const primaryTruth = primaryCitationTruth(response.citations);
 
@@ -2155,7 +2482,9 @@ export default function WorkspacePage() {
           role: 'assistant',
           content: response.answer,
           citations: response.citations ?? [],
-          suggestedQueries: response.suggested_queries ?? [],
+          suggestedQueries: messageRouteKind === 'learning'
+            ? mergeLearningFollowUps(response.suggested_queries ?? [], resolvedLearningIndex, welcomeLearningSequence)
+            : response.suggested_queries ?? [],
           relatedLinks: response.related_links ?? [],
           relatedSections: response.related_sections ?? [],
           artifacts: Array.isArray((response as { artifacts?: unknown }).artifacts)
@@ -2169,6 +2498,8 @@ export default function WorkspacePage() {
           primaryBoundaryBadge: primaryTruth?.boundaryBadge,
           primaryPublicationState: primaryTruth?.publicationState,
           primaryApprovalState: primaryTruth?.approvalState,
+          routeKind: messageRouteKind,
+          learningIndex: resolvedLearningIndex,
           rewrittenQuery: response.rewritten_query,
           retrievalTrace: response.retrieval_trace,
           pipelineTrace: response.pipeline_trace,
@@ -2180,10 +2511,16 @@ export default function WorkspacePage() {
             ? { ...assistantMessage, id: courseAssistantMessageId }
             : message
         )));
+      } else if (assistantStreamMessageId) {
+        setMessages((current) => current.map((message) => (
+          message.id === assistantStreamMessageId
+            ? { ...assistantMessage, id: assistantStreamMessageId }
+            : message
+        )));
       } else {
         setMessages((current) => [...current, assistantMessage]);
       }
-      if (testMode && !isCourseMode) {
+      if (testMode && !shouldUseCourseMode) {
         setActiveTestTrace((current) => ({
           query: current?.query ?? trimmed,
           sessionId: response.session_id || current?.sessionId || sessionId,
@@ -2193,7 +2530,7 @@ export default function WorkspacePage() {
       }
 
       const primaryCitation = pickPrimaryPlaybookCitation(response.citations);
-      if (primaryCitation && !isCourseMode) {
+      if (primaryCitation && !shouldUseCourseMode) {
         await handleCitationClick(primaryCitation);
       }
     } catch (error) {
@@ -2496,26 +2833,13 @@ export default function WorkspacePage() {
     </div>
   ) : null;
   return (
-    <div className="workspace-wrapper" ref={containerRef} data-lenis-prevent>
+    <div className={`workspace-wrapper ${isPanelResizing ? 'is-resizing-panels' : ''}`} ref={containerRef} data-lenis-prevent>
       <div className="bokeh-bg bokeh-1"></div>
       <div className="bokeh-bg bokeh-2"></div>
 
       <WorkspaceHeader
-        packDropdownOpen={packDropdownOpen}
-        packLabel={packLabel}
-        packOptions={PACK_OPTIONS}
-        sessionId={sessionId}
-        testMode={testMode}
-        testModeDisabled={isCourseMode}
         globalTheme={globalTheme}
         onOpenLibrary={() => navigate('/playbook-library')}
-        onResetSession={resetSession}
-        onSelectPack={(label) => {
-          setPackLabel(label);
-          setPackDropdownOpen(false);
-        }}
-        onTogglePackDropdown={() => setPackDropdownOpen((prev) => !prev)}
-        onToggleTestMode={() => setTestMode((current) => !current)}
         onToggleGlobalTheme={handleToggleGlobalTheme}
       />
 
@@ -2978,60 +3302,52 @@ export default function WorkspacePage() {
                     <div className="welcome-icon">
                       <Sparkles size={36} />
                     </div>
-                    <h2 className="welcome-title">{isGuidedSurface ? '투어를 시작하세요' : '질문을 시작하세요'}</h2>
+                    <h2 className="welcome-title">질문을 시작하세요</h2>
                     <p className="welcome-vision-copy">
-                      {isGuidedSurface
-                        ? '질문을 던지면 바로 읽을 절차와 이어서 열 문서를 한 경로로 엽니다.'
-                        : activeVision.workspace.summary}
+                      공식 문서와 실운영 기준을 한 채팅에서 함께 확인합니다.
                     </p>
-                    {isGuidedSurface ? (
-                      <div className="welcome-vision-active">
-                        <div className="welcome-vision-active-title">{activeVision.label} Active</div>
-                        <p className="welcome-vision-active-copy">{activeVision.workspace.cue}</p>
-                      </div>
-                    ) : (
-                      <div className="welcome-vision-grid">
-                        {WIKI_VISION_MODES.map((mode) => (
-                          <button
-                            key={mode.id}
-                            type="button"
-                            className={`welcome-vision-card ${visionMode === mode.id ? 'active' : ''}`}
-                            onClick={() => setVisionMode(mode.id)}
-                          >
-                            <strong>{mode.label}</strong>
-                            <span>{mode.workspace.cue}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className="suggested-query-label welcome-route-label">
-                      {isGuidedSurface ? 'Start Tour' : '시작 질문'}
-                    </div>
-                    <div className={isGuidedSurface ? 'welcome-question-grid guided-welcome-grid' : 'welcome-question-grid'}>
-                      {displayedWelcomeQuestions.map((q, i) => (
-                        <button
-                          key={`welcome-q-${i}`}
-                          type="button"
-                          className={isGuidedSurface ? 'welcome-question-card glass-panel guided-welcome-card' : 'welcome-question-card glass-panel'}
-                          onClick={() => { void handleSend(q); }}
-                          disabled={isSending}
-                        >
-                          {isGuidedSurface && (
-                            <span className="guided-welcome-index">Step {i + 1}</span>
-                          )}
-                          {q}
-                          {isGuidedSurface && (
-                            <span className="guided-welcome-arrow">
-                              <ArrowRight size={14} />
-                            </span>
-                          )}
-                        </button>
+                    <div className="suggested-query-label welcome-route-label">시작 질문</div>
+                    <div className="welcome-question-groups">
+                      {welcomeQuestionGroups.map((group) => (
+                        <section key={group.key} className={`welcome-question-group welcome-question-group--${group.key}`}>
+                          <div className="welcome-question-group-heading">
+                            <span>{group.title}</span>
+                            <small>{group.description}</small>
+                          </div>
+                          <div className="welcome-question-stack">
+                            {group.questions.map((item, i) => (
+                              <button
+                                key={`welcome-q-${group.key}-${i}`}
+                                type="button"
+                                className="welcome-question-card glass-panel"
+                                onClick={() => {
+                                  void handleSend(item.question, {
+                                    forceCourseMode: item.lane === 'operations',
+                                    routeKind: item.routeKind || (item.lane === 'learning' ? 'learning' : item.lane === 'operations' ? 'course' : 'official'),
+                                    learningIndex: item.learningIndex,
+                                    categoryKey: item.categoryKey,
+                                    categoryLabel: item.categoryLabel,
+                                    targetBookSlug: item.targetBookSlug,
+                                    targetTitle: item.targetTitle,
+                                    targetViewerPath: item.targetViewerPath,
+                                  });
+                                }}
+                                disabled={isSending}
+                              >
+                                <span className={`welcome-question-lane welcome-question-lane--${item.lane}`}>
+                                  {group.title}
+                                </span>
+                                <span>{item.question}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
                       ))}
                     </div>
-                    {isBootstrapLoading && (
+                    {(isBootstrapLoading || isWelcomeQuestionLoading) && (
                       <div className="welcome-loading-hint">
                         <div className="loading-spinner-small"></div>
-                        <span>runtime 문서 목록 동기화 중</span>
+                        <span>runtime 문서와 시작 질문 동기화 중</span>
                       </div>
                     )}
                   </div>
@@ -3047,7 +3363,7 @@ export default function WorkspacePage() {
                               citations={message.citations ?? []}
                               relatedLinks={message.relatedLinks ?? []}
                               relatedSections={message.relatedSections ?? []}
-                              visionMode={isCourseMode ? 'guided_tour' : visionMode}
+                              visionMode={visionMode}
                               primarySourceLane={message.primarySourceLane}
                               primaryBoundaryTruth={message.primaryBoundaryTruth}
                               primaryRuntimeTruthLabel={message.primaryRuntimeTruthLabel}
@@ -3055,7 +3371,7 @@ export default function WorkspacePage() {
                               primaryPublicationState={message.primaryPublicationState}
                               primaryApprovalState={message.primaryApprovalState}
                               onCitationClick={(citation) => {
-                                void handleCitationClick(citation);
+                                void handleCitationClick(citation, message.content);
                               }}
                               onRelatedLinkClick={(link) => {
                                 void handleRelatedLinkClick(link);
@@ -3075,7 +3391,7 @@ export default function WorkspacePage() {
                                 return Boolean(target && overlayExists('check', target.ref));
                               }}
                             />
-                            {isCourseMode && message.artifacts?.length ? (
+                            {(isCourseMode || message.routeKind === 'course') && message.artifacts?.length ? (
                               <CourseChatArtifacts
                                 artifacts={message.artifacts}
                                 includeKinds={['course_image_evidence']}
@@ -3107,7 +3423,21 @@ export default function WorkspacePage() {
                                 key={`${message.id}-suggested-${suggestedIndex}`}
                                 className={isGuidedSurface ? 'suggested-query-chip guided-tour-query-chip' : 'suggested-query-chip'}
                                 type="button"
-                                onClick={() => { void handleSend(suggestedQuery); }}
+                                onClick={() => {
+                                  const suggestedMeta = message.routeKind === 'learning'
+                                    ? learningQuestionByText.get(suggestedQuery.trim())
+                                    : undefined;
+                                  void handleSend(suggestedQuery, {
+                                    forceCourseMode: message.routeKind === 'course' || isCourseSourceLane(message.primarySourceLane),
+                                    routeKind: message.routeKind === 'learning' ? 'learning' : undefined,
+                                    learningIndex: suggestedMeta?.learningIndex,
+                                    categoryKey: suggestedMeta?.categoryKey,
+                                    categoryLabel: suggestedMeta?.categoryLabel,
+                                    targetBookSlug: suggestedMeta?.targetBookSlug,
+                                    targetTitle: suggestedMeta?.targetTitle,
+                                    targetViewerPath: suggestedMeta?.targetViewerPath,
+                                  });
+                                }}
                                 disabled={isSending}
                               >
                                 {isGuidedSurface && (
@@ -3180,6 +3510,7 @@ export default function WorkspacePage() {
             atlasCanvasActive={visionMode === 'atlas_canvas' && viewerPageMode === 'multi'}
             savedInkStrokes={currentInkStrokes}
             isInkSaving={isOverlaySaving}
+            isPanelResizing={isPanelResizing}
             rightCollapsed={rightCollapsed}
             testMode={testMode}
             viewerSurfaceTitle={viewerSurfaceTitle}
@@ -3300,6 +3631,7 @@ export default function WorkspacePage() {
                     viewerDocument={preview.viewerDocument}
                     currentViewerPath={currentViewerPath}
                     scrollTargetText={preview.scrollTargetText}
+                    suspendActiveSectionTracking={isPanelResizing}
                     onActiveSectionChange={viewerPageMode === 'multi' ? setViewerActiveSection : undefined}
                     onNavigateViewerPath={(viewerPath) => {
                       void openViewerPreview(viewerPath, preview.title, undefined, viewerPageMode);
@@ -3363,6 +3695,7 @@ export default function WorkspacePage() {
                     <ViewerDocumentStage
                       viewerDocument={preview.viewerDocument}
                       currentViewerPath={runtimePathFromUrl(preview.viewerUrl)}
+                      suspendActiveSectionTracking={isPanelResizing}
                       onNavigateViewerPath={(viewerPath) => {
                         void openViewerPreview(viewerPath, preview.title, undefined, viewerPageMode);
                       }}

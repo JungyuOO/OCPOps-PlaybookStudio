@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+import re
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
@@ -90,6 +91,55 @@ def _attach_server_timings(
         pipeline_trace["server_timings_ms"] = rounded
 
 
+def _stream_answer_delta(handler: Any, answer: str, *, target_chars: int = 34) -> None:
+    buffer = ""
+    for token in re.split(r"(\s+)", answer):
+        if not token:
+            continue
+        buffer += token
+        if len(buffer) >= target_chars or "\n" in buffer:
+            handler._stream_event({"type": "answer_delta", "delta": buffer})
+            buffer = ""
+            time.sleep(0.01)
+    if buffer:
+        handler._stream_event({"type": "answer_delta", "delta": buffer})
+
+
+def _answer_query_from_payload(query: str, payload: dict[str, Any]) -> str:
+    route_kind = str(payload.get("route_kind") or "").strip()
+    target_title = str(payload.get("learning_target_title") or "").strip()
+    target_slug = str(payload.get("learning_target_book_slug") or "").strip()
+    if route_kind != "learning":
+        if route_kind == "official" and (target_title or target_slug):
+            target_slug_terms = target_slug.replace("_", " ")
+            hints = " ".join(item for item in (target_title, target_slug, target_slug_terms) if item)
+            return f"{hints} | {query} | official seeded question"
+        return query
+    target_slug_terms = target_slug.replace("_", " ")
+    target_boosts = {
+        "machine_configuration": "MachineConfigPool machine-config MCO About the Machine Config Operator",
+        "installation_overview": "installation overview install cluster preparation",
+        "postinstallation_configuration": "postinstallation day 2 operations cluster configuration",
+        "monitoring": "OpenShift monitoring Prometheus Alertmanager",
+        "security_and_compliance": "certificate authentication authorization security compliance",
+        "networking_overview": "networking route ingress DNS service",
+        "validation_and_troubleshooting": "troubleshooting validation install issue",
+        "etcd": "etcd backup restore snapshot",
+    }
+    hints = [
+        target_title,
+        target_slug,
+        target_slug_terms,
+        target_boosts.get(target_slug, ""),
+        str(payload.get("learning_category_key") or "").strip(),
+        str(payload.get("learning_category_label") or "").strip(),
+    ]
+    hint_text = " ".join(item for item in hints if item)
+    if not hint_text:
+        return f"{query} 단계별 학습 순서"
+    return f"{hint_text} | {query} | 단계별 학습 순서"
+
+
 def _persist_chat_audit_logs(
     *,
     root_dir: Path,
@@ -168,8 +218,9 @@ def handle_chat(
     server_timings_ms: dict[str, float] = {}
     try:
         answer_started_at = time.perf_counter()
+        answer_query = _answer_query_from_payload(query, payload)
         result = active_answerer.answer(
-            query,
+            answer_query,
             mode=mode,
             context=request_context,
             top_k=8,
@@ -316,8 +367,9 @@ def handle_chat_stream(
     server_timings_ms: dict[str, float] = {}
     try:
         answer_started_at = time.perf_counter()
+        answer_query = _answer_query_from_payload(query, payload)
         result = active_answerer.answer(
-            query,
+            answer_query,
             mode=mode,
             context=request_context,
             top_k=8,
@@ -393,6 +445,7 @@ def handle_chat_stream(
     )
     server_timings_ms["request_total"] = (time.perf_counter() - request_started_at) * 1000
     _attach_server_timings(response_payload, server_timings_ms=server_timings_ms)
+    _stream_answer_delta(handler, str(response_payload.get("answer") or ""))
     handler._stream_event(
         {
             "type": "result",

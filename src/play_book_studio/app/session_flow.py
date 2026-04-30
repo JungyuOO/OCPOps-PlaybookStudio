@@ -77,6 +77,15 @@ def context_with_request_overrides(
             if str(item).strip()
         ]
     context.restrict_uploaded_sources = bool(payload.get("restrict_uploaded_sources", True))
+    if str(payload.get("route_kind") or "").strip() == "learning":
+        target_title = str(payload.get("learning_target_title") or "").strip()
+        target_slug = str(payload.get("learning_target_book_slug") or "").strip()
+        category_label = str(payload.get("learning_category_label") or "").strip()
+        if target_title:
+            context.current_topic = target_title
+        context.open_entities = [
+            item for item in (target_title, target_slug, category_label) if item
+        ]
     return context
 
 def is_task_topic(topic: str) -> bool:
@@ -187,6 +196,19 @@ def derive_next_context(
         next_context.unresolved_question = query
     return next_context
 
+_AMBIGUOUS_DOC_SUGGESTION_RE = re.compile(
+    r"(문서.*(같이|순서|이어|보여줘|알려줘)|플레이북\s*순서|먼저\s*읽어야|"
+    r"허브에서|운영\s*문서|어떤\s*책\s*순서|먼저\s*볼\s*문서)"
+)
+
+
+def _is_ambiguous_doc_suggestion(candidate: str) -> bool:
+    cleaned = (candidate or "").strip()
+    if not cleaned:
+        return True
+    return bool(_AMBIGUOUS_DOC_SUGGESTION_RE.search(cleaned))
+
+
 def dedupe_suggestions(candidates: list[str], *, query: str, limit: int = 3) -> list[str]:
     normalized_query = (query or "").strip().lower()
     seen: set[str] = set()
@@ -194,6 +216,8 @@ def dedupe_suggestions(candidates: list[str], *, query: str, limit: int = 3) -> 
     for candidate in candidates:
         cleaned = (candidate or "").strip()
         if not cleaned:
+            continue
+        if _is_ambiguous_doc_suggestion(cleaned):
             continue
         lowered = cleaned.lower()
         if lowered == normalized_query or lowered in seen:
@@ -316,7 +340,16 @@ def _is_bad_suggestion_section(section: str) -> bool:
         return True
     return any(pattern in lowered for pattern in _BAD_SUGGESTION_PATTERNS)
 
-def _suggestions_from_retrieval_hits(result: AnswerResult) -> list[str]:
+
+def _clean_suggestion_section(section: str) -> str:
+    subject = re.sub(r"\s+", " ", str(section or "").strip())
+    subject = re.sub(r"^\d+(?:\.\d+)*\.?\s*", "", subject)
+    subject = re.sub(r"^\d+\s*장\.\s*", "", subject)
+    subject = re.sub(r"^(chapter|section)\s+\d+(?:\.\d+)*\.?\s*", "", subject, flags=re.IGNORECASE)
+    return subject.strip(" .>-")
+
+
+def _suggestions_from_retrieval_hits(result: AnswerResult, *, require_token_overlap: bool = True) -> list[str]:
     retrieval_trace = result.retrieval_trace or {}
     metrics = retrieval_trace.get("metrics") or {}
     query_tokens = _tokenize_suggestion_text(result.query or "", result.rewritten_query or "")
@@ -332,7 +365,7 @@ def _suggestions_from_retrieval_hits(result: AnswerResult) -> list[str]:
         for item in top_hits:
             if not isinstance(item, dict):
                 continue
-            section = str(item.get("section") or "").strip()
+            section = _clean_suggestion_section(str(item.get("section") or "").strip())
             book_slug = str(item.get("book_slug") or "").strip()
             if (
                 not section
@@ -341,7 +374,7 @@ def _suggestions_from_retrieval_hits(result: AnswerResult) -> list[str]:
             ):
                 continue
             section_tokens = _tokenize_suggestion_text(section, book_slug)
-            if query_tokens and not (query_tokens & section_tokens):
+            if require_token_overlap and query_tokens and not (query_tokens & section_tokens):
                 continue
             suggestion = f"{section} 기준으로 설명해줘"
             if suggestion in seen:
@@ -367,11 +400,15 @@ def suggest_follow_up_questions(*, session: ChatSession, result: AnswerResult) -
             "프로젝트가 Terminating에서 안 지워질 때 어떻게 해?",
         ]
     if result.response_kind == "no_answer":
-        retrieval_backed = _suggestions_from_retrieval_hits(result)
+        retrieval_backed = _suggestions_from_retrieval_hits(result, require_token_overlap=False)
         if retrieval_backed:
             return retrieval_backed
         return fallback_no_answer_questions(query=query, topic=topic)
     if result.response_kind == "clarification":
+        if "low retrieval confidence" in result.warnings:
+            retrieval_backed = _suggestions_from_retrieval_hits(result, require_token_overlap=False)
+            if retrieval_backed:
+                return retrieval_backed
         subject = _suggestion_subject(query=query, topic=topic, primary=primary)
         return dedupe_suggestions(
             [
@@ -438,15 +475,15 @@ def suggest_follow_up_questions(*, session: ChatSession, result: AnswerResult) -
     elif ETCD_RE.search(query) or "etcd" in topic.lower() or book_slug == "etcd":
         if has_backup_restore_intent(query) or "백업" in topic or "복원" in topic:
             candidates = [
-                "etcd 허브에서 같이 봐야 할 관련 문서도 보여줘",
-                "복원 후 Machine Configuration은 왜 같이 봐야 해?",
+                "etcd 백업 파일이 정상인지 확인하는 명령을 알려줘",
+                "etcd 복원 후 kube-apiserver와 etcd Pod 상태를 확인하는 순서를 알려줘",
                 "백업 후 Monitoring에서 어떤 신호를 확인해야 해?",
             ]
         else:
             candidates = [
-                "etcd 허브에서 바로 가야 할 운영 문서를 보여줘",
+                "etcd 상태와 리더 정보를 확인하는 명령을 알려줘",
                 "etcd 백업은 어떻게 해?",
-                "etcd 복원 후 어떤 문서로 이어서 확인해야 해?",
+                "etcd 복원 후 정상화 여부를 어떻게 검증해?",
                 "장애가 나면 어떤 신호를 먼저 봐야 해?",
             ]
     elif MCO_RE.search(query) or "machine config" in topic.lower() or book_slug in {
@@ -454,7 +491,7 @@ def suggest_follow_up_questions(*, session: ChatSession, result: AnswerResult) -
         "operators",
     }:
         candidates = [
-            "Machine Config Operator 허브에서 같이 봐야 할 문서를 보여줘",
+            "Machine Config Operator 상태를 먼저 확인하는 명령을 알려줘",
             "MachineConfigPool 상태는 어떻게 확인해?",
             "노드 설정 변경 뒤 Monitoring에서는 뭘 봐야 해?",
         ]
@@ -465,9 +502,9 @@ def suggest_follow_up_questions(*, session: ChatSession, result: AnswerResult) -
         "monitoring_troubleshooting",
     }:
         candidates = [
-            "Prometheus 허브에서 같이 봐야 할 운영 문서를 보여줘",
-            "경보를 본 다음 어떤 메트릭 문서로 이어가야 해?",
-            "Monitoring 장애를 볼 때 Machine Configuration도 같이 봐야 해?",
+            "Prometheus 알림에서 영향 namespace와 원인을 좁히는 순서를 알려줘",
+            "경보를 본 다음 어떤 메트릭을 먼저 확인해야 해?",
+            "Alertmanager와 Prometheus 상태를 먼저 확인하는 방법을 알려줘",
         ]
     elif has_openshift_kubernetes_compare_intent(query):
         candidates = [
@@ -501,9 +538,9 @@ def suggest_follow_up_questions(*, session: ChatSession, result: AnswerResult) -
 
     if not candidates and "backup" in section:
         candidates = [
-            "복원 후 이어서 봐야 할 문서도 알려줘",
+            "복원 후 정상화 여부를 확인하는 명령을 알려줘",
             "백업 파일 확인 방법도 알려줘",
-            "운영 중 어떤 허브로 이어지는지 정리해줘",
+            "운영 중 실패 신호를 먼저 확인하는 방법을 알려줘",
         ]
 
     subject = _suggestion_subject(query=query, topic=topic, primary=primary)
