@@ -3384,6 +3384,11 @@
     linear-gradient(180deg, #f6f2ea 0%, #efe9de 100%);
 }
 
+.source-viewer-content.viewer-surface--terminal {
+  padding: 0;
+  background: #070b12;
+}
+
 .wiki-overlay-strip {
   padding: 10px 18px 0;
   display: flex;
@@ -4464,6 +4469,133 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   pointer-events: auto;
+}
+
+.viewer-panel-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 34px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 20, 24, 0.1);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 8px 18px rgba(41, 28, 16, 0.06);
+}
+
+.viewer-panel-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #6b5a48;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.viewer-panel-mode-btn:hover,
+.viewer-panel-mode-btn.active {
+  background: rgba(28, 36, 46, 0.92);
+  color: #e8f8ff;
+}
+
+.terminal-session-shell {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #070b12;
+  color: #dbe8ef;
+}
+
+.terminal-session-status {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(96, 165, 250, 0.12);
+  background: rgba(9, 14, 23, 0.96);
+}
+
+.terminal-session-meta {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(219, 232, 239, 0.68);
+  font-size: 0.72rem;
+}
+
+.terminal-session-meta strong {
+  color: #edf7ff;
+  font-size: 0.74rem;
+}
+
+.terminal-session-meta span:not(.terminal-session-dot) {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-session-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #64748b;
+}
+
+.terminal-session-dot--connected {
+  background: #22c55e;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.54);
+}
+
+.terminal-session-dot--connecting {
+  background: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.42);
+}
+
+.terminal-session-dot--error {
+  background: #fb7185;
+  box-shadow: 0 0 12px rgba(251, 113, 133, 0.46);
+}
+
+.terminal-session-reconnect {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: #dbe8ef;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.terminal-session-reconnect:hover {
+  border-color: rgba(56, 189, 248, 0.34);
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.terminal-session-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px;
+  overflow: hidden;
+}
+
+.terminal-session-host .xterm {
+  height: 100%;
 }
 
 .viewer-header-icon-btn,

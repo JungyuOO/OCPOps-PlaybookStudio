@@ -63,6 +63,7 @@ type WorkspaceViewerPanelProps = {
   textAnnotationMode: WikiTextAnnotationMode;
   textAnnotationStyle: WikiEditedTextStyle;
   uploadAccept: string;
+  viewerSurfaceMode?: 'viewer' | 'terminal';
   viewerSurfaceTitle: string;
   onAnnotationColorChange: (colorId: WikiInkColorId) => void;
   onAnnotationEnabledChange: (enabled: boolean) => void;
@@ -96,6 +97,7 @@ export default function WorkspaceViewerPanel({
   textAnnotationMode,
   textAnnotationStyle,
   uploadAccept,
+  viewerSurfaceMode = 'viewer',
   viewerSurfaceTitle,
   onAnnotationColorChange,
   onAnnotationEnabledChange,
@@ -527,7 +529,7 @@ export default function WorkspaceViewerPanel({
           </>
         )}
 
-        <div className={`source-viewer-content viewer-surface ${isPanelResizing ? 'is-panel-resizing' : ''}`}>
+        <div className={`source-viewer-content viewer-surface viewer-surface--${viewerSurfaceMode} ${isPanelResizing ? 'is-panel-resizing' : ''}`}>
           <div
             ref={stageRef}
             className={`atlas-ink-stage ${inkEnabled ? 'is-inking' : ''}`}

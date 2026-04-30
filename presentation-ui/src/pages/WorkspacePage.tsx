@@ -21,6 +21,7 @@ import {
   Star,
   Clock3,
   Compass,
+  Terminal as TerminalIcon,
 } from 'lucide-react';
 import gsap from 'gsap';
 import './WorkspacePage.css';
@@ -90,6 +91,7 @@ import {
   truthSurfaceCopy,
 } from './workspace/WorkspaceAnswer';
 import WorkspaceViewerPanel from './workspace/WorkspaceViewerPanel';
+import TerminalSessionPanel from './workspace/TerminalSessionPanel';
 import CourseChatArtifacts from './CourseChatArtifacts';
 import type {
   Message,
@@ -113,6 +115,7 @@ interface ViewerActiveSection {
 }
 
 type LeftPanelMode = 'history' | 'outline' | 'signals';
+type RightPanelMode = 'viewer' | 'terminal';
 type SignalsFavoriteFilter = 'favorites' | 'edited';
 interface OutlineLinkItem {
   id: string;
@@ -967,6 +970,7 @@ export default function WorkspacePage() {
   const [query, setQuery] = useState('');
   const [sessionId, setSessionId] = useState(() => makeId('ID'));
   const [testMode, setTestMode] = useState(false);
+  const [rightPanelMode, setRightPanelMode] = useState<RightPanelMode>('viewer');
   const [activeTestTrace, setActiveTestTrace] = useState<WorkspaceTestTrace | null>(null);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState>({ kind: 'empty' });
@@ -2744,8 +2748,8 @@ export default function WorkspacePage() {
     },
     tone: activeSourceId === source.id ? 'default' : 'muted',
   }));
-  const viewerSurfaceTitle = 'Wiki Viewer';
-  const viewerHeaderToolbar = !testMode && currentOverlayTarget ? (
+  const viewerSurfaceTitle = rightPanelMode === 'terminal' ? 'Terminal Session' : 'Wiki Viewer';
+  const viewerDocumentToolbar = !testMode && currentOverlayTarget ? (
     <div className="viewer-header-toolbar" role="toolbar" aria-label="위키 뷰어 액션">
       {preview.kind === 'viewer' && viewerOriginalSourceHref && (
         <a
@@ -2832,6 +2836,31 @@ export default function WorkspacePage() {
       )}
     </div>
   ) : null;
+  const viewerHeaderToolbar = (
+    <>
+      <div className="viewer-panel-mode-switch" role="tablist" aria-label="Right panel mode">
+        <button
+          type="button"
+          className={`viewer-panel-mode-btn ${rightPanelMode === 'viewer' ? 'active' : ''}`}
+          onClick={() => setRightPanelMode('viewer')}
+          title="Wiki Viewer"
+          aria-label="Wiki Viewer"
+        >
+          <BookOpen size={14} />
+        </button>
+        <button
+          type="button"
+          className={`viewer-panel-mode-btn ${rightPanelMode === 'terminal' ? 'active' : ''}`}
+          onClick={() => setRightPanelMode('terminal')}
+          title="Terminal Session"
+          aria-label="Terminal Session"
+        >
+          <TerminalIcon size={14} />
+        </button>
+      </div>
+      {rightPanelMode === 'viewer' ? viewerDocumentToolbar : null}
+    </>
+  );
   return (
     <div className={`workspace-wrapper ${isPanelResizing ? 'is-resizing-panels' : ''}`} ref={containerRef} data-lenis-prevent>
       <div className="bokeh-bg bokeh-1"></div>
@@ -3513,6 +3542,7 @@ export default function WorkspacePage() {
             isPanelResizing={isPanelResizing}
             rightCollapsed={rightCollapsed}
             testMode={testMode}
+            viewerSurfaceMode={rightPanelMode}
             viewerSurfaceTitle={viewerSurfaceTitle}
             sourcesDrawerOpen={sourcesDrawerOpen}
             fileInputRef={fileInputRef}
@@ -3600,6 +3630,10 @@ export default function WorkspacePage() {
               </div>
             )}
           >
+            {rightPanelMode === 'terminal' ? (
+              <TerminalSessionPanel />
+            ) : (
+              <>
             {testMode && (
               <WorkspaceTracePanel
                 query={activeTestTrace?.query ?? query}
@@ -3724,6 +3758,8 @@ export default function WorkspacePage() {
                   </button>
                 </div>
               </div>
+            )}
+              </>
             )}
           </WorkspaceViewerPanel>
         </Group>
