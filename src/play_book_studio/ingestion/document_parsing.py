@@ -12,6 +12,7 @@ import mimetypes
 import re
 import uuid
 import zipfile
+import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -112,7 +113,35 @@ class ParsedUploadDocument:
         }
 
 
-MarkdownConverter = Callable[[Path, DocumentFormat], str]
+@dataclass(frozen=True, slots=True)
+class ConvertedMarkdown:
+    markdown: str
+    assets: tuple[DocumentAsset, ...] = field(default_factory=tuple)
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentChunk:
+    chunk_id: str
+    chunk_key: str
+    ordinal: int
+    markdown: str
+    embedding_text: str
+    section_path: tuple[str, ...] = field(default_factory=tuple)
+    asset_ids: tuple[str, ...] = field(default_factory=tuple)
+    block_ordinals: tuple[int, ...] = field(default_factory=tuple)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["section_path"] = list(self.section_path)
+        payload["asset_ids"] = list(self.asset_ids)
+        payload["block_ordinals"] = list(self.block_ordinals)
+        return payload
+
+
+MarkdownConverter = Callable[[Path, DocumentFormat], str | ConvertedMarkdown]
 ImageDescriber = Callable[[Path, DocumentAsset], str]
 
 
@@ -126,6 +155,12 @@ _IMAGE_SIGNATURES = (
 )
 _MARKDOWN_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 _ASCIIDOC_HEADING_RE = re.compile(r"^(={1,6})\s+(.+?)\s*$")
+_XML_TEXT_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t"
+_DOCX_PARAGRAPH_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"
+_DOCX_TABLE_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl"
+_DOCX_ROW_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tr"
+_DOCX_CELL_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tc"
+_PPT_TEXT_TAG = "{http://schemas.openxmlformats.org/drawingml/2006/main}t"
 
 
 def detect_document_format(path: Path, *, sample_size: int = 4096) -> DocumentFormat:
@@ -186,9 +221,21 @@ def parse_upload_document(
     elif document_format in CONVERTER_FORMATS:
         if markdown_converter is None:
             markdown_converter = _default_markdown_converter
-        markdown = markdown_converter(path, document_format).strip()
+        converted = markdown_converter(path, document_format)
+        if isinstance(converted, ConvertedMarkdown):
+            markdown = converted.markdown.strip()
+            assets.extend(converted.assets)
+            warnings.extend(converted.warnings)
+        else:
+            markdown = converted.strip()
         if not markdown:
             raise ValueError(f"markdown converter produced empty output for {path.name}")
+        if image_describer and assets:
+            assets = [
+                _describe_asset(path, asset, image_describer=image_describer)
+                for asset in assets
+            ]
+            markdown = _append_asset_descriptions(markdown, assets)
     else:
         raise ValueError(f"unsupported document format for ingestion: {path.name}")
 
@@ -245,6 +292,66 @@ def _detect_zip_document_format(path: Path, suffix: str) -> DocumentFormat:
     return "unknown"
 
 
+def build_document_chunks(
+    parsed: ParsedUploadDocument,
+    *,
+    max_chars: int = 1800,
+    overlap_blocks: int = 1,
+) -> tuple[DocumentChunk, ...]:
+    chunks: list[DocumentChunk] = []
+    current: list[DocumentBlock] = []
+    current_chars = 0
+    ordinal = 0
+
+    def flush() -> None:
+        nonlocal current, current_chars, ordinal
+        if not current:
+            return
+        markdown = "\n\n".join(block.markdown for block in current).strip()
+        section_path = _last_section_path(current)
+        asset_ids = tuple(dict.fromkeys(asset_id for block in current for asset_id in block.asset_ids))
+        block_ordinals = tuple(block.ordinal for block in current)
+        chunk_key = f"{parsed.document_id}:{ordinal}"
+        chunks.append(
+            DocumentChunk(
+                chunk_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{chunk_key}:{markdown}")),
+                chunk_key=chunk_key,
+                ordinal=ordinal,
+                markdown=markdown,
+                embedding_text=_strip_markdown(markdown),
+                section_path=section_path,
+                asset_ids=asset_ids,
+                block_ordinals=block_ordinals,
+                metadata={
+                    "filename": parsed.filename,
+                    "document_format": parsed.document_format,
+                },
+            )
+        )
+        ordinal += 1
+        if overlap_blocks <= 0:
+            current = []
+        else:
+            current = current[-overlap_blocks:]
+        current_chars = sum(len(block.markdown) for block in current)
+
+    for block in parsed.blocks:
+        if block.block_type == "heading":
+            flush()
+            current = [block]
+            current_chars = len(block.markdown)
+            continue
+        block_chars = len(block.markdown)
+        if current and current_chars + block_chars > max_chars:
+            flush()
+        current.append(block)
+        current_chars += block_chars
+        if block.block_type in {"table", "code", "image"} and current_chars >= max_chars:
+            flush()
+    flush()
+    return tuple(chunks)
+
+
 def _is_image_signature(head: bytes) -> bool:
     for signature, mime_type in _IMAGE_SIGNATURES:
         if head.startswith(signature):
@@ -299,6 +406,25 @@ def _image_markdown(asset: DocumentAsset) -> str:
     if description:
         return f"![{asset.filename}](asset://{asset.asset_id})\n\n{description}"
     return f"![{asset.filename}](asset://{asset.asset_id})"
+
+
+def _describe_asset(path: Path, asset: DocumentAsset, *, image_describer: ImageDescriber) -> DocumentAsset:
+    description = image_describer(path, asset).strip()
+    if not description:
+        return asset
+    return DocumentAsset(**{**asset.to_dict(), "description": description})
+
+
+def _append_asset_descriptions(markdown: str, assets: list[DocumentAsset]) -> str:
+    result = markdown
+    for asset in assets:
+        if not asset.description:
+            continue
+        marker = f"asset://{asset.asset_id})"
+        replacement = f"asset://{asset.asset_id})\n\n{asset.description}"
+        if marker in result and replacement not in result:
+            result = result.replace(marker, replacement, 1)
+    return result
 
 
 def _markdown_to_blocks(markdown: str, *, assets: tuple[DocumentAsset, ...]) -> list[DocumentBlock]:
@@ -398,24 +524,162 @@ def _strip_markdown(markdown: str) -> str:
     return text.strip()
 
 
-def _default_markdown_converter(path: Path, document_format: DocumentFormat) -> str:
-    try:
-        from play_book_studio.intake.normalization.markitdown_adapter import convert_with_markitdown
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError("markdown converter is unavailable") from exc
-
+def _default_markdown_converter(path: Path, document_format: DocumentFormat) -> str | ConvertedMarkdown:
     if document_format in {"hwp", "hwpx", "hwpml"}:
         raise RuntimeError(
             f"{document_format} parsing needs an internal HWP/HWPX adapter before runtime ingestion"
         )
+    if document_format == "docx":
+        return _convert_docx_to_markdown(path)
+    if document_format == "pptx":
+        return _convert_pptx_to_markdown(path)
+    if document_format == "pdf":
+        return _convert_pdf_to_markdown(path)
+    return _convert_with_markitdown(path)
+
+
+def _convert_docx_to_markdown(path: Path) -> ConvertedMarkdown:
+    lines = [f"# {path.stem}"]
+    with zipfile.ZipFile(path) as archive:
+        document_xml = archive.read("word/document.xml")
+    root = ET.fromstring(document_xml)
+    body = root.find("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}body")
+    if body is None:
+        raise ValueError(f"DOCX body is missing: {path.name}")
+    for child in body:
+        if child.tag == _DOCX_PARAGRAPH_TAG:
+            text = _xml_text(child, text_tag=_XML_TEXT_TAG)
+            if text:
+                lines.extend(["", text])
+        elif child.tag == _DOCX_TABLE_TAG:
+            table = _docx_table_to_markdown(child)
+            if table:
+                lines.extend(["", table])
+    markdown = "\n".join(lines).strip()
+    if markdown == f"# {path.stem}":
+        raise ValueError(f"DOCX produced empty markdown: {path.name}")
+    return ConvertedMarkdown(markdown=markdown)
+
+
+def _convert_pptx_to_markdown(path: Path) -> ConvertedMarkdown:
+    lines = [f"# {path.stem}"]
+    assets: list[DocumentAsset] = []
+    with zipfile.ZipFile(path) as archive:
+        names = set(archive.namelist())
+        slide_names = sorted(
+            (name for name in names if re.match(r"ppt/slides/slide\d+\.xml$", name)),
+            key=_natural_key,
+        )
+        media_names = sorted(name for name in names if name.startswith("ppt/media/"))
+        for slide_index, slide_name in enumerate(slide_names, start=1):
+            slide_root = ET.fromstring(archive.read(slide_name))
+            texts = [text for text in _xml_texts(slide_root, text_tag=_PPT_TEXT_TAG) if text.strip()]
+            lines.extend(["", f"## Slide {slide_index}"])
+            for text in texts:
+                lines.append(text.strip())
+        for media_name in media_names:
+            content = archive.read(media_name)
+            asset = _blob_asset(path, media_name=media_name, content=content)
+            assets.append(asset)
+            lines.extend(["", _image_markdown(asset)])
+    markdown = "\n".join(lines).strip()
+    if len(lines) <= 1 and not assets:
+        raise ValueError(f"PPTX produced empty markdown: {path.name}")
+    return ConvertedMarkdown(markdown=markdown, assets=tuple(assets))
+
+
+def _convert_pdf_to_markdown(path: Path) -> ConvertedMarkdown:
+    try:
+        from pypdf import PdfReader
+    except Exception:  # noqa: BLE001
+        return ConvertedMarkdown(
+            markdown=_convert_with_markitdown(path),
+            warnings=("pdf_used_markitdown_fallback",),
+        )
+
+    reader = PdfReader(str(path))
+    lines = [f"# {path.stem}"]
+    for page_index, page in enumerate(reader.pages, start=1):
+        text = str(page.extract_text() or "").strip()
+        if text:
+            lines.extend(["", f"## Page {page_index}", "", text])
+    markdown = "\n".join(lines).strip()
+    if markdown == f"# {path.stem}":
+        return ConvertedMarkdown(
+            markdown=_convert_with_markitdown(path),
+            warnings=("pdf_used_markitdown_fallback",),
+        )
+    return ConvertedMarkdown(markdown=markdown)
+
+
+def _convert_with_markitdown(path: Path) -> str:
+    try:
+        from play_book_studio.intake.normalization.markitdown_adapter import convert_with_markitdown
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("markdown converter is unavailable") from exc
     return convert_with_markitdown(path)
+
+
+def _xml_text(element: ET.Element, *, text_tag: str) -> str:
+    return " ".join(text.strip() for text in _xml_texts(element, text_tag=text_tag) if text.strip()).strip()
+
+
+def _xml_texts(element: ET.Element, *, text_tag: str) -> list[str]:
+    return [node.text or "" for node in element.iter() if node.tag == text_tag]
+
+
+def _docx_table_to_markdown(table: ET.Element) -> str:
+    rows: list[list[str]] = []
+    for row in table.iter(_DOCX_ROW_TAG):
+        cells = [_xml_text(cell, text_tag=_XML_TEXT_TAG) for cell in row.iter(_DOCX_CELL_TAG)]
+        if any(cells):
+            rows.append(cells)
+    if not rows:
+        return ""
+    width = max(len(row) for row in rows)
+    normalized = [row + [""] * (width - len(row)) for row in rows]
+    header = normalized[0]
+    separator = ["---"] * width
+    body = normalized[1:] or [[""] * width]
+    markdown_rows = [header, separator, *body]
+    return "\n".join("| " + " | ".join(cell.replace("\n", " ") for cell in row) + " |" for row in markdown_rows)
+
+
+def _blob_asset(path: Path, *, media_name: str, content: bytes) -> DocumentAsset:
+    sha256 = hashlib.sha256(content).hexdigest()
+    filename = Path(media_name).name
+    asset_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{path.name}:{media_name}:{sha256}"))
+    mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    return DocumentAsset(
+        asset_id=asset_id,
+        asset_type="image",
+        filename=filename,
+        mime_type=mime_type,
+        sha256=sha256,
+        storage_key=f"uploads/assets/{asset_id}{Path(filename).suffix.lower()}",
+        metadata={"source_member": media_name},
+    )
+
+
+def _last_section_path(blocks: list[DocumentBlock]) -> tuple[str, ...]:
+    for block in reversed(blocks):
+        if block.section_path:
+            return block.section_path
+    return ()
+
+
+def _natural_key(value: str) -> list[int | str]:
+    return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", value)]
 
 
 __all__ = [
     "DocumentAsset",
     "DocumentBlock",
+    "DocumentChunk",
     "DocumentFormat",
+    "ConvertedMarkdown",
     "ParsedUploadDocument",
+    "build_document_chunks",
     "detect_document_format",
     "parse_upload_document",
 ]
