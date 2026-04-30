@@ -87,6 +87,69 @@ export interface CourseManifest {
   stages: CourseManifestStage[];
 }
 
+export interface LearningCommandCheck {
+  id: string;
+  check_key: string;
+  ordinal: number;
+  command_pattern: string;
+  expected_command: string;
+  validation_kind: string;
+  validation_payload: Record<string, unknown>;
+  success_message: string;
+  failure_hint: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface LearningLabTask {
+  id: string;
+  task_key: string;
+  ordinal: number;
+  title: string;
+  goal_markdown: string;
+  starter_context: Record<string, unknown>;
+  expected_outcome: Record<string, unknown>;
+  hint_markdown: string;
+  metadata: Record<string, unknown>;
+  command_checks: LearningCommandCheck[];
+}
+
+export interface LearningStep {
+  id: string;
+  step_key: string;
+  ordinal: number;
+  title: string;
+  objective: string;
+  concept_slugs: string[];
+  prerequisite_step_keys: string[];
+  estimated_minutes: number;
+  difficulty: string;
+  lesson_markdown: string;
+  metadata: Record<string, unknown>;
+  lab_tasks: LearningLabTask[];
+}
+
+export interface LearningPath {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  audience: string;
+  ocp_version: string;
+  language: string;
+  source_kind: string;
+  source_ref: string;
+  metadata: Record<string, unknown>;
+  steps: LearningStep[];
+}
+
+export interface LearningPathCatalog {
+  schema: string;
+  source: string;
+  count: number;
+  paths: LearningPath[];
+  unavailable_reason?: string;
+}
+
 export interface CourseChunkRef {
   chunk_id: string;
   title: string;
@@ -246,6 +309,11 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function loadCourseManifest(): Promise<CourseManifest> {
   return requestJson('/api/v1/course/manifest');
+}
+
+export function loadLearningPaths(limit = 20): Promise<LearningPathCatalog> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return requestJson(`/api/learning-paths?${params.toString()}`);
 }
 
 export function loadCourseStage(stageId: string): Promise<CourseStagePayload> {

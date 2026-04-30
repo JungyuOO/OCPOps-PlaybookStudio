@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './CoursePages.css';
 import { ROUTES } from '../app/routes';
-import { loadCourseManifest, type CourseManifest } from '../lib/courseApi';
+import { loadCourseManifest, loadLearningPaths, type CourseManifest, type LearningPathCatalog } from '../lib/courseApi';
 
 const STAGE_SUMMARY: Record<string, string> = {
   architecture: '설계 산출물과 아키텍처 다이어그램을 운영 학습 순서로 따라갑니다.',
@@ -14,17 +14,29 @@ const STAGE_SUMMARY: Record<string, string> = {
 
 export default function CourseTimelinePage() {
   const [manifest, setManifest] = useState<CourseManifest | null>(null);
+  const [learningCatalog, setLearningCatalog] = useState<LearningPathCatalog | null>(null);
   const [error, setError] = useState('');
+  const [learningError, setLearningError] = useState('');
 
   useEffect(() => {
     void loadCourseManifest().then(setManifest).catch((caught) => {
       setError(caught instanceof Error ? caught.message : 'Failed to load course manifest');
+    });
+    void loadLearningPaths(5).then(setLearningCatalog).catch((caught) => {
+      setLearningError(caught instanceof Error ? caught.message : 'Failed to load learning paths');
     });
   }, []);
 
   const totalChunks = useMemo(
     () => (manifest?.stages ?? []).reduce((sum, stage) => sum + stage.chunk_refs.length, 0),
     [manifest],
+  );
+  const primaryLearningPath = learningCatalog?.paths?.[0] ?? null;
+  const primarySteps = primaryLearningPath?.steps ?? [];
+  const totalLabs = primarySteps.reduce((sum, step) => sum + step.lab_tasks.length, 0);
+  const totalChecks = primarySteps.reduce(
+    (sum, step) => sum + step.lab_tasks.reduce((taskSum, task) => taskSum + task.command_checks.length, 0),
+    0,
   );
 
   return (
@@ -36,6 +48,7 @@ export default function CourseTimelinePage() {
         </header>
 
         {error ? <div className="course-panel course-detail">{error}</div> : null}
+        {learningError ? <div className="course-panel course-detail">{learningError}</div> : null}
 
         <section className="course-panel course-detail course-overview-card">
           <strong>{manifest?.title || 'Loading course timeline...'}</strong>
@@ -44,6 +57,45 @@ export default function CourseTimelinePage() {
             각 단계는 PPT/PDF에서 추출한 실운영 근거를 기반으로 구성됩니다.
             사용자는 내부 문서 ID를 몰라도 추천 질문 카드를 따라가며 답변, 근거, 다음 절차를 이어서 확인할 수 있습니다.
           </p>
+        </section>
+
+        <section className="course-panel course-detail course-learning-path-panel">
+          <div className="course-learning-path-head">
+            <div>
+              <span className="course-route-kicker">PostgreSQL Curriculum</span>
+              <strong>{primaryLearningPath?.title || 'Learning path is waiting for seed import'}</strong>
+              <p className="course-copy">
+                {primaryLearningPath
+                  ? primaryLearningPath.description || 'DB에 저장된 단계별 학습 경로를 기준으로 수업, 실습, 명령어 검증을 구성합니다.'
+                  : learningCatalog?.unavailable_reason || 'learning-seed-import 실행 후 DB 기반 학습 경로가 여기에 표시됩니다.'}
+              </p>
+            </div>
+            <div className="course-learning-path-metrics">
+              <span><strong>{primarySteps.length}</strong> Steps</span>
+              <span><strong>{totalLabs}</strong> Labs</span>
+              <span><strong>{totalChecks}</strong> Checks</span>
+            </div>
+          </div>
+          {primarySteps.length > 0 ? (
+            <div className="course-learning-step-strip">
+              {primarySteps.slice(0, 6).map((step) => (
+                <article key={step.id} className="course-learning-step-card">
+                  <span>Step {step.ordinal}</span>
+                  <strong>{step.title}</strong>
+                  <p>{step.objective || '이 단계의 목표는 DB curriculum seed에서 관리됩니다.'}</p>
+                  <div className="course-learning-step-meta">
+                    <span>{step.estimated_minutes || 0} min</span>
+                    <span>{step.lab_tasks.length} labs</span>
+                    <span>{step.difficulty || 'beginner'}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="course-learning-empty">
+              <span>DB 기반 학습 경로가 준비되면 단계별 수업과 실습 검증이 표시됩니다.</span>
+            </div>
+          )}
         </section>
 
         <section className="course-timeline">
