@@ -142,6 +142,15 @@ def build_parser() -> argparse.ArgumentParser:
     upload_ingest_parser.add_argument("--chunk-overlap-blocks", type=int, default=1)
     upload_ingest_parser.add_argument("--dry-run", action="store_true")
 
+    db_qdrant_index_parser = subparsers.add_parser(
+        "db-qdrant-index",
+        help="Embed pending PostgreSQL document chunks and upsert them to Qdrant",
+    )
+    db_qdrant_index_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    db_qdrant_index_parser.add_argument("--database-url", default="")
+    db_qdrant_index_parser.add_argument("--collection", default="")
+    db_qdrant_index_parser.add_argument("--limit", type=int, default=100)
+
     course_qa_parser = subparsers.add_parser(
         "course-qa",
         help="Generate, quality-gate, and run Study-docs course chat QA cases",
@@ -585,6 +594,29 @@ def _run_upload_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_db_qdrant_index(args: argparse.Namespace) -> int:
+    from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        result = index_pending_document_chunks(
+            settings,
+            connection,
+            collection=args.collection.strip() or None,
+            limit=args.limit,
+        )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main() -> int:
     args = build_parser().parse_args()
     if args.command == "ui":
@@ -607,6 +639,8 @@ def main() -> int:
         return _run_db_migrate(args)
     if args.command == "upload-ingest":
         return _run_upload_ingest(args)
+    if args.command == "db-qdrant-index":
+        return _run_db_qdrant_index(args)
     if args.command == "course-qa":
         from play_book_studio.course.quality_eval import run_quality_eval
 
