@@ -24,6 +24,7 @@ from play_book_studio.app.ops_console_api import (
     handle_ops_console_post as _handle_ops_console_post_request,
     handle_ops_console_put as _handle_ops_console_put_request,
 )
+from play_book_studio.app.upload_api import handle_upload_ingest as _handle_upload_ingest_request
 from play_book_studio.app.server_routes import (
     resolve_viewer_html as _resolve_viewer_html,
     handle_data_control_room as _handle_data_control_room_request,
@@ -270,6 +271,9 @@ def _build_handler(
             if parsed_request.path == "/api/customer-packs/upload-draft":
                 self._handle_customer_pack_upload_draft(payload)
                 return
+            if parsed_request.path == "/api/uploads/ingest":
+                self._handle_upload_ingest(payload)
+                return
             if parsed_request.path == "/api/customer-packs/ingest":
                 self._handle_customer_pack_ingest(payload)
                 return
@@ -460,6 +464,9 @@ def _build_handler(
             data_control_room_cache.set("payload", None)
         def _handle_customer_pack_delete_draft(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_delete_draft_request(self, payload, root_dir=root_dir)
+            data_control_room_cache.set("payload", None)
+        def _handle_upload_ingest(self, payload: dict[str, Any]) -> None:
+            _handle_upload_ingest_request(self, payload, root_dir=root_dir)
             data_control_room_cache.set("payload", None)
         def _handle_repository_favorites_save(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_save_request(self, payload, root_dir=root_dir)
         def _handle_repository_favorites_remove(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_remove_request(self, payload, root_dir=root_dir)
