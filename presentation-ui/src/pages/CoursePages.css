@@ -380,6 +380,18 @@
   background: rgba(248, 250, 252, 0.82);
 }
 
+.course-learning-step-card {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.course-learning-step-card.active {
+  border-color: rgba(15, 132, 121, 0.38);
+  background: rgba(15, 132, 121, 0.12);
+}
+
 .course-learning-step-card span,
 .course-learning-empty span {
   color: #607896;
@@ -403,6 +415,65 @@
   font-size: 0.78rem;
   font-weight: 700;
   background: rgba(17, 103, 172, 0.08);
+}
+
+.course-learning-step-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: 14px;
+}
+
+.course-learning-lesson,
+.course-learning-lab-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid rgba(16, 36, 62, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.course-learning-lesson p,
+.course-learning-lab-card p {
+  margin: 0;
+  color: #445f7d;
+  line-height: 1.55;
+}
+
+.course-learning-lesson pre {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  border-radius: 12px;
+}
+
+.course-learning-lab-list {
+  display: grid;
+  gap: 12px;
+}
+
+.course-learning-lab-card span {
+  color: #607896;
+}
+
+.course-learning-command-list {
+  display: grid;
+  gap: 8px;
+}
+
+.course-learning-command-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: rgba(17, 103, 172, 0.08);
+}
+
+.course-learning-command-row code {
+  overflow-wrap: anywhere;
 }
 
 .course-step-index,
@@ -1012,6 +1083,10 @@
 
   .course-learning-path-metrics {
     min-width: 0;
+  }
+
+  .course-learning-step-detail {
+    grid-template-columns: 1fr;
   }
 
   .course-chat-workspace-shell {

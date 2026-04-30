@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './CoursePages.css';
 import { ROUTES } from '../app/routes';
-import { loadCourseManifest, loadLearningPaths, type CourseManifest, type LearningPathCatalog } from '../lib/courseApi';
+import { loadCourseManifest, loadLearningPaths, type CourseManifest, type LearningPathCatalog, type LearningStep } from '../lib/courseApi';
 
 const STAGE_SUMMARY: Record<string, string> = {
   architecture: '설계 산출물과 아키텍처 다이어그램을 운영 학습 순서로 따라갑니다.',
@@ -17,6 +17,7 @@ export default function CourseTimelinePage() {
   const [learningCatalog, setLearningCatalog] = useState<LearningPathCatalog | null>(null);
   const [error, setError] = useState('');
   const [learningError, setLearningError] = useState('');
+  const [selectedStepKey, setSelectedStepKey] = useState('');
 
   useEffect(() => {
     void loadCourseManifest().then(setManifest).catch((caught) => {
@@ -33,6 +34,9 @@ export default function CourseTimelinePage() {
   );
   const primaryLearningPath = learningCatalog?.paths?.[0] ?? null;
   const primarySteps = primaryLearningPath?.steps ?? [];
+  const selectedStep: LearningStep | null = primarySteps.find((step) => step.step_key === selectedStepKey)
+    ?? primarySteps[0]
+    ?? null;
   const totalLabs = primarySteps.reduce((sum, step) => sum + step.lab_tasks.length, 0);
   const totalChecks = primarySteps.reduce(
     (sum, step) => sum + step.lab_tasks.reduce((taskSum, task) => taskSum + task.command_checks.length, 0),
@@ -79,7 +83,12 @@ export default function CourseTimelinePage() {
           {primarySteps.length > 0 ? (
             <div className="course-learning-step-strip">
               {primarySteps.slice(0, 6).map((step) => (
-                <article key={step.id} className="course-learning-step-card">
+                <button
+                  key={step.id}
+                  className={`course-learning-step-card ${selectedStep?.step_key === step.step_key ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setSelectedStepKey(step.step_key)}
+                >
                   <span>Step {step.ordinal}</span>
                   <strong>{step.title}</strong>
                   <p>{step.objective || '이 단계의 목표는 DB curriculum seed에서 관리됩니다.'}</p>
@@ -88,7 +97,7 @@ export default function CourseTimelinePage() {
                     <span>{step.lab_tasks.length} labs</span>
                     <span>{step.difficulty || 'beginner'}</span>
                   </div>
-                </article>
+                </button>
               ))}
             </div>
           ) : (
@@ -96,6 +105,41 @@ export default function CourseTimelinePage() {
               <span>DB 기반 학습 경로가 준비되면 단계별 수업과 실습 검증이 표시됩니다.</span>
             </div>
           )}
+          {selectedStep ? (
+            <div className="course-learning-step-detail">
+              <div className="course-learning-lesson">
+                <span className="course-route-kicker">Selected Step</span>
+                <strong>{selectedStep.title}</strong>
+                <p>{selectedStep.objective || 'No objective provided yet.'}</p>
+                {selectedStep.lesson_markdown ? <pre>{selectedStep.lesson_markdown}</pre> : null}
+              </div>
+              <div className="course-learning-lab-list">
+                {selectedStep.lab_tasks.length > 0 ? selectedStep.lab_tasks.map((task) => (
+                  <article key={task.id} className="course-learning-lab-card">
+                    <span>Lab {task.ordinal}</span>
+                    <strong>{task.title}</strong>
+                    <p>{task.goal_markdown || 'No lab goal provided yet.'}</p>
+                    {task.command_checks.length > 0 ? (
+                      <div className="course-learning-command-list">
+                        {task.command_checks.map((check) => (
+                          <div key={check.id} className="course-learning-command-row">
+                            <code>{check.expected_command || check.command_pattern || check.check_key}</code>
+                            <span>{check.validation_kind}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="course-muted">No command checks yet</span>
+                    )}
+                  </article>
+                )) : (
+                  <div className="course-learning-empty">
+                    <span>No labs are attached to this step yet.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <section className="course-timeline">
