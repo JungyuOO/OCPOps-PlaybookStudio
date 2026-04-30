@@ -1,6 +1,7 @@
 export const RUNTIME_ORIGIN = (import.meta.env.VITE_RUNTIME_ORIGIN ?? '').trim().replace(/\/$/, '');
 export const RUNTIME_EXTERNAL_ORIGIN = RUNTIME_ORIGIN || 'http://127.0.0.1:8765';
 export const CUSTOMER_PACK_UPLOAD_ACCEPT = '.pdf,.md,.markdown,.docx,.pptx,.xlsx,.txt,.adoc,.asciidoc,.html,.htm,.png,.jpg,.jpeg,.webp';
+export const DOCUMENT_INGEST_UPLOAD_ACCEPT = '.pdf,.md,.markdown,.docx,.pptx,.xlsx,.txt,.adoc,.asciidoc,.png,.jpg,.jpeg,.webp';
 
 export interface LibraryBookSourceOption {
   key: string;
@@ -100,6 +101,39 @@ export interface CorpusChunkViewerResponse {
   error_chunk_count: number;
   chunk_type_breakdown: Record<string, number>;
   chunks: CorpusChunkRow[];
+}
+
+export interface UploadIngestPersistedSummary {
+  document_source_id: string;
+  document_version_id: string;
+  parse_job_id: string;
+  parsed_document_id: string;
+  block_count: number;
+  asset_count: number;
+  chunk_count: number;
+}
+
+export interface UploadIngestIndexSummary {
+  collection: string;
+  candidate_count: number;
+  indexed_count: number;
+}
+
+export interface UploadIngestResponse {
+  dry_run: boolean;
+  filename: string;
+  storage_key: string;
+  byte_size: number;
+  document_format: string;
+  mime_type: string;
+  sha256: string;
+  block_count: number;
+  asset_count: number;
+  chunk_count: number;
+  warnings: string[];
+  sections: string[][];
+  persisted?: UploadIngestPersistedSummary;
+  index?: UploadIngestIndexSummary;
 }
 
 export interface BuyerPacket {
@@ -1140,6 +1174,24 @@ export async function loadCustomerPackCapturedPreview(
     blob: await response.blob(),
     contentType: response.headers.get('Content-Type') || 'application/octet-stream',
   };
+}
+
+export async function uploadDocumentIngestion(
+  file: File,
+  options: { dryRun?: boolean; index?: boolean; createdBy?: string } = {},
+): Promise<UploadIngestResponse> {
+  const payload = new FormData();
+  payload.append('file_name', file.name);
+  payload.append('file', file, file.name);
+  payload.append('dry_run', String(Boolean(options.dryRun)));
+  payload.append('index', String(options.index ?? true));
+  if (options.createdBy) {
+    payload.append('created_by', options.createdBy);
+  }
+  return requestJson<UploadIngestResponse>('/api/uploads/ingest', {
+    method: 'POST',
+    body: payload,
+  });
 }
 
 function inferSourceType(file: File): string {

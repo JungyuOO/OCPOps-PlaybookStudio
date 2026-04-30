@@ -30,7 +30,7 @@ import gsap from 'gsap';
 import './PlaybookLibraryPage.css';
 import ViewerDocumentStage, { type ViewerDocumentPayload } from '../components/ViewerDocumentStage';
 import {
-  CUSTOMER_PACK_UPLOAD_ACCEPT,
+  DOCUMENT_INGEST_UPLOAD_ACCEPT,
   type CustomerPackDraft,
   type CorpusChunkViewerResponse,
   type BuyerPacket,
@@ -43,9 +43,8 @@ import {
   type RepositoryFavorite,
   type RepositorySearchResult,
   type RepositoryUnansweredItem,
-  uploadCustomerPackDraft,
-  captureCustomerPackDraft,
-  normalizeCustomerPackDraft,
+  type UploadIngestResponse,
+  uploadDocumentIngestion,
   loadDataControlRoom,
   loadDataControlRoomChunks,
   listCustomerPackDrafts,
@@ -577,6 +576,7 @@ const PlaybookLibraryPage: React.FC = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [currentFile, setCurrentFile] = useState('');
+  const [latestUploadIngest, setLatestUploadIngest] = useState<UploadIngestResponse | null>(null);
   const [controlRoom, setControlRoom] = useState<DataControlRoomResponse | null>(null);
   const [drafts, setDrafts] = useState<CustomerPackDraft[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -817,32 +817,28 @@ const PlaybookLibraryPage: React.FC = () => {
 
     setErrorMsg('');
     setCurrentFile(file.name);
-    let draft: CustomerPackDraft;
+    setLatestUploadIngest(null);
 
     try {
       setPipelineStage('uploading');
-      addLog('info', `Uploading '${file.name}'...`);
-      draft = await uploadCustomerPackDraft(file);
-      addLog('success', `'${file.name}' uploaded → draft ${draft.draft_id}`);
+      addLog('info', `Uploading '${file.name}' to document ingestion...`);
 
       setPipelineStage('capturing');
-      addLog('info', `Capturing source artifact (${draft.source_type.toUpperCase()})...`);
-      draft = await captureCustomerPackDraft(draft.draft_id);
-      addLog('success', `Artifact captured for '${draft.title}'`);
-
+      addLog('info', 'Parsing source into Markdown blocks and semantic chunks...');
       setPipelineStage('normalizing');
-      const backend = ['pdf', 'docx', 'pptx', 'xlsx'].includes(draft.source_type)
-        ? 'MarkItDown' : 'Native parser';
-      addLog('info', `Normalizing via ${backend} → canonical sections...`);
-      draft = await normalizeCustomerPackDraft(draft.draft_id);
+      addLog('info', 'Persisting chunks to PostgreSQL and indexing them for RAG...');
+      const ingest = await uploadDocumentIngestion(file, { index: true, createdBy: 'playbook-library' });
+      const indexedCount = ingest.index?.indexed_count ?? 0;
+      const indexLine = ingest.index ? `, ${indexedCount}/${ingest.index.candidate_count} indexed` : '';
+      setLatestUploadIngest(ingest);
 
-      const qualityLine = draft.quality_score > 0
-        ? ` (quality: ${draft.quality_score}/100 — ${draft.quality_status})`
-        : '';
-      addLog('success', `Normalized: ${draft.playable_asset_count} playable assets, ${draft.derived_asset_count} derived${qualityLine}`);
+      addLog('success', `Ingested '${ingest.filename}': ${ingest.block_count} blocks, ${ingest.chunk_count} chunks${indexLine}.`);
+      if (ingest.warnings.length > 0) {
+        addLog('warn', ingest.warnings.slice(0, 2).join(' / '));
+      }
 
       setPipelineStage('done');
-      addLog('success', `'${draft.title}' saved to User Library.`);
+      addLog('success', `'${ingest.filename}' is now available to the RAG corpus.`);
       refreshData();
       setTimeout(() => { setPipelineStage('idle'); setCurrentFile(''); }, 6000);
     } catch (error: unknown) {
@@ -1405,8 +1401,8 @@ const PlaybookLibraryPage: React.FC = () => {
   const stageLabel = (stage: PipelineStage) => {
     switch (stage) {
       case 'uploading': return 'Uploading...';
-      case 'capturing': return 'Capturing Artifact...';
-      case 'normalizing': return 'Normalizing...';
+      case 'capturing': return 'Parsing Document...';
+      case 'normalizing': return 'Indexing Chunks...';
       case 'done': return 'Pipeline Complete';
       case 'error': return 'Pipeline Failed';
       default: return 'Engine Idle';
@@ -1536,7 +1532,7 @@ const PlaybookLibraryPage: React.FC = () => {
             ? 'done'
             : '';
   const bookFactoryModeSummary = factoryLane === 'user'
-    ? `${userLibraryBookCount} user books · ${drafts.length} drafts`
+    ? `${userLibraryBookCount} user books · ${latestUploadIngest?.chunk_count ?? userCorpusBookCount} chunks`
     : `${repositoryUnanswered.length} requests · ${repositoryFavorites.length} saved sources`;
   const toggleFactoryManualChecklist = (checkId: string) => {
     if (!factoryManualSubjectKey) return;
@@ -1901,7 +1897,7 @@ const PlaybookLibraryPage: React.FC = () => {
               ref={fileInputRef}
               type="file"
               hidden
-              accept={CUSTOMER_PACK_UPLOAD_ACCEPT}
+              accept={DOCUMENT_INGEST_UPLOAD_ACCEPT}
               onChange={handleUpload}
             />
 
