@@ -5,11 +5,14 @@ from pathlib import Path
 
 from play_book_studio.app.starter_questions import build_studio_starter_questions
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+TEST_TMP = REPO_ROOT / "tmp" / "starter_questions_tests"
 
-def test_starter_questions_are_loaded_from_manifests(tmp_path: Path) -> None:
-    manifests = tmp_path / "manifests"
-    course_manifests = tmp_path / "data" / "course_pbs" / "manifests"
-    manifests.mkdir()
+
+def test_starter_questions_are_loaded_from_manifests() -> None:
+    manifests = TEST_TMP / "manifests"
+    course_manifests = TEST_TMP / "data" / "course_pbs" / "manifests"
+    manifests.mkdir(parents=True, exist_ok=True)
     course_manifests.mkdir(parents=True)
     (manifests / "pbs_chat_quality_cases.jsonl").write_text(
         json.dumps(
@@ -67,7 +70,7 @@ def test_starter_questions_are_loaded_from_manifests(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    payload = build_studio_starter_questions(tmp_path, seed="stable")
+    payload = build_studio_starter_questions(TEST_TMP, seed="stable")
     groups = {group["key"]: group for group in payload["groups"]}
 
     assert groups["faq"]["questions"][0]["question"] == "Operator가 Degraded일 때 CSV 상태를 어떻게 확인해?"

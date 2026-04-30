@@ -205,6 +205,86 @@ def list_learning_path_summaries(
         )
 
 
+def load_ops_learning_guides_payload(
+    connection,
+    *,
+    workspace_slug: str = "default",
+    path_slug: str = "",
+) -> dict[str, Any]:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                lp.slug,
+                lp.title,
+                lp.source_ref,
+                ls.step_key,
+                ls.ordinal,
+                ls.title,
+                ls.objective,
+                ls.lesson_markdown,
+                ls.metadata
+            FROM learning_paths lp
+            LEFT JOIN workspaces w ON w.id = lp.workspace_id
+            JOIN learning_steps ls ON ls.learning_path_id = lp.id
+            WHERE (w.slug = %s OR lp.workspace_id IS NULL)
+              AND (%s = '' OR lp.slug = %s)
+            ORDER BY lp.updated_at DESC, lp.created_at DESC, ls.ordinal ASC
+            """,
+            (workspace_slug, path_slug, path_slug),
+        )
+        rows = cursor.fetchall()
+    if not rows:
+        return {"canonical_model": "ops_learning_guide_v1", "guides": []}
+
+    path_slug_value = str(rows[0][0] or "")
+    path_title = str(rows[0][1] or "")
+    source_ref = str(rows[0][2] or "")
+    guides_by_id: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        metadata = row[8] if isinstance(row[8], dict) else {}
+        guide_id = str(metadata.get("guide_id") or "guided_learning").strip() or "guided_learning"
+        guide = guides_by_id.setdefault(
+            guide_id,
+            {
+                "guide_id": guide_id,
+                "stage_id": str(metadata.get("stage_id") or ""),
+                "title": path_title,
+                "audience": "beginner",
+                "learning_goal": "",
+                "steps": [],
+            },
+        )
+        guide["steps"].append(
+            {
+                "step_id": str(row[3] or ""),
+                "guide_id": guide_id,
+                "stage_id": str(metadata.get("stage_id") or ""),
+                "card_text": str(row[5] or ""),
+                "user_query": str(metadata.get("user_query") or ""),
+                "learning_objective": str(row[6] or ""),
+                "answer_outline": _outline_from_lesson_markdown(str(row[7] or "")),
+                "source_anchors": [
+                    {"chunk_id": chunk_id, "anchor_role": "primary"}
+                    for chunk_id in metadata.get("source_anchor_chunk_ids", [])
+                    if str(chunk_id).strip()
+                ],
+                "next_step_ids": metadata.get("next_step_ids") if isinstance(metadata.get("next_step_ids"), list) else [],
+                "quality": metadata.get("quality") if isinstance(metadata.get("quality"), dict) else {},
+            }
+        )
+    guides = list(guides_by_id.values())
+    return {
+        "canonical_model": "ops_learning_guide_v1",
+        "course_slug": path_slug_value,
+        "title": path_title,
+        "source_manifest": source_ref,
+        "guide_count": len(guides),
+        "step_count": sum(len(guide["steps"]) for guide in guides),
+        "guides": guides,
+    }
+
+
 def persist_learning_path(
     connection,
     seed: LearningPathSeed,
@@ -256,6 +336,15 @@ def persist_learning_path(
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _outline_from_lesson_markdown(markdown: str) -> list[str]:
+    lines: list[str] = []
+    for raw_line in markdown.splitlines():
+        line = raw_line.strip()
+        if line.startswith("- "):
+            lines.append(line[2:].strip())
+    return lines
 
 
 def _upsert_tenant(cursor, *, tenant_slug: str, tenant_name: str) -> str:
@@ -439,5 +528,6 @@ __all__ = [
     "StoredLearningPath",
     "build_learning_path_rows",
     "list_learning_path_summaries",
+    "load_ops_learning_guides_payload",
     "persist_learning_path",
 ]

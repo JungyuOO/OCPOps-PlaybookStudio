@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.settings import load_settings
+
 
 @dataclass(frozen=True)
 class StarterCategoryRule:
@@ -241,12 +243,33 @@ def _learning_questions(root_dir: Path) -> list[dict[str, Any]]:
     return questions
 
 
-def _operations_questions(root_dir: Path) -> list[dict[str, Any]]:
-    payload = _safe_read_json(root_dir / "data" / "course_pbs" / "manifests" / "ops_learning_guides_v1.json")
+def _load_ops_learning_guides_payload(root_dir: Path) -> tuple[dict[str, Any], str]:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if database_url:
+        try:
+            import psycopg
+
+            from play_book_studio.db.learning_repository import load_ops_learning_guides_payload
+
+            with psycopg.connect(database_url) as connection:
+                payload = load_ops_learning_guides_payload(connection, workspace_slug="default")
+            if payload.get("guides"):
+                return payload, "postgres.learning_paths"
+        except Exception:  # noqa: BLE001
+            pass
+    return (
+        _safe_read_json(root_dir / "data" / "course_pbs" / "manifests" / "ops_learning_guides_v1.json"),
+        "data/course_pbs/manifests/ops_learning_guides_v1.json",
+    )
+
+
+def _operations_questions(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
+    payload, source_label = _load_ops_learning_guides_payload(root_dir)
     guides = payload.get("guides")
     candidates: list[dict[str, Any]] = []
     if not isinstance(guides, list):
-        return candidates
+        return candidates, source_label
     for guide in guides:
         if not isinstance(guide, dict):
             continue
@@ -264,18 +287,19 @@ def _operations_questions(root_dir: Path) -> list[dict[str, Any]]:
                     lane="operations",
                     question=query,
                     route_kind="course",
-                    source="ops_learning_guides_v1",
+                    source=source_label,
                     category_key=str(guide.get("stage_id") or ""),
                     category_label=str(guide.get("title") or ""),
                 )
             )
-    return candidates
+    return candidates, source_label
 
 
 def build_studio_starter_questions(root_dir: Path, *, seed: str = "") -> dict[str, Any]:
     root = Path(root_dir)
     official = _stable_sample(_official_faq_questions(root), count=2, seed=f"{seed}:faq")
-    operations = _stable_sample(_operations_questions(root), count=2, seed=f"{seed}:operations")
+    operation_candidates, operations_source = _operations_questions(root)
+    operations = _stable_sample(operation_candidates, count=2, seed=f"{seed}:operations")
     learning_sequence = _learning_questions(root)
     learning = learning_sequence[:2]
     questions_by_group = {
@@ -296,7 +320,7 @@ def build_studio_starter_questions(root_dir: Path, *, seed: str = "") -> dict[st
         "sources": {
             "faq": "manifests/pbs_chat_quality_cases*.jsonl",
             "learning": "manifests/ocp420_repo_wide_source_manifest.json",
-            "operations": "data/course_pbs/manifests/ops_learning_guides_v1.json",
+            "operations": operations_source,
         },
     }
 
