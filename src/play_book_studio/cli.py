@@ -151,6 +151,23 @@ def build_parser() -> argparse.ArgumentParser:
     db_qdrant_index_parser.add_argument("--collection", default="")
     db_qdrant_index_parser.add_argument("--limit", type=int, default=100)
 
+    learning_seed_parser = subparsers.add_parser(
+        "learning-seed-import",
+        help="Import guided learning path seed manifests into PostgreSQL",
+    )
+    learning_seed_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    learning_seed_parser.add_argument(
+        "--guides-path",
+        type=Path,
+        default=Path("data/course_pbs/manifests/ops_learning_guides_v1.json"),
+    )
+    learning_seed_parser.add_argument("--database-url", default="")
+    learning_seed_parser.add_argument("--tenant-slug", default="public")
+    learning_seed_parser.add_argument("--tenant-name", default="Public")
+    learning_seed_parser.add_argument("--workspace-slug", default="default")
+    learning_seed_parser.add_argument("--workspace-name", default="Default")
+    learning_seed_parser.add_argument("--dry-run", action="store_true")
+
     course_qa_parser = subparsers.add_parser(
         "course-qa",
         help="Generate, quality-gate, and run Study-docs course chat QA cases",
@@ -617,6 +634,69 @@ def _run_db_qdrant_index(args: argparse.Namespace) -> int:
     return 0
 
 
+def _learning_seed_summary(seed, *, persisted=None) -> dict:
+    step_count = len(seed.steps)
+    lab_task_count = sum(len(step.lab_tasks) for step in seed.steps)
+    command_check_count = sum(len(task.command_checks) for step in seed.steps for task in step.lab_tasks)
+    return {
+        "slug": seed.slug,
+        "title": seed.title,
+        "audience": seed.audience,
+        "ocp_version": seed.ocp_version,
+        "language": seed.language,
+        "source_kind": seed.source_kind,
+        "source_ref": seed.source_ref,
+        "step_count": step_count,
+        "lab_task_count": lab_task_count,
+        "command_check_count": command_check_count,
+        "persisted": None if persisted is None else {
+            "learning_path_id": persisted.learning_path_id,
+            "step_count": len(persisted.step_ids),
+            "lab_task_count": len(persisted.lab_task_ids),
+            "command_check_count": len(persisted.command_check_ids),
+        },
+    }
+
+
+def _run_learning_seed_import(args: argparse.Namespace) -> int:
+    from play_book_studio.course.learning_path_seed import load_ops_learning_guides_seed
+    from play_book_studio.db.learning_repository import persist_learning_path
+
+    root_dir = args.root_dir.resolve()
+    guides_path = args.guides_path
+    if not guides_path.is_absolute():
+        guides_path = root_dir / guides_path
+    guides_path = guides_path.resolve()
+    if not guides_path.exists():
+        print(f"learning guides seed does not exist: {guides_path}")
+        return 1
+
+    seed = load_ops_learning_guides_seed(guides_path)
+    if args.dry_run:
+        print(json.dumps(_learning_seed_summary(seed), ensure_ascii=False, indent=2))
+        return 0
+
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        persisted = persist_learning_path(
+            connection,
+            seed,
+            tenant_slug=args.tenant_slug,
+            tenant_name=args.tenant_name,
+            workspace_slug=args.workspace_slug,
+            workspace_name=args.workspace_name,
+        )
+    print(json.dumps(_learning_seed_summary(seed, persisted=persisted), ensure_ascii=False, indent=2))
+    return 0
+
+
 def main() -> int:
     args = build_parser().parse_args()
     if args.command == "ui":
@@ -641,6 +721,8 @@ def main() -> int:
         return _run_upload_ingest(args)
     if args.command == "db-qdrant-index":
         return _run_db_qdrant_index(args)
+    if args.command == "learning-seed-import":
+        return _run_learning_seed_import(args)
     if args.command == "course-qa":
         from play_book_studio.course.quality_eval import run_quality_eval
 

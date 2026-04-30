@@ -78,6 +78,19 @@ class StoredLearningPath:
     command_check_ids: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class LearningPathSummary:
+    learning_path_id: str
+    slug: str
+    title: str
+    audience: str
+    ocp_version: str
+    language: str
+    step_count: int
+    lab_task_count: int
+    command_check_count: int
+
+
 def build_learning_path_rows(seed: LearningPathSeed) -> LearningPathRows:
     path = {
         "slug": seed.slug,
@@ -143,6 +156,53 @@ def build_learning_path_rows(seed: LearningPathSeed) -> LearningPathRows:
         lab_tasks=tuple(lab_tasks),
         command_checks=tuple(command_checks),
     )
+
+
+def list_learning_path_summaries(
+    connection,
+    *,
+    workspace_slug: str = "default",
+    limit: int = 50,
+) -> tuple[LearningPathSummary, ...]:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                lp.id,
+                lp.slug,
+                lp.title,
+                lp.audience,
+                lp.ocp_version,
+                lp.language,
+                COUNT(DISTINCT ls.id) AS step_count,
+                COUNT(DISTINCT lt.id) AS lab_task_count,
+                COUNT(DISTINCT cc.id) AS command_check_count
+            FROM learning_paths lp
+            LEFT JOIN workspaces w ON w.id = lp.workspace_id
+            LEFT JOIN learning_steps ls ON ls.learning_path_id = lp.id
+            LEFT JOIN lab_tasks lt ON lt.learning_step_id = ls.id
+            LEFT JOIN command_checks cc ON cc.lab_task_id = lt.id
+            WHERE w.slug = %s OR lp.workspace_id IS NULL
+            GROUP BY lp.id
+            ORDER BY lp.updated_at DESC, lp.created_at DESC
+            LIMIT %s
+            """,
+            (workspace_slug, int(limit)),
+        )
+        return tuple(
+            LearningPathSummary(
+                learning_path_id=str(row[0]),
+                slug=str(row[1]),
+                title=str(row[2]),
+                audience=str(row[3]),
+                ocp_version=str(row[4]),
+                language=str(row[5]),
+                step_count=int(row[6] or 0),
+                lab_task_count=int(row[7] or 0),
+                command_check_count=int(row[8] or 0),
+            )
+            for row in cursor.fetchall()
+        )
 
 
 def persist_learning_path(
@@ -374,8 +434,10 @@ __all__ = [
     "LabTaskSeed",
     "LearningPathRows",
     "LearningPathSeed",
+    "LearningPathSummary",
     "LearningStepSeed",
     "StoredLearningPath",
     "build_learning_path_rows",
+    "list_learning_path_summaries",
     "persist_learning_path",
 ]
