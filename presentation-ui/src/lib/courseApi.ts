@@ -225,7 +225,10 @@ export type CourseChatStreamEvent =
   | { type: 'error'; error?: string; message?: string };
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${RUNTIME_ORIGIN}${path}`, init);
+  const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
+    credentials: 'include',
+    ...init,
+  });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
     try {
@@ -316,6 +319,7 @@ export async function sendCourseChatStream(
 ): Promise<CourseChatResponse> {
   const response = await fetch(`${RUNTIME_ORIGIN}/api/v1/course/chat/stream`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message: payload.message,

@@ -40,6 +40,19 @@ def _query_identifiers(query: str) -> set[str]:
     }
 
 
+def _is_reading_roadmap_query(query: str) -> bool:
+    normalized = _normalize_query(query)
+    has_document_target = any(
+        term in normalized
+        for term in ["문서", "docs", "documentation", "playbook", "플레이북", "가이드"]
+    )
+    has_sequence_signal = any(
+        term in normalized
+        for term in ["순서", "순서대로", "먼저 읽", "읽어야", "먼저 봐", "roadmap", "sequence", "order"]
+    )
+    return has_document_target and has_sequence_signal
+
+
 def _is_route_intent(query: str) -> bool:
     normalized = _normalize_query(query)
     if any(
@@ -548,6 +561,23 @@ def _contains_any_term(text: str, terms: list[str]) -> bool:
 
 
 def _is_image_evidence_intent(query: str) -> bool:
+    normalized = _normalize_query(query)
+    explicit_visual_terms = [
+        "image",
+        "screen",
+        "screenshot",
+        "diagram",
+        "topology",
+        "이미지",
+        "화면",
+        "캡처",
+        "스크린샷",
+        "다이어그램",
+        "구성도",
+        "그림",
+    ]
+    if not any(term in normalized for term in explicit_visual_terms):
+        return False
     return _contains_any_term(
         query,
         [
@@ -988,6 +1018,8 @@ def _build_course_answer_rewrite_messages(
         "'metrics-server 로부터'가 아니라 'metrics-server로부터'처럼 쓴다. "
         "citation은 반드시 제공된 번호만 [1], [2] 형식으로 유지한다. "
         "'실운영 가이드 기준' 같은 시스템 prefix로 시작하지 말고, 바로 사용자 질문에 대한 답으로 시작한다. "
+        "요약 카드처럼 짧게 잘라내지 말고, GPT 답변처럼 결론 다음에 이유와 판단 기준을 학습용으로 풀어쓴다. "
+        "이미지, 화면, 다이어그램을 직접 묻지 않은 질문에는 이미지 캡션이나 그림 설명을 본문에 넣지 않는다. "
         "출력은 답변 본문만 작성한다."
     )
     user = (
@@ -996,7 +1028,9 @@ def _build_course_answer_rewrite_messages(
         f"근거 데이터(JSON):\n{json.dumps(evidence, ensure_ascii=False, indent=2)}\n\n"
         "재작성 규칙:\n"
         "- 첫 문단에서 질문에 대한 결론이나 어디부터 봐야 하는지를 바로 말한다.\n"
-        "- 이후 2~4개의 짧은 단계나 bullet로 확인 순서를 정리한다.\n"
+        "- 이후 3~5개의 읽기 쉬운 문단이나 bullet로 확인 순서, 왜 그 순서인지, 다음 분기 기준을 설명한다.\n"
+        "- 운영자가 학습할 수 있도록 각 단계에서 어떤 신호를 보면 되는지 한두 문장으로 풀이한다.\n"
+        "- 이미지/화면/다이어그램을 직접 묻지 않았으면 이미지 캡션과 그림 묘사는 제외한다.\n"
         "- 원문 OCR처럼 이어진 문장은 그대로 복사하지 말고 운영자가 읽기 쉬운 문장으로 다듬는다.\n"
         "- POD처럼 대문자로 추출된 일반 리소스명은 자연스러운 기술 표기(Pod)로 정리한다.\n"
         "- 띄어쓰기와 조사를 자연스럽게 다듬는다. 예: 'HPA는', 'Pod의', '기본값 15초', 'max 값까지', 'Scale-out은 Pod를 늘리는 동작'처럼 작성한다.\n"
@@ -1071,7 +1105,7 @@ def _rewrite_course_answer_with_llm(
         guide_step=guide_step,
     )
     client = LLMClient(settings)
-    rewritten = client.generate(messages, max_tokens=min(max(int(getattr(settings, "llm_max_tokens", 900) or 900), 600), 1200))
+    rewritten = client.generate(messages, max_tokens=min(max(int(getattr(settings, "llm_max_tokens", 900) or 900), 700), 1400))
     rewritten = re.sub(r"^\s*답변\s*:\s*", "", str(rewritten or "").strip(), flags=re.IGNORECASE)
     rewritten = re.sub(r"^\s*(?:Study-docs|실운영 가이드)\s*기준\s*", "", rewritten).strip()
     if len(rewritten) < 40:
@@ -1079,7 +1113,7 @@ def _rewrite_course_answer_with_llm(
     style_issues = _course_answer_style_issues(rewritten)
     if style_issues:
         copyedit_messages = _build_course_answer_copyedit_messages(answer=rewritten, style_issues=style_issues)
-        copyedited = client.generate(copyedit_messages, max_tokens=min(max(int(getattr(settings, "llm_max_tokens", 900) or 900), 600), 1200))
+        copyedited = client.generate(copyedit_messages, max_tokens=min(max(int(getattr(settings, "llm_max_tokens", 900) or 900), 700), 1400))
         copyedited = re.sub(r"^\s*답변\s*:\s*", "", str(copyedited or "").strip(), flags=re.IGNORECASE)
         copyedited = re.sub(r"^\s*(?:Study-docs|실운영 가이드)\s*기준\s*", "", copyedited).strip()
         if len(copyedited) >= 40:
@@ -2324,7 +2358,11 @@ def _course_chat_payload(root_dir: Path, payload: dict[str, Any]) -> dict[str, A
     if resolved_guide is not None:
         guide, guide_step = resolved_guide
         stage_id = str(guide_step.get("stage_id") or guide.get("stage_id") or stage_id)
-    route_like_query = _is_route_intent(query) and not any(term in normalized_query for term in image_evidence_terms)
+    route_like_query = (
+        _is_route_intent(query)
+        and not _is_reading_roadmap_query(query)
+        and not any(term in normalized_query for term in image_evidence_terms)
+    )
     resolved_route_chunk = (
         _resolve_route_step_chunk(root_dir, query=query, stage_id=stage_id)
         if route_like_query and not explicit_chunk_ids and guide_step is None and not learning_chunks and not has_query_identifiers

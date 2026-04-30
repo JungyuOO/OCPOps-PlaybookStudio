@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  ArrowRight,
   Activity,
   Database,
   Layers,
@@ -44,7 +43,6 @@ import {
   type RepositoryFavorite,
   type RepositorySearchResult,
   type RepositoryUnansweredItem,
-  type RuntimeFigureItem,
   uploadCustomerPackDraft,
   captureCustomerPackDraft,
   normalizeCustomerPackDraft,
@@ -60,31 +58,16 @@ import {
   removeRepositoryFavorite,
   searchRepositories,
   loadCustomerPackCapturedPreview,
-  loadRuntimeFigures,
   loadViewerDocument,
   toRuntimeUrl,
   formatBytes,
 } from '../lib/runtimeApi';
-import { WIKI_VISION_MODES, loadStoredVisionMode, persistVisionMode, type VisionMode } from '../lib/wikiVision';
 import { ROUTES } from '../app/routes';
 
 type PipelineStage = 'idle' | 'uploading' | 'capturing' | 'normalizing' | 'done' | 'error';
 type FactoryLane = 'tools' | 'user';
 type FactoryRunMode = 'auto' | 'manual';
 type OfficialSourceBasisKey = 'official_repo' | 'official_homepage';
-
-interface FigureAtlasEntry {
-  key: string;
-  title: string;
-  subtitle: string;
-  kind: string;
-  intent: string;
-  why: string;
-  thumbUrl?: string;
-  href: string;
-  count?: number;
-  isCluster?: boolean;
-}
 
 interface LogEntry {
   time: string;
@@ -116,6 +99,7 @@ interface FactoryChecklistItem {
   title: string;
   detail: string;
 }
+
 
 type MetricPopoverMode = 'playbook' | 'corpus';
 
@@ -356,70 +340,6 @@ function playbookGradeBadgeClass(grade?: string | null): string {
   return `playbook-grade-badge playbook-grade-badge--${normalized}`;
 }
 
-function firstFigureSectionToken(sectionHint: string): string {
-  const normalized = sectionHint.replace(/[›>]/g, '|');
-  return normalized
-    .split('|')
-    .map((chunk) => chunk.trim())
-    .find(Boolean) || '';
-}
-
-function buildFigureAtlasEntries(figures: RuntimeFigureItem[]): FigureAtlasEntry[] {
-  const groups = new Map<string, RuntimeFigureItem[]>();
-  for (const figure of figures) {
-    const diagramKey = (figure.diagram_type || '').trim().toLowerCase();
-    const sectionKey = firstFigureSectionToken(figure.section_hint || '').toLowerCase();
-    const assetKey = (figure.asset_kind || 'figure').trim().toLowerCase();
-    const key = diagramKey
-      ? `diagram:${diagramKey}`
-      : sectionKey
-        ? `section:${sectionKey}`
-        : `asset:${assetKey}`;
-    const bucket = groups.get(key) ?? [];
-    bucket.push(figure);
-    groups.set(key, bucket);
-  }
-
-  return [...groups.entries()]
-    .sort((a, b) => {
-      if (b[1].length !== a[1].length) return b[1].length - a[1].length;
-      return a[1][0].caption.localeCompare(b[1][0].caption);
-    })
-    .slice(0, 3)
-    .map(([key, bucket]) => {
-      const first = bucket[0];
-      const isDiagram = Boolean(first.diagram_type);
-      const thumbUrl = first.asset_url ? toRuntimeUrl(first.asset_url) : undefined;
-      if (bucket.length === 1) {
-        return {
-          key,
-          title: first.caption,
-          subtitle: first.section_hint || first.diagram_type || first.asset_kind,
-          kind: isDiagram ? 'Diagram' : 'Figure',
-          intent: 'View',
-          why: '문서를 읽기 전에 맥락을 빠르게 잡는 시각 자산',
-          thumbUrl,
-          href: first.viewer_path,
-        };
-      }
-
-      const clusterLabel = isDiagram
-        ? `${first.diagram_type || 'diagram'} cluster`
-        : firstFigureSectionToken(first.section_hint || '') || 'figure cluster';
-      return {
-        key,
-        title: clusterLabel,
-        subtitle: `${bucket.length} visual assets grouped`,
-        kind: isDiagram ? 'Diagram Cluster' : 'Figure Cluster',
-        intent: 'Scan',
-        why: `이 문서를 이해시키는 ${bucket.length}개의 시각 자산 묶음`,
-        thumbUrl,
-        href: first.viewer_path,
-        count: bucket.length,
-        isCluster: true,
-      };
-    });
-}
 
 type SourceOptionRecord = {
   title: string;
@@ -653,7 +573,6 @@ const PlaybookLibraryPage: React.FC = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [factoryLane, setFactoryLane] = useState<FactoryLane>('tools');
-  const [visionMode, setVisionMode] = useState<VisionMode>(() => loadStoredVisionMode());
   const [pipelineStage, setPipelineStage] = useState<PipelineStage>('idle');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
@@ -672,10 +591,6 @@ const PlaybookLibraryPage: React.FC = () => {
   const [previewCapturedType, setPreviewCapturedType] = useState('');
   const [previewViewerDocument, setPreviewViewerDocument] = useState<ViewerDocumentPayload | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [atlasBookFigures, setAtlasBookFigures] = useState<RuntimeFigureItem[]>([]);
-  const atlasBookFigureEntries = useMemo(() => buildFigureAtlasEntries(atlasBookFigures), [atlasBookFigures]);
-  const [comparisonBookSlug, setComparisonBookSlug] = useState('');
-  const [comparisonBookFigures, setComparisonBookFigures] = useState<RuntimeFigureItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [repositoryResults, setRepositoryResults] = useState<RepositorySearchResult[]>([]);
   const [officialSourceCandidates, setOfficialSourceCandidates] = useState<OfficialSourceCandidate[]>([]);
@@ -767,21 +682,6 @@ const PlaybookLibraryPage: React.FC = () => {
   useEffect(() => () => {
     stopToolsRunHeartbeat();
   }, [stopToolsRunHeartbeat]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    persistVisionMode(visionMode);
-  }, [visionMode]);
-
-  useEffect(() => {
-    if (visionMode !== 'atlas_canvas' || !bookViewer?.book_slug) {
-      setAtlasBookFigures([]);
-      return;
-    }
-    loadRuntimeFigures(bookViewer.book_slug, 3)
-      .then((payload) => setAtlasBookFigures(payload.items ?? []))
-      .catch(() => setAtlasBookFigures([]));
-  }, [bookViewer, visionMode]);
 
   useEffect(() => {
     if (!bookViewer?.viewer_path) {
@@ -1546,44 +1446,6 @@ const PlaybookLibraryPage: React.FC = () => {
   const releaseCandidatePacket = controlRoom?.buyer_packet_bundle?.books?.find(
     (packet) => packet.book_slug === 'buyer_packet__release-candidate-freeze',
   ) ?? null;
-  const activeVision = WIKI_VISION_MODES.find((mode) => mode.id === visionMode) ?? WIKI_VISION_MODES[0];
-  const comparisonCandidates = useMemo(() => {
-    const preferred = operationalWikiBooks.find((book) => book.book_slug === 'advanced_networking');
-    const others = operationalWikiBooks.filter((book) => book.book_slug !== 'advanced_networking').slice(0, 5);
-    return preferred ? [preferred, ...others] : operationalWikiBooks.slice(0, 6);
-  }, [operationalWikiBooks]);
-  useEffect(() => {
-    if (!comparisonCandidates.length) {
-      setComparisonBookSlug('');
-      return;
-    }
-    if (!comparisonBookSlug || !comparisonCandidates.some((book) => book.book_slug === comparisonBookSlug)) {
-      setComparisonBookSlug(comparisonCandidates[0].book_slug);
-    }
-  }, [comparisonBookSlug, comparisonCandidates]);
-  const comparisonBook = useMemo(
-    () => comparisonCandidates.find((book) => book.book_slug === comparisonBookSlug) ?? comparisonCandidates[0] ?? null,
-    [comparisonBookSlug, comparisonCandidates],
-  );
-  useEffect(() => {
-    if (!comparisonBook?.book_slug) {
-      setComparisonBookFigures([]);
-      return;
-    }
-    loadRuntimeFigures(comparisonBook.book_slug, 4)
-      .then((payload) => setComparisonBookFigures(payload.items ?? []))
-      .catch(() => setComparisonBookFigures([]));
-  }, [comparisonBook]);
-  const comparisonFigureEntries = useMemo(() => buildFigureAtlasEntries(comparisonBookFigures), [comparisonBookFigures]);
-  const comparisonLinkedDocs = useMemo(
-    () => operationalWikiBooks.filter((book) => book.book_slug !== comparisonBook?.book_slug).slice(0, 2),
-    [comparisonBook, operationalWikiBooks],
-  );
-  const guidedTourShelfSteps = useMemo(() => operationalWikiBooks.slice(0, 3), [operationalWikiBooks]);
-  const guidedTourShelfDocs = useMemo(() => operationalWikiBooks.slice(3, 5), [operationalWikiBooks]);
-  const atlasReadingBooks = useMemo(() => operationalWikiBooks.slice(0, 3), [operationalWikiBooks]);
-  const atlasRelationBooks = useMemo(() => operationalWikiBooks.slice(3, 6), [operationalWikiBooks]);
-  const atlasContextBooks = useMemo(() => operationalWikiBooks.slice(6, 8), [operationalWikiBooks]);
   const hasMetricSourceDrift = Boolean(controlRoom?.source_of_truth_drift?.status_alignment?.mismatches?.length);
   const gate = controlRoom?.gate;
   const productRehearsal = controlRoom?.product_rehearsal;
@@ -1760,9 +1622,7 @@ const PlaybookLibraryPage: React.FC = () => {
               <p className="text-muted">
                 {viewMode === 'repository'
                   ? 'Book Factory & Asset Repository'
-                  : visionMode === 'guided_tour'
-                    ? 'Guided Tour Entry & Operational Wiki'
-                    : 'Control Tower & Asset Repository'}
+                  : 'Operational Wiki'}
               </p>
             </div>
           </div>
@@ -1774,7 +1634,7 @@ const PlaybookLibraryPage: React.FC = () => {
                 onClick={() => navigate('/playbook-library/control-tower')}
               >
                 <Activity size={16} />
-                <span>{visionMode === 'guided_tour' ? 'Guided Tour' : 'Control Tower'}</span>
+                <span>Operational Wiki</span>
               </button>
               <button
                 className={viewMode === 'repository' ? 'active' : ''}
@@ -1795,150 +1655,13 @@ const PlaybookLibraryPage: React.FC = () => {
       <main className="library-main">
         {viewMode === 'monitoring' ? (
           <div className="monitoring-view">
-            {comparisonBook && (
-              <section className="vision-compare box-container">
-                <div className="vision-compare-header">
-                  <div>
-                    <span className="vision-compare-eyebrow">Viewer Compare</span>
-                    <h2>같은 문서를 3안으로 비교해보기</h2>
-                    <p>
-                      같은 문서 하나를 기준으로, 어떤 viewer가 우리 위키 대백과의 중심이 되어야 하는지 바로 비교합니다.
-                    </p>
-                  </div>
-                  <div className="vision-compare-book-picker" role="tablist" aria-label="comparison document picker">
-                    {comparisonCandidates.map((book) => (
-                      <button
-                        key={book.book_slug}
-                        type="button"
-                        className={`vision-compare-book-chip ${comparisonBook.book_slug === book.book_slug ? 'active' : ''}`}
-                        onClick={() => setComparisonBookSlug(book.book_slug)}
-                      >
-                        {book.title}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="vision-compare-book-meta">
-                  <span>{comparisonBook.title}</span>
-                  <span>{comparisonBook.section_count} sections</span>
-                  <span className={playbookGradeBadgeClass(comparisonBook.grade)}>{normalizePlaybookGrade(comparisonBook.grade)}</span>
-                  <span>{comparisonBook.book_slug.replace(/_/g, ' ')}</span>
-                </div>
-                <div className="vision-compare-grid">
-                  {WIKI_VISION_MODES.map((mode) => {
-                    const copy = mode.compare;
-                    const isActive = visionMode === mode.id;
-                    return (
-                      <article key={mode.id} className={`vision-compare-card ${isActive ? 'active' : ''}`}>
-                        <div className="vision-compare-card-top">
-                          <span className="vision-compare-card-eyebrow">{copy.eyebrow}</span>
-                          <span className="vision-compare-card-mode">{mode.label}</span>
-                        </div>
-                        <h3>{copy.title}</h3>
-                        <p className="vision-compare-card-summary">{mode.library.summary}</p>
-                        <ul className="vision-compare-bullets">
-                          {copy.bullets.map((bullet) => (
-                            <li key={bullet}>{bullet}</li>
-                          ))}
-                        </ul>
-                        <div className="vision-compare-signals">
-                          <span>본문 {mode.id === 'atlas_canvas' ? '강조' : mode.id === 'guided_tour' ? '요약 후 이동' : '주제의 일부'}</span>
-                          <span>절차 {mode.id === 'guided_tour' ? '전면' : '보조'}</span>
-                          <span>figure {mode.id === 'atlas_canvas' ? '같은 시야' : '선택 노출'}</span>
-                        </div>
-                        {mode.id === 'atlas_canvas' && (
-                          <div className="vision-compare-mini-preview">
-                            <div className="vision-compare-mini-kicker">Reading core + side context</div>
-                            <strong>{comparisonBook.title}</strong>
-                            <span>본문을 중심으로 연결 문서와 figure를 옆에서 확장합니다.</span>
-                            <div className="vision-compare-inline-list">
-                              {comparisonFigureEntries.slice(0, 2).map((figure) => (
-                                <span key={figure.key}>{figure.kind}</span>
-                              ))}
-                              {comparisonLinkedDocs.slice(0, 1).map((book) => (
-                                <span key={book.book_slug}>{book.title}</span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {mode.id === 'guided_tour' && (
-                          <div className="vision-compare-mini-preview vision-compare-mini-route">
-                            <div className="vision-compare-mini-kicker">Answer -&gt; next route</div>
-                            <div className="vision-compare-route-step">
-                              <strong>Start Here</strong>
-                              <span>{comparisonBook.title}</span>
-                            </div>
-                            <div className="vision-compare-route-step">
-                              <strong>Then Open</strong>
-                              <span>{comparisonLinkedDocs[0]?.title ?? '연결 문서 1개'}</span>
-                            </div>
-                            <div className="vision-compare-route-step">
-                              <strong>Verify</strong>
-                              <span>{comparisonLinkedDocs[1]?.title ?? '검증 문서 1개'}</span>
-                            </div>
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          className="vision-compare-open-btn"
-                          onClick={() => {
-                            setVisionMode(mode.id);
-                            setBookViewer(comparisonBook);
-                          }}
-                        >
-                          {copy.cta}
-                        </button>
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-            <section className="wiki-vision-lab box-container">
-              <div className="wiki-vision-lab-header">
-                <div>
-                  <span className="wiki-vision-eyebrow">{visionMode === 'guided_tour' ? 'Guided Tour' : 'Wiki Vision Lab'}</span>
-                  <h2>{visionMode === 'guided_tour' ? 'Guided Tour Active' : '위키 대백과 3안'}</h2>
-                  <p>{activeVision.library.summary}</p>
-                </div>
-                <div className="wiki-vision-focus">{visionMode === 'guided_tour' ? 'Active Route' : activeVision.library.focus}</div>
-              </div>
-              {visionMode === 'guided_tour' ? (
-                <div className="wiki-vision-active">
-                  <div className="wiki-vision-active-title">질문에서 문서 투어로 바로 이어지는 모드</div>
-                  <p className="wiki-vision-active-copy">Start Here와 Then Open만 먼저 열고, 나머지 위키는 진행 중에 따라붙게 정리합니다.</p>
-                </div>
-              ) : (
-                <div className="wiki-vision-grid">
-                  {WIKI_VISION_MODES.map((mode) => (
-                    <button
-                      key={mode.id}
-                      type="button"
-                      className={`wiki-vision-card ${visionMode === mode.id ? 'active' : ''}`}
-                      onClick={() => setVisionMode(mode.id)}
-                    >
-                      <span className="wiki-vision-card-eyebrow">{mode.library.eyebrow}</span>
-                      <strong>{mode.label}</strong>
-                      <span>{mode.library.summary}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-
             {operationalWikiBooks.length > 0 && (
               <section className="operational-shelf box-container">
                 <div className="operational-shelf-header">
                   <div>
-                    <span className="operational-shelf-eyebrow">{visionMode === 'guided_tour' ? 'Start Tour' : visionMode === 'atlas_canvas' ? 'Atlas Canvas' : 'Operational Wiki'}</span>
-                    <h2>{visionMode === 'guided_tour' ? '운영 위키 투어 시작점' : visionMode === 'atlas_canvas' ? '운영 위키 아틀라스' : '바로 읽을 수 있는 운영 위키'}</h2>
-                    <p>
-                      {visionMode === 'guided_tour'
-                        ? '가장 먼저 열 문서와 이어서 볼 문서를 이 순서대로 엽니다.'
-                        : visionMode === 'atlas_canvas'
-                          ? '문서 본문, 연결 경로, 맥락 문서를 한 화면 감각으로 읽기 위한 atlas shelf 입니다.'
-                          : '지금 제품 표면에서 바로 여는 핵심 운영 문서 묶음입니다.'}
-                    </p>
+                    <span className="operational-shelf-eyebrow">Operational Wiki</span>
+                    <h2>바로 읽을 수 있는 운영 위키</h2>
+                    <p>지금 제품 표면에서 바로 여는 핵심 운영 문서 묶음입니다.</p>
                   </div>
                   <button
                     type="button"
@@ -1948,118 +1671,7 @@ const PlaybookLibraryPage: React.FC = () => {
                     전체 {approvedWikiRuntimeBooks.toLocaleString()}권 보기
                   </button>
                 </div>
-                {visionMode === 'atlas_canvas' && (
-                  <div className="operational-atlas-grid">
-                    {atlasReadingBooks.length > 0 && (
-                      <div className="operational-atlas-lane">
-                        <div className="operational-atlas-lane-label">Reading Spine</div>
-                        {atlasReadingBooks.map((book, index) => (
-                          <button
-                            key={`atlas-reading-${book.book_slug}`}
-                            type="button"
-                            className="operational-atlas-card"
-                            onClick={() => setBookViewer(book)}
-                          >
-                            <div className="operational-atlas-meta-row">
-                              <span className="operational-atlas-kind">Document</span>
-                              <span className="operational-atlas-intent">Read</span>
-                            </div>
-                            <span className="operational-atlas-kicker">Core {index + 1}</span>
-                            <strong>{book.title}</strong>
-                            <span>{book.book_slug.replace(/_/g, ' ')}</span>
-                            <span className="operational-atlas-why">아틀라스의 중심에서 먼저 읽을 문서</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {atlasRelationBooks.length > 0 && (
-                      <div className="operational-atlas-lane">
-                        <div className="operational-atlas-lane-label">Connected Paths</div>
-                        {atlasRelationBooks.map((book, index) => (
-                          <button
-                            key={`atlas-relation-${book.book_slug}`}
-                            type="button"
-                            className="operational-atlas-card operational-atlas-card-relation"
-                            onClick={() => setBookViewer(book)}
-                          >
-                            <div className="operational-atlas-meta-row">
-                              <span className="operational-atlas-kind">Linked Doc</span>
-                              <span className="operational-atlas-intent">Open</span>
-                            </div>
-                            <span className="operational-atlas-kicker">Path {index + 1}</span>
-                            <strong>{book.title}</strong>
-                            <span>{book.book_slug.replace(/_/g, ' ')}</span>
-                            <span className="operational-atlas-why">핵심 문서와 연결되는 확장 경로</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {atlasContextBooks.length > 0 && (
-                      <div className="operational-atlas-lane">
-                        <div className="operational-atlas-lane-label">Visual Memory</div>
-                        {atlasContextBooks.map((book, index) => (
-                          <button
-                            key={`atlas-context-${book.book_slug}`}
-                            type="button"
-                            className="operational-atlas-card operational-atlas-card-context"
-                            onClick={() => setBookViewer(book)}
-                          >
-                            <div className="operational-atlas-meta-row">
-                              <span className="operational-atlas-kind">Context</span>
-                              <span className="operational-atlas-intent">Scan</span>
-                            </div>
-                            <span className="operational-atlas-kicker">Context {index + 1}</span>
-                            <strong>{book.title}</strong>
-                            <span>{book.book_slug.replace(/_/g, ' ')}</span>
-                            <span className="operational-atlas-why">주변 맥락과 운영 배경을 채우는 층</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {visionMode === 'guided_tour' && (
-                  <div className="operational-tour-grid">
-                    {guidedTourShelfSteps.length > 0 && (
-                      <div className="operational-tour-lane">
-                        <div className="operational-tour-lane-label">Start Here</div>
-                        {guidedTourShelfSteps.map((book: LibraryBook, index: number) => (
-                          <button
-                            key={`guided-shelf-step-${book.book_slug}`}
-                            type="button"
-                            className="operational-tour-card"
-                            onClick={() => setBookViewer(book)}
-                          >
-                            <span className="operational-tour-kicker">Step {index + 1}</span>
-                            <strong>{book.title}</strong>
-                            <span>{book.book_slug.replace(/_/g, ' ')}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {guidedTourShelfDocs.length > 0 && (
-                      <div className="operational-tour-lane">
-                        <div className="operational-tour-lane-label">Then Open</div>
-                        {guidedTourShelfDocs.map((book: LibraryBook, index: number) => (
-                          <button
-                            key={`guided-shelf-doc-${book.book_slug}`}
-                            type="button"
-                            className="operational-tour-card operational-tour-card-doc"
-                            onClick={() => setBookViewer(book)}
-                          >
-                            <span className="operational-tour-kicker">Document {index + 1}</span>
-                            <strong>{book.title}</strong>
-                            <span>{book.book_slug.replace(/_/g, ' ')}</span>
-                            <span className="operational-tour-arrow">
-                              <ArrowRight size={14} />
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {visionMode !== 'guided_tour' && visionMode !== 'atlas_canvas' && (
+                {(
                   <div className="operational-shelf-grid">
                     {operationalWikiBooks.map((book) => (
                       <article
@@ -2083,7 +1695,7 @@ const PlaybookLibraryPage: React.FC = () => {
               </section>
             )}
 
-            {allOperationalWikiBooks.length > 0 && visionMode !== 'guided_tour' && (
+            {allOperationalWikiBooks.length > 0 && (
               <section className="operational-library box-container">
                 <div className="operational-library-header">
                   <div>
@@ -2114,7 +1726,7 @@ const PlaybookLibraryPage: React.FC = () => {
               </section>
             )}
 
-            {releaseCandidateFreeze?.exists && visionMode !== 'guided_tour' && (
+            {releaseCandidateFreeze?.exists && (
               <section className="release-freeze-hero">
                 <div className="release-freeze-hero-copy">
                   <span className="release-freeze-eyebrow">Current Freeze</span>
@@ -2151,7 +1763,7 @@ const PlaybookLibraryPage: React.FC = () => {
               </section>
             )}
 
-            {(gate || hasMetricSourceDrift) && visionMode !== 'guided_tour' && (
+            {(gate || hasMetricSourceDrift) && (
               <div className="truth-banner">
                 <AlertCircle size={16} />
                 <div className="truth-banner-copy">
@@ -2212,7 +1824,7 @@ const PlaybookLibraryPage: React.FC = () => {
               </div>
             </section>
 
-            {visionMode !== 'guided_tour' && (
+            {(
               <section className="metrics-grid metrics-grid-secondary">
                 <div className="metric-card metric-card-secondary metric-clickable" onClick={() => openMetricPopover('customerPack')}>
                   <div className="metric-icon"><HardDrive size={24} /></div>
@@ -3719,58 +3331,6 @@ const PlaybookLibraryPage: React.FC = () => {
               </div>
             </div>
             <div className="preview-body">
-              {visionMode === 'atlas_canvas' && (
-                <aside className="book-preview-atlas-sidebar">
-                  <div className="book-preview-atlas-lane">
-                    <div className="book-preview-atlas-label">Reading Spine</div>
-                    <div className="book-preview-atlas-card">
-                      <div className="book-preview-atlas-meta-row">
-                        <span className="book-preview-atlas-kind">Document</span>
-                        <span className="book-preview-atlas-intent">Read</span>
-                      </div>
-                      <strong>{bookViewer.title}</strong>
-                      <span>{bookViewer.book_slug.replace(/_/g, ' ')}</span>
-                    </div>
-                  </div>
-                  <div className="book-preview-atlas-lane">
-                    <div className="book-preview-atlas-label">Visual Memory</div>
-                    {atlasBookFigureEntries.length > 0 ? (
-                      atlasBookFigureEntries.map((figure, index) => (
-                        <a
-                          key={`${figure.key}-${index}`}
-                          className={`book-preview-atlas-card book-preview-atlas-card-link${figure.isCluster ? ' book-preview-atlas-card-cluster' : ''}`}
-                          href={toRuntimeUrl(figure.href)}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <div className="book-preview-atlas-meta-row">
-                            <span className="book-preview-atlas-kind">{figure.kind}</span>
-                            <span className="book-preview-atlas-intent">{figure.intent}</span>
-                          </div>
-                          {typeof figure.count === 'number' ? (
-                            <span className="book-preview-atlas-count">{figure.count} linked visuals</span>
-                          ) : null}
-                          {figure.thumbUrl ? (
-                            <div
-                              className="book-preview-atlas-thumb"
-                              style={{ backgroundImage: `url(${figure.thumbUrl})` }}
-                              aria-hidden="true"
-                            />
-                          ) : null}
-                          <strong>{figure.title}</strong>
-                          <span>{figure.subtitle}</span>
-                          <span className="book-preview-atlas-why">{figure.why}</span>
-                        </a>
-                      ))
-                    ) : (
-                      <div className="book-preview-atlas-card book-preview-atlas-card-muted">
-                        <strong>Figure 없음</strong>
-                        <span>현재 book에 연결된 figure asset이 아직 없습니다.</span>
-                      </div>
-                    )}
-                  </div>
-                </aside>
-              )}
               <div className="preview-viewer-shell">
                 {bookViewerLoading ? (
                   <div className="preview-loading"><Loader2 size={20} className="spin-icon" /> Loading viewer...</div>
