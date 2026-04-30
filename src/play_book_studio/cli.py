@@ -135,11 +135,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     course_qdrant_parser = subparsers.add_parser(
         "course-qdrant-upsert",
-        help="Upsert existing Study-docs course chunks into the course Qdrant collection",
+        help="Upsert existing Study-docs course and ops learning chunks into Qdrant",
     )
     course_qdrant_parser.add_argument("--root-dir", type=Path, default=ROOT)
     course_qdrant_parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
     course_qdrant_parser.add_argument("--limit", type=int, default=0)
+    course_qdrant_parser.add_argument("--skip-course", action="store_true")
+    course_qdrant_parser.add_argument("--skip-ops-learning", action="store_true")
 
     course_visual_audit_parser = subparsers.add_parser(
         "course-visual-audit",
@@ -453,24 +455,37 @@ def main() -> int:
     if args.command == "course-qdrant-upsert":
         from play_book_studio.course.qdrant_course import (
             COURSE_QDRANT_COLLECTION,
+            COURSE_OPS_LEARNING_QDRANT_COLLECTION,
             load_course_chunks,
+            load_ops_learning_chunks,
             upsert_course_chunks,
+            upsert_ops_learning_chunks,
         )
 
         root_dir = args.root_dir.resolve()
         course_dir = (root_dir / args.course_dir).resolve() if not args.course_dir.is_absolute() else args.course_dir.resolve()
-        chunks = load_course_chunks(course_dir)
-        if int(args.limit or 0) > 0:
-            chunks = chunks[: int(args.limit)]
         settings = load_settings(root_dir)
-        upserted = upsert_course_chunks(settings, chunks)
+        course_chunks = [] if args.skip_course else load_course_chunks(course_dir)
+        ops_learning_chunks = [] if args.skip_ops_learning else load_ops_learning_chunks(course_dir)
+        if int(args.limit or 0) > 0:
+            limit = int(args.limit)
+            course_chunks = course_chunks[:limit]
+            ops_learning_chunks = ops_learning_chunks[:limit]
+        course_upserted = 0 if args.skip_course else upsert_course_chunks(settings, course_chunks)
+        ops_learning_upserted = (
+            0 if args.skip_ops_learning else upsert_ops_learning_chunks(settings, ops_learning_chunks)
+        )
         print(
             json.dumps(
                 {
                     "course_dir": str(course_dir),
-                    "collection": COURSE_QDRANT_COLLECTION,
-                    "chunk_count": len(chunks),
-                    "qdrant_upserted": upserted,
+                    "course_collection": COURSE_QDRANT_COLLECTION,
+                    "course_chunk_count": len(course_chunks),
+                    "course_qdrant_upserted": course_upserted,
+                    "ops_learning_collection": COURSE_OPS_LEARNING_QDRANT_COLLECTION,
+                    "ops_learning_chunk_count": len(ops_learning_chunks),
+                    "ops_learning_qdrant_upserted": ops_learning_upserted,
+                    "qdrant_upserted": course_upserted + ops_learning_upserted,
                     "qdrant_url": settings.qdrant_url,
                 },
                 ensure_ascii=False,
