@@ -30,6 +30,7 @@ COPY pyproject.toml README.md /app/
 RUN python -c "import subprocess, sys, tomllib; deps = tomllib.load(open('pyproject.toml', 'rb'))['project']['dependencies']; subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--no-cache-dir', *deps])"
 
 COPY src /app/src
+COPY db /app/db
 RUN pip install --no-cache-dir --no-deps -e .
 
 COPY data/course_pbs /app/data/course_pbs
