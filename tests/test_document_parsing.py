@@ -104,6 +104,31 @@ def test_markdown_blocks_build_section_aware_chunks():
     assert all(chunk.embedding_text for chunk in chunks)
 
 
+def test_markdown_sections_store_toc_metadata_outside_body_text():
+    source = _case_dir("section_metadata") / "guide.md"
+    source.write_text(
+        "# 1 Install\n\nIntro.\n\n## 1.1 Network check\n\nCheck routes.",
+        encoding="utf-8",
+    )
+
+    parsed = parse_upload_document(source)
+    chunks = build_document_chunks(parsed, max_chars=80, overlap_blocks=0)
+
+    assert parsed.blocks[0].section_number == "1"
+    assert parsed.blocks[0].heading_title == "Install"
+    assert parsed.blocks[0].section_path == ("Install",)
+    assert parsed.blocks[0].toc_path == ("1 Install",)
+    assert parsed.blocks[2].section_number == "1.1"
+    assert parsed.blocks[2].heading_title == "Network check"
+    assert parsed.blocks[2].section_path == ("Install", "Network check")
+    assert parsed.blocks[2].toc_path == ("1 Install", "1.1 Network check")
+    assert chunks[-1].section_number == "1.1"
+    assert chunks[-1].heading_title == "Network check"
+    assert chunks[-1].toc_path == ("1 Install", "1.1 Network check")
+    assert "## Network check" in chunks[-1].markdown
+    assert "1.1 Network check" not in chunks[-1].markdown
+
+
 def test_parse_image_document_keeps_asset_and_description():
     image_path = _case_dir("image_asset") / "diagram.png"
     image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")

@@ -69,12 +69,17 @@ class DocumentBlock:
     text: str
     heading_level: int | None = None
     section_path: tuple[str, ...] = field(default_factory=tuple)
+    section_number: str = ""
+    heading_title: str = ""
+    source_anchor: str = ""
+    toc_path: tuple[str, ...] = field(default_factory=tuple)
     asset_ids: tuple[str, ...] = field(default_factory=tuple)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["section_path"] = list(self.section_path)
+        payload["toc_path"] = list(self.toc_path)
         payload["asset_ids"] = list(self.asset_ids)
         return payload
 
@@ -129,6 +134,10 @@ class DocumentChunk:
     markdown: str
     embedding_text: str
     section_path: tuple[str, ...] = field(default_factory=tuple)
+    section_number: str = ""
+    heading_title: str = ""
+    source_anchor: str = ""
+    toc_path: tuple[str, ...] = field(default_factory=tuple)
     asset_ids: tuple[str, ...] = field(default_factory=tuple)
     block_ordinals: tuple[int, ...] = field(default_factory=tuple)
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -136,6 +145,7 @@ class DocumentChunk:
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["section_path"] = list(self.section_path)
+        payload["toc_path"] = list(self.toc_path)
         payload["asset_ids"] = list(self.asset_ids)
         payload["block_ordinals"] = list(self.block_ordinals)
         return payload
@@ -155,6 +165,7 @@ _IMAGE_SIGNATURES = (
 )
 _MARKDOWN_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 _ASCIIDOC_HEADING_RE = re.compile(r"^(={1,6})\s+(.+?)\s*$")
+_SECTION_NUMBER_RE = re.compile(r"^\s*((?:\d+\.)+\d+|\d+)(?:[.)]|장\.)?\s+(.+?)\s*$")
 _XML_TEXT_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t"
 _DOCX_PARAGRAPH_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"
 _DOCX_TABLE_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl"
@@ -308,7 +319,8 @@ def build_document_chunks(
         if not current:
             return
         markdown = "\n\n".join(block.markdown for block in current).strip()
-        section_path = _last_section_path(current)
+        section_block = _last_section_block(current)
+        section_path = section_block.section_path if section_block else ()
         asset_ids = tuple(dict.fromkeys(asset_id for block in current for asset_id in block.asset_ids))
         block_ordinals = tuple(block.ordinal for block in current)
         chunk_key = f"{parsed.document_id}:{ordinal}"
@@ -320,6 +332,10 @@ def build_document_chunks(
                 markdown=markdown,
                 embedding_text=_strip_markdown(markdown),
                 section_path=section_path,
+                section_number=section_block.section_number if section_block else "",
+                heading_title=section_block.heading_title if section_block else "",
+                source_anchor=section_block.source_anchor if section_block else "",
+                toc_path=section_block.toc_path if section_block else (),
                 asset_ids=asset_ids,
                 block_ordinals=block_ordinals,
                 metadata={
@@ -431,6 +447,10 @@ def _markdown_to_blocks(markdown: str, *, assets: tuple[DocumentAsset, ...]) -> 
     blocks: list[DocumentBlock] = []
     current_lines: list[str] = []
     section_path: list[str] = []
+    toc_path: list[str] = []
+    section_number = ""
+    heading_title = ""
+    source_anchor = ""
     in_code = False
     code_lines: list[str] = []
     ordinal = 0
@@ -456,6 +476,10 @@ def _markdown_to_blocks(markdown: str, *, assets: tuple[DocumentAsset, ...]) -> 
                 text=_strip_markdown(markdown_text),
                 heading_level=heading_level,
                 section_path=tuple(section_path),
+                section_number=section_number,
+                heading_title=heading_title,
+                source_anchor=source_anchor,
+                toc_path=tuple(toc_path),
                 asset_ids=block_asset_ids,
             )
         )
@@ -489,10 +513,16 @@ def _markdown_to_blocks(markdown: str, *, assets: tuple[DocumentAsset, ...]) -> 
         if heading_match:
             flush_paragraph()
             level = len(heading_match.group(1))
-            title = heading_match.group(2).strip()
+            raw_title = heading_match.group(2).strip()
+            parsed_number, parsed_title = _split_section_number_title(raw_title)
             section_path = section_path[: max(0, level - 1)]
-            section_path.append(title)
-            append_block("heading", [line], heading_level=level)
+            toc_path = toc_path[: max(0, level - 1)]
+            section_path.append(parsed_title)
+            toc_path.append(_toc_label(parsed_number, parsed_title))
+            section_number = parsed_number
+            heading_title = parsed_title
+            source_anchor = _source_anchor(section_path=section_path, section_number=section_number)
+            append_block("heading", [f"{'#' * level} {parsed_title}"], heading_level=level)
             continue
 
         if re.match(r"^!\[[^\]]*]\([^)]+\)", stripped):
@@ -661,11 +691,32 @@ def _blob_asset(path: Path, *, media_name: str, content: bytes) -> DocumentAsset
     )
 
 
-def _last_section_path(blocks: list[DocumentBlock]) -> tuple[str, ...]:
+def _last_section_block(blocks: list[DocumentBlock]) -> DocumentBlock | None:
     for block in reversed(blocks):
         if block.section_path:
-            return block.section_path
-    return ()
+            return block
+    return None
+
+
+def _split_section_number_title(title: str) -> tuple[str, str]:
+    match = _SECTION_NUMBER_RE.match(title)
+    if not match:
+        return "", title.strip()
+    number = match.group(1).strip().rstrip(".")
+    heading = match.group(2).strip()
+    return number, heading or title.strip()
+
+
+def _toc_label(section_number: str, heading_title: str) -> str:
+    if section_number:
+        return f"{section_number} {heading_title}".strip()
+    return heading_title.strip()
+
+
+def _source_anchor(*, section_path: list[str], section_number: str) -> str:
+    basis = "-".join([section_number, *section_path]).strip("-") or "section"
+    normalized = re.sub(r"[^0-9A-Za-z가-힣._-]+", "-", basis).strip("-").lower()
+    return normalized or "section"
 
 
 def _natural_key(value: str) -> list[int | str]:

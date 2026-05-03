@@ -71,6 +71,9 @@ def _parsed_document() -> ParsedUploadDocument:
             text="Architecture",
             heading_level=1,
             section_path=("Architecture",),
+            heading_title="Architecture",
+            source_anchor="architecture",
+            toc_path=("Architecture",),
         ),
         DocumentBlock(
             block_id="33333333-3333-3333-3333-333333333333",
@@ -79,6 +82,9 @@ def _parsed_document() -> ParsedUploadDocument:
             markdown="Router sends traffic to services.",
             text="Router sends traffic to services.",
             section_path=("Architecture",),
+            heading_title="Architecture",
+            source_anchor="architecture",
+            toc_path=("Architecture",),
         ),
         DocumentBlock(
             block_id="44444444-4444-4444-4444-444444444444",
@@ -87,6 +93,9 @@ def _parsed_document() -> ParsedUploadDocument:
             markdown="![image1.png](asset://11111111-1111-1111-1111-111111111111)",
             text="image1.png",
             section_path=("Architecture",),
+            heading_title="Architecture",
+            source_anchor="architecture",
+            toc_path=("Architecture",),
             asset_ids=(asset.asset_id,),
         ),
     )
@@ -111,14 +120,21 @@ def test_build_parsed_document_rows_maps_parser_output_to_schema_rows():
 
     assert rows.source["filename"] == "deck.pptx"
     assert rows.source["byte_size"] == 1234
+    assert rows.source["visibility"] == "private_user"
+    assert rows.source["owner_user_id"] == "tester"
+    assert rows.source["source_scope"] == "user_upload"
     assert rows.source["metadata"]["document_format"] == "pptx"
     assert rows.parsed_document["title"] == "Architecture"
     assert rows.parsed_document["outline"][0]["text"] == "Architecture"
+    assert rows.parsed_document["outline"][0]["heading_title"] == "Architecture"
     assert rows.blocks[2]["metadata"]["asset_ids"] == ["11111111-1111-1111-1111-111111111111"]
+    assert rows.blocks[2]["source_anchor"] == "architecture"
     assert rows.assets[0]["block_id"] == "44444444-4444-4444-4444-444444444444"
     assert rows.assets[0]["qwen_description"] == "Architecture diagram"
     assert rows.assets[0]["qwen_model"] == "Qwen2.5-VL"
     assert rows.chunks[0]["section_path"] == ["Architecture"]
+    assert rows.chunks[0]["heading_title"] == "Architecture"
+    assert rows.chunks[0]["source_anchor"] == "architecture"
     assert rows.chunks[0]["token_count"] > 0
 
 

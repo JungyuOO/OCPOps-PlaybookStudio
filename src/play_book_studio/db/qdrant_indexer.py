@@ -39,7 +39,15 @@ def load_qdrant_chunk_candidates(
                 c.markdown,
                 c.embedding_text,
                 c.section_path,
+                c.section_number,
+                c.heading_title,
+                c.source_anchor,
+                c.toc_path,
                 c.asset_ids,
+                c.repository_id::text AS repository_id,
+                c.owner_user_id,
+                c.visibility,
+                c.source_scope,
                 c.metadata AS chunk_metadata,
                 pd.id::text AS parsed_document_id,
                 pd.title AS document_title,
@@ -83,6 +91,7 @@ def qdrant_candidate_from_row(row: dict[str, Any]) -> QdrantChunkCandidate:
 
 def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
     section_path = _json_list(row.get("section_path"))
+    toc_path = _json_list(row.get("toc_path"))
     asset_ids = _json_list(row.get("asset_ids"))
     chunk_metadata = _json_dict(row.get("chunk_metadata"))
     parsed_metadata = _json_dict(row.get("parsed_metadata"))
@@ -105,7 +114,7 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "chapter": chapter,
         "section": section,
         "section_id": str(row.get("chunk_key") or chunk_id),
-        "anchor": str(row.get("chunk_key") or chunk_id),
+        "anchor": str(row.get("source_anchor") or row.get("chunk_key") or chunk_id),
         "source_url": storage_key,
         "viewer_path": f"/uploads/documents/{document_source_id}/chunks/{chunk_id}",
         "text": str(row.get("embedding_text") or row.get("markdown") or ""),
@@ -124,7 +133,15 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "semantic_role": "uploaded_document",
         "block_kinds": [str(row.get("chunk_type") or "document")],
         "section_path": section_path,
+        "section_number": str(row.get("section_number") or ""),
+        "heading_title": str(row.get("heading_title") or ""),
+        "source_anchor": str(row.get("source_anchor") or ""),
+        "toc_path": toc_path,
         "asset_ids": asset_ids,
+        "repository_id": str(row.get("repository_id") or ""),
+        "visibility": str(row.get("visibility") or "workspace_shared"),
+        "owner_user_id": str(row.get("owner_user_id") or ""),
+        "source_scope": str(row.get("source_scope") or "user_upload"),
         "created_by": str(row.get("created_by") or ""),
         "chunk_metadata": chunk_metadata,
     }

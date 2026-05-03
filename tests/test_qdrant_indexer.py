@@ -55,7 +55,15 @@ def _chunk_row():
         "markdown": "# Architecture\n\nRouter sends traffic.",
         "embedding_text": "Architecture\nRouter sends traffic.",
         "section_path": ["Architecture"],
+        "section_number": "1",
+        "heading_title": "Architecture",
+        "source_anchor": "1-architecture",
+        "toc_path": ["1 Architecture"],
         "asset_ids": ["asset-1"],
+        "repository_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "owner_user_id": "admin",
+        "visibility": "private_user",
+        "source_scope": "user_upload",
         "chunk_metadata": {"block_ordinals": [0, 1]},
         "parsed_document_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
         "document_title": "Architecture",
@@ -84,6 +92,14 @@ def test_qdrant_payload_from_row_matches_vector_retriever_contract():
     assert payload["source_type"] == "uploaded_document"
     assert payload["source_collection"] == "uploads"
     assert payload["section_path"] == ["Architecture"]
+    assert payload["section_number"] == "1"
+    assert payload["heading_title"] == "Architecture"
+    assert payload["source_anchor"] == "1-architecture"
+    assert payload["toc_path"] == ["1 Architecture"]
+    assert payload["repository_id"] == "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    assert payload["visibility"] == "private_user"
+    assert payload["owner_user_id"] == "admin"
+    assert payload["source_scope"] == "user_upload"
     assert payload["asset_ids"] == ["asset-1"]
 
 

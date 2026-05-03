@@ -52,6 +52,10 @@ def build_parsed_document_rows(
         "storage_key": storage_key,
         "byte_size": int(parsed.metadata.get("byte_size") or 0),
         "access_policy": {},
+        "repository_id": "",
+        "owner_user_id": created_by,
+        "visibility": "private_user" if created_by else "workspace_shared",
+        "source_scope": "user_upload",
         "metadata": {
             "document_id": parsed.document_id,
             "document_format": parsed.document_format,
@@ -82,6 +86,10 @@ def build_parsed_document_rows(
             "text": block.text,
             "markdown": block.markdown,
             "section_path": list(block.section_path),
+            "section_number": block.section_number,
+            "heading_title": block.heading_title,
+            "source_anchor": block.source_anchor,
+            "toc_path": list(block.toc_path),
             "bbox": block.metadata.get("bbox") or {},
             "table_data": block.metadata.get("table_data") or {},
             "metadata": {
@@ -126,6 +134,10 @@ def build_parsed_document_rows(
             "page_start": chunk.metadata.get("page_start"),
             "page_end": chunk.metadata.get("page_end"),
             "section_path": list(chunk.section_path),
+            "section_number": chunk.section_number,
+            "heading_title": chunk.heading_title,
+            "source_anchor": chunk.source_anchor,
+            "toc_path": list(chunk.toc_path),
             "asset_ids": list(chunk.asset_ids),
             "metadata": {
                 **dict(chunk.metadata),
@@ -240,6 +252,10 @@ def _outline_from_blocks(parsed: ParsedUploadDocument) -> list[dict[str, Any]]:
             "heading_level": block.heading_level,
             "text": block.text,
             "section_path": list(block.section_path),
+            "section_number": block.section_number,
+            "heading_title": block.heading_title,
+            "source_anchor": block.source_anchor,
+            "toc_path": list(block.toc_path),
         }
         for block in parsed.blocks
         if block.block_type == "heading"
@@ -292,16 +308,24 @@ def _upsert_document_source(cursor, *, tenant_id: str, workspace_id: str, row: d
         """
         INSERT INTO document_sources (
             tenant_id, workspace_id, source_kind, filename, mime_type, sha256,
-            storage_key, byte_size, access_policy, metadata, created_by
+            storage_key, byte_size, access_policy, metadata, created_by,
+            repository_id, owner_user_id, visibility, source_scope
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
+        VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s,
+            NULLIF(%s, '')::uuid, %s, %s, %s
+        )
         ON CONFLICT (workspace_id, sha256) DO UPDATE SET
             filename = EXCLUDED.filename,
             mime_type = EXCLUDED.mime_type,
             storage_key = EXCLUDED.storage_key,
             byte_size = EXCLUDED.byte_size,
             metadata = EXCLUDED.metadata,
-            created_by = EXCLUDED.created_by
+            created_by = EXCLUDED.created_by,
+            repository_id = EXCLUDED.repository_id,
+            owner_user_id = EXCLUDED.owner_user_id,
+            visibility = EXCLUDED.visibility,
+            source_scope = EXCLUDED.source_scope
         RETURNING id
         """,
         (
@@ -316,6 +340,10 @@ def _upsert_document_source(cursor, *, tenant_id: str, workspace_id: str, row: d
             _json(row["access_policy"]),
             _json(row["metadata"]),
             row["created_by"],
+            row["repository_id"],
+            row["owner_user_id"],
+            row["visibility"],
+            row["source_scope"],
         ),
     )
     return _fetch_id(cursor)
@@ -399,9 +427,13 @@ def _insert_document_block(cursor, *, parsed_document_id: str, row: dict[str, An
         """
         INSERT INTO document_blocks (
             id, parsed_document_id, ordinal, block_type, heading_level, page_number,
-            text, markdown, section_path, bbox, table_data, metadata
+            text, markdown, section_path, section_number, heading_title, source_anchor,
+            toc_path, bbox, table_data, metadata
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb)
+        VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s,
+            %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb
+        )
         RETURNING id
         """,
         (
@@ -414,6 +446,10 @@ def _insert_document_block(cursor, *, parsed_document_id: str, row: dict[str, An
             row["text"],
             row["markdown"],
             _json(row["section_path"]),
+            row["section_number"],
+            row["heading_title"],
+            row["source_anchor"],
+            _json(row["toc_path"]),
             _json(row["bbox"]),
             _json(row["table_data"]),
             _json(row["metadata"]),
@@ -471,11 +507,36 @@ def _insert_document_chunk(cursor, *, parsed_document_id: str, row: dict[str, An
         INSERT INTO document_chunks (
             id, parsed_document_id, chunk_key, ordinal, chunk_type, markdown,
             embedding_text, token_count, page_start, page_end, section_path,
-            asset_ids, metadata
+            section_number, heading_title, source_anchor, toc_path,
+            asset_ids, metadata, repository_id, owner_user_id, visibility, source_scope
         )
         VALUES (
             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb,
-            %s::jsonb, %s::jsonb
+            %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb,
+            (
+                SELECT ds.repository_id
+                FROM parsed_documents pd
+                JOIN document_sources ds ON ds.id = pd.document_source_id
+                WHERE pd.id = %s
+            ),
+            COALESCE((
+                SELECT ds.owner_user_id
+                FROM parsed_documents pd
+                JOIN document_sources ds ON ds.id = pd.document_source_id
+                WHERE pd.id = %s
+            ), ''),
+            COALESCE((
+                SELECT ds.visibility
+                FROM parsed_documents pd
+                JOIN document_sources ds ON ds.id = pd.document_source_id
+                WHERE pd.id = %s
+            ), 'workspace_shared'),
+            COALESCE((
+                SELECT ds.source_scope
+                FROM parsed_documents pd
+                JOIN document_sources ds ON ds.id = pd.document_source_id
+                WHERE pd.id = %s
+            ), 'user_upload')
         )
         RETURNING id
         """,
@@ -491,8 +552,16 @@ def _insert_document_chunk(cursor, *, parsed_document_id: str, row: dict[str, An
             row["page_start"],
             row["page_end"],
             _json(row["section_path"]),
+            row["section_number"],
+            row["heading_title"],
+            row["source_anchor"],
+            _json(row["toc_path"]),
             _json(row["asset_ids"]),
             _json(row["metadata"]),
+            parsed_document_id,
+            parsed_document_id,
+            parsed_document_id,
+            parsed_document_id,
         ),
     )
     return _fetch_id(cursor)
