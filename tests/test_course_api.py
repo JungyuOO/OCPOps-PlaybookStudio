@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -107,7 +108,11 @@ def test_load_chunk_prefers_postgres_course_chunks(monkeypatch: pytest.MonkeyPat
     with _temp_root() as root:
         course_api._COURSE_CHUNK_CACHE.clear()
         course_api._COURSE_SINGLE_CHUNK_CACHE.clear()
-        monkeypatch.setattr(course_api, "load_settings", lambda _root: SimpleNamespace(database_url="postgresql://unit-test"))
+        monkeypatch.setattr(
+            course_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+        )
         monkeypatch.setattr(
             course_api,
             "_load_course_chunks_from_database",
@@ -141,6 +146,55 @@ def test_load_manifest_prefers_postgres_manifest(monkeypatch: pytest.MonkeyPatch
         manifest = course_api._load_manifest(root)
 
     assert manifest["stages"][0]["stage_id"] == "db-stage"
+
+
+def test_ops_learning_guides_do_not_fall_back_to_files_when_database_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _temp_root() as root:
+        _write_guides(
+            root,
+            {
+                "guides": [
+                    {
+                        "stage_id": "perf_test",
+                        "title": "File fallback guide",
+                        "steps": [{"user_query": "This file guide should not leak"}],
+                    }
+                ]
+            },
+        )
+        monkeypatch.setattr(
+            course_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+        )
+        monkeypatch.setitem(sys.modules, "psycopg", None)
+
+        payload = course_api._load_ops_learning_guides(root)
+
+    assert payload == {"canonical_model": "ops_learning_guide_v1", "guides": []}
+
+
+def test_ops_learning_chunks_do_not_fall_back_to_files_when_database_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _temp_root() as root:
+        _write_learning_chunks(
+            root,
+            [
+                {
+                    "learning_chunk_id": "guide::file-step",
+                    "title": "File fallback learning chunk",
+                }
+            ],
+        )
+        monkeypatch.setattr(course_api, "load_settings", lambda _root: SimpleNamespace(database_url="postgresql://unit-test"))
+        monkeypatch.setitem(sys.modules, "psycopg", None)
+
+        rows = course_api._load_ops_learning_chunks(root)
+
+    assert rows == []
 
 
 def test_resolve_course_path_rejects_assets_outside_workspace() -> None:

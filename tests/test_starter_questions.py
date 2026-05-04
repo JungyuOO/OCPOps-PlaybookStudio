@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
+import play_book_studio.app.starter_questions as starter_questions
 from play_book_studio.app.starter_questions import build_studio_starter_questions
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -77,3 +80,34 @@ def test_starter_questions_are_loaded_from_manifests() -> None:
     assert groups["learning"]["questions"][0]["source"] == "ocp420_repo_wide_source_manifest"
     assert groups["operations"]["questions"][0]["question"] == "성능 테스트 결과에서 병목은 어디부터 보면 돼?"
     assert payload["learning_sequence"][0]["learning_index"] == 0
+
+
+def test_starter_questions_do_not_fall_back_to_files_when_database_is_configured(monkeypatch) -> None:
+    root = TEST_TMP / "db_configured"
+    course_manifests = root / "data" / "course_pbs" / "manifests"
+    course_manifests.mkdir(parents=True, exist_ok=True)
+    (course_manifests / "ops_learning_guides_v1.json").write_text(
+        json.dumps(
+            {
+                "guides": [
+                    {
+                        "stage_id": "perf_test",
+                        "title": "File fallback guide",
+                        "steps": [{"user_query": "This file question should not leak"}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        starter_questions,
+        "load_settings",
+        lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+    )
+    monkeypatch.setitem(sys.modules, "psycopg", None)
+
+    payload = build_studio_starter_questions(root, seed="stable")
+    groups = {group["key"]: group for group in payload["groups"]}
+
+    assert groups["operations"]["questions"] == []

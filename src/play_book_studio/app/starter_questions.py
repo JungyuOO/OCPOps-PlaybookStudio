@@ -254,10 +254,9 @@ def _load_ops_learning_guides_payload(root_dir: Path) -> tuple[dict[str, Any], s
 
             with psycopg.connect(database_url) as connection:
                 payload = load_ops_learning_guides_payload(connection, workspace_slug="default")
-            if payload.get("guides"):
-                return payload, "postgres.learning_paths"
+            return payload, "postgres.learning_paths"
         except Exception:  # noqa: BLE001
-            pass
+            return {"canonical_model": "ops_learning_guide_v1", "guides": []}, "postgres.learning_paths"
     return (
         _safe_read_json(root_dir / "data" / "course_pbs" / "manifests" / "ops_learning_guides_v1.json"),
         "data/course_pbs/manifests/ops_learning_guides_v1.json",

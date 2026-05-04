@@ -549,10 +549,9 @@ def _load_ops_learning_guides(root_dir: Path) -> dict[str, Any]:
 
             with psycopg.connect(database_url) as connection:
                 payload = load_ops_learning_guides_payload(connection, workspace_slug="default")
-            if payload.get("guides"):
-                return payload
+            return payload if isinstance(payload, dict) else {"canonical_model": "ops_learning_guide_v1", "guides": []}
         except Exception:  # noqa: BLE001
-            pass
+            return {"canonical_model": "ops_learning_guide_v1", "guides": []}
     path = _ops_learning_guides_path(root_dir)
     if not path.exists():
         return {"canonical_model": "ops_learning_guide_v1", "guides": []}
@@ -574,10 +573,9 @@ def _load_ops_learning_chunks(root_dir: Path) -> list[dict[str, Any]]:
 
             with psycopg.connect(database_url) as connection:
                 rows = load_ops_learning_chunks_payload(connection, workspace_slug="default")
-            if rows:
-                return rows
+            return rows
         except Exception:  # noqa: BLE001
-            pass
+            return []
     path = _ops_learning_chunks_path(root_dir)
     if not path.exists():
         return []
