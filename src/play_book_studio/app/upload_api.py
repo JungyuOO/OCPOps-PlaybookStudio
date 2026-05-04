@@ -79,6 +79,7 @@ def build_upload_ingest_response(
         overlap_blocks=_int_payload(payload.get("chunk_overlap_blocks"), default=1),
     )
     dry_run = _bool_payload(payload.get("dry_run"), default=False)
+    created_by = str(payload.get("created_by") or "").strip()
     result: dict[str, Any] = {
         "dry_run": dry_run,
         "filename": parsed.filename,
@@ -90,6 +91,8 @@ def build_upload_ingest_response(
         "block_count": len(parsed.blocks),
         "asset_count": len(parsed.assets),
         "chunk_count": len(chunks),
+        "owner_user_id": created_by,
+        "repository_id": str(payload.get("repository_id") or "").strip(),
         "warnings": list(parsed.warnings),
         "sections": [list(chunk.section_path) for chunk in chunks if chunk.section_path],
     }
@@ -112,13 +115,18 @@ def build_upload_ingest_response(
             workspace_slug=str(payload.get("workspace_slug") or "default"),
             workspace_name=str(payload.get("workspace_name") or "Default"),
             storage_key=storage_key,
-            created_by=str(payload.get("created_by") or ""),
+            created_by=created_by,
+            repository_id=str(payload.get("repository_id") or ""),
+            repository_slug=str(payload.get("repository_slug") or ""),
+            repository_title=str(payload.get("repository_title") or ""),
         )
+        result["repository_id"] = persisted.repository_id
         result["persisted"] = {
             "document_source_id": persisted.document_source_id,
             "document_version_id": persisted.document_version_id,
             "parse_job_id": persisted.parse_job_id,
             "parsed_document_id": persisted.parsed_document_id,
+            "repository_id": persisted.repository_id,
             "block_count": len(persisted.block_ids),
             "asset_count": len(persisted.asset_ids),
             "chunk_count": len(persisted.chunk_ids),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -29,6 +30,7 @@ class StoredParsedDocument:
     document_version_id: str
     parse_job_id: str
     parsed_document_id: str
+    repository_id: str
     block_ids: tuple[str, ...]
     asset_ids: tuple[str, ...]
     chunk_ids: tuple[str, ...]
@@ -40,6 +42,9 @@ def build_parsed_document_rows(
     *,
     storage_key: str = "",
     created_by: str = "",
+    repository_id: str = "",
+    visibility: str = "",
+    source_scope: str = "user_upload",
 ) -> ParsedDocumentRows:
     document_chunks = chunks if chunks is not None else build_document_chunks(parsed)
     block_id_by_asset_id = _block_id_by_asset_id(parsed)
@@ -52,10 +57,10 @@ def build_parsed_document_rows(
         "storage_key": storage_key,
         "byte_size": int(parsed.metadata.get("byte_size") or 0),
         "access_policy": {},
-        "repository_id": "",
+        "repository_id": repository_id,
         "owner_user_id": created_by,
-        "visibility": "private_user" if created_by else "workspace_shared",
-        "source_scope": "user_upload",
+        "visibility": visibility or ("private_user" if created_by else "workspace_shared"),
+        "source_scope": source_scope or "user_upload",
         "metadata": {
             "document_id": parsed.document_id,
             "document_format": parsed.document_format,
@@ -166,12 +171,16 @@ def persist_parsed_upload_document(
     workspace_name: str = "Default",
     storage_key: str = "",
     created_by: str = "",
+    repository_id: str = "",
+    repository_slug: str = "",
+    repository_title: str = "",
 ) -> StoredParsedDocument:
     rows = build_parsed_document_rows(
         parsed,
         chunks,
         storage_key=storage_key,
         created_by=created_by,
+        repository_id=repository_id,
     )
     with connection.transaction():
         with connection.cursor() as cursor:
@@ -182,6 +191,19 @@ def persist_parsed_upload_document(
                 workspace_slug=workspace_slug,
                 workspace_name=workspace_name,
             )
+            source_repository_id = rows.source["repository_id"]
+            if not source_repository_id:
+                source_repository_id = _upsert_repository(
+                    cursor,
+                    tenant_id=tenant_id,
+                    workspace_id=workspace_id,
+                    owner_user_id=created_by,
+                    slug=repository_slug or ("personal-uploads" if created_by else "workspace-uploads"),
+                    title=repository_title or ("My Uploads" if created_by else "Workspace Uploads"),
+                    repository_kind="personal" if created_by else "workspace",
+                    visibility="private_user" if created_by else "workspace_shared",
+                )
+                rows.source["repository_id"] = source_repository_id
             source_id = _upsert_document_source(
                 cursor,
                 tenant_id=tenant_id,
@@ -224,6 +246,7 @@ def persist_parsed_upload_document(
         document_version_id=version_id,
         parse_job_id=parse_job_id,
         parsed_document_id=parsed_document_id,
+        repository_id=source_repository_id,
         block_ids=block_ids,
         asset_ids=asset_ids,
         chunk_ids=chunk_ids,
@@ -299,6 +322,54 @@ def _upsert_workspace(cursor, *, tenant_id: str, workspace_slug: str, workspace_
         RETURNING id
         """,
         (tenant_id, workspace_slug, workspace_name),
+    )
+    return _fetch_id(cursor)
+
+
+def _safe_slug(value: str, *, fallback: str) -> str:
+    slug = re.sub(r"[^a-z0-9._-]+", "-", str(value or "").strip().lower()).strip("-._")
+    return slug or fallback
+
+
+def _upsert_repository(
+    cursor,
+    *,
+    tenant_id: str,
+    workspace_id: str,
+    owner_user_id: str,
+    slug: str,
+    title: str,
+    repository_kind: str,
+    visibility: str,
+) -> str:
+    cursor.execute(
+        """
+        INSERT INTO repositories (
+            tenant_id, workspace_id, owner_user_id, slug, title,
+            repository_kind, visibility, metadata, updated_at
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, '{}'::jsonb, now())
+        ON CONFLICT (
+            (COALESCE(workspace_id, '00000000-0000-0000-0000-000000000000'::uuid)),
+            (COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid)),
+            owner_user_id,
+            slug
+        ) DO UPDATE SET
+            title = EXCLUDED.title,
+            repository_kind = EXCLUDED.repository_kind,
+            visibility = EXCLUDED.visibility,
+            updated_at = now()
+        RETURNING id
+        """,
+        (
+            tenant_id,
+            workspace_id,
+            owner_user_id,
+            _safe_slug(slug, fallback="uploads"),
+            title,
+            repository_kind,
+            visibility,
+        ),
     )
     return _fetch_id(cursor)
 
@@ -567,9 +638,66 @@ def _insert_document_chunk(cursor, *, parsed_document_id: str, row: dict[str, An
     return _fetch_id(cursor)
 
 
+def list_document_repositories(
+    connection,
+    *,
+    tenant_slug: str = "public",
+    workspace_slug: str = "default",
+    owner_user_id: str = "",
+    include_shared: bool = True,
+) -> list[dict[str, Any]]:
+    scope_sql = "(r.visibility = 'workspace_shared' OR r.owner_user_id = %s)" if include_shared else "r.owner_user_id = %s"
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT
+                r.id::text,
+                r.slug,
+                r.title,
+                r.repository_kind,
+                r.visibility,
+                r.owner_user_id,
+                r.metadata,
+                count(ds.id)::int AS document_count,
+                max(ds.created_at) AS last_document_at,
+                r.updated_at
+            FROM repositories r
+            JOIN tenants t ON t.id = r.tenant_id
+            JOIN workspaces w ON w.id = r.workspace_id
+            LEFT JOIN document_sources ds ON ds.repository_id = r.id
+            WHERE t.slug = %s
+              AND w.slug = %s
+              AND {scope_sql}
+            GROUP BY r.id
+            ORDER BY
+                CASE WHEN r.visibility = 'workspace_shared' THEN 0 ELSE 1 END,
+                r.updated_at DESC,
+                r.title ASC
+            """,
+            (tenant_slug, workspace_slug, owner_user_id),
+        )
+        rows = cursor.fetchall()
+    return [
+        {
+            "repository_id": str(row[0]),
+            "slug": str(row[1] or ""),
+            "title": str(row[2] or ""),
+            "repository_kind": str(row[3] or ""),
+            "visibility": str(row[4] or ""),
+            "owner_user_id": str(row[5] or ""),
+            "metadata": dict(row[6] or {}),
+            "document_count": int(row[7] or 0),
+            "last_document_at": row[8].isoformat() if row[8] is not None else "",
+            "updated_at": row[9].isoformat() if row[9] is not None else "",
+        }
+        for row in rows
+    ]
+
+
 __all__ = [
     "ParsedDocumentRows",
     "StoredParsedDocument",
     "build_parsed_document_rows",
+    "list_document_repositories",
     "persist_parsed_upload_document",
 ]

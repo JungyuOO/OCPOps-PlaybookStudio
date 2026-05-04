@@ -25,6 +25,7 @@ from play_book_studio.app.ops_console_api import (
     handle_ops_console_put as _handle_ops_console_put_request,
 )
 from play_book_studio.app.upload_api import handle_upload_ingest as _handle_upload_ingest_request
+from play_book_studio.app.repository_api import handle_document_repositories as _handle_document_repositories_request
 from play_book_studio.app.learning_api import handle_learning_paths as _handle_learning_paths_request
 from play_book_studio.app.server_routes import (
     resolve_viewer_html as _resolve_viewer_html,
@@ -216,6 +217,9 @@ def _build_handler(
             if request_path == "/api/repositories/favorites":
                 self._handle_repository_favorites(parsed_request.query)
                 return
+            if request_path == "/api/repositories/documents":
+                self._handle_document_repositories(parsed_request.query)
+                return
             if request_path == "/api/wiki-overlays":
                 self._handle_wiki_user_overlays(parsed_request.query)
                 return
@@ -370,6 +374,14 @@ def _build_handler(
                 root_dir=root_dir,
             )
 
+        def _handle_document_repositories(self, query: str) -> None:
+            _handle_document_repositories_request(
+                self,
+                query,
+                root_dir=root_dir,
+                owner_user_id=self._session_owner().owner_hash,
+            )
+
         def _handle_repository_unanswered(self, query: str) -> None:
             _handle_repository_unanswered_request(
                 self,
@@ -470,6 +482,8 @@ def _build_handler(
             _handle_customer_pack_delete_draft_request(self, payload, root_dir=root_dir)
             data_control_room_cache.set("payload", None)
         def _handle_upload_ingest(self, payload: dict[str, Any]) -> None:
+            owner = self._session_owner()
+            payload.setdefault("created_by", owner.owner_hash)
             _handle_upload_ingest_request(self, payload, root_dir=root_dir)
             data_control_room_cache.set("payload", None)
         def _handle_repository_favorites_save(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_save_request(self, payload, root_dir=root_dir)

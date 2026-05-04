@@ -4,6 +4,7 @@ from pathlib import Path
 
 from play_book_studio.db.document_repository import (
     build_parsed_document_rows,
+    list_document_repositories,
     persist_parsed_upload_document,
 )
 from play_book_studio.ingestion.document_parsing import (
@@ -38,6 +39,22 @@ class FakeCursor:
 
     def fetchone(self):
         return (self.return_ids.pop(0),)
+
+    def fetchall(self):
+        return [
+            (
+                "99999999-9999-9999-9999-999999999999",
+                "personal-uploads",
+                "My Uploads",
+                "personal",
+                "private_user",
+                "tester",
+                {"purpose": "unit"},
+                2,
+                None,
+                None,
+            )
+        ]
 
 
 class FakeConnection:
@@ -158,6 +175,7 @@ def test_persist_parsed_upload_document_executes_expected_insert_sequence():
 
     assert "INSERT INTO tenants" in sql_text
     assert "INSERT INTO workspaces" in sql_text
+    assert "INSERT INTO repositories" in sql_text
     assert "INSERT INTO document_sources" in sql_text
     assert "INSERT INTO document_versions" in sql_text
     assert "INSERT INTO parse_jobs" in sql_text
@@ -165,7 +183,26 @@ def test_persist_parsed_upload_document_executes_expected_insert_sequence():
     assert "INSERT INTO document_blocks" in sql_text
     assert "INSERT INTO document_assets" in sql_text
     assert "INSERT INTO document_chunks" in sql_text
-    assert stored.document_source_id.endswith("000000000003")
+    assert stored.repository_id.endswith("000000000003")
+    assert stored.document_source_id.endswith("000000000004")
     assert len(stored.block_ids) == 3
     assert len(stored.asset_ids) == 1
     assert len(stored.chunk_ids) == 1
+
+
+def test_list_document_repositories_filters_by_owner_scope():
+    connection = FakeConnection()
+
+    repositories = list_document_repositories(
+        connection,
+        tenant_slug="public",
+        workspace_slug="default",
+        owner_user_id="tester",
+    )
+
+    sql_text = "\n".join(sql for sql, _params in connection.cursor_obj.calls)
+    assert "FROM repositories r" in sql_text
+    assert "r.visibility = 'workspace_shared' OR r.owner_user_id = %s" in sql_text
+    assert connection.cursor_obj.calls[0][1] == ("public", "default", "tester")
+    assert repositories[0]["repository_id"] == "99999999-9999-9999-9999-999999999999"
+    assert repositories[0]["document_count"] == 2

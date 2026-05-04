@@ -557,6 +557,7 @@ def _upload_ingest_summary(parsed, chunks, *, persisted=None) -> dict:
             "document_version_id": persisted.document_version_id,
             "parse_job_id": persisted.parse_job_id,
             "parsed_document_id": persisted.parsed_document_id,
+            "repository_id": persisted.repository_id,
             "block_count": len(persisted.block_ids),
             "asset_count": len(persisted.asset_ids),
             "chunk_count": len(persisted.chunk_ids),

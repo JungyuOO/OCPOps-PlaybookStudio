@@ -39,6 +39,8 @@ def test_build_upload_ingest_response_dry_run_stores_file_and_chunks(monkeypatch
             "dry_run": True,
             "chunk_max_chars": 80,
             "chunk_overlap_blocks": 0,
+            "created_by": "owner-1",
+            "repository_id": "11111111-1111-1111-1111-111111111111",
         },
     )
 
@@ -47,6 +49,8 @@ def test_build_upload_ingest_response_dry_run_stores_file_and_chunks(monkeypatch
     assert result["document_format"] == "md"
     assert result["block_count"] == 2
     assert result["chunk_count"] == 1
+    assert result["owner_user_id"] == "owner-1"
+    assert result["repository_id"] == "11111111-1111-1111-1111-111111111111"
     assert (storage_dir / result["storage_key"]).is_file()
 
 
