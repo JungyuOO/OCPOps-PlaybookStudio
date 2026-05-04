@@ -221,6 +221,82 @@ def index_pending_document_chunks(
     }
 
 
+def backfill_existing_qdrant_index_entries(
+    settings: Settings,
+    connection,
+    *,
+    collection: str | None = None,
+    limit: int = 1000,
+    batch_size: int = 256,
+) -> dict[str, Any]:
+    """Record index entries for DB chunks whose Qdrant points already exist."""
+    target_collection = collection or settings.qdrant_collection
+    candidates = load_qdrant_chunk_candidates(
+        connection,
+        collection=target_collection,
+        limit=limit,
+    )
+    if not candidates:
+        return {
+            "collection": target_collection,
+            "candidate_count": 0,
+            "existing_count": 0,
+            "missing_count": 0,
+            "recorded_count": 0,
+        }
+
+    existing_point_ids: set[str] = set()
+    effective_batch_size = max(1, int(batch_size or 256))
+    for start in range(0, len(candidates), effective_batch_size):
+        batch = candidates[start : start + effective_batch_size]
+        existing_point_ids.update(
+            fetch_existing_qdrant_point_ids(
+                settings,
+                collection=target_collection,
+                point_ids=[candidate.point_id for candidate in batch],
+            )
+        )
+    existing_candidates = tuple(
+        candidate for candidate in candidates if candidate.point_id in existing_point_ids
+    )
+    if existing_candidates:
+        record_qdrant_index_entries(
+            connection,
+            collection=target_collection,
+            vector_model=settings.embedding_model,
+            candidates=existing_candidates,
+        )
+    return {
+        "collection": target_collection,
+        "candidate_count": len(candidates),
+        "existing_count": len(existing_candidates),
+        "missing_count": len(candidates) - len(existing_candidates),
+        "recorded_count": len(existing_candidates),
+    }
+
+
+def fetch_existing_qdrant_point_ids(
+    settings: Settings,
+    *,
+    collection: str,
+    point_ids: list[str],
+) -> set[str]:
+    if not point_ids:
+        return set()
+    response = requests.post(
+        f"{settings.qdrant_url}/collections/{collection}/points",
+        json={
+            "ids": point_ids,
+            "with_payload": False,
+            "with_vector": False,
+        },
+        timeout=max(settings.request_timeout_seconds, 30),
+    )
+    response.raise_for_status()
+    result = response.json().get("result") or []
+    return {str(point.get("id")) for point in result if isinstance(point, dict) and point.get("id")}
+
+
 def ensure_qdrant_collection(settings: Settings, collection: str) -> None:
     url = f"{settings.qdrant_url}/collections/{collection}"
     response = requests.get(url, timeout=settings.request_timeout_seconds)
@@ -329,6 +405,8 @@ def _string_list(value: Any) -> list[str]:
 
 __all__ = [
     "QdrantChunkCandidate",
+    "backfill_existing_qdrant_index_entries",
+    "fetch_existing_qdrant_point_ids",
     "index_pending_document_chunks",
     "load_qdrant_chunk_candidates",
     "qdrant_candidate_from_row",

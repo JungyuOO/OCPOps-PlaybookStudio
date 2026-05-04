@@ -175,6 +175,16 @@ def build_parser() -> argparse.ArgumentParser:
     db_qdrant_index_parser.add_argument("--collection", default="")
     db_qdrant_index_parser.add_argument("--limit", type=int, default=100)
 
+    db_qdrant_backfill_parser = subparsers.add_parser(
+        "db-qdrant-backfill",
+        help="Record qdrant_index_entries for PostgreSQL chunks whose Qdrant points already exist",
+    )
+    db_qdrant_backfill_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    db_qdrant_backfill_parser.add_argument("--database-url", default="")
+    db_qdrant_backfill_parser.add_argument("--collection", default="")
+    db_qdrant_backfill_parser.add_argument("--limit", type=int, default=1000)
+    db_qdrant_backfill_parser.add_argument("--batch-size", type=int, default=256)
+
     official_gold_import_parser = subparsers.add_parser(
         "official-gold-import",
         help="Import existing official gold retrieval chunks into PostgreSQL document repositories",
@@ -722,6 +732,30 @@ def _run_db_qdrant_index(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_db_qdrant_backfill(args: argparse.Namespace) -> int:
+    from play_book_studio.db.qdrant_indexer import backfill_existing_qdrant_index_entries
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        result = backfill_existing_qdrant_index_entries(
+            settings,
+            connection,
+            collection=args.collection.strip() or None,
+            limit=args.limit,
+            batch_size=args.batch_size,
+        )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _run_official_gold_import(args: argparse.Namespace) -> int:
     from play_book_studio.ingestion.official_gold_import import (
         build_official_gold_import_plan,
@@ -854,6 +888,8 @@ def main() -> int:
         return _run_corpus_ingest(args)
     if args.command == "db-qdrant-index":
         return _run_db_qdrant_index(args)
+    if args.command == "db-qdrant-backfill":
+        return _run_db_qdrant_backfill(args)
     if args.command == "official-gold-import":
         return _run_official_gold_import(args)
     if args.command == "learning-seed-import":
