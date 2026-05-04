@@ -26,8 +26,10 @@ def load_qdrant_chunk_candidates(
     connection,
     *,
     collection: str,
+    source_scope: str = "",
     limit: int = 100,
 ) -> tuple[QdrantChunkCandidate, ...]:
+    scope = source_scope.strip()
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -64,10 +66,11 @@ def load_qdrant_chunk_candidates(
             LEFT JOIN qdrant_index_entries q
                 ON q.chunk_id = c.id AND q.collection = %s
             WHERE q.chunk_id IS NULL
+                AND (%s = '' OR c.source_scope = %s)
             ORDER BY c.created_at ASC, c.ordinal ASC
             LIMIT %s
             """,
-            (collection, int(limit)),
+            (collection, scope, scope, int(limit)),
         )
         rows = cursor.fetchall()
         columns = [item.name for item in cursor.description]
@@ -249,6 +252,7 @@ def index_pending_document_chunks(
     connection,
     *,
     collection: str | None = None,
+    source_scope: str = "",
     limit: int = 100,
     embedding_client: EmbeddingClient | None = None,
 ) -> dict[str, Any]:
@@ -256,11 +260,13 @@ def index_pending_document_chunks(
     candidates = load_qdrant_chunk_candidates(
         connection,
         collection=target_collection,
+        source_scope=source_scope,
         limit=limit,
     )
     if not candidates:
         return {
             "collection": target_collection,
+            "source_scope": source_scope.strip(),
             "candidate_count": 0,
             "indexed_count": 0,
         }
@@ -277,6 +283,7 @@ def index_pending_document_chunks(
     )
     return {
         "collection": target_collection,
+        "source_scope": source_scope.strip(),
         "candidate_count": len(candidates),
         "indexed_count": len(candidates),
     }

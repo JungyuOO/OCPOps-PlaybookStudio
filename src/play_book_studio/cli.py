@@ -173,6 +173,7 @@ def build_parser() -> argparse.ArgumentParser:
     db_qdrant_index_parser.add_argument("--root-dir", type=Path, default=ROOT)
     db_qdrant_index_parser.add_argument("--database-url", default="")
     db_qdrant_index_parser.add_argument("--collection", default="")
+    db_qdrant_index_parser.add_argument("--source-scope", default="")
     db_qdrant_index_parser.add_argument("--limit", type=int, default=100)
 
     db_qdrant_backfill_parser = subparsers.add_parser(
@@ -228,6 +229,8 @@ def build_parser() -> argparse.ArgumentParser:
     official_gold_import_parser.add_argument("--workspace-slug", default="default")
     official_gold_import_parser.add_argument("--workspace-name", default="Default")
     official_gold_import_parser.add_argument("--limit", type=int, default=0)
+    official_gold_import_parser.add_argument("--index", action="store_true")
+    official_gold_import_parser.add_argument("--index-limit", type=int, default=0)
     official_gold_import_parser.add_argument("--refresh-qdrant-payloads", action="store_true")
     official_gold_import_parser.add_argument("--collection", default="")
     official_gold_import_parser.add_argument("--refresh-limit", type=int, default=0)
@@ -771,6 +774,7 @@ def _run_db_qdrant_index(args: argparse.Namespace) -> int:
             settings,
             connection,
             collection=args.collection.strip() or None,
+            source_scope=args.source_scope,
             limit=args.limit,
         )
     print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -894,6 +898,17 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
             limit=args.limit,
         )
         payload = result.to_dict()
+        if args.index:
+            from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
+
+            index_limit = args.index_limit or max(result.imported_chunk_count, 1000)
+            payload["qdrant_index"] = index_pending_document_chunks(
+                settings,
+                connection,
+                collection=args.collection.strip() or None,
+                source_scope="official_docs",
+                limit=index_limit,
+            )
         if args.refresh_qdrant_payloads:
             from play_book_studio.db.qdrant_indexer import refresh_stale_qdrant_payloads
 

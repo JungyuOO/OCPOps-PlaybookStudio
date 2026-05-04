@@ -394,6 +394,8 @@ def test_db_qdrant_index_parser_accepts_args():
             str(REPO_ROOT),
             "--collection",
             "uploads",
+            "--source-scope",
+            "workspace_uploads",
             "--limit",
             "10",
         ]
@@ -401,6 +403,7 @@ def test_db_qdrant_index_parser_accepts_args():
 
     assert args.command == "db-qdrant-index"
     assert args.collection == "uploads"
+    assert args.source_scope == "workspace_uploads"
     assert args.limit == 10
 
 
