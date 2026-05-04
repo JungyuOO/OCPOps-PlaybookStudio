@@ -228,6 +228,17 @@ def build_parser() -> argparse.ArgumentParser:
     learning_seed_parser.add_argument("--workspace-name", default="Default")
     learning_seed_parser.add_argument("--dry-run", action="store_true")
 
+    course_chunk_import_parser = subparsers.add_parser(
+        "course-chunk-import",
+        help="Import Study-docs course chunks into PostgreSQL for runtime course viewers",
+    )
+    course_chunk_import_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    course_chunk_import_parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
+    course_chunk_import_parser.add_argument("--database-url", default="")
+    course_chunk_import_parser.add_argument("--course-slug", default="project-playbook")
+    course_chunk_import_parser.add_argument("--limit", type=int, default=0)
+    course_chunk_import_parser.add_argument("--dry-run", action="store_true")
+
     course_qa_parser = subparsers.add_parser(
         "course-qa",
         help="Generate, quality-gate, and run Study-docs course chat QA cases",
@@ -884,6 +895,55 @@ def _run_learning_seed_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_course_chunk_import(args: argparse.Namespace) -> int:
+    from play_book_studio.course.qdrant_course import load_course_chunks
+    from play_book_studio.db.course_repository import import_course_chunks
+
+    root_dir = args.root_dir.resolve()
+    course_dir = args.course_dir
+    if not course_dir.is_absolute():
+        course_dir = root_dir / course_dir
+    course_dir = course_dir.resolve()
+    chunks = load_course_chunks(course_dir)
+    limit = max(0, int(args.limit or 0))
+    if limit:
+        chunks = chunks[:limit]
+    source_ref = str(course_dir.relative_to(root_dir)) if course_dir.is_relative_to(root_dir) else str(course_dir)
+    if args.dry_run:
+        print(
+            json.dumps(
+                {
+                    "dry_run": True,
+                    "course_slug": args.course_slug,
+                    "source_ref": source_ref,
+                    "chunk_count": len(chunks),
+                    "first_chunk_id": str(chunks[0].get("chunk_id") or "") if chunks else "",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        result = import_course_chunks(
+            connection,
+            chunks,
+            course_slug=args.course_slug,
+            source_ref=source_ref,
+        )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main() -> int:
     args = build_parser().parse_args()
     if args.command == "ui":
@@ -918,6 +978,8 @@ def main() -> int:
         return _run_official_gold_import(args)
     if args.command == "learning-seed-import":
         return _run_learning_seed_import(args)
+    if args.command == "course-chunk-import":
+        return _run_course_chunk_import(args)
     if args.command == "course-qa":
         from play_book_studio.course.quality_eval import run_quality_eval
 

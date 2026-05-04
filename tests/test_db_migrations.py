@@ -19,6 +19,7 @@ def test_list_migrations_includes_ingestion_foundation():
         "0002_learning_foundation",
         "0003_terminal_learning_runtime",
         "0004_repository_session_scope",
+        "0005_course_runtime_chunks",
     ]
     assert all(len(migration.checksum) == 64 for migration in migrations)
     assert "document_chunks" in migrations[1].sql
@@ -27,9 +28,10 @@ def test_list_migrations_includes_ingestion_foundation():
     assert "command_checks" in migrations[2].sql
     assert "terminal_sessions" in migrations[3].sql
     assert "command_check_results" in migrations[3].sql
-    assert "repositories" in migrations[-1].sql
-    assert "chat_sessions" in migrations[-1].sql
-    assert "section_number" in migrations[-1].sql
+    assert "repositories" in migrations[4].sql
+    assert "chat_sessions" in migrations[4].sql
+    assert "section_number" in migrations[4].sql
+    assert "course_chunks" in migrations[-1].sql
 
 
 def test_db_migrate_parser_accepts_dry_run_args():
@@ -46,3 +48,24 @@ def test_db_migrate_parser_accepts_dry_run_args():
     assert args.dry_run is True
     assert args.root_dir == REPO_ROOT
     assert args.migrations_dir == Path("db/migrations")
+
+
+def test_course_chunk_import_parser_accepts_dry_run_args():
+    args = build_parser().parse_args(
+        [
+            "course-chunk-import",
+            "--root-dir",
+            str(REPO_ROOT),
+            "--course-dir",
+            "data/course_pbs",
+            "--limit",
+            "3",
+            "--dry-run",
+        ]
+    )
+
+    assert args.command == "course-chunk-import"
+    assert args.root_dir == REPO_ROOT
+    assert args.course_dir == Path("data/course_pbs")
+    assert args.limit == 3
+    assert args.dry_run is True

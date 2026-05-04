@@ -18,6 +18,7 @@ from play_book_studio.answering.llm import LLMClient
 from play_book_studio.app.sessions import Turn
 from play_book_studio.config.settings import load_settings
 from play_book_studio.course.qdrant_course import search_course_and_official, search_ops_learning_chunks
+from play_book_studio.db.course_repository import DEFAULT_COURSE_SLUG
 
 
 COURSE_RUNTIME_LABEL = "실운영 가이드"
@@ -590,6 +591,18 @@ def _contains_any_term(text: str, terms: list[str]) -> bool:
 
 def _is_image_evidence_intent(query: str) -> bool:
     normalized = _normalize_query(query)
+    state_evidence_terms = [
+        "status",
+        "state",
+        "ready",
+        "running",
+        "evidence",
+        "정상",
+        "상태",
+        "증적",
+    ]
+    if any(term in normalized for term in state_evidence_terms):
+        return True
     explicit_visual_terms = [
         "image",
         "screen",
@@ -1755,8 +1768,29 @@ def _normalize_chunk_payload(chunk: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _load_course_chunks_from_database(root_dir: Path) -> list[dict[str, Any]]:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if not database_url:
+        return []
+    try:
+        import psycopg
+
+        from play_book_studio.db.course_repository import load_course_chunks
+
+        with psycopg.connect(database_url) as connection:
+            return load_course_chunks(connection, course_slug=DEFAULT_COURSE_SLUG)
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def _load_chunk(root_dir: Path, chunk_id: str) -> dict[str, Any]:
     chunk_id = _validate_chunk_id(chunk_id)
+    _, cached_by_id = _course_chunk_cache(root_dir)
+    cached_payload = cached_by_id.get(chunk_id)
+    if cached_payload is not None:
+        return dict(cached_payload)
+
     chunks_jsonl = _course_chunks_jsonl_path(root_dir)
     chunks_dir = _course_chunks_dir(root_dir)
     cache_source = chunks_jsonl if chunks_jsonl.exists() else chunks_dir
@@ -1801,8 +1835,31 @@ def _iter_chunks(root_dir: Path) -> list[dict[str, Any]]:
 def _course_chunk_cache(root_dir: Path) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     chunks_jsonl = _course_chunks_jsonl_path(root_dir)
     chunks_dir = _course_chunks_dir(root_dir)
-    cache_key = str(chunks_jsonl if chunks_jsonl.exists() else chunks_dir)
     now = time.monotonic()
+    database_url = load_settings(root_dir).database_url.strip()
+    if database_url:
+        cache_key = f"postgres:{root_dir.resolve()}:{DEFAULT_COURSE_SLUG}"
+        with _COURSE_CHUNK_CACHE_LOCK:
+            cached = _COURSE_CHUNK_CACHE.get(cache_key)
+            if cached is not None and now - cached[0] < COURSE_CHUNK_CACHE_TTL_SECONDS:
+                return cached[1], cached[2]
+        rows: list[dict[str, Any]] = []
+        by_id: dict[str, dict[str, Any]] = {}
+        for payload in _load_course_chunks_from_database(root_dir):
+            if not isinstance(payload, dict):
+                continue
+            normalized = _normalize_chunk_payload(payload)
+            chunk_id = str(normalized.get("chunk_id") or "").strip()
+            if not chunk_id:
+                continue
+            rows.append(normalized)
+            by_id[chunk_id] = normalized
+        if rows:
+            with _COURSE_CHUNK_CACHE_LOCK:
+                _COURSE_CHUNK_CACHE[cache_key] = (now, rows, by_id)
+            return rows, by_id
+
+    cache_key = str(chunks_jsonl if chunks_jsonl.exists() else chunks_dir)
     with _COURSE_CHUNK_CACHE_LOCK:
         cached = _COURSE_CHUNK_CACHE.get(cache_key)
         if cached is not None and now - cached[0] < COURSE_CHUNK_CACHE_TTL_SECONDS:

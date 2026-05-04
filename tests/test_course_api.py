@@ -5,10 +5,12 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+import play_book_studio.app.course_api as course_api
 from play_book_studio.app.course_api import (
     _apply_course_answer_typography,
     _course_answer_style_issues,
@@ -57,6 +59,16 @@ def _write_learning_chunks(root: Path, rows: list[dict]) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def _isolate_course_runtime(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    course_api._COURSE_CHUNK_CACHE.clear()
+    course_api._COURSE_SINGLE_CHUNK_CACHE.clear()
+    yield
+    course_api._COURSE_CHUNK_CACHE.clear()
+    course_api._COURSE_SINGLE_CHUNK_CACHE.clear()
+
+
 @contextmanager
 def _temp_root() -> Iterator[Path]:
     temp_parent = Path.cwd() / ".pytest-tmp" / "course-api"
@@ -88,6 +100,30 @@ def test_load_chunk_reads_consolidated_chunks_jsonl() -> None:
         payload = _load_chunk(root, "chunk-01")
 
     assert payload["title"] == "단일 파일 청크"
+    assert payload["schema_version"] == "ppt_chunk_v1"
+
+
+def test_load_chunk_prefers_postgres_course_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    with _temp_root() as root:
+        course_api._COURSE_CHUNK_CACHE.clear()
+        course_api._COURSE_SINGLE_CHUNK_CACHE.clear()
+        monkeypatch.setattr(course_api, "load_settings", lambda _root: SimpleNamespace(database_url="postgresql://unit-test"))
+        monkeypatch.setattr(
+            course_api,
+            "_load_course_chunks_from_database",
+            lambda _root: [
+                {
+                    "chunk_id": "db-chunk",
+                    "stage_id": "db-stage",
+                    "title": "DB backed chunk",
+                    "body_md": "Loaded from PostgreSQL course_chunks.",
+                }
+            ],
+        )
+
+        payload = _load_chunk(root, "db-chunk")
+
+    assert payload["title"] == "DB backed chunk"
     assert payload["schema_version"] == "ppt_chunk_v1"
 
 
