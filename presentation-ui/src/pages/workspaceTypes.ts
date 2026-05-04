@@ -4,6 +4,7 @@ import type {
   ChatResponse,
   ChatTraceEvent,
   CustomerPackDraft,
+  DocumentRepository,
   LibraryBook,
 } from '../lib/runtimeApi';
 
@@ -55,11 +56,12 @@ export interface WorkspaceTestTrace {
 
 export interface SourceEntry {
   id: string;
-  kind: 'manual' | 'draft';
+  kind: 'manual' | 'draft' | 'repository';
   name: string;
   meta: string;
   grade?: string;
   viewerPath?: string;
   book?: LibraryBook;
   draft?: CustomerPackDraft;
+  repository?: DocumentRepository;
 }

@@ -33,6 +33,7 @@ import {
   type ChatRelatedLink,
   type CustomerPackBook,
   type CustomerPackDraft,
+  type DocumentRepository,
   type DerivedAsset,
   type LibraryBook,
   type SessionSummary,
@@ -57,6 +58,7 @@ import {
   loadCustomerPackBook,
   loadCustomerPackDraft,
   loadDataControlRoom,
+  loadDocumentRepositories,
   loadWikiOverlaySignals,
   loadWikiOverlays,
   loadSession,
@@ -965,6 +967,7 @@ function buildOverlayTargetFromViewerPath(
 export default function WorkspacePage() {
   const [manualBooks, setManualBooks] = useState<WorkspaceManualBook[]>([]);
   const [drafts, setDrafts] = useState<CustomerPackDraft[]>([]);
+  const [documentRepositories, setDocumentRepositories] = useState<DocumentRepository[]>([]);
   const [isBootstrapLoading, setIsBootstrapLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [query, setQuery] = useState('');
@@ -982,6 +985,7 @@ export default function WorkspacePage() {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     manuals: true,
     drafts: true,
+    repositories: false,
   });
 
   // Session history
@@ -1503,9 +1507,10 @@ export default function WorkspacePage() {
       setIsBootstrapLoading(true);
       try {
         void refreshSessionList();
-        const [room, draftPayload] = await Promise.all([
+        const [room, draftPayload, repositoryPayload] = await Promise.all([
           loadDataControlRoom(),
           listCustomerPackDrafts(),
+          loadDocumentRepositories().catch(() => ({ repositories: [] })),
         ]);
         if (cancelled) {
           return;
@@ -1516,6 +1521,7 @@ export default function WorkspacePage() {
 
         setManualBooks(sourceBooks);
         setDrafts(nextDrafts);
+        setDocumentRepositories(repositoryPayload.repositories ?? []);
       } catch (error) {
         console.error(error);
       } finally {
@@ -1557,9 +1563,26 @@ export default function WorkspacePage() {
     [drafts],
   );
 
+  const repositorySources = useMemo<SourceEntry[]>(
+    () =>
+      documentRepositories.map((repository) => ({
+        id: `repository:${repository.repository_id}`,
+        kind: 'repository',
+        name: repository.title || repository.slug || 'Document Repository',
+        meta: `${repository.visibility || 'repository'} · ${repository.document_count} docs`,
+        repository,
+      })),
+    [documentRepositories],
+  );
+
   const activeDraft = useMemo(
     () => drafts.find((draft) => activeSourceId === `draft:${draft.draft_id}`) ?? null,
     [activeSourceId, drafts],
+  );
+
+  const activeRepository = useMemo(
+    () => documentRepositories.find((repository) => activeSourceId === `repository:${repository.repository_id}`) ?? null,
+    [activeSourceId, documentRepositories],
   );
 
   const currentViewerPath = useMemo(
@@ -1902,6 +1925,10 @@ export default function WorkspacePage() {
       }
       if (source.kind === 'draft' && source.draft) {
         await openDraftPreview(source.draft.draft_id);
+      }
+      if (source.kind === 'repository' && source.repository) {
+        setActiveSourceId(source.id);
+        setPreview({ kind: 'empty' });
       }
       animatePreviewPanel();
     } catch (error) {
@@ -2384,6 +2411,7 @@ export default function WorkspacePage() {
         selectedDraftIds: activeDraft ? [activeDraft.draft_id] : [],
         restrictUploadedSources: Boolean(activeDraft),
         routeKind: messageRouteKind,
+        activeRepositoryId: activeRepository?.repository_id,
         learningIndex: resolvedLearningIndex,
         learningCategoryKey: resolvedCategoryKey,
         learningCategoryLabel: resolvedCategoryLabel,
@@ -3627,6 +3655,41 @@ export default function WorkspacePage() {
                     </div>
                   )}
                 </div>
+
+                <div className={`source-section ${collapsedSections.repositories ? 'collapsed' : ''}`}>
+                  <button className="section-header-btn" onClick={() => toggleSection('repositories')} type="button">
+                    <div className="header-label-group">
+                      {collapsedSections.repositories ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                      <span className="list-title">Document Repositories</span>
+                    </div>
+                    <span className="item-count-badge">{repositorySources.length}</span>
+                  </button>
+                  {!collapsedSections.repositories && (
+                    <div className="section-items-container">
+                      {repositorySources.length === 0 ? (
+                        <div className="source-item source-item-muted">
+                          <div className="item-main">
+                            <BookOpen size={16} className="file-icon" />
+                            <span className="file-name">No DB repositories</span>
+                          </div>
+                          <div className="item-meta">Upload documents from Playbook Library.</div>
+                        </div>
+                      ) : repositorySources.map((file) => (
+                        <div
+                          key={file.id}
+                          className={`source-item ${activeSourceId === file.id ? 'selected' : ''}`}
+                          onClick={() => { void handleSourceClick(file); }}
+                        >
+                          <div className="item-main">
+                            <BookOpen size={16} className="file-icon" />
+                            <span className="file-name">{file.name}</span>
+                          </div>
+                          <div className="item-meta">{file.meta}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           >
@@ -3744,6 +3807,21 @@ export default function WorkspacePage() {
                 </section>
               );
             })()}
+
+            {activeRepository && (
+              <div className="panel-footer viewer-build-actions">
+                <div className="footer-actions">
+                  <button className="outline-btn" type="button" onClick={() => navigate(ROUTES.pbsRepository)}>
+                    <BookOpen size={14} />
+                    <span>{activeRepository.document_count} docs</span>
+                  </button>
+                  <button className="primary-btn" type="button" onClick={() => setSourcesDrawerOpen(true)}>
+                    <span>{activeRepository.title || activeRepository.slug}</span>
+                    <Check size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
 
             {activeDraft && (
               <div className="panel-footer viewer-build-actions">

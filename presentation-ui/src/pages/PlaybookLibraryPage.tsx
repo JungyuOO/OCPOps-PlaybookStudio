@@ -827,7 +827,7 @@ const PlaybookLibraryPage: React.FC = () => {
       addLog('info', 'Parsing source into Markdown blocks and semantic chunks...');
       setPipelineStage('normalizing');
       addLog('info', 'Persisting chunks to PostgreSQL and indexing them for RAG...');
-      const ingest = await uploadDocumentIngestion(file, { index: true, createdBy: 'playbook-library' });
+      const ingest = await uploadDocumentIngestion(file, { index: true });
       const indexedCount = ingest.index?.indexed_count ?? 0;
       const indexLine = ingest.index ? `, ${indexedCount}/${ingest.index.candidate_count} indexed` : '';
       setLatestUploadIngest(ingest);

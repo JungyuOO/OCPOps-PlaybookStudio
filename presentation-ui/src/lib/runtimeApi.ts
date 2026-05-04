@@ -108,6 +108,7 @@ export interface UploadIngestPersistedSummary {
   document_version_id: string;
   parse_job_id: string;
   parsed_document_id: string;
+  repository_id?: string;
   block_count: number;
   asset_count: number;
   chunk_count: number;
@@ -134,6 +135,30 @@ export interface UploadIngestResponse {
   sections: string[][];
   persisted?: UploadIngestPersistedSummary;
   index?: UploadIngestIndexSummary;
+  repository_id?: string;
+  owner_user_id?: string;
+}
+
+export interface DocumentRepository {
+  repository_id: string;
+  slug: string;
+  title: string;
+  repository_kind: string;
+  visibility: string;
+  owner_user_id: string;
+  metadata: Record<string, unknown>;
+  document_count: number;
+  last_document_at: string;
+  updated_at: string;
+}
+
+export interface DocumentRepositoriesResponse {
+  database: 'postgres' | 'disabled' | string;
+  tenant_slug?: string;
+  workspace_slug?: string;
+  owner_user_id?: string;
+  count: number;
+  repositories: DocumentRepository[];
 }
 
 export interface BuyerPacket {
@@ -1027,6 +1052,7 @@ export async function sendChat(payload: {
   learningTargetBookSlug?: string;
   learningTargetTitle?: string;
   learningTargetViewerPath?: string;
+  activeRepositoryId?: string;
 }): Promise<ChatResponse> {
   return requestJson<ChatResponse>('/api/chat', {
     method: 'POST',
@@ -1044,6 +1070,7 @@ export async function sendChat(payload: {
       learning_target_book_slug: payload.learningTargetBookSlug ?? '',
       learning_target_title: payload.learningTargetTitle ?? '',
       learning_target_viewer_path: payload.learningTargetViewerPath ?? '',
+      active_repository_id: payload.activeRepositoryId ?? '',
     }),
   });
 }
@@ -1063,6 +1090,7 @@ export async function sendChatStream(
     learningTargetBookSlug?: string;
     learningTargetTitle?: string;
     learningTargetViewerPath?: string;
+    activeRepositoryId?: string;
   },
   onEvent: (event: ChatStreamEvent) => void,
 ): Promise<ChatResponse> {
@@ -1086,6 +1114,7 @@ export async function sendChatStream(
       learning_target_book_slug: payload.learningTargetBookSlug ?? '',
       learning_target_title: payload.learningTargetTitle ?? '',
       learning_target_viewer_path: payload.learningTargetViewerPath ?? '',
+      active_repository_id: payload.activeRepositoryId ?? '',
     }),
   });
   if (!response.ok || !response.body) {
@@ -1192,6 +1221,10 @@ export async function uploadDocumentIngestion(
     method: 'POST',
     body: payload,
   });
+}
+
+export async function loadDocumentRepositories(): Promise<DocumentRepositoriesResponse> {
+  return requestJson<DocumentRepositoriesResponse>('/api/repositories/documents');
 }
 
 function inferSourceType(file: File): string {
