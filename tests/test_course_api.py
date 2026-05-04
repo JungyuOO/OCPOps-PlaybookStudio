@@ -213,6 +213,47 @@ def test_course_asset_endpoint_converts_browser_incompatible_image_payloads() ->
         assert handler.bytes_payload.startswith(b"\x89PNG\r\n\x1a\n")
 
 
+def test_course_asset_endpoint_prefers_postgres_asset_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Handler:
+        def __init__(self) -> None:
+            self.json_payload = None
+            self.status = None
+            self.bytes_payload = b""
+            self.content_type = ""
+
+        def _send_json(self, payload: dict, status=200) -> None:  # noqa: ANN001
+            self.json_payload = payload
+            self.status = status
+
+        def _send_bytes(self, payload: bytes, *, content_type: str) -> None:
+            self.bytes_payload = payload
+            self.content_type = content_type
+
+    with _temp_root() as root:
+        monkeypatch.setattr(course_api, "load_settings", lambda _root: SimpleNamespace(database_url="postgresql://unit-test"))
+        monkeypatch.setattr(
+            course_api,
+            "_load_course_asset_from_database",
+            lambda _root, asset_path: {
+                "asset_path": asset_path,
+                "content_type": "image/png",
+                "content": b"db-image-bytes",
+            },
+        )
+
+        handler = Handler()
+        handled = handle_course_get(
+            handler,
+            "/api/v1/course/assets",
+            "path=data/course_pbs/assets/db-only.png",
+            root_dir=root,
+        )
+
+    assert handled is True
+    assert handler.bytes_payload == b"db-image-bytes"
+    assert handler.content_type == "image/png"
+
+
 def test_course_chat_uses_ops_learning_guide_before_raw_chunk_route() -> None:
     with _temp_root() as root:
         current_chunk_id = "perf-current"

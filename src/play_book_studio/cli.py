@@ -237,6 +237,7 @@ def build_parser() -> argparse.ArgumentParser:
     course_chunk_import_parser.add_argument("--database-url", default="")
     course_chunk_import_parser.add_argument("--course-slug", default="project-playbook")
     course_chunk_import_parser.add_argument("--limit", type=int, default=0)
+    course_chunk_import_parser.add_argument("--skip-assets", action="store_true")
     course_chunk_import_parser.add_argument("--dry-run", action="store_true")
 
     course_qa_parser = subparsers.add_parser(
@@ -897,7 +898,11 @@ def _run_learning_seed_import(args: argparse.Namespace) -> int:
 
 def _run_course_chunk_import(args: argparse.Namespace) -> int:
     from play_book_studio.course.qdrant_course import load_course_chunks
-    from play_book_studio.db.course_repository import import_course_chunks
+    from play_book_studio.db.course_repository import (
+        build_course_asset_record,
+        import_course_assets,
+        import_course_chunks,
+    )
 
     root_dir = args.root_dir.resolve()
     course_dir = args.course_dir
@@ -909,6 +914,44 @@ def _run_course_chunk_import(args: argparse.Namespace) -> int:
     if limit:
         chunks = chunks[:limit]
     source_ref = str(course_dir.relative_to(root_dir)) if course_dir.is_relative_to(root_dir) else str(course_dir)
+    asset_records = []
+    missing_assets: list[str] = []
+    seen_asset_paths: set[str] = set()
+    if not args.skip_assets:
+        for chunk in chunks:
+            attachments = chunk.get("image_attachments") if isinstance(chunk.get("image_attachments"), list) else []
+            for attachment in attachments:
+                if not isinstance(attachment, dict):
+                    continue
+                asset_path = str(attachment.get("asset_path") or "").strip().replace("\\", "/")
+                if not asset_path or asset_path in seen_asset_paths:
+                    continue
+                seen_asset_paths.add(asset_path)
+                resolved = Path(asset_path)
+                if not resolved.is_absolute():
+                    resolved = root_dir / resolved
+                resolved = resolved.resolve()
+                if not resolved.exists() or not resolved.is_file():
+                    missing_assets.append(asset_path)
+                    continue
+                asset_records.append(
+                    build_course_asset_record(
+                        asset_key=asset_path,
+                        asset_path=asset_path,
+                        content=resolved.read_bytes(),
+                        payload={
+                            "asset_id": str(attachment.get("asset_id") or ""),
+                            "attachment_id": str(attachment.get("attachment_id") or ""),
+                            "chunk_id": str(chunk.get("chunk_id") or ""),
+                            "slide_no": int(attachment.get("slide_no") or 0),
+                            "visual_summary": str(attachment.get("visual_summary") or ""),
+                            "ocr_text": str(attachment.get("ocr_text") or ""),
+                            "instructional_role": str(attachment.get("instructional_role") or ""),
+                        },
+                        course_slug=args.course_slug,
+                        source_ref=source_ref,
+                    )
+                )
     if args.dry_run:
         print(
             json.dumps(
@@ -917,6 +960,9 @@ def _run_course_chunk_import(args: argparse.Namespace) -> int:
                     "course_slug": args.course_slug,
                     "source_ref": source_ref,
                     "chunk_count": len(chunks),
+                    "asset_count": len(asset_records),
+                    "missing_asset_count": len(missing_assets),
+                    "missing_assets": missing_assets[:10],
                     "first_chunk_id": str(chunks[0].get("chunk_id") or "") if chunks else "",
                 },
                 ensure_ascii=False,
@@ -934,14 +980,38 @@ def _run_course_chunk_import(args: argparse.Namespace) -> int:
     import psycopg
 
     with psycopg.connect(database_url) as connection:
-        result = import_course_chunks(
+        chunk_result = import_course_chunks(
             connection,
             chunks,
             course_slug=args.course_slug,
             source_ref=source_ref,
         )
+        asset_result = (
+            {
+                "course_slug": args.course_slug,
+                "source_ref": source_ref,
+                "scanned_count": 0,
+                "imported_count": 0,
+                "skipped_count": 0,
+            }
+            if args.skip_assets
+            else import_course_assets(
+                connection,
+                asset_records,
+                course_slug=args.course_slug,
+                source_ref=source_ref,
+            )
+        )
+    result = {
+        "course_slug": args.course_slug,
+        "source_ref": source_ref,
+        "chunks": chunk_result,
+        "assets": asset_result,
+        "missing_asset_count": len(missing_assets),
+        "missing_assets": missing_assets[:10],
+    }
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return 0 if not missing_assets else 1
 
 
 def main() -> int:

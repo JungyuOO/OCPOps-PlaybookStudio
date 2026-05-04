@@ -457,6 +457,46 @@ def _course_asset_payload(path: Path) -> tuple[bytes, str]:
         return path.read_bytes(), expected_content_type
 
 
+def _course_asset_payload_from_bytes(body: bytes, content_type: str) -> tuple[bytes, str]:
+    expected_content_type = content_type or "application/octet-stream"
+    try:
+        from PIL import Image
+
+        image = Image.open(BytesIO(body))
+        image.load()
+        source_format = str(image.format or "").upper()
+        if source_format in {"PNG", "JPEG", "GIF", "WEBP"}:
+            image.close()
+            return bytes(body), expected_content_type
+        output = BytesIO()
+        converted = image.convert("RGBA") if image.mode not in {"RGB", "RGBA"} else image
+        converted.save(output, format="PNG")
+        converted.close()
+        return output.getvalue(), "image/png"
+    except Exception:
+        return bytes(body), expected_content_type
+
+
+def _load_course_asset_from_database(root_dir: Path, asset_path: str) -> dict[str, Any] | None:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if not database_url:
+        return None
+    try:
+        import psycopg
+
+        from play_book_studio.db.course_repository import load_course_asset_by_path
+
+        with psycopg.connect(database_url) as connection:
+            return load_course_asset_by_path(
+                connection,
+                asset_path.replace("\\", "/"),
+                course_slug=DEFAULT_COURSE_SLUG,
+            )
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -3435,6 +3475,14 @@ def handle_course_get(handler: Any, path: str, query: str, *, root_dir: Path) ->
         if asset_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
             handler._send_json({"error": "Course asset must be an image"}, HTTPStatus.BAD_REQUEST)
             return True
+        db_asset = _load_course_asset_from_database(root_dir, asset_path_raw)
+        if db_asset is not None:
+            body, content_type = _course_asset_payload_from_bytes(
+                db_asset["content"],
+                str(db_asset.get("content_type") or _course_asset_content_type(asset_path)),
+            )
+            handler._send_bytes(body, content_type=content_type)
+            return True
         if not asset_path.exists() or not asset_path.is_file():
             handler._send_json({"error": "Course asset not found"}, HTTPStatus.NOT_FOUND)
             return True
@@ -3471,6 +3519,11 @@ def handle_course_get(handler: Any, path: str, query: str, *, root_dir: Path) ->
             return True
         if asset_path is not None and asset_path.suffix.lower() != ".png":
             handler._send_json({"error": "Course slide asset must be a PNG"}, HTTPStatus.BAD_REQUEST)
+            return True
+        db_asset = _load_course_asset_from_database(root_dir, str((attachment or {}).get("asset_path") or "")) if attachment else None
+        if db_asset is not None:
+            body, content_type = _course_asset_payload_from_bytes(db_asset["content"], str(db_asset.get("content_type") or "image/png"))
+            handler._send_bytes(body, content_type=content_type)
             return True
         if asset_path is None or not asset_path.exists():
             handler._send_json({"error": f"Slide PNG not found for {chunk_id}:{slide_no}"}, HTTPStatus.NOT_FOUND)
