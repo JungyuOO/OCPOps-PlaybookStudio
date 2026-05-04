@@ -35,6 +35,15 @@ def _build_reranker(settings: Settings, *, enabled: bool) -> "CrossEncoderRerank
     return CrossEncoderReranker(settings)
 
 
+def _load_bm25_index(settings: Settings) -> BM25Index:
+    if settings.database_url.strip():
+        try:
+            return BM25Index.from_postgres(settings.database_url)
+        except Exception:  # noqa: BLE001
+            pass
+    return BM25Index.from_jsonl(settings.retrieval_bm25_corpus_path)
+
+
 class ChatRetriever:
     """answerer와 eval이 공통으로 사용하는 메인 retrieval 런타임."""
 
@@ -63,7 +72,7 @@ class ChatRetriever:
         enable_vector: bool = True,
         enable_reranker: bool | None = None,
     ) -> "ChatRetriever":
-        bm25_index = BM25Index.from_jsonl(settings.retrieval_bm25_corpus_path)
+        bm25_index = _load_bm25_index(settings)
         vector_retriever = VectorRetriever(settings) if enable_vector else None
         reranker_enabled = settings.reranker_enabled if enable_reranker is None else enable_reranker
         reranker = _build_reranker(settings, enabled=reranker_enabled)
