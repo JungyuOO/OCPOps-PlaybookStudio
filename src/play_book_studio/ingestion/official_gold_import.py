@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
@@ -17,6 +18,8 @@ from play_book_studio.db.document_repository import (
     _upsert_tenant,
     _upsert_workspace,
 )
+
+_SECTION_NUMBER_RE = re.compile(r"^\s*((?:\d+\.)+\d+|\d+)(?:[.)]|\.?)\s+(.+?)\s*$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,10 +194,97 @@ def _stable_sha256(*parts: str) -> str:
 def _section_path(row: dict[str, Any]) -> list[str]:
     value = row.get("section_path")
     if isinstance(value, list):
-        return [str(item) for item in value if str(item).strip()]
+        return [_split_section_number_title(str(item))[1] for item in value if str(item).strip()]
     chapter = str(row.get("chapter") or "").strip()
     section = str(row.get("section") or "").strip()
-    return [item for item in (chapter, section) if item]
+    return [_split_section_number_title(item)[1] for item in (chapter, section) if item]
+
+
+def _section_number(row: dict[str, Any]) -> str:
+    explicit = str(row.get("section_number") or "").strip()
+    if explicit:
+        return explicit
+    for candidate in reversed(_raw_section_labels(row)):
+        section_number, _ = _split_section_number_title(candidate)
+        if section_number:
+            return section_number
+    return ""
+
+
+def _heading_title(row: dict[str, Any], section_path: list[str]) -> str:
+    if section_path:
+        return section_path[-1]
+    for candidate in (row.get("section"), row.get("chapter"), row.get("book_title"), row.get("book_slug")):
+        text = str(candidate or "").strip()
+        if text:
+            return _split_section_number_title(text)[1]
+    return ""
+
+
+def _toc_path(row: dict[str, Any]) -> list[str]:
+    labels: list[str] = []
+    for raw_label in _raw_section_labels(row):
+        section_number, heading_title = _split_section_number_title(raw_label)
+        if not heading_title:
+            continue
+        labels.append(f"{section_number} {heading_title}".strip() if section_number else heading_title)
+    return labels
+
+
+def _raw_section_labels(row: dict[str, Any]) -> list[str]:
+    value = row.get("section_path")
+    if isinstance(value, list):
+        labels = [str(item).strip() for item in value if str(item).strip()]
+        if labels:
+            return labels
+    labels = []
+    for item in (row.get("chapter"), row.get("section")):
+        text = str(item or "").strip()
+        if text and text not in labels:
+            labels.append(text)
+    return labels
+
+
+def _split_section_number_title(title: str) -> tuple[str, str]:
+    title = str(title or "").strip()
+    match = _SECTION_NUMBER_RE.match(title)
+    if not match:
+        return "", title
+    section_number = match.group(1).strip().rstrip(".")
+    heading_title = match.group(2).strip()
+    return section_number, heading_title or title
+
+
+def _source_anchor(row: dict[str, Any]) -> str:
+    for key in ("anchor", "anchor_id", "source_anchor"):
+        value = str(row.get(key) or "").strip()
+        if value:
+            return value
+    section_id = str(row.get("section_id") or "").strip()
+    if ":" in section_id:
+        return section_id.rsplit(":", 1)[-1]
+    return section_id
+
+
+def _normalized_chunk_text(row: dict[str, Any]) -> str:
+    text = str(row.get("text") or "").strip()
+    if not text:
+        return ""
+    raw_labels = _raw_section_labels(row)
+    removable = {
+        str(row.get("book_title") or "").strip(),
+        str(row.get("book_slug") or "").strip(),
+        *raw_labels,
+        " > ".join(raw_labels),
+        *_section_path(row),
+        *_toc_path(row),
+    }
+    lines = text.splitlines()
+    while lines and lines[0].strip() in removable:
+        lines.pop(0)
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    return "\n".join(lines).strip() or text
 
 
 def _chunk_metadata(row: dict[str, Any]) -> dict[str, Any]:
@@ -384,7 +474,11 @@ def _upsert_official_document_chunk(
 ) -> str:
     chunk_id = _uuid_from_row_chunk_id(row)
     section_path = _section_path(row)
-    heading_title = str(row.get("section") or (section_path[-1] if section_path else "")).strip()
+    section_number = _section_number(row)
+    heading_title = _heading_title(row, section_path)
+    source_anchor = _source_anchor(row)
+    toc_path = _toc_path(row)
+    chunk_text = _normalized_chunk_text(row)
     cursor.execute(
         """
         INSERT INTO document_chunks (
@@ -395,7 +489,7 @@ def _upsert_official_document_chunk(
         )
         VALUES (
             %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s::jsonb,
-            '', %s, %s, %s::jsonb, '[]'::jsonb, %s::jsonb,
+            %s, %s, %s, %s::jsonb, '[]'::jsonb, %s::jsonb,
             (
                 SELECT ds.repository_id
                 FROM parsed_documents pd
@@ -413,6 +507,7 @@ def _upsert_official_document_chunk(
             embedding_text = EXCLUDED.embedding_text,
             token_count = EXCLUDED.token_count,
             section_path = EXCLUDED.section_path,
+            section_number = EXCLUDED.section_number,
             heading_title = EXCLUDED.heading_title,
             source_anchor = EXCLUDED.source_anchor,
             toc_path = EXCLUDED.toc_path,
@@ -428,13 +523,14 @@ def _upsert_official_document_chunk(
             chunk_id,
             int(row.get("ordinal") if row.get("ordinal") is not None else ordinal),
             str(row.get("chunk_type") or "reference"),
-            str(row.get("text") or ""),
-            str(row.get("text") or ""),
-            int(row.get("token_count") or len(str(row.get("text") or "").split())),
+            chunk_text,
+            chunk_text,
+            len(chunk_text.split()),
             _json(section_path),
+            section_number,
             heading_title,
-            str(row.get("anchor") or row.get("anchor_id") or ""),
-            _json([heading_title] if heading_title else []),
+            source_anchor,
+            _json(toc_path),
             _json(_chunk_metadata(row)),
             parsed_document_id,
         ),

@@ -4,7 +4,15 @@ import json
 from pathlib import Path
 
 from play_book_studio.cli import build_parser
-from play_book_studio.ingestion.official_gold_import import build_official_gold_import_plan
+from play_book_studio.ingestion.official_gold_import import (
+    _heading_title,
+    _normalized_chunk_text,
+    _section_number,
+    _section_path,
+    _source_anchor,
+    _toc_path,
+    build_official_gold_import_plan,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TEST_TMP = REPO_ROOT / "tmp" / "official_gold_import_tests"
@@ -75,3 +83,23 @@ def test_official_gold_import_parser_accepts_args():
     assert args.chunks_path == Path("data/gold_corpus_ko/chunks.jsonl")
     assert args.limit == 25
     assert args.dry_run is True
+
+
+def test_official_gold_import_derives_section_metadata_without_body_prefixes():
+    row = {
+        "book_slug": "architecture",
+        "book_title": "Architecture",
+        "chapter": "1 Networking",
+        "section": "1.1 Routes and services",
+        "section_path": ["1 Networking", "1.1 Routes and services"],
+        "anchor": "routes",
+        "text": "Architecture\n1 Networking > 1.1 Routes and services\n\nRoute body text.",
+    }
+    section_path = _section_path(row)
+
+    assert section_path == ["Networking", "Routes and services"]
+    assert _section_number(row) == "1.1"
+    assert _heading_title(row, section_path) == "Routes and services"
+    assert _source_anchor(row) == "routes"
+    assert _toc_path(row) == ["1 Networking", "1.1 Routes and services"]
+    assert _normalized_chunk_text(row) == "Route body text."
