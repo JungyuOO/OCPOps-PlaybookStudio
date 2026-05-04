@@ -9,6 +9,8 @@ from typing import Any
 from datetime import datetime
 import time
 
+from play_book_studio.config.settings import load_settings
+from play_book_studio.db.chat_repository import persist_chat_turn
 from play_book_studio.retrieval.models import SessionContext
 from play_book_studio.app.sessions import RUNTIME_CHAT_MODE, Turn
 
@@ -140,6 +142,16 @@ def _answer_query_from_payload(query: str, payload: dict[str, Any]) -> str:
     return f"{hint_text} | {query} | 단계별 학습 순서"
 
 
+def _uuid_or_empty(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        return str(uuid.UUID(raw))
+    except ValueError:
+        return ""
+
+
 def _persist_chat_audit_logs(
     *,
     root_dir: Path,
@@ -152,6 +164,8 @@ def _persist_chat_audit_logs(
     response_payload: dict[str, Any],
     append_chat_turn_log: Any,
     append_unanswered_question_log: Any,
+    owner_user_id: str = "",
+    active_repository_id: str = "",
 ) -> None:
     try:
         append_chat_turn_log(
@@ -175,6 +189,57 @@ def _persist_chat_audit_logs(
             )
     except Exception as exc:  # noqa: BLE001
         print(f"[chat-audit] persist failed: {exc}")
+    _persist_chat_turn_to_db(
+        root_dir=root_dir,
+        session=session,
+        query=query,
+        result=result,
+        response_payload=response_payload,
+        owner_user_id=owner_user_id,
+        active_repository_id=active_repository_id,
+    )
+
+
+def _persist_chat_turn_to_db(
+    *,
+    root_dir: Path,
+    session: Any,
+    query: str,
+    result: Any,
+    response_payload: dict[str, Any],
+    owner_user_id: str,
+    active_repository_id: str,
+) -> None:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if not database_url:
+        return
+    turn = session.history[-1] if getattr(session, "history", None) else None
+    if turn is None:
+        return
+    import psycopg
+
+    try:
+        with psycopg.connect(database_url) as connection:
+            persist_chat_turn(
+                connection,
+                client_session_id=str(getattr(session, "session_id", "") or ""),
+                anonymous_user_id=owner_user_id,
+                query=query,
+                answer=str(getattr(result, "answer", "") or ""),
+                active_repository_id=active_repository_id,
+                turn_id=str(getattr(turn, "turn_id", "") or ""),
+                parent_turn_id=str(getattr(turn, "parent_turn_id", "") or ""),
+                mode=str(getattr(result, "mode", "") or RUNTIME_CHAT_MODE),
+                response_kind=str(getattr(result, "response_kind", "") or ""),
+                rewritten_query=str(getattr(result, "rewritten_query", "") or ""),
+                citations=[item for item in response_payload.get("citations") or [] if isinstance(item, dict)],
+                metadata={
+                    "session_revision": int(getattr(session, "revision", 0) or 0),
+                },
+            )
+    except Exception as exc:  # noqa: BLE001
+        print(f"[chat-db] persist failed: {exc}")
 
 
 def handle_chat(
@@ -193,6 +258,7 @@ def handle_chat(
     build_turn_stages: Any,
     build_turn_diagnosis: Any,
     suggest_follow_up_questions: Any | None = None,
+    owner_user_id: str = "",
 ) -> None:
     request_started_at = time.perf_counter()
     active_answerer = current_answerer()
@@ -201,6 +267,7 @@ def handle_chat(
     mode = RUNTIME_CHAT_MODE
     regenerate = bool(payload.get("regenerate", False))
     query = str(payload.get("query") or "").strip()
+    active_repository_id = _uuid_or_empty(payload.get("active_repository_id") or payload.get("repository_id"))
     request_context = context_with_request_overrides(
         session.context,
         payload=payload,
@@ -310,6 +377,8 @@ def handle_chat(
         response_payload=response_payload,
         append_chat_turn_log=append_chat_turn_log,
         append_unanswered_question_log=append_unanswered_question_log,
+        owner_user_id=owner_user_id,
+        active_repository_id=active_repository_id,
     )
 
 
@@ -328,6 +397,7 @@ def handle_chat_stream(
     write_recent_chat_session_snapshot: Any,
     build_turn_stages: Any,
     build_turn_diagnosis: Any,
+    owner_user_id: str = "",
 ) -> None:
     request_started_at = time.perf_counter()
     active_answerer = current_answerer()
@@ -336,6 +406,7 @@ def handle_chat_stream(
     mode = RUNTIME_CHAT_MODE
     regenerate = bool(payload.get("regenerate", False))
     query = str(payload.get("query") or "").strip()
+    active_repository_id = _uuid_or_empty(payload.get("active_repository_id") or payload.get("repository_id"))
     request_context = context_with_request_overrides(
         session.context,
         payload=payload,
@@ -463,4 +534,6 @@ def handle_chat_stream(
         response_payload=response_payload,
         append_chat_turn_log=append_chat_turn_log,
         append_unanswered_question_log=append_unanswered_question_log,
+        owner_user_id=owner_user_id,
+        active_repository_id=active_repository_id,
     )

@@ -510,6 +510,7 @@ def _build_handler(
                 write_recent_chat_session_snapshot=_write_recent_chat_session_snapshot,
                 build_turn_stages=_build_turn_stages,
                 build_turn_diagnosis=_build_turn_diagnosis,
+                owner_user_id=self._session_owner().owner_hash,
             )
 
         def _handle_chat_stream(self, payload: dict[str, Any]) -> None:
@@ -527,6 +528,7 @@ def _build_handler(
                 write_recent_chat_session_snapshot=_write_recent_chat_session_snapshot,
                 build_turn_stages=_build_turn_stages,
                 build_turn_diagnosis=_build_turn_diagnosis,
+                owner_user_id=self._session_owner().owner_hash,
             )
 
         def _handle_reset(self, payload: dict[str, Any]) -> None:
