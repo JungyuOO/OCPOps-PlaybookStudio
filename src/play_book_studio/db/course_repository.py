@@ -38,6 +38,17 @@ class CourseAssetRecord:
     source_ref: str
 
 
+@dataclass(frozen=True, slots=True)
+class CourseManifestRecord:
+    course_slug: str
+    manifest_key: str
+    payload: dict[str, Any]
+    stage_count: int
+    stop_count: int
+    source_ref: str
+    checksum: str
+
+
 def _compact_json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -115,6 +126,28 @@ def build_course_asset_record(
     )
 
 
+def build_course_manifest_record(
+    payload: dict[str, Any],
+    *,
+    course_slug: str = DEFAULT_COURSE_SLUG,
+    manifest_key: str = "course_v1",
+    source_ref: str = "",
+) -> CourseManifestRecord:
+    stored_payload = dict(payload)
+    stages = stored_payload.get("stages") if isinstance(stored_payload.get("stages"), list) else []
+    tour = stored_payload.get("tour") if isinstance(stored_payload.get("tour"), dict) else {}
+    checksum = hashlib.sha256(_compact_json(stored_payload).encode("utf-8")).hexdigest()
+    return CourseManifestRecord(
+        course_slug=_string_value(course_slug) or DEFAULT_COURSE_SLUG,
+        manifest_key=_string_value(manifest_key) or "course_v1",
+        payload=stored_payload,
+        stage_count=len(stages),
+        stop_count=int(tour.get("stop_count") or 0),
+        source_ref=_string_value(source_ref),
+        checksum=checksum,
+    )
+
+
 def load_course_chunks(
     connection,
     *,
@@ -157,6 +190,87 @@ def load_course_chunk(
     if row is None or not isinstance(row[0], dict):
         return None
     return dict(row[0])
+
+
+def load_course_manifest(
+    connection,
+    *,
+    course_slug: str = DEFAULT_COURSE_SLUG,
+    manifest_key: str = "course_v1",
+) -> dict[str, Any] | None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT payload
+            FROM course_manifests
+            WHERE course_slug = %s AND manifest_key = %s
+            """,
+            (
+                _string_value(course_slug) or DEFAULT_COURSE_SLUG,
+                _string_value(manifest_key) or "course_v1",
+            ),
+        )
+        row = cursor.fetchone()
+    if row is None or not isinstance(row[0], dict):
+        return None
+    return dict(row[0])
+
+
+def import_course_manifest(
+    connection,
+    payload: dict[str, Any],
+    *,
+    course_slug: str = DEFAULT_COURSE_SLUG,
+    manifest_key: str = "course_v1",
+    source_ref: str = "",
+) -> dict[str, Any]:
+    record = build_course_manifest_record(
+        payload,
+        course_slug=course_slug,
+        manifest_key=manifest_key,
+        source_ref=source_ref,
+    )
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO course_manifests (
+                course_slug,
+                manifest_key,
+                payload,
+                stage_count,
+                stop_count,
+                source_ref,
+                checksum,
+                created_at,
+                updated_at
+            )
+            VALUES (%s, %s, %s::jsonb, %s, %s, %s, %s, now(), now())
+            ON CONFLICT (course_slug, manifest_key) DO UPDATE SET
+                payload = EXCLUDED.payload,
+                stage_count = EXCLUDED.stage_count,
+                stop_count = EXCLUDED.stop_count,
+                source_ref = EXCLUDED.source_ref,
+                checksum = EXCLUDED.checksum,
+                updated_at = now()
+            """,
+            (
+                record.course_slug,
+                record.manifest_key,
+                _compact_json(record.payload),
+                record.stage_count,
+                record.stop_count,
+                record.source_ref,
+                record.checksum,
+            ),
+        )
+    return {
+        "course_slug": record.course_slug,
+        "manifest_key": record.manifest_key,
+        "stage_count": record.stage_count,
+        "stop_count": record.stop_count,
+        "source_ref": record.source_ref,
+        "checksum": record.checksum,
+    }
 
 
 def load_course_asset_by_path(

@@ -127,6 +127,22 @@ def test_load_chunk_prefers_postgres_course_chunks(monkeypatch: pytest.MonkeyPat
     assert payload["schema_version"] == "ppt_chunk_v1"
 
 
+def test_load_manifest_prefers_postgres_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
+    with _temp_root() as root:
+        monkeypatch.setattr(
+            course_api,
+            "_load_course_manifest_from_database",
+            lambda _root: {
+                "canonical_model": "course_manifest_v1",
+                "stages": [{"stage_id": "db-stage", "title": "DB Stage"}],
+            },
+        )
+
+        manifest = course_api._load_manifest(root)
+
+    assert manifest["stages"][0]["stage_id"] == "db-stage"
+
+
 def test_resolve_course_path_rejects_assets_outside_workspace() -> None:
     with _temp_root() as root:
         outside = root.parent / "outside.png"

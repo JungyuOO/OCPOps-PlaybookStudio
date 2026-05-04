@@ -6,11 +6,14 @@ from typing import Any
 from play_book_studio.db.course_repository import (
     build_course_asset_record,
     build_course_chunk_record,
+    build_course_manifest_record,
     import_course_assets,
     import_course_chunks,
+    import_course_manifest,
     load_course_asset_by_path,
     load_course_chunk,
     load_course_chunks,
+    load_course_manifest,
 )
 
 
@@ -162,3 +165,41 @@ def test_load_course_asset_by_path_returns_binary_content() -> None:
         "payload": {"asset_id": "a"},
         "checksum": "abc",
     }
+
+
+def test_build_course_manifest_record_counts_stage_and_stops() -> None:
+    payload = {
+        "canonical_model": "course_manifest_v1",
+        "stages": [{"stage_id": "a"}, {"stage_id": "b"}],
+        "tour": {"stop_count": 7},
+    }
+
+    record = build_course_manifest_record(payload, course_slug="project-playbook", source_ref="data/course_pbs/manifests/course_v1.json")
+
+    assert record.manifest_key == "course_v1"
+    assert record.stage_count == 2
+    assert record.stop_count == 7
+    assert record.payload == payload
+    assert len(record.checksum) == 64
+
+
+def test_import_course_manifest_upserts_payload() -> None:
+    connection = FakeConnection()
+    payload = {"canonical_model": "course_manifest_v1", "stages": [{"stage_id": "a"}], "tour": {"stop_count": 1}}
+
+    result = import_course_manifest(connection, payload, course_slug="project-playbook", source_ref="data/course_pbs/manifests/course_v1.json")
+
+    assert result["stage_count"] == 1
+    assert result["stop_count"] == 1
+    sql, params = connection.cursor_instance.statements[0]
+    assert "ON CONFLICT (course_slug, manifest_key) DO UPDATE" in sql
+    assert params[0:2] == ("project-playbook", "course_v1")
+    assert json.loads(params[2])["canonical_model"] == "course_manifest_v1"
+
+
+def test_load_course_manifest_returns_payload() -> None:
+    connection = FakeConnection([({"canonical_model": "course_manifest_v1", "stages": []},)])
+
+    payload = load_course_manifest(connection, course_slug="project-playbook")
+
+    assert payload == {"canonical_model": "course_manifest_v1", "stages": []}

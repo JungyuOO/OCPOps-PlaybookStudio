@@ -497,6 +497,22 @@ def _load_course_asset_from_database(root_dir: Path, asset_path: str) -> dict[st
         return None
 
 
+def _load_course_manifest_from_database(root_dir: Path) -> dict[str, Any] | None:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if not database_url:
+        return None
+    try:
+        import psycopg
+
+        from play_book_studio.db.course_repository import load_course_manifest
+
+        with psycopg.connect(database_url) as connection:
+            return load_course_manifest(connection, course_slug=DEFAULT_COURSE_SLUG)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -510,6 +526,9 @@ def _read_jsonl(path: Path) -> list[Any]:
 
 
 def _load_manifest(root_dir: Path) -> dict[str, Any]:
+    payload = _load_course_manifest_from_database(root_dir)
+    if isinstance(payload, dict) and payload:
+        return payload
     path = _course_manifest_path(root_dir)
     if not path.exists():
         raise FileNotFoundError("Course manifest not found")

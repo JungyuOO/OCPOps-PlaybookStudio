@@ -238,6 +238,7 @@ def build_parser() -> argparse.ArgumentParser:
     course_chunk_import_parser.add_argument("--course-slug", default="project-playbook")
     course_chunk_import_parser.add_argument("--limit", type=int, default=0)
     course_chunk_import_parser.add_argument("--skip-assets", action="store_true")
+    course_chunk_import_parser.add_argument("--skip-manifest", action="store_true")
     course_chunk_import_parser.add_argument("--dry-run", action="store_true")
 
     course_qa_parser = subparsers.add_parser(
@@ -900,6 +901,7 @@ def _run_course_chunk_import(args: argparse.Namespace) -> int:
     from play_book_studio.course.qdrant_course import load_course_chunks
     from play_book_studio.db.course_repository import (
         build_course_asset_record,
+        import_course_manifest,
         import_course_assets,
         import_course_chunks,
     )
@@ -914,6 +916,12 @@ def _run_course_chunk_import(args: argparse.Namespace) -> int:
     if limit:
         chunks = chunks[:limit]
     source_ref = str(course_dir.relative_to(root_dir)) if course_dir.is_relative_to(root_dir) else str(course_dir)
+    manifest_path = course_dir / "manifests" / "course_v1.json"
+    manifest_payload: dict | None = None
+    manifest_source_ref = ""
+    if not args.skip_manifest and manifest_path.exists():
+        manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest_source_ref = str(manifest_path.relative_to(root_dir)) if manifest_path.is_relative_to(root_dir) else str(manifest_path)
     asset_records = []
     missing_assets: list[str] = []
     seen_asset_paths: set[str] = set()
@@ -963,6 +971,8 @@ def _run_course_chunk_import(args: argparse.Namespace) -> int:
                     "asset_count": len(asset_records),
                     "missing_asset_count": len(missing_assets),
                     "missing_assets": missing_assets[:10],
+                    "manifest_loaded": manifest_payload is not None,
+                    "manifest_stage_count": len(manifest_payload.get("stages") or []) if isinstance(manifest_payload, dict) else 0,
                     "first_chunk_id": str(chunks[0].get("chunk_id") or "") if chunks else "",
                 },
                 ensure_ascii=False,
@@ -1002,11 +1012,29 @@ def _run_course_chunk_import(args: argparse.Namespace) -> int:
                 source_ref=source_ref,
             )
         )
+        manifest_result = (
+            {
+                "course_slug": args.course_slug,
+                "manifest_key": "course_v1",
+                "stage_count": 0,
+                "stop_count": 0,
+                "source_ref": "",
+            }
+            if manifest_payload is None
+            else import_course_manifest(
+                connection,
+                manifest_payload,
+                course_slug=args.course_slug,
+                manifest_key="course_v1",
+                source_ref=manifest_source_ref,
+            )
+        )
     result = {
         "course_slug": args.course_slug,
         "source_ref": source_ref,
         "chunks": chunk_result,
         "assets": asset_result,
+        "manifest": manifest_result,
         "missing_asset_count": len(missing_assets),
         "missing_assets": missing_assets[:10],
     }
