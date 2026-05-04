@@ -140,10 +140,6 @@ class Settings(SettingsPathMixin):
     surya_ocr_endpoint: str = ""
     surya_health_endpoint: str = ""
     surya_timeout_seconds: float = 30.0
-    qwen_vision_endpoint: str = ""
-    qwen_vision_api_key: str = ""
-    qwen_vision_model: str = ""
-    qwen_vision_timeout_seconds: float = 30.0
     ocp_api_base_url: str = ""
     ocp_api_token: str = ""
     terminal_enabled: bool = False
@@ -370,10 +366,6 @@ def load_settings(root_dir: str | Path) -> Settings:
         surya_ocr_endpoint=effective_env.get("SURYA_OCR", "").strip().rstrip("/"),
         surya_health_endpoint=effective_env.get("SURYA_HEALTH", "").strip().rstrip("/"),
         surya_timeout_seconds=float(effective_env.get("SURYA_TIMEOUT_SECONDS", "30")),
-        qwen_vision_endpoint=effective_env.get("QWEN_VISION_ENDPOINT", "").strip().rstrip("/"),
-        qwen_vision_api_key=effective_env.get("QWEN_VISION_API_KEY", "").strip(),
-        qwen_vision_model=effective_env.get("QWEN_VISION_MODEL", "").strip(),
-        qwen_vision_timeout_seconds=float(effective_env.get("QWEN_VISION_TIMEOUT_SECONDS", "30")),
         ocp_api_base_url=effective_env.get("OCP_API_BASE_URL", "").strip().rstrip("/"),
         ocp_api_token=effective_env.get("OCP_API_TOKEN", "").strip(),
         terminal_enabled=effective_env.get("TERMINAL_ENABLED", "false").lower()

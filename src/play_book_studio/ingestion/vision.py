@@ -25,7 +25,6 @@ DEFAULT_IMAGE_PROMPT = (
 class QwenVisionClient:
     endpoint: str
     model: str
-    api_key: str = ""
     timeout_seconds: float = 30.0
     prompt: str = DEFAULT_IMAGE_PROMPT
 
@@ -51,8 +50,6 @@ class QwenVisionClient:
         }
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
         req = request.Request(_chat_completions_url(self.endpoint), data=body, headers=headers, method="POST")
         try:
             with request.urlopen(req, timeout=self.timeout_seconds) as response:
@@ -63,15 +60,13 @@ class QwenVisionClient:
 
 
 def build_qwen_image_describer(settings: Settings) -> ImageDescriber | None:
-    endpoint = str(settings.qwen_vision_endpoint or settings.llm_endpoint or "").strip()
-    model = str(settings.qwen_vision_model or settings.llm_model or "").strip()
+    endpoint = str(settings.llm_endpoint or "").strip()
+    model = str(settings.llm_model or "").strip()
     if not endpoint or not model:
         return None
     client = QwenVisionClient(
         endpoint=endpoint,
         model=model,
-        api_key=str(settings.qwen_vision_api_key or settings.llm_api_key or "").strip(),
-        timeout_seconds=float(settings.qwen_vision_timeout_seconds or 30.0),
     )
 
     def describe(document_path: Path, asset: DocumentAsset) -> str:

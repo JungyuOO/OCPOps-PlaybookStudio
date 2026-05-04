@@ -64,7 +64,6 @@ def test_qwen_vision_client_sends_openai_compatible_image_payload(monkeypatch):
     client = QwenVisionClient(
         endpoint="http://qwen.internal:8000/v1",
         model="qwen2.5-vl",
-        api_key="secret",
         timeout_seconds=7,
     )
 
@@ -73,7 +72,7 @@ def test_qwen_vision_client_sends_openai_compatible_image_payload(monkeypatch):
     assert description == "OpenShift console topology diagram."
     assert captured["url"] == "http://qwen.internal:8000/v1/chat/completions"
     assert captured["timeout"] == 7
-    assert captured["headers"]["Authorization"] == "Bearer secret"
+    assert "Authorization" not in captured["headers"]
     assert captured["body"]["model"] == "qwen2.5-vl"
     image_url = captured["body"]["messages"][0]["content"][1]["image_url"]["url"]
     assert image_url.startswith("data:image/png;base64,")
@@ -96,21 +95,6 @@ def test_qwen_describer_factory_uses_existing_llm_settings_by_default():
 
     assert describer is not None
     assert getattr(describer, "qwen_model") == "Qwen/Qwen3.5-9B"
-
-
-def test_qwen_describer_factory_allows_vision_specific_override():
-    settings = Settings(
-        root_dir=Path.cwd(),
-        llm_endpoint="http://cllm.cywell.co.kr/v1",
-        llm_model="Qwen/Qwen3.5-9B",
-        qwen_vision_endpoint="http://qwen.internal/v1",
-        qwen_vision_model="Qwen/Qwen-VL",
-    )
-
-    describer = build_qwen_image_describer(settings)
-
-    assert describer is not None
-    assert getattr(describer, "qwen_model") == "Qwen/Qwen-VL"
 
 
 def test_parse_image_document_injects_qwen_description_into_chunk_text():
