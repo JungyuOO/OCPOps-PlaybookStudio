@@ -11,6 +11,7 @@ from play_book_studio.config.settings import load_settings
 from play_book_studio.db.document_repository import persist_parsed_upload_document
 from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
 from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
+from play_book_studio.ingestion.vision import build_qwen_image_describer
 
 
 def _bool_payload(value: Any, *, default: bool = False) -> bool:
@@ -72,7 +73,7 @@ def build_upload_ingest_response(
 ) -> dict[str, Any]:
     settings = load_settings(root_dir)
     source_path, storage_key, byte_size = _store_uploaded_file(root_dir, payload)
-    parsed = parse_upload_document(source_path)
+    parsed = parse_upload_document(source_path, image_describer=build_qwen_image_describer(settings))
     chunks = build_document_chunks(
         parsed,
         max_chars=_int_payload(payload.get("chunk_max_chars"), default=1800),

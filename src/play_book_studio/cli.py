@@ -649,6 +649,7 @@ def _upload_ingest_summary(parsed, chunks, *, persisted=None) -> dict:
 def _run_upload_ingest(args: argparse.Namespace) -> int:
     from play_book_studio.db.document_repository import persist_parsed_upload_document
     from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
+    from play_book_studio.ingestion.vision import build_qwen_image_describer
 
     root_dir = args.root_dir.resolve()
     source_path = args.path
@@ -659,7 +660,8 @@ def _run_upload_ingest(args: argparse.Namespace) -> int:
         print(f"upload source does not exist: {source_path}")
         return 1
 
-    parsed = parse_upload_document(source_path)
+    settings = load_settings(root_dir)
+    parsed = parse_upload_document(source_path, image_describer=build_qwen_image_describer(settings))
     chunks = build_document_chunks(
         parsed,
         max_chars=args.chunk_max_chars,
@@ -669,7 +671,6 @@ def _run_upload_ingest(args: argparse.Namespace) -> int:
         print(json.dumps(_upload_ingest_summary(parsed, chunks), ensure_ascii=False, indent=2))
         return 0
 
-    settings = load_settings(root_dir)
     database_url = (args.database_url or settings.database_url).strip()
     if not database_url:
         print("DATABASE_URL is required. Set it in .env or pass --database-url.")

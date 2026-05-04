@@ -10,6 +10,7 @@ from typing import Any
 from play_book_studio.db.document_repository import persist_parsed_upload_document
 from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
 from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
+from play_book_studio.ingestion.vision import build_qwen_image_describer
 
 
 SUPPORTED_CORPUS_SUFFIXES = {
@@ -123,6 +124,7 @@ def import_corpus_documents(
     skipped: list[dict[str, str]] = []
     failed: list[dict[str, str]] = []
     seen_sha256: dict[str, str] = {}
+    image_describer = build_qwen_image_describer(settings) if settings is not None else None
 
     for path in files:
         relative_path = path.relative_to(source_dir).as_posix()
@@ -138,7 +140,7 @@ def import_corpus_documents(
                 )
                 continue
             seen_sha256[source_sha256] = relative_path
-            parsed = parse_upload_document(path)
+            parsed = parse_upload_document(path, image_describer=image_describer)
             chunks = build_document_chunks(
                 parsed,
                 max_chars=chunk_max_chars,

@@ -232,9 +232,8 @@ def parse_upload_document(
             markdown = _plain_text_to_markdown(markdown, title=path.stem)
     elif document_format in IMAGE_FORMATS:
         asset = _image_asset(path, sha256=sha256, mime_type=mime_type)
-        description = image_describer(path, asset) if image_describer else ""
-        if description:
-            asset = DocumentAsset(**{**asset.to_dict(), "description": description})
+        if image_describer:
+            asset = _describe_asset(path, asset, image_describer=image_describer)
         assets.append(asset)
         markdown = _image_markdown(asset)
     elif document_format in CONVERTER_FORMATS:
@@ -442,10 +441,19 @@ def _image_markdown(asset: DocumentAsset) -> str:
 
 
 def _describe_asset(path: Path, asset: DocumentAsset, *, image_describer: ImageDescriber) -> DocumentAsset:
-    description = image_describer(path, asset).strip()
+    try:
+        description = image_describer(path, asset).strip()
+    except Exception as exc:  # noqa: BLE001
+        metadata = {**dict(asset.metadata), "qwen_error": str(exc)}
+        return DocumentAsset(**{**asset.to_dict(), "metadata": metadata})
     if not description:
         return asset
-    return DocumentAsset(**{**asset.to_dict(), "description": description})
+    metadata = {**dict(asset.metadata)}
+    metadata.setdefault("qwen_status", "described")
+    qwen_model = str(getattr(image_describer, "qwen_model", "") or "").strip()
+    if qwen_model:
+        metadata.setdefault("qwen_model", qwen_model)
+    return DocumentAsset(**{**asset.to_dict(), "description": description, "metadata": metadata})
 
 
 def _append_asset_descriptions(markdown: str, assets: list[DocumentAsset]) -> str:
