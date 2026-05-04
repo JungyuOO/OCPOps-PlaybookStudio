@@ -177,6 +177,7 @@ def list_chat_sessions(
               AND w.slug = %s
               AND cs.anonymous_user_id = %s
               AND cs.user_id = %s
+              AND cs.status = 'active'
             GROUP BY cs.id
             ORDER BY cs.updated_at DESC
             LIMIT %s
@@ -233,6 +234,7 @@ def list_chat_messages(
               AND cs.anonymous_user_id = %s
               AND cs.user_id = %s
               AND cs.client_session_id = %s
+              AND cs.status = 'active'
             ORDER BY cm.created_at ASC, cm.id ASC
             LIMIT %s
             """,
@@ -251,6 +253,41 @@ def list_chat_messages(
         }
         for row in rows
     ]
+
+
+def archive_chat_session(
+    connection,
+    *,
+    tenant_slug: str = "public",
+    workspace_slug: str = "default",
+    anonymous_user_id: str = "",
+    user_id: str = "",
+    client_session_id: str = "",
+) -> bool:
+    if not str(client_session_id or "").strip():
+        raise ValueError("client_session_id is required")
+    with connection.transaction():
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE chat_sessions cs
+                SET status = 'archived',
+                    updated_at = now(),
+                    metadata = cs.metadata || jsonb_build_object('archived_at', now())
+                FROM tenants t, workspaces w
+                WHERE cs.tenant_id = t.id
+                  AND cs.workspace_id = w.id
+                  AND t.slug = %s
+                  AND w.slug = %s
+                  AND cs.anonymous_user_id = %s
+                  AND cs.user_id = %s
+                  AND cs.client_session_id = %s
+                  AND cs.status = 'active'
+                RETURNING cs.id
+                """,
+                (tenant_slug, workspace_slug, anonymous_user_id, user_id, client_session_id),
+            )
+            return cursor.fetchone() is not None
 
 
 def persist_chat_turn(
@@ -343,6 +380,7 @@ def persist_chat_turn(
 
 __all__ = [
     "StoredChatTurn",
+    "archive_chat_session",
     "list_chat_messages",
     "list_chat_sessions",
     "persist_chat_turn",

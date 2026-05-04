@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from play_book_studio.db.chat_repository import list_chat_messages, list_chat_sessions, persist_chat_turn
+from play_book_studio.db.chat_repository import (
+    archive_chat_session,
+    list_chat_messages,
+    list_chat_sessions,
+    persist_chat_turn,
+)
 
 
 class FakeTransaction:
@@ -109,6 +114,7 @@ def test_list_chat_sessions_filters_to_owner_scope():
     sql_text = "\n".join(sql for sql, _params in connection.cursor_obj.calls)
     assert "FROM chat_sessions cs" in sql_text
     assert "cs.anonymous_user_id = %s" in sql_text
+    assert "cs.status = 'active'" in sql_text
     assert connection.cursor_obj.calls[0][1] == ("public", "default", "owner-hash", "", 10)
     assert sessions[0]["client_session_id"] == "client-session"
     assert sessions[0]["message_count"] == 2
@@ -137,6 +143,26 @@ def test_list_chat_messages_filters_to_owner_and_client_session():
     sql_text = "\n".join(sql for sql, _params in connection.cursor_obj.calls)
     assert "FROM chat_messages cm" in sql_text
     assert "cs.client_session_id = %s" in sql_text
+    assert "cs.status = 'active'" in sql_text
     assert connection.cursor_obj.calls[0][1] == ("public", "default", "owner-hash", "", "client-session", 200)
     assert messages[0]["message_id"] == "message-id"
     assert messages[0]["cited_chunk_ids"] == ["chunk-a"]
+
+
+def test_archive_chat_session_scopes_update_to_owner_and_client_session():
+    connection = FakeConnection()
+
+    archived = archive_chat_session(
+        connection,
+        anonymous_user_id="owner-hash",
+        client_session_id="client-session",
+    )
+
+    sql_text = "\n".join(sql for sql, _params in connection.cursor_obj.calls)
+    assert archived is True
+    assert "UPDATE chat_sessions cs" in sql_text
+    assert "SET status = 'archived'" in sql_text
+    assert "cs.anonymous_user_id = %s" in sql_text
+    assert "cs.client_session_id = %s" in sql_text
+    assert "cs.status = 'active'" in sql_text
+    assert connection.cursor_obj.calls[0][1] == ("public", "default", "owner-hash", "", "client-session")

@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import parse_qs
 
 from play_book_studio.config.settings import load_settings
-from play_book_studio.db.chat_repository import list_chat_messages, list_chat_sessions
+from play_book_studio.db.chat_repository import archive_chat_session, list_chat_messages, list_chat_sessions
 
 
 def _int_query(value: str, *, default: int, upper: int) -> int:
@@ -98,6 +98,44 @@ def build_chat_history_messages_response(
     }
 
 
+def build_chat_history_archive_response(
+    root_dir: Path,
+    payload: dict[str, Any],
+    *,
+    owner_user_id: str,
+) -> dict[str, Any]:
+    database_url = _database_url(root_dir)
+    if not database_url:
+        return {"database": "disabled", "success": False, "archived": False}
+    client_session_id = str(payload.get("client_session_id") or payload.get("session_id") or "").strip()
+    if not client_session_id:
+        raise ValueError("client_session_id is required")
+    tenant_slug = str(payload.get("tenant_slug") or "public").strip() or "public"
+    workspace_slug = str(payload.get("workspace_slug") or "default").strip() or "default"
+    user_id = str(payload.get("user_id") or "").strip()
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        archived = archive_chat_session(
+            connection,
+            tenant_slug=tenant_slug,
+            workspace_slug=workspace_slug,
+            anonymous_user_id=owner_user_id,
+            user_id=user_id,
+            client_session_id=client_session_id,
+        )
+    return {
+        "database": "postgres",
+        "success": archived,
+        "archived": archived,
+        "tenant_slug": tenant_slug,
+        "workspace_slug": workspace_slug,
+        "owner_user_id": owner_user_id,
+        "client_session_id": client_session_id,
+    }
+
+
 def handle_chat_history_sessions(
     handler: Any,
     query: str,
@@ -131,9 +169,30 @@ def handle_chat_history_messages(
     handler._send_json(payload)
 
 
+def handle_chat_history_archive(
+    handler: Any,
+    payload: dict[str, Any],
+    *,
+    root_dir: Path,
+    owner_user_id: str,
+) -> None:
+    try:
+        response_payload = build_chat_history_archive_response(root_dir, payload, owner_user_id=owner_user_id)
+    except ValueError as exc:
+        handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        return
+    except Exception as exc:  # noqa: BLE001
+        handler._send_json({"error": f"chat history archive failed: {exc}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    status = HTTPStatus.OK if response_payload.get("archived") else HTTPStatus.NOT_FOUND
+    handler._send_json(response_payload, status)
+
+
 __all__ = [
+    "build_chat_history_archive_response",
     "build_chat_history_messages_response",
     "build_chat_history_sessions_response",
+    "handle_chat_history_archive",
     "handle_chat_history_messages",
     "handle_chat_history_sessions",
 ]

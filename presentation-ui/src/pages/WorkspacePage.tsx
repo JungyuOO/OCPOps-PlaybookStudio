@@ -51,6 +51,7 @@ import {
   type WikiTextAnnotation,
   type WikiTextAnnotationMode,
   type ViewerPageMode,
+  archiveDbChatSession,
   captureCustomerPackDraft,
   formatBytes,
   listCustomerPackDrafts,
@@ -1391,17 +1392,17 @@ export default function WorkspacePage() {
       return;
     }
     const summary = sessionList.find((session) => session.session_id === targetSessionId);
-    if (summary?.history_source === 'db') {
-      window.alert('DB chat history deletion is not wired yet.');
-      return;
-    }
     const confirmed = window.confirm('이 대화 기록을 삭제할까요?');
     if (!confirmed) {
       return;
     }
     setDeletingSessionId(targetSessionId);
     try {
-      await deleteSession(targetSessionId);
+      if (summary?.history_source === 'db') {
+        await archiveDbChatSession(targetSessionId);
+      } else {
+        await deleteSession(targetSessionId);
+      }
       setSessionList((current) => current.filter((session) => session.session_id !== targetSessionId));
       if (targetSessionId === sessionId) {
         setSessionId(makeId('ID'));
@@ -3075,7 +3076,6 @@ export default function WorkspacePage() {
                           void handleSessionDelete(session.session_id);
                         }}
                         disabled={Boolean(deletingSessionId) || isLoadingSession}
-                        aria-disabled={session.history_source === 'db'}
                       >
                         <Trash2 size={13} />
                       </button>

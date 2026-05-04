@@ -27,6 +27,7 @@ from play_book_studio.app.ops_console_api import (
 from play_book_studio.app.upload_api import handle_upload_ingest as _handle_upload_ingest_request
 from play_book_studio.app.repository_api import handle_document_repositories as _handle_document_repositories_request
 from play_book_studio.app.chat_history_api import (
+    handle_chat_history_archive as _handle_chat_history_archive_request,
     handle_chat_history_messages as _handle_chat_history_messages_request,
     handle_chat_history_sessions as _handle_chat_history_sessions_request,
 )
@@ -274,6 +275,9 @@ def _build_handler(
             if parsed_request.path == "/api/chat/stream":
                 self._handle_chat_stream(payload)
                 return
+            if parsed_request.path == "/api/chat-history/archive":
+                self._handle_chat_history_archive(payload)
+                return
             if parsed_request.path == "/api/sessions/delete":
                 self._handle_session_delete(payload)
                 return
@@ -463,6 +467,13 @@ def _build_handler(
             _handle_chat_history_messages_request(
                 self,
                 query,
+                root_dir=root_dir,
+                owner_user_id=self._session_owner().owner_hash,
+            )
+        def _handle_chat_history_archive(self, payload: dict[str, Any]) -> None:
+            _handle_chat_history_archive_request(
+                self,
+                payload,
                 root_dir=root_dir,
                 owner_user_id=self._session_owner().owner_hash,
             )

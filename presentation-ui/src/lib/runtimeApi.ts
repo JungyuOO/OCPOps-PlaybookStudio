@@ -1343,6 +1343,13 @@ export async function loadDbChatMessages(sessionId: string): Promise<DbChatMessa
   );
 }
 
+export async function archiveDbChatSession(sessionId: string): Promise<void> {
+  await requestJson<{ success: boolean; client_session_id: string }>('/api/chat-history/archive', {
+    method: 'POST',
+    body: JSON.stringify({ client_session_id: sessionId }),
+  });
+}
+
 export async function deleteSession(sessionId: string): Promise<void> {
   await requestJson<{ success: boolean; session_id: string }>('/api/sessions/delete', {
     method: 'POST',

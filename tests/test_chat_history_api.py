@@ -31,3 +31,14 @@ def test_chat_history_messages_requires_client_session_id(monkeypatch):
             "",
             owner_user_id="owner-hash",
         )
+
+
+def test_chat_history_archive_requires_client_session_id(monkeypatch):
+    monkeypatch.setattr(chat_history_api, "load_settings", lambda _root_dir: SimpleNamespace(database_url="postgresql://db"))
+
+    with pytest.raises(ValueError, match="client_session_id"):
+        chat_history_api.build_chat_history_archive_response(
+            REPO_ROOT,
+            {},
+            owner_user_id="owner-hash",
+        )
