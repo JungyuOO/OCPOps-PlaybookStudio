@@ -354,7 +354,7 @@ def test_refresh_stale_qdrant_payloads_updates_existing_candidates(monkeypatch):
 
     monkeypatch.setattr(
         "play_book_studio.db.qdrant_indexer.load_qdrant_payload_refresh_candidates",
-        lambda connection, collection, limit: (stale, missing),
+        lambda connection, collection, source_scope, limit: (stale, missing),
     )
     monkeypatch.setattr(
         "play_book_studio.db.qdrant_indexer.fetch_existing_qdrant_point_ids",
@@ -369,11 +369,13 @@ def test_refresh_stale_qdrant_payloads_updates_existing_candidates(monkeypatch):
         SettingsStub(),
         connection,
         collection="openshift_docs",
+        source_scope="official_docs",
         limit=2,
     )
 
     assert result == {
         "collection": "openshift_docs",
+        "source_scope": "official_docs",
         "candidate_count": 2,
         "existing_count": 1,
         "missing_count": 1,
@@ -431,6 +433,8 @@ def test_db_qdrant_refresh_payloads_parser_accepts_args():
             str(REPO_ROOT),
             "--collection",
             "openshift_docs",
+            "--source-scope",
+            "official_docs",
             "--limit",
             "500",
             "--batch-size",
@@ -440,5 +444,6 @@ def test_db_qdrant_refresh_payloads_parser_accepts_args():
 
     assert args.command == "db-qdrant-refresh-payloads"
     assert args.collection == "openshift_docs"
+    assert args.source_scope == "official_docs"
     assert args.limit == 500
     assert args.batch_size == 64

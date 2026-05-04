@@ -192,6 +192,7 @@ def build_parser() -> argparse.ArgumentParser:
     db_qdrant_refresh_parser.add_argument("--root-dir", type=Path, default=ROOT)
     db_qdrant_refresh_parser.add_argument("--database-url", default="")
     db_qdrant_refresh_parser.add_argument("--collection", default="")
+    db_qdrant_refresh_parser.add_argument("--source-scope", default="")
     db_qdrant_refresh_parser.add_argument("--limit", type=int, default=1000)
     db_qdrant_refresh_parser.add_argument("--batch-size", type=int, default=256)
 
@@ -227,6 +228,10 @@ def build_parser() -> argparse.ArgumentParser:
     official_gold_import_parser.add_argument("--workspace-slug", default="default")
     official_gold_import_parser.add_argument("--workspace-name", default="Default")
     official_gold_import_parser.add_argument("--limit", type=int, default=0)
+    official_gold_import_parser.add_argument("--refresh-qdrant-payloads", action="store_true")
+    official_gold_import_parser.add_argument("--collection", default="")
+    official_gold_import_parser.add_argument("--refresh-limit", type=int, default=0)
+    official_gold_import_parser.add_argument("--refresh-batch-size", type=int, default=256)
     official_gold_import_parser.add_argument("--dry-run", action="store_true")
 
     learning_seed_parser = subparsers.add_parser(
@@ -813,6 +818,7 @@ def _run_db_qdrant_refresh_payloads(args: argparse.Namespace) -> int:
             settings,
             connection,
             collection=args.collection.strip() or None,
+            source_scope=args.source_scope,
             limit=args.limit,
             batch_size=args.batch_size,
         )
@@ -887,7 +893,20 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
             workspace_name=args.workspace_name,
             limit=args.limit,
         )
-    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        payload = result.to_dict()
+        if args.refresh_qdrant_payloads:
+            from play_book_studio.db.qdrant_indexer import refresh_stale_qdrant_payloads
+
+            refresh_limit = args.refresh_limit or max(result.imported_chunk_count, 1000)
+            payload["qdrant_refresh"] = refresh_stale_qdrant_payloads(
+                settings,
+                connection,
+                collection=args.collection.strip() or None,
+                source_scope="official_docs",
+                limit=refresh_limit,
+                batch_size=args.refresh_batch_size,
+            )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
 

@@ -78,8 +78,10 @@ def load_qdrant_payload_refresh_candidates(
     connection,
     *,
     collection: str,
+    source_scope: str = "",
     limit: int = 1000,
 ) -> tuple[QdrantChunkCandidate, ...]:
+    scope = source_scope.strip()
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -116,10 +118,11 @@ def load_qdrant_payload_refresh_candidates(
             JOIN document_sources ds ON ds.id = pd.document_source_id
             JOIN qdrant_index_entries q
                 ON q.chunk_id = c.id AND q.collection = %s
+            WHERE (%s = '' OR c.source_scope = %s)
             ORDER BY q.indexed_at ASC, c.ordinal ASC
             LIMIT %s
             """,
-            (collection, int(limit)),
+            (collection, scope, scope, int(limit)),
         )
         rows = cursor.fetchall()
         columns = [item.name for item in cursor.description]
@@ -338,19 +341,23 @@ def refresh_stale_qdrant_payloads(
     connection,
     *,
     collection: str | None = None,
+    source_scope: str = "",
     limit: int = 1000,
     batch_size: int = 256,
 ) -> dict[str, Any]:
     """Overwrite Qdrant payloads when DB-derived payload hashes changed."""
     target_collection = collection or settings.qdrant_collection
+    scope = source_scope.strip()
     candidates = load_qdrant_payload_refresh_candidates(
         connection,
         collection=target_collection,
+        source_scope=scope,
         limit=limit,
     )
     if not candidates:
         return {
             "collection": target_collection,
+            "source_scope": scope,
             "candidate_count": 0,
             "existing_count": 0,
             "missing_count": 0,
@@ -386,6 +393,7 @@ def refresh_stale_qdrant_payloads(
         )
     return {
         "collection": target_collection,
+        "source_scope": scope,
         "candidate_count": len(candidates),
         "existing_count": len(existing_candidates),
         "missing_count": len(candidates) - len(existing_candidates),
