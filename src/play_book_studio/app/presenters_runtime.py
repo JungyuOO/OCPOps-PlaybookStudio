@@ -6,6 +6,7 @@ from typing import Any
 
 from play_book_studio.answering.answerer import ChatAnswerer
 from play_book_studio.config.settings import Settings, load_settings
+from play_book_studio.db.corpus_status import build_corpus_status
 from play_book_studio.ingestion.graph_sidecar import graph_sidecar_compact_artifact_status
 
 
@@ -117,6 +118,10 @@ def _build_health_payload(answerer: ChatAnswerer) -> dict[str, Any]:
             "normalized_docs_path": str(settings.retrieval_normalized_docs_path),
             "bm25_corpus_path": str(settings.retrieval_bm25_corpus_path),
             "customer_pack_books_dir": str(settings.customer_pack_books_dir),
+            "db_corpus": build_corpus_status(
+                database_url=settings.database_url,
+                collection=settings.qdrant_collection,
+            ),
         },
     }
 

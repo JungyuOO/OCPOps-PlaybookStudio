@@ -185,6 +185,14 @@ def build_parser() -> argparse.ArgumentParser:
     db_qdrant_backfill_parser.add_argument("--limit", type=int, default=1000)
     db_qdrant_backfill_parser.add_argument("--batch-size", type=int, default=256)
 
+    db_corpus_status_parser = subparsers.add_parser(
+        "db-corpus-status",
+        help="Report PostgreSQL corpus and qdrant_index_entries readiness",
+    )
+    db_corpus_status_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    db_corpus_status_parser.add_argument("--database-url", default="")
+    db_corpus_status_parser.add_argument("--collection", default="")
+
     official_gold_import_parser = subparsers.add_parser(
         "official-gold-import",
         help="Import existing official gold retrieval chunks into PostgreSQL document repositories",
@@ -756,6 +764,20 @@ def _run_db_qdrant_backfill(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_db_corpus_status(args: argparse.Namespace) -> int:
+    from play_book_studio.db.corpus_status import build_corpus_status
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    payload = build_corpus_status(
+        database_url=database_url,
+        collection=args.collection.strip() or settings.qdrant_collection,
+    )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if bool(payload.get("ready")) else 1
+
+
 def _run_official_gold_import(args: argparse.Namespace) -> int:
     from play_book_studio.ingestion.official_gold_import import (
         build_official_gold_import_plan,
@@ -890,6 +912,8 @@ def main() -> int:
         return _run_db_qdrant_index(args)
     if args.command == "db-qdrant-backfill":
         return _run_db_qdrant_backfill(args)
+    if args.command == "db-corpus-status":
+        return _run_db_corpus_status(args)
     if args.command == "official-gold-import":
         return _run_official_gold_import(args)
     if args.command == "learning-seed-import":

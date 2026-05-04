@@ -16,6 +16,7 @@ import requests
 
 from play_book_studio.answering.llm import LLMClient
 from play_book_studio.config.settings import Settings, load_settings
+from play_book_studio.db.corpus_status import build_corpus_status
 from play_book_studio.ingestion.embedding import EmbeddingClient
 from play_book_studio.ingestion.graph_sidecar import graph_sidecar_compact_artifact_status
 
@@ -267,6 +268,10 @@ def build_runtime_report(
             "reranker_enabled": bool(settings.reranker_enabled),
             "reranker_model": settings.reranker_model,
             "reranker_top_n": settings.reranker_top_n,
+            "db_corpus": build_corpus_status(
+                database_url=settings.database_url,
+                collection=settings.qdrant_collection,
+            ),
         },
         "artifacts": {
             "source_manifest": _path_status(settings.source_manifest_path),
