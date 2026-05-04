@@ -6,6 +6,8 @@ __pycache__/
 .pytest-tmp/
 .pytest-tmp-*/
 .tmp_pytest/
+.tmp/
+tests/_tmp*/
 pytest-cache-files-*/
 .mypy_cache/
 .ruff_cache/

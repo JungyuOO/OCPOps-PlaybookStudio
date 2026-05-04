@@ -32,6 +32,10 @@ pytest-cache-files-*/**
 /.pytest_cache/
 /.pytest-tmp/
 /.tmp_pytest/
+/.tmp/
+**/.tmp
+**/.tmp/
+**/.tmp/**
 /artifacts/
 /reports/
 /tmp/
@@ -87,6 +91,9 @@ __pycache__
 .tmp_pytest
 /.tmp_pytest
 /.tmp_pytest/**
+.tmp
+/.tmp
+/.tmp/**
 pytest-cache-files-*
 pytest-cache-files-*/
 pytest-cache-files-*/**
