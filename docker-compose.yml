@@ -109,6 +109,34 @@ services:
     command: ["python", "-m", "play_book_studio.cli", "course-chunk-import", "--root-dir", "/app", "--course-dir", "/app/data/course_pbs"]
     restart: "no"
 
+  official-corpus-seed:
+    profiles:
+      - seed
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+    command: ["python", "-m", "play_book_studio.cli", "official-gold-import", "--root-dir", "/app", "--chunks-path", "/app/data/gold_corpus_ko/chunks.jsonl", "--index", "--index-limit", "${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}", "--refresh-qdrant-payloads", "--refresh-limit", "${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}"]
+    restart: "no"
+
   qdrant-seed:
     profiles:
       - seed
