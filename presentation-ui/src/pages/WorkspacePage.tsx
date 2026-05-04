@@ -54,10 +54,12 @@ import {
   captureCustomerPackDraft,
   formatBytes,
   listCustomerPackDrafts,
+  listDbChatSessions,
   listSessions,
   loadCustomerPackBook,
   loadCustomerPackDraft,
   loadDataControlRoom,
+  loadDbChatMessages,
   loadDocumentRepositories,
   loadWikiOverlaySignals,
   loadWikiOverlays,
@@ -1078,10 +1080,28 @@ export default function WorkspacePage() {
   const refreshSessionList = useCallback(async () => {
     setIsSessionListLoading(true);
     try {
+      const dbResult = await listDbChatSessions();
+      if (dbResult.database === 'postgres') {
+        setSessionList(dbResult.sessions.map((session) => ({
+          session_id: session.client_session_id,
+          session_name: session.title || `Session ${session.client_session_id.slice(0, 8)}`,
+          turn_count: Math.ceil(session.message_count / 2),
+          updated_at: session.updated_at,
+          first_query: session.title,
+          history_source: 'db',
+        })));
+        return;
+      }
       const result = await listSessions();
-      setSessionList(result.sessions);
+      setSessionList(result.sessions.map((session) => ({ ...session, history_source: 'file' as const })));
     } catch (error) {
       console.error(error);
+      try {
+        const result = await listSessions();
+        setSessionList(result.sessions.map((session) => ({ ...session, history_source: 'file' as const })));
+      } catch (fallbackError) {
+        console.error(fallbackError);
+      }
     } finally {
       setIsSessionListLoading(false);
     }
@@ -1321,6 +1341,26 @@ export default function WorkspacePage() {
     if (isLoadingSession) return;
     setIsLoadingSession(true);
     try {
+      const summary = sessionList.find((session) => session.session_id === targetSessionId);
+      if (summary?.history_source === 'db') {
+        const history = await loadDbChatMessages(targetSessionId);
+        setSessionId(targetSessionId);
+        setMessages(history.messages.map((message) => {
+          const metadata = message.metadata || {};
+          const citations = Array.isArray(metadata.citations)
+            ? metadata.citations.filter((item): item is ChatCitation => typeof item === 'object' && item !== null)
+            : [];
+          return {
+            id: message.message_id || makeId(message.role === 'user' ? 'u' : 'a'),
+            role: message.role === 'assistant' ? 'assistant' as const : 'user' as const,
+            content: message.content,
+            citations,
+            responseKind: typeof metadata.response_kind === 'string' ? metadata.response_kind : undefined,
+            rewrittenQuery: typeof metadata.rewritten_query === 'string' ? metadata.rewritten_query : undefined,
+          };
+        }));
+        return;
+      }
       const snapshot = await loadSession(targetSessionId);
       setSessionId(snapshot.session_id);
       setMessages(
@@ -1348,6 +1388,11 @@ export default function WorkspacePage() {
 
   async function handleSessionDelete(targetSessionId: string): Promise<void> {
     if (deletingSessionId || isLoadingSession) {
+      return;
+    }
+    const summary = sessionList.find((session) => session.session_id === targetSessionId);
+    if (summary?.history_source === 'db') {
+      window.alert('DB chat history deletion is not wired yet.');
       return;
     }
     const confirmed = window.confirm('이 대화 기록을 삭제할까요?');
@@ -3030,6 +3075,7 @@ export default function WorkspacePage() {
                           void handleSessionDelete(session.session_id);
                         }}
                         disabled={Boolean(deletingSessionId) || isLoadingSession}
+                        aria-disabled={session.history_source === 'db'}
                       >
                         <Trash2 size={13} />
                       </button>

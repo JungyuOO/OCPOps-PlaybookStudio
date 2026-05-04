@@ -818,6 +818,7 @@ export interface SessionSummary {
   turn_count: number;
   updated_at: string;
   first_query: string;
+  history_source?: 'file' | 'db';
   primary_source_lane?: string;
   primary_boundary_truth?: string;
   primary_runtime_truth_label?: string;
@@ -849,6 +850,43 @@ export interface SessionSnapshot {
   session_name: string;
   turns: SessionTurnSnapshot[];
   updated_at: string;
+}
+
+export interface DbChatSessionSummary {
+  chat_session_id: string;
+  client_session_id: string;
+  title: string;
+  status: string;
+  active_repository_id: string;
+  anonymous_user_id: string;
+  user_id: string;
+  metadata: Record<string, unknown>;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbChatSessionsResponse {
+  database: 'postgres' | 'disabled' | string;
+  count: number;
+  sessions: DbChatSessionSummary[];
+}
+
+export interface DbChatMessage {
+  message_id: string;
+  role: 'user' | 'assistant' | string;
+  content: string;
+  cited_chunk_ids: string[];
+  cited_asset_ids: string[];
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface DbChatMessagesResponse {
+  database: 'postgres' | 'disabled' | string;
+  client_session_id: string;
+  count: number;
+  messages: DbChatMessage[];
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -1293,6 +1331,16 @@ export async function listSessions(limit = 50): Promise<SessionListResponse> {
 
 export async function loadSession(sessionId: string): Promise<SessionSnapshot> {
   return requestJson<SessionSnapshot>(`/api/sessions/load?session_id=${encodeURIComponent(sessionId)}`);
+}
+
+export async function listDbChatSessions(limit = 50): Promise<DbChatSessionsResponse> {
+  return requestJson<DbChatSessionsResponse>(`/api/chat-history/sessions?limit=${limit}`);
+}
+
+export async function loadDbChatMessages(sessionId: string): Promise<DbChatMessagesResponse> {
+  return requestJson<DbChatMessagesResponse>(
+    `/api/chat-history/messages?client_session_id=${encodeURIComponent(sessionId)}`,
+  );
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
