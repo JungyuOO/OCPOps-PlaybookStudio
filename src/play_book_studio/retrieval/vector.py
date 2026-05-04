@@ -58,6 +58,7 @@ class VectorRetriever:
         self.settings = settings
         self.embedding_client = EmbeddingClient(settings)
         self.request_timeout_seconds = max(float(self.settings.request_timeout_seconds), 1.0)
+        self.database_url = settings.database_url.strip()
 
     def search(self, query: str, top_k: int) -> list[RetrievalHit]:
         hits, _runtime = self.search_with_trace(query, top_k)
@@ -115,6 +116,7 @@ class VectorRetriever:
                         score=float(point.get("score", 0.0)),
                     )
                 )
+            hits, hydration = self._hydrate_hits_from_database(hits)
             return (
                 hits,
                 {
@@ -123,7 +125,28 @@ class VectorRetriever:
                     "errors": errors,
                     "hit_count": len(hits),
                     "top_score": float(points[0].get("score", 0.0)) if points else None,
+                    "hydration": hydration,
                 },
             )
 
         raise ValueError(last_error)
+
+    def _hydrate_hits_from_database(self, hits: list[RetrievalHit]) -> tuple[list[RetrievalHit], dict[str, Any]]:
+        hydration: dict[str, Any] = {
+            "status": "disabled",
+            "requested_count": len(hits),
+            "hydrated_count": 0,
+        }
+        if not hits or not self.database_url:
+            return hits, hydration
+        import psycopg
+
+        from play_book_studio.retrieval.chunk_hydration import hydrate_retrieval_hits
+
+        with psycopg.connect(self.database_url) as connection:
+            hydrated = hydrate_retrieval_hits(connection, hits)
+        hydration["status"] = "ready"
+        hydration["hydrated_count"] = sum(
+            1 for original, canonical in zip(hits, hydrated, strict=True) if original is not canonical
+        )
+        return hydrated, hydration

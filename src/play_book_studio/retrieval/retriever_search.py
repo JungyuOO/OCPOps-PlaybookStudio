@@ -24,13 +24,16 @@ def _vector_subquery_runtime(
     query: str,
     runtime: dict[str, object],
 ) -> dict[str, object]:
-    return {
+    payload = {
         "query": query,
         "endpoint_used": str(runtime.get("endpoint_used", "")),
         "attempted_endpoints": [str(item) for item in (runtime.get("attempted_endpoints") or [])],
         "hit_count": int(runtime.get("hit_count", 0) or 0),
         "top_score": runtime.get("top_score"),
     }
+    if isinstance(runtime.get("hydration"), dict):
+        payload["hydration"] = dict(runtime["hydration"])
+    return payload
 
 
 def _aggregate_vector_runtime(subqueries: list[dict[str, object]]) -> dict[str, object]:
