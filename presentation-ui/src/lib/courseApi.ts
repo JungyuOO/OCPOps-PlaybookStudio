@@ -100,6 +100,34 @@ export interface LearningCommandCheck {
   metadata: Record<string, unknown>;
 }
 
+export interface LearningCommandCheckResult {
+  id: string;
+  terminal_session_id: string;
+  terminal_event_id: string;
+  learning_step_attempt_id: string;
+  learner_id: string;
+  submitted_command: string;
+  status: string;
+  matched: boolean;
+  validation_result: Record<string, unknown>;
+  updated_at: string;
+}
+
+export interface LearningCommandCheckResultItem {
+  command_check: Omit<LearningCommandCheck, 'metadata' | 'ordinal'> & { ordinal: number };
+  result: LearningCommandCheckResult | null;
+}
+
+export interface LearningCommandCheckResultsPayload {
+  schema: string;
+  source: string;
+  lab_task_id: string;
+  learner_id: string;
+  count: number;
+  items: LearningCommandCheckResultItem[];
+  unavailable_reason?: string;
+}
+
 export interface LearningLabTask {
   id: string;
   task_key: string;
@@ -314,6 +342,17 @@ export function loadCourseManifest(): Promise<CourseManifest> {
 export function loadLearningPaths(limit = 20): Promise<LearningPathCatalog> {
   const params = new URLSearchParams({ limit: String(limit) });
   return requestJson(`/api/learning-paths?${params.toString()}`);
+}
+
+export function loadLearningCommandResults(
+  labTaskId: string,
+  learnerId: string,
+): Promise<LearningCommandCheckResultsPayload> {
+  const params = new URLSearchParams({ lab_task_id: labTaskId });
+  if (learnerId.trim()) {
+    params.set('learner_id', learnerId.trim());
+  }
+  return requestJson(`/api/learning-command-results?${params.toString()}`);
 }
 
 export function loadCourseStage(stageId: string): Promise<CourseStagePayload> {

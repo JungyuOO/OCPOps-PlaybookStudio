@@ -2,7 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './CoursePages.css';
 import { ROUTES } from '../app/routes';
-import { loadCourseManifest, loadLearningPaths, type CourseManifest, type LearningPathCatalog, type LearningStep } from '../lib/courseApi';
+import {
+  loadCourseManifest,
+  loadLearningCommandResults,
+  loadLearningPaths,
+  type CourseManifest,
+  type LearningCommandCheckResultItem,
+  type LearningLabTask,
+  type LearningPathCatalog,
+  type LearningStep,
+} from '../lib/courseApi';
+import TerminalSessionPanel from './workspace/TerminalSessionPanel';
 
 const STAGE_SUMMARY: Record<string, string> = {
   architecture: '설계 산출물과 아키텍처 다이어그램을 운영 학습 순서로 따라갑니다.',
@@ -18,6 +28,10 @@ export default function CourseTimelinePage() {
   const [error, setError] = useState('');
   const [learningError, setLearningError] = useState('');
   const [selectedStepKey, setSelectedStepKey] = useState('');
+  const [selectedLabTaskId, setSelectedLabTaskId] = useState('');
+  const [learnerId, setLearnerId] = useState('');
+  const [commandResults, setCommandResults] = useState<Record<string, LearningCommandCheckResultItem>>({});
+  const [commandResultsError, setCommandResultsError] = useState('');
 
   useEffect(() => {
     void loadCourseManifest().then(setManifest).catch((caught) => {
@@ -26,6 +40,18 @@ export default function CourseTimelinePage() {
     void loadLearningPaths(5).then(setLearningCatalog).catch((caught) => {
       setLearningError(caught instanceof Error ? caught.message : 'Failed to load learning paths');
     });
+  }, []);
+
+  useEffect(() => {
+    const storageKey = 'playbookstudio.learning.learnerId';
+    const existing = window.localStorage.getItem(storageKey);
+    if (existing) {
+      setLearnerId(existing);
+      return;
+    }
+    const created = `anon-${crypto.randomUUID()}`;
+    window.localStorage.setItem(storageKey, created);
+    setLearnerId(created);
   }, []);
 
   const totalChunks = useMemo(
@@ -37,11 +63,49 @@ export default function CourseTimelinePage() {
   const selectedStep: LearningStep | null = primarySteps.find((step) => step.step_key === selectedStepKey)
     ?? primarySteps[0]
     ?? null;
+  const selectedLabTask: LearningLabTask | null = selectedStep?.lab_tasks.find((task) => task.id === selectedLabTaskId)
+    ?? selectedStep?.lab_tasks[0]
+    ?? null;
   const totalLabs = primarySteps.reduce((sum, step) => sum + step.lab_tasks.length, 0);
   const totalChecks = primarySteps.reduce(
     (sum, step) => sum + step.lab_tasks.reduce((taskSum, task) => taskSum + task.command_checks.length, 0),
     0,
   );
+
+  useEffect(() => {
+    setSelectedLabTaskId('');
+    setCommandResults({});
+    setCommandResultsError('');
+  }, [selectedStep?.id]);
+
+  useEffect(() => {
+    if (!selectedLabTask?.id || !learnerId) {
+      setCommandResults({});
+      return undefined;
+    }
+    let cancelled = false;
+    const refresh = (): void => {
+      void loadLearningCommandResults(selectedLabTask.id, learnerId)
+        .then((payload) => {
+          if (cancelled) {
+            return;
+          }
+          setCommandResults(Object.fromEntries(payload.items.map((item) => [item.command_check.id, item])));
+          setCommandResultsError(payload.unavailable_reason || '');
+        })
+        .catch((caught) => {
+          if (!cancelled) {
+            setCommandResultsError(caught instanceof Error ? caught.message : 'Failed to load command check results');
+          }
+        });
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [learnerId, selectedLabTask?.id]);
 
   return (
     <div className="course-page">
@@ -115,18 +179,32 @@ export default function CourseTimelinePage() {
               </div>
               <div className="course-learning-lab-list">
                 {selectedStep.lab_tasks.length > 0 ? selectedStep.lab_tasks.map((task) => (
-                  <article key={task.id} className="course-learning-lab-card">
+                  <article
+                    key={task.id}
+                    className={`course-learning-lab-card ${selectedLabTask?.id === task.id ? 'active' : ''}`}
+                  >
                     <span>Lab {task.ordinal}</span>
                     <strong>{task.title}</strong>
                     <p>{task.goal_markdown || 'No lab goal provided yet.'}</p>
+                    <button
+                      className="course-learning-lab-select"
+                      type="button"
+                      onClick={() => setSelectedLabTaskId(task.id)}
+                    >
+                      Use in terminal
+                    </button>
                     {task.command_checks.length > 0 ? (
                       <div className="course-learning-command-list">
-                        {task.command_checks.map((check) => (
-                          <div key={check.id} className="course-learning-command-row">
+                        {task.command_checks.map((check) => {
+                          const result = commandResults[check.id]?.result;
+                          const status = result?.status || 'waiting';
+                          return (
+                          <div key={check.id} className={`course-learning-command-row status-${status}`}>
                             <code>{check.expected_command || check.command_pattern || check.check_key}</code>
-                            <span>{check.validation_kind}</span>
+                            <span>{status}</span>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <span className="course-muted">No command checks yet</span>
@@ -138,6 +216,25 @@ export default function CourseTimelinePage() {
                   </div>
                 )}
               </div>
+            </div>
+          ) : null}
+          {selectedStep && selectedLabTask ? (
+            <div className="course-learning-terminal-panel">
+              <div className="course-learning-terminal-head">
+                <div>
+                  <span className="course-route-kicker">Terminal Session</span>
+                  <strong>{selectedLabTask.title}</strong>
+                </div>
+                {commandResultsError ? <span className="course-learning-terminal-warning">{commandResultsError}</span> : null}
+              </div>
+              <TerminalSessionPanel
+                learningContext={{
+                  learnerId,
+                  learningPathId: primaryLearningPath?.id,
+                  learningStepId: selectedStep.id,
+                  labTaskId: selectedLabTask.id,
+                }}
+              />
             </div>
           ) : null}
         </section>

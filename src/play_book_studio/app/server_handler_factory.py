@@ -31,7 +31,10 @@ from play_book_studio.app.chat_history_api import (
     handle_chat_history_messages as _handle_chat_history_messages_request,
     handle_chat_history_sessions as _handle_chat_history_sessions_request,
 )
-from play_book_studio.app.learning_api import handle_learning_paths as _handle_learning_paths_request
+from play_book_studio.app.learning_api import (
+    handle_learning_command_results as _handle_learning_command_results_request,
+    handle_learning_paths as _handle_learning_paths_request,
+)
 from play_book_studio.app.server_routes import (
     resolve_viewer_html as _resolve_viewer_html,
     handle_data_control_room as _handle_data_control_room_request,
@@ -182,6 +185,9 @@ def _build_handler(
                 return
             if request_path == "/api/learning-paths":
                 _handle_learning_paths_request(self, parsed_request.query, root_dir=root_dir)
+                return
+            if request_path == "/api/learning-command-results":
+                _handle_learning_command_results_request(self, parsed_request.query, root_dir=root_dir)
                 return
             if request_path == "/api/buyer-packet":
                 self._handle_buyer_packet(parsed_request.query)

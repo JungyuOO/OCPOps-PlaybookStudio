@@ -39,3 +39,39 @@ def test_ops_learning_guides_to_seed_converts_guides_to_ordered_steps():
     assert seed.steps[0].concept_slugs == ("project", "namespace")
     assert "Check the active project." in seed.steps[0].lesson_markdown
     assert seed.steps[0].metadata["source_anchor_chunk_ids"] == ["chunk-1"]
+    assert len(seed.steps[0].lab_tasks) == 1
+    assert seed.steps[0].lab_tasks[0].starter_context["suggested_command"] == "oc get co"
+    assert seed.steps[0].lab_tasks[0].command_checks[0].expected_command == "oc get co"
+
+
+def test_ops_learning_guides_to_seed_preserves_explicit_lab_tasks():
+    payload = {
+        "guides": [
+            {
+                "guide_id": "project_start",
+                "steps": [
+                    {
+                        "step_id": "project-basics",
+                        "card_text": "Project basics",
+                        "lab_tasks": [
+                            {
+                                "task_key": "check-project",
+                                "title": "Check project",
+                                "command_checks": [
+                                    {
+                                        "check_key": "oc-project",
+                                        "expected_command": "oc project",
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                ],
+            },
+        ],
+    }
+
+    seed = ops_learning_guides_to_seed(payload)
+
+    assert seed.steps[0].lab_tasks[0].task_key == "check-project"
+    assert seed.steps[0].lab_tasks[0].command_checks[0].expected_command == "oc project"

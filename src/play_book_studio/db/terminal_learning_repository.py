@@ -297,6 +297,101 @@ def load_command_checks_for_lab_task(connection, *, lab_task_id: str) -> tuple[C
         )
 
 
+def list_command_check_results(
+    connection,
+    *,
+    lab_task_id: str,
+    learner_id: str = "",
+) -> list[dict[str, Any]]:
+    if not lab_task_id:
+        return []
+    learner_filter = "AND ccr.learner_id = %s" if learner_id else ""
+    params: list[Any] = [lab_task_id]
+    if learner_id:
+        params.append(learner_id)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            WITH latest_results AS (
+                SELECT DISTINCT ON (ccr.command_check_id)
+                    ccr.command_check_id,
+                    ccr.id,
+                    ccr.terminal_session_id,
+                    ccr.terminal_event_id,
+                    ccr.learning_step_attempt_id,
+                    ccr.learner_id,
+                    ccr.submitted_command,
+                    ccr.status,
+                    ccr.matched,
+                    ccr.validation_result,
+                    ccr.updated_at
+                FROM command_check_results ccr
+                WHERE ccr.lab_task_id = %s::uuid
+                  {learner_filter}
+                ORDER BY ccr.command_check_id, ccr.updated_at DESC
+            )
+            SELECT
+                cc.id::text,
+                cc.lab_task_id::text,
+                cc.check_key,
+                cc.ordinal,
+                cc.command_pattern,
+                cc.expected_command,
+                cc.validation_kind,
+                cc.validation_payload,
+                cc.success_message,
+                cc.failure_hint,
+                lr.id::text,
+                lr.terminal_session_id::text,
+                lr.terminal_event_id::text,
+                lr.learning_step_attempt_id::text,
+                lr.learner_id,
+                lr.submitted_command,
+                lr.status,
+                lr.matched,
+                lr.validation_result,
+                lr.updated_at
+            FROM command_checks cc
+            LEFT JOIN latest_results lr ON lr.command_check_id = cc.id
+            WHERE cc.lab_task_id = %s::uuid
+            ORDER BY cc.ordinal ASC
+            """,
+            (*params, lab_task_id),
+        )
+        rows = cursor.fetchall()
+    return [
+        {
+            "command_check": {
+                "id": str(row[0]),
+                "lab_task_id": str(row[1]),
+                "check_key": str(row[2] or ""),
+                "ordinal": int(row[3] or 0),
+                "command_pattern": str(row[4] or ""),
+                "expected_command": str(row[5] or ""),
+                "validation_kind": str(row[6] or ""),
+                "validation_payload": _json_value(row[7], {}),
+                "success_message": str(row[8] or ""),
+                "failure_hint": str(row[9] or ""),
+            },
+            "result": None
+            if row[10] is None
+            else {
+                "id": str(row[10]),
+                "terminal_session_id": str(row[11] or ""),
+                "terminal_event_id": str(row[12] or ""),
+                "learning_step_attempt_id": str(row[13] or ""),
+                "learner_id": str(row[14] or ""),
+                "submitted_command": str(row[15] or ""),
+                "status": str(row[16] or ""),
+                "matched": bool(row[17]),
+                "validation_result": _json_value(row[18], {}),
+                "updated_at": row[19].isoformat() if row[19] is not None else "",
+            },
+        }
+        for row in rows
+    ]
+
+
 def upsert_command_check_result(
     connection,
     *,
@@ -355,6 +450,7 @@ __all__ = [
     "create_terminal_session",
     "evaluate_command_check",
     "finish_terminal_session",
+    "list_command_check_results",
     "load_command_checks_for_lab_task",
     "record_terminal_event",
     "update_terminal_session_context",
