@@ -105,3 +105,31 @@ def test_import_corpus_documents_persists_shared_scope(monkeypatch):
     assert kwargs["visibility"] == "global_shared"
     assert kwargs["source_scope"] == "official_docs"
     assert kwargs["storage_key"] == "corpus/official_docs/official.md"
+
+
+def test_import_corpus_documents_skips_exact_duplicate_sources(monkeypatch):
+    source_dir = _case_dir("duplicates")
+    (source_dir / "first.md").write_text("# Same\n\nBody.", encoding="utf-8")
+    (source_dir / "second.md").write_text("# Same\n\nBody.", encoding="utf-8")
+    calls = []
+
+    def fake_persist(connection, parsed, chunks, **kwargs):
+        calls.append((connection, parsed, chunks, kwargs))
+        return Stored()
+
+    monkeypatch.setattr(corpus_import, "persist_parsed_upload_document", fake_persist)
+
+    result = import_corpus_documents(
+        FakeConnection(),
+        source_dir=source_dir,
+        corpus_kind="study_docs",
+        chunk_max_chars=200,
+        chunk_overlap_blocks=0,
+    )
+
+    assert result["imported_count"] == 1
+    assert result["skipped_count"] == 1
+    assert result["failed_count"] == 0
+    assert result["skipped"][0]["reason"] == "duplicate_sha256"
+    assert result["skipped"][0]["duplicate_of"] == "first.md"
+    assert len(calls) == 1

@@ -259,7 +259,7 @@ def parse_upload_document(
     else:
         raise ValueError(f"unsupported document format for ingestion: {path.name}")
 
-    blocks = tuple(_markdown_to_blocks(markdown, assets=tuple(assets)))
+    blocks = tuple(_markdown_to_blocks(markdown, assets=tuple(assets), document_id=document_id))
     if not blocks:
         warnings.append("no_blocks_detected")
 
@@ -460,7 +460,12 @@ def _append_asset_descriptions(markdown: str, assets: list[DocumentAsset]) -> st
     return result
 
 
-def _markdown_to_blocks(markdown: str, *, assets: tuple[DocumentAsset, ...]) -> list[DocumentBlock]:
+def _markdown_to_blocks(
+    markdown: str,
+    *,
+    assets: tuple[DocumentAsset, ...],
+    document_id: str,
+) -> list[DocumentBlock]:
     blocks: list[DocumentBlock] = []
     current_lines: list[str] = []
     section_path: list[str] = []
@@ -487,7 +492,7 @@ def _markdown_to_blocks(markdown: str, *, assets: tuple[DocumentAsset, ...]) -> 
         )
         blocks.append(
             DocumentBlock(
-                block_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{ordinal}:{markdown_text}")),
+                block_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{document_id}:{ordinal}:{markdown_text}")),
                 ordinal=ordinal,
                 block_type=block_type,
                 markdown=markdown_text,
@@ -622,6 +627,7 @@ def _convert_docx_to_markdown(path: Path) -> ConvertedMarkdown:
 def _convert_pptx_to_markdown(path: Path) -> ConvertedMarkdown:
     lines = [f"# {path.stem}"]
     assets: list[DocumentAsset] = []
+    source_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
     with zipfile.ZipFile(path) as archive:
         names = set(archive.namelist())
         slide_names = sorted(
@@ -646,7 +652,13 @@ def _convert_pptx_to_markdown(path: Path) -> ConvertedMarkdown:
                 if media_name not in names:
                     continue
                 content = archive.read(media_name)
-                asset = _blob_asset(path, media_name=media_name, content=content, page_number=slide_index)
+                asset = _blob_asset(
+                    path,
+                    media_name=media_name,
+                    content=content,
+                    source_sha256=source_sha256,
+                    page_number=slide_index,
+                )
                 assets.append(asset)
                 lines.extend(["", _image_markdown(asset)])
     markdown = "\n".join(lines).strip()
@@ -783,10 +795,17 @@ def _resolve_pptx_relationship_target(slide_name: str, target: str) -> str:
     return "/".join(parts)
 
 
-def _blob_asset(path: Path, *, media_name: str, content: bytes, page_number: int | None = None) -> DocumentAsset:
+def _blob_asset(
+    path: Path,
+    *,
+    media_name: str,
+    content: bytes,
+    source_sha256: str,
+    page_number: int | None = None,
+) -> DocumentAsset:
     sha256 = hashlib.sha256(content).hexdigest()
     filename = Path(media_name).name
-    asset_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{path.name}:{media_name}:{sha256}"))
+    asset_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{path.name}:{source_sha256}:{media_name}:{sha256}:{page_number or 0}"))
     mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     return DocumentAsset(
         asset_id=asset_id,

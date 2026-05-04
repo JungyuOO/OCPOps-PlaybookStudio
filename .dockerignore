@@ -1,5 +1,30 @@
 *
 
+/.pytest-tmp
+/.pytest-tmp/
+/.pytest-tmp/**
+**/.pytest-tmp
+**/.pytest-tmp/
+**/.pytest-tmp/**
+pytest-cache-files-*
+pytest-cache-files-*/
+pytest-cache-files-*/**
+**/pytest-cache-files-*
+**/pytest-cache-files-*/
+**/pytest-cache-files-*/**
+/tmp/pytest-terminal
+/tmp/pytest-terminal/
+/tmp/pytest-terminal/**
+**/pytest-terminal
+**/pytest-terminal/
+**/pytest-terminal/**
+/tmp/pytest-*
+/tmp/pytest-*/
+/tmp/pytest-*/**
+**/pytest-*
+**/pytest-*/
+**/pytest-*/**
+
 /.git/
 /.omx/
 /.venv/
@@ -21,6 +46,9 @@
 
 !src/
 !src/**
+
+!db/
+!db/**
 
 !data/
 !data/course_pbs/

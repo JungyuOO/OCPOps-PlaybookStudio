@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -119,11 +120,24 @@ def import_corpus_documents(
     profile = corpus_import_profile(corpus_kind)
     files = iter_corpus_source_files(source_dir)
     imported: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
     failed: list[dict[str, str]] = []
+    seen_sha256: dict[str, str] = {}
 
     for path in files:
         relative_path = path.relative_to(source_dir).as_posix()
         try:
+            source_sha256 = _sha256_file(path)
+            if source_sha256 in seen_sha256:
+                skipped.append(
+                    {
+                        "relative_path": relative_path,
+                        "reason": "duplicate_sha256",
+                        "duplicate_of": seen_sha256[source_sha256],
+                    }
+                )
+                continue
+            seen_sha256[source_sha256] = relative_path
             parsed = parse_upload_document(path)
             chunks = build_document_chunks(
                 parsed,
@@ -177,11 +191,21 @@ def import_corpus_documents(
         "source_scope": profile.source_scope,
         "file_count": len(files),
         "imported_count": len(imported),
+        "skipped_count": len(skipped),
         "failed_count": len(failed),
         "imported": imported,
+        "skipped": skipped,
         "failed": failed,
         "index": index_result,
     }
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 __all__ = [

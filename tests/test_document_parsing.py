@@ -86,6 +86,20 @@ def test_parse_markdown_document_builds_structured_blocks():
     assert parsed.blocks[-1].text.startswith("| item")
 
 
+def test_block_ids_are_scoped_by_document_identity():
+    case_dir = _case_dir("block_identity")
+    first = case_dir / "first.md"
+    second = case_dir / "second.md"
+    first.write_text("# Shared\n\nSame paragraph.", encoding="utf-8")
+    second.write_text("# Shared\n\nSame paragraph.", encoding="utf-8")
+
+    first_parsed = parse_upload_document(first)
+    second_parsed = parse_upload_document(second)
+
+    assert first_parsed.blocks[0].markdown == second_parsed.blocks[0].markdown
+    assert first_parsed.blocks[0].block_id != second_parsed.blocks[0].block_id
+
+
 def test_markdown_blocks_build_section_aware_chunks():
     source = _case_dir("document_chunks") / "runbook.md"
     source.write_text(
@@ -251,6 +265,71 @@ def test_pptx_default_pipeline_extracts_slide_text_and_image_assets():
     assert parsed.assets[0].description == "Visual asset: image1.png"
     assert any(block.block_type == "image" for block in parsed.blocks)
     assert any(parsed.assets[0].asset_id in chunk.asset_ids for chunk in chunks)
+
+
+def test_pptx_asset_ids_are_scoped_by_source_document():
+    case_dir = _case_dir("pptx_asset_identity")
+    slide_xml_template = """<?xml version="1.0" encoding="UTF-8"?>
+    <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+           xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+           xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+      <p:cSld><p:spTree>
+        <p:sp><p:txBody><a:p><a:r><a:t>{title}</a:t></a:r></a:p></p:txBody></p:sp>
+        <p:pic><p:blipFill><a:blip r:embed="rIdImage1"/></p:blipFill></p:pic>
+      </p:spTree></p:cSld>
+    </p:sld>
+    """
+    paths = [case_dir / "first.pptx", case_dir / "second.pptx"]
+    for path, title in zip(paths, ["First", "Second"], strict=True):
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("[Content_Types].xml", "<Types />")
+            archive.writestr("ppt/presentation.xml", "<p:presentation />")
+            archive.writestr("ppt/slides/slide1.xml", slide_xml_template.format(title=title))
+            archive.writestr(
+                "ppt/slides/_rels/slide1.xml.rels",
+                '<Relationships><Relationship Id="rIdImage1" Target="../media/image1.png"/></Relationships>',
+            )
+            archive.writestr("ppt/media/image1.png", b"\x89PNG\r\n\x1a\nsame-image")
+
+    first = parse_upload_document(paths[0])
+    second = parse_upload_document(paths[1])
+
+    assert first.assets[0].sha256 == second.assets[0].sha256
+    assert first.assets[0].asset_id != second.assets[0].asset_id
+
+
+def test_pptx_reused_media_is_scoped_by_slide():
+    pptx_path = _case_dir("pptx_reused_media") / "deck.pptx"
+    slide_xml_template = """<?xml version="1.0" encoding="UTF-8"?>
+    <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+           xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+           xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+      <p:cSld><p:spTree>
+        <p:sp><p:txBody><a:p><a:r><a:t>{title}</a:t></a:r></a:p></p:txBody></p:sp>
+        <p:pic><p:blipFill><a:blip r:embed="rIdImage1"/></p:blipFill></p:pic>
+      </p:spTree></p:cSld>
+    </p:sld>
+    """
+    with zipfile.ZipFile(pptx_path, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types />")
+        archive.writestr("ppt/presentation.xml", "<p:presentation />")
+        archive.writestr("ppt/slides/slide1.xml", slide_xml_template.format(title="First"))
+        archive.writestr("ppt/slides/slide2.xml", slide_xml_template.format(title="Second"))
+        archive.writestr(
+            "ppt/slides/_rels/slide1.xml.rels",
+            '<Relationships><Relationship Id="rIdImage1" Target="../media/image1.png"/></Relationships>',
+        )
+        archive.writestr(
+            "ppt/slides/_rels/slide2.xml.rels",
+            '<Relationships><Relationship Id="rIdImage1" Target="../media/image1.png"/></Relationships>',
+        )
+        archive.writestr("ppt/media/image1.png", b"\x89PNG\r\n\x1a\nsame-image")
+
+    parsed = parse_upload_document(pptx_path)
+
+    assert [asset.page_number for asset in parsed.assets] == [1, 2]
+    assert parsed.assets[0].sha256 == parsed.assets[1].sha256
+    assert parsed.assets[0].asset_id != parsed.assets[1].asset_id
 
 
 def test_pptx_pipeline_scopes_images_tables_and_chunks_to_slides():
