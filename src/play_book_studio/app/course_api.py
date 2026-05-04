@@ -504,6 +504,20 @@ def _load_ops_learning_guides(root_dir: Path) -> dict[str, Any]:
 
 
 def _load_ops_learning_chunks(root_dir: Path) -> list[dict[str, Any]]:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if database_url:
+        try:
+            import psycopg
+
+            from play_book_studio.db.learning_repository import load_ops_learning_chunks_payload
+
+            with psycopg.connect(database_url) as connection:
+                rows = load_ops_learning_chunks_payload(connection, workspace_slug="default")
+            if rows:
+                return rows
+        except Exception:  # noqa: BLE001
+            pass
     path = _ops_learning_chunks_path(root_dir)
     if not path.exists():
         return []

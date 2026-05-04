@@ -285,6 +285,130 @@ def load_ops_learning_guides_payload(
     }
 
 
+def load_ops_learning_chunks_payload(
+    connection,
+    *,
+    workspace_slug: str = "default",
+    path_slug: str = "",
+) -> list[dict[str, Any]]:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                lp.slug,
+                lp.title,
+                lp.audience,
+                lp.metadata,
+                ls.step_key,
+                ls.ordinal,
+                ls.title,
+                ls.objective,
+                ls.lesson_markdown,
+                ls.metadata
+            FROM learning_paths lp
+            LEFT JOIN workspaces w ON w.id = lp.workspace_id
+            JOIN learning_steps ls ON ls.learning_path_id = lp.id
+            WHERE (w.slug = %s OR lp.workspace_id IS NULL)
+              AND (%s = '' OR lp.slug = %s)
+            ORDER BY lp.updated_at DESC, lp.created_at DESC, ls.ordinal ASC
+            """,
+            (workspace_slug, path_slug, path_slug),
+        )
+        rows = cursor.fetchall()
+
+    chunks: list[dict[str, Any]] = []
+    for row in rows:
+        path_slug_value = str(row[0] or "")
+        path_title = str(row[1] or "")
+        audience = str(row[2] or "beginner_operator")
+        path_metadata = _json_value(row[3], {})
+        step_key = str(row[4] or "")
+        step_title = str(row[6] or step_key)
+        objective = str(row[7] or "")
+        lesson_markdown = str(row[8] or "")
+        metadata = _json_value(row[9], {})
+        guide_id = str(metadata.get("guide_id") or path_slug_value or "guided_learning").strip()
+        stage_id = str(metadata.get("stage_id") or "").strip()
+        source_chunk_ids = (
+            [
+                str(chunk_id).strip()
+                for chunk_id in metadata.get("source_anchor_chunk_ids", [])
+                if str(chunk_id).strip()
+            ]
+            if isinstance(metadata.get("source_anchor_chunk_ids"), list)
+            else []
+        )
+        query_variants = [
+            str(item).strip()
+            for item in (
+                metadata.get("query_variants")
+                if isinstance(metadata.get("query_variants"), list)
+                else [metadata.get("user_query"), step_title, objective]
+            )
+            if str(item).strip()
+        ]
+        outline = _outline_from_lesson_markdown(lesson_markdown)
+        embedding_parts = [
+            step_title,
+            objective,
+            lesson_markdown,
+            "\n".join(query_variants),
+        ]
+        chunks.append(
+            {
+                "canonical_model": "ops_learning_chunk_v1",
+                "chunk_type": "ops_learning_step",
+                "learning_chunk_id": f"{guide_id}::{step_key}",
+                "guide_id": guide_id,
+                "step_id": step_key,
+                "stage_id": stage_id,
+                "audience": audience,
+                "title": step_title,
+                "learning_goal": objective,
+                "beginner_explanation": lesson_markdown,
+                "operational_sequence": outline,
+                "what_to_look_for": metadata.get("expected_terms")
+                if isinstance(metadata.get("expected_terms"), list)
+                else [],
+                "normal_state": metadata.get("normal_state")
+                if isinstance(metadata.get("normal_state"), list)
+                else [],
+                "failure_state": metadata.get("failure_state")
+                if isinstance(metadata.get("failure_state"), list)
+                else [],
+                "visual_evidence_roles": metadata.get("visual_evidence_roles")
+                if isinstance(metadata.get("visual_evidence_roles"), list)
+                else [],
+                "source_chunk_ids": source_chunk_ids,
+                "source_titles": metadata.get("source_titles") if isinstance(metadata.get("source_titles"), list) else [],
+                "source_terms": metadata.get("source_terms") if isinstance(metadata.get("source_terms"), list) else [],
+                "source_summary": str(metadata.get("source_summary") or ""),
+                "hidden_native_ids": metadata.get("hidden_native_ids")
+                if isinstance(metadata.get("hidden_native_ids"), list)
+                else [],
+                "official_ref_ids": metadata.get("official_ref_ids")
+                if isinstance(metadata.get("official_ref_ids"), list)
+                else [],
+                "official_mapping_summary": str(metadata.get("official_mapping_summary") or ""),
+                "next_step_ids": metadata.get("next_step_ids") if isinstance(metadata.get("next_step_ids"), list) else [],
+                "next_guide": metadata.get("next_guide") if isinstance(metadata.get("next_guide"), dict) else None,
+                "query_variants": list(dict.fromkeys(query_variants)),
+                "image_evidence_texts": metadata.get("image_evidence_texts")
+                if isinstance(metadata.get("image_evidence_texts"), list)
+                else [],
+                "quality": metadata.get("quality")
+                if isinstance(metadata.get("quality"), dict)
+                else {"status": "draft", "needs_review": []},
+                "embedding_text": "\n".join(part for part in embedding_parts if str(part).strip()),
+                "course_slug": path_slug_value,
+                "course_title": path_title,
+                "source": "postgres.learning_steps",
+                "path_metadata": path_metadata if isinstance(path_metadata, dict) else {},
+            }
+        )
+    return chunks
+
+
 def load_learning_path_catalog(
     connection,
     *,
@@ -702,6 +826,7 @@ __all__ = [
     "build_learning_path_rows",
     "list_learning_path_summaries",
     "load_learning_path_catalog",
+    "load_ops_learning_chunks_payload",
     "load_ops_learning_guides_payload",
     "persist_learning_path",
 ]
