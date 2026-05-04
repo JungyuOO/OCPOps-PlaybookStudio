@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from play_book_studio.db.chat_repository import persist_chat_turn
+from datetime import datetime, timezone
+
+from play_book_studio.db.chat_repository import list_chat_messages, list_chat_sessions, persist_chat_turn
 
 
 class FakeTransaction:
@@ -15,6 +17,7 @@ class FakeCursor:
     def __init__(self):
         self.calls = []
         self.return_ids = [f"00000000-0000-0000-0000-{index:012d}" for index in range(1, 20)]
+        self.fetchall_rows = []
 
     def __enter__(self):
         return self
@@ -27,6 +30,9 @@ class FakeCursor:
 
     def fetchone(self):
         return (self.return_ids.pop(0),)
+
+    def fetchall(self):
+        return list(self.fetchall_rows)
 
 
 class FakeConnection:
@@ -74,3 +80,63 @@ def test_persist_chat_turn_upserts_session_and_messages():
     assert assistant_params[1] == "assistant"
     assert assistant_params[3] == '["chunk-a", "chunk-b"]'
     assert assistant_params[4] == '["asset-a"]'
+
+
+def test_list_chat_sessions_filters_to_owner_scope():
+    connection = FakeConnection()
+    connection.cursor_obj.fetchall_rows = [
+        (
+            "chat-session-id",
+            "client-session",
+            "How do I check pods?",
+            "active",
+            "11111111-1111-1111-1111-111111111111",
+            "owner-hash",
+            "",
+            {"mode": "chat"},
+            2,
+            datetime(2026, 5, 4, tzinfo=timezone.utc),
+            datetime(2026, 5, 4, 1, tzinfo=timezone.utc),
+        )
+    ]
+
+    sessions = list_chat_sessions(
+        connection,
+        anonymous_user_id="owner-hash",
+        limit=10,
+    )
+
+    sql_text = "\n".join(sql for sql, _params in connection.cursor_obj.calls)
+    assert "FROM chat_sessions cs" in sql_text
+    assert "cs.anonymous_user_id = %s" in sql_text
+    assert connection.cursor_obj.calls[0][1] == ("public", "default", "owner-hash", "", 10)
+    assert sessions[0]["client_session_id"] == "client-session"
+    assert sessions[0]["message_count"] == 2
+
+
+def test_list_chat_messages_filters_to_owner_and_client_session():
+    connection = FakeConnection()
+    connection.cursor_obj.fetchall_rows = [
+        (
+            "message-id",
+            "assistant",
+            "Use oc get pods. [1]",
+            ["chunk-a"],
+            ["asset-a"],
+            {"response_kind": "rag"},
+            datetime(2026, 5, 4, tzinfo=timezone.utc),
+        )
+    ]
+
+    messages = list_chat_messages(
+        connection,
+        anonymous_user_id="owner-hash",
+        client_session_id="client-session",
+    )
+
+    sql_text = "\n".join(sql for sql, _params in connection.cursor_obj.calls)
+    assert "FROM chat_messages cm" in sql_text
+    assert "cs.client_session_id = %s" in sql_text
+    assert connection.cursor_obj.calls[0][1] == ("public", "default", "owner-hash", "", "client-session", 200)
+    assert messages[0]["message_id"] == "message-id"
+    assert messages[0]["cited_chunk_ids"] == ["chunk-a"]

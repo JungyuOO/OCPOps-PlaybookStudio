@@ -144,6 +144,115 @@ def _insert_chat_message(
     return _fetch_id(cursor)
 
 
+def list_chat_sessions(
+    connection,
+    *,
+    tenant_slug: str = "public",
+    workspace_slug: str = "default",
+    anonymous_user_id: str = "",
+    user_id: str = "",
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    effective_limit = max(1, min(int(limit), 200))
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                cs.id::text,
+                cs.client_session_id,
+                cs.title,
+                cs.status,
+                cs.active_repository_id::text,
+                cs.anonymous_user_id,
+                cs.user_id,
+                cs.metadata,
+                count(cm.id)::int AS message_count,
+                cs.created_at,
+                cs.updated_at
+            FROM chat_sessions cs
+            JOIN tenants t ON t.id = cs.tenant_id
+            JOIN workspaces w ON w.id = cs.workspace_id
+            LEFT JOIN chat_messages cm ON cm.chat_session_id = cs.id
+            WHERE t.slug = %s
+              AND w.slug = %s
+              AND cs.anonymous_user_id = %s
+              AND cs.user_id = %s
+            GROUP BY cs.id
+            ORDER BY cs.updated_at DESC
+            LIMIT %s
+            """,
+            (tenant_slug, workspace_slug, anonymous_user_id, user_id, effective_limit),
+        )
+        rows = cursor.fetchall()
+    return [
+        {
+            "chat_session_id": str(row[0]),
+            "client_session_id": str(row[1] or ""),
+            "title": str(row[2] or ""),
+            "status": str(row[3] or ""),
+            "active_repository_id": str(row[4] or ""),
+            "anonymous_user_id": str(row[5] or ""),
+            "user_id": str(row[6] or ""),
+            "metadata": dict(row[7] or {}),
+            "message_count": int(row[8] or 0),
+            "created_at": row[9].isoformat() if row[9] is not None else "",
+            "updated_at": row[10].isoformat() if row[10] is not None else "",
+        }
+        for row in rows
+    ]
+
+
+def list_chat_messages(
+    connection,
+    *,
+    tenant_slug: str = "public",
+    workspace_slug: str = "default",
+    anonymous_user_id: str = "",
+    user_id: str = "",
+    client_session_id: str = "",
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    effective_limit = max(1, min(int(limit), 500))
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                cm.id::text,
+                cm.role,
+                cm.content,
+                cm.cited_chunk_ids,
+                cm.cited_asset_ids,
+                cm.metadata,
+                cm.created_at
+            FROM chat_messages cm
+            JOIN chat_sessions cs ON cs.id = cm.chat_session_id
+            JOIN tenants t ON t.id = cs.tenant_id
+            JOIN workspaces w ON w.id = cs.workspace_id
+            WHERE t.slug = %s
+              AND w.slug = %s
+              AND cs.anonymous_user_id = %s
+              AND cs.user_id = %s
+              AND cs.client_session_id = %s
+            ORDER BY cm.created_at ASC, cm.id ASC
+            LIMIT %s
+            """,
+            (tenant_slug, workspace_slug, anonymous_user_id, user_id, client_session_id, effective_limit),
+        )
+        rows = cursor.fetchall()
+    return [
+        {
+            "message_id": str(row[0]),
+            "role": str(row[1] or ""),
+            "content": str(row[2] or ""),
+            "cited_chunk_ids": list(row[3] or []),
+            "cited_asset_ids": list(row[4] or []),
+            "metadata": dict(row[5] or {}),
+            "created_at": row[6].isoformat() if row[6] is not None else "",
+        }
+        for row in rows
+    ]
+
+
 def persist_chat_turn(
     connection,
     *,
@@ -234,5 +343,7 @@ def persist_chat_turn(
 
 __all__ = [
     "StoredChatTurn",
+    "list_chat_messages",
+    "list_chat_sessions",
     "persist_chat_turn",
 ]

@@ -26,6 +26,10 @@ from play_book_studio.app.ops_console_api import (
 )
 from play_book_studio.app.upload_api import handle_upload_ingest as _handle_upload_ingest_request
 from play_book_studio.app.repository_api import handle_document_repositories as _handle_document_repositories_request
+from play_book_studio.app.chat_history_api import (
+    handle_chat_history_messages as _handle_chat_history_messages_request,
+    handle_chat_history_sessions as _handle_chat_history_sessions_request,
+)
 from play_book_studio.app.learning_api import handle_learning_paths as _handle_learning_paths_request
 from play_book_studio.app.server_routes import (
     resolve_viewer_html as _resolve_viewer_html,
@@ -189,6 +193,12 @@ def _build_handler(
                 return
             if request_path == "/api/sessions/load":
                 self._handle_session_load(parsed_request.query)
+                return
+            if request_path == "/api/chat-history/sessions":
+                self._handle_chat_history_sessions(parsed_request.query)
+                return
+            if request_path == "/api/chat-history/messages":
+                self._handle_chat_history_messages(parsed_request.query)
                 return
             if request_path == "/api/debug/session":
                 self._handle_debug_session(parsed_request.query)
@@ -442,6 +452,20 @@ def _build_handler(
         def _handle_session_load(self, query: str) -> None: _handle_session_load_request(self, query, store=self._session_store())
         def _handle_session_delete(self, payload: dict[str, Any]) -> None: _handle_session_delete_request(self, payload, store=self._session_store())
         def _handle_sessions_delete_all(self, payload: dict[str, Any]) -> None: _handle_sessions_delete_all_request(self, payload, store=self._session_store())
+        def _handle_chat_history_sessions(self, query: str) -> None:
+            _handle_chat_history_sessions_request(
+                self,
+                query,
+                root_dir=root_dir,
+                owner_user_id=self._session_owner().owner_hash,
+            )
+        def _handle_chat_history_messages(self, query: str) -> None:
+            _handle_chat_history_messages_request(
+                self,
+                query,
+                root_dir=root_dir,
+                owner_user_id=self._session_owner().owner_hash,
+            )
 
         def _handle_debug_session(self, query: str) -> None:
             _handle_debug_session_request(
