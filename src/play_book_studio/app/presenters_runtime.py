@@ -7,6 +7,7 @@ from typing import Any
 from play_book_studio.answering.answerer import ChatAnswerer
 from play_book_studio.config.settings import Settings, load_settings
 from play_book_studio.db.corpus_status import build_corpus_status
+from play_book_studio.db.course_runtime_status import build_course_runtime_status
 from play_book_studio.ingestion.graph_sidecar import graph_sidecar_compact_artifact_status
 
 
@@ -121,6 +122,9 @@ def _build_health_payload(answerer: ChatAnswerer) -> dict[str, Any]:
             "db_corpus": build_corpus_status(
                 database_url=settings.database_url,
                 collection=settings.qdrant_collection,
+            ),
+            "course_runtime": build_course_runtime_status(
+                database_url=settings.database_url,
             ),
         },
     }

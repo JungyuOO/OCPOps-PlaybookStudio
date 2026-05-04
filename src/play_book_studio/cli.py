@@ -193,6 +193,14 @@ def build_parser() -> argparse.ArgumentParser:
     db_corpus_status_parser.add_argument("--database-url", default="")
     db_corpus_status_parser.add_argument("--collection", default="")
 
+    course_runtime_status_parser = subparsers.add_parser(
+        "course-runtime-status",
+        help="Report PostgreSQL course runtime readiness for chunks, assets, and manifest",
+    )
+    course_runtime_status_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    course_runtime_status_parser.add_argument("--database-url", default="")
+    course_runtime_status_parser.add_argument("--course-slug", default="project-playbook")
+
     official_gold_import_parser = subparsers.add_parser(
         "official-gold-import",
         help="Import existing official gold retrieval chunks into PostgreSQL document repositories",
@@ -791,6 +799,20 @@ def _run_db_corpus_status(args: argparse.Namespace) -> int:
     return 0 if bool(payload.get("ready")) else 1
 
 
+def _run_course_runtime_status(args: argparse.Namespace) -> int:
+    from play_book_studio.db.course_runtime_status import build_course_runtime_status
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    payload = build_course_runtime_status(
+        database_url=database_url,
+        course_slug=args.course_slug,
+    )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if bool(payload.get("ready")) else 1
+
+
 def _run_official_gold_import(args: argparse.Namespace) -> int:
     from play_book_studio.ingestion.official_gold_import import (
         build_official_gold_import_plan,
@@ -1072,6 +1094,8 @@ def main() -> int:
         return _run_db_qdrant_backfill(args)
     if args.command == "db-corpus-status":
         return _run_db_corpus_status(args)
+    if args.command == "course-runtime-status":
+        return _run_course_runtime_status(args)
     if args.command == "official-gold-import":
         return _run_official_gold_import(args)
     if args.command == "learning-seed-import":
