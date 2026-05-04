@@ -51,6 +51,10 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+      course-runtime-seed:
+        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -68,6 +72,42 @@ services:
       retries: 8
       start_period: 90s
     restart: unless-stopped
+
+  db-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "play_book_studio.cli", "db-migrate", "--root-dir", "/app"]
+    restart: "no"
+
+  course-runtime-seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./data:/app/data:ro
+    command: ["python", "-m", "play_book_studio.cli", "course-chunk-import", "--root-dir", "/app", "--course-dir", "/app/data/course_pbs"]
+    restart: "no"
 
   qdrant-seed:
     profiles:
