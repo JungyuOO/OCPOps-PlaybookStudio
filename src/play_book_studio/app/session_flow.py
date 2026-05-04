@@ -63,6 +63,12 @@ def context_with_request_overrides(
     requested_user_id = str(payload.get("user_id") or "").strip()
     if requested_user_id:
         context.user_id = requested_user_id
+    requested_owner_user_id = str(payload.get("owner_user_id") or "").strip()
+    if requested_owner_user_id:
+        context.owner_user_id = requested_owner_user_id
+    requested_repository_id = str(payload.get("active_repository_id") or "").strip()
+    if requested_repository_id:
+        context.active_repository_id = requested_repository_id
     requested_version = str(payload.get("ocp_version") or "").strip()
     if requested_version:
         context.ocp_version = requested_version

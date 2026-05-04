@@ -268,9 +268,14 @@ def handle_chat(
     regenerate = bool(payload.get("regenerate", False))
     query = str(payload.get("query") or "").strip()
     active_repository_id = _uuid_or_empty(payload.get("active_repository_id") or payload.get("repository_id"))
+    scoped_payload = dict(payload)
+    if owner_user_id:
+        scoped_payload["owner_user_id"] = owner_user_id
+    if active_repository_id:
+        scoped_payload["active_repository_id"] = active_repository_id
     request_context = context_with_request_overrides(
         session.context,
-        payload=payload,
+        payload=scoped_payload,
         mode=mode,
         default_ocp_version=active_answerer.settings.ocp_version,
     )
@@ -407,9 +412,14 @@ def handle_chat_stream(
     regenerate = bool(payload.get("regenerate", False))
     query = str(payload.get("query") or "").strip()
     active_repository_id = _uuid_or_empty(payload.get("active_repository_id") or payload.get("repository_id"))
+    scoped_payload = dict(payload)
+    if owner_user_id:
+        scoped_payload["owner_user_id"] = owner_user_id
+    if active_repository_id:
+        scoped_payload["active_repository_id"] = active_repository_id
     request_context = context_with_request_overrides(
         session.context,
-        payload=payload,
+        payload=scoped_payload,
         mode=mode,
         default_ocp_version=active_answerer.settings.ocp_version,
     )

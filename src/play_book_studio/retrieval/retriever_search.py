@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 
+from .access_scope import filter_hits_by_session_scope
 from .intake_overlay import (
     filter_customer_pack_hits_by_selection,
     has_active_customer_pack_selection,
@@ -116,6 +117,8 @@ def search_bm25_candidates(
         if overlay_hits
         else core_hits
     )
+    bm25_hits = filter_hits_by_session_scope(bm25_hits, context=context)
+    overlay_hits = filter_hits_by_session_scope(overlay_hits, context=context)
     timings_ms["bm25_search"] = _duration_ms(bm25_started_at)
     _emit_trace_event(
         trace_callback,
@@ -195,12 +198,14 @@ def search_vector_candidates(
                         "hit_count": len(official_hits),
                         "top_score": float(official_hits[0].raw_score) if official_hits else None,
                     }
+            official_hits = filter_hits_by_session_scope(official_hits, context=context)
             private_hits, private_runtime = search_selected_customer_pack_private_vectors(
                 retriever.settings,
                 context=context,
                 query=subquery,
                 top_k=effective_candidate_k,
             )
+            private_hits = filter_hits_by_session_scope(private_hits, context=context)
             merged_hits = (
                 _rrf_merge_named_hit_lists(
                     {
