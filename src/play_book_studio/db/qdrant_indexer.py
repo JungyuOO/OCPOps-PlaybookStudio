@@ -97,41 +97,72 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
     parsed_metadata = _json_dict(row.get("parsed_metadata"))
     source_metadata = _json_dict(row.get("source_metadata"))
     title = str(row.get("document_title") or row.get("filename") or "Uploaded document")
-    section = str(section_path[-1] if section_path else title)
-    chapter = str(section_path[0] if section_path else title)
+    section = str(chunk_metadata.get("section") or (section_path[-1] if section_path else title))
+    chapter = str(chunk_metadata.get("chapter") or (section_path[0] if section_path else title))
     document_source_id = str(row.get("document_source_id") or "")
     chunk_id = str(row.get("chunk_id") or "")
     filename = str(row.get("filename") or "")
     storage_key = str(row.get("storage_key") or "")
+    source_scope = str(row.get("source_scope") or source_metadata.get("source_scope") or "user_upload")
     document_format = str(
         source_metadata.get("document_format")
         or parsed_metadata.get("document_format")
         or ""
     )
+    book_slug = str(chunk_metadata.get("book_slug") or source_metadata.get("book_slug") or "")
+    if not book_slug:
+        book_slug = "uploaded-documents" if source_scope == "user_upload" else source_scope
+    source_lane = str(
+        chunk_metadata.get("source_lane")
+        or source_metadata.get("source_lane")
+        or ("uploads" if source_scope == "user_upload" else source_scope)
+    )
+    source_type = str(
+        chunk_metadata.get("source_type")
+        or source_metadata.get("source_type")
+        or ("uploaded_document" if source_scope == "user_upload" else source_scope)
+    )
+    source_collection = str(
+        chunk_metadata.get("source_collection")
+        or source_metadata.get("source_collection")
+        or ("uploads" if source_scope == "user_upload" else "core")
+    )
+    source_id = str(chunk_metadata.get("source_id") or source_metadata.get("source_id") or document_source_id)
+    source_url = str(chunk_metadata.get("source_url") or source_metadata.get("source_url") or storage_key)
+    viewer_path = str(
+        chunk_metadata.get("viewer_path")
+        or source_metadata.get("viewer_path")
+        or f"/uploads/documents/{document_source_id}/chunks/{chunk_id}"
+    )
     return {
         "chunk_id": chunk_id,
-        "book_slug": "uploaded-documents",
+        "book_slug": book_slug,
         "chapter": chapter,
         "section": section,
-        "section_id": str(row.get("chunk_key") or chunk_id),
-        "anchor": str(row.get("source_anchor") or row.get("chunk_key") or chunk_id),
-        "source_url": storage_key,
-        "viewer_path": f"/uploads/documents/{document_source_id}/chunks/{chunk_id}",
+        "section_id": str(chunk_metadata.get("section_id") or row.get("chunk_key") or chunk_id),
+        "anchor": str(chunk_metadata.get("anchor") or row.get("source_anchor") or row.get("chunk_key") or chunk_id),
+        "source_url": source_url,
+        "viewer_path": viewer_path,
         "text": str(row.get("embedding_text") or row.get("markdown") or ""),
         "markdown": str(row.get("markdown") or ""),
         "filename": filename,
         "document_format": document_format,
         "source_kind": str(row.get("source_kind") or "upload"),
         "chunk_type": str(row.get("chunk_type") or "document"),
-        "source_id": document_source_id,
-        "source_lane": "uploads",
-        "source_type": "uploaded_document",
-        "source_collection": "uploads",
-        "review_status": "unreviewed",
-        "trust_score": 0.8,
-        "parsed_artifact_id": str(row.get("parsed_document_id") or ""),
-        "semantic_role": "uploaded_document",
-        "block_kinds": [str(row.get("chunk_type") or "document")],
+        "source_id": source_id,
+        "source_lane": source_lane,
+        "source_type": source_type,
+        "source_collection": source_collection,
+        "review_status": str(chunk_metadata.get("review_status") or source_metadata.get("review_status") or "unreviewed"),
+        "trust_score": float(chunk_metadata.get("trust_score") or source_metadata.get("trust_score") or 0.8),
+        "parsed_artifact_id": str(
+            chunk_metadata.get("parsed_artifact_id")
+            or source_metadata.get("parsed_artifact_id")
+            or row.get("parsed_document_id")
+            or ""
+        ),
+        "semantic_role": str(chunk_metadata.get("semantic_role") or "uploaded_document"),
+        "block_kinds": _string_list(chunk_metadata.get("block_kinds")) or [str(row.get("chunk_type") or "document")],
         "section_path": section_path,
         "section_number": str(row.get("section_number") or ""),
         "heading_title": str(row.get("heading_title") or ""),
@@ -139,10 +170,15 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "toc_path": toc_path,
         "asset_ids": asset_ids,
         "repository_id": str(row.get("repository_id") or ""),
-        "visibility": str(row.get("visibility") or "workspace_shared"),
+        "visibility": str(row.get("visibility") or source_metadata.get("visibility") or "workspace_shared"),
         "owner_user_id": str(row.get("owner_user_id") or ""),
-        "source_scope": str(row.get("source_scope") or "user_upload"),
+        "source_scope": source_scope,
         "created_by": str(row.get("created_by") or ""),
+        "cli_commands": _string_list(chunk_metadata.get("cli_commands")),
+        "error_strings": _string_list(chunk_metadata.get("error_strings")),
+        "k8s_objects": _string_list(chunk_metadata.get("k8s_objects")),
+        "operator_names": _string_list(chunk_metadata.get("operator_names")),
+        "verification_hints": _string_list(chunk_metadata.get("verification_hints")),
         "chunk_metadata": chunk_metadata,
     }
 
@@ -285,6 +321,10 @@ def _json_dict(value: Any) -> dict[str, Any]:
             return {}
         return loaded if isinstance(loaded, dict) else {}
     return {}
+
+
+def _string_list(value: Any) -> list[str]:
+    return [str(item) for item in _json_list(value) if str(item).strip()]
 
 
 __all__ = [

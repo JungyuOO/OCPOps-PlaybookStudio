@@ -103,6 +103,59 @@ def test_qdrant_payload_from_row_matches_vector_retriever_contract():
     assert payload["asset_ids"] == ["asset-1"]
 
 
+def test_qdrant_payload_from_row_preserves_official_gold_metadata():
+    row = {
+        **_chunk_row(),
+        "chunk_metadata": {
+            "book_slug": "architecture",
+            "chapter": "Architecture overview",
+            "section": "Routes and services",
+            "section_id": "architecture:routes",
+            "anchor": "routes",
+            "source_url": "https://docs.redhat.com/openshift/architecture",
+            "viewer_path": "/docs/ocp/4.20/ko/architecture/index.html#routes",
+            "source_id": "openshift:architecture",
+            "source_lane": "official_ko",
+            "source_type": "official_doc",
+            "source_collection": "core",
+            "review_status": "approved",
+            "trust_score": 1.0,
+            "semantic_role": "concept",
+            "cli_commands": ["oc get routes"],
+            "k8s_objects": ["Route", "Service"],
+        },
+        "source_kind": "official_gold",
+        "source_scope": "official_docs",
+        "visibility": "global_shared",
+        "source_metadata": {
+            "document_format": "official_gold_jsonl",
+            "source_scope": "official_docs",
+            "visibility": "global_shared",
+        },
+    }
+
+    payload = qdrant_payload_from_row(row)
+
+    assert payload["book_slug"] == "architecture"
+    assert payload["chapter"] == "Architecture overview"
+    assert payload["section"] == "Routes and services"
+    assert payload["section_id"] == "architecture:routes"
+    assert payload["anchor"] == "routes"
+    assert payload["source_url"] == "https://docs.redhat.com/openshift/architecture"
+    assert payload["viewer_path"] == "/docs/ocp/4.20/ko/architecture/index.html#routes"
+    assert payload["source_id"] == "openshift:architecture"
+    assert payload["source_lane"] == "official_ko"
+    assert payload["source_type"] == "official_doc"
+    assert payload["source_collection"] == "core"
+    assert payload["review_status"] == "approved"
+    assert payload["trust_score"] == 1.0
+    assert payload["semantic_role"] == "concept"
+    assert payload["cli_commands"] == ["oc get routes"]
+    assert payload["k8s_objects"] == ["Route", "Service"]
+    assert payload["visibility"] == "global_shared"
+    assert payload["source_scope"] == "official_docs"
+
+
 def test_qdrant_candidate_from_row_hashes_stable_payload():
     candidate = qdrant_candidate_from_row(_chunk_row())
 

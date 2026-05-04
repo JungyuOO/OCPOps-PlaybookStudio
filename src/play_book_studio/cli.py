@@ -175,6 +175,24 @@ def build_parser() -> argparse.ArgumentParser:
     db_qdrant_index_parser.add_argument("--collection", default="")
     db_qdrant_index_parser.add_argument("--limit", type=int, default=100)
 
+    official_gold_import_parser = subparsers.add_parser(
+        "official-gold-import",
+        help="Import existing official gold retrieval chunks into PostgreSQL document repositories",
+    )
+    official_gold_import_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    official_gold_import_parser.add_argument(
+        "--chunks-path",
+        type=Path,
+        default=Path("data/gold_corpus_ko/chunks.jsonl"),
+    )
+    official_gold_import_parser.add_argument("--database-url", default="")
+    official_gold_import_parser.add_argument("--tenant-slug", default="public")
+    official_gold_import_parser.add_argument("--tenant-name", default="Public")
+    official_gold_import_parser.add_argument("--workspace-slug", default="default")
+    official_gold_import_parser.add_argument("--workspace-name", default="Default")
+    official_gold_import_parser.add_argument("--limit", type=int, default=0)
+    official_gold_import_parser.add_argument("--dry-run", action="store_true")
+
     learning_seed_parser = subparsers.add_parser(
         "learning-seed-import",
         help="Import guided learning path seed manifests into PostgreSQL",
@@ -704,6 +722,49 @@ def _run_db_qdrant_index(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_official_gold_import(args: argparse.Namespace) -> int:
+    from play_book_studio.ingestion.official_gold_import import (
+        build_official_gold_import_plan,
+        import_official_gold_chunks,
+    )
+
+    root_dir = args.root_dir.resolve()
+    chunks_path = args.chunks_path
+    if not chunks_path.is_absolute():
+        chunks_path = root_dir / chunks_path
+    chunks_path = chunks_path.resolve()
+    if args.dry_run:
+        print(
+            json.dumps(
+                build_official_gold_import_plan(chunks_path, limit=args.limit),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        result = import_official_gold_chunks(
+            connection,
+            chunks_path=chunks_path,
+            tenant_slug=args.tenant_slug,
+            tenant_name=args.tenant_name,
+            workspace_slug=args.workspace_slug,
+            workspace_name=args.workspace_name,
+            limit=args.limit,
+        )
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
 def _learning_seed_summary(seed, *, persisted=None) -> dict:
     step_count = len(seed.steps)
     lab_task_count = sum(len(step.lab_tasks) for step in seed.steps)
@@ -793,6 +854,8 @@ def main() -> int:
         return _run_corpus_ingest(args)
     if args.command == "db-qdrant-index":
         return _run_db_qdrant_index(args)
+    if args.command == "official-gold-import":
+        return _run_official_gold_import(args)
     if args.command == "learning-seed-import":
         return _run_learning_seed_import(args)
     if args.command == "course-qa":
