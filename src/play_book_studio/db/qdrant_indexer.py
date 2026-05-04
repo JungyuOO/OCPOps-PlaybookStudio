@@ -74,6 +74,64 @@ def load_qdrant_chunk_candidates(
     return tuple(qdrant_candidate_from_row(dict(zip(columns, row, strict=True))) for row in rows)
 
 
+def load_qdrant_payload_refresh_candidates(
+    connection,
+    *,
+    collection: str,
+    limit: int = 1000,
+) -> tuple[QdrantChunkCandidate, ...]:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                c.id::text AS chunk_id,
+                c.chunk_key,
+                c.ordinal,
+                c.chunk_type,
+                c.markdown,
+                c.embedding_text,
+                c.section_path,
+                c.section_number,
+                c.heading_title,
+                c.source_anchor,
+                c.toc_path,
+                c.asset_ids,
+                c.repository_id::text AS repository_id,
+                c.owner_user_id,
+                c.visibility,
+                c.source_scope,
+                c.metadata AS chunk_metadata,
+                pd.id::text AS parsed_document_id,
+                pd.title AS document_title,
+                pd.metadata AS parsed_metadata,
+                ds.id::text AS document_source_id,
+                ds.filename,
+                ds.storage_key,
+                ds.source_kind,
+                ds.metadata AS source_metadata,
+                ds.created_by,
+                q.payload_hash AS indexed_payload_hash
+            FROM document_chunks c
+            JOIN parsed_documents pd ON pd.id = c.parsed_document_id
+            JOIN document_sources ds ON ds.id = pd.document_source_id
+            JOIN qdrant_index_entries q
+                ON q.chunk_id = c.id AND q.collection = %s
+            ORDER BY q.indexed_at ASC, c.ordinal ASC
+            LIMIT %s
+            """,
+            (collection, int(limit)),
+        )
+        rows = cursor.fetchall()
+        columns = [item.name for item in cursor.description]
+    stale: list[QdrantChunkCandidate] = []
+    for row in rows:
+        row_dict = dict(zip(columns, row, strict=True))
+        candidate = qdrant_candidate_from_row(row_dict)
+        if candidate.payload_hash != str(row_dict.get("indexed_payload_hash") or ""):
+            stale.append(candidate)
+    return tuple(stale)
+
+
 def qdrant_candidate_from_row(row: dict[str, Any]) -> QdrantChunkCandidate:
     chunk_id = str(row["chunk_id"])
     payload = qdrant_payload_from_row(row)
@@ -275,6 +333,66 @@ def backfill_existing_qdrant_index_entries(
     }
 
 
+def refresh_stale_qdrant_payloads(
+    settings: Settings,
+    connection,
+    *,
+    collection: str | None = None,
+    limit: int = 1000,
+    batch_size: int = 256,
+) -> dict[str, Any]:
+    """Overwrite Qdrant payloads when DB-derived payload hashes changed."""
+    target_collection = collection or settings.qdrant_collection
+    candidates = load_qdrant_payload_refresh_candidates(
+        connection,
+        collection=target_collection,
+        limit=limit,
+    )
+    if not candidates:
+        return {
+            "collection": target_collection,
+            "candidate_count": 0,
+            "existing_count": 0,
+            "missing_count": 0,
+            "refreshed_count": 0,
+        }
+
+    existing_point_ids: set[str] = set()
+    effective_batch_size = max(1, int(batch_size or 256))
+    for start in range(0, len(candidates), effective_batch_size):
+        batch = candidates[start : start + effective_batch_size]
+        existing_point_ids.update(
+            fetch_existing_qdrant_point_ids(
+                settings,
+                collection=target_collection,
+                point_ids=[candidate.point_id for candidate in batch],
+            )
+        )
+    existing_candidates = tuple(
+        candidate for candidate in candidates if candidate.point_id in existing_point_ids
+    )
+    if existing_candidates:
+        overwrite_qdrant_payloads(
+            settings,
+            target_collection,
+            existing_candidates,
+            batch_size=effective_batch_size,
+        )
+        record_qdrant_index_entries(
+            connection,
+            collection=target_collection,
+            vector_model=settings.embedding_model,
+            candidates=existing_candidates,
+        )
+    return {
+        "collection": target_collection,
+        "candidate_count": len(candidates),
+        "existing_count": len(existing_candidates),
+        "missing_count": len(candidates) - len(existing_candidates),
+        "refreshed_count": len(existing_candidates),
+    }
+
+
 def fetch_existing_qdrant_point_ids(
     settings: Settings,
     *,
@@ -347,6 +465,34 @@ def record_qdrant_index_entries(
                 )
 
 
+def overwrite_qdrant_payloads(
+    settings: Settings,
+    collection: str,
+    candidates: tuple[QdrantChunkCandidate, ...],
+    *,
+    batch_size: int = 256,
+) -> None:
+    effective_batch_size = max(1, int(batch_size or 256))
+    for start in range(0, len(candidates), effective_batch_size):
+        batch = candidates[start : start + effective_batch_size]
+        response = requests.post(
+            f"{settings.qdrant_url}/collections/{collection}/points/batch?wait=true",
+            json={
+                "operations": [
+                    {
+                        "overwrite_payload": {
+                            "points": [candidate.point_id],
+                            "payload": candidate.payload,
+                        }
+                    }
+                    for candidate in batch
+                ]
+            },
+            timeout=max(settings.request_timeout_seconds, 120),
+        )
+        response.raise_for_status()
+
+
 def _upsert_candidates(
     settings: Settings,
     collection: str,
@@ -409,7 +555,10 @@ __all__ = [
     "fetch_existing_qdrant_point_ids",
     "index_pending_document_chunks",
     "load_qdrant_chunk_candidates",
+    "load_qdrant_payload_refresh_candidates",
+    "overwrite_qdrant_payloads",
     "qdrant_candidate_from_row",
     "qdrant_payload_from_row",
     "record_qdrant_index_entries",
+    "refresh_stale_qdrant_payloads",
 ]

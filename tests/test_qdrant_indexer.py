@@ -7,9 +7,11 @@ from play_book_studio.db.qdrant_indexer import (
     QdrantChunkCandidate,
     backfill_existing_qdrant_index_entries,
     fetch_existing_qdrant_point_ids,
+    overwrite_qdrant_payloads,
     qdrant_candidate_from_row,
     qdrant_payload_from_row,
     record_qdrant_index_entries,
+    refresh_stale_qdrant_payloads,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -293,6 +295,95 @@ def test_backfill_existing_qdrant_index_entries_records_existing_candidates(monk
     assert connection.cursor_obj.calls[0][1][0] == existing.chunk_id
 
 
+def test_overwrite_qdrant_payloads_batches_distinct_payload_operations(monkeypatch):
+    calls = []
+    candidate = QdrantChunkCandidate(
+        chunk_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        point_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        embedding_text="text",
+        payload={"chunk_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "section_number": "1.1"},
+        payload_hash="hash-a",
+    )
+
+    def fake_post(url, *, json, timeout):
+        calls.append((url, json, timeout))
+        return FakeResponse({"result": {"status": "ok"}})
+
+    monkeypatch.setattr("play_book_studio.db.qdrant_indexer.requests.post", fake_post)
+
+    overwrite_qdrant_payloads(SettingsStub(), "openshift_docs", (candidate,))
+
+    assert calls == [
+        (
+            "http://qdrant/collections/openshift_docs/points/batch?wait=true",
+            {
+                "operations": [
+                    {
+                        "overwrite_payload": {
+                            "points": ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"],
+                            "payload": {
+                                "chunk_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                                "section_number": "1.1",
+                            },
+                        }
+                    }
+                ]
+            },
+            120,
+        )
+    ]
+
+
+def test_refresh_stale_qdrant_payloads_updates_existing_candidates(monkeypatch):
+    stale = QdrantChunkCandidate(
+        chunk_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        point_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        embedding_text="text",
+        payload={"chunk_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "section_number": "1.1"},
+        payload_hash="hash-a",
+    )
+    missing = QdrantChunkCandidate(
+        chunk_id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        point_id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        embedding_text="text",
+        payload={"chunk_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"},
+        payload_hash="hash-b",
+    )
+    connection = FakeConnection()
+    overwritten = []
+
+    monkeypatch.setattr(
+        "play_book_studio.db.qdrant_indexer.load_qdrant_payload_refresh_candidates",
+        lambda connection, collection, limit: (stale, missing),
+    )
+    monkeypatch.setattr(
+        "play_book_studio.db.qdrant_indexer.fetch_existing_qdrant_point_ids",
+        lambda settings, collection, point_ids: {stale.point_id},
+    )
+    monkeypatch.setattr(
+        "play_book_studio.db.qdrant_indexer.overwrite_qdrant_payloads",
+        lambda settings, collection, candidates, batch_size: overwritten.extend(candidates),
+    )
+
+    result = refresh_stale_qdrant_payloads(
+        SettingsStub(),
+        connection,
+        collection="openshift_docs",
+        limit=2,
+    )
+
+    assert result == {
+        "collection": "openshift_docs",
+        "candidate_count": 2,
+        "existing_count": 1,
+        "missing_count": 1,
+        "refreshed_count": 1,
+    }
+    assert overwritten == [stale]
+    assert len(connection.cursor_obj.calls) == 1
+    assert connection.cursor_obj.calls[0][1][0] == stale.chunk_id
+
+
 def test_db_qdrant_index_parser_accepts_args():
     args = build_parser().parse_args(
         [
@@ -330,3 +421,24 @@ def test_db_qdrant_backfill_parser_accepts_args():
     assert args.collection == "openshift_docs"
     assert args.limit == 1000
     assert args.batch_size == 128
+
+
+def test_db_qdrant_refresh_payloads_parser_accepts_args():
+    args = build_parser().parse_args(
+        [
+            "db-qdrant-refresh-payloads",
+            "--root-dir",
+            str(REPO_ROOT),
+            "--collection",
+            "openshift_docs",
+            "--limit",
+            "500",
+            "--batch-size",
+            "64",
+        ]
+    )
+
+    assert args.command == "db-qdrant-refresh-payloads"
+    assert args.collection == "openshift_docs"
+    assert args.limit == 500
+    assert args.batch_size == 64

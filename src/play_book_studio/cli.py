@@ -185,6 +185,16 @@ def build_parser() -> argparse.ArgumentParser:
     db_qdrant_backfill_parser.add_argument("--limit", type=int, default=1000)
     db_qdrant_backfill_parser.add_argument("--batch-size", type=int, default=256)
 
+    db_qdrant_refresh_parser = subparsers.add_parser(
+        "db-qdrant-refresh-payloads",
+        help="Refresh Qdrant payloads whose PostgreSQL-derived payload hash changed",
+    )
+    db_qdrant_refresh_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    db_qdrant_refresh_parser.add_argument("--database-url", default="")
+    db_qdrant_refresh_parser.add_argument("--collection", default="")
+    db_qdrant_refresh_parser.add_argument("--limit", type=int, default=1000)
+    db_qdrant_refresh_parser.add_argument("--batch-size", type=int, default=256)
+
     db_corpus_status_parser = subparsers.add_parser(
         "db-corpus-status",
         help="Report PostgreSQL corpus and qdrant_index_entries readiness",
@@ -786,6 +796,30 @@ def _run_db_qdrant_backfill(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_db_qdrant_refresh_payloads(args: argparse.Namespace) -> int:
+    from play_book_studio.db.qdrant_indexer import refresh_stale_qdrant_payloads
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        result = refresh_stale_qdrant_payloads(
+            settings,
+            connection,
+            collection=args.collection.strip() or None,
+            limit=args.limit,
+            batch_size=args.batch_size,
+        )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _run_db_corpus_status(args: argparse.Namespace) -> int:
     from play_book_studio.db.corpus_status import build_corpus_status
 
@@ -1093,6 +1127,8 @@ def main() -> int:
         return _run_db_qdrant_index(args)
     if args.command == "db-qdrant-backfill":
         return _run_db_qdrant_backfill(args)
+    if args.command == "db-qdrant-refresh-payloads":
+        return _run_db_qdrant_refresh_payloads(args)
     if args.command == "db-corpus-status":
         return _run_db_corpus_status(args)
     if args.command == "course-runtime-status":
