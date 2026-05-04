@@ -148,6 +148,24 @@ def build_parser() -> argparse.ArgumentParser:
     upload_ingest_parser.add_argument("--chunk-overlap-blocks", type=int, default=1)
     upload_ingest_parser.add_argument("--dry-run", action="store_true")
 
+    corpus_ingest_parser = subparsers.add_parser(
+        "corpus-ingest",
+        help="Parse a local official/study corpus folder into shared PostgreSQL document repositories",
+    )
+    corpus_ingest_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    corpus_ingest_parser.add_argument("--source-dir", type=Path, required=True)
+    corpus_ingest_parser.add_argument("--corpus-kind", choices=("official_docs", "study_docs"), required=True)
+    corpus_ingest_parser.add_argument("--database-url", default="")
+    corpus_ingest_parser.add_argument("--tenant-slug", default="public")
+    corpus_ingest_parser.add_argument("--tenant-name", default="Public")
+    corpus_ingest_parser.add_argument("--workspace-slug", default="default")
+    corpus_ingest_parser.add_argument("--workspace-name", default="Default")
+    corpus_ingest_parser.add_argument("--chunk-max-chars", type=int, default=1800)
+    corpus_ingest_parser.add_argument("--chunk-overlap-blocks", type=int, default=1)
+    corpus_ingest_parser.add_argument("--index", action="store_true")
+    corpus_ingest_parser.add_argument("--collection", default="")
+    corpus_ingest_parser.add_argument("--dry-run", action="store_true")
+
     db_qdrant_index_parser = subparsers.add_parser(
         "db-qdrant-index",
         help="Embed pending PostgreSQL document chunks and upsert them to Qdrant",
@@ -624,6 +642,45 @@ def _run_upload_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_corpus_ingest(args: argparse.Namespace) -> int:
+    from play_book_studio.ingestion.corpus_import import build_corpus_import_plan, import_corpus_documents
+
+    root_dir = args.root_dir.resolve()
+    source_dir = args.source_dir
+    if not source_dir.is_absolute():
+        source_dir = root_dir / source_dir
+    source_dir = source_dir.resolve()
+    if args.dry_run:
+        print(json.dumps(build_corpus_import_plan(source_dir, corpus_kind=args.corpus_kind), ensure_ascii=False, indent=2))
+        return 0
+
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        result = import_corpus_documents(
+            connection,
+            source_dir=source_dir,
+            corpus_kind=args.corpus_kind,
+            tenant_slug=args.tenant_slug,
+            tenant_name=args.tenant_name,
+            workspace_slug=args.workspace_slug,
+            workspace_name=args.workspace_name,
+            chunk_max_chars=args.chunk_max_chars,
+            chunk_overlap_blocks=args.chunk_overlap_blocks,
+            index=bool(args.index),
+            settings=settings,
+            collection=args.collection,
+        )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if int(result.get("failed_count") or 0) == 0 else 1
+
+
 def _run_db_qdrant_index(args: argparse.Namespace) -> int:
     from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
 
@@ -732,6 +789,8 @@ def main() -> int:
         return _run_db_migrate(args)
     if args.command == "upload-ingest":
         return _run_upload_ingest(args)
+    if args.command == "corpus-ingest":
+        return _run_corpus_ingest(args)
     if args.command == "db-qdrant-index":
         return _run_db_qdrant_index(args)
     if args.command == "learning-seed-import":
