@@ -25,7 +25,7 @@ class FakeResponse:
                 "choices": [
                     {
                         "message": {
-                            "content": "OpenShift 콘솔 토폴로지 다이어그램이다.",
+                            "content": "OpenShift console topology diagram.",
                         }
                     }
                 ]
@@ -70,7 +70,7 @@ def test_qwen_vision_client_sends_openai_compatible_image_payload(monkeypatch):
 
     description = client.describe_asset(image_path, asset)
 
-    assert description == "OpenShift 콘솔 토폴로지 다이어그램이다."
+    assert description == "OpenShift console topology diagram."
     assert captured["url"] == "http://qwen.internal:8000/v1/chat/completions"
     assert captured["timeout"] == 7
     assert captured["headers"]["Authorization"] == "Bearer secret"
@@ -85,17 +85,32 @@ def test_qwen_describer_factory_is_disabled_until_endpoint_and_model_exist():
     assert build_qwen_image_describer(settings) is None
 
 
-def test_qwen_describer_factory_marks_model_metadata():
+def test_qwen_describer_factory_uses_existing_llm_settings_by_default():
     settings = Settings(
         root_dir=Path.cwd(),
-        qwen_vision_endpoint="http://qwen.internal",
-        qwen_vision_model="qwen2.5-vl",
+        llm_endpoint="http://cllm.cywell.co.kr/v1",
+        llm_model="Qwen/Qwen3.5-9B",
     )
 
     describer = build_qwen_image_describer(settings)
 
     assert describer is not None
-    assert getattr(describer, "qwen_model") == "qwen2.5-vl"
+    assert getattr(describer, "qwen_model") == "Qwen/Qwen3.5-9B"
+
+
+def test_qwen_describer_factory_allows_vision_specific_override():
+    settings = Settings(
+        root_dir=Path.cwd(),
+        llm_endpoint="http://cllm.cywell.co.kr/v1",
+        llm_model="Qwen/Qwen3.5-9B",
+        qwen_vision_endpoint="http://qwen.internal/v1",
+        qwen_vision_model="Qwen/Qwen-VL",
+    )
+
+    describer = build_qwen_image_describer(settings)
+
+    assert describer is not None
+    assert getattr(describer, "qwen_model") == "Qwen/Qwen-VL"
 
 
 def test_parse_image_document_injects_qwen_description_into_chunk_text():
@@ -103,17 +118,17 @@ def test_parse_image_document_injects_qwen_description_into_chunk_text():
     image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
 
     def describe(_path, _asset):
-        return "OpenShift 라우터와 서비스 연결 다이어그램"
+        return "OpenShift router and service diagram"
 
-    setattr(describe, "qwen_model", "qwen2.5-vl")
+    setattr(describe, "qwen_model", "Qwen/Qwen3.5-9B")
 
     parsed = parse_upload_document(image_path, image_describer=describe)
     chunks = build_document_chunks(parsed)
 
-    assert parsed.assets[0].description == "OpenShift 라우터와 서비스 연결 다이어그램"
-    assert parsed.assets[0].metadata["qwen_model"] == "qwen2.5-vl"
+    assert parsed.assets[0].description == "OpenShift router and service diagram"
+    assert parsed.assets[0].metadata["qwen_model"] == "Qwen/Qwen3.5-9B"
     assert parsed.assets[0].metadata["qwen_status"] == "described"
-    assert "OpenShift 라우터와 서비스 연결 다이어그램" in chunks[0].embedding_text
+    assert "OpenShift router and service diagram" in chunks[0].embedding_text
 
 
 def test_load_asset_image_bytes_reads_embedded_pptx_member():

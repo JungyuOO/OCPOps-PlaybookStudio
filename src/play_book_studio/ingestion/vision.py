@@ -63,14 +63,14 @@ class QwenVisionClient:
 
 
 def build_qwen_image_describer(settings: Settings) -> ImageDescriber | None:
-    endpoint = str(settings.qwen_vision_endpoint or "").strip()
-    model = str(settings.qwen_vision_model or "").strip()
+    endpoint = str(settings.qwen_vision_endpoint or settings.llm_endpoint or "").strip()
+    model = str(settings.qwen_vision_model or settings.llm_model or "").strip()
     if not endpoint or not model:
         return None
     client = QwenVisionClient(
         endpoint=endpoint,
         model=model,
-        api_key=str(settings.qwen_vision_api_key or "").strip(),
+        api_key=str(settings.qwen_vision_api_key or settings.llm_api_key or "").strip(),
         timeout_seconds=float(settings.qwen_vision_timeout_seconds or 30.0),
     )
 
