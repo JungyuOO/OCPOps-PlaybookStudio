@@ -80,6 +80,8 @@ def build_upload_ingest_response(
     )
     dry_run = _bool_payload(payload.get("dry_run"), default=False)
     created_by = str(payload.get("created_by") or "").strip()
+    visibility = str(payload.get("visibility") or "").strip()
+    source_scope = str(payload.get("source_scope") or "user_upload").strip() or "user_upload"
     result: dict[str, Any] = {
         "dry_run": dry_run,
         "filename": parsed.filename,
@@ -93,6 +95,8 @@ def build_upload_ingest_response(
         "chunk_count": len(chunks),
         "owner_user_id": created_by,
         "repository_id": str(payload.get("repository_id") or "").strip(),
+        "visibility": visibility or ("private_user" if created_by else "workspace_shared"),
+        "source_scope": source_scope,
         "warnings": list(parsed.warnings),
         "sections": [list(chunk.section_path) for chunk in chunks if chunk.section_path],
     }
@@ -119,6 +123,9 @@ def build_upload_ingest_response(
             repository_id=str(payload.get("repository_id") or ""),
             repository_slug=str(payload.get("repository_slug") or ""),
             repository_title=str(payload.get("repository_title") or ""),
+            repository_kind=str(payload.get("repository_kind") or ""),
+            visibility=visibility,
+            source_scope=source_scope,
         )
         result["repository_id"] = persisted.repository_id
         result["persisted"] = {

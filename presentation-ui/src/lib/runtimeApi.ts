@@ -137,6 +137,8 @@ export interface UploadIngestResponse {
   index?: UploadIngestIndexSummary;
   repository_id?: string;
   owner_user_id?: string;
+  visibility?: string;
+  source_scope?: string;
 }
 
 export interface DocumentRepository {
@@ -1245,7 +1247,17 @@ export async function loadCustomerPackCapturedPreview(
 
 export async function uploadDocumentIngestion(
   file: File,
-  options: { dryRun?: boolean; index?: boolean; createdBy?: string } = {},
+  options: {
+    dryRun?: boolean;
+    index?: boolean;
+    createdBy?: string;
+    repositoryId?: string;
+    repositorySlug?: string;
+    repositoryTitle?: string;
+    repositoryKind?: string;
+    visibility?: string;
+    sourceScope?: string;
+  } = {},
 ): Promise<UploadIngestResponse> {
   const payload = new FormData();
   payload.append('file_name', file.name);
@@ -1254,6 +1266,24 @@ export async function uploadDocumentIngestion(
   payload.append('index', String(options.index ?? true));
   if (options.createdBy) {
     payload.append('created_by', options.createdBy);
+  }
+  if (options.repositoryId) {
+    payload.append('repository_id', options.repositoryId);
+  }
+  if (options.repositorySlug) {
+    payload.append('repository_slug', options.repositorySlug);
+  }
+  if (options.repositoryTitle) {
+    payload.append('repository_title', options.repositoryTitle);
+  }
+  if (options.repositoryKind) {
+    payload.append('repository_kind', options.repositoryKind);
+  }
+  if (options.visibility) {
+    payload.append('visibility', options.visibility);
+  }
+  if (options.sourceScope) {
+    payload.append('source_scope', options.sourceScope);
   }
   return requestJson<UploadIngestResponse>('/api/uploads/ingest', {
     method: 'POST',

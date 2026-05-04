@@ -174,6 +174,9 @@ def persist_parsed_upload_document(
     repository_id: str = "",
     repository_slug: str = "",
     repository_title: str = "",
+    repository_kind: str = "",
+    visibility: str = "",
+    source_scope: str = "user_upload",
 ) -> StoredParsedDocument:
     rows = build_parsed_document_rows(
         parsed,
@@ -181,6 +184,8 @@ def persist_parsed_upload_document(
         storage_key=storage_key,
         created_by=created_by,
         repository_id=repository_id,
+        visibility=visibility,
+        source_scope=source_scope,
     )
     with connection.transaction():
         with connection.cursor() as cursor:
@@ -200,8 +205,8 @@ def persist_parsed_upload_document(
                     owner_user_id=created_by,
                     slug=repository_slug or ("personal-uploads" if created_by else "workspace-uploads"),
                     title=repository_title or ("My Uploads" if created_by else "Workspace Uploads"),
-                    repository_kind="personal" if created_by else "workspace",
-                    visibility="private_user" if created_by else "workspace_shared",
+                    repository_kind=repository_kind or ("personal" if created_by else "workspace"),
+                    visibility=rows.source["visibility"],
                 )
                 rows.source["repository_id"] = source_repository_id
             source_id = _upsert_document_source(
@@ -646,7 +651,8 @@ def list_document_repositories(
     owner_user_id: str = "",
     include_shared: bool = True,
 ) -> list[dict[str, Any]]:
-    scope_sql = "(r.visibility = 'workspace_shared' OR r.owner_user_id = %s)" if include_shared else "r.owner_user_id = %s"
+    shared_visibility_sql = "r.visibility IN ('workspace_shared', 'global_shared')"
+    scope_sql = f"({shared_visibility_sql} OR r.owner_user_id = %s)" if include_shared else "r.owner_user_id = %s"
     with connection.cursor() as cursor:
         cursor.execute(
             f"""
@@ -670,7 +676,7 @@ def list_document_repositories(
               AND {scope_sql}
             GROUP BY r.id
             ORDER BY
-                CASE WHEN r.visibility = 'workspace_shared' THEN 0 ELSE 1 END,
+                CASE WHEN r.visibility IN ('global_shared', 'workspace_shared') THEN 0 ELSE 1 END,
                 r.updated_at DESC,
                 r.title ASC
             """,

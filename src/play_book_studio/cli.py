@@ -138,6 +138,12 @@ def build_parser() -> argparse.ArgumentParser:
     upload_ingest_parser.add_argument("--workspace-name", default="Default")
     upload_ingest_parser.add_argument("--created-by", default="")
     upload_ingest_parser.add_argument("--storage-key", default="")
+    upload_ingest_parser.add_argument("--repository-id", default="")
+    upload_ingest_parser.add_argument("--repository-slug", default="")
+    upload_ingest_parser.add_argument("--repository-title", default="")
+    upload_ingest_parser.add_argument("--repository-kind", default="")
+    upload_ingest_parser.add_argument("--visibility", default="")
+    upload_ingest_parser.add_argument("--source-scope", default="user_upload")
     upload_ingest_parser.add_argument("--chunk-max-chars", type=int, default=1800)
     upload_ingest_parser.add_argument("--chunk-overlap-blocks", type=int, default=1)
     upload_ingest_parser.add_argument("--dry-run", action="store_true")
@@ -607,6 +613,12 @@ def _run_upload_ingest(args: argparse.Namespace) -> int:
             workspace_name=args.workspace_name,
             storage_key=args.storage_key,
             created_by=args.created_by,
+            repository_id=args.repository_id,
+            repository_slug=args.repository_slug,
+            repository_title=args.repository_title,
+            repository_kind=args.repository_kind,
+            visibility=args.visibility,
+            source_scope=args.source_scope,
         )
     print(json.dumps(_upload_ingest_summary(parsed, chunks, persisted=persisted), ensure_ascii=False, indent=2))
     return 0

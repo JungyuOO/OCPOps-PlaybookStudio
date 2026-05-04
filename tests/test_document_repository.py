@@ -155,6 +155,22 @@ def test_build_parsed_document_rows_maps_parser_output_to_schema_rows():
     assert rows.chunks[0]["token_count"] > 0
 
 
+def test_build_parsed_document_rows_supports_shared_official_scope():
+    parsed = _parsed_document()
+    chunks = build_document_chunks(parsed, max_chars=300, overlap_blocks=0)
+
+    rows = build_parsed_document_rows(
+        parsed,
+        chunks,
+        visibility="global_shared",
+        source_scope="official_docs",
+    )
+
+    assert rows.source["visibility"] == "global_shared"
+    assert rows.source["source_scope"] == "official_docs"
+    assert rows.source["owner_user_id"] == ""
+
+
 def test_persist_parsed_upload_document_executes_expected_insert_sequence():
     connection = FakeConnection()
     parsed = _parsed_document()
@@ -190,6 +206,30 @@ def test_persist_parsed_upload_document_executes_expected_insert_sequence():
     assert len(stored.chunk_ids) == 1
 
 
+def test_persist_parsed_upload_document_can_create_shared_study_repository():
+    connection = FakeConnection()
+    parsed = _parsed_document()
+    chunks = build_document_chunks(parsed, max_chars=300, overlap_blocks=0)
+
+    persist_parsed_upload_document(
+        connection,
+        parsed,
+        chunks,
+        repository_slug="study-docs",
+        repository_title="Study Docs",
+        repository_kind="study",
+        visibility="workspace_shared",
+        source_scope="study_docs",
+    )
+
+    repository_call = next(call for call in connection.cursor_obj.calls if "INSERT INTO repositories" in call[0])
+    assert repository_call[1][5] == "study"
+    assert repository_call[1][6] == "workspace_shared"
+    source_call = next(call for call in connection.cursor_obj.calls if "INSERT INTO document_sources" in call[0])
+    assert source_call[1][13] == "workspace_shared"
+    assert source_call[1][14] == "study_docs"
+
+
 def test_list_document_repositories_filters_by_owner_scope():
     connection = FakeConnection()
 
@@ -202,7 +242,7 @@ def test_list_document_repositories_filters_by_owner_scope():
 
     sql_text = "\n".join(sql for sql, _params in connection.cursor_obj.calls)
     assert "FROM repositories r" in sql_text
-    assert "r.visibility = 'workspace_shared' OR r.owner_user_id = %s" in sql_text
+    assert "r.visibility IN ('workspace_shared', 'global_shared') OR r.owner_user_id = %s" in sql_text
     assert connection.cursor_obj.calls[0][1] == ("public", "default", "tester")
     assert repositories[0]["repository_id"] == "99999999-9999-9999-9999-999999999999"
     assert repositories[0]["document_count"] == 2
