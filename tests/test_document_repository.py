@@ -142,6 +142,7 @@ def test_build_parsed_document_rows_maps_parser_output_to_schema_rows():
     assert rows.source["source_scope"] == "user_upload"
     assert rows.source["metadata"]["document_format"] == "pptx"
     assert rows.parsed_document["title"] == "Architecture"
+    assert rows.parsed_document["metadata"]["byte_size"] == 1234
     assert rows.parsed_document["outline"][0]["text"] == "Architecture"
     assert rows.parsed_document["outline"][0]["heading_title"] == "Architecture"
     assert rows.blocks[2]["metadata"]["asset_ids"] == ["11111111-1111-1111-1111-111111111111"]

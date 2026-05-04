@@ -168,10 +168,17 @@ _ASCIIDOC_HEADING_RE = re.compile(r"^(={1,6})\s+(.+?)\s*$")
 _SECTION_NUMBER_RE = re.compile(r"^\s*((?:\d+\.)+\d+|\d+)(?:[.)]|장\.)?\s+(.+?)\s*$")
 _XML_TEXT_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t"
 _DOCX_PARAGRAPH_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"
+_DOCX_PARAGRAPH_PROPS_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr"
+_DOCX_PARAGRAPH_STYLE_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pStyle"
 _DOCX_TABLE_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl"
 _DOCX_ROW_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tr"
 _DOCX_CELL_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tc"
 _PPT_TEXT_TAG = "{http://schemas.openxmlformats.org/drawingml/2006/main}t"
+_PPT_TABLE_TAG = "{http://schemas.openxmlformats.org/drawingml/2006/main}tbl"
+_PPT_ROW_TAG = "{http://schemas.openxmlformats.org/drawingml/2006/main}tr"
+_PPT_CELL_TAG = "{http://schemas.openxmlformats.org/drawingml/2006/main}tc"
+_PAGE_MARKER_RE = re.compile(r"^<!--\s*(?:page|slide)\s*:\s*(\d+)\s*-->\s*$", re.IGNORECASE)
+_DRAWING_EMBED_RE = re.compile(r'r:embed="([^"]+)"')
 
 
 def detect_document_format(path: Path, *, sample_size: int = 4096) -> DocumentFormat:
@@ -217,6 +224,7 @@ def parse_upload_document(
 
     warnings: list[str] = []
     assets: list[DocumentAsset] = []
+    converter_metadata: dict[str, Any] = {}
 
     if document_format in MARKDOWN_FORMATS | TEXT_FORMATS:
         markdown = path.read_text(encoding="utf-8-sig").strip()
@@ -237,6 +245,7 @@ def parse_upload_document(
             markdown = converted.markdown.strip()
             assets.extend(converted.assets)
             warnings.extend(converted.warnings)
+            converter_metadata.update(converted.metadata)
         else:
             markdown = converted.strip()
         if not markdown:
@@ -267,6 +276,7 @@ def parse_upload_document(
         metadata={
             "byte_size": len(content),
             "source_path": str(path),
+            **converter_metadata,
         },
     )
 
@@ -321,6 +331,11 @@ def build_document_chunks(
         markdown = "\n\n".join(block.markdown for block in current).strip()
         section_block = _last_section_block(current)
         section_path = section_block.section_path if section_block else ()
+        page_numbers = [
+            int(page_number)
+            for page_number in (block.metadata.get("page_number") for block in current)
+            if isinstance(page_number, int)
+        ]
         asset_ids = tuple(dict.fromkeys(asset_id for block in current for asset_id in block.asset_ids))
         block_ordinals = tuple(block.ordinal for block in current)
         chunk_key = f"{parsed.document_id}:{ordinal}"
@@ -341,6 +356,8 @@ def build_document_chunks(
                 metadata={
                     "filename": parsed.filename,
                     "document_format": parsed.document_format,
+                    "page_start": min(page_numbers) if page_numbers else None,
+                    "page_end": max(page_numbers) if page_numbers else None,
                 },
             )
         )
@@ -451,6 +468,7 @@ def _markdown_to_blocks(markdown: str, *, assets: tuple[DocumentAsset, ...]) -> 
     section_number = ""
     heading_title = ""
     source_anchor = ""
+    page_number: int | None = None
     in_code = False
     code_lines: list[str] = []
     ordinal = 0
@@ -481,6 +499,7 @@ def _markdown_to_blocks(markdown: str, *, assets: tuple[DocumentAsset, ...]) -> 
                 source_anchor=source_anchor,
                 toc_path=tuple(toc_path),
                 asset_ids=block_asset_ids,
+                metadata={"page_number": page_number} if page_number is not None else {},
             )
         )
         ordinal += 1
@@ -494,6 +513,11 @@ def _markdown_to_blocks(markdown: str, *, assets: tuple[DocumentAsset, ...]) -> 
 
     for line in markdown.splitlines():
         stripped = line.strip()
+        page_match = _PAGE_MARKER_RE.match(stripped)
+        if page_match:
+            flush_paragraph()
+            page_number = int(page_match.group(1))
+            continue
         if stripped.startswith(("```", "~~~")):
             if in_code:
                 code_lines.append(line)
@@ -580,7 +604,11 @@ def _convert_docx_to_markdown(path: Path) -> ConvertedMarkdown:
         if child.tag == _DOCX_PARAGRAPH_TAG:
             text = _xml_text(child, text_tag=_XML_TEXT_TAG)
             if text:
-                lines.extend(["", text])
+                heading_level = _docx_heading_level(child)
+                if heading_level is not None:
+                    lines.extend(["", f"{'#' * heading_level} {text}"])
+                else:
+                    lines.extend(["", text])
         elif child.tag == _DOCX_TABLE_TAG:
             table = _docx_table_to_markdown(child)
             if table:
@@ -600,22 +628,31 @@ def _convert_pptx_to_markdown(path: Path) -> ConvertedMarkdown:
             (name for name in names if re.match(r"ppt/slides/slide\d+\.xml$", name)),
             key=_natural_key,
         )
-        media_names = sorted(name for name in names if name.startswith("ppt/media/"))
         for slide_index, slide_name in enumerate(slide_names, start=1):
-            slide_root = ET.fromstring(archive.read(slide_name))
+            slide_xml = archive.read(slide_name)
+            slide_root = ET.fromstring(slide_xml)
             texts = [text for text in _xml_texts(slide_root, text_tag=_PPT_TEXT_TAG) if text.strip()]
-            lines.extend(["", f"## Slide {slide_index}"])
+            table_markdowns = [
+                table_markdown
+                for table in slide_root.iter(_PPT_TABLE_TAG)
+                if (table_markdown := _pptx_table_to_markdown(table))
+            ]
+            lines.extend(["", f"<!-- slide: {slide_index} -->", f"## Slide {slide_index}"])
             for text in texts:
                 lines.append(text.strip())
-        for media_name in media_names:
-            content = archive.read(media_name)
-            asset = _blob_asset(path, media_name=media_name, content=content)
-            assets.append(asset)
-            lines.extend(["", _image_markdown(asset)])
+            for table_markdown in table_markdowns:
+                lines.extend(["", table_markdown])
+            for media_name in _pptx_slide_media_names(archive, slide_name, slide_xml):
+                if media_name not in names:
+                    continue
+                content = archive.read(media_name)
+                asset = _blob_asset(path, media_name=media_name, content=content, page_number=slide_index)
+                assets.append(asset)
+                lines.extend(["", _image_markdown(asset)])
     markdown = "\n".join(lines).strip()
     if len(lines) <= 1 and not assets:
         raise ValueError(f"PPTX produced empty markdown: {path.name}")
-    return ConvertedMarkdown(markdown=markdown, assets=tuple(assets))
+    return ConvertedMarkdown(markdown=markdown, assets=tuple(assets), metadata={"slide_count": len(slide_names)})
 
 
 def _convert_pdf_to_markdown(path: Path) -> ConvertedMarkdown:
@@ -632,7 +669,7 @@ def _convert_pdf_to_markdown(path: Path) -> ConvertedMarkdown:
     for page_index, page in enumerate(reader.pages, start=1):
         text = str(page.extract_text() or "").strip()
         if text:
-            lines.extend(["", f"## Page {page_index}", "", text])
+            lines.extend(["", f"<!-- page: {page_index} -->", f"## Page {page_index}", "", text])
     markdown = "\n".join(lines).strip()
     if markdown == f"# {path.stem}":
         return ConvertedMarkdown(
@@ -675,7 +712,78 @@ def _docx_table_to_markdown(table: ET.Element) -> str:
     return "\n".join("| " + " | ".join(cell.replace("\n", " ") for cell in row) + " |" for row in markdown_rows)
 
 
-def _blob_asset(path: Path, *, media_name: str, content: bytes) -> DocumentAsset:
+def _pptx_table_to_markdown(table: ET.Element) -> str:
+    rows: list[list[str]] = []
+    for row in table.iter(_PPT_ROW_TAG):
+        cells = [_xml_text(cell, text_tag=_PPT_TEXT_TAG) for cell in row.iter(_PPT_CELL_TAG)]
+        if any(cells):
+            rows.append(cells)
+    if not rows:
+        return ""
+    width = max(len(row) for row in rows)
+    normalized = [row + [""] * (width - len(row)) for row in rows]
+    header = normalized[0]
+    separator = ["---"] * width
+    body = normalized[1:] or [[""] * width]
+    return "\n".join("| " + " | ".join(cell.replace("\n", " ") for cell in row) + " |" for row in [header, separator, *body])
+
+
+def _docx_heading_level(paragraph: ET.Element) -> int | None:
+    props = paragraph.find(_DOCX_PARAGRAPH_PROPS_TAG)
+    style = props.find(_DOCX_PARAGRAPH_STYLE_TAG) if props is not None else None
+    if style is None:
+        return None
+    value = style.attrib.get("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val", "")
+    match = re.search(r"heading\s*(\d+)|Heading\s*(\d+)", value, flags=re.IGNORECASE)
+    if not match:
+        return None
+    level = int(match.group(1) or match.group(2))
+    return max(1, min(level, 6))
+
+
+def _pptx_slide_media_names(archive: zipfile.ZipFile, slide_name: str, slide_xml: bytes) -> tuple[str, ...]:
+    rels_name = f"{Path(slide_name).parent.as_posix()}/_rels/{Path(slide_name).name}.rels"
+    if rels_name not in archive.namelist():
+        return tuple(sorted(name for name in archive.namelist() if name.startswith("ppt/media/")))
+    try:
+        rels_xml = archive.read(rels_name).decode("utf-8", errors="ignore")
+    except Exception:  # noqa: BLE001
+        return ()
+    targets_by_id: dict[str, str] = {}
+    try:
+        rels_root = ET.fromstring(rels_xml)
+        relationships = [node for node in rels_root.iter() if node.tag.endswith("Relationship")]
+    except ET.ParseError:
+        relationships = []
+    for relationship in relationships:
+        rel_id = str(relationship.attrib.get("Id") or "").strip()
+        target = str(relationship.attrib.get("Target") or "").strip()
+        if not rel_id or not target:
+            continue
+        target_path = _resolve_pptx_relationship_target(slide_name, target)
+        if target_path.startswith("ppt/media/"):
+            targets_by_id[rel_id] = target_path
+    embedded_ids = _DRAWING_EMBED_RE.findall(slide_xml.decode("utf-8", errors="ignore"))
+    return tuple(dict.fromkeys(targets_by_id[rel_id] for rel_id in embedded_ids if rel_id in targets_by_id))
+
+
+def _resolve_pptx_relationship_target(slide_name: str, target: str) -> str:
+    if target.startswith("/"):
+        return target.strip("/")
+    base = Path(slide_name).parent
+    parts: list[str] = []
+    for part in (base / target).as_posix().split("/"):
+        if part == "..":
+            if parts:
+                parts.pop()
+            continue
+        if part == "." or not part:
+            continue
+        parts.append(part)
+    return "/".join(parts)
+
+
+def _blob_asset(path: Path, *, media_name: str, content: bytes, page_number: int | None = None) -> DocumentAsset:
     sha256 = hashlib.sha256(content).hexdigest()
     filename = Path(media_name).name
     asset_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{path.name}:{media_name}:{sha256}"))
@@ -687,6 +795,7 @@ def _blob_asset(path: Path, *, media_name: str, content: bytes) -> DocumentAsset
         mime_type=mime_type,
         sha256=sha256,
         storage_key=f"uploads/assets/{asset_id}{Path(filename).suffix.lower()}",
+        page_number=page_number,
         metadata={"source_member": media_name},
     )
 

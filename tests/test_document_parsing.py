@@ -192,6 +192,35 @@ def test_docx_default_pipeline_extracts_markdown_blocks_and_chunks():
     assert chunks[0].embedding_text.startswith("guide")
 
 
+def test_docx_heading_styles_become_section_metadata():
+    docx_path = _case_dir("docx_heading_styles") / "styled.docx"
+    document_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:body>
+        <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>1 Install</w:t></w:r></w:p>
+        <w:p><w:r><w:t>Run installer.</w:t></w:r></w:p>
+        <w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>1.1 Verify</w:t></w:r></w:p>
+        <w:p><w:r><w:t>Check cluster operators.</w:t></w:r></w:p>
+      </w:body>
+    </w:document>
+    """
+    with zipfile.ZipFile(docx_path, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types />")
+        archive.writestr("word/document.xml", document_xml)
+
+    parsed = parse_upload_document(docx_path)
+    chunks = build_document_chunks(parsed, max_chars=120, overlap_blocks=0)
+
+    headings = [block for block in parsed.blocks if block.block_type == "heading"]
+    assert headings[1].section_number == "1"
+    assert headings[1].heading_title == "Install"
+    assert headings[2].section_number == "1.1"
+    assert headings[2].heading_title == "Verify"
+    assert chunks[-1].toc_path == ("1 Install", "1.1 Verify")
+    assert "## Verify" in chunks[-1].markdown
+    assert "1.1 Verify" not in chunks[-1].markdown
+
+
 def test_pptx_default_pipeline_extracts_slide_text_and_image_assets():
     pptx_path = _case_dir("pptx_default") / "deck.pptx"
     slide_xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -222,3 +251,51 @@ def test_pptx_default_pipeline_extracts_slide_text_and_image_assets():
     assert parsed.assets[0].description == "Visual asset: image1.png"
     assert any(block.block_type == "image" for block in parsed.blocks)
     assert any(parsed.assets[0].asset_id in chunk.asset_ids for chunk in chunks)
+
+
+def test_pptx_pipeline_scopes_images_tables_and_chunks_to_slides():
+    pptx_path = _case_dir("pptx_slide_scope") / "deck.pptx"
+    slide1_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+           xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+           xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+      <p:cSld><p:spTree>
+        <p:sp><p:txBody><a:p><a:r><a:t>Architecture</a:t></a:r></a:p></p:txBody></p:sp>
+        <p:pic><p:blipFill><a:blip r:embed="rIdImage1"/></p:blipFill></p:pic>
+        <p:graphicFrame><a:graphic><a:graphicData>
+          <a:tbl>
+            <a:tr><a:tc><a:txBody><a:p><a:r><a:t>Component</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>Role</a:t></a:r></a:p></a:txBody></a:tc></a:tr>
+            <a:tr><a:tc><a:txBody><a:p><a:r><a:t>Router</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>Ingress</a:t></a:r></a:p></a:txBody></a:tc></a:tr>
+          </a:tbl>
+        </a:graphicData></a:graphic></p:graphicFrame>
+      </p:spTree></p:cSld>
+    </p:sld>
+    """
+    slide2_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+           xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+           xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+      <p:cSld><p:spTree>
+        <p:sp><p:txBody><a:p><a:r><a:t>Verification</a:t></a:r></a:p></p:txBody></p:sp>
+        <p:pic><p:blipFill><a:blip r:embed="rIdImage2"/></p:blipFill></p:pic>
+      </p:spTree></p:cSld>
+    </p:sld>
+    """
+    with zipfile.ZipFile(pptx_path, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types />")
+        archive.writestr("ppt/presentation.xml", "<p:presentation />")
+        archive.writestr("ppt/slides/slide1.xml", slide1_xml)
+        archive.writestr("ppt/slides/_rels/slide1.xml.rels", '<Relationships><Relationship Id="rIdImage1" Target="../media/image1.png"/></Relationships>')
+        archive.writestr("ppt/slides/slide2.xml", slide2_xml)
+        archive.writestr("ppt/slides/_rels/slide2.xml.rels", '<Relationships><Relationship Id="rIdImage2" Target="../media/image2.png"/></Relationships>')
+        archive.writestr("ppt/media/image1.png", b"\x89PNG\r\n\x1a\none")
+        archive.writestr("ppt/media/image2.png", b"\x89PNG\r\n\x1a\ntwo")
+
+    parsed = parse_upload_document(pptx_path)
+    chunks = build_document_chunks(parsed, max_chars=180, overlap_blocks=0)
+
+    assert parsed.metadata["slide_count"] == 2
+    assert [asset.page_number for asset in parsed.assets] == [1, 2]
+    assert any(block.block_type == "table" and block.metadata.get("page_number") == 1 for block in parsed.blocks)
+    assert any(block.block_type == "image" and block.metadata.get("page_number") == 2 for block in parsed.blocks)
+    assert [chunk.metadata["page_start"] for chunk in chunks if chunk.heading_title.startswith("Slide")] == [1, 2]

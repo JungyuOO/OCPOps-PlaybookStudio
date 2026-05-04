@@ -77,6 +77,7 @@ def build_parsed_document_rows(
             "document_id": parsed.document_id,
             "document_format": parsed.document_format,
             "status": parsed.status,
+            **dict(parsed.metadata),
         },
         "outline": _outline_from_blocks(parsed),
         "warnings": list(parsed.warnings),
