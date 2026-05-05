@@ -529,6 +529,8 @@ def _load_manifest(root_dir: Path) -> dict[str, Any]:
     payload = _load_course_manifest_from_database(root_dir)
     if isinstance(payload, dict) and payload:
         return payload
+    if load_settings(root_dir).database_url.strip():
+        raise FileNotFoundError("Course manifest not found in PostgreSQL")
     path = _course_manifest_path(root_dir)
     if not path.exists():
         raise FileNotFoundError("Course manifest not found")
@@ -1847,6 +1849,8 @@ def _load_chunk(root_dir: Path, chunk_id: str) -> dict[str, Any]:
     cached_payload = cached_by_id.get(chunk_id)
     if cached_payload is not None:
         return dict(cached_payload)
+    if load_settings(root_dir).database_url.strip():
+        raise FileNotFoundError(f"Course chunk not found in PostgreSQL: {chunk_id}")
 
     chunks_jsonl = _course_chunks_jsonl_path(root_dir)
     chunks_dir = _course_chunks_dir(root_dir)
@@ -1915,6 +1919,9 @@ def _course_chunk_cache(root_dir: Path) -> tuple[list[dict[str, Any]], dict[str,
             with _COURSE_CHUNK_CACHE_LOCK:
                 _COURSE_CHUNK_CACHE[cache_key] = (now, rows, by_id)
             return rows, by_id
+        with _COURSE_CHUNK_CACHE_LOCK:
+            _COURSE_CHUNK_CACHE[cache_key] = (now, rows, by_id)
+        return rows, by_id
 
     cache_key = str(chunks_jsonl if chunks_jsonl.exists() else chunks_dir)
     with _COURSE_CHUNK_CACHE_LOCK:

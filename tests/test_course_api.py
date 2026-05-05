@@ -132,6 +132,31 @@ def test_load_chunk_prefers_postgres_course_chunks(monkeypatch: pytest.MonkeyPat
     assert payload["schema_version"] == "ppt_chunk_v1"
 
 
+def test_load_chunk_does_not_fall_back_to_files_when_database_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _temp_root() as root:
+        _write_chunks_jsonl(
+            root,
+            [
+                {
+                    "chunk_id": "file-chunk",
+                    "title": "File fallback chunk",
+                    "body_md": "This file chunk should not leak.",
+                }
+            ],
+        )
+        monkeypatch.setattr(
+            course_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+        )
+        monkeypatch.setattr(course_api, "_load_course_chunks_from_database", lambda _root: [])
+
+        with pytest.raises(FileNotFoundError):
+            _load_chunk(root, "file-chunk")
+
+
 def test_load_manifest_prefers_postgres_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
     with _temp_root() as root:
         monkeypatch.setattr(
@@ -146,6 +171,28 @@ def test_load_manifest_prefers_postgres_manifest(monkeypatch: pytest.MonkeyPatch
         manifest = course_api._load_manifest(root)
 
     assert manifest["stages"][0]["stage_id"] == "db-stage"
+
+
+def test_load_manifest_does_not_fall_back_to_files_when_database_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _temp_root() as root:
+        _write_manifest(
+            root,
+            {
+                "canonical_model": "course_manifest_v1",
+                "stages": [{"stage_id": "file-stage", "title": "File Stage"}],
+            },
+        )
+        monkeypatch.setattr(
+            course_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+        )
+        monkeypatch.setattr(course_api, "_load_course_manifest_from_database", lambda _root: None)
+
+        with pytest.raises(FileNotFoundError):
+            course_api._load_manifest(root)
 
 
 def test_ops_learning_guides_do_not_fall_back_to_files_when_database_is_configured(
