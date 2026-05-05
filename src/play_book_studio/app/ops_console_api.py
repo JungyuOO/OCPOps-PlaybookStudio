@@ -1418,7 +1418,134 @@ def _document_root(root_dir: Path) -> Path:
     return root_dir / "data" / "gold_manualbook_ko" / "playbooks"
 
 
+def _json_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            payload = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+    return {}
+
+
+def _json_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            payload = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+        return payload if isinstance(payload, list) else []
+    return []
+
+
+def _official_viewer_path(book_slug: str, anchor: str) -> str:
+    slug = str(book_slug or "").strip()
+    normalized_anchor = str(anchor or "").strip()
+    if not slug:
+        return ""
+    path = f"/playbooks/wiki-runtime/active/{slug}/index.html"
+    return f"{path}#{normalized_anchor}" if normalized_anchor else path
+
+
+def _document_rows_from_database_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows_by_source: dict[str, dict[str, Any]] = {}
+    for record in records:
+        source_id = str(record.get("document_source_id") or "").strip()
+        if not source_id:
+            continue
+        source_metadata = _json_dict(record.get("source_metadata"))
+        parsed_metadata = _json_dict(record.get("parsed_metadata"))
+        book_slug = str(source_metadata.get("book_slug") or record.get("filename") or source_id).removesuffix(".jsonl")
+        row = rows_by_source.setdefault(
+            source_id,
+            {
+                "document_key": book_slug,
+                "title": str(record.get("document_title") or source_metadata.get("book_title") or book_slug),
+                "relative_path": str(record.get("storage_key") or ""),
+                "source_type": str(source_metadata.get("source_type") or "official_document"),
+                "group": "official_ocp",
+                "indexed": True,
+                "chunk_count": 0,
+                "original_kind": str(source_metadata.get("document_format") or parsed_metadata.get("document_format") or "postgres"),
+                "original_key": str(record.get("filename") or source_id),
+                "description": str(source_metadata.get("source_id") or record.get("storage_key") or ""),
+                "path": None,
+                "payload": {
+                    "title": str(record.get("document_title") or source_metadata.get("book_title") or book_slug),
+                    "source_metadata": {**source_metadata, "source_type": str(source_metadata.get("source_type") or "official_document")},
+                    "sections": [],
+                },
+            },
+        )
+        chunk_id = str(record.get("chunk_id") or "").strip()
+        if not chunk_id:
+            continue
+        heading = str(record.get("heading_title") or record.get("section_number") or f"Chunk {record.get('ordinal') or ''}").strip()
+        anchor = str(record.get("source_anchor") or "").strip()
+        markdown = str(record.get("markdown") or record.get("embedding_text") or "").strip()
+        section_path = [str(item) for item in _json_list(record.get("section_path")) if str(item).strip()]
+        section = {
+            "anchor": anchor or chunk_id,
+            "section_id": chunk_id,
+            "heading": heading,
+            "section_path": section_path,
+            "viewer_path": _official_viewer_path(book_slug, anchor),
+            "blocks": [{"kind": "paragraph", "text": markdown}] if markdown else [],
+        }
+        row["payload"]["sections"].append(section)
+        row["chunk_count"] = len(row["payload"]["sections"])
+    return list(rows_by_source.values())
+
+
+def _document_rows_from_database(root_dir: Path) -> list[dict[str, Any]] | None:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if not database_url:
+        return None
+    try:
+        import psycopg
+
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        ds.id::text AS document_source_id,
+                        ds.filename,
+                        ds.storage_key,
+                        ds.metadata AS source_metadata,
+                        pd.title AS document_title,
+                        pd.metadata AS parsed_metadata,
+                        c.id::text AS chunk_id,
+                        c.ordinal,
+                        c.markdown,
+                        c.embedding_text,
+                        c.section_path,
+                        c.section_number,
+                        c.heading_title,
+                        c.source_anchor
+                    FROM document_sources ds
+                    JOIN parsed_documents pd ON pd.document_source_id = ds.id
+                    LEFT JOIN document_chunks c ON c.parsed_document_id = pd.id
+                    WHERE ds.source_scope = 'official_docs'
+                    ORDER BY ds.filename ASC, c.ordinal ASC
+                    """
+                )
+                db_rows = cursor.fetchall()
+                columns = [item.name for item in cursor.description]
+    except Exception:  # noqa: BLE001
+        return []
+    return _document_rows_from_database_records([dict(zip(columns, row, strict=True)) for row in db_rows])
+
+
 def _iter_document_rows(root_dir: Path) -> list[dict[str, Any]]:
+    db_rows = _document_rows_from_database(root_dir)
+    if db_rows is not None:
+        return db_rows
     rows: list[dict[str, Any]] = []
     document_root = _document_root(root_dir)
     if not document_root.exists():
@@ -2776,8 +2903,13 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
         if row is None:
             _send_not_found(handler, "Document not found")
             return True
-        body = row["path"].read_bytes()
-        content_type = mimetypes.guess_type(str(row["path"]))[0] or "application/json"
+        row_path = row.get("path")
+        if isinstance(row_path, Path):
+            body = row_path.read_bytes()
+            content_type = mimetypes.guess_type(str(row_path))[0] or "application/json"
+        else:
+            body = json.dumps(row.get("payload") or {}, ensure_ascii=False, indent=2).encode("utf-8")
+            content_type = "application/json"
         handler._send_bytes(body, content_type=content_type)
         return True
 
