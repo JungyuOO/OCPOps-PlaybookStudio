@@ -11,7 +11,6 @@ running one-shot seed services.
 - `docker-compose.prod.yml` - production compose file.
 - `.env.production.example` - copy to `.env.production` and fill secrets.
 - `artifacts/`, `storage/`, and `reports/` - mounted read-write for runtime output.
-- `manifests/` - temporarily mounted read-only into the app for remaining UI source-manifest compatibility.
 - `data/`, `corpus/`, and `manifests/` - mounted read-only into seed/import services.
 - PostgreSQL volume - defaults to `ocpops_playbookstudio_postgres_data`.
 - Qdrant volume - defaults to `ocp-rag-chatbot_qdrant_storage`.
@@ -96,6 +95,5 @@ docker compose -f docker-compose.prod.yml --env-file .env.production ps
 - `web` is exposed by `WEB_BIND`, default `0.0.0.0:8080`.
 - Qdrant binds to localhost by default for safety.
 - The app uses Qdrant over the internal Docker network: `http://qdrant:6333`.
-- The production app container no longer mounts `data/` or `corpus/`; those
-  directories are seed/import inputs. `manifests/` remains mounted read-only
-  until the remaining source-manifest UI paths are fully DB-backed.
+- The production app container no longer mounts `data/`, `corpus/`, or
+  `manifests/`; those directories are seed/import inputs.

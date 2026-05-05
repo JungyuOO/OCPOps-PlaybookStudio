@@ -44,7 +44,6 @@ services:
       QDRANT_RECREATE_COLLECTION: "false"
       ARTIFACTS_DIR: /app/artifacts
       OBJECT_STORAGE_ROOT: /app/storage
-      SOURCE_MANIFEST_PATH: /app/manifests/ocp_ko_4_20_approved_ko.json
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,7 +56,6 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./manifests:/app/manifests:ro
       - ./artifacts:/app/artifacts
       - ./storage:/app/storage
       - ./reports:/app/reports

@@ -36,6 +36,7 @@ from play_book_studio.app.wiki_user_overlay import (
     save_wiki_user_overlay as _save_wiki_user_overlay,
 )
 from play_book_studio.config.settings import load_settings
+from play_book_studio.db.official_documents import load_official_manifest_entries
 from play_book_studio.ingestion.manifest import (
     _source_fingerprint,
     read_manifest,
@@ -234,8 +235,53 @@ def _manifest_entry_by_slug(path: Path | None) -> dict[str, dict[str, Any]]:
     return rows
 
 
+def _official_db_entries(settings: Any) -> list[dict[str, Any]]:
+    database_url = str(getattr(settings, "database_url", "") or "").strip()
+    if not database_url:
+        return []
+    return load_official_manifest_entries(database_url)
+
+
+def _official_db_entries_by_slug(settings: Any) -> dict[str, dict[str, Any]]:
+    return {
+        str(entry.get("book_slug") or "").strip(): entry
+        for entry in _official_db_entries(settings)
+        if str(entry.get("book_slug") or "").strip()
+    }
+
+
 def _search_official_source_candidates(root_dir: Path, *, query: str, limit: int = 8) -> list[dict[str, Any]]:
     settings = load_settings(root_dir)
+    if str(getattr(settings, "database_url", "") or "").strip():
+        approved_entries_by_slug = _official_db_entries_by_slug(settings)
+        ranked: list[tuple[int, str, dict[str, Any]]] = []
+        for slug, entry in approved_entries_by_slug.items():
+            score = _candidate_match_score(query, entry)
+            if score > 0:
+                ranked.append((score, slug, entry))
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        rows: list[dict[str, Any]] = []
+        for score, slug, entry in ranked[: max(1, min(limit, 12))]:
+            source_payload = _official_candidate_source_payload(entry, settings)
+            rows.append(
+                {
+                    "book_slug": slug,
+                    "title": str(entry.get("title") or slug),
+                    "viewer_path": str(entry.get("viewer_path") or settings.viewer_path_template.format(slug=slug)),
+                    "source_relative_path": _first_nonempty(
+                        entry.get("source_relative_path"),
+                        *(entry.get("source_relative_paths") or []),
+                    ),
+                    "source_repo": str(entry.get("source_repo") or "").strip(),
+                    "source_kind": str(entry.get("source_kind") or "").strip(),
+                    "status_kind": "live",
+                    "status_label": "available_in_postgres",
+                    "match_score": score,
+                    **source_payload,
+                }
+            )
+        return rows
+
     approved_entries_by_slug = _manifest_entry_by_slug(settings.source_manifest_path)
     approved_slugs = set(approved_entries_by_slug)
     ranked: list[tuple[int, str, dict[str, Any]]] = []
@@ -277,6 +323,40 @@ def _search_official_source_candidates(root_dir: Path, *, query: str, limit: int
 
 def _list_official_source_catalog(root_dir: Path) -> dict[str, Any]:
     settings = load_settings(root_dir)
+    db_entries = _official_db_entries(settings)
+    if db_entries:
+        rows: list[dict[str, Any]] = []
+        for entry in db_entries:
+            slug = str(entry.get("book_slug") or "").strip()
+            if not slug:
+                continue
+            source_payload = _official_candidate_source_payload(entry, settings)
+            rows.append(
+                {
+                    "book_slug": slug,
+                    "title": str(entry.get("title") or slug),
+                    "viewer_path": str(entry.get("viewer_path") or settings.viewer_path_template.format(slug=slug)),
+                    "source_relative_path": _first_nonempty(
+                        entry.get("source_relative_path"),
+                        *(entry.get("source_relative_paths") or []),
+                    ),
+                    "source_repo": str(entry.get("source_repo") or "").strip(),
+                    "source_kind": str(entry.get("source_kind") or "").strip(),
+                    "status_kind": "live",
+                    "status_label": "available_in_postgres",
+                    "match_score": 0,
+                    **source_payload,
+                }
+            )
+        rows.sort(key=lambda item: (str(item.get("title") or "").lower(), str(item.get("book_slug") or "").lower()))
+        return {
+            "source": "postgres.official_docs",
+            "total_count": len(rows),
+            "live_count": len(rows),
+            "candidate_count": 0,
+            "rows": rows,
+        }
+
     manifest_paths = _official_candidate_manifest_paths(root_dir, settings)
     source_truth_path = manifest_paths[0] if manifest_paths else None
     approved_entries_by_slug = _manifest_entry_by_slug(settings.source_manifest_path)

@@ -20,6 +20,7 @@ from play_book_studio.app.data_control_room_buckets import (
     _safe_read_json,
 )
 from play_book_studio.config.settings import load_settings
+from play_book_studio.db.official_documents import load_official_manifest_entries
 from play_book_studio.intake import CustomerPackDraftStore
 
 from .data_control_room_helpers import (
@@ -75,7 +76,6 @@ def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, i
     gate_path = root / "reports" / "build_logs" / "foundry_runs" / "profiles" / "morning_gate" / "latest.json"
     watched_paths = [
         gate_path,
-        settings.source_manifest_path,
         settings.source_approval_report_path,
         settings.translation_lane_report_path,
         settings.retrieval_eval_report_path,
@@ -87,6 +87,8 @@ def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, i
         settings.customer_pack_corpus_dir,
         *settings.playbook_book_dirs,
     ]
+    if not str(settings.database_url or "").strip():
+        watched_paths.insert(1, settings.source_manifest_path)
     return tuple(_path_fingerprint(path) for path in watched_paths)
 
 
@@ -112,8 +114,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     gate_report = _safe_read_json(gate_path)
     verdict = gate_report.get("verdict") if isinstance(gate_report.get("verdict"), dict) else {}
     verdict_summary = verdict.get("summary") if isinstance(verdict.get("summary"), dict) else {}
-    manifest = _safe_read_json(settings.source_manifest_path)
-    manifest_entries = manifest.get("entries") if isinstance(manifest.get("entries"), list) else []
+    manifest_entries = _approved_manifest_entries(settings)
     manifest_by_slug = {str(entry.get("book_slug") or "").strip(): entry for entry in manifest_entries if isinstance(entry, dict) and str(entry.get("book_slug") or "").strip()}
     manifest_slugs = set(manifest_by_slug)
     expected_approved_runtime_count = len(manifest_by_slug)
@@ -436,6 +437,15 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "runtime": runtime_smoke_payload,
         },
     }
+
+
+def _approved_manifest_entries(settings: object) -> list[dict[str, object]]:
+    database_url = str(getattr(settings, "database_url", "") or "").strip()
+    if database_url:
+        return load_official_manifest_entries(database_url)
+    manifest = _safe_read_json(settings.source_manifest_path)
+    entries = manifest.get("entries") if isinstance(manifest.get("entries"), list) else []
+    return [entry for entry in entries if isinstance(entry, dict)]
 
 
 __all__ = ["build_data_control_room_payload"]

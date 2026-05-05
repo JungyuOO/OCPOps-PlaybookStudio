@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from play_book_studio.config.settings import load_settings
+from play_book_studio.db.official_documents import load_official_manifest_entries
 from play_book_studio.runtime_catalog_registry import official_runtime_books
 
 from .runtime_truth import official_runtime_grade, official_runtime_truth_payload
@@ -281,8 +282,11 @@ def _build_approved_wiki_runtime_book_bucket(root: Path, *, translation_lane_rep
             }
         )
         seen_slugs.add(slug)
-    approved_manifest_payload = _safe_read_json(settings.source_manifest_path)
-    approved_manifest_entries = approved_manifest_payload.get("entries") if isinstance(approved_manifest_payload.get("entries"), list) else []
+    if str(settings.database_url or "").strip():
+        approved_manifest_entries = load_official_manifest_entries(settings.database_url)
+    else:
+        approved_manifest_payload = _safe_read_json(settings.source_manifest_path)
+        approved_manifest_entries = approved_manifest_payload.get("entries") if isinstance(approved_manifest_payload.get("entries"), list) else []
     for entry in approved_manifest_entries:
         if not isinstance(entry, dict):
             continue
