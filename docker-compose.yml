@@ -63,7 +63,6 @@ services:
       - ./manifests:/app/manifests
       - ./reports:/app/reports
       - ./tmp:/app/tmp
-      - ./tmp_source:/app/tmp_source
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=5)"]
       interval: 15s

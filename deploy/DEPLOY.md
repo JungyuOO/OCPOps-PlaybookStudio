@@ -1,16 +1,19 @@
 # PlayBookStudio Server Deployment
 
 This deployment keeps application images separate from runtime data.
-The server must have Docker Compose, the repository files, `data/`,
-`manifests/`, `artifacts/`, and the Qdrant volume or a Qdrant restore.
+The server must have Docker Compose, the repository files, PostgreSQL,
+Qdrant, and the writable runtime directories used by the app. Seed/import
+inputs such as `data/`, `corpus/`, and `manifests/` are only required when
+running one-shot seed services.
 
 ## Files
 
 - `docker-compose.prod.yml` - production compose file.
 - `.env.production.example` - copy to `.env.production` and fill secrets.
-- `data/` - mounted read-only into the app container.
-- `manifests/` - mounted read-only into the app container.
-- `artifacts/` and `reports/` - mounted read-write for runtime output.
+- `artifacts/`, `storage/`, and `reports/` - mounted read-write for runtime output.
+- `manifests/` - temporarily mounted read-only into the app for remaining UI source-manifest compatibility.
+- `data/`, `corpus/`, and `manifests/` - mounted read-only into seed/import services.
+- PostgreSQL volume - defaults to `ocpops_playbookstudio_postgres_data`.
 - Qdrant volume - defaults to `ocp-rag-chatbot_qdrant_storage`.
 
 ## First Run
@@ -93,5 +96,6 @@ docker compose -f docker-compose.prod.yml --env-file .env.production ps
 - `web` is exposed by `WEB_BIND`, default `0.0.0.0:8080`.
 - Qdrant binds to localhost by default for safety.
 - The app uses Qdrant over the internal Docker network: `http://qdrant:6333`.
-- `data/` and `manifests/` are mounted read-only so runtime writes cannot
-  accidentally alter the source corpus on the server.
+- The production app container no longer mounts `data/` or `corpus/`; those
+  directories are seed/import inputs. `manifests/` remains mounted read-only
+  until the remaining source-manifest UI paths are fully DB-backed.
