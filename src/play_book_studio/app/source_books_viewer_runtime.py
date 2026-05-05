@@ -126,6 +126,8 @@ def internal_viewer_html(root_dir: Path, viewer_path: str, *, page_mode: str = "
     manifest_entry = _manifest_entry_for_book(root_dir, book_slug)
     settings = load_settings(root_dir)
     if playbook_book is None:
+        if settings.database_url.strip():
+            return None
         sections = _load_normalized_book_sections(root_dir, book_slug)
         source_url = (
             str(manifest_entry.get("source_url") or "").strip()
@@ -204,6 +206,7 @@ def internal_active_runtime_markdown_viewer_html(root_dir: Path, viewer_path: st
     embedded = "embed=1" in request.query
     manifest_entry = _manifest_entry_for_book(root_dir, slug)
     playbook_book = _load_playbook_book(root_dir, slug)
+    settings = load_settings(root_dir)
     if playbook_book is not None:
         sections = [dict(section) for section in (playbook_book.get("sections") or []) if isinstance(section, dict)]
         if not sections:
@@ -213,6 +216,8 @@ def internal_active_runtime_markdown_viewer_html(root_dir: Path, viewer_path: st
         summary = _playbook_viewer_chrome(playbook_book)[1]
         source_url = str(playbook_book.get("source_uri") or "")
     else:
+        if settings.database_url.strip():
+            return None
         sections = _load_normalized_book_sections(root_dir, slug)
         if sections:
             title = (
