@@ -406,11 +406,15 @@ def _build_playbook_library(derived_playbook_family_statuses: dict[str, dict[str
 
 def _apply_viewer_path_fallback(books: list[dict[str, Any]], *, root: Path) -> list[dict[str, Any]]:
     settings = load_settings(root)
+    database_url = getattr(settings, "database_url", "").strip()
     playbook_dir = settings.playbook_books_dir.resolve()
     for book in books:
         if str(book.get("viewer_path") or "").strip():
             continue
         slug = str(book.get("book_slug") or "").strip()
+        if database_url and slug:
+            book["viewer_path"] = settings.viewer_path_template.format(slug=slug)
+            continue
         if slug and (playbook_dir / f"{slug}.json").exists():
             book["viewer_path"] = settings.viewer_path_template.format(slug=slug)
     return books
