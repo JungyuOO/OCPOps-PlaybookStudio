@@ -5,6 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.settings import load_settings
 from play_book_studio.app.viewer_blocks import (
     _clean_source_view_text,
     _render_normal_paragraph,
@@ -136,9 +137,63 @@ def _runtime_href_from_docs_href(href: str) -> str:
     return f"{rewritten}#{anchor}" if anchor else rewritten
 
 
+def _json_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            payload = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+    return {}
+
+
+def _db_runtime_enabled(root_dir: Path) -> bool:
+    try:
+        return bool(load_settings(root_dir).database_url.strip())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _playbook_anchor_index_from_database(root_dir: Path) -> dict[str, str]:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if not database_url:
+        return {}
+    try:
+        import psycopg
+
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT ds.metadata, c.source_anchor
+                    FROM document_sources ds
+                    JOIN parsed_documents pd ON pd.document_source_id = ds.id
+                    JOIN document_chunks c ON c.parsed_document_id = pd.id
+                    WHERE ds.source_scope = 'official_docs'
+                      AND c.source_anchor IS NOT NULL
+                      AND c.source_anchor <> ''
+                    """
+                )
+                rows = cursor.fetchall()
+    except Exception:  # noqa: BLE001
+        return {}
+    index: dict[str, str] = {}
+    for metadata, source_anchor in rows:
+        anchor = str(source_anchor or "").strip()
+        book_slug = str(_json_dict(metadata).get("book_slug") or "").strip()
+        if anchor and book_slug and anchor not in index:
+            index[anchor] = f"/playbooks/wiki-runtime/active/{book_slug}/index.html#{anchor}"
+    return index
+
+
 @lru_cache(maxsize=1)
 def _playbook_anchor_index(root_dir_str: str) -> dict[str, str]:
     root_dir = Path(root_dir_str)
+    if _db_runtime_enabled(root_dir):
+        return _playbook_anchor_index_from_database(root_dir)
     playbook_dir = root_dir / "data" / "gold_manualbook_ko" / "playbooks"
     index: dict[str, str] = {}
     if not playbook_dir.exists():
@@ -171,6 +226,8 @@ def _source_anchor_variants(anchor: str) -> tuple[str, ...]:
 
 @lru_cache(maxsize=1)
 def _source_anchor_file_index(root_dir_str: str) -> dict[str, str]:
+    if _db_runtime_enabled(Path(root_dir_str)):
+        return {}
     repo_root = Path(root_dir_str) / "tmp_source" / "openshift-docs-enterprise-4.20"
     index: dict[str, str] = {}
     if not repo_root.exists():
@@ -203,6 +260,12 @@ def _source_section_lines(root_dir_str: str, anchor: str) -> tuple[str, ...]:
     anchor_variants = _source_anchor_variants(anchor)
     if not anchor_variants:
         return ()
+    root_dir = Path(root_dir_str)
+    if _db_runtime_enabled(root_dir):
+        lines = _source_section_lines_from_database(root_dir, anchor_variants)
+        if lines:
+            return lines
+        return ()
     anchor_file_index = _source_anchor_file_index(root_dir_str)
     for anchor_variant in anchor_variants:
         file_path_str = anchor_file_index.get(anchor_variant)
@@ -222,6 +285,34 @@ def _source_section_lines(root_dir_str: str, anchor: str) -> tuple[str, ...]:
                 collected.append(candidate.rstrip())
             return tuple(collected)
     return ()
+
+
+def _source_section_lines_from_database(root_dir: Path, anchor_variants: tuple[str, ...]) -> tuple[str, ...]:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if not database_url:
+        return ()
+    try:
+        import psycopg
+
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT c.markdown
+                    FROM document_chunks c
+                    WHERE c.source_scope = 'official_docs'
+                      AND c.source_anchor = ANY(%s)
+                    ORDER BY c.ordinal ASC
+                    LIMIT 1
+                    """,
+                    (list(anchor_variants),),
+                )
+                row = cursor.fetchone()
+    except Exception:  # noqa: BLE001
+        return ()
+    markdown = str((row or [""])[0] or "").strip()
+    return tuple(markdown.splitlines()) if markdown else ()
 
 
 def _source_overlay_href(root_dir: Path, raw_target: str) -> str:
