@@ -127,6 +127,11 @@ def _starter_question(
 
 
 def _official_faq_questions(root_dir: Path) -> list[dict[str, Any]]:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if database_url:
+        return _official_faq_questions_from_db(database_url)
+
     candidates: list[dict[str, Any]] = []
     entries_by_slug = {
         str(entry.get("book_slug") or "").strip(): entry
@@ -167,6 +172,11 @@ def _official_faq_questions(root_dir: Path) -> list[dict[str, Any]]:
 
 
 def _manifest_entries(root_dir: Path) -> list[dict[str, Any]]:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if database_url:
+        return _official_manifest_entries_from_db(database_url)
+
     for path in (
         root_dir / "manifests" / "ocp420_repo_wide_source_manifest.json",
         root_dir / "manifests" / "ocp420_source_first_full_rebuild_manifest.json",
@@ -176,6 +186,101 @@ def _manifest_entries(root_dir: Path) -> list[dict[str, Any]]:
         if isinstance(entries, list) and entries:
             return [entry for entry in entries if isinstance(entry, dict)]
     return []
+
+
+def _official_manifest_entries_from_db(database_url: str) -> list[dict[str, Any]]:
+    try:
+        import psycopg
+    except Exception:  # noqa: BLE001
+        return []
+
+    try:
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        COALESCE(NULLIF(ds.metadata->>'book_slug', ''), ds.filename) AS book_slug,
+                        COALESCE(NULLIF(pd.title, ''), NULLIF(ds.metadata->>'title', ''), ds.filename) AS title,
+                        COALESCE(NULLIF(ds.metadata->>'viewer_path', ''), '') AS viewer_path,
+                        ds.metadata
+                    FROM document_sources ds
+                    LEFT JOIN LATERAL (
+                        SELECT title
+                        FROM parsed_documents
+                        WHERE document_source_id = ds.id
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    ) pd ON true
+                    WHERE ds.source_scope = 'official_docs'
+                    ORDER BY book_slug
+                    """
+                )
+                rows = cursor.fetchall()
+    except Exception:  # noqa: BLE001
+        return []
+
+    entries: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for book_slug, title, viewer_path, metadata in rows:
+        slug = str(book_slug or "").strip()
+        if not slug or slug in seen:
+            continue
+        seen.add(slug)
+        meta = metadata if isinstance(metadata, dict) else {}
+        topic_path = meta.get("topic_path") or meta.get("section_path") or meta.get("toc_path") or []
+        if not isinstance(topic_path, list):
+            topic_path = [str(topic_path)]
+        section_family = meta.get("section_family") or []
+        if not isinstance(section_family, list):
+            section_family = [str(section_family)]
+        entries.append(
+            {
+                "book_slug": slug,
+                "title": str(title or slug.replace("_", " ").title()).strip(),
+                "viewer_path": str(viewer_path or f"/playbooks/wiki-runtime/active/{slug}/index.html").strip(),
+                "source_relative_path": str(meta.get("source_relative_path") or meta.get("source_path") or ""),
+                "topic_path": [str(item) for item in topic_path if str(item).strip()],
+                "section_family": [str(item) for item in section_family if str(item).strip()],
+            }
+        )
+    return entries
+
+
+def _official_faq_questions_from_db(database_url: str) -> list[dict[str, Any]]:
+    entries = _official_manifest_entries_from_db(database_url)
+    questions: list[dict[str, Any]] = []
+    for rule in STARTER_CATEGORY_RULES:
+        if rule.key not in {"day2", "operations", "storage", "security", "networking", "troubleshooting"}:
+            continue
+        entry = _best_entry_for_category(entries, rule)
+        if not entry:
+            continue
+        title = _clean_title(str(entry.get("title") or rule.label))
+        book_slug = str(entry.get("book_slug") or "").strip()
+        questions.append(
+            _starter_question(
+                lane="faq",
+                question=f"What should I check first in {title}?",
+                route_kind="official",
+                source="postgres.official_docs",
+                category_key=rule.key,
+                category_label=rule.label,
+                target_book_slug=book_slug,
+                target_title=title,
+                target_viewer_path=str(entry.get("viewer_path") or ""),
+            )
+        )
+    if questions:
+        return questions
+    return [
+        _starter_question(
+            lane="faq",
+            question="What official OpenShift document should I start from for this issue?",
+            route_kind="official",
+            source="postgres.official_docs",
+        )
+    ]
 
 
 def _entry_haystack(entry: dict[str, Any]) -> str:

@@ -111,3 +111,34 @@ def test_starter_questions_do_not_fall_back_to_files_when_database_is_configured
     groups = {group["key"]: group for group in payload["groups"]}
 
     assert groups["operations"]["questions"] == []
+
+
+def test_starter_questions_use_postgres_official_metadata_when_database_is_configured(monkeypatch) -> None:
+    root = TEST_TMP / "db_official_metadata"
+    root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(
+        starter_questions,
+        "load_settings",
+        lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+    )
+    monkeypatch.setattr(
+        starter_questions,
+        "_official_manifest_entries_from_db",
+        lambda _database_url: [
+            {
+                "book_slug": "machine_configuration",
+                "title": "Machine configuration",
+                "viewer_path": "/playbooks/wiki-runtime/active/machine_configuration/index.html",
+                "topic_path": ["Operations", "Machine configuration"],
+                "section_family": ["operations"],
+                "source_relative_path": "machine_configuration/index.html",
+            }
+        ],
+    )
+
+    payload = build_studio_starter_questions(root, seed="stable")
+    groups = {group["key"]: group for group in payload["groups"]}
+
+    assert groups["faq"]["questions"][0]["source"] == "postgres.official_docs"
+    assert groups["faq"]["questions"][0]["target_book_slug"] == "machine_configuration"
+    assert payload["learning_sequence"][2]["target_viewer_path"] == "/playbooks/wiki-runtime/active/machine_configuration/index.html"
