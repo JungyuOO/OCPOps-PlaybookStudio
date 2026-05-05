@@ -371,6 +371,49 @@ def test_course_asset_endpoint_prefers_postgres_asset_payload(monkeypatch: pytes
     assert handler.content_type == "image/png"
 
 
+def test_course_asset_endpoint_does_not_fall_back_to_files_when_database_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Handler:
+        def __init__(self) -> None:
+            self.json_payload = None
+            self.status = None
+            self.bytes_payload = b""
+            self.content_type = ""
+
+        def _send_json(self, payload: dict, status=200) -> None:  # noqa: ANN001
+            self.json_payload = payload
+            self.status = status
+
+        def _send_bytes(self, payload: bytes, *, content_type: str) -> None:
+            self.bytes_payload = payload
+            self.content_type = content_type
+
+    with _temp_root() as root:
+        asset = root / "data" / "course_pbs" / "assets" / "file-only.png"
+        asset.parent.mkdir(parents=True, exist_ok=True)
+        asset.write_bytes(b"file-image-bytes")
+        monkeypatch.setattr(
+            course_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+        )
+        monkeypatch.setattr(course_api, "_load_course_asset_from_database", lambda _root, asset_path: None)
+
+        handler = Handler()
+        handled = handle_course_get(
+            handler,
+            "/api/v1/course/assets",
+            "path=data/course_pbs/assets/file-only.png",
+            root_dir=root,
+        )
+
+    assert handled is True
+    assert handler.status == 404
+    assert handler.bytes_payload == b""
+    assert handler.json_payload == {"error": "Course asset not found in PostgreSQL"}
+
+
 def test_course_chat_uses_ops_learning_guide_before_raw_chunk_route() -> None:
     with _temp_root() as root:
         current_chunk_id = "perf-current"

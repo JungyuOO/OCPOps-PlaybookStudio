@@ -3507,6 +3507,9 @@ def handle_course_get(handler: Any, path: str, query: str, *, root_dir: Path) ->
             )
             handler._send_bytes(body, content_type=content_type)
             return True
+        if load_settings(root_dir).database_url.strip():
+            handler._send_json({"error": "Course asset not found in PostgreSQL"}, HTTPStatus.NOT_FOUND)
+            return True
         if not asset_path.exists() or not asset_path.is_file():
             handler._send_json({"error": "Course asset not found"}, HTTPStatus.NOT_FOUND)
             return True
@@ -3548,6 +3551,9 @@ def handle_course_get(handler: Any, path: str, query: str, *, root_dir: Path) ->
         if db_asset is not None:
             body, content_type = _course_asset_payload_from_bytes(db_asset["content"], str(db_asset.get("content_type") or "image/png"))
             handler._send_bytes(body, content_type=content_type)
+            return True
+        if load_settings(root_dir).database_url.strip():
+            handler._send_json({"error": f"Slide PNG not found in PostgreSQL for {chunk_id}:{slide_no}"}, HTTPStatus.NOT_FOUND)
             return True
         if asset_path is None or not asset_path.exists():
             handler._send_json({"error": f"Slide PNG not found for {chunk_id}:{slide_no}"}, HTTPStatus.NOT_FOUND)
