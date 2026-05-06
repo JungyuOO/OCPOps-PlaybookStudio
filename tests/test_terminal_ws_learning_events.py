@@ -104,7 +104,67 @@ def test_terminal_recorder_updates_pending_output_check_from_scoped_stdout(monke
                 "stdout": "Using project \"demo\" on server",
                 "stderr": "",
                 "exit_code": None,
+                "output_complete": False,
                 "stdout_contains_matched": True,
+            },
+        }
+    ]
+    assert recorder.pending_output_checks == []
+
+
+def test_terminal_recorder_closes_pending_exit_code_check_on_session_exit(monkeypatch):
+    check = CommandCheck(
+        id="check-1",
+        lab_task_id="task-1",
+        check_key="oc-get-co-exit",
+        command_pattern=r"^oc get co$",
+        expected_command="oc get co",
+        validation_payload={"expected_exit_code": 0},
+    )
+    recorder = terminal_ws.TerminalEventRecorder(
+        database_url="postgresql://unit-test",
+        session=object(),
+        context=TerminalLearningContext(learner_id="learner-1", lab_task_id="task-1"),
+    )
+    recorder.connection = object()
+    recorder.terminal_session_id = "terminal-1"
+    recorder.learning_step_attempt_id = "attempt-1"
+
+    event_ids = iter(["command-event-1", "exit-event-1"])
+    result_ids = iter(["pending-result-1", "passed-result-1"])
+    monkeypatch.setattr(terminal_ws, "record_terminal_event", lambda *args, **kwargs: next(event_ids))
+    monkeypatch.setattr(terminal_ws, "load_command_checks_for_lab_task", lambda *args, **kwargs: (check,))
+    monkeypatch.setattr(terminal_ws, "upsert_command_check_result", lambda *args, **kwargs: next(result_ids))
+
+    pending_events = recorder.record_input("oc get co\r")
+    exit_events = recorder.record_exit_code(0)
+
+    assert pending_events[0]["status"] == "pending_output"
+    assert exit_events == [
+        {
+            "type": "command_check_result",
+            "id": "passed-result-1",
+            "terminal_session_id": "terminal-1",
+            "terminal_event_id": "command-event-1",
+            "command_check_id": "check-1",
+            "lab_task_id": "task-1",
+            "learner_id": "learner-1",
+            "submitted_command": "oc get co",
+            "status": "passed",
+            "matched": True,
+            "validation_result": {
+                "validation_kind": "command_pattern",
+                "submitted_command": "oc get co",
+                "expected_command": "oc get co",
+                "command_pattern": r"^oc get co$",
+                "matched": True,
+                "requires_output": True,
+                "error": "",
+                "stdout": "",
+                "stderr": "",
+                "exit_code": 0,
+                "output_complete": True,
+                "expected_exit_code_matched": True,
             },
         }
     ]

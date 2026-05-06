@@ -154,7 +154,13 @@ class TerminalEventRecorder:
         )
         return self._record_output_check_results(stream=stream, data=data)
 
-    def _record_output_check_results(self, *, stream: str, data: str) -> list[dict[str, Any]]:
+    def _record_output_check_results(
+        self,
+        *,
+        stream: str,
+        data: str,
+        exit_code: int | None = None,
+    ) -> list[dict[str, Any]]:
         result_events: list[dict[str, Any]] = []
         remaining: list[dict[str, Any]] = []
         for pending in self.pending_output_checks:
@@ -162,6 +168,8 @@ class TerminalEventRecorder:
                 pending["stderr"] = f"{pending.get('stderr', '')}{data}"
             else:
                 pending["stdout"] = f"{pending.get('stdout', '')}{data}"
+            if exit_code is not None:
+                pending["exit_code"] = exit_code
             check = pending["check"]
             command = str(pending["command"])
             evaluation = evaluate_command_check_output(
@@ -169,6 +177,8 @@ class TerminalEventRecorder:
                 command,
                 stdout=str(pending.get("stdout") or ""),
                 stderr=str(pending.get("stderr") or ""),
+                exit_code=pending.get("exit_code"),
+                output_complete=exit_code is not None,
             )
             if evaluation.status == "pending_output":
                 remaining.append(pending)
@@ -194,6 +204,20 @@ class TerminalEventRecorder:
             )
         self.pending_output_checks = remaining
         return result_events
+
+    def record_exit_code(self, exit_code: int) -> list[dict[str, Any]]:
+        if not self.connection or not self.terminal_session_id:
+            return []
+        self.event_ordinal += 1
+        record_terminal_event(
+            self.connection,
+            terminal_session_id=self.terminal_session_id,
+            event_ordinal=self.event_ordinal,
+            event_type="exit",
+            data=str(exit_code),
+            metadata={"exit_code": exit_code},
+        )
+        return self._record_output_check_results(stream="stdout", data="", exit_code=exit_code)
 
     def record_error(self, message: str) -> None:
         if not self.connection or not self.terminal_session_id:
@@ -349,6 +373,8 @@ async def _handle_terminal_connection(
             exit_code = session.poll_exit_code()
             if exit_code is not None and not exit_sent:
                 exit_sent = True
+                for event in recorder.record_exit_code(exit_code):
+                    await websocket.send(_json_event(event))
                 recorder.finish(status="exited", exit_code=exit_code)
                 await websocket.send(_json_event({"type": "exit", "exit_code": exit_code}))
                 return

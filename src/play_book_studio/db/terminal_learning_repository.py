@@ -114,6 +114,7 @@ def evaluate_command_check_output(
     stdout: str = "",
     stderr: str = "",
     exit_code: int | None = None,
+    output_complete: bool = False,
 ) -> CommandCheckEvaluation:
     command_evaluation = evaluate_command_check(check, command)
     payload = dict(check.validation_payload or {})
@@ -123,6 +124,7 @@ def evaluate_command_check_output(
             "stdout": stdout,
             "stderr": stderr,
             "exit_code": exit_code,
+            "output_complete": output_complete,
         }
     )
     if not command_evaluation.matched:
@@ -165,7 +167,7 @@ def evaluate_command_check_output(
 
     if not checks:
         return command_evaluation
-    status = "passed" if all(checks) else "pending_output"
+    status = "passed" if all(checks) else "failed" if output_complete else "pending_output"
     details["matched"] = status == "passed"
     return CommandCheckEvaluation(status=status, matched=status == "passed", validation_result=details)
 
