@@ -10,7 +10,7 @@ from .common import relative_project_path
 
 
 def _load_learning_route_overrides() -> dict[str, Any]:
-    path = Path("manifests/course_learning_routes_overrides.json")
+    path = Path("corpus/manifests/course_learning_routes_overrides.json")
     if not path.exists():
         return {}
     try:

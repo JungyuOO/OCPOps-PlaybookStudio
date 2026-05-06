@@ -59,8 +59,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./artifacts:/app/artifacts
-      - ./data:/app/data
-      - ./manifests:/app/manifests
+      - ./corpus:/app/corpus
       - ./reports:/app/reports
       - ./tmp:/app/tmp
     healthcheck:
@@ -104,8 +103,8 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./src:/app/src
-      - ./data:/app/data
-    command: ["python", "-m", "play_book_studio.cli", "course-chunk-import", "--root-dir", "/app", "--course-dir", "/app/data/course_pbs"]
+      - ./corpus:/app/corpus
+    command: ["python", "-m", "play_book_studio.cli", "course-chunk-import", "--root-dir", "/app", "--course-dir", "/app/corpus/data/course_pbs"]
     restart: "no"
 
   official-corpus-seed:
@@ -132,8 +131,8 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./src:/app/src
-      - ./data:/app/data
-    command: ["python", "-m", "play_book_studio.cli", "official-gold-import", "--root-dir", "/app", "--chunks-path", "/app/data/gold_corpus_ko/chunks.jsonl", "--index", "--index-limit", "${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}", "--refresh-qdrant-payloads", "--refresh-limit", "${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}"]
+      - ./corpus:/app/corpus
+    command: ["python", "-m", "play_book_studio.cli", "official-gold-import", "--root-dir", "/app", "--chunks-path", "/app/corpus/data/gold_corpus_ko/chunks.jsonl", "--index", "--index-limit", "${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}", "--refresh-qdrant-payloads", "--refresh-limit", "${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}"]
     restart: "no"
 
   qdrant-seed:
@@ -156,11 +155,10 @@ services:
     volumes:
       - ./src:/app/src
       - ./artifacts:/app/artifacts
-      - ./data:/app/data
-      - ./manifests:/app/manifests
+      - ./corpus:/app/corpus
       - ./reports:/app/reports
       - ./tmp:/app/tmp
-    command: ["python", "-m", "play_book_studio.cli", "course-qdrant-upsert", "--root-dir", "/app", "--course-dir", "data/course_pbs"]
+    command: ["python", "-m", "play_book_studio.cli", "course-qdrant-upsert", "--root-dir", "/app", "--course-dir", "corpus/data/course_pbs"]
     restart: "no"
 
   web:

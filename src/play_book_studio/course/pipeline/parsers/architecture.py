@@ -15,7 +15,7 @@ DESIGN_ID_RE = re.compile(r"DSGN-005-\d{3}", re.IGNORECASE)
 
 def parse_architecture_deck(pptx_path: Path, slide_rows: list[dict[str, Any]]) -> dict[str, Any]:
     render_index = load_render_index(Path("tmp/ppt-render/_index.csv"))
-    source_dir = Path("study-docs")
+    source_dir = Path("corpus/study-docs")
     deck_key = deck_key_from_path(pptx_path)
     grouped: dict[str, dict[str, Any]] = {}
     for slide in slide_rows:

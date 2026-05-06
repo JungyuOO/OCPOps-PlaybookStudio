@@ -52,8 +52,8 @@ def _enrich_chunks_with_attachment_summaries(chunks: list[dict]) -> list[dict]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build project-playbook course artifacts from study-docs PPTX files.")
-    parser.add_argument("--source-dir", type=Path, default=Path("study-docs"))
-    parser.add_argument("--output-dir", type=Path, default=Path("data/course_pbs"))
+    parser.add_argument("--source-dir", type=Path, default=Path("corpus/study-docs"))
+    parser.add_argument("--output-dir", type=Path, default=Path("corpus/data/course_pbs"))
     parser.add_argument(
         "--family",
         choices=("architecture", "unit_test", "integration_test", "perf_test", "completion_report", "all"),

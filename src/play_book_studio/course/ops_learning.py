@@ -13,11 +13,11 @@ AUDIT_SCHEMA = "ops_learning_anchor_audit_v1"
 GUIDE_SCHEMA = "ops_learning_guide_v1"
 GOLDEN_CASE_SCHEMA = "ops_learning_golden_case_v1"
 LEARNING_CHUNK_SCHEMA = "ops_learning_chunk_v1"
-DEFAULT_COURSE_DIR = Path("data/course_pbs")
-DEFAULT_AUDIT_PATH = Path("data/course_pbs/manifests/ops_learning_anchor_audit_v1.json")
-DEFAULT_GUIDES_PATH = Path("data/course_pbs/manifests/ops_learning_guides_v1.json")
-DEFAULT_GOLDEN_PATH = Path("manifests/course_ops_learning_golden_cases.jsonl")
-DEFAULT_LEARNING_CHUNKS_PATH = Path("data/course_pbs/manifests/ops_learning_chunks_v1.jsonl")
+DEFAULT_COURSE_DIR = Path("corpus/data/course_pbs")
+DEFAULT_AUDIT_PATH = Path("corpus/data/course_pbs/manifests/ops_learning_anchor_audit_v1.json")
+DEFAULT_GUIDES_PATH = Path("corpus/data/course_pbs/manifests/ops_learning_guides_v1.json")
+DEFAULT_GOLDEN_PATH = Path("corpus/manifests/course_ops_learning_golden_cases.jsonl")
+DEFAULT_LEARNING_CHUNKS_PATH = Path("corpus/data/course_pbs/manifests/ops_learning_chunks_v1.jsonl")
 OPS_SEQUENCE_TEXT_LIMIT = 560
 OPS_SOURCE_SUMMARY_TEXT_LIMIT = 500
 
@@ -427,6 +427,14 @@ def _load_chunks(course_dir: Path) -> list[dict[str, Any]]:
         payload = _read_json(path)
         if isinstance(payload, dict):
             chunks.append(payload)
+    jsonl_path = course_dir / "chunks.jsonl"
+    if not chunks and jsonl_path.exists():
+        for line in jsonl_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            payload = json.loads(line)
+            if isinstance(payload, dict):
+                chunks.append(payload)
     return chunks
 
 

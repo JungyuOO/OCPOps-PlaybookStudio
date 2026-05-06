@@ -22,7 +22,7 @@ def _chapter_marker(slide: dict[str, Any]) -> str:
 
 def parse_completion_report_deck(pptx_path: Path, slide_rows: list[dict[str, Any]]) -> dict[str, Any]:
     render_index = load_render_index(Path("tmp/ppt-render/_index.csv"))
-    source_dir = Path("study-docs")
+    source_dir = Path("corpus/study-docs")
     grouped: dict[str, dict[str, Any]] = {}
     current_chapter_index = 1
     current_marker = "I"

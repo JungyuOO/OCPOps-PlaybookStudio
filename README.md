@@ -8,14 +8,14 @@
 
 - `apps/web/`
 - `src/`
-- `data/wiki_runtime_books`
-- `data/wiki_assets`
-- `data/wiki_relations`
-- `data/gold_candidate_books`
-- `data/gold_manualbook_ko`
-- `data/silver_ko`
-- `data/gold_corpus_ko`
-- `manifests/`
+- `corpus/data/wiki_runtime_books`
+- `corpus/data/wiki_assets`
+- `corpus/data/wiki_relations`
+- `corpus/data/gold_candidate_books`
+- `corpus/data/gold_manualbook_ko`
+- `corpus/data/silver_ko`
+- `corpus/data/gold_corpus_ko`
+- `corpus/manifests/`
 - `schemas/`
 - `tests/`
 - 루트 실행 파일과 설정 파일
@@ -51,9 +51,9 @@
 
 이번 편입 브랜치에는 아래 3개 데이터가 포함되어 있습니다.
 
-- `data/gold_manualbook_ko`
-- `data/silver_ko`
-- `data/gold_corpus_ko`
+- `corpus/data/gold_manualbook_ko`
+- `corpus/data/silver_ko`
+- `corpus/data/gold_corpus_ko`
 
 그 외 큰 데이터나 복원용 자료는 아래 Drive 링크를 사용하면 됩니다.
 
@@ -63,8 +63,8 @@
 
 - `.env`
 - `artifacts/**`
-- `data/bronze/raw_html/**`
-- `data/bronze/source_bundles/**`
+- `corpus/data/bronze/raw_html/**`
+- `corpus/data/bronze/source_bundles/**`
 - customer/private 원본 문서
 - 실험 리포트
 - execution harness 재생성본
@@ -96,13 +96,13 @@ npm --prefix apps/web exec vitest run src/app/handoff.test.ts
 
 ## Study-docs Course QA
 
-`data/course_pbs` 기반 Guided Tour, 공식문서 매핑, 이미지 증적 추천 품질은 아래 명령으로 검증합니다.
+`corpus/data/course_pbs` 기반 Guided Tour, 공식문서 매핑, 이미지 증적 추천 품질은 아래 명령으로 검증합니다.
 
 ```powershell
 $env:PYTHONPATH='src'
 .\.venv\Scripts\python.exe -m play_book_studio.cli course-qa --generate --run --target-count 96
 ```
 
-이 명령은 `manifests/course_qa_cases.jsonl`을 생성하고, 원본 chunk/asset/role/state/공식문서 매핑에 근거가 있는 케이스만 `manifests/course_qa_cases.accepted.jsonl`로 통과시킨 뒤, accepted 케이스만 실제 course chat 품질 평가에 사용합니다. 최종 결과는 `data/course_pbs/manifests/course_qa_report.json`에 기록됩니다.
+이 명령은 `corpus/manifests/course_qa_cases.jsonl`을 생성하고, 원본 chunk/asset/role/state/공식문서 매핑에 근거가 있는 케이스만 `corpus/manifests/course_qa_cases.accepted.jsonl`로 통과시킨 뒤, accepted 케이스만 실제 course chat 품질 평가에 사용합니다. 최종 결과는 `corpus/data/course_pbs/manifests/course_qa_report.json`에 기록됩니다.
 
 기본 품질 게이트는 rejected 케이스가 1개라도 있거나 accepted 케이스 수가 `--target-count`보다 작거나 실행 평가 실패가 있으면 실패합니다. 실행 평가는 단순 passed 여부가 아니라 답변 본문에 Study-docs 근거 섹션, 원본 제목/ID, 공식문서 섹션, Guided Tour, 이미지 증적의 역할/상태가 실제로 설명되는지도 확인합니다. 전체 케이스별 결과를 콘솔에서 확인해야 할 때만 `--verbose-results`를 추가합니다.

@@ -30,7 +30,7 @@ def test_ops_learning_guides_to_seed_converts_guides_to_ordered_steps():
         ],
     }
 
-    seed = ops_learning_guides_to_seed(payload, source_ref="data/course_pbs/manifests/ops_learning_guides_v1.json")
+    seed = ops_learning_guides_to_seed(payload, source_ref="corpus/data/course_pbs/manifests/ops_learning_guides_v1.json")
 
     assert seed.slug == "ocp-project-playbook"
     assert seed.source_kind == "ops_learning_guides"

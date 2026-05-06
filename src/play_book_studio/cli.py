@@ -221,7 +221,7 @@ def build_parser() -> argparse.ArgumentParser:
     official_gold_import_parser.add_argument(
         "--chunks-path",
         type=Path,
-        default=Path("data/gold_corpus_ko/chunks.jsonl"),
+        default=Path("corpus/data/gold_corpus_ko/chunks.jsonl"),
     )
     official_gold_import_parser.add_argument("--database-url", default="")
     official_gold_import_parser.add_argument("--tenant-slug", default="public")
@@ -245,7 +245,7 @@ def build_parser() -> argparse.ArgumentParser:
     learning_seed_parser.add_argument(
         "--guides-path",
         type=Path,
-        default=Path("data/course_pbs/manifests/ops_learning_guides_v1.json"),
+        default=Path("corpus/data/course_pbs/manifests/ops_learning_guides_v1.json"),
     )
     learning_seed_parser.add_argument("--database-url", default="")
     learning_seed_parser.add_argument("--tenant-slug", default="public")
@@ -259,7 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Import Study-docs course chunks into PostgreSQL for runtime course viewers",
     )
     course_chunk_import_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_chunk_import_parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
+    course_chunk_import_parser.add_argument("--course-dir", type=Path, default=Path("corpus/data/course_pbs"))
     course_chunk_import_parser.add_argument("--database-url", default="")
     course_chunk_import_parser.add_argument("--course-slug", default="project-playbook")
     course_chunk_import_parser.add_argument("--limit", type=int, default=0)
@@ -272,11 +272,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Generate, quality-gate, and run Study-docs course chat QA cases",
     )
     course_qa_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_qa_parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
-    course_qa_parser.add_argument("--cases-path", type=Path, default=Path("manifests/course_qa_cases.jsonl"))
-    course_qa_parser.add_argument("--accepted-path", type=Path, default=Path("manifests/course_qa_cases.accepted.jsonl"))
-    course_qa_parser.add_argument("--rejected-path", type=Path, default=Path("manifests/course_qa_cases.rejected.jsonl"))
-    course_qa_parser.add_argument("--report-path", type=Path, default=Path("data/course_pbs/manifests/course_qa_report.json"))
+    course_qa_parser.add_argument("--course-dir", type=Path, default=Path("corpus/data/course_pbs"))
+    course_qa_parser.add_argument("--cases-path", type=Path, default=Path("corpus/manifests/course_qa_cases.jsonl"))
+    course_qa_parser.add_argument("--accepted-path", type=Path, default=Path("corpus/manifests/course_qa_cases.accepted.jsonl"))
+    course_qa_parser.add_argument("--rejected-path", type=Path, default=Path("corpus/manifests/course_qa_cases.rejected.jsonl"))
+    course_qa_parser.add_argument("--report-path", type=Path, default=Path("corpus/data/course_pbs/manifests/course_qa_report.json"))
     course_qa_parser.add_argument("--target-count", type=int, default=96)
     course_qa_parser.add_argument("--min-accepted", type=int, default=None)
     course_qa_parser.add_argument("--allow-rejected", action="store_true")
@@ -289,7 +289,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Upsert existing Study-docs course and ops learning chunks into Qdrant",
     )
     course_qdrant_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_qdrant_parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
+    course_qdrant_parser.add_argument("--course-dir", type=Path, default=Path("corpus/data/course_pbs"))
     course_qdrant_parser.add_argument("--limit", type=int, default=0)
     course_qdrant_parser.add_argument("--skip-course", action="store_true")
     course_qdrant_parser.add_argument("--skip-ops-learning", action="store_true")
@@ -299,7 +299,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Generate Course QA browser audit pages and optionally capture them with Playwright",
     )
     course_visual_audit_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_visual_audit_parser.add_argument("--cases-path", type=Path, default=Path("manifests/course_qa_cases.accepted.jsonl"))
+    course_visual_audit_parser.add_argument("--cases-path", type=Path, default=Path("corpus/manifests/course_qa_cases.accepted.jsonl"))
     course_visual_audit_parser.add_argument("--output-dir", type=Path, default=Path("output/playwright/course-qa-audit"))
     course_visual_audit_parser.add_argument("--capture", action="store_true")
     course_visual_audit_parser.add_argument("--host", default="127.0.0.1")
@@ -312,7 +312,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run Playwright smoke checks against the built Course UI",
     )
     course_ui_smoke_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_ui_smoke_parser.add_argument("--cases-path", type=Path, default=Path("manifests/course_qa_cases.accepted.jsonl"))
+    course_ui_smoke_parser.add_argument("--cases-path", type=Path, default=Path("corpus/manifests/course_qa_cases.accepted.jsonl"))
     course_ui_smoke_parser.add_argument("--output-dir", type=Path, default=Path("output/playwright/course-ui-smoke"))
     course_ui_smoke_parser.add_argument("--scenario-count", type=int, default=12)
     course_ui_smoke_parser.add_argument("--host", default="127.0.0.1")
@@ -325,11 +325,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Build the Study-docs operational learning source-anchor audit manifest",
     )
     course_ops_anchor_audit_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_ops_anchor_audit_parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
+    course_ops_anchor_audit_parser.add_argument("--course-dir", type=Path, default=Path("corpus/data/course_pbs"))
     course_ops_anchor_audit_parser.add_argument(
         "--output-path",
         type=Path,
-        default=Path("data/course_pbs/manifests/ops_learning_anchor_audit_v1.json"),
+        default=Path("corpus/data/course_pbs/manifests/ops_learning_anchor_audit_v1.json"),
     )
 
     course_ops_guides_parser = subparsers.add_parser(
@@ -337,21 +337,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Build initial Study-docs operational learning guides and beginner golden cases",
     )
     course_ops_guides_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_ops_guides_parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
+    course_ops_guides_parser.add_argument("--course-dir", type=Path, default=Path("corpus/data/course_pbs"))
     course_ops_guides_parser.add_argument(
         "--guides-path",
         type=Path,
-        default=Path("data/course_pbs/manifests/ops_learning_guides_v1.json"),
+        default=Path("corpus/data/course_pbs/manifests/ops_learning_guides_v1.json"),
     )
     course_ops_guides_parser.add_argument(
         "--golden-path",
         type=Path,
-        default=Path("manifests/course_ops_learning_golden_cases.jsonl"),
+        default=Path("corpus/manifests/course_ops_learning_golden_cases.jsonl"),
     )
     course_ops_guides_parser.add_argument(
         "--learning-chunks-path",
         type=Path,
-        default=Path("data/course_pbs/manifests/ops_learning_chunks_v1.jsonl"),
+        default=Path("corpus/data/course_pbs/manifests/ops_learning_chunks_v1.jsonl"),
     )
 
     return parser

@@ -103,7 +103,7 @@ def _write_chunks(course_dir: Path, chunks: list[dict[str, Any]]) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Refresh official-doc links for existing course chunks without rerunning OCR.")
     parser.add_argument("--root-dir", type=Path, default=Path("."))
-    parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
+    parser.add_argument("--course-dir", type=Path, default=Path("corpus/data/course_pbs"))
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--min-score", type=float, default=0.65)
     parser.add_argument("--min-overlap", type=int, default=2)

@@ -81,7 +81,7 @@ def _report(chunks: list[dict[str, Any]], *, applied: bool) -> dict[str, Any]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Apply chunk-context-aware image policy metadata to generated course chunks.")
     parser.add_argument("--root-dir", type=Path, default=Path("."))
-    parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
+    parser.add_argument("--course-dir", type=Path, default=Path("corpus/data/course_pbs"))
     parser.add_argument("--dry-run", action="store_true")
     return parser
 

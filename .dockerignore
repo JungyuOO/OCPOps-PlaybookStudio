@@ -41,6 +41,7 @@ pytest-cache-files-*/**
 /tmp/
 /tmp_source/
 /output/
+/corpus/
 /apps/web/node_modules/
 /apps/web/dist/
 
@@ -118,8 +119,5 @@ tests/**
 schemas
 schemas/**
 
-data
-data/**
-
-manifests
-manifests/**
+corpus
+corpus/**

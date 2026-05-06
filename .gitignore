@@ -20,13 +20,13 @@ storage/*
 !storage/.gitignore
 /archive/
 /_quarantine/
-data/bronze/raw_html/
-data/bronze/source_bundles/
-data/silver/normalized_docs.jsonl
+corpus/data/bronze/raw_html/
+corpus/data/bronze/source_bundles/
+corpus/data/silver/normalized_docs.jsonl
 # incorporation baseline keeps the three curated datasets below in Git:
-# - data/silver_ko
-# - data/gold_corpus_ko
-# - data/gold_manualbook_ko
+# - corpus/data/silver_ko
+# - corpus/data/gold_corpus_ko
+# - corpus/data/gold_manualbook_ko
 reports/build_logs/
 reports/build_logs/ui_server_stdout.log
 reports/build_logs/ui_server_stderr.log
@@ -83,12 +83,12 @@ __pycache__
 
 .playwright-cli
 output/*
-study-docs/*
-data/course_pbs/*
-!data/course_pbs/assets/
-!data/course_pbs/assets/**
-!data/course_pbs/manifests/
-!data/course_pbs/manifests/course_v1.json
-!data/course_pbs/manifests/ops_learning_chunks_v1.jsonl
-!data/course_pbs/manifests/ops_learning_guides_v1.json
-!data/course_pbs/chunks.jsonl
+corpus/study-docs/*
+corpus/data/course_pbs/*
+!corpus/data/course_pbs/assets/
+!corpus/data/course_pbs/assets/**
+!corpus/data/course_pbs/manifests/
+!corpus/data/course_pbs/manifests/course_v1.json
+!corpus/data/course_pbs/manifests/ops_learning_chunks_v1.jsonl
+!corpus/data/course_pbs/manifests/ops_learning_guides_v1.json
+!corpus/data/course_pbs/chunks.jsonl

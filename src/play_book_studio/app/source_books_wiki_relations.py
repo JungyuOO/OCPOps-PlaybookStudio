@@ -274,7 +274,7 @@ def _runtime_markdown_path_candidates(root_dir: Path, recorded_path: str) -> tup
         return ()
     candidates: list[Path] = [Path(normalized)]
     normalized_slash = normalized.replace("\\", "/")
-    marker = "data/wiki_runtime_books/"
+    marker = "corpus/data/wiki_runtime_books/"
     relative_tail = ""
     if marker in normalized_slash:
         relative_tail = normalized_slash.split(marker, 1)[1].strip("/")

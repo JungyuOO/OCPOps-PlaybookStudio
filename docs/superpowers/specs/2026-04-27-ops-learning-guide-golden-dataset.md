@@ -5,8 +5,8 @@ Status: Draft baseline for implementation
 Related:
 - `docs/superpowers/specs/2026-04-23-ocp-project-playbook-course-design.md`
 - `docs/superpowers/evaluate/2026-04-23-ocp-project-playbook-course-evaluation.md`
-- `data/course_pbs/manifests/course_v1.json`
-- `manifests/course_qa_cases.accepted.jsonl`
+- `corpus/data/course_pbs/manifests/course_v1.json`
+- `corpus/manifests/course_qa_cases.accepted.jsonl`
 
 ## 1. Purpose
 
@@ -34,8 +34,8 @@ Observed issues:
 Measured baseline as of 2026-04-27:
 
 - `course_v1.json` has 5 stages and 166 route stops.
-- `data/course_pbs/chunks` has 523 chunks.
-- `manifests/course_qa_cases.accepted.jsonl` has 300 accepted cases.
+- `corpus/data/course_pbs/chunks` has 523 chunks.
+- `corpus/manifests/course_qa_cases.accepted.jsonl` has 300 accepted cases.
 - 226 of 300 accepted cases include ID-like terms in the user-facing query.
 - Existing QA therefore over-validates document-anchor retrieval and under-validates beginner guided learning.
 
@@ -91,7 +91,7 @@ Canonical model: `ops_learning_guide_v1`
 Recommended file:
 
 ```text
-data/course_pbs/manifests/ops_learning_guides_v1.json
+corpus/data/course_pbs/manifests/ops_learning_guides_v1.json
 ```
 
 Top-level shape:
@@ -100,7 +100,7 @@ Top-level shape:
 {
   "canonical_model": "ops_learning_guide_v1",
   "generated_at": "2026-04-27",
-  "source_manifest": "data/course_pbs/manifests/course_v1.json",
+  "source_manifest": "corpus/data/course_pbs/manifests/course_v1.json",
   "guides": []
 }
 ```
@@ -188,7 +188,7 @@ Canonical model: `ops_learning_golden_case_v1`
 Recommended file:
 
 ```text
-manifests/course_ops_learning_golden_cases.jsonl
+corpus/manifests/course_ops_learning_golden_cases.jsonl
 ```
 
 Case shape:

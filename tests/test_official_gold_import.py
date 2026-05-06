@@ -72,7 +72,7 @@ def test_official_gold_import_parser_accepts_args():
             "--root-dir",
             str(REPO_ROOT),
             "--chunks-path",
-            "data/gold_corpus_ko/chunks.jsonl",
+            "corpus/data/gold_corpus_ko/chunks.jsonl",
             "--limit",
             "25",
             "--index",
@@ -90,7 +90,7 @@ def test_official_gold_import_parser_accepts_args():
     )
 
     assert args.command == "official-gold-import"
-    assert args.chunks_path == Path("data/gold_corpus_ko/chunks.jsonl")
+    assert args.chunks_path == Path("corpus/data/gold_corpus_ko/chunks.jsonl")
     assert args.limit == 25
     assert args.index is True
     assert args.index_limit == 30000

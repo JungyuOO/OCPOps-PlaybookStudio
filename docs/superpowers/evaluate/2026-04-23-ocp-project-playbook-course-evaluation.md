@@ -113,14 +113,14 @@ Spec 섹션 7의 layout_type → chunk_kind 매핑 테이블이 architecture/int
 ### 4.2 `/course/slides` path traversal 방어
 
 - 현재 `Path(png_path).resolve().exists()` 만 체크
-- resolved가 `data/course_pbs/` 밖을 벗어나도 그대로 서빙됨
+- resolved가 `corpus/data/course_pbs/` 밖을 벗어나도 그대로 서빙됨
 - 입력 png_path는 인덱스 산출이라 악용 가능성 낮지만, 방어-심층화 관점에서 root prefix 검사 필요
 - plan에도 이미 TODO로 있음
 
 ### 4.3 Gitignore 경계
 
 - `study-docs/*` 는 .gitignore 처리됨 ✓
-- `data/course_pbs/` 는 절대경로가 박제된 JSON을 포함 — 저장소에 커밋되면 사용자 로컬 경로가 그대로 노출됨. gitignore 경계 확인 권장
+- `corpus/data/course_pbs/` 는 절대경로가 박제된 JSON을 포함 — 저장소에 커밋되면 사용자 로컬 경로가 그대로 노출됨. gitignore 경계 확인 권장
 
 ---
 

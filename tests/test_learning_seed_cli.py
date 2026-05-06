@@ -16,7 +16,7 @@ def test_learning_seed_import_parser_accepts_dry_run_args():
             "--root-dir",
             ".",
             "--guides-path",
-            "data/course_pbs/manifests/ops_learning_guides_v1.json",
+            "corpus/data/course_pbs/manifests/ops_learning_guides_v1.json",
             "--tenant-slug",
             "ocp",
             "--workspace-slug",
@@ -26,7 +26,7 @@ def test_learning_seed_import_parser_accepts_dry_run_args():
     )
 
     assert args.command == "learning-seed-import"
-    assert args.guides_path == Path("data/course_pbs/manifests/ops_learning_guides_v1.json")
+    assert args.guides_path == Path("corpus/data/course_pbs/manifests/ops_learning_guides_v1.json")
     assert args.tenant_slug == "ocp"
     assert args.workspace_slug == "training"
     assert args.dry_run is True

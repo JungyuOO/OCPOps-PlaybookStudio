@@ -16,9 +16,9 @@ The source PPT/PDF-derived chunks remain intact. The new work adds a guide/golde
 
 As of 2026-04-27:
 
-- `data/course_pbs/manifests/course_v1.json` has 5 stages and 166 route stops.
-- `data/course_pbs/chunks` has 523 chunk files.
-- `manifests/course_qa_cases.accepted.jsonl` has 300 accepted cases.
+- `corpus/data/course_pbs/manifests/course_v1.json` has 5 stages and 166 route stops.
+- `corpus/data/course_pbs/chunks` has 523 chunk files.
+- `corpus/manifests/course_qa_cases.accepted.jsonl` has 300 accepted cases.
 - 226 of 300 accepted cases include ID-like terms in the user-facing query.
 - Current guided tour behavior is still strongly tied to chunk title, native ID, and `tour_stop.next_chunk_id`.
 
@@ -62,7 +62,7 @@ Tasks:
 
 Deliverables:
 
-- `data/course_pbs/manifests/ops_learning_anchor_audit_v1.json`
+- `corpus/data/course_pbs/manifests/ops_learning_anchor_audit_v1.json`
 - audit summary in the terminal/final report
 
 Completion criteria:
@@ -78,7 +78,7 @@ Create the first `ops_learning_guide_v1` manifest.
 
 Tasks:
 
-- Create `data/course_pbs/manifests/ops_learning_guides_v1.json`.
+- Create `corpus/data/course_pbs/manifests/ops_learning_guides_v1.json`.
 - Add required initial guides:
   - Architecture Overview
   - Service Flow and Network Reading
@@ -127,7 +127,7 @@ Create a new beginner-guided golden dataset.
 
 Tasks:
 
-- Create `manifests/course_ops_learning_golden_cases.jsonl`.
+- Create `corpus/manifests/course_ops_learning_golden_cases.jsonl`.
 - Add cases for:
   - `beginner_stage_entry`
   - `beginner_concept`

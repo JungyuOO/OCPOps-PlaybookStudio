@@ -30,7 +30,7 @@ def _short_slug(value: str, *, max_length: int = 28) -> str:
     return f"{slug[:keep]}-{digest}"
 
 
-def deck_key_from_path(pptx_path: Path, source_dir: Path = Path("study-docs")) -> str:
+def deck_key_from_path(pptx_path: Path, source_dir: Path = Path("corpus/study-docs")) -> str:
     try:
         relative = pptx_path.resolve().relative_to(source_dir.resolve())
         raw = str(relative.with_suffix("")).replace("\\", "-").replace("/", "-")

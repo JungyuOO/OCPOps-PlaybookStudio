@@ -23,7 +23,7 @@ from .pipeline.image_policy import apply_image_policy_to_chunk
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Retry only missing visual summaries in generated course chunks.")
     parser.add_argument("--root-dir", type=Path, default=Path("."))
-    parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
+    parser.add_argument("--course-dir", type=Path, default=Path("corpus/data/course_pbs"))
     parser.add_argument("--limit", type=int, default=0, help="Maximum number of missing assets to retry. 0 means all.")
     parser.add_argument("--max-workers", type=int, default=4)
     parser.add_argument("--include-short", action="store_true", help="Retry visual summaries shorter than --min-summary-chars.")

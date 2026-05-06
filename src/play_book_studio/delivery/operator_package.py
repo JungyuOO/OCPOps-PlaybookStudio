@@ -501,7 +501,7 @@ def build_operator_package(
         "generated_at_utc": generated_at,
         "commercial_truth": str(buyer_packet_bundle.get("commercial_truth") or ""),
         "source_runtime_group": active_group,
-        "source_runtime_manifest": "data/wiki_runtime_books/active_manifest.json",
+        "source_runtime_manifest": "corpus/data/wiki_runtime_books/active_manifest.json",
         "package_dir": _relative_to_root(root_dir, output_dir),
         "books": books,
         "reading_sequence": reading_sequence,

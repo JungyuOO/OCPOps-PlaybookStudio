@@ -200,7 +200,7 @@ async page => {{
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run Playwright smoke checks against the built Course UI.")
     parser.add_argument("--root-dir", type=Path, default=Path("."))
-    parser.add_argument("--cases-path", type=Path, default=Path("manifests/course_qa_cases.accepted.jsonl"))
+    parser.add_argument("--cases-path", type=Path, default=Path("corpus/manifests/course_qa_cases.accepted.jsonl"))
     parser.add_argument("--output-dir", type=Path, default=Path("output/playwright/course-ui-smoke"))
     parser.add_argument("--scenario-count", type=int, default=12)
     parser.add_argument("--host", default="127.0.0.1")

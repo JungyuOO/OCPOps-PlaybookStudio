@@ -365,7 +365,7 @@ def _chunk_beginner_question(chunk: dict[str, Any], *, intent: str = "learn") ->
 
 
 def _course_root(root_dir: Path) -> Path:
-    return root_dir / "data" / "course_pbs"
+    return root_dir / "corpus" / "data" / "course_pbs"
 
 
 def _course_manifest_path(root_dir: Path) -> Path:
@@ -3494,7 +3494,7 @@ def handle_course_get(handler: Any, path: str, query: str, *, root_dir: Path) ->
             return True
         assets_root = (_course_root(root_dir) / "assets").resolve()
         if not asset_path_raw or not _is_relative_to(asset_path, assets_root):
-            handler._send_json({"error": "Course asset path must be under data/course_pbs/assets"}, HTTPStatus.BAD_REQUEST)
+            handler._send_json({"error": "Course asset path must be under corpus/data/course_pbs/assets"}, HTTPStatus.BAD_REQUEST)
             return True
         if asset_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
             handler._send_json({"error": "Course asset must be an image"}, HTTPStatus.BAD_REQUEST)

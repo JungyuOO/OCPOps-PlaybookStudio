@@ -60,8 +60,8 @@ Reference spec: `docs/superpowers/specs/2026-04-23-ocp-project-playbook-course-d
 - `.venv`에 `python-pptx` 설치
 - `unit_test` family PPT 1개를 end-to-end 처리
 - 생성 결과:
-  - `data/course_pbs/manifests/course_v1.json`
-  - `data/course_pbs/chunks/*.json`
+  - `corpus/data/course_pbs/manifests/course_v1.json`
+  - `corpus/data/course_pbs/chunks/*.json`
 - `slide_refs.png_path`도 기존 `tmp/ppt-render` 자산과 연결됨
 
 실행 결과 예:
@@ -425,11 +425,11 @@ Immediate next implementation backlog:
 As of the latest implementation round:
 
 - `/course`, `/course/stages/:stageId`, and `/course/chunks/:chunkId` are all connected to generated course data
-- `slide_graph_v1` is persisted under `data/course_pbs/slide_graphs/`
+- `slide_graph_v1` is persisted under `corpus/data/course_pbs/slide_graphs/`
 - all five stage families are emitted into parent-first chunk sets
 - course APIs are live for manifest, stage, chunk, search, chat, and slide image access
 - guided learning routes now exist per stage
-- route overrides can be curated in `manifests/course_learning_routes_overrides.json`
+- route overrides can be curated in `corpus/manifests/course_learning_routes_overrides.json`
 - image attachments are annotated via the internal VLM endpoint and persisted into both graph/chunk artifacts
 
 Current dataset status:

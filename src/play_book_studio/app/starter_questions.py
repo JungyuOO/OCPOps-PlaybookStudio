@@ -310,7 +310,7 @@ def _load_ops_learning_guides_payload(root_dir: Path) -> tuple[dict[str, Any], s
             return {"canonical_model": "ops_learning_guide_v1", "guides": []}, "postgres.learning_paths"
     return (
         _safe_read_json(root_dir / "data" / "course_pbs" / "manifests" / "ops_learning_guides_v1.json"),
-        "data/course_pbs/manifests/ops_learning_guides_v1.json",
+        "corpus/data/course_pbs/manifests/ops_learning_guides_v1.json",
     )
 
 
@@ -368,8 +368,8 @@ def build_studio_starter_questions(root_dir: Path, *, seed: str = "") -> dict[st
         ],
         "learning_sequence": learning_sequence,
         "sources": {
-            "faq": "manifests/pbs_chat_quality_cases*.jsonl",
-            "learning": "manifests/ocp420_repo_wide_source_manifest.json",
+            "faq": "corpus/manifests/pbs_chat_quality_cases*.jsonl",
+            "learning": "corpus/manifests/ocp420_repo_wide_source_manifest.json",
             "operations": operations_source,
         },
     }

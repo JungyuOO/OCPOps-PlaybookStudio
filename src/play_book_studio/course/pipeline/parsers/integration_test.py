@@ -31,7 +31,7 @@ def _scenario_key(slide: dict[str, Any]) -> tuple[str, str]:
 
 def parse_integration_test_deck(pptx_path: Path, slide_rows: list[dict[str, Any]]) -> dict[str, Any]:
     render_index = load_render_index(Path("tmp/ppt-render/_index.csv"))
-    source_dir = Path("study-docs")
+    source_dir = Path("corpus/study-docs")
     deck_key = deck_key_from_path(pptx_path)
     grouped: dict[str, dict[str, Any]] = {}
 

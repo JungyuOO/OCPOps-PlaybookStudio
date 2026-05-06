@@ -368,7 +368,7 @@ As of now:
 - course APIs exist
 - `/course` UI exists
 - stage-level guided learning routes now exist
-- route overrides can be curated in `manifests/course_learning_routes_overrides.json`
+- route overrides can be curated in `corpus/manifests/course_learning_routes_overrides.json`
 - image attachments are annotated through the company VLM endpoint instead of full-slide OCR fallback
 
 But the parser quality is still transitional.

@@ -3,7 +3,7 @@
 This deployment keeps application images separate from runtime data.
 The server must have Docker Compose, the repository files, PostgreSQL,
 Qdrant, and the writable runtime directories used by the app. Seed/import
-inputs such as `data/`, `corpus/`, and `manifests/` are only required when
+inputs under `corpus/` are only required when
 running one-shot seed services.
 
 ## Files
@@ -11,11 +11,11 @@ running one-shot seed services.
 - `docker-compose.prod.yml` - production compose file.
 - `.env.production.example` - copy to `.env.production` and fill secrets.
 - `artifacts/`, `storage/`, and `reports/` - mounted read-write for runtime output.
-- `data/`, `corpus/`, and `manifests/` - mounted read-only into seed/import services.
+- `corpus/` - mounted read-only into seed/import services.
 - PostgreSQL volume - defaults to `ocpops_playbookstudio_postgres_data`.
 - Qdrant volume - defaults to `ocp-rag-chatbot_qdrant_storage`.
 
-The app image does not copy `data/`, `corpus/`, or `manifests/`. Keep those
+The app image does not copy `corpus/`. Keep this
 directories on the server only when you need to run seed/import services.
 
 ## First Run
@@ -50,7 +50,7 @@ Expected Qdrant collections for the current dataset:
 `openshift_docs` should have the same count as:
 
 ```powershell
-(Get-Content data\gold_corpus_ko\chunks.jsonl | Measure-Object -Line).Lines
+(Get-Content corpus\data\gold_corpus_ko\chunks.jsonl | Measure-Object -Line).Lines
 ```
 
 ## Seed Course Qdrant Data
@@ -65,7 +65,7 @@ For course runtime rows and assets in PostgreSQL:
 docker compose -f docker-compose.prod.yml --env-file .env.production --profile seed run --rm course-runtime-seed
 ```
 
-For the official OpenShift corpus, this imports `data/gold_corpus_ko/chunks.jsonl`
+For the official OpenShift corpus, this imports `corpus/data/gold_corpus_ko/chunks.jsonl`
 into PostgreSQL and indexes/refreshes Qdrant payloads for the `official_docs`
 scope:
 
@@ -81,8 +81,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.production --profile s
 
 This upserts:
 
-- `data/course_pbs/chunks.jsonl` into `course_pbs_ko`
-- `data/course_pbs/manifests/ops_learning_chunks_v1.jsonl` into `course_ops_learning_ko`
+- `corpus/data/course_pbs/chunks.jsonl` into `course_pbs_ko`
+- `corpus/data/course_pbs/manifests/ops_learning_chunks_v1.jsonl` into `course_ops_learning_ko`
 
 The command is idempotent for the same chunk IDs.
 The official corpus seed is also idempotent for the same chunk IDs and uses
@@ -112,5 +112,5 @@ docker compose -f docker-compose.prod.yml --env-file .env.production ps
 - `web` is exposed by `WEB_BIND`, default `0.0.0.0:8080`.
 - Qdrant binds to localhost by default for safety.
 - The app uses Qdrant over the internal Docker network: `http://qdrant:6333`.
-- The production app container no longer mounts `data/`, `corpus/`, or
-  `manifests/`; those directories are seed/import inputs.
+- The production app container no longer mounts `corpus/`; that directory is
+  only a seed/import input.

@@ -100,8 +100,8 @@ services:
       db-migrate:
         condition: service_completed_successfully
     volumes:
-      - ./data:/app/data:ro
-    command: ["python", "-m", "play_book_studio.cli", "course-chunk-import", "--root-dir", "/app", "--course-dir", "/app/data/course_pbs"]
+      - ./corpus:/app/corpus:ro
+    command: ["python", "-m", "play_book_studio.cli", "course-chunk-import", "--root-dir", "/app", "--course-dir", "/app/corpus/data/course_pbs"]
     restart: "no"
 
   official-corpus-seed:
@@ -121,7 +121,7 @@ services:
       ARTIFACTS_DIR: /app/artifacts
       OBJECT_STORAGE_ROOT: /app/storage
       CORPUS_SEED_DIR: /app/corpus
-      SOURCE_MANIFEST_PATH: /app/manifests/ocp_ko_4_20_approved_ko.json
+      SOURCE_MANIFEST_PATH: /app/corpus/manifests/ocp_ko_4_20_approved_ko.json
     depends_on:
       postgres:
         condition: service_healthy
@@ -132,14 +132,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./data:/app/data:ro
-      - ./manifests:/app/manifests:ro
       - ./corpus:/app/corpus:ro
       - ./artifacts:/app/artifacts
       - ./storage:/app/storage
       - ./reports:/app/reports
       - app_tmp:/app/tmp
-    command: ["python", "-m", "play_book_studio.cli", "official-gold-import", "--root-dir", "/app", "--chunks-path", "/app/data/gold_corpus_ko/chunks.jsonl", "--index", "--index-limit", "${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}", "--refresh-qdrant-payloads", "--refresh-limit", "${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}"]
+    command: ["python", "-m", "play_book_studio.cli", "official-gold-import", "--root-dir", "/app", "--chunks-path", "/app/corpus/data/gold_corpus_ko/chunks.jsonl", "--index", "--index-limit", "${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}", "--refresh-qdrant-payloads", "--refresh-limit", "${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}"]
     restart: "no"
 
   qdrant-seed:
@@ -158,21 +156,19 @@ services:
       ARTIFACTS_DIR: /app/artifacts
       OBJECT_STORAGE_ROOT: /app/storage
       CORPUS_SEED_DIR: /app/corpus
-      SOURCE_MANIFEST_PATH: /app/manifests/ocp_ko_4_20_approved_ko.json
+      SOURCE_MANIFEST_PATH: /app/corpus/manifests/ocp_ko_4_20_approved_ko.json
     depends_on:
       postgres:
         condition: service_healthy
       qdrant:
         condition: service_started
     volumes:
-      - ./data:/app/data:ro
-      - ./manifests:/app/manifests:ro
       - ./corpus:/app/corpus:ro
       - ./artifacts:/app/artifacts
       - ./storage:/app/storage
       - ./reports:/app/reports
       - app_tmp:/app/tmp
-    command: ["python", "-m", "play_book_studio.cli", "course-qdrant-upsert", "--root-dir", "/app", "--course-dir", "data/course_pbs"]
+    command: ["python", "-m", "play_book_studio.cli", "course-qdrant-upsert", "--root-dir", "/app", "--course-dir", "corpus/data/course_pbs"]
     restart: "no"
 
   web:
