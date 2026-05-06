@@ -107,6 +107,69 @@ def evaluate_command_check(check: CommandCheck, command: str) -> CommandCheckEva
     return CommandCheckEvaluation(status=status, matched=matched, validation_result=details)
 
 
+def evaluate_command_check_output(
+    check: CommandCheck,
+    command: str,
+    *,
+    stdout: str = "",
+    stderr: str = "",
+    exit_code: int | None = None,
+) -> CommandCheckEvaluation:
+    command_evaluation = evaluate_command_check(check, command)
+    payload = dict(check.validation_payload or {})
+    details = dict(command_evaluation.validation_result)
+    details.update(
+        {
+            "stdout": stdout,
+            "stderr": stderr,
+            "exit_code": exit_code,
+        }
+    )
+    if not command_evaluation.matched:
+        return command_evaluation
+
+    checks: list[bool] = []
+    output_contains = str(payload.get("output_contains") or "").strip()
+    stdout_contains = str(payload.get("stdout_contains") or "").strip()
+    stderr_contains = str(payload.get("stderr_contains") or "").strip()
+    expected_exit_code = payload.get("expected_exit_code")
+
+    if output_contains:
+        checks.append(output_contains.casefold() in f"{stdout}\n{stderr}".casefold())
+        details["output_contains_matched"] = checks[-1]
+    if stdout_contains:
+        checks.append(stdout_contains.casefold() in stdout.casefold())
+        details["stdout_contains_matched"] = checks[-1]
+    if stderr_contains:
+        checks.append(stderr_contains.casefold() in stderr.casefold())
+        details["stderr_contains_matched"] = checks[-1]
+    if expected_exit_code is not None:
+        if exit_code is None:
+            checks.append(False)
+            details["expected_exit_code_matched"] = False
+            details["awaiting_exit_code"] = True
+        else:
+            try:
+                expected_code = int(expected_exit_code)
+            except (TypeError, ValueError):
+                return CommandCheckEvaluation(
+                    status="error",
+                    matched=True,
+                    validation_result={
+                        **details,
+                        "error": f"invalid expected_exit_code: {expected_exit_code}",
+                    },
+                )
+            checks.append(exit_code == expected_code)
+            details["expected_exit_code_matched"] = checks[-1]
+
+    if not checks:
+        return command_evaluation
+    status = "passed" if all(checks) else "pending_output"
+    details["matched"] = status == "passed"
+    return CommandCheckEvaluation(status=status, matched=status == "passed", validation_result=details)
+
+
 def create_terminal_session(
     connection,
     *,
@@ -449,6 +512,7 @@ __all__ = [
     "create_learning_step_attempt",
     "create_terminal_session",
     "evaluate_command_check",
+    "evaluate_command_check_output",
     "finish_terminal_session",
     "list_command_check_results",
     "load_command_checks_for_lab_task",

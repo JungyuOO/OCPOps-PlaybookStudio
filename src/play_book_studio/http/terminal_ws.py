@@ -15,6 +15,7 @@ from play_book_studio.db.terminal_learning_repository import (
     create_learning_step_attempt,
     create_terminal_session,
     evaluate_command_check,
+    evaluate_command_check_output,
     finish_terminal_session,
     load_command_checks_for_lab_task,
     record_terminal_event,
@@ -83,6 +84,7 @@ class TerminalEventRecorder:
         self.event_ordinal = 0
         self.input_buffer = ""
         self.connection = None
+        self.pending_output_checks: list[dict[str, Any]] = []
 
     @property
     def enabled(self) -> bool:
@@ -138,9 +140,9 @@ class TerminalEventRecorder:
                 context=self.context,
             )
 
-    def record_output(self, *, stream: str, data: str) -> None:
+    def record_output(self, *, stream: str, data: str) -> list[dict[str, Any]]:
         if not self.connection or not self.terminal_session_id or not data:
-            return
+            return []
         self.event_ordinal += 1
         record_terminal_event(
             self.connection,
@@ -150,6 +152,48 @@ class TerminalEventRecorder:
             stream=stream,
             data=data,
         )
+        return self._record_output_check_results(stream=stream, data=data)
+
+    def _record_output_check_results(self, *, stream: str, data: str) -> list[dict[str, Any]]:
+        result_events: list[dict[str, Any]] = []
+        remaining: list[dict[str, Any]] = []
+        for pending in self.pending_output_checks:
+            if stream == "stderr":
+                pending["stderr"] = f"{pending.get('stderr', '')}{data}"
+            else:
+                pending["stdout"] = f"{pending.get('stdout', '')}{data}"
+            check = pending["check"]
+            command = str(pending["command"])
+            evaluation = evaluate_command_check_output(
+                check,
+                command,
+                stdout=str(pending.get("stdout") or ""),
+                stderr=str(pending.get("stderr") or ""),
+            )
+            if evaluation.status == "pending_output":
+                remaining.append(pending)
+                continue
+            result_id = upsert_command_check_result(
+                self.connection,
+                terminal_session_id=self.terminal_session_id,
+                terminal_event_id=str(pending["terminal_event_id"]),
+                command_check=check,
+                learning_step_attempt_id=self.learning_step_attempt_id,
+                learner_id=self.context.learner_id,
+                submitted_command=command,
+                evaluation=evaluation,
+            )
+            result_events.append(
+                self._command_check_event(
+                    result_id=result_id,
+                    terminal_event_id=str(pending["terminal_event_id"]),
+                    check=check,
+                    command=command,
+                    evaluation=evaluation,
+                )
+            )
+        self.pending_output_checks = remaining
+        return result_events
 
     def record_error(self, message: str) -> None:
         if not self.connection or not self.terminal_session_id:
@@ -204,21 +248,48 @@ class TerminalEventRecorder:
                     evaluation=evaluation,
                 )
                 result_events.append(
-                    {
-                        "type": "command_check_result",
-                        "id": result_id,
-                        "terminal_session_id": self.terminal_session_id,
-                        "terminal_event_id": event_id,
-                        "command_check_id": check.id,
-                        "lab_task_id": check.lab_task_id,
-                        "learner_id": self.context.learner_id,
-                        "submitted_command": command,
-                        "status": evaluation.status,
-                        "matched": evaluation.matched,
-                        "validation_result": evaluation.validation_result,
-                    }
+                    self._command_check_event(
+                        result_id=result_id,
+                        terminal_event_id=event_id,
+                        check=check,
+                        command=command,
+                        evaluation=evaluation,
+                    )
                 )
+                if evaluation.status == "pending_output":
+                    self.pending_output_checks.append(
+                        {
+                            "terminal_event_id": event_id,
+                            "check": check,
+                            "command": command,
+                            "stdout": "",
+                            "stderr": "",
+                        }
+                    )
         return result_events
+
+    def _command_check_event(
+        self,
+        *,
+        result_id: str,
+        terminal_event_id: str,
+        check: Any,
+        command: str,
+        evaluation: Any,
+    ) -> dict[str, Any]:
+        return {
+            "type": "command_check_result",
+            "id": result_id,
+            "terminal_session_id": self.terminal_session_id,
+            "terminal_event_id": terminal_event_id,
+            "command_check_id": check.id,
+            "lab_task_id": check.lab_task_id,
+            "learner_id": self.context.learner_id,
+            "submitted_command": command,
+            "status": evaluation.status,
+            "matched": evaluation.matched,
+            "validation_result": evaluation.validation_result,
+        }
 
     def finish(self, *, status: str, exit_code: int | None = None) -> None:
         if not self.connection or not self.terminal_session_id:
@@ -273,7 +344,8 @@ async def _handle_terminal_connection(
                 await websocket.send(_json_event(payload))
             for stream, chunks in output_chunks.items():
                 if chunks:
-                    recorder.record_output(stream=stream, data="".join(chunks))
+                    for event in recorder.record_output(stream=stream, data="".join(chunks)):
+                        await websocket.send(_json_event(event))
             exit_code = session.poll_exit_code()
             if exit_code is not None and not exit_sent:
                 exit_sent = True

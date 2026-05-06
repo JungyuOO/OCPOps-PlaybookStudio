@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from play_book_studio.db.terminal_learning_repository import CommandCheck, evaluate_command_check_output
 from play_book_studio.http.terminal_session import TerminalSessionConfig, resolve_shell_args
 from play_book_studio.http.terminal_ws import build_terminal_session_config
 from play_book_studio.config.settings import Settings
@@ -41,3 +42,22 @@ def test_terminal_session_config_resolves_relative_workdir():
     config = build_terminal_session_config(settings, TEST_ROOT)
 
     assert config.workdir == Path(TEST_ROOT, "workspace")
+
+
+def test_evaluate_command_check_output_requires_scoped_stdout_match():
+    check = CommandCheck(
+        id="check-1",
+        lab_task_id="task-1",
+        check_key="project-output",
+        command_pattern=r"^oc project$",
+        expected_command="oc project",
+        validation_payload={"stdout_contains": "Using project"},
+    )
+
+    pending = evaluate_command_check_output(check, "oc project", stdout="No project selected")
+    passed = evaluate_command_check_output(check, "oc project", stdout='Using project "demo"')
+
+    assert pending.status == "pending_output"
+    assert pending.matched is False
+    assert passed.status == "passed"
+    assert passed.matched is True
