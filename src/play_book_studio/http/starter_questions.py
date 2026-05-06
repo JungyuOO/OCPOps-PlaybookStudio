@@ -14,6 +14,7 @@ from play_book_studio.config.corpus_paths import (
     ANSWER_EVAL_REALWORLD_CASES_PATH,
     OCP420_REPO_WIDE_SOURCE_MANIFEST_PATH,
     OCP420_SOURCE_FIRST_FULL_REBUILD_MANIFEST_PATH,
+    OPS_LEARNING_GUIDES_PATH,
     PBS_CHAT_QUALITY_CASES_PATH,
 )
 from play_book_studio.config.settings import load_settings
@@ -316,8 +317,8 @@ def _load_ops_learning_guides_payload(root_dir: Path) -> tuple[dict[str, Any], s
         except Exception:  # noqa: BLE001
             return {"canonical_model": "ops_learning_guide_v1", "guides": []}, "postgres.learning_paths"
     return (
-        _safe_read_json(root_dir / "data" / "course_pbs" / "manifests" / "ops_learning_guides_v1.json"),
-        "corpus/sources/kmsc/parsed-preview/course_pbs/manifests/ops_learning_guides_v1.json",
+        _safe_read_json(root_dir / OPS_LEARNING_GUIDES_PATH),
+        OPS_LEARNING_GUIDES_PATH.as_posix(),
     )
 
 

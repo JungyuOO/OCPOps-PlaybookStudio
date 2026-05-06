@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +14,7 @@ TEST_TMP = REPO_ROOT / "tmp" / "starter_questions_tests"
 
 
 def test_starter_questions_are_loaded_from_manifests() -> None:
+    shutil.rmtree(TEST_TMP, ignore_errors=True)
     eval_manifests = TEST_TMP / "corpus" / "manifests" / "eval"
     official_manifests = TEST_TMP / "corpus" / "manifests" / "official"
     course_manifests = TEST_TMP / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
