@@ -58,6 +58,19 @@ def test_private_hits_require_matching_owner_and_active_repository():
     ]
 
 
+def test_private_hits_are_hidden_without_active_repository_selection():
+    context = SessionContext(owner_user_id="owner-a")
+    private_hit = _hit(
+        chunk_id="private",
+        repository_id="repo-a",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+    )
+
+    assert not hit_visible_to_session(private_hit, context)
+
+
 def test_shared_hits_are_visible_across_owners():
     assert hit_visible_to_session(
         _hit(visibility="workspace_shared", owner_user_id="owner-b", source_scope="study_docs"),

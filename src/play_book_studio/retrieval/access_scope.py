@@ -18,9 +18,11 @@ def hit_visible_to_session(hit: RetrievalHit, context: SessionContext | None) ->
         return False
 
     active_repository_id = str(getattr(context, "active_repository_id", "") or "").strip()
+    if not active_repository_id:
+        return False
     if active_repository_id and str(hit.repository_id or "").strip():
         return str(hit.repository_id or "").strip() == active_repository_id
-    return True
+    return False
 
 
 def filter_hits_by_session_scope(
