@@ -7,7 +7,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from play_book_studio.app.course_api import warmup_course_runtime
+from play_book_studio.http.course_api import warmup_course_runtime
 from play_book_studio.config.settings import load_settings
 
 from .server_handler_factory import _build_handler

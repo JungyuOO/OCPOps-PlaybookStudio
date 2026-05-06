@@ -15,7 +15,7 @@ from typing import Any, Iterable
 from urllib.parse import parse_qs
 
 from play_book_studio.answering.llm import LLMClient
-from play_book_studio.app.sessions import Turn
+from play_book_studio.http.sessions import Turn
 from play_book_studio.config.corpus_paths import COURSE_PBS_DIR
 from play_book_studio.config.settings import load_settings
 from play_book_studio.course.qdrant_course import search_course_and_official, search_ops_learning_chunks
@@ -3017,7 +3017,7 @@ def _course_render_text(value: Any) -> str:
 
 def _course_render_normalized_section_html(text: str) -> str:
     try:
-        from play_book_studio.app.viewer_blocks import _render_normalized_section_html
+        from play_book_studio.http.viewer_blocks import _render_normalized_section_html
     except ModuleNotFoundError:
         return f"<p>{html.escape(text)}</p>"
     return _render_normalized_section_html(text)
@@ -3033,7 +3033,7 @@ def _course_render_code_block_html(
     caption: str,
 ) -> str:
     try:
-        from play_book_studio.app.viewer_blocks_rich import _render_code_block_html
+        from play_book_studio.http.viewer_blocks_rich import _render_code_block_html
     except ModuleNotFoundError:
         return f"<pre><code>{html.escape(code)}</code></pre>"
     return _render_code_block_html(

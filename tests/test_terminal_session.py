@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from play_book_studio.app.terminal_session import TerminalSessionConfig, resolve_shell_args
-from play_book_studio.app.terminal_ws import build_terminal_session_config
+from play_book_studio.http.terminal_session import TerminalSessionConfig, resolve_shell_args
+from play_book_studio.http.terminal_ws import build_terminal_session_config
 from play_book_studio.config.settings import Settings
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

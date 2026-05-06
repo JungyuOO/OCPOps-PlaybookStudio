@@ -10,16 +10,16 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote
-from play_book_studio.app.presenters import (
+from play_book_studio.http.presenters import (
     _build_citation_presentation_context,
     _serialize_citation,
 )
-from play_book_studio.app.source_books import (
+from play_book_studio.http.source_books import (
     build_chat_navigation_links as _build_chat_navigation_links,
     build_chat_section_links as _build_chat_section_links,
 )
-from play_book_studio.app.session_flow import suggest_follow_up_questions as _suggest_follow_up_questions
-from play_book_studio.app.sessions import ChatSession
+from play_book_studio.http.session_flow import suggest_follow_up_questions as _suggest_follow_up_questions
+from play_book_studio.http.sessions import ChatSession
 
 if TYPE_CHECKING:
     from play_book_studio.answering.answerer import ChatAnswerer

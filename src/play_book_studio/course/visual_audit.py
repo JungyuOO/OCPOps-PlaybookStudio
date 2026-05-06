@@ -15,7 +15,7 @@ from typing import Any
 
 from play_book_studio.config.corpus_paths import COURSE_QA_ACCEPTED_CASES_PATH
 
-from play_book_studio.app.course_api import _course_chat_payload
+from play_book_studio.http.course_api import _course_chat_payload
 from play_book_studio.course.quality_eval import read_jsonl
 
 

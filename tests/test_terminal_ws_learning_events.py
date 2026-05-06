@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from play_book_studio.app import terminal_ws
+from play_book_studio.http import terminal_ws
 from play_book_studio.db.terminal_learning_repository import CommandCheck, TerminalLearningContext
 
 

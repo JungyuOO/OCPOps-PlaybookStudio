@@ -5,13 +5,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from play_book_studio.app.customer_pack_read_boundary import (
+from play_book_studio.http.customer_pack_read_boundary import (
     load_customer_pack_read_boundary,
     sanitize_customer_pack_book_payload,
     sanitize_customer_pack_draft_payload,
     sanitize_customer_pack_mutation_payload,
 )
-from play_book_studio.app.intake_api import (
+from play_book_studio.http.intake_api import (
     build_customer_pack_plan as _build_customer_pack_plan,
     build_customer_pack_support_matrix as _build_customer_pack_support_matrix,
     capture_customer_pack_draft as _capture_customer_pack_draft,
@@ -23,7 +23,7 @@ from play_book_studio.app.intake_api import (
     normalize_customer_pack_draft as _normalize_customer_pack_draft,
     upload_customer_pack_draft as _upload_customer_pack_draft,
 )
-from play_book_studio.app.source_books_customer_pack import (
+from play_book_studio.http.source_books_customer_pack import (
     list_customer_pack_drafts as _list_customer_pack_drafts,
     load_customer_pack_book as _load_customer_pack_book,
 )

@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-import play_book_studio.app.viewer_page_sections as viewer_page_sections
+import play_book_studio.http.viewer_page_sections as viewer_page_sections
 
 
 def test_playbook_anchor_index_does_not_read_files_when_database_is_configured(monkeypatch) -> None:

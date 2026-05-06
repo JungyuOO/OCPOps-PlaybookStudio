@@ -4,8 +4,8 @@ import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
-import play_book_studio.app.presenters_runtime as presenters_runtime
-import play_book_studio.app.runtime_report as runtime_report
+import play_book_studio.http.presenters_runtime as presenters_runtime
+import play_book_studio.http.runtime_report as runtime_report
 from play_book_studio.config.settings import load_settings
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

@@ -24,16 +24,16 @@ from _support_app_ui import (
     _serialize_citation,
     _viewer_path_to_local_html,
 )
-from play_book_studio.app.server_routes import (
+from play_book_studio.http.server_routes import (
     _build_viewer_document_payload,
     _canonicalize_viewer_path,
     handle_source_meta,
     handle_viewer_document,
     _viewer_source_meta,
 )
-import play_book_studio.app.presenters as presenters_module
-from play_book_studio.app.presenters import _build_citation_presentation_context
-from play_book_studio.app.viewer_page import _render_study_viewer_html
+import play_book_studio.http.presenters as presenters_module
+from play_book_studio.http.presenters import _build_citation_presentation_context
+from play_book_studio.http.viewer_page import _render_study_viewer_html
 from play_book_studio.config.settings import load_settings
 
 
@@ -1057,7 +1057,7 @@ class AppViewersTestSupport(unittest.TestCase):
             (relation_dir / "entity_hubs.json").write_text("{}", encoding="utf-8")
             (relation_dir / "chat_navigation_aliases.json").write_text("{}", encoding="utf-8")
 
-            with patch("play_book_studio.app.wiki_relations.WIKI_RELATIONS_DIR", relation_dir):
+            with patch("play_book_studio.http.wiki_relations.WIKI_RELATIONS_DIR", relation_dir):
                 advanced_handler = self._capture_json_response()
                 handle_viewer_document(
                     advanced_handler,
@@ -1745,7 +1745,7 @@ class AppViewersTestSupport(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch("play_book_studio.app.presenters.load_settings", wraps=load_settings) as load_settings_spy:
+            with patch("play_book_studio.http.presenters.load_settings", wraps=load_settings) as load_settings_spy:
                 presentation_context = _build_citation_presentation_context(root)
                 first = _serialize_citation(
                     root,
@@ -1797,7 +1797,7 @@ class AppViewersTestSupport(unittest.TestCase):
             )
             presentation_context = _build_citation_presentation_context(root)
             with patch(
-                "play_book_studio.app.presenters._resolve_normalized_row_for_viewer_path",
+                "play_book_studio.http.presenters._resolve_normalized_row_for_viewer_path",
                 side_effect=AssertionError("normalized lookup should not run"),
             ):
                 payload = _serialize_citation(
@@ -1857,7 +1857,7 @@ class AppViewersTestSupport(unittest.TestCase):
             )
             presenters_module._serialize_citation_cached.cache_clear()
             with patch(
-                "play_book_studio.app.presenters._serialize_citation_uncached",
+                "play_book_studio.http.presenters._serialize_citation_uncached",
                 wraps=presenters_module._serialize_citation_uncached,
             ) as uncached_spy:
                 first = _serialize_citation(root, _citation(1))

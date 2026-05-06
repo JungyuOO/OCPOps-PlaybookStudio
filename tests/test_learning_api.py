@@ -3,7 +3,7 @@ from __future__ import annotations
 from http import HTTPStatus
 from pathlib import Path
 
-from play_book_studio.app.learning_api import (
+from play_book_studio.http.learning_api import (
     build_learning_command_results_response,
     build_learning_paths_response,
     handle_learning_paths,

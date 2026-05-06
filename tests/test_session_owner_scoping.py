@@ -4,8 +4,8 @@ import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
-from play_book_studio.app.session_owner import OWNER_COOKIE_NAME, resolve_session_owner
-from play_book_studio.app.sessions import SessionStore, Turn
+from play_book_studio.http.session_owner import OWNER_COOKIE_NAME, resolve_session_owner
+from play_book_studio.http.sessions import SessionStore, Turn
 
 
 OWNER_A = "sessionownera0000000000000000001"

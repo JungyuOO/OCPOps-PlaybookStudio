@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-import play_book_studio.app.data_control_room_library as library
+import play_book_studio.http.data_control_room_library as library
 
 
 def test_viewer_path_fallback_does_not_require_playbook_file_when_database_is_configured(monkeypatch) -> None:

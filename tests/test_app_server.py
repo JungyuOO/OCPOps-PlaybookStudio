@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import requests
 
-from play_book_studio.app import server
+from play_book_studio.http import server
 from play_book_studio.config.settings import load_settings
 
 
@@ -89,7 +89,7 @@ def test_start_runtime_warmup_starts_daemon_thread_when_reranker_missing() -> No
         created_threads.append(thread)
         return thread
 
-    with patch("play_book_studio.app.server.threading.Thread", side_effect=_build_thread):
+    with patch("play_book_studio.http.server.threading.Thread", side_effect=_build_thread):
         thread = server._start_runtime_warmup(answerer, root_dir)
 
     assert thread is created_threads[0]
@@ -110,7 +110,7 @@ def test_start_runtime_warmup_starts_daemon_thread_when_reranker_present() -> No
         created_threads.append(thread)
         return thread
 
-    with patch("play_book_studio.app.server.threading.Thread", side_effect=_build_thread):
+    with patch("play_book_studio.http.server.threading.Thread", side_effect=_build_thread):
         thread = server._start_runtime_warmup(answerer, root_dir)
 
     assert thread is created_threads[0]

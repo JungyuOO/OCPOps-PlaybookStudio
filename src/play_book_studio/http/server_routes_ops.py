@@ -7,29 +7,29 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from play_book_studio.app.customer_pack_read_boundary import (
+from play_book_studio.http.customer_pack_read_boundary import (
     blocked_customer_pack_draft_ids_from_payload,
     sanitize_debug_chat_log_entry,
 )
-from play_book_studio.app.data_control_room import build_data_control_room_payload
-from play_book_studio.app.data_control_room_detail import (
+from play_book_studio.http.data_control_room import build_data_control_room_payload
+from play_book_studio.http.data_control_room_detail import (
     build_data_control_room_chunk_payload,
 )
-from play_book_studio.app.server_routes_customer_pack import (
+from play_book_studio.http.server_routes_customer_pack import (
     _customer_pack_read_allowed,
     _send_customer_pack_read_blocked,
 )
-from play_book_studio.app.repository_registry import (
+from play_book_studio.http.repository_registry import (
     list_repository_favorites as _list_repository_favorites,
     remove_repository_favorite as _remove_repository_favorite,
     save_repository_favorites as _save_repository_favorites,
     search_github_repositories as _search_github_repositories,
 )
-from play_book_studio.app.server_routes_viewer import (
+from play_book_studio.http.server_routes_viewer import (
     _viewer_source_meta as _viewer_source_meta_payload,
     resolve_viewer_html as _resolve_viewer_html,
 )
-from play_book_studio.app.wiki_user_overlay import (
+from play_book_studio.http.wiki_user_overlay import (
     build_wiki_overlay_signal_payload as _build_wiki_overlay_signal_payload,
     list_wiki_user_overlays as _list_wiki_user_overlays,
     remove_wiki_user_overlay as _remove_wiki_user_overlay,
@@ -625,7 +625,7 @@ def handle_session_load(handler: Any, query: str, *, store: Any) -> None:
     if session is None:
         handler._send_json({"error": "Session not found"}, HTTPStatus.NOT_FOUND)
         return
-    from play_book_studio.app.sessions import serialize_session_snapshot
+    from play_book_studio.http.sessions import serialize_session_snapshot
 
     payload = serialize_session_snapshot(session)
     blocked = blocked_customer_pack_draft_ids_from_payload(Path(store._root_dir or "."), payload)

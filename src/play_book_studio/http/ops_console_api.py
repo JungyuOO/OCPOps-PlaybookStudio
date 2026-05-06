@@ -136,11 +136,26 @@ def _seed_workspace_record() -> dict[str, Any]:
     }
 
 
+def _default_model_profile(workspace_id: str) -> dict[str, Any]:
+    timestamp = _now_iso()
+    return {
+        "workspace_id": workspace_id,
+        "profile_id": f"model_{workspace_id}",
+        "provider": "runtime-default",
+        "model": "",
+        "status": "not_configured",
+        "created_at": timestamp,
+        "updated_at": timestamp,
+    }
+
+
 def _default_state() -> dict[str, Any]:
     workspace = _seed_workspace_record()
+    workspace_id = str(workspace["workspace_id"])
     return {
         "version": 1,
         "workspaces": [workspace],
+        "models": {workspace_id: _default_model_profile(workspace_id)},
         "connections": [],
         "connection_inventory": {},
         "recommendations": [],
@@ -163,6 +178,7 @@ def _load_state(root_dir: Path) -> dict[str, Any]:
         return state
     state.setdefault("version", 1)
     state.setdefault("workspaces", [])
+    state.setdefault("models", {})
     state.setdefault("connections", [])
     state.setdefault("connection_inventory", {})
     state.setdefault("recommendations", [])
@@ -176,6 +192,13 @@ def _load_state(root_dir: Path) -> dict[str, Any]:
     if not state["workspaces"]:
         workspace = _seed_workspace_record()
         state["workspaces"].append(workspace)
+    for workspace in state["workspaces"]:
+        if not isinstance(workspace, dict):
+            continue
+        workspace_id = str(workspace.get("workspace_id") or "").strip()
+        if workspace_id:
+            state["models"].setdefault(workspace_id, _default_model_profile(workspace_id))
+    if not path.exists():
         _write_json_object(path, state)
     return state
 
@@ -1631,7 +1654,7 @@ def _document_summary_payload(root_dir: Path, workspace_id: str) -> dict[str, An
     summary: dict[str, Any] = {}
     manualbook_rows: list[dict[str, Any]] = []
     try:
-        from play_book_studio.app.data_control_room import build_data_control_room_payload
+        from play_book_studio.http.data_control_room import build_data_control_room_payload
 
         control_room_payload = build_data_control_room_payload(root_dir)
         summary = control_room_payload.get("summary") if isinstance(control_room_payload.get("summary"), dict) else {}

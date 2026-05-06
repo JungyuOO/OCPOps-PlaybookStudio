@@ -6,7 +6,7 @@ from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 
-from play_book_studio.app.data_control_room_buckets import (
+from play_book_studio.http.data_control_room_buckets import (
     _build_approved_wiki_runtime_book_bucket,
     _build_buyer_packet_bundle_bucket,
     _build_gold_candidate_book_bucket,

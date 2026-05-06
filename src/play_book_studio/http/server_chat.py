@@ -12,7 +12,7 @@ import time
 from play_book_studio.config.settings import load_settings
 from play_book_studio.db.chat_repository import persist_chat_turn
 from play_book_studio.retrieval.models import SessionContext
-from play_book_studio.app.sessions import RUNTIME_CHAT_MODE, Turn
+from play_book_studio.http.sessions import RUNTIME_CHAT_MODE, Turn
 
 
 def _summarize_citation_truth(response_payload: dict[str, Any]) -> dict[str, str]:

@@ -3,8 +3,8 @@ from play_book_studio.answering.answerer import (
     _low_confidence_clarification_answer,
 )
 from play_book_studio.answering.models import Citation
-from play_book_studio.app.session_flow import suggest_follow_up_questions
-from play_book_studio.app.sessions import ChatSession
+from play_book_studio.http.session_flow import suggest_follow_up_questions
+from play_book_studio.http.sessions import ChatSession
 from play_book_studio.answering.models import AnswerResult
 
 
@@ -63,7 +63,7 @@ def test_low_confidence_answer_includes_example_questions() -> None:
         ]
     )
 
-    assert "조금 더" in answer
+    assert "한 단계만 더 좁혀" in answer
     assert "클러스터의 모든 노드 나열 정보 기준으로" in answer
     assert "6.1.1." not in answer
 

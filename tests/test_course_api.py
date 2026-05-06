@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-import play_book_studio.app.course_api as course_api
-from play_book_studio.app.course_api import (
+import play_book_studio.http.course_api as course_api
+from play_book_studio.http.course_api import (
     _apply_course_answer_typography,
     _course_answer_style_issues,
     _course_chat_payload,
@@ -496,8 +496,8 @@ def test_course_chat_uses_ops_learning_guide_before_raw_chunk_route() -> None:
 
 
 def test_course_chat_retrieves_ops_learning_chunk_without_exact_golden_query(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
-    monkeypatch.setattr("play_book_studio.app.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
     with _temp_root() as root:
         source_id = "perf-source"
         next_source_id = "perf-next"
@@ -616,9 +616,9 @@ def test_course_chat_rewrites_ops_learning_answer_with_llm_prompt(monkeypatch: p
     monkeypatch.setenv("COURSE_CHAT_LLM_REWRITE", "true")
     monkeypatch.setenv("LLM_ENDPOINT", "http://fake-llm/v1")
     monkeypatch.setenv("LLM_MODEL", "fake-model")
-    monkeypatch.setattr("play_book_studio.app.course_api.LLMClient", FakeLLMClient)
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
-    monkeypatch.setattr("play_book_studio.app.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
+    monkeypatch.setattr("play_book_studio.http.course_api.LLMClient", FakeLLMClient)
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
 
     with _temp_root() as root:
         source_id = "perf-source"
@@ -696,9 +696,9 @@ def test_course_chat_llm_selector_chooses_grounding_candidate(monkeypatch: pytes
     monkeypatch.setenv("COURSE_CHAT_LLM_REWRITE", "true")
     monkeypatch.setenv("LLM_ENDPOINT", "http://fake-llm/v1")
     monkeypatch.setenv("LLM_MODEL", "fake-model")
-    monkeypatch.setattr("play_book_studio.app.course_api.LLMClient", FakeLLMClient)
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
-    monkeypatch.setattr("play_book_studio.app.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
+    monkeypatch.setattr("play_book_studio.http.course_api.LLMClient", FakeLLMClient)
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
 
     with _temp_root() as root:
         _write_chunk(
@@ -916,7 +916,7 @@ def test_course_chunk_viewer_meta_and_html_support_workspace_preview() -> None:
 
 
 def test_course_chat_separates_study_docs_official_docs_and_guided_next_step(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
     current_id = "unit-test--TEST-UN-OCP-30-01--summary"
     next_id = "unit-test--TEST-UN-OCP-30-02--summary"
     with _temp_root() as root:
@@ -996,7 +996,7 @@ def test_course_chat_separates_study_docs_official_docs_and_guided_next_step(mon
 
 
 def test_course_chat_uses_stage_official_route_when_chunk_mapping_is_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
     chunk_id = "completion--CH-01--summary"
     with _temp_root() as root:
         _write_chunk(
@@ -1053,7 +1053,7 @@ def test_course_chat_uses_stage_official_route_when_chunk_mapping_is_absent(monk
 
 
 def test_course_chat_returns_ranked_image_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
     chunk_id = "unit-test--image-evidence"
     with _temp_root() as root:
         _write_chunk(
@@ -1097,7 +1097,7 @@ def test_course_chat_returns_ranked_image_evidence(monkeypatch: pytest.MonkeyPat
 
 
 def test_course_chat_image_evidence_prefers_query_matched_state_and_role(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
     chunk_id = "perf-test--dashboard-ready"
     with _temp_root() as root:
         _write_chunk(

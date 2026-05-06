@@ -8,7 +8,7 @@ from typing import Any
 
 import requests
 
-from play_book_studio.app.runtime_report import DEFAULT_PLAYBOOK_UI_BASE_URL
+from play_book_studio.http.runtime_report import DEFAULT_PLAYBOOK_UI_BASE_URL
 from play_book_studio.config.settings import load_settings
 from play_book_studio.intake.private_boundary import (
     PRIVATE_RUNTIME_REQUIRED_BOUNDARY_FIELDS,

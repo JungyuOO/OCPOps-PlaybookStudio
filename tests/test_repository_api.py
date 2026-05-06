@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from play_book_studio.app import repository_api
+from play_book_studio.http import repository_api
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 

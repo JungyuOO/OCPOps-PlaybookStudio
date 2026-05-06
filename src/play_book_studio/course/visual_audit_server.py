@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from play_book_studio.app.course_api import (
+from play_book_studio.http.course_api import (
     course_viewer_html,
     course_viewer_source_meta,
     handle_course_get,

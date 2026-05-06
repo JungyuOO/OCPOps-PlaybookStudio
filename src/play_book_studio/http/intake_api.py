@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from play_book_studio.app.source_books_customer_pack import load_customer_pack_book
+from play_book_studio.http.source_books_customer_pack import load_customer_pack_book
 from play_book_studio.intake import (
     DocSourceRequest,
     CustomerPackDraftStore,

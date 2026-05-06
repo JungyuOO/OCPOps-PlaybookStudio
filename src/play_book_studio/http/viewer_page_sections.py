@@ -6,16 +6,16 @@ from pathlib import Path
 from typing import Any
 
 from play_book_studio.config.settings import load_settings
-from play_book_studio.app.viewer_blocks import (
+from play_book_studio.http.viewer_blocks import (
     _clean_source_view_text,
     _render_normal_paragraph,
     _render_normalized_section_html,
     _render_playbook_block_html,
 )
-from play_book_studio.app.viewer_blocks_text import _render_inline_html
-from play_book_studio.app.viewer_blocks_rich import _render_figure_block_html
-from play_book_studio.app.viewer_blocks_text import _extract_labeled_reader_item, _split_reader_display_paragraphs
-from play_book_studio.app.source_books_wiki_relations import _figure_asset_by_name
+from play_book_studio.http.viewer_blocks_text import _render_inline_html
+from play_book_studio.http.viewer_blocks_rich import _render_figure_block_html
+from play_book_studio.http.viewer_blocks_text import _extract_labeled_reader_item, _split_reader_display_paragraphs
+from play_book_studio.http.source_books_wiki_relations import _figure_asset_by_name
 
 HEADING_NUMBER_PREFIX_RE = re.compile(
     r"^\s*(?:chapter\s+\d+\.?\s*|\d+\s*장\.?\s*|(?:\d+|[A-Za-z])(?:\.\d+)*\.?\s+)",

@@ -6,7 +6,7 @@ import time
 from http import HTTPStatus
 from typing import Any
 
-from play_book_studio.app.server_support import _parse_multipart_form_data
+from play_book_studio.http.server_support import _parse_multipart_form_data
 
 
 class _HandlerBase:

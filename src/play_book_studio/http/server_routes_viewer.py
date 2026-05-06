@@ -7,19 +7,19 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse, urlunparse
 
-from play_book_studio.app.customer_pack_read_boundary import (
+from play_book_studio.http.customer_pack_read_boundary import (
     customer_pack_draft_id_from_viewer_path,
     sanitize_customer_pack_source_meta_payload,
 )
-from play_book_studio.app.course_api import course_viewer_html, course_viewer_source_meta
-from play_book_studio.app.presenters import (
+from play_book_studio.http.course_api import course_viewer_html, course_viewer_source_meta
+from play_book_studio.http.presenters import (
     _core_pack_payload,
     _customer_pack_meta_for_viewer_path,
     _humanize_book_slug,
     _manifest_entry_for_book,
     _resolve_normalized_row_for_viewer_path,
 )
-from play_book_studio.app.source_books import (
+from play_book_studio.http.source_books import (
     _entity_hubs,
     _figure_asset_by_name,
     _figure_section_match,
@@ -32,11 +32,11 @@ from play_book_studio.app.source_books import (
     parse_entity_hub_viewer_path,
     parse_figure_viewer_path,
 )
-from play_book_studio.app.source_books_customer_pack import (
+from play_book_studio.http.source_books_customer_pack import (
     internal_customer_pack_viewer_html as _internal_customer_pack_viewer_html,
 )
-from play_book_studio.app.viewer_paths import _viewer_path_to_local_html
-from play_book_studio.app.viewers import _parse_viewer_path
+from play_book_studio.http.viewer_paths import _viewer_path_to_local_html
+from play_book_studio.http.viewers import _parse_viewer_path
 from play_book_studio.config.settings import load_settings
 from play_book_studio.source_provenance import source_provenance_payload
 

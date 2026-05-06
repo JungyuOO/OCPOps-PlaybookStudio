@@ -7,7 +7,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from play_book_studio.app.course_api import _chunk_beginner_question, _clean_beginner_title, _course_chat_payload
+from play_book_studio.http.course_api import _chunk_beginner_question, _clean_beginner_title, _course_chat_payload
 from play_book_studio.config.corpus_paths import (
     COURSE_PBS_DIR,
     COURSE_QA_ACCEPTED_CASES_PATH,

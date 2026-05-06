@@ -392,7 +392,7 @@ def _warmup_ui_runtime(answerer: ChatAnswerer) -> None:
 
 
 def _run_ui(args: argparse.Namespace) -> int:
-    from play_book_studio.app.server import serve
+    from play_book_studio.http.server import serve
 
     answerer = _build_answerer()
     if getattr(args, "warmup_reranker", False):
@@ -526,7 +526,7 @@ def _run_ragas(args: argparse.Namespace) -> int:
 
 
 def _run_runtime(args: argparse.Namespace) -> int:
-    from play_book_studio.app.runtime_report import write_runtime_report
+    from play_book_studio.http.runtime_report import write_runtime_report
 
     output_path, report = write_runtime_report(
         ROOT,
@@ -541,7 +541,7 @@ def _run_runtime(args: argparse.Namespace) -> int:
 
 
 def _run_maintenance_smoke(args: argparse.Namespace) -> int:
-    from play_book_studio.app.runtime_maintenance_smoke import write_runtime_maintenance_smoke
+    from play_book_studio.http.runtime_maintenance_smoke import write_runtime_maintenance_smoke
 
     output_path, payload = write_runtime_maintenance_smoke(
         ROOT,
@@ -556,7 +556,7 @@ def _run_maintenance_smoke(args: argparse.Namespace) -> int:
 
 
 def _run_private_lane_smoke(args: argparse.Namespace) -> int:
-    from play_book_studio.app.private_lane_smoke import write_private_lane_smoke
+    from play_book_studio.http.private_lane_smoke import write_private_lane_smoke
 
     output_path, payload = write_private_lane_smoke(
         ROOT,

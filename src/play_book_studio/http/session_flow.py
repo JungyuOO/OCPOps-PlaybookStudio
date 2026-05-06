@@ -5,8 +5,8 @@ import re
 from typing import Any
 
 from play_book_studio.answering.models import AnswerResult
-from play_book_studio.app.next_play_planner import build_next_play_plan
-from play_book_studio.app.sessions import ChatSession, RUNTIME_CHAT_MODE
+from play_book_studio.http.next_play_planner import build_next_play_plan
+from play_book_studio.http.sessions import ChatSession, RUNTIME_CHAT_MODE
 from play_book_studio.config.packs import default_core_pack
 from play_book_studio.retrieval.models import SessionContext
 from play_book_studio.retrieval.text_utils import strip_section_prefix

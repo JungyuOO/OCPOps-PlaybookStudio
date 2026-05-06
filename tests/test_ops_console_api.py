@@ -11,8 +11,8 @@ from types import SimpleNamespace
 
 import requests
 
-from play_book_studio.app import server
-import play_book_studio.app.ops_console_api as ops_console_api
+from play_book_studio.http import server
+import play_book_studio.http.ops_console_api as ops_console_api
 from play_book_studio.config.settings import load_settings
 
 

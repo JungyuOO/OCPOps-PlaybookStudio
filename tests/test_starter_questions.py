@@ -5,8 +5,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-import play_book_studio.app.starter_questions as starter_questions
-from play_book_studio.app.starter_questions import build_studio_starter_questions
+import play_book_studio.http.starter_questions as starter_questions
+from play_book_studio.http.starter_questions import build_studio_starter_questions
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TEST_TMP = REPO_ROOT / "tmp" / "starter_questions_tests"

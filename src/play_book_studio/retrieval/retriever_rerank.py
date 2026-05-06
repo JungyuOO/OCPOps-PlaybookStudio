@@ -4,7 +4,7 @@ import copy
 import time
 from typing import Any
 
-from play_book_studio.app.wiki_user_overlay import build_wiki_overlay_signal_payload
+from play_book_studio.http.wiki_user_overlay import build_wiki_overlay_signal_payload
 
 from .followups import has_follow_up_reference
 from .intake_overlay import has_active_customer_pack_selection

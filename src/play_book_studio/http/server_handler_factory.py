@@ -10,32 +10,32 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
-from play_book_studio.app.server_chat import (
+from play_book_studio.http.server_chat import (
     handle_chat as _handle_chat_request,
     handle_chat_stream as _handle_chat_stream_request,
 )
-from play_book_studio.app.course_api import (
+from play_book_studio.http.course_api import (
     handle_course_get as _handle_course_get_request,
     handle_course_post as _handle_course_post_request,
 )
-from play_book_studio.app.ops_console_api import (
+from play_book_studio.http.ops_console_api import (
     handle_ops_console_get as _handle_ops_console_get_request,
     handle_ops_console_patch as _handle_ops_console_patch_request,
     handle_ops_console_post as _handle_ops_console_post_request,
     handle_ops_console_put as _handle_ops_console_put_request,
 )
-from play_book_studio.app.upload_api import handle_upload_ingest as _handle_upload_ingest_request
-from play_book_studio.app.repository_api import handle_document_repositories as _handle_document_repositories_request
-from play_book_studio.app.chat_history_api import (
+from play_book_studio.http.upload_api import handle_upload_ingest as _handle_upload_ingest_request
+from play_book_studio.http.repository_api import handle_document_repositories as _handle_document_repositories_request
+from play_book_studio.http.chat_history_api import (
     handle_chat_history_archive as _handle_chat_history_archive_request,
     handle_chat_history_messages as _handle_chat_history_messages_request,
     handle_chat_history_sessions as _handle_chat_history_sessions_request,
 )
-from play_book_studio.app.learning_api import (
+from play_book_studio.http.learning_api import (
     handle_learning_command_results as _handle_learning_command_results_request,
     handle_learning_paths as _handle_learning_paths_request,
 )
-from play_book_studio.app.server_routes import (
+from play_book_studio.http.server_routes import (
     resolve_viewer_html as _resolve_viewer_html,
     handle_data_control_room as _handle_data_control_room_request,
     handle_data_control_room_chunks as _handle_data_control_room_chunks_request,
@@ -72,16 +72,16 @@ from play_book_studio.app.server_routes import (
     handle_wiki_user_overlay_save as _handle_wiki_user_overlay_save_request,
     handle_wiki_user_overlays as _handle_wiki_user_overlays_request,
 )
-from play_book_studio.app.server_support import (
+from play_book_studio.http.server_support import (
     DATA_CONTROL_ROOM_CACHE_TTL_SECONDS,
     _TimedValueCache,
     _build_chat_payload,
     _resolve_frontend_asset,
 )
-from play_book_studio.app.starter_questions import handle_studio_starter_questions as _handle_studio_starter_questions
-from play_book_studio.app.server_handler_base import _HandlerBase
-from play_book_studio.app.session_owner import SessionOwner, resolve_session_owner
-from play_book_studio.app.chat_debug import (
+from play_book_studio.http.starter_questions import handle_studio_starter_questions as _handle_studio_starter_questions
+from play_book_studio.http.server_handler_base import _HandlerBase
+from play_book_studio.http.session_owner import SessionOwner, resolve_session_owner
+from play_book_studio.http.chat_debug import (
     append_unanswered_question_log as _append_unanswered_question_log,
     append_chat_turn_log as _append_chat_turn_log,
     build_session_debug_payload as _build_session_debug_payload,
@@ -89,9 +89,9 @@ from play_book_studio.app.chat_debug import (
     build_turn_stages as _build_turn_stages,
     write_recent_chat_session_snapshot as _write_recent_chat_session_snapshot,
 )
-from play_book_studio.app.presenters import _build_health_payload, _llm_runtime_signature, _refresh_answerer_llm_settings
-from play_book_studio.app.session_flow import context_with_request_overrides as _context_with_request_overrides, derive_next_context as _derive_next_context
-from play_book_studio.app.sessions import ChatSession, SessionStore
+from play_book_studio.http.presenters import _build_health_payload, _llm_runtime_signature, _refresh_answerer_llm_settings
+from play_book_studio.http.session_flow import context_with_request_overrides as _context_with_request_overrides, derive_next_context as _derive_next_context
+from play_book_studio.http.sessions import ChatSession, SessionStore
 
 if TYPE_CHECKING:
     from play_book_studio.answering.answerer import ChatAnswerer

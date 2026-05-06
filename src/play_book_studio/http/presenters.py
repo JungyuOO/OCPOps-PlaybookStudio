@@ -14,7 +14,7 @@ from play_book_studio.config.settings import Settings, load_settings
 from play_book_studio.config.validation import read_jsonl
 from play_book_studio.runtime_catalog_registry import official_runtime_book_entry
 from play_book_studio.answering.models import Citation
-from play_book_studio.app.viewers import _parse_viewer_path
+from play_book_studio.http.viewers import _parse_viewer_path
 from .runtime_truth import official_runtime_truth_payload
 from .presenters_runtime import (
     _build_health_payload,

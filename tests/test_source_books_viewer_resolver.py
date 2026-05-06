@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-import play_book_studio.app.source_books_viewer_resolver as resolver
+import play_book_studio.http.source_books_viewer_resolver as resolver
 
 
 def test_playbook_book_is_built_from_postgres_records() -> None:

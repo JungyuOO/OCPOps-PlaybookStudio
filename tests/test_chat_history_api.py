@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from play_book_studio.app import chat_history_api
+from play_book_studio.http import chat_history_api
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
