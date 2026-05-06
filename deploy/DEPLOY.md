@@ -15,6 +15,9 @@ running one-shot seed services.
 - PostgreSQL volume - defaults to `ocpops_playbookstudio_postgres_data`.
 - Qdrant volume - defaults to `ocp-rag-chatbot_qdrant_storage`.
 
+The app image does not copy `data/`, `corpus/`, or `manifests/`. Keep those
+directories on the server only when you need to run seed/import services.
+
 ## First Run
 
 ```powershell
