@@ -119,6 +119,16 @@ interface ViewerActiveSection {
   title: string;
 }
 
+const WORKSPACE_ACTIVE_SOURCE_STORAGE_KEY = 'workspace.activeSourceId';
+
+function loadStoredActiveSourceId(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const value = window.localStorage.getItem(WORKSPACE_ACTIVE_SOURCE_STORAGE_KEY);
+  return value && value.trim() ? value : null;
+}
+
 type LeftPanelMode = 'history' | 'outline' | 'signals';
 type RightPanelMode = 'viewer' | 'terminal';
 type SignalsFavoriteFilter = 'favorites' | 'edited';
@@ -987,7 +997,7 @@ export default function WorkspacePage() {
   const [testMode, setTestMode] = useState(false);
   const [rightPanelMode, setRightPanelMode] = useState<RightPanelMode>('viewer');
   const [activeTestTrace, setActiveTestTrace] = useState<WorkspaceTestTrace | null>(null);
-  const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
+  const [activeSourceId, setActiveSourceId] = useState<string | null>(() => loadStoredActiveSourceId());
   const [preview, setPreview] = useState<PreviewState>({ kind: 'empty' });
   const [viewerPageMode, setViewerPageMode] = useState<ViewerPageMode>('single');
   const [isPanelResizing, setIsPanelResizing] = useState(false);
@@ -1181,6 +1191,15 @@ export default function WorkspacePage() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('workspace.outlineCategoryKey', outlineCategoryKey);
   }, [outlineCategoryKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (activeSourceId) {
+      window.localStorage.setItem(WORKSPACE_ACTIVE_SOURCE_STORAGE_KEY, activeSourceId);
+    } else {
+      window.localStorage.removeItem(WORKSPACE_ACTIVE_SOURCE_STORAGE_KEY);
+    }
+  }, [activeSourceId]);
 
   useEffect(() => {
     let cancelled = false;
