@@ -250,6 +250,19 @@ def _persist_private_session(
 
 
 class CustomerPackReadBoundaryTests(unittest.TestCase):
+    def test_customer_pack_ingest_rejects_file_upload_payloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            payload = {
+                "source_type": "md",
+                "uri": "ignored.md",
+                "title": "legacy-upload",
+                "file_bytes": b"# Legacy Upload\n\nBody",
+            }
+
+            with self.assertRaisesRegex(ValueError, "/api/uploads/ingest"):
+                ingest_customer_pack(root, payload)
+
     def test_customer_pack_read_surfaces_auto_repair_local_uploads_and_fail_close_non_read_ready_packs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

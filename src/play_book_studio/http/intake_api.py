@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import re
-import uuid
 import json
 from pathlib import Path
 from typing import Any
@@ -189,59 +186,6 @@ def create_customer_pack_draft(root_dir: Path, payload: dict[str, Any]) -> dict[
     return record.to_dict()
 
 
-def upload_customer_pack_draft(root_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
-    request = customer_pack_request_from_payload(payload)
-    file_name = str(payload.get("file_name") or "").strip()
-    file_bytes = payload.get("file_bytes")
-    if not file_name:
-        raise ValueError("업로드할 file_name이 필요합니다.")
-    if not isinstance(file_bytes, (bytes, bytearray)):
-        content_base64 = str(payload.get("content_base64") or "").strip()
-        if not content_base64:
-            raise ValueError("업로드할 file_bytes가 필요합니다.")
-        try:
-            file_bytes = base64.b64decode(content_base64, validate=True)
-        except Exception as exc:  # noqa: BLE001
-            raise ValueError("content_base64가 올바른 base64 문자열이 아닙니다.") from exc
-
-    content = bytes(file_bytes)
-    if not content:
-        raise ValueError("빈 파일은 업로드할 수 없습니다.")
-
-    settings = load_settings(root_dir)
-    upload_dir = settings.customer_pack_capture_dir / "_uploads"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    default_suffix = {
-        "pdf": ".pdf",
-        "md": ".md",
-        "asciidoc": ".adoc",
-        "txt": ".txt",
-        "docx": ".docx",
-        "pptx": ".pptx",
-        "xlsx": ".xlsx",
-        "image": ".png",
-    }.get(request.source_type, ".html")
-    source_suffix = Path(file_name).suffix or default_suffix
-    safe_stem = re.sub(r"[^A-Za-z0-9가-힣._-]+", "-", Path(file_name).stem).strip("-") or "upload"
-    target = upload_dir / f"{uuid.uuid4().hex[:10]}-{safe_stem}{source_suffix}"
-    target.write_bytes(content)
-
-    uploaded_request = DocSourceRequest(
-        source_type=request.source_type,
-        uri=str(target),
-        title=request.title or Path(file_name).stem,
-        language_hint=request.language_hint,
-    )
-    store = CustomerPackDraftStore(root_dir)
-    record = store.create(uploaded_request)
-    record.uploaded_file_name = file_name
-    record.uploaded_file_path = str(target)
-    record.uploaded_byte_size = len(content)
-    store.save(record)
-    record = _apply_private_runtime_overrides(root_dir, record, payload)
-    return record.to_dict()
-
 
 def load_customer_pack_draft(root_dir: Path, draft_id: str) -> dict[str, Any] | None:
     record = CustomerPackDraftStore(root_dir).get(draft_id)
@@ -306,11 +250,13 @@ def normalize_customer_pack_draft(root_dir: Path, payload: dict[str, Any]) -> di
 
 def ingest_customer_pack(root_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
     draft_id = str(payload.get("draft_id") or "").strip()
+    has_file_upload_payload = isinstance(payload.get("file_bytes"), (bytes, bytearray)) or bool(
+        str(payload.get("content_base64") or "").strip()
+    )
+    if has_file_upload_payload:
+        raise ValueError("customer-pack file upload fallback was removed; use /api/uploads/ingest")
     if draft_id:
         captured = capture_customer_pack_draft(root_dir, {"draft_id": draft_id})
-    elif isinstance(payload.get("file_bytes"), (bytes, bytearray)):
-        uploaded = upload_customer_pack_draft(root_dir, payload)
-        captured = capture_customer_pack_draft(root_dir, {"draft_id": str(uploaded["draft_id"])})
     else:
         captured = capture_customer_pack_draft(root_dir, payload)
 
