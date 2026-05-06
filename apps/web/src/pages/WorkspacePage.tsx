@@ -96,7 +96,7 @@ import {
   truthSurfaceCopy,
 } from './workspace/WorkspaceAnswer';
 import WorkspaceViewerPanel from './workspace/WorkspaceViewerPanel';
-import TerminalSessionPanel from './workspace/TerminalSessionPanel';
+import TerminalSessionPanel, { type TerminalLearningContext } from './workspace/TerminalSessionPanel';
 import CourseChatArtifacts from './CourseChatArtifacts';
 import type {
   Message,
@@ -311,6 +311,9 @@ type WelcomeQuestion = {
   targetBookSlug?: string;
   targetTitle?: string;
   targetViewerPath?: string;
+  learningPathId?: string;
+  learningStepId?: string;
+  labTaskId?: string;
 };
 
 type WelcomeQuestionGroup = {
@@ -329,6 +332,9 @@ type SendOptions = {
   targetBookSlug?: string;
   targetTitle?: string;
   targetViewerPath?: string;
+  learningPathId?: string;
+  learningStepId?: string;
+  labTaskId?: string;
 };
 
 const EMPTY_WELCOME_QUESTION_GROUPS: WelcomeQuestionGroup[] = [];
@@ -362,6 +368,9 @@ function normalizeWelcomeQuestion(item: StudioStarterQuestion): WelcomeQuestion 
     targetBookSlug: typeof item.target_book_slug === 'string' ? item.target_book_slug : undefined,
     targetTitle: typeof item.target_title === 'string' ? item.target_title : undefined,
     targetViewerPath: typeof item.target_viewer_path === 'string' ? item.target_viewer_path : undefined,
+    learningPathId: typeof item.learning_path_id === 'string' ? item.learning_path_id : undefined,
+    learningStepId: typeof item.learning_step_id === 'string' ? item.learning_step_id : undefined,
+    labTaskId: typeof item.lab_task_id === 'string' ? item.lab_task_id : undefined,
   };
 }
 
@@ -1019,6 +1028,7 @@ export default function WorkspacePage() {
   const [welcomeQuestionGroups, setWelcomeQuestionGroups] = useState<WelcomeQuestionGroup[]>(EMPTY_WELCOME_QUESTION_GROUPS);
   const [welcomeLearningSequence, setWelcomeLearningSequence] = useState<WelcomeQuestion[]>([]);
   const [isWelcomeQuestionLoading, setIsWelcomeQuestionLoading] = useState(true);
+  const [terminalLearningContext, setTerminalLearningContext] = useState<TerminalLearningContext | undefined>(undefined);
 
   // Collapsible panels
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -2437,10 +2447,21 @@ export default function WorkspacePage() {
     const resolvedTargetBookSlug = options.targetBookSlug ?? questionMeta?.targetBookSlug;
     const resolvedTargetTitle = options.targetTitle ?? questionMeta?.targetTitle;
     const resolvedTargetViewerPath = options.targetViewerPath ?? questionMeta?.targetViewerPath;
+    const resolvedLearningPathId = options.learningPathId ?? questionMeta?.learningPathId;
+    const resolvedLearningStepId = options.learningStepId ?? questionMeta?.learningStepId;
+    const resolvedLabTaskId = options.labTaskId ?? questionMeta?.labTaskId;
     const shouldUseCourseMode = options.forceCourseMode || resolvedRouteKind === 'course' || isCourseMode;
     const messageRouteKind: Message['routeKind'] = shouldUseCourseMode
       ? 'course'
       : resolvedRouteKind || 'official';
+    if (messageRouteKind === 'learning' && resolvedLabTaskId) {
+      setTerminalLearningContext({
+        learnerId: wikiOverlayUserId,
+        learningPathId: resolvedLearningPathId,
+        learningStepId: resolvedLearningStepId,
+        labTaskId: resolvedLabTaskId,
+      });
+    }
 
     const nextUserMessage: Message = {
       id: makeId('user'),
@@ -3441,6 +3462,9 @@ export default function WorkspacePage() {
                                     targetBookSlug: item.targetBookSlug,
                                     targetTitle: item.targetTitle,
                                     targetViewerPath: item.targetViewerPath,
+                                    learningPathId: item.learningPathId,
+                                    learningStepId: item.learningStepId,
+                                    labTaskId: item.labTaskId,
                                   });
                                 }}
                                 disabled={isSending}
@@ -3547,6 +3571,9 @@ export default function WorkspacePage() {
                                     targetBookSlug: suggestedMeta?.targetBookSlug,
                                     targetTitle: suggestedMeta?.targetTitle,
                                     targetViewerPath: suggestedMeta?.targetViewerPath,
+                                    learningPathId: suggestedMeta?.learningPathId,
+                                    learningStepId: suggestedMeta?.learningStepId,
+                                    labTaskId: suggestedMeta?.labTaskId,
                                   });
                                 }}
                                 disabled={isSending}
@@ -3748,7 +3775,7 @@ export default function WorkspacePage() {
             )}
           >
             {rightPanelMode === 'terminal' ? (
-              <TerminalSessionPanel />
+              <TerminalSessionPanel learningContext={terminalLearningContext} />
             ) : (
               <>
             {testMode && (

@@ -113,6 +113,9 @@ def _starter_question(
     target_book_slug: str = "",
     target_title: str = "",
     target_viewer_path: str = "",
+    learning_path_id: str = "",
+    learning_step_id: str = "",
+    lab_task_id: str = "",
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "lane": lane,
@@ -132,6 +135,12 @@ def _starter_question(
         payload["target_title"] = target_title
     if target_viewer_path:
         payload["target_viewer_path"] = target_viewer_path
+    if learning_path_id:
+        payload["learning_path_id"] = learning_path_id
+    if learning_step_id:
+        payload["learning_step_id"] = learning_step_id
+    if lab_task_id:
+        payload["lab_task_id"] = lab_task_id
     return payload
 
 
@@ -275,6 +284,7 @@ def _clean_title(title: str) -> str:
 
 def _learning_questions(root_dir: Path) -> list[dict[str, Any]]:
     entries = _manifest_entries(root_dir)
+    terminal_contexts = _learning_terminal_contexts(root_dir)
     questions: list[dict[str, Any]] = []
     for index, rule in enumerate(STARTER_CATEGORY_RULES):
         entry = _best_entry_for_category(entries, rule)
@@ -285,6 +295,7 @@ def _learning_questions(root_dir: Path) -> list[dict[str, Any]]:
             question = f"OCP를 처음 시작할 때 {title} 문서는 무엇부터 이해하면 돼?"
         else:
             question = f"{rule.label} 단계에서는 {title} 기준으로 무엇을 순서대로 학습하면 돼?"
+        terminal_context = terminal_contexts[index] if index < len(terminal_contexts) else {}
         questions.append(
             _starter_question(
                 lane="learning",
@@ -297,9 +308,54 @@ def _learning_questions(root_dir: Path) -> list[dict[str, Any]]:
                 target_book_slug=book_slug,
                 target_title=title,
                 target_viewer_path=viewer_path,
+                learning_path_id=str(terminal_context.get("learning_path_id") or ""),
+                learning_step_id=str(terminal_context.get("learning_step_id") or ""),
+                lab_task_id=str(terminal_context.get("lab_task_id") or ""),
             )
         )
     return questions
+
+
+def _learning_terminal_contexts(root_dir: Path) -> list[dict[str, str]]:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if not database_url:
+        return []
+    try:
+        import psycopg
+
+        from play_book_studio.db.learning_repository import load_learning_path_catalog
+
+        with psycopg.connect(database_url) as connection:
+            catalog = load_learning_path_catalog(connection, workspace_slug="default", limit=1)
+    except Exception:  # noqa: BLE001
+        return []
+    paths = catalog.get("paths") if isinstance(catalog, dict) else []
+    if not isinstance(paths, list) or not paths:
+        return []
+    path = paths[0] if isinstance(paths[0], dict) else {}
+    path_id = str(path.get("id") or "")
+    steps = path.get("steps")
+    if not isinstance(steps, list):
+        return []
+    contexts: list[dict[str, str]] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        lab_task_id = ""
+        lab_tasks = step.get("lab_tasks")
+        if isinstance(lab_tasks, list):
+            first_task = next((task for task in lab_tasks if isinstance(task, dict) and str(task.get("id") or "")), None)
+            if isinstance(first_task, dict):
+                lab_task_id = str(first_task.get("id") or "")
+        contexts.append(
+            {
+                "learning_path_id": path_id,
+                "learning_step_id": str(step.get("id") or ""),
+                "lab_task_id": lab_task_id,
+            }
+        )
+    return contexts
 
 
 def _load_ops_learning_guides_payload(root_dir: Path) -> tuple[dict[str, Any], str]:

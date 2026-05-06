@@ -146,3 +146,26 @@ def test_starter_questions_use_postgres_official_metadata_when_database_is_confi
     assert groups["faq"]["questions"][0]["source"] == "postgres.official_docs"
     assert groups["faq"]["questions"][0]["target_book_slug"] == "machine_configuration"
     assert payload["learning_sequence"][2]["target_viewer_path"] == "/playbooks/wiki-runtime/active/machine_configuration/index.html"
+
+
+def test_learning_starter_questions_include_terminal_context_when_available(monkeypatch) -> None:
+    root = TEST_TMP / "terminal_context"
+    root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(
+        starter_questions,
+        "_learning_terminal_contexts",
+        lambda _root: [
+            {
+                "learning_path_id": "path-1",
+                "learning_step_id": "step-1",
+                "lab_task_id": "lab-1",
+            }
+        ],
+    )
+
+    payload = build_studio_starter_questions(root, seed="stable")
+    first_learning = payload["learning_sequence"][0]
+
+    assert first_learning["learning_path_id"] == "path-1"
+    assert first_learning["learning_step_id"] == "step-1"
+    assert first_learning["lab_task_id"] == "lab-1"

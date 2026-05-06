@@ -322,6 +322,9 @@ export interface StudioStarterQuestion {
   target_book_slug?: string;
   target_title?: string;
   target_viewer_path?: string;
+  learning_path_id?: string;
+  learning_step_id?: string;
+  lab_task_id?: string;
 }
 
 export interface StudioStarterQuestionGroup {
