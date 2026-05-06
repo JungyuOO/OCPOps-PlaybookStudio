@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from play_book_studio.config.corpus_paths import COURSE_PBS_DIR, STUDY_DOCS_DIR
 from play_book_studio.config.settings import load_settings
 
 from .ops_learning import DEFAULT_GOLDEN_PATH, DEFAULT_GUIDES_PATH, DEFAULT_LEARNING_CHUNKS_PATH, write_initial_guides_and_golden
@@ -52,8 +53,8 @@ def _enrich_chunks_with_attachment_summaries(chunks: list[dict]) -> list[dict]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build project-playbook course artifacts from study-docs PPTX files.")
-    parser.add_argument("--source-dir", type=Path, default=Path("corpus/study-docs"))
-    parser.add_argument("--output-dir", type=Path, default=Path("corpus/data/course_pbs"))
+    parser.add_argument("--source-dir", type=Path, default=STUDY_DOCS_DIR)
+    parser.add_argument("--output-dir", type=Path, default=COURSE_PBS_DIR)
     parser.add_argument(
         "--family",
         choices=("architecture", "unit_test", "integration_test", "perf_test", "completion_report", "all"),

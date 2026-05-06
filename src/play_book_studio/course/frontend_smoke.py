@@ -8,6 +8,8 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import COURSE_QA_ACCEPTED_CASES_PATH
+
 from play_book_studio.course.quality_eval import read_jsonl
 from play_book_studio.course.visual_audit import _extract_playwright_result, _run_playwright
 from play_book_studio.course.visual_audit_server import build_handler
@@ -200,7 +202,7 @@ async page => {{
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run Playwright smoke checks against the built Course UI.")
     parser.add_argument("--root-dir", type=Path, default=Path("."))
-    parser.add_argument("--cases-path", type=Path, default=Path("corpus/manifests/course_qa_cases.accepted.jsonl"))
+    parser.add_argument("--cases-path", type=Path, default=COURSE_QA_ACCEPTED_CASES_PATH)
     parser.add_argument("--output-dir", type=Path, default=Path("output/playwright/course-ui-smoke"))
     parser.add_argument("--scenario-count", type=int, default=12)
     parser.add_argument("--host", default="127.0.0.1")

@@ -4,6 +4,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import STUDY_DOCS_DIR
+
 from ..common import apply_chunk_identity, collect_image_attachments, deck_key_from_path, deck_metadata, finalize_chunk, normalize_text
 from ..layout_semantics import derive_slide_semantics
 from ..slide_assets import load_render_index, resolve_slide_png
@@ -15,7 +17,7 @@ DESIGN_ID_RE = re.compile(r"DSGN-005-\d{3}", re.IGNORECASE)
 
 def parse_architecture_deck(pptx_path: Path, slide_rows: list[dict[str, Any]]) -> dict[str, Any]:
     render_index = load_render_index(Path("tmp/ppt-render/_index.csv"))
-    source_dir = Path("corpus/study-docs")
+    source_dir = STUDY_DOCS_DIR
     deck_key = deck_key_from_path(pptx_path)
     grouped: dict[str, dict[str, Any]] = {}
     for slide in slide_rows:

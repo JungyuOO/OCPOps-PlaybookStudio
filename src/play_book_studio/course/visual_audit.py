@@ -13,6 +13,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import COURSE_QA_ACCEPTED_CASES_PATH
+
 from play_book_studio.app.course_api import _course_chat_payload
 from play_book_studio.course.quality_eval import read_jsonl
 
@@ -362,7 +364,7 @@ async page => {{
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate static browser pages for course QA visual audits.")
     parser.add_argument("--root-dir", type=Path, default=Path("."))
-    parser.add_argument("--cases-path", type=Path, default=Path("corpus/manifests/course_qa_cases.accepted.jsonl"))
+    parser.add_argument("--cases-path", type=Path, default=COURSE_QA_ACCEPTED_CASES_PATH)
     parser.add_argument("--output-dir", type=Path, default=Path("output/playwright/course-qa-audit"))
     parser.add_argument("--capture", action="store_true", help="Capture generated audit pages with playwright-cli.")
     parser.add_argument("--host", default="127.0.0.1")

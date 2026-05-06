@@ -6,11 +6,13 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import COURSE_LEARNING_ROUTES_OVERRIDES_PATH
+
 from .common import relative_project_path
 
 
 def _load_learning_route_overrides() -> dict[str, Any]:
-    path = Path("corpus/manifests/course_learning_routes_overrides.json")
+    path = COURSE_LEARNING_ROUTES_OVERRIDES_PATH
     if not path.exists():
         return {}
     try:

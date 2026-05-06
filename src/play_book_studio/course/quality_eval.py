@@ -8,6 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from play_book_studio.app.course_api import _chunk_beginner_question, _clean_beginner_title, _course_chat_payload
+from play_book_studio.config.corpus_paths import (
+    COURSE_PBS_DIR,
+    COURSE_QA_ACCEPTED_CASES_PATH,
+    COURSE_QA_CASES_PATH,
+    COURSE_QA_REJECTED_CASES_PATH,
+    COURSE_QA_REPORT_PATH,
+)
 
 
 CASE_SCHEMA = "course_chat_quality_case_v1"
@@ -1035,11 +1042,11 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate and run quality-gated course chat QA cases.")
     parser.add_argument("--root-dir", type=Path, default=Path("."))
-    parser.add_argument("--course-dir", type=Path, default=Path("corpus/data/course_pbs"))
-    parser.add_argument("--cases-path", type=Path, default=Path("corpus/manifests/course_qa_cases.jsonl"))
-    parser.add_argument("--accepted-path", type=Path, default=Path("corpus/manifests/course_qa_cases.accepted.jsonl"))
-    parser.add_argument("--rejected-path", type=Path, default=Path("corpus/manifests/course_qa_cases.rejected.jsonl"))
-    parser.add_argument("--report-path", type=Path, default=Path("corpus/data/course_pbs/manifests/course_qa_report.json"))
+    parser.add_argument("--course-dir", type=Path, default=COURSE_PBS_DIR)
+    parser.add_argument("--cases-path", type=Path, default=COURSE_QA_CASES_PATH)
+    parser.add_argument("--accepted-path", type=Path, default=COURSE_QA_ACCEPTED_CASES_PATH)
+    parser.add_argument("--rejected-path", type=Path, default=COURSE_QA_REJECTED_CASES_PATH)
+    parser.add_argument("--report-path", type=Path, default=COURSE_QA_REPORT_PATH)
     parser.add_argument("--target-count", type=int, default=96)
     parser.add_argument("--min-accepted", type=int, default=None)
     parser.add_argument("--allow-rejected", action="store_true")

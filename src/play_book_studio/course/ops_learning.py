@@ -8,16 +8,23 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import (
+    COURSE_OPS_LEARNING_GOLDEN_CASES_PATH,
+    COURSE_PBS_DIR,
+    OPS_LEARNING_ANCHOR_AUDIT_PATH,
+    OPS_LEARNING_CHUNKS_PATH,
+    OPS_LEARNING_GUIDES_PATH,
+)
 
 AUDIT_SCHEMA = "ops_learning_anchor_audit_v1"
 GUIDE_SCHEMA = "ops_learning_guide_v1"
 GOLDEN_CASE_SCHEMA = "ops_learning_golden_case_v1"
 LEARNING_CHUNK_SCHEMA = "ops_learning_chunk_v1"
-DEFAULT_COURSE_DIR = Path("corpus/data/course_pbs")
-DEFAULT_AUDIT_PATH = Path("corpus/data/course_pbs/manifests/ops_learning_anchor_audit_v1.json")
-DEFAULT_GUIDES_PATH = Path("corpus/data/course_pbs/manifests/ops_learning_guides_v1.json")
-DEFAULT_GOLDEN_PATH = Path("corpus/manifests/course_ops_learning_golden_cases.jsonl")
-DEFAULT_LEARNING_CHUNKS_PATH = Path("corpus/data/course_pbs/manifests/ops_learning_chunks_v1.jsonl")
+DEFAULT_COURSE_DIR = COURSE_PBS_DIR
+DEFAULT_AUDIT_PATH = OPS_LEARNING_ANCHOR_AUDIT_PATH
+DEFAULT_GUIDES_PATH = OPS_LEARNING_GUIDES_PATH
+DEFAULT_GOLDEN_PATH = COURSE_OPS_LEARNING_GOLDEN_CASES_PATH
+DEFAULT_LEARNING_CHUNKS_PATH = OPS_LEARNING_CHUNKS_PATH
 OPS_SEQUENCE_TEXT_LIMIT = 560
 OPS_SOURCE_SUMMARY_TEXT_LIMIT = 500
 
