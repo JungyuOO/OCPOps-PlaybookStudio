@@ -43,6 +43,23 @@ export default function TerminalSessionPanel({ learningContext }: TerminalSessio
   const [state, setState] = useState<TerminalConnectionState>('connecting');
   const [sessionMeta, setSessionMeta] = useState({ shell: '', workdir: '' });
   const wsUrl = useMemo(defaultTerminalWebSocketUrl, []);
+  const stableLearningContext = useMemo<TerminalLearningContext | undefined>(() => {
+    if (!learningContext) {
+      return undefined;
+    }
+    const normalized = {
+      learnerId: learningContext.learnerId?.trim(),
+      learningPathId: learningContext.learningPathId?.trim(),
+      learningStepId: learningContext.learningStepId?.trim(),
+      labTaskId: learningContext.labTaskId?.trim(),
+    };
+    return Object.values(normalized).some(Boolean) ? normalized : undefined;
+  }, [
+    learningContext?.labTaskId,
+    learningContext?.learnerId,
+    learningContext?.learningPathId,
+    learningContext?.learningStepId,
+  ]);
 
   useEffect(() => {
     const host = containerRef.current;
@@ -104,8 +121,8 @@ export default function TerminalSessionPanel({ learningContext }: TerminalSessio
 
     socket.addEventListener('open', () => {
       setState('connected');
-      if (learningContext) {
-        socket.send(JSON.stringify({ type: 'context', ...learningContext }));
+      if (stableLearningContext) {
+        socket.send(JSON.stringify({ type: 'context', ...stableLearningContext }));
       }
     });
 
@@ -161,7 +178,7 @@ export default function TerminalSessionPanel({ learningContext }: TerminalSessio
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [connectionKey, learningContext, wsUrl]);
+  }, [connectionKey, stableLearningContext, wsUrl]);
 
   return (
     <section className="terminal-session-shell" aria-label="Terminal Session">
