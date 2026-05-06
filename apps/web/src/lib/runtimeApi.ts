@@ -1,6 +1,5 @@
 export const RUNTIME_ORIGIN = (import.meta.env.VITE_RUNTIME_ORIGIN ?? '').trim().replace(/\/$/, '');
 export const RUNTIME_EXTERNAL_ORIGIN = RUNTIME_ORIGIN || 'http://127.0.0.1:8765';
-export const CUSTOMER_PACK_UPLOAD_ACCEPT = '.pdf,.md,.markdown,.docx,.pptx,.xlsx,.txt,.adoc,.asciidoc,.html,.htm,.png,.jpg,.jpeg,.webp';
 export const DOCUMENT_INGEST_UPLOAD_ACCEPT = '.pdf,.md,.markdown,.docx,.pptx,.xlsx,.txt,.adoc,.asciidoc,.png,.jpg,.jpeg,.webp';
 
 export interface LibraryBookSourceOption {
@@ -1293,52 +1292,6 @@ export async function uploadDocumentIngestion(
 
 export async function loadDocumentRepositories(): Promise<DocumentRepositoriesResponse> {
   return requestJson<DocumentRepositoriesResponse>('/api/repositories/documents');
-}
-
-function inferSourceType(file: File): string {
-  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
-  if (['md', 'markdown'].includes(extension)) {
-    return 'md';
-  }
-  if (['html', 'htm'].includes(extension)) {
-    return 'web';
-  }
-  if (['adoc', 'asciidoc'].includes(extension)) {
-    return 'asciidoc';
-  }
-  if (['txt', 'text'].includes(extension)) {
-    return 'txt';
-  }
-  if (['docx'].includes(extension)) {
-    return 'docx';
-  }
-  if (['pptx'].includes(extension)) {
-    return 'pptx';
-  }
-  if (['xlsx'].includes(extension)) {
-    return 'xlsx';
-  }
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(extension)) {
-    return 'image';
-  }
-  if (['pdf'].includes(extension)) {
-    return 'pdf';
-  }
-  return 'web';
-}
-
-export async function uploadCustomerPackDraft(file: File): Promise<CustomerPackDraft> {
-  const payload = new FormData();
-  payload.append('source_type', inferSourceType(file));
-  payload.append('uri', file.name);
-  payload.append('title', file.name.replace(/\.[^.]+$/, ''));
-  payload.append('language_hint', 'ko');
-  payload.append('file_name', file.name);
-  payload.append('file', file, file.name);
-  return requestJson<CustomerPackDraft>('/api/customer-packs/upload-draft', {
-    method: 'POST',
-    body: payload,
-  });
 }
 
 export async function captureCustomerPackDraft(draftId: string): Promise<CustomerPackDraft> {

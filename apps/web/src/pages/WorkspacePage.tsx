@@ -27,7 +27,7 @@ import gsap from 'gsap';
 import './WorkspacePage.css';
 import ViewerDocumentStage, { type ViewerDocumentPayload } from '../components/ViewerDocumentStage';
 import {
-  CUSTOMER_PACK_UPLOAD_ACCEPT,
+  DOCUMENT_INGEST_UPLOAD_ACCEPT,
   type ChatResponse,
   type ChatCitation,
   type ChatRelatedLink,
@@ -76,7 +76,7 @@ import {
   saveWikiOverlay,
   sendChatStream,
   toRuntimeUrl,
-  uploadCustomerPackDraft,
+  uploadDocumentIngestion,
 } from '../lib/runtimeApi';
 import {
   listOcpProfiles,
@@ -2365,9 +2365,17 @@ export default function WorkspacePage() {
     }
 
     try {
-      const uploaded = await uploadCustomerPackDraft(file);
-      setDrafts((current) => mergeDraft(uploaded, current));
-      await openDraftPreview(uploaded.draft_id, mergeDraft(uploaded));
+      const uploaded = await uploadDocumentIngestion(file, {
+        index: true,
+        repositoryId: activeRepository?.repository_id,
+      });
+      const repositoryPayload = await loadDocumentRepositories().catch(() => ({ repositories: [] }));
+      const repositoryId = uploaded.repository_id || uploaded.persisted?.repository_id || activeRepository?.repository_id || '';
+      setDocumentRepositories(repositoryPayload.repositories ?? []);
+      if (repositoryId) {
+        setActiveSourceId(`repository:${repositoryId}`);
+      }
+      setPreview({ kind: 'empty' });
     } catch (error) {
       console.error(error);
       window.alert(error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.');
@@ -3624,7 +3632,7 @@ export default function WorkspacePage() {
             inkSurfaceKey={currentOverlayTarget?.ref || currentViewerPath || (activeDraft ? `draft:${activeDraft.draft_id}` : `preview:${preview.kind}`)}
             textAnnotationMode={textAnnotationMode}
             textAnnotationStyle={annotationTextStyle}
-            uploadAccept={CUSTOMER_PACK_UPLOAD_ACCEPT}
+            uploadAccept={DOCUMENT_INGEST_UPLOAD_ACCEPT}
             onAnnotationColorChange={setAnnotationColorId}
             onAnnotationEnabledChange={setAnnotationEnabled}
             onAnnotationToolChange={setAnnotationTool}

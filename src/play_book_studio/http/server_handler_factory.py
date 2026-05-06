@@ -56,7 +56,6 @@ from play_book_studio.http.server_routes import (
     handle_customer_pack_normalize as _handle_customer_pack_normalize_request,
     handle_customer_pack_plan as _handle_customer_pack_plan_request,
     handle_customer_pack_support_matrix as _handle_customer_pack_support_matrix_request,
-    handle_customer_pack_upload_draft as _handle_customer_pack_upload_draft_request,
     handle_repository_favorites as _handle_repository_favorites_request,
     handle_repository_favorites_remove as _handle_repository_favorites_remove_request,
     handle_repository_favorites_save as _handle_repository_favorites_save_request,
@@ -296,9 +295,6 @@ def _build_handler(
             if parsed_request.path == "/api/customer-packs/drafts":
                 self._handle_customer_pack_draft_create(payload)
                 return
-            if parsed_request.path == "/api/customer-packs/upload-draft":
-                self._handle_customer_pack_upload_draft(payload)
-                return
             if parsed_request.path == "/api/uploads/ingest":
                 self._handle_upload_ingest(payload)
                 return
@@ -506,9 +502,6 @@ def _build_handler(
         def _handle_customer_pack_book(self, query: str) -> None: _handle_customer_pack_book_request(self, query, root_dir=root_dir)
         def _handle_customer_pack_draft_create(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_draft_create_request(self, payload, root_dir=root_dir)
-            data_control_room_cache.set("payload", None)
-        def _handle_customer_pack_upload_draft(self, payload: dict[str, Any]) -> None:
-            _handle_customer_pack_upload_draft_request(self, payload, root_dir=root_dir)
             data_control_room_cache.set("payload", None)
         def _handle_customer_pack_ingest(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_ingest_request(self, payload, root_dir=root_dir)

@@ -17,7 +17,6 @@ from .server_routes_customer_pack import (
     handle_customer_pack_normalize,
     handle_customer_pack_plan,
     handle_customer_pack_support_matrix,
-    handle_customer_pack_upload_draft,
 )
 from .server_routes_ops import (
     handle_repository_official_materialize,

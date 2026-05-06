@@ -21,7 +21,6 @@ from play_book_studio.http.intake_api import (
     load_customer_pack_capture as _load_customer_pack_capture,
     load_customer_pack_draft as _load_customer_pack_draft,
     normalize_customer_pack_draft as _normalize_customer_pack_draft,
-    upload_customer_pack_draft as _upload_customer_pack_draft,
 )
 from play_book_studio.http.source_books_customer_pack import (
     list_customer_pack_drafts as _list_customer_pack_drafts,
@@ -217,5 +216,4 @@ __all__ = [
     "handle_customer_pack_normalize",
     "handle_customer_pack_plan",
     "handle_customer_pack_support_matrix",
-    "handle_customer_pack_upload_draft",
 ]
