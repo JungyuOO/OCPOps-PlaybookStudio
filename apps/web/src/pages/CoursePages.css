@@ -621,6 +621,13 @@
   cursor: pointer;
 }
 
+.course-learning-terminal-panel .terminal-session-checks {
+  display: flex;
+  gap: 6px;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .course-learning-terminal-panel .terminal-session-host {
   height: 340px;
   padding: 8px;

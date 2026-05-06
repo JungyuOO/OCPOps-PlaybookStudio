@@ -15,6 +15,7 @@ interface TerminalSocketEvent {
   command_check_id?: string;
   status?: string;
   matched?: boolean;
+  validation_result?: Record<string, unknown>;
 }
 
 export interface TerminalLearningContext {
@@ -47,6 +48,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
   const [connectionKey, setConnectionKey] = useState(0);
   const [state, setState] = useState<TerminalConnectionState>('connecting');
   const [sessionMeta, setSessionMeta] = useState({ shell: '', workdir: '' });
+  const [recentCheckResults, setRecentCheckResults] = useState<TerminalSocketEvent[]>([]);
   const wsUrl = useMemo(defaultTerminalWebSocketUrl, []);
   const stableLearningContext = useMemo<TerminalLearningContext | undefined>(() => {
     if (!learningContext) {
@@ -152,6 +154,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
         return;
       }
       if (payload.type === 'command_check_result') {
+        setRecentCheckResults((current) => [payload, ...current.filter((item) => item.command_check_id !== payload.command_check_id)].slice(0, 4));
         onCommandCheckResult?.(payload);
         return;
       }
@@ -197,6 +200,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
           <strong>{state === 'connected' ? 'Connected' : state === 'connecting' ? 'Connecting' : state === 'error' ? 'Connection error' : 'Closed'}</strong>
           {sessionMeta.shell ? <span>{sessionMeta.shell}</span> : null}
           {sessionMeta.workdir ? <span>{sessionMeta.workdir}</span> : null}
+          {stableLearningContext?.labTaskId ? <span>Lab attached</span> : null}
         </div>
         <button
           className="terminal-session-reconnect"
@@ -206,6 +210,18 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
           Reconnect
         </button>
       </div>
+      {recentCheckResults.length > 0 ? (
+        <div className="terminal-session-checks" aria-label="Command check results">
+          {recentCheckResults.map((result) => (
+            <span
+              key={result.command_check_id || `${result.lab_task_id}-${result.status}`}
+              className={`terminal-session-check terminal-session-check--${result.status || 'unknown'}`}
+            >
+              {result.status || 'unknown'}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div ref={containerRef} className="terminal-session-host" />
     </section>
   );
