@@ -115,6 +115,41 @@ def test_parse_image_document_injects_qwen_description_into_chunk_text():
     assert "OpenShift router and service diagram" in chunks[0].embedding_text
 
 
+def test_parse_image_document_preserves_qwen_failure_status():
+    image_path = _case_dir("parser_failure") / "diagram.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+
+    def describe(_path, _asset):
+        raise RuntimeError("vision backend unavailable")
+
+    setattr(describe, "qwen_model", "Qwen/Qwen3.5-9B")
+
+    parsed = parse_upload_document(image_path, image_describer=describe)
+    chunks = build_document_chunks(parsed)
+
+    assert parsed.assets[0].description == ""
+    assert parsed.assets[0].metadata["qwen_status"] == "failed"
+    assert parsed.assets[0].metadata["qwen_model"] == "Qwen/Qwen3.5-9B"
+    assert "vision backend unavailable" in parsed.assets[0].metadata["qwen_error"]
+    assert "vision backend unavailable" not in chunks[0].embedding_text
+
+
+def test_parse_image_document_preserves_qwen_empty_status():
+    image_path = _case_dir("parser_empty") / "diagram.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+
+    def describe(_path, _asset):
+        return "   "
+
+    setattr(describe, "qwen_model", "Qwen/Qwen3.5-9B")
+
+    parsed = parse_upload_document(image_path, image_describer=describe)
+
+    assert parsed.assets[0].description == ""
+    assert parsed.assets[0].metadata["qwen_status"] == "empty"
+    assert parsed.assets[0].metadata["qwen_model"] == "Qwen/Qwen3.5-9B"
+
+
 def test_load_asset_image_bytes_reads_embedded_pptx_member():
     pptx_path = _case_dir("embedded") / "deck.pptx"
     with zipfile.ZipFile(pptx_path, "w") as archive:
