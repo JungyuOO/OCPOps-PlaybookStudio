@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
+from .corpus_paths import OFFICIAL_MANIFESTS_DIR
 from .packs import GLOBAL_SOURCE_CATALOG_NAME
 
 
@@ -67,7 +68,7 @@ class SettingsPathMixin:
 
     @property
     def manifest_dir(self) -> Path:
-        return self.root_dir / "manifests"
+        return self.root_dir / OFFICIAL_MANIFESTS_DIR
 
     @property
     def data_dir(self) -> Path:

@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import (
+    CORPUS_DATA_DIR,
+    OCP420_SOURCE_FIRST_FULL_REBUILD_MANIFEST_PATH,
+)
+
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 INLINE_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
@@ -23,13 +28,13 @@ class RuntimeTruthPaths:
 
 
 def runtime_truth_paths(root_dir: Path) -> RuntimeTruthPaths:
-    active_manifest_path = root_dir / "data" / "wiki_runtime_books" / "active_manifest.json"
-    source_first_manifest_path = root_dir / "manifests" / "ocp420_source_first_full_rebuild_manifest.json"
+    active_manifest_path = root_dir / CORPUS_DATA_DIR / "wiki_runtime_books" / "active_manifest.json"
+    source_first_manifest_path = root_dir / OCP420_SOURCE_FIRST_FULL_REBUILD_MANIFEST_PATH
     one_click_report_path = root_dir / "reports" / "build_logs" / "ocp420_one_click_runtime_report.json"
     active_manifest = _read_json(active_manifest_path)
     configured_source_manifest = Path(str(active_manifest.get("source_manifest_path") or "")).expanduser()
     source_manifest_path = configured_source_manifest if configured_source_manifest.is_absolute() else (
-        root_dir / "data" / "wiki_runtime_books" / "full_rebuild_manifest.json"
+        root_dir / CORPUS_DATA_DIR / "wiki_runtime_books" / "full_rebuild_manifest.json"
     )
     return RuntimeTruthPaths(
         active_manifest_path=active_manifest_path,
