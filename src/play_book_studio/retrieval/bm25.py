@@ -107,8 +107,6 @@ class BM25Index:
 
         with psycopg.connect(database_url) as connection:
             rows = load_bm25_rows_from_connection(connection)
-        if not rows:
-            raise ValueError("PostgreSQL document_chunks corpus is empty")
         return cls.from_rows(rows)
 
     def _idf(self, token: str) -> float:

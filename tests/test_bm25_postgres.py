@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from play_book_studio.retrieval.bm25 import BM25Index, load_bm25_rows_from_connection
+from play_book_studio.retrieval import retriever
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True)
@@ -109,3 +113,25 @@ def test_bm25_index_can_search_postgres_payload_rows():
     assert hits[0].book_slug == "study-pods"
     assert hits[0].section_path == ("Workloads", "Pods")
     assert hits[0].cli_commands == ("oc get pods",)
+
+
+def test_db_runtime_bm25_does_not_fall_back_to_missing_seed_file(monkeypatch):
+    missing_seed_file = REPO_ROOT / "tmp" / "bm25_postgres_tests" / "missing" / "bm25_corpus.jsonl"
+    monkeypatch.setattr(
+        BM25Index,
+        "from_postgres",
+        classmethod(lambda cls, _database_url: (_ for _ in ()).throw(RuntimeError("db not ready"))),
+    )
+    settings = type(
+        "Settings",
+        (),
+        {
+            "database_url": "postgresql://unit-test",
+            "retrieval_bm25_corpus_path": missing_seed_file,
+        },
+    )()
+
+    index = retriever._load_bm25_index(settings)
+
+    assert index.rows == []
+    assert index.search("anything") == []

@@ -40,7 +40,7 @@ def _load_bm25_index(settings: Settings) -> BM25Index:
         try:
             return BM25Index.from_postgres(settings.database_url)
         except Exception:  # noqa: BLE001
-            pass
+            return BM25Index.from_rows([])
     return BM25Index.from_jsonl(settings.retrieval_bm25_corpus_path)
 
 
