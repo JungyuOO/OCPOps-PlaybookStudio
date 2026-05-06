@@ -25,6 +25,14 @@ Copy-Item .env.production.example .env.production
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
+Then run seed/import jobs when the server has the seed input directories:
+
+```powershell
+docker compose -f docker-compose.prod.yml --env-file .env.production --profile seed run --rm course-runtime-seed
+docker compose -f docker-compose.prod.yml --env-file .env.production --profile seed run --rm official-corpus-seed
+docker compose -f docker-compose.prod.yml --env-file .env.production --profile seed run --rm qdrant-seed
+```
+
 Then verify:
 
 ```powershell
@@ -50,6 +58,12 @@ Expected Qdrant collections for the current dataset:
 The app does not rebuild corpus/course vectors on every boot. Run one-shot seed
 services after restoring Qdrant for the first time, after changing source data,
 or when a collection is missing.
+
+For course runtime rows and assets in PostgreSQL:
+
+```powershell
+docker compose -f docker-compose.prod.yml --env-file .env.production --profile seed run --rm course-runtime-seed
+```
 
 For the official OpenShift corpus, this imports `data/gold_corpus_ko/chunks.jsonl`
 into PostgreSQL and indexes/refreshes Qdrant payloads for the `official_docs`

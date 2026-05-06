@@ -51,8 +51,6 @@ services:
         condition: service_started
       db-migrate:
         condition: service_completed_successfully
-      course-runtime-seed:
-        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -85,6 +83,8 @@ services:
     restart: "no"
 
   course-runtime-seed:
+    profiles:
+      - seed
     build:
       context: .
       dockerfile: Dockerfile
