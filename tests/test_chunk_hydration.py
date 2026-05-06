@@ -112,6 +112,7 @@ def test_hydrate_retrieval_hits_rebuilds_hits_from_canonical_db_rows():
     assert hydrated[0].owner_user_id == "owner-a"
     assert hydrated[0].visibility == "workspace_shared"
     assert hydrated[0].source_scope == "study_docs"
+    assert hydrated[0].asset_ids == ("asset-1",)
     assert hydrated[0].source == "vector"
     assert hydrated[0].raw_score == 0.75
     assert hydrated[0].fused_score == 0.42

@@ -44,6 +44,7 @@ def hit_from_payload(payload: dict[str, Any], *, source: str, score: float) -> R
         verification_hints=tuple(
             str(item) for item in (payload.get("verification_hints") or []) if str(item).strip()
         ),
+        asset_ids=tuple(str(item) for item in (payload.get("asset_ids") or []) if str(item).strip()),
         repository_id=str(payload.get("repository_id", "")),
         owner_user_id=str(payload.get("owner_user_id", "")),
         visibility=str(payload.get("visibility", "")),

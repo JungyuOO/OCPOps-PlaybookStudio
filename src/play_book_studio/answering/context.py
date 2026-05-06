@@ -1668,6 +1668,7 @@ def assemble_context(
                 k8s_objects=hit.k8s_objects,
                 operator_names=hit.operator_names,
                 verification_hints=hit.verification_hints,
+                asset_ids=hit.asset_ids,
             )
         )
 

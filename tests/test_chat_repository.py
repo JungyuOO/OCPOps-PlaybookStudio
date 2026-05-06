@@ -87,6 +87,26 @@ def test_persist_chat_turn_upserts_session_and_messages():
     assert assistant_params[4] == '["asset-a"]'
 
 
+def test_persist_chat_turn_extracts_cited_asset_ids_from_asset_id_lists():
+    connection = FakeConnection()
+
+    persist_chat_turn(
+        connection,
+        client_session_id="client-session",
+        anonymous_user_id="owner-hash",
+        query="How do I inspect the image?",
+        answer="Use the cited figure. [1]",
+        citations=[
+            {"chunk_id": "chunk-a", "asset_ids": ["asset-a", "asset-b"]},
+            {"chunk_id": "chunk-b", "asset_ids": ["asset-a"]},
+        ],
+    )
+
+    assistant_params = connection.cursor_obj.calls[-1][1]
+    assert assistant_params[3] == '["chunk-a", "chunk-b"]'
+    assert assistant_params[4] == '["asset-a", "asset-b"]'
+
+
 def test_list_chat_sessions_filters_to_owner_scope():
     connection = FakeConnection()
     connection.cursor_obj.fetchall_rows = [

@@ -55,11 +55,15 @@ def _citation_ids(citations: list[dict[str, Any]], key: str) -> list[str]:
     seen: set[str] = set()
     ids: list[str] = []
     for citation in citations:
-        value = str(citation.get(key) or "").strip()
-        if not value or value in seen:
-            continue
-        seen.add(value)
-        ids.append(value)
+        values = citation.get(f"{key}s") if key == "asset_id" else None
+        if not isinstance(values, list):
+            values = [citation.get(key)]
+        for item in values:
+            value = str(item or "").strip()
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            ids.append(value)
     return ids
 
 
