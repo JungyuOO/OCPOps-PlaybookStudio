@@ -25,13 +25,13 @@ from play_book_studio.app.course_api import (
 
 
 def _write_chunk(root: Path, chunk_id: str, payload: dict) -> None:
-    chunks_dir = root / "corpus" / "data" / "course_pbs" / "chunks"
+    chunks_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "chunks"
     chunks_dir.mkdir(parents=True, exist_ok=True)
     (chunks_dir / f"{chunk_id}.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _write_chunks_jsonl(root: Path, rows: list[dict]) -> None:
-    course_dir = root / "corpus" / "data" / "course_pbs"
+    course_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs"
     course_dir.mkdir(parents=True, exist_ok=True)
     (course_dir / "chunks.jsonl").write_text(
         "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
@@ -40,19 +40,19 @@ def _write_chunks_jsonl(root: Path, rows: list[dict]) -> None:
 
 
 def _write_manifest(root: Path, payload: dict) -> None:
-    manifests_dir = root / "corpus" / "data" / "course_pbs" / "manifests"
+    manifests_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
     manifests_dir.mkdir(parents=True, exist_ok=True)
     (manifests_dir / "course_v1.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _write_guides(root: Path, payload: dict) -> None:
-    manifests_dir = root / "corpus" / "data" / "course_pbs" / "manifests"
+    manifests_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
     manifests_dir.mkdir(parents=True, exist_ok=True)
     (manifests_dir / "ops_learning_guides_v1.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def _write_learning_chunks(root: Path, rows: list[dict]) -> None:
-    manifests_dir = root / "corpus" / "data" / "course_pbs" / "manifests"
+    manifests_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
     manifests_dir.mkdir(parents=True, exist_ok=True)
     (manifests_dir / "ops_learning_chunks_v1.jsonl").write_text(
         "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
@@ -283,19 +283,19 @@ def test_course_asset_endpoint_serves_only_course_assets() -> None:
             self.content_type = content_type
 
     with _temp_root() as root:
-        asset = root / "corpus" / "data" / "course_pbs" / "assets" / "a.png"
+        asset = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "assets" / "a.png"
         asset.parent.mkdir(parents=True, exist_ok=True)
         asset.write_bytes(b"png-bytes")
 
         handler = Handler()
-        handled = handle_course_get(handler, "/api/v1/course/assets", "path=corpus/data/course_pbs/assets/a.png", root_dir=root)
+        handled = handle_course_get(handler, "/api/v1/course/assets", "path=corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png", root_dir=root)
 
         assert handled is True
         assert handler.bytes_payload == b"png-bytes"
         assert handler.content_type == "image/png"
 
         blocked = Handler()
-        handle_course_get(blocked, "/api/v1/course/assets", "path=corpus/data/course_pbs/chunks/a.json", root_dir=root)
+        handle_course_get(blocked, "/api/v1/course/assets", "path=corpus/sources/kmsc/parsed-preview/course_pbs/chunks/a.json", root_dir=root)
         assert blocked.status == 400
 
 
@@ -318,12 +318,12 @@ def test_course_asset_endpoint_converts_browser_incompatible_image_payloads() ->
     with _temp_root() as root:
         from PIL import Image
 
-        asset = root / "corpus" / "data" / "course_pbs" / "assets" / "wmf-like.png"
+        asset = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "assets" / "wmf-like.png"
         asset.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (2, 2), color="white").save(asset, format="BMP")
 
         handler = Handler()
-        handled = handle_course_get(handler, "/api/v1/course/assets", "path=corpus/data/course_pbs/assets/wmf-like.png", root_dir=root)
+        handled = handle_course_get(handler, "/api/v1/course/assets", "path=corpus/sources/kmsc/parsed-preview/course_pbs/assets/wmf-like.png", root_dir=root)
 
         assert handled is True
         assert handler.content_type == "image/png"
@@ -362,7 +362,7 @@ def test_course_asset_endpoint_prefers_postgres_asset_payload(monkeypatch: pytes
         handled = handle_course_get(
             handler,
             "/api/v1/course/assets",
-            "path=corpus/data/course_pbs/assets/db-only.png",
+            "path=corpus/sources/kmsc/parsed-preview/course_pbs/assets/db-only.png",
             root_dir=root,
         )
 
@@ -390,7 +390,7 @@ def test_course_asset_endpoint_does_not_fall_back_to_files_when_database_is_conf
             self.content_type = content_type
 
     with _temp_root() as root:
-        asset = root / "corpus" / "data" / "course_pbs" / "assets" / "file-only.png"
+        asset = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "assets" / "file-only.png"
         asset.parent.mkdir(parents=True, exist_ok=True)
         asset.write_bytes(b"file-image-bytes")
         monkeypatch.setattr(
@@ -404,7 +404,7 @@ def test_course_asset_endpoint_does_not_fall_back_to_files_when_database_is_conf
         handled = handle_course_get(
             handler,
             "/api/v1/course/assets",
-            "path=corpus/data/course_pbs/assets/file-only.png",
+            "path=corpus/sources/kmsc/parsed-preview/course_pbs/assets/file-only.png",
             root_dir=root,
         )
 
@@ -876,7 +876,7 @@ def test_load_chunk_projects_missing_index_contract_fields() -> None:
 
 def test_course_chunk_viewer_meta_and_html_support_workspace_preview() -> None:
     with _temp_root() as root:
-        assets_dir = root / "corpus" / "data" / "course_pbs" / "assets"
+        assets_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "assets"
         assets_dir.mkdir(parents=True, exist_ok=True)
         (assets_dir / "chunk-01__img_01.png").write_bytes(b"not-a-real-png")
         _write_chunk(
@@ -890,12 +890,12 @@ def test_course_chunk_viewer_meta_and_html_support_workspace_preview() -> None:
                 "chunk_kind": "test_case_summary",
                 "body_md": "Running 상태를 확인한다.",
                 "search_text": "TEST-01 Running Ready",
-                "source_pptx": "corpus/study-docs/unit.pptx",
-                "slide_refs": [{"slide_no": 3, "pptx": "corpus/study-docs/unit.pptx"}],
+                "source_pptx": "corpus/sources/kmsc/raw/unit.pptx",
+                "slide_refs": [{"slide_no": 3, "pptx": "corpus/sources/kmsc/raw/unit.pptx"}],
                 "image_attachments": [
                     {
                         "asset_id": "chunk-01::asset:01",
-                        "asset_path": "corpus/data/course_pbs/assets/chunk-01__img_01.png",
+                        "asset_path": "corpus/sources/kmsc/parsed-preview/course_pbs/assets/chunk-01__img_01.png",
                         "slide_no": 3,
                         "visual_summary": "Pod Running screen",
                     }
@@ -912,7 +912,7 @@ def test_course_chunk_viewer_meta_and_html_support_workspace_preview() -> None:
     assert meta["source_lane"] == "study_docs_course_runtime"
     assert viewer_html is not None
     assert "Pod Running 확인" in viewer_html
-    assert "/api/v1/course/assets?path=corpus/data/course_pbs/assets/chunk-01__img_01.png" in viewer_html
+    assert "/api/v1/course/assets?path=corpus/sources/kmsc/parsed-preview/course_pbs/assets/chunk-01__img_01.png" in viewer_html
 
 
 def test_course_chat_separates_study_docs_official_docs_and_guided_next_step(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -931,8 +931,8 @@ def test_course_chat_separates_study_docs_official_docs_and_guided_next_step(mon
                 "chunk_kind": "test_case_summary",
                 "body_md": "마스터노드에서 etcd 백업을 수행한다.",
                 "search_text": "TEST-UN-OCP-30-01 etcd 백업 수행. 주요 기술: ETCD.",
-                "source_pptx": "corpus/study-docs/unit.pptx",
-                "slide_refs": [{"slide_no": 10, "pptx": "corpus/study-docs/unit.pptx"}],
+                "source_pptx": "corpus/sources/kmsc/raw/unit.pptx",
+                "slide_refs": [{"slide_no": 10, "pptx": "corpus/sources/kmsc/raw/unit.pptx"}],
                 "related_official_docs": [
                     {"score": 0.42, "title": "low doc", "section_title": "ignored"},
                     {
@@ -964,8 +964,8 @@ def test_course_chat_separates_study_docs_official_docs_and_guided_next_step(mon
                 "chunk_kind": "test_case_summary",
                 "body_md": "백업 파일 생성 여부를 확인한다.",
                 "search_text": "TEST-UN-OCP-30-02 etcd 백업 확인. 주요 기술: ETCD.",
-                "source_pptx": "corpus/study-docs/unit.pptx",
-                "slide_refs": [{"slide_no": 11, "pptx": "corpus/study-docs/unit.pptx"}],
+                "source_pptx": "corpus/sources/kmsc/raw/unit.pptx",
+                "slide_refs": [{"slide_no": 11, "pptx": "corpus/sources/kmsc/raw/unit.pptx"}],
                 "related_official_docs": [],
                 "tour_stop": {
                     "stop_order": 2,
@@ -1010,8 +1010,8 @@ def test_course_chat_uses_stage_official_route_when_chunk_mapping_is_absent(monk
                 "chunk_kind": "chapter_summary",
                 "body_md": "완료보고 첫 장",
                 "search_text": "CH-01 완료보고 완료본",
-                "source_pptx": "corpus/study-docs/completion.pptx",
-                "slide_refs": [{"slide_no": 1, "pptx": "corpus/study-docs/completion.pptx"}],
+                "source_pptx": "corpus/sources/kmsc/raw/completion.pptx",
+                "slide_refs": [{"slide_no": 1, "pptx": "corpus/sources/kmsc/raw/completion.pptx"}],
                 "related_official_docs": [],
                 "tour_stop": {
                     "stop_order": 1,
@@ -1067,8 +1067,8 @@ def test_course_chat_returns_ranked_image_evidence(monkeypatch: pytest.MonkeyPat
                 "chunk_kind": "test_case_summary",
                 "body_md": "oc get pods 결과에서 Running 상태를 확인한다.",
                 "search_text": "TEST-IMG-01 Running Ready 상태 확인",
-                "source_pptx": "corpus/study-docs/unit.pptx",
-                "slide_refs": [{"slide_no": 3, "pptx": "corpus/study-docs/unit.pptx"}],
+                "source_pptx": "corpus/sources/kmsc/raw/unit.pptx",
+                "slide_refs": [{"slide_no": 3, "pptx": "corpus/sources/kmsc/raw/unit.pptx"}],
                 "image_attachments": [
                     {
                         "asset_id": "asset-running",
@@ -1111,8 +1111,8 @@ def test_course_chat_image_evidence_prefers_query_matched_state_and_role(monkeyp
                 "chunk_kind": "perf_slide_detail",
                 "body_md": "Prometheus dashboard and Ready condition evidence.",
                 "search_text": "PERF-IMG-01 Prometheus dashboard Ready condition.",
-                "source_pptx": "corpus/study-docs/perf.pptx",
-                "slide_refs": [{"slide_no": 58, "pptx": "corpus/study-docs/perf.pptx"}],
+                "source_pptx": "corpus/sources/kmsc/raw/perf.pptx",
+                "slide_refs": [{"slide_no": 58, "pptx": "corpus/sources/kmsc/raw/perf.pptx"}],
                 "image_attachments": [
                     {
                         "asset_id": "asset-command",

@@ -310,7 +310,7 @@ def _load_ops_learning_guides_payload(root_dir: Path) -> tuple[dict[str, Any], s
             return {"canonical_model": "ops_learning_guide_v1", "guides": []}, "postgres.learning_paths"
     return (
         _safe_read_json(root_dir / "data" / "course_pbs" / "manifests" / "ops_learning_guides_v1.json"),
-        "corpus/data/course_pbs/manifests/ops_learning_guides_v1.json",
+        "corpus/sources/kmsc/parsed-preview/course_pbs/manifests/ops_learning_guides_v1.json",
     )
 
 

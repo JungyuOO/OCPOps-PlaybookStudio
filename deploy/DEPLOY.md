@@ -65,7 +65,7 @@ For course runtime rows and assets in PostgreSQL:
 docker compose -f docker-compose.prod.yml --env-file .env.production --profile seed run --rm course-runtime-seed
 ```
 
-For the official OpenShift corpus, this imports `corpus/data/gold_corpus_ko/chunks.jsonl`
+For the official OpenShift corpus, this imports `corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl`
 into PostgreSQL and indexes/refreshes Qdrant payloads for the `official_docs`
 scope:
 
@@ -81,8 +81,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.production --profile s
 
 This upserts:
 
-- `corpus/data/course_pbs/chunks.jsonl` into `course_pbs_ko`
-- `corpus/data/course_pbs/manifests/ops_learning_chunks_v1.jsonl` into `course_ops_learning_ko`
+- `corpus/sources/kmsc/parsed-preview/course_pbs/chunks.jsonl` into `course_pbs_ko`
+- `corpus/sources/kmsc/parsed-preview/course_pbs/manifests/ops_learning_chunks_v1.jsonl` into `course_ops_learning_ko`
 
 The command is idempotent for the same chunk IDs.
 The official corpus seed is also idempotent for the same chunk IDs and uses

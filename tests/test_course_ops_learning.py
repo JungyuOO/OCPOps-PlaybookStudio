@@ -19,13 +19,13 @@ def _temp_root() -> Iterator[Path]:
 
 
 def _write_chunk(root: Path, chunk_id: str, payload: dict) -> None:
-    chunks_dir = root / "corpus" / "data" / "course_pbs" / "chunks"
+    chunks_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "chunks"
     chunks_dir.mkdir(parents=True, exist_ok=True)
     (chunks_dir / f"{chunk_id}.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def _write_manifest(root: Path, payload: dict) -> None:
-    manifests_dir = root / "corpus" / "data" / "course_pbs" / "manifests"
+    manifests_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
     manifests_dir.mkdir(parents=True, exist_ok=True)
     (manifests_dir / "course_v1.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
@@ -137,7 +137,7 @@ def test_build_anchor_audit_summarizes_stage_candidates_and_weak_route_starts() 
             },
         )
 
-        payload = ops_learning.build_anchor_audit(Path("corpus/data/course_pbs"), root_dir=root)
+        payload = ops_learning.build_anchor_audit(Path("corpus/sources/kmsc/parsed-preview/course_pbs"), root_dir=root)
 
     assert payload["canonical_model"] == "ops_learning_anchor_audit_v1"
     assert payload["source_chunk_count"] == 2
@@ -168,7 +168,7 @@ def test_initial_guides_keep_user_queries_free_of_internal_ids() -> None:
                         },
                     )
 
-        payload = ops_learning.build_initial_guides(Path("corpus/data/course_pbs"), root_dir=root)
+        payload = ops_learning.build_initial_guides(Path("corpus/sources/kmsc/parsed-preview/course_pbs"), root_dir=root)
         cases = ops_learning.build_ops_learning_golden_cases(payload)
         accepted, rejected = ops_learning.validate_ops_learning_golden_cases(cases)
 
@@ -229,7 +229,7 @@ def test_build_ops_learning_chunks_creates_second_corpus_without_fixed_answer_ou
             ],
         }
 
-        learning_chunks = ops_learning.build_ops_learning_chunks(Path("corpus/data/course_pbs"), guides, root_dir=root)
+        learning_chunks = ops_learning.build_ops_learning_chunks(Path("corpus/sources/kmsc/parsed-preview/course_pbs"), guides, root_dir=root)
 
     assert len(learning_chunks) == 1
     learning = learning_chunks[0]
@@ -287,7 +287,7 @@ def test_validate_ops_learning_golden_cases_checks_source_terms_and_image_roles(
 
 
 def test_repository_ops_learning_golden_cases_are_grounded_in_source_chunks() -> None:
-    course_dir = Path("corpus/data/course_pbs")
+    course_dir = Path("corpus/sources/kmsc/parsed-preview/course_pbs")
     golden_path = Path("corpus/manifests/course_ops_learning_golden_cases.jsonl")
     if not course_dir.exists() or not golden_path.exists():
         return
@@ -302,8 +302,8 @@ def test_repository_ops_learning_golden_cases_are_grounded_in_source_chunks() ->
 
 
 def test_repository_ops_learning_chunks_are_grounded_and_public_queries_hide_internal_ids() -> None:
-    course_dir = Path("corpus/data/course_pbs")
-    learning_path = Path("corpus/data/course_pbs/manifests/ops_learning_chunks_v1.jsonl")
+    course_dir = Path("corpus/sources/kmsc/parsed-preview/course_pbs")
+    learning_path = Path("corpus/sources/kmsc/parsed-preview/course_pbs/manifests/ops_learning_chunks_v1.jsonl")
     if not course_dir.exists() or not learning_path.exists():
         return
     rows = [json.loads(line) for line in learning_path.read_text(encoding="utf-8").splitlines() if line.strip()]

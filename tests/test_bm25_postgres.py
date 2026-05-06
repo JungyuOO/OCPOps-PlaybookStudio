@@ -70,7 +70,7 @@ def _row_dict() -> dict:
         "parsed_metadata": {"document_format": "pdf"},
         "document_source_id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
         "filename": "pod-guide.pdf",
-        "storage_key": "corpus/study-docs/pod-guide.pdf",
+        "storage_key": "corpus/sources/kmsc/raw/pod-guide.pdf",
         "source_kind": "study_docs",
         "source_metadata": {"document_format": "pdf"},
         "created_by": "seed",

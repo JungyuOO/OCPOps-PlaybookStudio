@@ -54,7 +54,7 @@ def test_build_course_chunk_record_preserves_payload_and_search_metadata() -> No
         "body_md": "Check response time and worker thread saturation.",
     }
 
-    record = build_course_chunk_record(payload, course_slug="ops-guide", source_ref="corpus/data/course_pbs")
+    record = build_course_chunk_record(payload, course_slug="ops-guide", source_ref="corpus/sources/kmsc/parsed-preview/course_pbs")
 
     assert record.course_slug == "ops-guide"
     assert record.chunk_key == "perf-001"
@@ -74,7 +74,7 @@ def test_import_course_chunks_upserts_valid_payloads() -> None:
             {"title": "missing id"},
         ],
         course_slug="project-playbook",
-        source_ref="corpus/data/course_pbs",
+        source_ref="corpus/sources/kmsc/parsed-preview/course_pbs",
     )
 
     assert result["scanned_count"] == 2
@@ -105,16 +105,16 @@ def test_load_course_chunk_returns_single_payload() -> None:
 
 def test_build_course_asset_record_hashes_content_and_normalizes_path() -> None:
     record = build_course_asset_record(
-        asset_key="corpus/data/course_pbs/assets/a.png",
-        asset_path="corpus\\data\\course_pbs\\assets\\a.png",
+        asset_key="corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png",
+        asset_path="corpus\\sources\\kmsc\\parsed-preview\\course_pbs\\assets\\a.png",
         content=b"image-bytes",
         payload={"asset_id": "a"},
         course_slug="project-playbook",
-        source_ref="corpus/data/course_pbs",
+        source_ref="corpus/sources/kmsc/parsed-preview/course_pbs",
     )
 
-    assert record.asset_key == "corpus/data/course_pbs/assets/a.png"
-    assert record.asset_path == "corpus/data/course_pbs/assets/a.png"
+    assert record.asset_key == "corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png"
+    assert record.asset_path == "corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png"
     assert record.content_type == "image/png"
     assert record.byte_size == len(b"image-bytes")
     assert record.payload["asset_id"] == "a"
@@ -124,20 +124,20 @@ def test_build_course_asset_record_hashes_content_and_normalizes_path() -> None:
 def test_import_course_assets_upserts_binary_payloads() -> None:
     connection = FakeConnection()
     record = build_course_asset_record(
-        asset_key="corpus/data/course_pbs/assets/a.png",
-        asset_path="corpus/data/course_pbs/assets/a.png",
+        asset_key="corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png",
+        asset_path="corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png",
         content=b"image-bytes",
         payload={"asset_id": "a"},
         course_slug="project-playbook",
-        source_ref="corpus/data/course_pbs",
+        source_ref="corpus/sources/kmsc/parsed-preview/course_pbs",
     )
 
-    result = import_course_assets(connection, [record], course_slug="project-playbook", source_ref="corpus/data/course_pbs")
+    result = import_course_assets(connection, [record], course_slug="project-playbook", source_ref="corpus/sources/kmsc/parsed-preview/course_pbs")
 
     assert result["imported_count"] == 1
     sql, params = connection.cursor_instance.statements[0]
     assert "ON CONFLICT (course_slug, asset_key) DO UPDATE" in sql
-    assert params[1:4] == ("corpus/data/course_pbs/assets/a.png", "corpus/data/course_pbs/assets/a.png", "image/png")
+    assert params[1:4] == ("corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png", "corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png", "image/png")
     assert params[7] == b"image-bytes"
 
 
@@ -145,8 +145,8 @@ def test_load_course_asset_by_path_returns_binary_content() -> None:
     connection = FakeConnection(
         [
             (
-                "corpus/data/course_pbs/assets/a.png",
-                "corpus/data/course_pbs/assets/a.png",
+                "corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png",
+                "corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png",
                 "image/png",
                 memoryview(b"image-bytes"),
                 {"asset_id": "a"},
@@ -155,11 +155,11 @@ def test_load_course_asset_by_path_returns_binary_content() -> None:
         ]
     )
 
-    asset = load_course_asset_by_path(connection, "corpus/data/course_pbs/assets/a.png", course_slug="project-playbook")
+    asset = load_course_asset_by_path(connection, "corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png", course_slug="project-playbook")
 
     assert asset == {
-        "asset_key": "corpus/data/course_pbs/assets/a.png",
-        "asset_path": "corpus/data/course_pbs/assets/a.png",
+        "asset_key": "corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png",
+        "asset_path": "corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png",
         "content_type": "image/png",
         "content": b"image-bytes",
         "payload": {"asset_id": "a"},
@@ -174,7 +174,7 @@ def test_build_course_manifest_record_counts_stage_and_stops() -> None:
         "tour": {"stop_count": 7},
     }
 
-    record = build_course_manifest_record(payload, course_slug="project-playbook", source_ref="corpus/data/course_pbs/manifests/course_v1.json")
+    record = build_course_manifest_record(payload, course_slug="project-playbook", source_ref="corpus/sources/kmsc/parsed-preview/course_pbs/manifests/course_v1.json")
 
     assert record.manifest_key == "course_v1"
     assert record.stage_count == 2
@@ -187,7 +187,7 @@ def test_import_course_manifest_upserts_payload() -> None:
     connection = FakeConnection()
     payload = {"canonical_model": "course_manifest_v1", "stages": [{"stage_id": "a"}], "tour": {"stop_count": 1}}
 
-    result = import_course_manifest(connection, payload, course_slug="project-playbook", source_ref="corpus/data/course_pbs/manifests/course_v1.json")
+    result = import_course_manifest(connection, payload, course_slug="project-playbook", source_ref="corpus/sources/kmsc/parsed-preview/course_pbs/manifests/course_v1.json")
 
     assert result["stage_count"] == 1
     assert result["stop_count"] == 1

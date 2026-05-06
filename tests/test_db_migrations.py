@@ -61,7 +61,7 @@ def test_course_chunk_import_parser_accepts_dry_run_args():
             "--root-dir",
             str(REPO_ROOT),
             "--course-dir",
-            "corpus/data/course_pbs",
+            "corpus/sources/kmsc/parsed-preview/course_pbs",
             "--limit",
             "3",
             "--dry-run",
@@ -70,6 +70,6 @@ def test_course_chunk_import_parser_accepts_dry_run_args():
 
     assert args.command == "course-chunk-import"
     assert args.root_dir == REPO_ROOT
-    assert args.course_dir == Path("corpus/data/course_pbs")
+    assert args.course_dir == Path("corpus/sources/kmsc/parsed-preview/course_pbs")
     assert args.limit == 3
     assert args.dry_run is True

@@ -16,6 +16,7 @@ from urllib.parse import parse_qs
 
 from play_book_studio.answering.llm import LLMClient
 from play_book_studio.app.sessions import Turn
+from play_book_studio.config.corpus_paths import COURSE_PBS_DIR
 from play_book_studio.config.settings import load_settings
 from play_book_studio.course.qdrant_course import search_course_and_official, search_ops_learning_chunks
 from play_book_studio.db.course_repository import DEFAULT_COURSE_SLUG
@@ -365,7 +366,7 @@ def _chunk_beginner_question(chunk: dict[str, Any], *, intent: str = "learn") ->
 
 
 def _course_root(root_dir: Path) -> Path:
-    return root_dir / "corpus" / "data" / "course_pbs"
+    return root_dir / COURSE_PBS_DIR
 
 
 def _course_manifest_path(root_dir: Path) -> Path:
@@ -3494,7 +3495,7 @@ def handle_course_get(handler: Any, path: str, query: str, *, root_dir: Path) ->
             return True
         assets_root = (_course_root(root_dir) / "assets").resolve()
         if not asset_path_raw or not _is_relative_to(asset_path, assets_root):
-            handler._send_json({"error": "Course asset path must be under corpus/data/course_pbs/assets"}, HTTPStatus.BAD_REQUEST)
+            handler._send_json({"error": "Course asset path must be under corpus/sources/kmsc/parsed-preview/course_pbs/assets"}, HTTPStatus.BAD_REQUEST)
             return True
         if asset_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
             handler._send_json({"error": "Course asset must be an image"}, HTTPStatus.BAD_REQUEST)

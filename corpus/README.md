@@ -27,7 +27,7 @@ corpus/
 
 Migration targets:
 
-- `corpus/study-docs/**` -> `corpus/sources/kmsc/raw/**`
+- `corpus/sources/kmsc/raw/**` -> `corpus/sources/kmsc/raw/**`
 - selected `corpus/data/gold_*` -> `corpus/sources/official/imported-gold/**`
 - eval JSONL manifests -> `corpus/manifests/eval/**`
 

@@ -39,7 +39,7 @@ def _write_asset(root: Path, asset_path: str) -> None:
     path.write_bytes(b"png")
 
 
-def _source_chunk(asset_path: str = "corpus/data/course_pbs/assets/running.png") -> dict:
+def _source_chunk(asset_path: str = "corpus/sources/kmsc/parsed-preview/course_pbs/assets/running.png") -> dict:
     return {
         "chunk_id": "unit-test--running",
         "stage_id": "unit_test",
@@ -72,7 +72,7 @@ def _source_chunk(asset_path: str = "corpus/data/course_pbs/assets/running.png")
 
 def test_validate_cases_rejects_untraceable_test_data() -> None:
     with _temp_root() as root:
-        asset_path = "corpus/data/course_pbs/assets/running.png"
+        asset_path = "corpus/sources/kmsc/parsed-preview/course_pbs/assets/running.png"
         _write_asset(root, asset_path)
         running_chunk = {
             **_source_chunk(asset_path),
@@ -116,7 +116,7 @@ def test_validate_cases_rejects_untraceable_test_data() -> None:
             "schema": "wrong_schema",
             "expected_image_roles": ["dashboard_metric"],
             "expected_state_signals": ["CrashLoopBackOff"],
-            "source": {"chunk_id": "unit-test--running", "asset_id": "missing-asset", "asset_path": "corpus/data/course_pbs/assets/missing.png"},
+            "source": {"chunk_id": "unit-test--running", "asset_id": "missing-asset", "asset_path": "corpus/sources/kmsc/parsed-preview/course_pbs/assets/missing.png"},
         }
 
         accepted, rejected = quality_eval.validate_cases([valid, invalid], root / "corpus" / "data" / "course_pbs", root_dir=root)
@@ -132,7 +132,7 @@ def test_validate_cases_rejects_untraceable_test_data() -> None:
 
 def test_generate_cases_creates_diverse_source_backed_cases() -> None:
     with _temp_root() as root:
-        asset_path = "corpus/data/course_pbs/assets/running.png"
+        asset_path = "corpus/sources/kmsc/parsed-preview/course_pbs/assets/running.png"
         _write_asset(root, asset_path)
         running_chunk = {
             **_source_chunk(asset_path),
@@ -374,11 +374,11 @@ def test_run_quality_eval_fails_when_quality_gate_has_rejected_cases() -> None:
         _write_chunk(root, "unit-test--running", _source_chunk())
         args = argparse.Namespace(
             root_dir=root,
-            course_dir=Path("corpus/data/course_pbs"),
+            course_dir=Path("corpus/sources/kmsc/parsed-preview/course_pbs"),
             cases_path=Path("corpus/manifests/course_qa_cases.jsonl"),
             accepted_path=Path("corpus/manifests/course_qa_cases.accepted.jsonl"),
             rejected_path=Path("corpus/manifests/course_qa_cases.rejected.jsonl"),
-            report_path=Path("corpus/data/course_pbs/manifests/course_qa_report.json"),
+            report_path=Path("corpus/sources/kmsc/parsed-preview/course_pbs/manifests/course_qa_report.json"),
             target_count=1,
             min_accepted=1,
             allow_rejected=False,
@@ -398,12 +398,12 @@ def test_run_quality_eval_fails_when_quality_gate_has_rejected_cases() -> None:
                 expected_image_roles=["missing_role"],
                 expected_state_signals=["Running"],
             ),
-            "source": {"chunk_id": "unit-test--running", "asset_id": "asset-running", "asset_path": "corpus/data/course_pbs/assets/missing.png"},
+            "source": {"chunk_id": "unit-test--running", "asset_id": "asset-running", "asset_path": "corpus/sources/kmsc/parsed-preview/course_pbs/assets/missing.png"},
         }
         quality_eval.write_jsonl(cases_path, [bad_case])
 
         exit_code = quality_eval.run_quality_eval(args)
-        report = json.loads((root / "corpus/data/course_pbs/manifests/course_qa_report.json").read_text(encoding="utf-8"))
+        report = json.loads((root / "corpus/sources/kmsc/parsed-preview/course_pbs/manifests/course_qa_report.json").read_text(encoding="utf-8"))
 
     assert exit_code == 1
     assert report["accepted_count"] == 0
