@@ -29,7 +29,7 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
       - .env
@@ -73,7 +73,7 @@ services:
   db-migrate:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
       - .env
@@ -89,7 +89,7 @@ services:
   course-runtime-seed:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
       - .env
@@ -112,7 +112,7 @@ services:
       - seed
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
       - .env
@@ -140,7 +140,7 @@ services:
       - seed
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
       - .env
@@ -164,7 +164,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       target: web
     depends_on:
       app:

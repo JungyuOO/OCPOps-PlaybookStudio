@@ -45,7 +45,6 @@ pytest-cache-files-*/**
 /apps/web/node_modules/
 /apps/web/dist/
 
-!Dockerfile
 !README.md
 !pyproject.toml
 
@@ -60,6 +59,7 @@ pytest-cache-files-*/**
 !apps/web/**
 
 !deploy/
+!deploy/Dockerfile
 !deploy/nginx/
 !deploy/nginx/default.conf
 

@@ -4,7 +4,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     env_file:
-      - ${APP_ENV_FILE:-.env.production}
+      - ${APP_ENV_FILE:-../.env.production}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-playbookstudio}
       POSTGRES_USER: ${POSTGRES_USER:-playbookstudio}
@@ -32,11 +32,11 @@ services:
 
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
-      - ${APP_ENV_FILE:-.env.production}
+      - ${APP_ENV_FILE:-../.env.production}
     environment:
       PYTHONPATH: /app/src
       COURSE_CHAT_LLM_REWRITE: "${COURSE_CHAT_LLM_REWRITE:-true}"
@@ -54,9 +54,9 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./artifacts:/app/artifacts
-      - ./storage:/app/storage
-      - ./reports:/app/reports
+      - ../artifacts:/app/artifacts
+      - ../storage:/app/storage
+      - ../reports:/app/reports
       - app_tmp:/app/tmp
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=5)"]
@@ -68,11 +68,11 @@ services:
 
   db-migrate:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
-      - ${APP_ENV_FILE:-.env.production}
+      - ${APP_ENV_FILE:-../.env.production}
     environment:
       PYTHONPATH: /app/src
       DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
@@ -86,11 +86,11 @@ services:
     profiles:
       - seed
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
-      - ${APP_ENV_FILE:-.env.production}
+      - ${APP_ENV_FILE:-../.env.production}
     environment:
       PYTHONPATH: /app/src
       DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
@@ -100,7 +100,7 @@ services:
       db-migrate:
         condition: service_completed_successfully
     volumes:
-      - ./corpus:/app/corpus:ro
+      - ../corpus:/app/corpus:ro
     command: ["python", "-m", "play_book_studio.cli", "course-chunk-import", "--root-dir", "/app", "--course-dir", "/app/corpus/sources/kmsc/parsed-preview/course_pbs"]
     restart: "no"
 
@@ -108,11 +108,11 @@ services:
     profiles:
       - seed
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
-      - ${APP_ENV_FILE:-.env.production}
+      - ${APP_ENV_FILE:-../.env.production}
     environment:
       PYTHONPATH: /app/src
       DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
@@ -132,10 +132,10 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./corpus:/app/corpus:ro
-      - ./artifacts:/app/artifacts
-      - ./storage:/app/storage
-      - ./reports:/app/reports
+      - ../corpus:/app/corpus:ro
+      - ../artifacts:/app/artifacts
+      - ../storage:/app/storage
+      - ../reports:/app/reports
       - app_tmp:/app/tmp
     command: ["python", "-m", "play_book_studio.cli", "official-gold-import", "--root-dir", "/app", "--chunks-path", "/app/corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl", "--index", "--index-limit", "${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}", "--refresh-qdrant-payloads", "--refresh-limit", "${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}"]
     restart: "no"
@@ -144,11 +144,11 @@ services:
     profiles:
       - seed
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
-      - ${APP_ENV_FILE:-.env.production}
+      - ${APP_ENV_FILE:-../.env.production}
     environment:
       PYTHONPATH: /app/src
       QDRANT_URL: http://qdrant:6333
@@ -163,18 +163,18 @@ services:
       qdrant:
         condition: service_started
     volumes:
-      - ./corpus:/app/corpus:ro
-      - ./artifacts:/app/artifacts
-      - ./storage:/app/storage
-      - ./reports:/app/reports
+      - ../corpus:/app/corpus:ro
+      - ../artifacts:/app/artifacts
+      - ../storage:/app/storage
+      - ../reports:/app/reports
       - app_tmp:/app/tmp
     command: ["python", "-m", "play_book_studio.cli", "course-qdrant-upsert", "--root-dir", "/app", "--course-dir", "corpus/sources/kmsc/parsed-preview/course_pbs"]
     restart: "no"
 
   web:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: deploy/Dockerfile
       target: web
     depends_on:
       app:

@@ -8,7 +8,7 @@ running one-shot seed services.
 
 ## Files
 
-- `docker-compose.prod.yml` - production compose file.
+- `deploy/docker-compose.prod.yml` - production compose file.
 - `.env.production.example` - copy to `.env.production` and fill secrets.
 - `artifacts/`, `storage/`, and `reports/` - mounted read-write for runtime output.
 - `corpus/` - mounted read-only into seed/import services.
@@ -22,21 +22,21 @@ directories on the server only when you need to run seed/import services.
 
 ```powershell
 Copy-Item .env.production.example .env.production
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
 Then run seed/import jobs when the server has the seed input directories:
 
 ```powershell
-docker compose -f docker-compose.prod.yml --env-file .env.production --profile seed run --rm course-runtime-seed
-docker compose -f docker-compose.prod.yml --env-file .env.production --profile seed run --rm official-corpus-seed
-docker compose -f docker-compose.prod.yml --env-file .env.production --profile seed run --rm qdrant-seed
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm course-runtime-seed
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm official-corpus-seed
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm qdrant-seed
 ```
 
 Then verify:
 
 ```powershell
-docker compose -f docker-compose.prod.yml --env-file .env.production ps
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.production ps
 Invoke-RestMethod http://127.0.0.1:8080/api/health
 Invoke-RestMethod http://127.0.0.1:6335/collections
 ```
@@ -50,7 +50,7 @@ Expected Qdrant collections for the current dataset:
 `openshift_docs` should have the same count as:
 
 ```powershell
-(Get-Content corpus\data\gold_corpus_ko\chunks.jsonl | Measure-Object -Line).Lines
+(Get-Content corpus\sources\official\imported-gold\gold_corpus_ko\chunks.jsonl | Measure-Object -Line).Lines
 ```
 
 ## Seed Course Qdrant Data
@@ -62,7 +62,7 @@ or when a collection is missing.
 For course runtime rows and assets in PostgreSQL:
 
 ```powershell
-docker compose -f docker-compose.prod.yml --env-file .env.production --profile seed run --rm course-runtime-seed
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm course-runtime-seed
 ```
 
 For the official OpenShift corpus, this imports `corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl`
@@ -70,13 +70,13 @@ into PostgreSQL and indexes/refreshes Qdrant payloads for the `official_docs`
 scope:
 
 ```powershell
-docker compose -f docker-compose.prod.yml --env-file .env.production --profile seed run --rm official-corpus-seed
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm official-corpus-seed
 ```
 
 For course vectors:
 
 ```powershell
-docker compose -f docker-compose.prod.yml --env-file .env.production --profile seed run --rm qdrant-seed
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm qdrant-seed
 ```
 
 This upserts:
@@ -103,8 +103,8 @@ ocp-rag-chatbot_qdrant_storage
 ## Update Deployment
 
 ```powershell
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build app web
-docker compose -f docker-compose.prod.yml --env-file .env.production ps
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.production up -d --build app web
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.production ps
 ```
 
 ## Notes
