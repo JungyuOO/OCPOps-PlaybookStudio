@@ -375,8 +375,8 @@ def build_studio_starter_questions(root_dir: Path, *, seed: str = "") -> dict[st
         ],
         "learning_sequence": learning_sequence,
         "sources": {
-            "faq": "corpus/manifests/pbs_chat_quality_cases*.jsonl",
-            "learning": "corpus/manifests/ocp420_repo_wide_source_manifest.json",
+            "faq": "corpus/manifests/eval/pbs_chat_quality_cases*.jsonl",
+            "learning": "corpus/manifests/official/ocp420_repo_wide_source_manifest.json",
             "operations": operations_source,
         },
     }

@@ -13,11 +13,13 @@ TEST_TMP = REPO_ROOT / "tmp" / "starter_questions_tests"
 
 
 def test_starter_questions_are_loaded_from_manifests() -> None:
-    manifests = TEST_TMP / "corpus" / "manifests"
+    eval_manifests = TEST_TMP / "corpus" / "manifests" / "eval"
+    official_manifests = TEST_TMP / "corpus" / "manifests" / "official"
     course_manifests = TEST_TMP / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
-    manifests.mkdir(parents=True, exist_ok=True)
+    eval_manifests.mkdir(parents=True, exist_ok=True)
+    official_manifests.mkdir(parents=True, exist_ok=True)
     course_manifests.mkdir(parents=True, exist_ok=True)
-    (manifests / "pbs_chat_quality_cases.jsonl").write_text(
+    (eval_manifests / "pbs_chat_quality_cases.jsonl").write_text(
         json.dumps(
             {
                 "query": "Operator가 Degraded일 때 CSV 상태를 어떻게 확인해?",
@@ -31,7 +33,7 @@ def test_starter_questions_are_loaded_from_manifests() -> None:
         + "\n",
         encoding="utf-8",
     )
-    (manifests / "ocp420_repo_wide_source_manifest.json").write_text(
+    (official_manifests / "ocp420_repo_wide_source_manifest.json").write_text(
         json.dumps(
             {
                 "entries": [

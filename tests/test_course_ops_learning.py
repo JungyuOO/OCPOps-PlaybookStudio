@@ -288,7 +288,7 @@ def test_validate_ops_learning_golden_cases_checks_source_terms_and_image_roles(
 
 def test_repository_ops_learning_golden_cases_are_grounded_in_source_chunks() -> None:
     course_dir = Path("corpus/sources/kmsc/parsed-preview/course_pbs")
-    golden_path = Path("corpus/manifests/course_ops_learning_golden_cases.jsonl")
+    golden_path = Path("corpus/manifests/course/course_ops_learning_golden_cases.jsonl")
     if not course_dir.exists() or not golden_path.exists():
         return
     cases = [json.loads(line) for line in golden_path.read_text(encoding="utf-8").splitlines() if line.strip()]

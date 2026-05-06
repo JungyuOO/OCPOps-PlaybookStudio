@@ -375,9 +375,9 @@ def test_run_quality_eval_fails_when_quality_gate_has_rejected_cases() -> None:
         args = argparse.Namespace(
             root_dir=root,
             course_dir=Path("corpus/sources/kmsc/parsed-preview/course_pbs"),
-            cases_path=Path("corpus/manifests/course_qa_cases.jsonl"),
-            accepted_path=Path("corpus/manifests/course_qa_cases.accepted.jsonl"),
-            rejected_path=Path("corpus/manifests/course_qa_cases.rejected.jsonl"),
+            cases_path=Path("corpus/manifests/course/course_qa_cases.jsonl"),
+            accepted_path=Path("corpus/manifests/course/course_qa_cases.accepted.jsonl"),
+            rejected_path=Path("corpus/manifests/course/course_qa_cases.rejected.jsonl"),
             report_path=Path("corpus/sources/kmsc/parsed-preview/course_pbs/manifests/course_qa_report.json"),
             target_count=1,
             min_accepted=1,
@@ -386,7 +386,7 @@ def test_run_quality_eval_fails_when_quality_gate_has_rejected_cases() -> None:
             generate=False,
             run=False,
         )
-        cases_path = root / "corpus" / "manifests" / "course_qa_cases.jsonl"
+        cases_path = root / "corpus" / "manifests" / "course" / "course_qa_cases.jsonl"
         bad_case = {
             **quality_eval._case(
                 case_id="bad-case",

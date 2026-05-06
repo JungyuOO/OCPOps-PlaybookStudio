@@ -121,7 +121,7 @@ services:
       ARTIFACTS_DIR: /app/artifacts
       OBJECT_STORAGE_ROOT: /app/storage
       CORPUS_SEED_DIR: /app/corpus
-      SOURCE_MANIFEST_PATH: /app/corpus/manifests/ocp_ko_4_20_approved_ko.json
+      SOURCE_MANIFEST_PATH: /app/corpus/manifests/official/ocp_ko_4_20_approved_ko.json
     depends_on:
       postgres:
         condition: service_healthy
@@ -156,7 +156,7 @@ services:
       ARTIFACTS_DIR: /app/artifacts
       OBJECT_STORAGE_ROOT: /app/storage
       CORPUS_SEED_DIR: /app/corpus
-      SOURCE_MANIFEST_PATH: /app/corpus/manifests/ocp_ko_4_20_approved_ko.json
+      SOURCE_MANIFEST_PATH: /app/corpus/manifests/official/ocp_ko_4_20_approved_ko.json
     depends_on:
       postgres:
         condition: service_healthy
