@@ -17,6 +17,10 @@ class Citation:
     excerpt: str
     section_path: tuple[str, ...] = field(default_factory=tuple)
     section_path_label: str = ""
+    section_number: str = ""
+    heading_title: str = ""
+    source_anchor: str = ""
+    toc_path: tuple[str, ...] = field(default_factory=tuple)
     chunk_type: str = "reference"
     semantic_role: str = "unknown"
     source_collection: str = "core"

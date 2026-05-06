@@ -292,7 +292,12 @@ export interface ChatCitation {
   book_title?: string;
   section: string;
   anchor?: string;
-  section_path?: string;
+  section_path?: string | string[];
+  section_path_label?: string;
+  section_number?: string;
+  heading_title?: string;
+  source_anchor?: string;
+  toc_path?: string[];
   viewer_path: string;
   excerpt?: string;
   source_label?: string;

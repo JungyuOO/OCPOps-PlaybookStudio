@@ -420,6 +420,10 @@ def _citation_from_payload(payload: dict[str, Any]) -> Citation:
         excerpt=str(payload.get("excerpt") or ""),
         section_path=tuple(str(item) for item in (payload.get("section_path") or [])),
         section_path_label=str(payload.get("section_path_label") or ""),
+        section_number=str(payload.get("section_number") or ""),
+        heading_title=str(payload.get("heading_title") or ""),
+        source_anchor=str(payload.get("source_anchor") or ""),
+        toc_path=tuple(str(item) for item in (payload.get("toc_path") or [])),
         chunk_type=str(payload.get("chunk_type") or "reference"),
         semantic_role=str(payload.get("semantic_role") or "unknown"),
         source_collection=str(payload.get("source_collection") or "core"),
@@ -429,6 +433,7 @@ def _citation_from_payload(payload: dict[str, Any]) -> Citation:
         k8s_objects=tuple(str(item) for item in (payload.get("k8s_objects") or [])),
         operator_names=tuple(str(item) for item in (payload.get("operator_names") or [])),
         verification_hints=tuple(str(item) for item in (payload.get("verification_hints") or [])),
+        asset_ids=tuple(str(item) for item in (payload.get("asset_ids") or [])),
     )
 
 

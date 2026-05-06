@@ -108,6 +108,10 @@ def test_hydrate_retrieval_hits_rebuilds_hits_from_canonical_db_rows():
     assert hydrated[0].section == "Canonical"
     assert hydrated[0].anchor == "canonical"
     assert hydrated[0].source_url == "corpus/sources/kmsc/raw/guide.pdf"
+    assert hydrated[0].section_number == "1.1"
+    assert hydrated[0].heading_title == "Canonical"
+    assert hydrated[0].source_anchor == "canonical"
+    assert hydrated[0].toc_path == ("1.1 Canonical",)
     assert hydrated[0].repository_id == "dddddddd-dddd-dddd-dddd-dddddddddddd"
     assert hydrated[0].owner_user_id == "owner-a"
     assert hydrated[0].visibility == "workspace_shared"

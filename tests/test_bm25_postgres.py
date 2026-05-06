@@ -112,6 +112,10 @@ def test_bm25_index_can_search_postgres_payload_rows():
     assert hits[0].source == "bm25"
     assert hits[0].book_slug == "study-pods"
     assert hits[0].section_path == ("Workloads", "Pods")
+    assert hits[0].section_number == "1.2"
+    assert hits[0].heading_title == "Pods"
+    assert hits[0].source_anchor == "pods"
+    assert hits[0].toc_path == ("1 Workloads", "1.2 Pods")
     assert hits[0].cli_commands == ("oc get pods",)
     assert hits[0].asset_ids == ("asset-a",)
     assert hits[0].repository_id == "dddddddd-dddd-dddd-dddd-dddddddddddd"

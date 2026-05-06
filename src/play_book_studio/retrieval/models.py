@@ -69,6 +69,10 @@ class RetrievalHit:
     fused_score: float = 0.0
     section_id: str = ""
     section_path: tuple[str, ...] = field(default_factory=tuple)
+    section_number: str = ""
+    heading_title: str = ""
+    source_anchor: str = ""
+    toc_path: tuple[str, ...] = field(default_factory=tuple)
     chunk_type: str = "reference"
     source_id: str = ""
     source_lane: str = "official_ko"
