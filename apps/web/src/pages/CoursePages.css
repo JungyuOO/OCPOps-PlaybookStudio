@@ -462,6 +462,28 @@
   color: #607896;
 }
 
+.course-learning-lab-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.course-learning-lab-progress {
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #0f665f;
+  font-size: 0.78rem;
+  font-weight: 800;
+  background: rgba(15, 132, 121, 0.1);
+  white-space: nowrap;
+}
+
+.course-learning-lab-progress.muted {
+  color: #607896;
+  background: rgba(17, 103, 172, 0.08);
+}
+
 .course-learning-lab-select {
   width: max-content;
   padding: 8px 10px;
@@ -520,6 +542,16 @@
 
 .course-learning-terminal-head strong {
   display: block;
+}
+
+.course-learning-terminal-progress {
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #0f665f;
+  font-size: 0.84rem;
+  font-weight: 800;
+  background: rgba(15, 132, 121, 0.1);
+  white-space: nowrap;
 }
 
 .course-learning-terminal-warning {

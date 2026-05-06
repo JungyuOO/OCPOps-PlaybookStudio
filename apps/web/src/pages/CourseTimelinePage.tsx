@@ -71,6 +71,19 @@ export default function CourseTimelinePage() {
     (sum, step) => sum + step.lab_tasks.reduce((taskSum, task) => taskSum + task.command_checks.length, 0),
     0,
   );
+  const selectedCommandProgress = useMemo(() => {
+    if (!selectedLabTask) {
+      return { passed: 0, attempted: 0, total: 0 };
+    }
+    const results = selectedLabTask.command_checks
+      .map((check) => commandResults[check.id]?.result)
+      .filter((result): result is NonNullable<typeof result> => Boolean(result));
+    return {
+      passed: results.filter((result) => result.status === 'passed').length,
+      attempted: results.length,
+      total: selectedLabTask.command_checks.length,
+    };
+  }, [commandResults, selectedLabTask]);
 
   useEffect(() => {
     setSelectedLabTaskId('');
@@ -183,7 +196,18 @@ export default function CourseTimelinePage() {
                     key={task.id}
                     className={`course-learning-lab-card ${selectedLabTask?.id === task.id ? 'active' : ''}`}
                   >
-                    <span>Lab {task.ordinal}</span>
+                    <div className="course-learning-lab-top">
+                      <span>Lab {task.ordinal}</span>
+                      {selectedLabTask?.id === task.id ? (
+                        <span className="course-learning-lab-progress">
+                          {selectedCommandProgress.passed}/{selectedCommandProgress.total} passed
+                        </span>
+                      ) : (
+                        <span className="course-learning-lab-progress muted">
+                          {task.command_checks.length} checks
+                        </span>
+                      )}
+                    </div>
                     <strong>{task.title}</strong>
                     <p>{task.goal_markdown || 'No lab goal provided yet.'}</p>
                     <button
@@ -196,12 +220,12 @@ export default function CourseTimelinePage() {
                     {task.command_checks.length > 0 ? (
                       <div className="course-learning-command-list">
                         {task.command_checks.map((check) => {
-                          const result = commandResults[check.id]?.result;
+                          const result = selectedLabTask?.id === task.id ? commandResults[check.id]?.result : null;
                           const status = result?.status || 'waiting';
                           return (
                           <div key={check.id} className={`course-learning-command-row status-${status}`}>
                             <code>{check.expected_command || check.command_pattern || check.check_key}</code>
-                            <span>{status}</span>
+                            <span>{selectedLabTask?.id === task.id ? status : 'select lab'}</span>
                           </div>
                           );
                         })}
@@ -225,6 +249,10 @@ export default function CourseTimelinePage() {
                   <span className="course-route-kicker">Terminal Session</span>
                   <strong>{selectedLabTask.title}</strong>
                 </div>
+                <span className="course-learning-terminal-progress">
+                  {selectedCommandProgress.passed}/{selectedCommandProgress.total} passed
+                  {selectedCommandProgress.attempted > selectedCommandProgress.passed ? ` · ${selectedCommandProgress.attempted} attempted` : ''}
+                </span>
                 {commandResultsError ? <span className="course-learning-terminal-warning">{commandResultsError}</span> : null}
               </div>
               <TerminalSessionPanel
