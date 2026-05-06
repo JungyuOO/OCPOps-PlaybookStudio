@@ -13,7 +13,7 @@ def test_playbook_book_is_built_from_postgres_records() -> None:
     payload = resolver._playbook_book_from_database_records(
         [
             {
-                "storage_key": "corpus/official_docs/gold_corpus_ko/chunks.jsonl#architecture",
+                "storage_key": "corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl#architecture",
                 "source_metadata": {"book_slug": "architecture", "source_id": "openshift:architecture"},
                 "document_title": "Architecture",
                 "parsed_metadata": {"document_format": "official_gold_jsonl"},
@@ -39,7 +39,7 @@ def test_playbook_book_is_built_from_postgres_records() -> None:
 def test_playbook_book_does_not_fallback_to_files_when_database_is_configured(monkeypatch) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
-        playbook_dir = root / "data" / "gold_manualbook_ko" / "playbooks"
+        playbook_dir = root / "corpus" / "sources" / "official" / "imported-gold" / "gold_manualbook_ko" / "playbooks"
         playbook_dir.mkdir(parents=True, exist_ok=True)
         (playbook_dir / "architecture.json").write_text(
             json.dumps({"title": "File fallback", "sections": [{"heading": "File section"}]}),

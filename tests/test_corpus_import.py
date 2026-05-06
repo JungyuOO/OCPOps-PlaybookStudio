@@ -73,6 +73,7 @@ def test_build_corpus_import_plan_reports_repository_scope():
     assert plan["repository_kind"] == "study"
     assert plan["visibility"] == "workspace_shared"
     assert plan["source_scope"] == "study_docs"
+    assert plan["storage_prefix"] == "corpus/sources/kmsc/raw"
     assert plan["file_count"] == 1
     assert plan["files"][0]["relative_path"] == "ops.md"
 
@@ -104,7 +105,7 @@ def test_import_corpus_documents_persists_shared_scope(monkeypatch):
     assert kwargs["repository_kind"] == "official"
     assert kwargs["visibility"] == "global_shared"
     assert kwargs["source_scope"] == "official_docs"
-    assert kwargs["storage_key"] == "corpus/official_docs/official.md"
+    assert kwargs["storage_key"] == "corpus/sources/official/imported-gold/official.md"
 
 
 def test_import_corpus_documents_preserves_section_metadata(monkeypatch):

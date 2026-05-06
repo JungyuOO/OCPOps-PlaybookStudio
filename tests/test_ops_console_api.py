@@ -205,7 +205,7 @@ def test_ops_console_document_rows_are_built_from_postgres_records() -> None:
             {
                 "document_source_id": "source-a",
                 "filename": "architecture.jsonl",
-                "storage_key": "corpus/official_docs/gold_corpus_ko/chunks.jsonl#architecture",
+                "storage_key": "corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl#architecture",
                 "source_metadata": {"book_slug": "architecture", "source_id": "openshift:architecture"},
                 "document_title": "Architecture",
                 "parsed_metadata": {"document_format": "official_gold_jsonl"},

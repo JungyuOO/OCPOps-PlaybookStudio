@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import OFFICIAL_GOLD_CHUNKS_PATH
 from play_book_studio.db.document_repository import (
     _fetch_id,
     _json,
@@ -20,6 +21,12 @@ from play_book_studio.db.document_repository import (
 )
 
 _SECTION_NUMBER_RE = re.compile(r"^\s*((?:\d+\.)+\d+|\d+)(?:[.)]|\.?)\s+(.+?)\s*$")
+
+
+def _official_gold_storage_key(source_key: str = "") -> str:
+    base = OFFICIAL_GOLD_CHUNKS_PATH.as_posix()
+    suffix = str(source_key or "").strip()
+    return f"{base}#{suffix}" if suffix else base
 
 
 @dataclass(frozen=True, slots=True)
@@ -375,7 +382,7 @@ def _upsert_official_document_source(
             workspace_id,
             f"{str(first.get('book_slug') or source_key)}.jsonl",
             source_sha256,
-            f"corpus/official_docs/gold_corpus_ko/chunks.jsonl#{source_key}",
+            _official_gold_storage_key(source_key),
             _json(_source_metadata(source_key, rows, chunks_path)),
             repository_id,
         ),
@@ -401,7 +408,7 @@ def _upsert_official_document_version(
             storage_key = EXCLUDED.storage_key
         RETURNING id
         """,
-        (version_id, source_id, source_sha256, str(chunks_path.resolve())),
+        (version_id, source_id, source_sha256, _official_gold_storage_key()),
     )
     return _fetch_id(cursor)
 

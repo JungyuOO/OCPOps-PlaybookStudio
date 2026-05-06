@@ -9,6 +9,7 @@ from typing import Any
 
 from play_book_studio.db.document_repository import persist_parsed_upload_document
 from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
+from play_book_studio.config.corpus_paths import OFFICIAL_IMPORTED_GOLD_DIR, STUDY_DOCS_DIR
 from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
 from play_book_studio.ingestion.vision import build_qwen_image_describer
 
@@ -37,6 +38,7 @@ class CorpusImportProfile:
     repository_kind: str
     visibility: str
     source_scope: str
+    storage_prefix: Path
 
 
 def corpus_import_profile(kind: str) -> CorpusImportProfile:
@@ -48,6 +50,7 @@ def corpus_import_profile(kind: str) -> CorpusImportProfile:
             repository_kind="official",
             visibility="global_shared",
             source_scope="official_docs",
+            storage_prefix=OFFICIAL_IMPORTED_GOLD_DIR,
         )
     if normalized in {"study", "study_docs"}:
         return CorpusImportProfile(
@@ -56,6 +59,7 @@ def corpus_import_profile(kind: str) -> CorpusImportProfile:
             repository_kind="study",
             visibility="workspace_shared",
             source_scope="study_docs",
+            storage_prefix=STUDY_DOCS_DIR,
         )
     raise ValueError("corpus kind must be official_docs or study_docs")
 
@@ -90,6 +94,7 @@ def build_corpus_import_plan(source_dir: Path, *, corpus_kind: str) -> dict[str,
         "repository_kind": profile.repository_kind,
         "visibility": profile.visibility,
         "source_scope": profile.source_scope,
+        "storage_prefix": profile.storage_prefix.as_posix(),
         "files": [
             {
                 "path": str(path),
@@ -154,7 +159,7 @@ def import_corpus_documents(
                 tenant_name=tenant_name,
                 workspace_slug=workspace_slug,
                 workspace_name=workspace_name,
-                storage_key=f"corpus/{profile.source_scope}/{relative_path}",
+                storage_key=(profile.storage_prefix / relative_path).as_posix(),
                 created_by="",
                 repository_slug=profile.repository_slug,
                 repository_title=profile.repository_title,
