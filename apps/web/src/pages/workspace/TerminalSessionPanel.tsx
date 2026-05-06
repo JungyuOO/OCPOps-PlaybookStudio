@@ -11,6 +11,10 @@ interface TerminalSocketEvent {
   shell?: string;
   workdir?: string;
   exit_code?: number;
+  lab_task_id?: string;
+  command_check_id?: string;
+  status?: string;
+  matched?: boolean;
 }
 
 export interface TerminalLearningContext {
@@ -22,6 +26,7 @@ export interface TerminalLearningContext {
 
 interface TerminalSessionPanelProps {
   learningContext?: TerminalLearningContext;
+  onCommandCheckResult?: (event: TerminalSocketEvent) => void;
 }
 
 function defaultTerminalWebSocketUrl(): string {
@@ -34,7 +39,7 @@ function defaultTerminalWebSocketUrl(): string {
   return `${protocol}//${host}:8770`;
 }
 
-export default function TerminalSessionPanel({ learningContext }: TerminalSessionPanelProps) {
+export default function TerminalSessionPanel({ learningContext, onCommandCheckResult }: TerminalSessionPanelProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -146,6 +151,10 @@ export default function TerminalSessionPanel({ learningContext }: TerminalSessio
         terminal.write(payload.data ?? '');
         return;
       }
+      if (payload.type === 'command_check_result') {
+        onCommandCheckResult?.(payload);
+        return;
+      }
       if (payload.type === 'exit') {
         terminal.writeln('');
         terminal.writeln(`Session exited (${payload.exit_code ?? 0}).`);
@@ -178,7 +187,7 @@ export default function TerminalSessionPanel({ learningContext }: TerminalSessio
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [connectionKey, stableLearningContext, wsUrl]);
+  }, [connectionKey, onCommandCheckResult, stableLearningContext, wsUrl]);
 
   return (
     <section className="terminal-session-shell" aria-label="Terminal Session">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './CoursePages.css';
 import { ROUTES } from '../app/routes';
@@ -32,6 +32,7 @@ export default function CourseTimelinePage() {
   const [learnerId, setLearnerId] = useState('');
   const [commandResults, setCommandResults] = useState<Record<string, LearningCommandCheckResultItem>>({});
   const [commandResultsError, setCommandResultsError] = useState('');
+  const commandResultsRequestId = useRef(0);
 
   useEffect(() => {
     void loadCourseManifest().then(setManifest).catch((caught) => {
@@ -91,34 +92,43 @@ export default function CourseTimelinePage() {
     setCommandResultsError('');
   }, [selectedStep?.id]);
 
-  useEffect(() => {
+  const refreshCommandResults = useCallback((): void => {
+    commandResultsRequestId.current += 1;
+    const requestId = commandResultsRequestId.current;
     if (!selectedLabTask?.id || !learnerId) {
       setCommandResults({});
+      return;
+    }
+    void loadLearningCommandResults(selectedLabTask.id, learnerId)
+      .then((payload) => {
+        if (requestId !== commandResultsRequestId.current) {
+          return;
+        }
+        setCommandResults(Object.fromEntries(payload.items.map((item) => [item.command_check.id, item])));
+        setCommandResultsError(payload.unavailable_reason || '');
+      })
+      .catch((caught) => {
+        if (requestId !== commandResultsRequestId.current) {
+          return;
+        }
+        setCommandResultsError(caught instanceof Error ? caught.message : 'Failed to load command check results');
+      });
+  }, [learnerId, selectedLabTask?.id]);
+
+  useEffect(() => {
+    refreshCommandResults();
+    if (!selectedLabTask?.id || !learnerId) {
       return undefined;
     }
-    let cancelled = false;
-    const refresh = (): void => {
-      void loadLearningCommandResults(selectedLabTask.id, learnerId)
-        .then((payload) => {
-          if (cancelled) {
-            return;
-          }
-          setCommandResults(Object.fromEntries(payload.items.map((item) => [item.command_check.id, item])));
-          setCommandResultsError(payload.unavailable_reason || '');
-        })
-        .catch((caught) => {
-          if (!cancelled) {
-            setCommandResultsError(caught instanceof Error ? caught.message : 'Failed to load command check results');
-          }
-        });
-    };
-    refresh();
-    const interval = window.setInterval(refresh, 2500);
+    const interval = window.setInterval(refreshCommandResults, 2500);
     return () => {
-      cancelled = true;
       window.clearInterval(interval);
     };
-  }, [learnerId, selectedLabTask?.id]);
+  }, [learnerId, refreshCommandResults, selectedLabTask?.id]);
+
+  const handleCommandCheckResult = useCallback((): void => {
+    refreshCommandResults();
+  }, [refreshCommandResults]);
 
   return (
     <div className="course-page">
@@ -262,6 +272,7 @@ export default function CourseTimelinePage() {
                   learningStepId: selectedStep.id,
                   labTaskId: selectedLabTask.id,
                 }}
+                onCommandCheckResult={handleCommandCheckResult}
               />
             </div>
           ) : null}

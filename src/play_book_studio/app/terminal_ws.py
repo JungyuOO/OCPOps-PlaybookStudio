@@ -163,19 +163,22 @@ class TerminalEventRecorder:
             data=message,
         )
 
-    def record_input(self, data: str) -> None:
+    def record_input(self, data: str) -> list[dict[str, Any]]:
         if not data:
-            return
+            return []
+        result_events: list[dict[str, Any]] = []
         self.input_buffer += data.replace("\r", "\n")
         while "\n" in self.input_buffer:
             command, self.input_buffer = self.input_buffer.split("\n", 1)
             command = command.strip()
             if command:
-                self.record_command(command)
+                result_events.extend(self.record_command(command))
+        return result_events
 
-    def record_command(self, command: str) -> None:
+    def record_command(self, command: str) -> list[dict[str, Any]]:
         if not self.connection or not self.terminal_session_id:
-            return
+            return []
+        result_events: list[dict[str, Any]] = []
         self.event_ordinal += 1
         event_id = record_terminal_event(
             self.connection,
@@ -186,11 +189,11 @@ class TerminalEventRecorder:
             data=command,
         )
         if not self.context.lab_task_id:
-            return
+            return result_events
         for check in load_command_checks_for_lab_task(self.connection, lab_task_id=self.context.lab_task_id):
             evaluation = evaluate_command_check(check, command)
             if evaluation.matched or evaluation.status == "error":
-                upsert_command_check_result(
+                result_id = upsert_command_check_result(
                     self.connection,
                     terminal_session_id=self.terminal_session_id,
                     terminal_event_id=event_id,
@@ -200,6 +203,22 @@ class TerminalEventRecorder:
                     submitted_command=command,
                     evaluation=evaluation,
                 )
+                result_events.append(
+                    {
+                        "type": "command_check_result",
+                        "id": result_id,
+                        "terminal_session_id": self.terminal_session_id,
+                        "terminal_event_id": event_id,
+                        "command_check_id": check.id,
+                        "lab_task_id": check.lab_task_id,
+                        "learner_id": self.context.learner_id,
+                        "submitted_command": command,
+                        "status": evaluation.status,
+                        "matched": evaluation.matched,
+                        "validation_result": evaluation.validation_result,
+                    }
+                )
+        return result_events
 
     def finish(self, *, status: str, exit_code: int | None = None) -> None:
         if not self.connection or not self.terminal_session_id:
@@ -285,8 +304,10 @@ async def _handle_terminal_connection(
             message_type = message.get("type")
             if message_type == "input":
                 data = str(message.get("data", ""))
-                recorder.record_input(data)
+                result_events = recorder.record_input(data)
                 session.write(data)
+                for event in result_events:
+                    await websocket.send(_json_event(event))
             elif message_type == "context":
                 recorder.update_context(_context_from_message(message))
                 await websocket.send(
