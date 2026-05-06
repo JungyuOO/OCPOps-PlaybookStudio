@@ -54,7 +54,7 @@ def _row_dict() -> dict:
         "heading_title": "Pods",
         "source_anchor": "pods",
         "toc_path": ["1 Workloads", "1.2 Pods"],
-        "asset_ids": [],
+        "asset_ids": ["asset-a"],
         "repository_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
         "owner_user_id": "",
         "visibility": "workspace_shared",
@@ -113,6 +113,10 @@ def test_bm25_index_can_search_postgres_payload_rows():
     assert hits[0].book_slug == "study-pods"
     assert hits[0].section_path == ("Workloads", "Pods")
     assert hits[0].cli_commands == ("oc get pods",)
+    assert hits[0].asset_ids == ("asset-a",)
+    assert hits[0].repository_id == "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    assert hits[0].visibility == "workspace_shared"
+    assert hits[0].source_scope == "study_docs"
 
 
 def test_db_runtime_bm25_does_not_fall_back_to_missing_seed_file(monkeypatch):

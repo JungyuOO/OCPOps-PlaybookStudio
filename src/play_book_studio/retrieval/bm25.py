@@ -53,6 +53,11 @@ def _row_to_hit(row: dict, score: float) -> RetrievalHit:
         verification_hints=tuple(
             str(item) for item in (row.get("verification_hints") or []) if str(item).strip()
         ),
+        asset_ids=tuple(str(item) for item in (row.get("asset_ids") or []) if str(item).strip()),
+        repository_id=str(row.get("repository_id", "")),
+        owner_user_id=str(row.get("owner_user_id", "")),
+        visibility=str(row.get("visibility", "")),
+        source_scope=str(row.get("source_scope", "")),
     )
 
 
