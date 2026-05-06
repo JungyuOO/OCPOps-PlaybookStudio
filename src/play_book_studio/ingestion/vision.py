@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,8 @@ class QwenVisionClient:
     endpoint: str
     model: str
     timeout_seconds: float = 30.0
+    max_attempts: int = 3
+    backoff_seconds: float = 2.0
     prompt: str = DEFAULT_IMAGE_PROMPT
 
     def describe_asset(self, document_path: Path, asset: DocumentAsset) -> str:
@@ -51,12 +54,29 @@ class QwenVisionClient:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         req = request.Request(_chat_completions_url(self.endpoint), data=body, headers=headers, method="POST")
+        response_body = self._send_with_retries(req)
         try:
-            with request.urlopen(req, timeout=self.timeout_seconds) as response:
-                response_body = response.read().decode("utf-8", errors="replace")
-        except error.URLError as exc:
-            raise RuntimeError(f"Qwen vision request failed: {exc}") from exc
-        return _extract_description(json.loads(response_body)).strip()
+            payload_json = json.loads(response_body)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Qwen vision response was not valid JSON") from exc
+        return _extract_description(payload_json).strip()
+
+    def _send_with_retries(self, req: request.Request) -> str:
+        attempts = max(1, int(self.max_attempts))
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                with request.urlopen(req, timeout=max(float(self.timeout_seconds), 1.0)) as response:
+                    return response.read().decode("utf-8", errors="replace")
+            except (TimeoutError, error.URLError) as exc:
+                last_error = exc
+                if attempt == attempts:
+                    break
+                sleep_seconds = max(float(self.backoff_seconds), 0.0) * attempt
+                if sleep_seconds:
+                    time.sleep(sleep_seconds)
+        assert last_error is not None
+        raise RuntimeError(f"Qwen vision request failed: {last_error}") from last_error
 
 
 def build_qwen_image_describer(settings: Settings) -> ImageDescriber | None:
@@ -67,12 +87,18 @@ def build_qwen_image_describer(settings: Settings) -> ImageDescriber | None:
     client = QwenVisionClient(
         endpoint=endpoint,
         model=model,
+        timeout_seconds=settings.request_timeout_seconds,
+        max_attempts=settings.request_retries,
+        backoff_seconds=settings.request_backoff_seconds,
     )
 
     def describe(document_path: Path, asset: DocumentAsset) -> str:
         return client.describe_asset(document_path, asset)
 
     setattr(describe, "qwen_model", model)
+    setattr(describe, "qwen_timeout_seconds", settings.request_timeout_seconds)
+    setattr(describe, "qwen_max_attempts", settings.request_retries)
+    setattr(describe, "qwen_backoff_seconds", settings.request_backoff_seconds)
     return describe
 
 

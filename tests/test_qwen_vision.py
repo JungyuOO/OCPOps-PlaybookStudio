@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from urllib import error
 import zipfile
 from pathlib import Path
 
@@ -89,12 +90,57 @@ def test_qwen_describer_factory_uses_existing_llm_settings_by_default():
         root_dir=Path.cwd(),
         llm_endpoint="http://cllm.cywell.co.kr/v1",
         llm_model="Qwen/Qwen3.5-9B",
+        request_timeout_seconds=11,
+        request_retries=4,
+        request_backoff_seconds=3,
     )
 
     describer = build_qwen_image_describer(settings)
 
     assert describer is not None
     assert getattr(describer, "qwen_model") == "Qwen/Qwen3.5-9B"
+    assert getattr(describer, "qwen_timeout_seconds") == 11
+    assert getattr(describer, "qwen_max_attempts") == 4
+    assert getattr(describer, "qwen_backoff_seconds") == 3
+
+
+def test_qwen_vision_client_retries_transient_url_errors(monkeypatch):
+    image_path = _case_dir("client_retry") / "diagram.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    asset = DocumentAsset(
+        asset_id="asset-1",
+        asset_type="image",
+        filename="diagram.png",
+        mime_type="image/png",
+        sha256="sha",
+    )
+    calls = {"count": 0, "sleeps": []}
+
+    def fake_urlopen(_req, timeout):
+        assert timeout == 7
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise error.URLError("temporary connection reset")
+        return FakeResponse()
+
+    def fake_sleep(seconds):
+        calls["sleeps"].append(seconds)
+
+    monkeypatch.setattr(vision.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(vision.time, "sleep", fake_sleep)
+
+    client = QwenVisionClient(
+        endpoint="http://qwen.internal:8000/v1",
+        model="qwen2.5-vl",
+        timeout_seconds=7,
+        max_attempts=2,
+        backoff_seconds=0.5,
+    )
+
+    description = client.describe_asset(image_path, asset)
+
+    assert description == "OpenShift console topology diagram."
+    assert calls == {"count": 2, "sleeps": [0.5]}
 
 
 def test_parse_image_document_injects_qwen_description_into_chunk_text():
