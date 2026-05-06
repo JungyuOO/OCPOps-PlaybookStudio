@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from play_book_studio.answering.answerer import ChatAnswerer
     from play_book_studio.answering.models import AnswerResult
 
-FRONTEND_DIST_DIRNAME = "presentation-ui/dist"
+FRONTEND_DIST_DIRNAME = "apps/web/dist"
 DATA_CONTROL_ROOM_CACHE_TTL_SECONDS = 30.0
 
 

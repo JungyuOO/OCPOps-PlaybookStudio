@@ -13,8 +13,8 @@ pytest-cache-files-*/
 .ruff_cache/
 .tmp_tests/
 node_modules/
-presentation-ui/dist/
-presentation-ui/node_modules/
+apps/web/dist/
+apps/web/node_modules/
 artifacts/
 storage/*
 !storage/.gitignore

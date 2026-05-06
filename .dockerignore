@@ -41,8 +41,8 @@ pytest-cache-files-*/**
 /tmp/
 /tmp_source/
 /output/
-/presentation-ui/node_modules/
-/presentation-ui/dist/
+/apps/web/node_modules/
+/apps/web/dist/
 
 !Dockerfile
 !README.md
@@ -54,8 +54,9 @@ pytest-cache-files-*/**
 !db/
 !db/**
 
-!presentation-ui/
-!presentation-ui/**
+!apps/
+!apps/web/
+!apps/web/**
 
 !deploy/
 !deploy/nginx/
@@ -107,10 +108,10 @@ tmp_source/**
 output
 output/**
 
-presentation-ui/node_modules
-presentation-ui/node_modules/**
-presentation-ui/dist
-presentation-ui/dist/**
+apps/web/node_modules
+apps/web/node_modules/**
+apps/web/dist
+apps/web/dist/**
 
 tests
 tests/**

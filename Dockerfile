@@ -1,11 +1,11 @@
 FROM node:22-bookworm-slim AS frontend-build
 
-WORKDIR /app/presentation-ui
+WORKDIR /app/apps/web
 
-COPY presentation-ui/package.json presentation-ui/package-lock.json ./
+COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci
 
-COPY presentation-ui ./
+COPY apps/web ./
 RUN npm run build
 
 
@@ -34,7 +34,7 @@ COPY src /app/src
 COPY db /app/db
 RUN pip install --no-cache-dir --no-deps -e .
 
-COPY --from=frontend-build /app/presentation-ui/dist /app/presentation-ui/dist
+COPY --from=frontend-build /app/apps/web/dist /app/apps/web/dist
 
 EXPOSE 8765 8770
 
@@ -44,6 +44,6 @@ CMD ["python", "-m", "play_book_studio.cli", "ui", "--no-browser", "--host", "0.
 FROM nginx:1.27-alpine AS web
 
 COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY --from=frontend-build /app/presentation-ui/dist /usr/share/nginx/html
+COPY --from=frontend-build /app/apps/web/dist /usr/share/nginx/html
 
 EXPOSE 80

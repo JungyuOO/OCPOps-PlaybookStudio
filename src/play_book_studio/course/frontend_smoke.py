@@ -81,9 +81,9 @@ def run_course_frontend_smoke(
     session: str = "course-ui-smoke",
     playwright_cmd: str = "playwright-cli",
 ) -> dict[str, Any]:
-    dist_index = root_dir / "presentation-ui" / "dist" / "index.html"
+    dist_index = root_dir / "apps" / "web" / "dist" / "index.html"
     if not dist_index.exists():
-        raise FileNotFoundError("presentation-ui/dist/index.html not found; run npm run build in presentation-ui first")
+        raise FileNotFoundError("apps/web/dist/index.html not found; run npm run build in apps/web first")
     scenarios = _pick_scenarios(read_jsonl(cases_path), limit=scenario_count)
     if not scenarios:
         raise ValueError("no frontend smoke scenarios found")

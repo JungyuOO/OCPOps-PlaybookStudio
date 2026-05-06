@@ -22,7 +22,7 @@ _STYLE_RE = re.compile(r"<style[^>]*>(?P<style>.*?)</style>", re.IGNORECASE | re
 
 
 def _frontend_path(root_dir: Path, request_path: str) -> Path | None:
-    dist = root_dir / "presentation-ui" / "dist"
+    dist = root_dir / "apps" / "web" / "dist"
     normalized_path = request_path.strip("/")
     has_file_suffix = bool(Path(normalized_path).suffix)
     if request_path in {"", "/"} or not has_file_suffix:
