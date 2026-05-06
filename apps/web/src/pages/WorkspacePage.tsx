@@ -486,6 +486,19 @@ type PreviewState =
     viewerDocument?: ViewerDocumentPayload;
   };
 
+type EvidenceDrawerState =
+  | { kind: 'closed' }
+  | { kind: 'loading'; title: string }
+  | {
+    kind: 'viewer';
+    title: string;
+    subtitle: string;
+    viewerPath: string;
+    viewerDocument: ViewerDocumentPayload;
+    scrollTargetText?: string;
+  }
+  | { kind: 'error'; title: string; message: string };
+
 function makeId(prefix: string): string {
   const shortPart = Math.random().toString(36).substring(2, 8).toUpperCase();
   return `${prefix}-${shortPart}`;
@@ -650,11 +663,6 @@ function NoAnswerAcquisitionCard({
       </button>
     </div>
   );
-}
-
-function extractDraftIdFromViewerPath(viewerPath: string): string | null {
-  const match = viewerPath.match(/\/playbooks\/customer-packs\/([^/]+)/);
-  return match?.[1] ?? null;
 }
 
 const FALLBACK_CLUSTER_USER_LABEL = 'Undefined';
@@ -1011,6 +1019,7 @@ export default function WorkspacePage() {
   const [activeTestTrace, setActiveTestTrace] = useState<WorkspaceTestTrace | null>(null);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(() => loadStoredActiveSourceId());
   const [preview, setPreview] = useState<PreviewState>({ kind: 'empty' });
+  const [evidenceDrawer, setEvidenceDrawer] = useState<EvidenceDrawerState>({ kind: 'closed' });
   const [viewerPageMode, setViewerPageMode] = useState<ViewerPageMode>('single');
   const [isPanelResizing, setIsPanelResizing] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -2024,31 +2033,42 @@ export default function WorkspacePage() {
     }
   }
 
-  async function handleCitationClick(citation: ChatCitation, answerContent = ''): Promise<void> {
+  async function openEvidenceDrawerPath(title: string, rawViewerPath: string, scrollTargetText = ''): Promise<void> {
+    const viewerPath = normalizeViewerPath(rawViewerPath);
+    if (!viewerPath) {
+      setEvidenceDrawer({ kind: 'error', title, message: 'No viewer path is available for this citation.' });
+      return;
+    }
+    setEvidenceDrawer({ kind: 'loading', title });
     try {
-      if (rightCollapsed) {
-        rightPanelRef.current?.expand();
-        setRightCollapsed(false);
-      }
-      const draftId = extractDraftIdFromViewerPath(citation.viewer_path);
-      if (draftId) {
-        await openDraftPreview(draftId, drafts, citation.viewer_path);
-      } else {
-        await openViewerPreview(
-          citation.viewer_path,
-          citation.source_label || citation.book_title || citation.section,
-          undefined,
-          'single',
-          citationScrollTarget(citation, answerContent) || firstCitationCommand(citation),
-        );
-      }
-      if (!isCourseMode) {
-        animatePreviewPanel();
-      }
+      const [meta, viewerDocument] = await Promise.all([
+        loadSourceMeta(viewerPath).catch(() => null),
+        loadViewerDocumentPayload(viewerPath, 'single'),
+      ]);
+      setEvidenceDrawer({
+        kind: 'viewer',
+        title,
+        subtitle: meta?.section_path_label || meta?.section || viewerPath,
+        viewerPath,
+        viewerDocument,
+        scrollTargetText,
+      });
     } catch (error) {
       console.error(error);
-      window.alert(error instanceof Error ? error.message : '참조 원문을 여는 중 오류가 발생했습니다.');
+      setEvidenceDrawer({
+        kind: 'error',
+        title,
+        message: error instanceof Error ? error.message : 'Failed to load citation evidence.',
+      });
     }
+  }
+
+  async function openCitationEvidenceDrawer(citation: ChatCitation, answerContent = ''): Promise<void> {
+    await openEvidenceDrawerPath(
+      citationEvidenceTitle(citation),
+      citation.viewer_path,
+      citationScrollTarget(citation, answerContent) || firstCitationCommand(citation),
+    );
   }
 
   function handleCitationEvidenceToggle(messageId: string, citation: ChatCitation): void {
@@ -3607,7 +3627,7 @@ export default function WorkspacePage() {
                                   <div className="citation-evidence-actions">
                                     <button
                                       type="button"
-                                      onClick={() => { void handleCitationClick(activeCitation, message.content); }}
+                                      onClick={() => { void openCitationEvidenceDrawer(activeCitation, message.content); }}
                                     >
                                       Open document
                                     </button>
@@ -3632,7 +3652,7 @@ export default function WorkspacePage() {
                             <CitationTag
                               key={`${message.id}-${citation.index}`}
                               citation={citation}
-                              onOpen={(selected) => { void handleCitationClick(selected); }}
+                              onOpen={(selected) => { void openCitationEvidenceDrawer(selected, message.content); }}
                             />
                           ))}
                         </div>
@@ -4010,6 +4030,60 @@ export default function WorkspacePage() {
             )}
           </WorkspaceViewerPanel>
         </Group>
+        {evidenceDrawer.kind !== 'closed' && (
+          <div className="evidence-drawer-layer">
+            <button
+              className="evidence-drawer-scrim"
+              type="button"
+              aria-label="Close evidence document"
+              onClick={() => setEvidenceDrawer({ kind: 'closed' })}
+            />
+            <aside className="evidence-drawer" aria-label="Citation evidence document">
+              <header className="evidence-drawer-header">
+                <div>
+                  <span>Evidence document</span>
+                  <h3>{evidenceDrawer.title}</h3>
+                  {evidenceDrawer.kind === 'viewer' && evidenceDrawer.subtitle ? (
+                    <p>{evidenceDrawer.subtitle}</p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  className="evidence-drawer-close"
+                  onClick={() => setEvidenceDrawer({ kind: 'closed' })}
+                >
+                  Close
+                </button>
+              </header>
+              <div className="evidence-drawer-body">
+                {evidenceDrawer.kind === 'loading' && (
+                  <div className="empty-state">
+                    <div className="loading-spinner-small"></div>
+                    <h4>Loading evidence</h4>
+                  </div>
+                )}
+                {evidenceDrawer.kind === 'error' && (
+                  <div className="empty-state">
+                    <h4>Evidence unavailable</h4>
+                    <p>{evidenceDrawer.message}</p>
+                  </div>
+                )}
+                {evidenceDrawer.kind === 'viewer' && (
+                  <ViewerDocumentStage
+                    viewerDocument={evidenceDrawer.viewerDocument}
+                    currentViewerPath={evidenceDrawer.viewerPath}
+                    scrollTargetText={evidenceDrawer.scrollTargetText}
+                    suspendActiveSectionTracking={isPanelResizing}
+                    onNavigateViewerPath={(viewerPath) => {
+                      void openEvidenceDrawerPath(evidenceDrawer.title, viewerPath);
+                    }}
+                    className="playbook-reader-shadow-host evidence-drawer-reader"
+                  />
+                )}
+              </div>
+            </aside>
+          </div>
+        )}
       </main>
     </div>
   );

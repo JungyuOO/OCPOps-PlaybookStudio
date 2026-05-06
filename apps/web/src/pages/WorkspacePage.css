@@ -5850,6 +5850,105 @@
 }
 
 /* ── Inline Doc Header Actions ── */
+.evidence-drawer-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: auto;
+}
+
+.evidence-drawer-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(2, 6, 12, 0.52);
+  backdrop-filter: blur(3px);
+  cursor: pointer;
+}
+
+.evidence-drawer {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  bottom: 24px;
+  width: min(760px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 209, 255, 0.18);
+  background: rgba(8, 13, 22, 0.96);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.54), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.evidence-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.evidence-drawer-header span {
+  color: var(--pbs-accent-cyan);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.evidence-drawer-header h3 {
+  margin: 4px 0 0;
+  color: #ffffff;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.evidence-drawer-header p {
+  margin: 5px 0 0;
+  color: rgba(239, 252, 255, 0.62);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.evidence-drawer-close {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #effcff;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.evidence-drawer-close:hover {
+  border-color: rgba(0, 209, 255, 0.3);
+  background: rgba(0, 209, 255, 0.12);
+}
+
+.evidence-drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px 22px;
+}
+
+.evidence-drawer-reader {
+  min-height: 100%;
+}
+
+@media (max-width: 760px) {
+  .evidence-drawer {
+    top: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+  }
+}
+
 .doc-header-with-actions {
   display: flex;
   align-items: flex-start;
