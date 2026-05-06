@@ -32,6 +32,14 @@ COURSE_QA_REJECTED_CASES_PATH = CORPUS_MANIFESTS_DIR / "course_qa_cases.rejected
 COURSE_OPS_LEARNING_GOLDEN_CASES_PATH = CORPUS_MANIFESTS_DIR / "course_ops_learning_golden_cases.jsonl"
 COURSE_LEARNING_ROUTES_OVERRIDES_PATH = CORPUS_MANIFESTS_DIR / "course_learning_routes_overrides.json"
 
+ANSWER_EVAL_CASES_PATH = CORPUS_MANIFESTS_DIR / "answer_eval_cases.jsonl"
+ANSWER_EVAL_REALWORLD_CASES_PATH = CORPUS_MANIFESTS_DIR / "answer_eval_realworld_cases.jsonl"
+RAGAS_EVAL_CASES_PATH = CORPUS_MANIFESTS_DIR / "ragas_eval_cases.jsonl"
+PBS_CHAT_QUALITY_CASES_PATH = CORPUS_MANIFESTS_DIR / "pbs_chat_quality_cases.jsonl"
+PBS_CHAT_QUALITY_EXTENDED_CASES_PATH = CORPUS_MANIFESTS_DIR / "pbs_chat_quality_extended_cases.jsonl"
+OCP420_REPO_WIDE_SOURCE_MANIFEST_PATH = CORPUS_MANIFESTS_DIR / "ocp420_repo_wide_source_manifest.json"
+OCP420_SOURCE_FIRST_FULL_REBUILD_MANIFEST_PATH = CORPUS_MANIFESTS_DIR / "ocp420_source_first_full_rebuild_manifest.json"
+
 COURSE_MANIFEST_PATH = COURSE_PBS_MANIFESTS_DIR / "course_v1.json"
 COURSE_QA_REPORT_PATH = COURSE_PBS_MANIFESTS_DIR / "course_qa_report.json"
 OPS_LEARNING_ANCHOR_AUDIT_PATH = COURSE_PBS_MANIFESTS_DIR / "ops_learning_anchor_audit_v1.json"

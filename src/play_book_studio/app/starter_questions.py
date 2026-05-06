@@ -9,6 +9,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import (
+    ANSWER_EVAL_CASES_PATH,
+    ANSWER_EVAL_REALWORLD_CASES_PATH,
+    OCP420_REPO_WIDE_SOURCE_MANIFEST_PATH,
+    OCP420_SOURCE_FIRST_FULL_REBUILD_MANIFEST_PATH,
+    PBS_CHAT_QUALITY_CASES_PATH,
+)
 from play_book_studio.config.settings import load_settings
 from play_book_studio.db.official_documents import load_official_manifest_entries
 
@@ -140,9 +147,9 @@ def _official_faq_questions(root_dir: Path) -> list[dict[str, Any]]:
         if str(entry.get("book_slug") or "").strip()
     }
     for path in (
-        root_dir / "manifests" / "pbs_chat_quality_cases.jsonl",
-        root_dir / "manifests" / "answer_eval_cases.jsonl",
-        root_dir / "manifests" / "answer_eval_realworld_cases.jsonl",
+        root_dir / PBS_CHAT_QUALITY_CASES_PATH,
+        root_dir / ANSWER_EVAL_CASES_PATH,
+        root_dir / ANSWER_EVAL_REALWORLD_CASES_PATH,
     ):
         for row in _iter_jsonl(path):
             query = str(row.get("query") or "").strip()
@@ -179,8 +186,8 @@ def _manifest_entries(root_dir: Path) -> list[dict[str, Any]]:
         return _official_manifest_entries_from_db(database_url)
 
     for path in (
-        root_dir / "manifests" / "ocp420_repo_wide_source_manifest.json",
-        root_dir / "manifests" / "ocp420_source_first_full_rebuild_manifest.json",
+        root_dir / OCP420_REPO_WIDE_SOURCE_MANIFEST_PATH,
+        root_dir / OCP420_SOURCE_FIRST_FULL_REBUILD_MANIFEST_PATH,
     ):
         payload = _safe_read_json(path)
         entries = payload.get("entries")

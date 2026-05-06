@@ -13,8 +13,8 @@ TEST_TMP = REPO_ROOT / "tmp" / "starter_questions_tests"
 
 
 def test_starter_questions_are_loaded_from_manifests() -> None:
-    manifests = TEST_TMP / "manifests"
-    course_manifests = TEST_TMP / "data" / "course_pbs" / "manifests"
+    manifests = TEST_TMP / "corpus" / "manifests"
+    course_manifests = TEST_TMP / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
     manifests.mkdir(parents=True, exist_ok=True)
     course_manifests.mkdir(parents=True, exist_ok=True)
     (manifests / "pbs_chat_quality_cases.jsonl").write_text(
@@ -84,7 +84,7 @@ def test_starter_questions_are_loaded_from_manifests() -> None:
 
 def test_starter_questions_do_not_fall_back_to_files_when_database_is_configured(monkeypatch) -> None:
     root = TEST_TMP / "db_configured"
-    course_manifests = root / "data" / "course_pbs" / "manifests"
+    course_manifests = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
     course_manifests.mkdir(parents=True, exist_ok=True)
     (course_manifests / "ops_learning_guides_v1.json").write_text(
         json.dumps(

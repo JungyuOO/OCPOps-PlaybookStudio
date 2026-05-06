@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 from play_book_studio.config.corpus_paths import (
+    ANSWER_EVAL_CASES_PATH,
     COURSE_OPS_LEARNING_GOLDEN_CASES_PATH,
     COURSE_PBS_DIR,
     COURSE_QA_ACCEPTED_CASES_PATH,
@@ -21,6 +22,7 @@ from play_book_studio.config.corpus_paths import (
     OPS_LEARNING_ANCHOR_AUDIT_PATH,
     OPS_LEARNING_CHUNKS_PATH,
     OPS_LEARNING_GUIDES_PATH,
+    RAGAS_EVAL_CASES_PATH,
 )
 from play_book_studio.config.settings import load_effective_env, load_settings
 
@@ -78,7 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument(
         "--cases",
         type=Path,
-        default=ROOT / "manifests" / "answer_eval_cases.jsonl",
+        default=ANSWER_EVAL_CASES_PATH,
     )
     _add_runtime_args(eval_parser)
 
@@ -86,7 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
     ragas_parser.add_argument(
         "--cases",
         type=Path,
-        default=ROOT / "manifests" / "ragas_eval_cases.jsonl",
+        default=RAGAS_EVAL_CASES_PATH,
     )
     ragas_parser.add_argument("--batch-size", type=int, default=2)
     ragas_parser.add_argument("--judge-model", default=None)
