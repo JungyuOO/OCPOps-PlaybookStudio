@@ -1,5 +1,5 @@
 import { Boxes, FolderTree, MonitorPlay, type LucideIcon } from 'lucide-react';
-import { ROUTES } from '../app/routes';
+import { ROUTES } from '../routing/routes';
 
 export type PartnerRouteDefinition = {
   path: string;

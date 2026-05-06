@@ -10,7 +10,7 @@ import {
   StickyNote,
   Type,
 } from 'lucide-react';
-import { ROUTES, buildSharedLandingHref } from '../app/routes';
+import { ROUTES, buildSharedLandingHref } from '../routing/routes';
 import type {
   CustomerPackDraft,
   ViewerPageMode,

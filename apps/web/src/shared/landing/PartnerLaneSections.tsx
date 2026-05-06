@@ -1,6 +1,6 @@
 import { ArrowRight, Waypoints } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { ROUTES } from '../../app/routes';
+import { ROUTES } from '../../routing/routes';
 import { PARTNER_SURFACES } from '../../partner/partnerLaneConfig';
 
 export function PartnerLaneHero() {

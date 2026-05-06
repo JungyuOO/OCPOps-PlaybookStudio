@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import './CoursePages.css';
-import { ROUTES } from '../app/routes';
+import { ROUTES } from '../routing/routes';
 import { buildCourseAssetUrl, emptyCourseChatResponse, loadCourseChunk, loadCourseStage, sendCourseChatStream, type CourseChatResponse, type CourseChunkPayload, type CourseImageAttachment, type CourseStagePayload } from '../lib/courseApi';
 import CourseChatWorkspaceAnswer from './CourseChatWorkspaceAnswer';
 

@@ -82,7 +82,7 @@ import {
   listOcpProfiles,
   type OcpConnection,
 } from '../lib/opsConsoleApi';
-import { ROUTES } from '../app/routes';
+import { ROUTES } from '../routing/routes';
 import { sendCourseChatStream } from '../lib/courseApi';
 import { loadStoredVisionMode, type VisionMode } from '../lib/wikiVision';
 import { resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';

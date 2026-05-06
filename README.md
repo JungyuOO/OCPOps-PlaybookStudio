@@ -89,7 +89,7 @@ docker compose up -d --build app web qdrant
 
 ```powershell
 npm --prefix apps/web run build
-npm --prefix apps/web exec vitest run src/app/handoff.test.ts
+npm --prefix apps/web exec vitest run src/routing/handoff.test.ts
 .\.venv\Scripts\python.exe -m pytest tests/test_app_server.py tests/test_customer_pack_direct_viewer_route.py -q
 .\.venv\Scripts\python.exe -m pytest tests/test_app_viewers_routes.py -q -k "canonicalize_viewer_path or viewer_document_route_supports_entity_and_figure_paths or viewer_document_route_falls_back_to_normalized_sections_for_known_book or viewer_path_local_raw_html_fallback"
 ```

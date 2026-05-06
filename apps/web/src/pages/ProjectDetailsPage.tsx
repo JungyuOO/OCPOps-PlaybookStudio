@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Book, ShieldCheck, Layers, MessageSquare, PlaySquare } from 'lucide-react';
 import gsap from 'gsap';
-import { ROUTES, buildSharedLandingHref } from '../app/routes';
+import { ROUTES, buildSharedLandingHref } from '../routing/routes';
 import './ProjectDetailsPage.css';
 
 export default function ProjectDetailsPage() {

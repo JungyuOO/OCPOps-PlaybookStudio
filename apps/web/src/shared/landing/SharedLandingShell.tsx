@@ -1,6 +1,6 @@
 import { useSearchParams } from 'react-router-dom';
 import LandingPage from '../../pages/LandingPage';
-import { normalizeSharedLandingTab } from '../../app/routes';
+import { normalizeSharedLandingTab } from '../../routing/routes';
 import PartnerLanePanel from './PartnerLanePanel';
 import './SharedLandingShell.css';
 

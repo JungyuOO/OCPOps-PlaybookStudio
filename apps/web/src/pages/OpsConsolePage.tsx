@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import './OpsConsolePage.css';
-import { ROUTES } from '../app/routes';
+import { ROUTES } from '../routing/routes';
 import {
   approveActionRequest,
   connectOcp,

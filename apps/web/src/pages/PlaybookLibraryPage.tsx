@@ -61,7 +61,7 @@ import {
   toRuntimeUrl,
   formatBytes,
 } from '../lib/runtimeApi';
-import { ROUTES } from '../app/routes';
+import { ROUTES } from '../routing/routes';
 
 type PipelineStage = 'idle' | 'uploading' | 'capturing' | 'normalizing' | 'done' | 'error';
 type FactoryLane = 'tools' | 'user';

@@ -1,6 +1,6 @@
 import { Sparkles, Moon, Sun } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { ROUTES, buildSharedLandingHref } from '../../app/routes';
+import { ROUTES, buildSharedLandingHref } from '../../routing/routes';
 
 type WorkspaceHeaderProps = {
   globalTheme: 'dark' | 'light';

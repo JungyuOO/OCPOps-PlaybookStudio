@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { Link } from 'react-router-dom';
 import { MessageSquare, BookOpen, MonitorPlay } from 'lucide-react';
-import { ROUTES } from '../app/routes';
+import { ROUTES } from '../routing/routes';
 import './ProductSurfaces.css';
 
 export default function ProductSurfaces() {

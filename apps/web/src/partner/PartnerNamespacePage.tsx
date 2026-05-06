@@ -1,6 +1,6 @@
 import { ArrowLeftRight, ShieldCheck, SplitSquareVertical } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { buildSharedLandingHref } from '../app/routes';
+import { buildSharedLandingHref } from '../routing/routes';
 import './PartnerNamespacePage.css';
 
 type PartnerNamespacePageProps = {

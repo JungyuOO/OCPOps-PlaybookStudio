@@ -1,6 +1,6 @@
 import { Layers3, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { buildSharedLandingHref, type SharedLandingTab } from '../../app/routes';
+import { buildSharedLandingHref, type SharedLandingTab } from '../../routing/routes';
 
 export default function SharedLandingSwitcher({ activeTab }: { activeTab: SharedLandingTab }) {
   return (

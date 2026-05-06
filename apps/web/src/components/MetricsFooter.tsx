@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
 import './MetricsFooter.css';
-import { ROUTES } from '../app/routes';
+import { ROUTES } from '../routing/routes';
 import { loadDataControlRoom } from '../lib/runtimeApi';
 
 export default function MetricsFooter() {

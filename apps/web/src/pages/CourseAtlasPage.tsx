@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import './CoursePages.css';
-import { ROUTES } from '../app/routes';
+import { ROUTES } from '../routing/routes';
 import { buildCourseAssetUrl, loadCourseChunk, type CourseChunkPayload, type CourseImageAttachment } from '../lib/courseApi';
 
 function shortText(value: unknown, maxLength = 260): string {
