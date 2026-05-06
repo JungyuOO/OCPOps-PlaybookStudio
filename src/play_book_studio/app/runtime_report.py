@@ -44,11 +44,13 @@ def _iso_timestamp() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
-def _path_status(path: Path) -> dict[str, Any]:
+def _path_status(path: Path, *, role: str = "runtime", required_for_runtime: bool = True) -> dict[str, Any]:
     exists = path.exists()
     payload: dict[str, Any] = {
         "path": str(path),
         "exists": exists,
+        "role": role,
+        "required_for_runtime": bool(required_for_runtime),
     }
     if exists and path.is_file():
         stat = path.stat()
@@ -245,6 +247,8 @@ def build_runtime_report(
     # 이 리포트는 config, artifact 상태, live probe를 함께 담아
     # 배선 설정과 실제 서비스 reachability를 한 번에 확인하게 한다.
     settings = load_settings(root_dir)
+    database_runtime = bool(settings.database_url.strip())
+    seed_required_for_runtime = not database_runtime
     return {
         "generated_at": _iso_timestamp(),
         "app": {
@@ -269,6 +273,8 @@ def build_runtime_report(
             "reranker_enabled": bool(settings.reranker_enabled),
             "reranker_model": settings.reranker_model,
             "reranker_top_n": settings.reranker_top_n,
+            "database_runtime": database_runtime,
+            "seed_inputs_required_for_runtime": seed_required_for_runtime,
             "db_corpus": build_corpus_status(
                 database_url=settings.database_url,
                 collection=settings.qdrant_collection,
@@ -278,11 +284,31 @@ def build_runtime_report(
             ),
         },
         "artifacts": {
-            "source_manifest": _path_status(settings.source_manifest_path),
-            "source_catalog": _path_status(settings.source_catalog_path),
-            "normalized_docs": _path_status(settings.normalized_docs_path),
-            "chunks": _path_status(settings.chunks_path),
-            "bm25_corpus": _path_status(settings.bm25_corpus_path),
+            "source_manifest": _path_status(
+                settings.source_manifest_path,
+                role="seed_input" if database_runtime else "runtime",
+                required_for_runtime=seed_required_for_runtime,
+            ),
+            "source_catalog": _path_status(
+                settings.source_catalog_path,
+                role="seed_input" if database_runtime else "runtime",
+                required_for_runtime=seed_required_for_runtime,
+            ),
+            "normalized_docs": _path_status(
+                settings.normalized_docs_path,
+                role="seed_input" if database_runtime else "runtime",
+                required_for_runtime=seed_required_for_runtime,
+            ),
+            "chunks": _path_status(
+                settings.chunks_path,
+                role="seed_input" if database_runtime else "runtime",
+                required_for_runtime=seed_required_for_runtime,
+            ),
+            "bm25_corpus": _path_status(
+                settings.bm25_corpus_path,
+                role="seed_input" if database_runtime else "runtime",
+                required_for_runtime=seed_required_for_runtime,
+            ),
             "graph_sidecar_compact": graph_sidecar_compact_artifact_status(settings),
             "chat_turns": _path_status(settings.chat_log_path),
             "answer_eval_report": _path_status(settings.answer_eval_report_path),

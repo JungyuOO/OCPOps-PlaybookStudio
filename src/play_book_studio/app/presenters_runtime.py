@@ -75,6 +75,7 @@ def _build_health_payload(answerer: ChatAnswerer) -> dict[str, Any]:
     pack = settings.active_pack
     embedding_mode = "remote" if settings.embedding_base_url else "local"
     compact_graph_artifact = graph_sidecar_compact_artifact_status(settings)
+    database_runtime = bool(settings.database_url.strip())
     llm_runtime = (
         answerer.llm_client.runtime_metadata()
         if hasattr(answerer.llm_client, "runtime_metadata")
@@ -114,10 +115,15 @@ def _build_health_payload(answerer: ChatAnswerer) -> dict[str, Any]:
             "graph_backend": settings.graph_backend,
             "graph_runtime_mode": settings.graph_runtime_mode,
             "graph_compact_artifact": compact_graph_artifact,
+            "database_runtime": database_runtime,
+            "seed_inputs_required_for_runtime": not database_runtime,
             "artifacts_dir": str(settings.artifacts_dir),
-            "source_manifest_path": str(settings.source_manifest_path),
-            "normalized_docs_path": str(settings.retrieval_normalized_docs_path),
-            "bm25_corpus_path": str(settings.retrieval_bm25_corpus_path),
+            "seed_inputs": {
+                "source_manifest_path": str(settings.source_manifest_path),
+                "normalized_docs_path": str(settings.retrieval_normalized_docs_path),
+                "bm25_corpus_path": str(settings.retrieval_bm25_corpus_path),
+                "required_for_runtime": not database_runtime,
+            },
             "customer_pack_books_dir": str(settings.customer_pack_books_dir),
             "db_corpus": build_corpus_status(
                 database_url=settings.database_url,
