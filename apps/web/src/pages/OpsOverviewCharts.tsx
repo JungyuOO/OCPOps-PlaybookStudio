@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { OcpMetricsResponse, OcpOverview } from '../../lib/opsConsoleApi';
+import type { OcpMetricsResponse, OcpOverview } from '../lib/opsConsoleApi';
 
 function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));

@@ -138,7 +138,7 @@ const CONNECT_GUIDE_STEPS = [
     code: 'namespace: demo\nSSL verify: false',
   },
 ] as const;
-const OpsOverviewCharts = lazy(() => import('./ops/OpsOverviewCharts'));
+const OpsOverviewCharts = lazy(() => import('./OpsOverviewCharts'));
 
 function sectionFromPath(pathname: string): OpsRouteKey {
   if (pathname === ROUTES.opsConnections) {
