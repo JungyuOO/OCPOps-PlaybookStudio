@@ -5,7 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from .corpus_paths import OFFICIAL_MANIFESTS_DIR
+from .corpus_paths import (
+    OFFICIAL_GOLD_CORPUS_DIR,
+    OFFICIAL_GOLD_MANUALBOOK_DIR,
+    OFFICIAL_MANIFESTS_DIR,
+    OFFICIAL_SILVER_KO_DIR,
+)
 from .packs import GLOBAL_SOURCE_CATALOG_NAME
 
 
@@ -98,15 +103,15 @@ class SettingsPathMixin:
 
     @property
     def silver_ko_dir(self) -> Path:
-        return self.data_dir / "silver_ko"
+        return self.root_dir / OFFICIAL_SILVER_KO_DIR
 
     @property
     def gold_corpus_ko_dir(self) -> Path:
-        return self.data_dir / "gold_corpus_ko"
+        return self.root_dir / OFFICIAL_GOLD_CORPUS_DIR
 
     @property
     def gold_manualbook_ko_dir(self) -> Path:
-        return self.data_dir / "gold_manualbook_ko"
+        return self.root_dir / OFFICIAL_GOLD_MANUALBOOK_DIR
 
     @property
     def source_manifest_path(self) -> Path:

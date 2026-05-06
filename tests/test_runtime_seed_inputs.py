@@ -93,6 +93,11 @@ def test_seed_manifest_defaults_use_consolidated_corpus_paths() -> None:
     paths = runtime_truth_paths(root)
 
     assert settings.manifest_dir == root / "corpus" / "manifests" / "official"
+    assert settings.gold_corpus_ko_dir == root / "corpus" / "sources" / "official" / "imported-gold" / "gold_corpus_ko"
+    assert settings.gold_manualbook_ko_dir == (
+        root / "corpus" / "sources" / "official" / "imported-gold" / "gold_manualbook_ko"
+    )
+    assert settings.silver_ko_dir == root / "corpus" / "sources" / "official" / "imported-gold" / "silver_ko"
     assert settings.source_manifest_path == settings.manifest_dir / settings.active_pack.approved_manifest_name
     assert settings.source_catalog_path == settings.manifest_dir / GLOBAL_SOURCE_CATALOG_NAME
     assert paths.active_manifest_path == root / "corpus" / "data" / "wiki_runtime_books" / "active_manifest.json"
