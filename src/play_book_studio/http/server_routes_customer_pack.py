@@ -124,7 +124,8 @@ def handle_customer_pack_draft_create(handler: Any, payload: dict[str, Any], *, 
 
 def handle_customer_pack_upload_draft(handler: Any, payload: dict[str, Any], *, root_dir: Path) -> None:
     try:
-        draft = _upload_customer_pack_draft(root_dir, payload)
+        del payload, root_dir
+        raise ValueError("customer-pack upload draft API was removed; use /api/uploads/ingest")
     except ValueError as exc:
         handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         return

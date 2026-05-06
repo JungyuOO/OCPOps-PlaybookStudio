@@ -33,7 +33,6 @@ from play_book_studio.http.intake_api import (
     load_customer_pack_capture as _load_customer_pack_capture,
     load_customer_pack_draft as _load_customer_pack_draft,
     normalize_customer_pack_draft as _normalize_customer_pack_draft,
-    upload_customer_pack_draft as _upload_customer_pack_draft,
 )
 from play_book_studio.http.presenters import (
     _build_health_payload,

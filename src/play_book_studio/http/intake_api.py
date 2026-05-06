@@ -350,5 +350,4 @@ __all__ = [
     "load_customer_pack_capture",
     "load_customer_pack_draft",
     "normalize_customer_pack_draft",
-    "upload_customer_pack_draft",
 ]
