@@ -107,6 +107,37 @@ def test_import_corpus_documents_persists_shared_scope(monkeypatch):
     assert kwargs["storage_key"] == "corpus/official_docs/official.md"
 
 
+def test_import_corpus_documents_preserves_section_metadata(monkeypatch):
+    source_dir = _case_dir("section_metadata")
+    source = source_dir / "study.md"
+    source.write_text(
+        "# 1 Install\n\nPrepare the cluster.\n\n## 1.1 Verify\n\nRun `oc get nodes`.",
+        encoding="utf-8",
+    )
+    calls = []
+
+    def fake_persist(connection, parsed, chunks, **kwargs):
+        calls.append((connection, parsed, chunks, kwargs))
+        return Stored()
+
+    monkeypatch.setattr(corpus_import, "persist_parsed_upload_document", fake_persist)
+
+    result = import_corpus_documents(
+        FakeConnection(),
+        source_dir=source_dir,
+        corpus_kind="study_docs",
+        chunk_max_chars=200,
+        chunk_overlap_blocks=0,
+    )
+
+    assert result["imported_count"] == 1
+    chunks = calls[0][2]
+    verify_chunk = next(chunk for chunk in chunks if chunk.section_number == "1.1")
+    assert verify_chunk.heading_title == "Verify"
+    assert verify_chunk.source_anchor == "1.1-install-verify"
+    assert verify_chunk.toc_path == ("1 Install", "1.1 Verify")
+
+
 def test_import_corpus_documents_skips_exact_duplicate_sources(monkeypatch):
     source_dir = _case_dir("duplicates")
     (source_dir / "first.md").write_text("# Same\n\nBody.", encoding="utf-8")
