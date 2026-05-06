@@ -2764,6 +2764,99 @@
   word-break: break-word;
 }
 
+.citation-evidence-preview {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 209, 255, 0.16);
+  background: rgba(0, 209, 255, 0.055);
+  color: #effcff;
+}
+
+.citation-evidence-header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.citation-evidence-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(0, 209, 255, 0.14);
+  color: #9fefff;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.citation-evidence-header strong {
+  display: block;
+  color: #ffffff;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.citation-evidence-header p {
+  margin: 4px 0 0;
+  color: rgba(239, 252, 255, 0.66);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.citation-evidence-preview blockquote {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid rgba(0, 209, 255, 0.36);
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(239, 252, 255, 0.82);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.citation-evidence-command {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: rgba(239, 252, 255, 0.68);
+  font-size: 0.78rem;
+}
+
+.citation-evidence-command code {
+  border-radius: 8px;
+  padding: 4px 7px;
+  background: rgba(0, 0, 0, 0.26);
+  color: #ffffff;
+  font-size: 0.78rem;
+}
+
+.citation-evidence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.citation-evidence-actions button {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #effcff;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.citation-evidence-actions button:hover {
+  border-color: rgba(0, 209, 255, 0.28);
+  background: rgba(0, 209, 255, 0.12);
+}
+
 
 .chat-input-wrapper {
   padding: 24px 0;

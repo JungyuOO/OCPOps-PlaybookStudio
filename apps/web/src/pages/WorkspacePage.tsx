@@ -129,6 +129,18 @@ function loadStoredActiveSourceId(): string | null {
   return value && value.trim() ? value : null;
 }
 
+function citationEvidenceTitle(citation: ChatCitation): string {
+  return citation.source_label || citation.book_title || citation.section || citation.book_slug || `Citation ${citation.index}`;
+}
+
+function citationEvidenceMeta(citation: ChatCitation): string {
+  return [
+    citation.runtime_truth_label || citation.boundary_badge || citation.source_lane || '',
+    citation.section_path || citation.section || '',
+    citation.viewer_path || '',
+  ].filter(Boolean).join(' · ');
+}
+
 type LeftPanelMode = 'history' | 'outline' | 'signals';
 type RightPanelMode = 'viewer' | 'terminal';
 type SignalsFavoriteFilter = 'favorites' | 'edited';
@@ -2039,6 +2051,16 @@ export default function WorkspacePage() {
     }
   }
 
+  function handleCitationEvidenceToggle(messageId: string, citation: ChatCitation): void {
+    setMessages((current) => current.map((message) => {
+      if (message.id !== messageId) {
+        return message;
+      }
+      const nextIndex = message.activeCitationIndex === citation.index ? undefined : citation.index;
+      return { ...message, activeCitationIndex: nextIndex };
+    }));
+  }
+
   async function handleRelatedLinkClick(link: ChatRelatedLink): Promise<void> {
     try {
       if (rightCollapsed) {
@@ -2657,7 +2679,12 @@ export default function WorkspacePage() {
 
       const primaryCitation = pickPrimaryPlaybookCitation(response.citations);
       if (primaryCitation && !shouldUseCourseMode) {
-        await handleCitationClick(primaryCitation);
+        const targetAssistantMessageId = assistantStreamMessageId || assistantMessage.id;
+        setMessages((current) => current.map((message) => (
+          message.id === targetAssistantMessageId
+            ? { ...message, activeCitationIndex: primaryCitation.index }
+            : message
+        )));
       }
     } catch (error) {
       console.error(error);
@@ -3525,7 +3552,7 @@ export default function WorkspacePage() {
                               primaryPublicationState={message.primaryPublicationState}
                               primaryApprovalState={message.primaryApprovalState}
                               onCitationClick={(citation) => {
-                                void handleCitationClick(citation, message.content);
+                                handleCitationEvidenceToggle(message.id, citation);
                               }}
                               onRelatedLinkClick={(link) => {
                                 void handleRelatedLinkClick(link);
@@ -3552,6 +3579,48 @@ export default function WorkspacePage() {
                                 disableLinks
                               />
                             ) : null}
+                            {(() => {
+                              const activeCitation = (message.citations ?? []).find(
+                                (citation) => citation.index === message.activeCitationIndex,
+                              );
+                              if (!activeCitation) {
+                                return null;
+                              }
+                              return (
+                                <div className="citation-evidence-preview">
+                                  <div className="citation-evidence-header">
+                                    <span className="citation-evidence-index">[{activeCitation.index}]</span>
+                                    <div>
+                                      <strong>{citationEvidenceTitle(activeCitation)}</strong>
+                                      <p>{citationEvidenceMeta(activeCitation)}</p>
+                                    </div>
+                                  </div>
+                                  {activeCitation.excerpt ? (
+                                    <blockquote>{activeCitation.excerpt}</blockquote>
+                                  ) : null}
+                                  {activeCitation.cli_commands?.length ? (
+                                    <div className="citation-evidence-command">
+                                      <span>Command</span>
+                                      <code>{activeCitation.cli_commands[0]}</code>
+                                    </div>
+                                  ) : null}
+                                  <div className="citation-evidence-actions">
+                                    <button
+                                      type="button"
+                                      onClick={() => { void handleCitationClick(activeCitation, message.content); }}
+                                    >
+                                      Open document
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCitationEvidenceToggle(message.id, activeCitation)}
+                                    >
+                                      Close
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </>
                         ) : (
                           message.content
