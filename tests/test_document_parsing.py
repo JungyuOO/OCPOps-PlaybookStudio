@@ -3,6 +3,8 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from play_book_studio.ingestion.document_parsing import (
     build_document_chunks,
     detect_document_format,
@@ -45,6 +47,16 @@ def test_detect_document_format_identifies_office_zip_packages():
     assert detect_document_format(docx_path) == "docx"
     assert detect_document_format(pptx_path) == "pptx"
     assert detect_document_format(hwpx_path) == "hwpx"
+
+
+def test_parse_rejects_hwpx_as_unsupported_upload_format():
+    hwpx_path = _case_dir("unsupported_hwpx") / "sample.hwpx"
+    with zipfile.ZipFile(hwpx_path, "w") as archive:
+        archive.writestr("mimetype", "application/hwp+zip")
+        archive.writestr("Contents/content.hpf", "<package />")
+
+    with pytest.raises(ValueError, match="intentionally unsupported"):
+        parse_upload_document(hwpx_path)
 
 
 def test_parse_markdown_document_builds_structured_blocks():

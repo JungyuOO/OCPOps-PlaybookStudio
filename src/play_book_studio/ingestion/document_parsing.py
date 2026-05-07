@@ -39,8 +39,9 @@ BlockType = Literal["heading", "paragraph", "table", "code", "image"]
 
 MARKDOWN_FORMATS = {"md", "asciidoc"}
 TEXT_FORMATS = {"txt"}
-CONVERTER_FORMATS = {"pdf", "docx", "pptx", "xlsx", "hwp", "hwpx", "hwpml"}
+CONVERTER_FORMATS = {"pdf", "docx", "pptx", "xlsx"}
 IMAGE_FORMATS = {"image"}
+UNSUPPORTED_UPLOAD_FORMATS = {"hwp", "hwpx", "hwpml"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,6 +237,11 @@ def parse_upload_document(
             asset = _describe_asset(path, asset, image_describer=image_describer)
         assets.append(asset)
         markdown = _image_markdown(asset)
+    elif document_format in UNSUPPORTED_UPLOAD_FORMATS:
+        raise ValueError(
+            f"{document_format} uploads are intentionally unsupported for this service. "
+            "Use PDF, DOCX, PPTX, XLSX, text, Markdown, or image inputs."
+        )
     elif document_format in CONVERTER_FORMATS:
         if markdown_converter is None:
             markdown_converter = _default_markdown_converter
@@ -597,10 +603,6 @@ def _strip_markdown(markdown: str) -> str:
 
 
 def _default_markdown_converter(path: Path, document_format: DocumentFormat) -> str | ConvertedMarkdown:
-    if document_format in {"hwp", "hwpx", "hwpml"}:
-        raise RuntimeError(
-            f"{document_format} parsing needs an internal HWP/HWPX adapter before runtime ingestion"
-        )
     if document_format == "docx":
         return _convert_docx_to_markdown(path)
     if document_format == "pptx":
