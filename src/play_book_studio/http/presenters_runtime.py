@@ -17,7 +17,6 @@ def _llm_runtime_signature(settings: Settings) -> tuple[Any, ...]:
         settings.docs_language,
         settings.llm_endpoint,
         settings.llm_model,
-        settings.llm_api_key,
         settings.llm_temperature,
         settings.llm_max_tokens,
         settings.embedding_base_url,

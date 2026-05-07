@@ -77,15 +77,6 @@ def _prepare_image_payload(content: bytes, content_type: str) -> tuple[bytes, st
         return content, content_type
 
 
-def _llm_headers(settings: Settings) -> dict[str, str]:
-    api_key = str(settings.llm_api_key or "").strip()
-    if not api_key:
-        return {}
-    if " " in api_key:
-        return {"Authorization": api_key}
-    return {"Authorization": f"Bearer {api_key}"}
-
-
 def _probe_vlm(settings: Settings) -> tuple[bool, str]:
     endpoint = str(settings.llm_endpoint or "").strip()
     model = str(settings.llm_model or "").strip()
@@ -94,7 +85,7 @@ def _probe_vlm(settings: Settings) -> tuple[bool, str]:
     try:
         response = requests.get(
             f"{endpoint}/models",
-            headers=_llm_headers(settings),
+            headers={},
             timeout=max(settings.request_timeout_seconds, 15),
         )
         response.raise_for_status()

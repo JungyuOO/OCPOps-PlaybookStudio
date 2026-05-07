@@ -171,12 +171,11 @@ def _probe_llm(settings: Settings, *, sample: bool) -> dict[str, Any]:
     report: dict[str, Any] = {
         "endpoint": settings.llm_endpoint,
         "model": settings.llm_model,
-        "has_api_key": bool(settings.llm_api_key),
     }
     try:
         response = requests.get(
             f"{settings.llm_endpoint}/models",
-            headers=_auth_headers(settings.llm_api_key),
+            headers={},
             timeout=20,
         )
         report["models_status"] = response.status_code

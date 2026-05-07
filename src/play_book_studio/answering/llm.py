@@ -16,7 +16,6 @@ class LLMClient:
         if not settings.llm_model:
             raise ValueError("LLM_MODEL must be configured")
         self.endpoint = settings.llm_endpoint
-        self.api_key = settings.llm_api_key
         self.model = settings.llm_model
         self.temperature = settings.llm_temperature
         self.max_tokens = settings.llm_max_tokens
@@ -31,13 +30,6 @@ class LLMClient:
             "last_attempted_providers": [],
             "last_requested_max_tokens": self.max_tokens,
         }
-
-    def _headers(self) -> dict[str, str]:
-        if not self.api_key:
-            return {}
-        if " " in self.api_key.strip():
-            return {"Authorization": self.api_key.strip()}
-        return {"Authorization": f"Bearer {self.api_key}"}
 
     def _post_openai(
         self,
@@ -58,7 +50,7 @@ class LLMClient:
         return requests.post(
             f"{self.endpoint}/chat/completions",
             json=payload,
-            headers=self._headers(),
+            headers={},
             timeout=self.timeout,
         )
 

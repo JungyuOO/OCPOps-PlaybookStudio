@@ -120,7 +120,6 @@ class Settings(SettingsPathMixin):
     graph_boost_top_n: int = 8
     graph_max_edge_fanout: int = 12
     llm_endpoint: str = ""
-    llm_api_key: str = ""
     llm_model: str = ""
     llm_temperature: float = 0.2
     llm_max_tokens: int = 1100
@@ -333,7 +332,6 @@ def load_settings(root_dir: str | Path) -> Settings:
         graph_boost_top_n=int(effective_env.get("GRAPH_BOOST_TOP_N", "8")),
         graph_max_edge_fanout=int(effective_env.get("GRAPH_MAX_EDGE_FANOUT", "12")),
         llm_endpoint=effective_env.get("LLM_ENDPOINT", "").strip().rstrip("/"),
-        llm_api_key=effective_env.get("LLM_API_KEY", "").strip(),
         llm_model=effective_env.get("LLM_MODEL", "").strip(),
         llm_temperature=float(effective_env.get("LLM_TEMPERATURE", "0.2")),
         llm_max_tokens=int(effective_env.get("LLM_MAX_TOKENS", "1100")),
