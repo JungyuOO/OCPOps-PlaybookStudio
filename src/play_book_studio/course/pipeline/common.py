@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import STUDY_DOCS_DIR
+
 
 def normalize_text(value: str) -> str:
     return " ".join(str(value or "").split()).strip()
@@ -30,7 +32,7 @@ def _short_slug(value: str, *, max_length: int = 28) -> str:
     return f"{slug[:keep]}-{digest}"
 
 
-def deck_key_from_path(pptx_path: Path, source_dir: Path = Path("study-docs")) -> str:
+def deck_key_from_path(pptx_path: Path, source_dir: Path = STUDY_DOCS_DIR) -> str:
     try:
         relative = pptx_path.resolve().relative_to(source_dir.resolve())
         raw = str(relative.with_suffix("")).replace("\\", "-").replace("/", "-")

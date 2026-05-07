@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import sys
 import tempfile
 import threading
 from contextlib import contextmanager
@@ -9,7 +11,8 @@ from types import SimpleNamespace
 
 import requests
 
-from play_book_studio.app import server
+from play_book_studio.http import server
+import play_book_studio.http.ops_console_api as ops_console_api
 from play_book_studio.config.settings import load_settings
 
 
@@ -194,3 +197,52 @@ def test_ops_console_actions_execute_scale_updates_resource_manifest() -> None:
             detail_payload = detail_response.json()
 
             assert "replicas: 5" in detail_payload["manifest_yaml"]
+
+
+def test_ops_console_document_rows_are_built_from_postgres_records() -> None:
+    rows = ops_console_api._document_rows_from_database_records(
+        [
+            {
+                "document_source_id": "source-a",
+                "filename": "architecture.jsonl",
+                "storage_key": "corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl#architecture",
+                "source_metadata": {"book_slug": "architecture", "source_id": "openshift:architecture"},
+                "document_title": "Architecture",
+                "parsed_metadata": {"document_format": "official_gold_jsonl"},
+                "chunk_id": "chunk-a",
+                "ordinal": 1,
+                "markdown": "Control plane overview.",
+                "section_path": ["Architecture", "Control plane"],
+                "section_number": "1.1",
+                "heading_title": "Control plane",
+                "source_anchor": "control-plane",
+            }
+        ]
+    )
+
+    assert rows[0]["document_key"] == "architecture"
+    assert rows[0]["chunk_count"] == 1
+    assert rows[0]["path"] is None
+    assert rows[0]["payload"]["sections"][0]["blocks"][0]["text"] == "Control plane overview."
+    assert rows[0]["payload"]["sections"][0]["viewer_path"].endswith("#control-plane")
+
+
+def test_ops_console_documents_do_not_fall_back_to_files_when_database_is_configured(monkeypatch) -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        playbook_dir = root / "data" / "gold_manualbook_ko" / "playbooks"
+        playbook_dir.mkdir(parents=True, exist_ok=True)
+        (playbook_dir / "file-only.json").write_text(
+            json.dumps({"title": "File Only", "sections": [{"heading": "File section"}]}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            ops_console_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+        )
+        monkeypatch.setitem(sys.modules, "psycopg", None)
+
+        rows = ops_console_api._iter_document_rows(root)
+
+    assert rows == []

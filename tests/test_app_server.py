@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import requests
 
-from play_book_studio.app import server
+from play_book_studio.http import server
 from play_book_studio.config.settings import load_settings
 
 
@@ -55,7 +55,7 @@ class _FakeAnswerer:
 
 
 def _write_frontend_shell(root: Path) -> None:
-    dist_dir = root / "presentation-ui" / "dist"
+    dist_dir = root / "apps" / "web" / "dist"
     dist_dir.mkdir(parents=True, exist_ok=True)
     (dist_dir / "index.html").write_text(
         "<!DOCTYPE html><html><body><div id='pbs-shell'>shared-shell</div></body></html>",
@@ -79,18 +79,9 @@ def _test_server(root: Path):
         thread.join(timeout=5)
 
 
-def test_start_runtime_warmup_skips_when_reranker_missing() -> None:
+def test_start_runtime_warmup_starts_daemon_thread_when_reranker_missing() -> None:
     answerer = SimpleNamespace(retriever=SimpleNamespace(reranker=None))
-
-    with patch("play_book_studio.app.server.threading.Thread") as thread_mock:
-        thread = server._start_runtime_warmup(answerer)
-
-    assert thread is None
-    thread_mock.assert_not_called()
-
-
-def test_start_runtime_warmup_starts_daemon_thread_when_reranker_present() -> None:
-    answerer = SimpleNamespace(retriever=SimpleNamespace(reranker=_FakeReranker()))
+    root_dir = Path("fake-root")
     created_threads: list[_FakeThread] = []
 
     def _build_thread(*, target, args, name, daemon):
@@ -98,12 +89,33 @@ def test_start_runtime_warmup_starts_daemon_thread_when_reranker_present() -> No
         created_threads.append(thread)
         return thread
 
-    with patch("play_book_studio.app.server.threading.Thread", side_effect=_build_thread):
-        thread = server._start_runtime_warmup(answerer)
+    with patch("play_book_studio.http.server.threading.Thread", side_effect=_build_thread):
+        thread = server._start_runtime_warmup(answerer, root_dir)
 
     assert thread is created_threads[0]
     assert thread.target is server._warmup_runtime_components
-    assert thread.args == (answerer,)
+    assert thread.args == (answerer, root_dir)
+    assert thread.name == "pbs-runtime-warmup"
+    assert thread.daemon is True
+    assert thread.start_calls == 1
+
+
+def test_start_runtime_warmup_starts_daemon_thread_when_reranker_present() -> None:
+    answerer = SimpleNamespace(retriever=SimpleNamespace(reranker=_FakeReranker()))
+    root_dir = Path("fake-root")
+    created_threads: list[_FakeThread] = []
+
+    def _build_thread(*, target, args, name, daemon):
+        thread = _FakeThread(target=target, args=args, name=name, daemon=daemon)
+        created_threads.append(thread)
+        return thread
+
+    with patch("play_book_studio.http.server.threading.Thread", side_effect=_build_thread):
+        thread = server._start_runtime_warmup(answerer, root_dir)
+
+    assert thread is created_threads[0]
+    assert thread.target is server._warmup_runtime_components
+    assert thread.args == (answerer, root_dir)
     assert thread.name == "pbs-runtime-warmup"
     assert thread.daemon is True
     assert thread.start_calls == 1

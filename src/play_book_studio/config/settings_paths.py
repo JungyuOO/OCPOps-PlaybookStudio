@@ -5,6 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
+from .corpus_paths import (
+    OFFICIAL_GOLD_CORPUS_DIR,
+    OFFICIAL_GOLD_MANUALBOOK_DIR,
+    OFFICIAL_MANIFESTS_DIR,
+    OFFICIAL_SILVER_KO_DIR,
+)
 from .packs import GLOBAL_SOURCE_CATALOG_NAME
 
 
@@ -17,6 +23,7 @@ class SettingsPathMixin:
             self.data_dir,
             self.bronze_dir,
             self.artifacts_dir,
+            self.object_storage_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)
 
@@ -66,11 +73,25 @@ class SettingsPathMixin:
 
     @property
     def manifest_dir(self) -> Path:
-        return self.root_dir / "manifests"
+        return self.root_dir / OFFICIAL_MANIFESTS_DIR
 
     @property
     def data_dir(self) -> Path:
         return self.root_dir / "data"
+
+    @property
+    def corpus_seed_dir(self) -> Path:
+        return self._resolve_optional_dir(
+            self.corpus_seed_dir_override,
+            self.root_dir / "corpus",
+        )
+
+    @property
+    def object_storage_dir(self) -> Path:
+        return self._resolve_optional_dir(
+            self.object_storage_root_override,
+            self.root_dir / "storage",
+        )
 
     @property
     def bronze_dir(self) -> Path:
@@ -82,15 +103,15 @@ class SettingsPathMixin:
 
     @property
     def silver_ko_dir(self) -> Path:
-        return self.data_dir / "silver_ko"
+        return self.root_dir / OFFICIAL_SILVER_KO_DIR
 
     @property
     def gold_corpus_ko_dir(self) -> Path:
-        return self.data_dir / "gold_corpus_ko"
+        return self.root_dir / OFFICIAL_GOLD_CORPUS_DIR
 
     @property
     def gold_manualbook_ko_dir(self) -> Path:
-        return self.data_dir / "gold_manualbook_ko"
+        return self.root_dir / OFFICIAL_GOLD_MANUALBOOK_DIR
 
     @property
     def source_manifest_path(self) -> Path:

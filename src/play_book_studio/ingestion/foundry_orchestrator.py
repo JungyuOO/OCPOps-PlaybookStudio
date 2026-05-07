@@ -9,7 +9,7 @@ from pathlib import Path
 import time
 from typing import Any, Callable
 
-from play_book_studio.app.runtime_report import write_runtime_report
+from play_book_studio.http.runtime_report import write_runtime_report
 from play_book_studio.config.settings import Settings
 from play_book_studio.config.validation import build_validation_report
 

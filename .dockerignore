@@ -1,24 +1,65 @@
 *
 
-!Dockerfile
+/.pytest-tmp
+/.pytest-tmp/
+/.pytest-tmp/**
+**/.pytest-tmp
+**/.pytest-tmp/
+**/.pytest-tmp/**
+pytest-cache-files-*
+pytest-cache-files-*/
+pytest-cache-files-*/**
+**/pytest-cache-files-*
+**/pytest-cache-files-*/
+**/pytest-cache-files-*/**
+/tmp/pytest-terminal
+/tmp/pytest-terminal/
+/tmp/pytest-terminal/**
+**/pytest-terminal
+**/pytest-terminal/
+**/pytest-terminal/**
+/tmp/pytest-*
+/tmp/pytest-*/
+/tmp/pytest-*/**
+**/pytest-*
+**/pytest-*/
+**/pytest-*/**
+
+/.git/
+/.omx/
+/.venv/
+/.playwright-cli/
+/.pytest_cache/
+/.pytest-tmp/
+/.tmp_pytest/
+/.tmp/
+**/.tmp
+**/.tmp/
+**/.tmp/**
+/artifacts/
+/reports/
+/tmp/
+/tmp_source/
+/output/
+/corpus/
+/apps/web/node_modules/
+/apps/web/dist/
+
 !README.md
 !pyproject.toml
 
 !src/
 !src/**
 
-!data/
-!data/course_pbs/
-!data/course_pbs/**
+!db/
+!db/**
 
-!manifests/
-!manifests/course_qa_cases*.jsonl
-!manifests/course_ops_learning_golden_cases.jsonl
-
-!presentation-ui/
-!presentation-ui/**
+!apps/
+!apps/web/
+!apps/web/**
 
 !deploy/
+!deploy/Dockerfile
 !deploy/nginx/
 !deploy/nginx/default.conf
 
@@ -44,6 +85,9 @@ __pycache__
 .tmp_pytest
 /.tmp_pytest
 /.tmp_pytest/**
+.tmp
+/.tmp
+/.tmp/**
 pytest-cache-files-*
 pytest-cache-files-*/
 pytest-cache-files-*/**
@@ -65,20 +109,15 @@ tmp_source/**
 output
 output/**
 
-presentation-ui/node_modules
-presentation-ui/node_modules/**
-presentation-ui/dist
-presentation-ui/dist/**
+apps/web/node_modules
+apps/web/node_modules/**
+apps/web/dist
+apps/web/dist/**
 
 tests
 tests/**
 schemas
 schemas/**
 
-data/*
-!data/course_pbs/
-!data/course_pbs/**
-
-manifests/*
-!manifests/course_qa_cases*.jsonl
-!manifests/course_ops_learning_golden_cases.jsonl
+corpus
+corpus/**

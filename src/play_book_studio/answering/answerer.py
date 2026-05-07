@@ -7,6 +7,7 @@ retrieve -> assemble context -> prompt -> LLM -> answer shaping -> citations
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 
@@ -39,6 +40,7 @@ from .answer_text_commands import (
     build_grounded_command_guide_answer,
     has_sufficient_command_grounding,
     shape_etcd_backup_answer,
+    strip_ungrounded_code_blocks,
 )
 from .answer_text_formatting import summarize_session_context
 from .citations import (
@@ -50,6 +52,7 @@ from .citations import (
     summarize_selected_citations,
 )
 from .context import assemble_context
+from .doc_locator_intent import is_document_sequence_query as _shared_is_document_sequence_query
 from .llm import LLMClient
 from .models import AnswerResult, Citation
 from .pipeline_helpers import (
@@ -84,6 +87,211 @@ def _looks_like_missing_coverage_answer(answer: str) -> bool:
             "만 설명",
         )
     )
+
+
+_CONFIDENCE_TOKEN_RE = re.compile(r"[0-9A-Za-z가-힣][0-9A-Za-z가-힣_-]*")
+_CONFIDENCE_STOPWORDS = {
+    "어떻게",
+    "어떤",
+    "먼저",
+    "확인",
+    "알려줘",
+    "설명해줘",
+    "기준",
+    "순서",
+    "문제",
+    "상태",
+    "방법",
+    "where",
+    "what",
+    "how",
+    "the",
+    "and",
+    "for",
+}
+
+
+def _confidence_tokens(*texts: str) -> set[str]:
+    tokens: set[str] = set()
+    for text in texts:
+        for token in _CONFIDENCE_TOKEN_RE.findall(str(text or "").lower()):
+            normalized = token.strip("-_ ")
+            if len(normalized) < 2 or normalized in _CONFIDENCE_STOPWORDS:
+                continue
+            tokens.add(normalized)
+    return tokens
+
+
+def _selected_hit_score(selected_hits: list[dict] | None, key: str) -> float:
+    if not selected_hits:
+        return 0.0
+    values = []
+    for item in selected_hits:
+        value = item.get(key)
+        if isinstance(value, int | float):
+            values.append(float(value))
+    return max(values, default=0.0)
+
+
+def _citation_token_coverage(query: str, citations: list[Citation]) -> float:
+    query_tokens = _confidence_tokens(query)
+    if len(query_tokens) < 3 or not citations:
+        return 1.0
+    citation_tokens = _confidence_tokens(
+        *[
+            " ".join(
+                [
+                    citation.book_slug,
+                    citation.section,
+                    citation.excerpt,
+                    " ".join(citation.section_path),
+                    " ".join(citation.cli_commands),
+                    " ".join(citation.k8s_objects),
+                    " ".join(citation.operator_names),
+                ]
+            )
+            for citation in citations
+        ]
+    )
+    if not citation_tokens:
+        return 0.0
+    overlap = query_tokens & citation_tokens
+    return len(overlap) / max(1, min(len(query_tokens), 8))
+
+
+def _low_confidence_example_questions(selected_hits: list[dict] | None) -> list[str]:
+    examples: list[str] = []
+    seen: set[str] = set()
+    for item in selected_hits or []:
+        section = _clean_low_confidence_subject(str(item.get("section") or "").strip())
+        book_slug = str(item.get("book_slug") or "").strip()
+        if not section or section.lower() in {"additional resources", "추가 리소스", "릴리스 노트"}:
+            continue
+        subject = section
+        if book_slug and book_slug not in section:
+            subject = f"{section}"
+        for candidate in (
+            f"{subject} 기준으로 먼저 확인할 절차를 알려줘",
+            f"{subject}에서 상태 확인 명령과 판단 기준을 알려줘",
+        ):
+            if candidate not in seen:
+                seen.add(candidate)
+                examples.append(candidate)
+        if len(examples) >= 3:
+            break
+    return examples[:3]
+
+
+def _clean_low_confidence_subject(section: str) -> str:
+    subject = re.sub(r"\s+", " ", str(section or "").strip())
+    subject = re.sub(r"^\d+(?:\.\d+)*\.?\s*", "", subject)
+    subject = re.sub(r"^\d+\s*장\.\s*", "", subject)
+    subject = re.sub(r"^(chapter|section)\s+\d+(?:\.\d+)*\.?\s*", "", subject, flags=re.IGNORECASE)
+    subject = subject.strip(" .>-")
+    if not subject or re.match(r"^\d", subject):
+        return ""
+    return subject
+
+
+_GUIDED_LEARNING_QUESTION_RE = re.compile(
+    r"("
+    r"OCP를\s*처음\s*시작|"
+    r"Installation\s+overview|"
+    r"단계에서는.*(?:기준|문서).*(?:학습|이해|순서)|"
+    r"(?:학습|입문).*(?:순서|로드맵|단계)|"
+    r"(?:무엇부터|어디부터).*(?:이해|학습)"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _is_guided_learning_question(query: str) -> bool:
+    return bool(_GUIDED_LEARNING_QUESTION_RE.search(query or ""))
+
+
+def _retrieval_hits_for_clarification(hits: list) -> list[dict]:
+    rows: list[dict] = []
+    for hit in hits[:3]:
+        row = {
+            "section": str(getattr(hit, "section", "") or "").strip(),
+            "book_slug": str(getattr(hit, "book_slug", "") or "").strip(),
+            "fused_score": float(getattr(hit, "fused_score", 0.0) or 0.0),
+        }
+        component_scores = getattr(hit, "component_scores", {}) or {}
+        if isinstance(component_scores, dict):
+            for key in ("pre_rerank_fused_score", "vector_score", "bm25_score"):
+                value = component_scores.get(key)
+                if isinstance(value, int | float):
+                    row[key] = float(value)
+        rows.append(row)
+    return rows
+
+
+def _low_confidence_clarification_answer(
+    *,
+    selected_hits: list[dict] | None,
+) -> str:
+    examples = _low_confidence_example_questions(selected_hits)
+    lines = [
+        "답변: 지금 질문은 현재 공식 문서 근거와 정확히 맞물리는 점수가 낮습니다.",
+        "엉뚱한 절차를 단정하지 않도록, 대상 리소스나 증상, 하고 싶은 작업을 한 단계만 더 좁혀 주세요.",
+    ]
+    if examples:
+        lines.extend(["", "이런 식으로 물어보면 더 정확히 안내할 수 있습니다."])
+        lines.extend([f"- {example}" for example in examples])
+    return "\n".join(lines)
+
+
+def _is_low_confidence_retrieval(
+    *,
+    query: str,
+    citations: list[Citation],
+    selected_hits: list[dict] | None,
+) -> bool:
+    if not citations:
+        return False
+    normalized_query = (query or "").lower()
+    citation_haystack = " ".join(
+        " ".join(
+            str(value or "")
+            for value in (
+                citation.book_slug,
+                citation.section,
+                citation.section_path_label,
+                citation.excerpt,
+            )
+        )
+        for citation in citations
+    ).lower()
+    if has_backup_restore_intent(query) and any(token in citation_haystack for token in ("etcd", "backup", "restore", "백업", "복원")):
+        return False
+    if ("route" in normalized_query or "ingress" in normalized_query) and any(
+        token in citation_haystack
+        for token in ("ingress_and_load_balancing", "ingress", "route", "networking")
+    ):
+        return False
+    if any(token in normalized_query for token in ("ocp-certificates", "인증서", "certificate", "cert")) and any(
+        token in citation_haystack
+        for token in ("certificate", "인증서", "security_and_compliance", "authentication")
+    ):
+        return False
+    if (
+        has_doc_locator_intent(query)
+        or is_generic_intro_query(query)
+        or is_explainer_query(query)
+        or _is_guided_learning_question(query)
+        or _is_supported_ops_learning_question(query)
+    ):
+        return False
+    coverage = _citation_token_coverage(query, citations)
+    max_fused = _selected_hit_score(selected_hits, "fused_score")
+    max_pre_rerank = _selected_hit_score(selected_hits, "pre_rerank_fused_score")
+    max_vector = _selected_hit_score(selected_hits, "vector_score")
+    has_command_grounding = any(citation.cli_commands for citation in citations)
+    if has_command_request(query) and has_command_grounding and coverage >= 0.2:
+        return False
+    weighted_score = (coverage * 0.62) + (max(max_pre_rerank, max_vector) * 1.8) + (0.12 if max_fused > 0 else 0)
+    return coverage < 0.28 and weighted_score < 0.46
 
 
 def _citation_matches_keywords(citations: list, keywords: tuple[str, ...]) -> bool:
@@ -159,8 +367,56 @@ def _citations_match_console_intent(citations: list) -> bool:
     return False
 
 
+def _is_document_sequence_query(query: str) -> bool:
+    return _shared_is_document_sequence_query(query)
+
+
+def _is_supported_ops_learning_question(query: str) -> bool:
+    normalized = (query or "").lower()
+    if any(
+        (
+            has_crash_loop_troubleshooting_intent(query),
+            has_pod_pending_troubleshooting_intent(query),
+            has_rbac_intent(query),
+            has_openshift_kubernetes_compare_intent(query),
+            has_mco_concept_intent(query),
+            has_operator_concept_intent(query),
+        )
+    ):
+        return True
+    return any(
+        token in normalized
+        for token in (
+            "oc auth can-i",
+            "delete 할 수",
+            "pods를 delete",
+            "pod를 delete",
+            "특정 namespace",
+            "securitycontextconstraints",
+            "scc",
+            "machineconfigpool",
+            "machine config pool",
+            "clusteroperator",
+            "cluster operator",
+            "image registry",
+            "internal registry",
+            "openshift와 kubernetes",
+            "kubernetes 차이",
+            "pending 상태",
+            "crashloopbackoff",
+            "view 권한",
+            "권한만",
+            "업데이트 전에",
+            "paused 상태",
+            "권한 문제",
+        )
+    )
+
+
 def _build_doc_locator_answer(*, query: str, citations: list) -> str | None:
     if not citations or not has_doc_locator_intent(query):
+        return None
+    if _is_document_sequence_query(query):
         return None
     if any(
         (
@@ -377,7 +633,7 @@ def _llm_max_tokens_override(*, query: str, default_max_tokens: int) -> int | No
     lowered = str(query or "").lower()
     if any(token in lowered for token in ("한 문단", "한문단", "one paragraph", "single paragraph")):
         return min(default_max_tokens, 192)
-    return min(default_max_tokens, 256)
+    return min(default_max_tokens, 700)
 
 
 class ChatAnswerer:
@@ -642,6 +898,7 @@ class ChatAnswerer:
         warnings: list[str] = []
         if not context_bundle.citations:
             warnings.append("no context citations assembled")
+            clarification_hits = _retrieval_hits_for_clarification(retrieval.hits)
             emit(
                 {
                     "step": "grounding_guard",
@@ -663,6 +920,22 @@ class ChatAnswerer:
                     "duration_ms": pipeline_timings_ms["total"],
                 }
             )
+            if clarification_hits and not _is_guided_learning_question(query):
+                warnings.append("low retrieval confidence")
+                return build_answer_result(
+                    query=query,
+                    mode=mode,
+                    answer=_low_confidence_clarification_answer(selected_hits=clarification_hits),
+                    rewritten_query=retrieval.rewritten_query,
+                    response_kind="clarification",
+                    citations=[],
+                    cited_indices=[],
+                    warnings=warnings,
+                    retrieval_trace=retrieval.trace,
+                    pipeline_events=pipeline_events,
+                    pipeline_timings_ms=pipeline_timings_ms,
+                    selected_hits=clarification_hits,
+                )
             return self._build_grounding_blocked_result(
                 query=query,
                 mode=mode,
@@ -762,6 +1035,48 @@ class ChatAnswerer:
                 selected_hits=selected_hits,
             )
 
+        if _is_low_confidence_retrieval(
+            query=query,
+            citations=context_bundle.citations,
+            selected_hits=selected_hits,
+        ):
+            warnings.append("low retrieval confidence")
+            emit(
+                {
+                    "step": "grounding_guard",
+                    "label": "근거 점수 낮음",
+                    "status": "warning",
+                    "detail": "질문과 선택 citation의 토큰/점수 결합 신뢰도가 낮습니다",
+                }
+            )
+            pipeline_timings_ms["total"] = round(
+                (time.perf_counter() - answer_started_at) * 1000,
+                1,
+            )
+            emit(
+                {
+                    "step": "pipeline_complete",
+                    "label": "구체화 요청으로 전환",
+                    "status": "done",
+                    "detail": f"총 {pipeline_timings_ms['total']}ms",
+                    "duration_ms": pipeline_timings_ms["total"],
+                }
+            )
+            return build_answer_result(
+                query=query,
+                mode=mode,
+                answer=_low_confidence_clarification_answer(selected_hits=selected_hits),
+                rewritten_query=retrieval.rewritten_query,
+                response_kind="clarification",
+                citations=[],
+                cited_indices=[],
+                warnings=warnings,
+                retrieval_trace=retrieval.trace,
+                pipeline_events=pipeline_events,
+                pipeline_timings_ms=pipeline_timings_ms,
+                selected_hits=selected_hits,
+            )
+
         intro_playbook_route = _build_intro_playbook_route_answer(query)
         if intro_playbook_route is not None:
             answer_text, route_citations = intro_playbook_route
@@ -779,6 +1094,51 @@ class ChatAnswerer:
                     "label": "입문 Playbook route 정리 완료",
                     "status": "done",
                     "detail": f"추천 3권, 총 {pipeline_timings_ms['total']}ms",
+                    "duration_ms": pipeline_timings_ms["total"],
+                }
+            )
+            return build_answer_result(
+                query=query,
+                mode=mode,
+                answer=answer_text,
+                rewritten_query=retrieval.rewritten_query,
+                response_kind="rag",
+                citations=final_citations,
+                cited_indices=cited_indices,
+                warnings=warnings,
+                retrieval_trace=retrieval.trace,
+                pipeline_events=pipeline_events,
+                pipeline_timings_ms=pipeline_timings_ms,
+                selected_hits=selected_hits,
+            )
+
+        grounded_command_answer = build_grounded_command_guide_answer(
+            query=query,
+            citations=context_bundle.citations,
+        )
+        if grounded_command_answer is not None:
+            answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
+                grounded_command_answer,
+                context_bundle.citations,
+            )
+            pipeline_timings_ms["total"] = round(
+                (time.perf_counter() - answer_started_at) * 1000,
+                1,
+            )
+            emit(
+                {
+                    "step": "deterministic_answer",
+                    "label": "명령 우선 답변 생성 완료",
+                    "status": "done",
+                    "detail": "grounded command guide",
+                }
+            )
+            emit(
+                {
+                    "step": "pipeline_complete",
+                    "label": "답변 생성 완료",
+                    "status": "done",
+                    "detail": f"총 {pipeline_timings_ms['total']}ms",
                     "duration_ms": pipeline_timings_ms["total"],
                 }
             )
@@ -880,51 +1240,6 @@ class ChatAnswerer:
                 answer=answer_text,
                 rewritten_query=retrieval.rewritten_query,
                 response_kind="clarification" if "숫자가 현재 질문에 없습니다" in answer_text else "rag",
-                citations=final_citations,
-                cited_indices=cited_indices,
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
-            )
-
-        grounded_command_answer = build_grounded_command_guide_answer(
-            query=query,
-            citations=context_bundle.citations,
-        )
-        if grounded_command_answer is not None:
-            answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
-                grounded_command_answer,
-                context_bundle.citations,
-            )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
-            emit(
-                {
-                    "step": "deterministic_answer",
-                    "label": "명령 우선 답변 생성 완료",
-                    "status": "done",
-                    "detail": "grounded command guide",
-                }
-            )
-            emit(
-                {
-                    "step": "pipeline_complete",
-                    "label": "답변 생성 완료",
-                    "status": "done",
-                    "detail": f"총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
-                }
-            )
-            return build_answer_result(
-                query=query,
-                mode=mode,
-                answer=answer_text,
-                rewritten_query=retrieval.rewritten_query,
-                response_kind="rag",
                 citations=final_citations,
                 cited_indices=cited_indices,
                 warnings=warnings,
@@ -1102,6 +1417,16 @@ class ChatAnswerer:
                     answer_text,
                     fallback_citations,
                 )
+        guarded_answer_text = strip_ungrounded_code_blocks(
+            answer_text,
+            citations=final_citations or context_bundle.citations,
+        )
+        if guarded_answer_text != answer_text:
+            answer_text = guarded_answer_text
+            answer_text, final_citations, cited_indices = finalize_citations(
+                answer_text,
+                final_citations or context_bundle.citations,
+            )
         if not cited_indices:
             warnings.append("answer has no inline citations")
         pipeline_timings_ms["citation_finalize"] = round(

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from play_book_studio.app.course_api import (
+from play_book_studio.http.course_api import (
     course_viewer_html,
     course_viewer_source_meta,
     handle_course_get,
@@ -22,7 +22,7 @@ _STYLE_RE = re.compile(r"<style[^>]*>(?P<style>.*?)</style>", re.IGNORECASE | re
 
 
 def _frontend_path(root_dir: Path, request_path: str) -> Path | None:
-    dist = root_dir / "presentation-ui" / "dist"
+    dist = root_dir / "apps" / "web" / "dist"
     normalized_path = request_path.strip("/")
     has_file_suffix = bool(Path(normalized_path).suffix)
     if request_path in {"", "/"} or not has_file_suffix:
