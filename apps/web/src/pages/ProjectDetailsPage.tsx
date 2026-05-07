@@ -22,7 +22,7 @@ export default function ProjectDetailsPage() {
       {/* Sidebar Navigation */}
       <nav className="details-sidebar glass-panel">
         <div className="sidebar-header">
-          <Link to={buildSharedLandingHref('pbs')} className="back-link">
+          <Link to={buildSharedLandingHref()} className="back-link">
             <ArrowLeft size={20} />
             <span>Back to Home</span>
           </Link>

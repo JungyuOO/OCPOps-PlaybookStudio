@@ -8,8 +8,6 @@ import CourseTimelinePage from '../pages/CourseTimelinePage';
 import CourseStagePage from '../pages/CourseStagePage';
 import CourseChunkPage from '../pages/CourseChunkPage';
 import CourseAtlasPage from '../pages/CourseAtlasPage';
-import PartnerNamespacePage from '../partner/PartnerNamespacePage';
-import { PARTNER_ROUTE_DEFINITIONS } from '../partner/partnerLaneConfig';
 import SharedLandingShell from '../shared/landing/SharedLandingShell';
 import { buildHandoffLocation } from './handoff';
 import { ROUTES } from './routes';
@@ -48,19 +46,6 @@ export default function AppRoutes() {
       <Route path={ROUTES.opsLibrary} element={<OpsConsolePage />} />
       <Route path={ROUTES.opsChat} element={<OpsConsolePage />} />
       <Route path={ROUTES.opsActions} element={<OpsConsolePage />} />
-      {PARTNER_ROUTE_DEFINITIONS.map(({ path, eyebrow, title, description }) => (
-        <Route
-          key={path}
-          path={path}
-          element={(
-            <PartnerNamespacePage
-              eyebrow={eyebrow}
-              title={title}
-              description={description}
-            />
-          )}
-        />
-      ))}
       <Route path="*" element={<Navigate replace to={ROUTES.sharedHome} />} />
     </Routes>
   );

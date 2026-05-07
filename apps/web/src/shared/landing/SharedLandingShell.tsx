@@ -1,17 +1,11 @@
-import { useSearchParams } from 'react-router-dom';
 import LandingPage from '../../pages/LandingPage';
-import { normalizeSharedLandingTab } from '../../routing/routes';
-import PartnerLanePanel from './PartnerLanePanel';
 import './SharedLandingShell.css';
 
 export default function SharedLandingShell() {
-  const [searchParams] = useSearchParams();
-  const activeTab = normalizeSharedLandingTab(searchParams.get('tab'));
-
   return (
-    <div className={`shared-landing-shell shared-landing-shell--${activeTab}`}>
+    <div className="shared-landing-shell shared-landing-shell--pbs">
       <div className="shared-shell-body">
-        {activeTab === 'partner' ? <PartnerLanePanel /> : <LandingPage />}
+        <LandingPage />
       </div>
     </div>
   );

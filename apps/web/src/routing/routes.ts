@@ -19,14 +19,7 @@ export const ROUTES = {
   opsLibrary: '/library',
   opsChat: '/chat',
   opsActions: '/actions',
-  partnerHome: '/partner',
-  partnerWorkspace: '/partner/workspace',
-  partnerLibrary: '/partner/library',
-  partnerViewer: '/partner/viewer',
-  partnerDetails: '/partner/details',
 } as const;
-
-export type SharedLandingTab = 'pbs' | 'partner';
 
 export const RESERVED_PBS_PATH_PREFIXES = [
   ROUTES.pbsPlaybookLibrary,
@@ -34,18 +27,6 @@ export const RESERVED_PBS_PATH_PREFIXES = [
   ROUTES.pbsWikiBook,
 ] as const;
 
-export const PARTNER_NAMESPACE_PATHS = [
-  ROUTES.partnerHome,
-  ROUTES.partnerWorkspace,
-  ROUTES.partnerLibrary,
-  ROUTES.partnerViewer,
-  ROUTES.partnerDetails,
-] as const;
-
-export function normalizeSharedLandingTab(value: string | null | undefined): SharedLandingTab {
-  return value === 'partner' ? 'partner' : 'pbs';
-}
-
-export function buildSharedLandingHref(tab: SharedLandingTab = 'pbs'): string {
-  return tab === 'pbs' ? ROUTES.sharedHome : `${ROUTES.sharedHome}?tab=${tab}`;
+export function buildSharedLandingHref(): string {
+  return ROUTES.sharedHome;
 }

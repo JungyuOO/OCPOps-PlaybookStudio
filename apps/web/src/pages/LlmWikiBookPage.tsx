@@ -866,7 +866,7 @@ export default function LlmWikiBookPage() {
       )}
       breadcrumbs={(
         <>
-              <Link to={buildSharedLandingHref('pbs')} className="llmwikibook-inline-link">Home</Link>
+              <Link to={buildSharedLandingHref()} className="llmwikibook-inline-link">Home</Link>
           <span>/</span>
               <Link to={ROUTES.pbsPlaybookLibrary} className="llmwikibook-inline-link">Playbook Library</Link>
           <span>/</span>

@@ -16,7 +16,7 @@ export default function WorkspaceHeader({
   return (
     <header className="workspace-nav">
       <div className="nav-left">
-        <Link to={buildSharedLandingHref('pbs')} className="nav-logo-link">
+        <Link to={buildSharedLandingHref()} className="nav-logo-link">
           <div className="logo-icon">
             <Sparkles size={20} />
           </div>
