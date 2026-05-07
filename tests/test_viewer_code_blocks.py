@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from play_book_studio.app.viewer_blocks_rich import _render_code_block_html
+from play_book_studio.http.viewer_blocks_rich import _render_code_block_html
 
 
 def test_code_block_copy_avoids_duplicate_data_payload_for_default_copy_text() -> None:

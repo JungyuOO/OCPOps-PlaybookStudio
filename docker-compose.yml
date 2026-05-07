@@ -1,6 +1,24 @@
 name: ocpops-playbookstudio
 
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-playbookstudio}
+      POSTGRES_USER: ${POSTGRES_USER:-playbookstudio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_storage:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
   qdrant:
     image: qdrant/qdrant:latest
     volumes:
@@ -13,26 +31,37 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
       - .env
     environment:
       PYTHONPATH: /app/src
       COURSE_CHAT_LLM_REWRITE: "true"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
       QDRANT_URL: http://qdrant:6333
+      TERMINAL_ENABLED: ${TERMINAL_ENABLED:-false}
+      TERMINAL_HOST: 0.0.0.0
+      TERMINAL_WS_PORT: ${TERMINAL_WS_PORT:-8770}
+      TERMINAL_SHELL: ${TERMINAL_SHELL:-/app/scripts/terminal-entrypoint.sh}
     depends_on:
-      - qdrant
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "${APP_HTTP_PORT:-8765}:8765"
+      - "${TERMINAL_WS_PORT:-8770}:8770"
     volumes:
       - ./src:/app/src
       - ./artifacts:/app/artifacts
-      - ./data:/app/data
-      - ./manifests:/app/manifests
+      - ./corpus:/app/corpus
       - ./reports:/app/reports
       - ./tmp:/app/tmp
-      - ./tmp_source:/app/tmp_source
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=5)"]
       interval: 15s
@@ -41,12 +70,77 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  db-migrate:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "play_book_studio.cli", "db-migrate", "--root-dir", "/app"]
+    restart: "no"
+
+  course-runtime-seed:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./src:/app/src
+      - ./corpus:/app/corpus
+    command: ["python", "-m", "play_book_studio.cli", "course-chunk-import", "--root-dir", "/app", "--course-dir", "/app/corpus/sources/kmsc/parsed-preview/course_pbs"]
+    restart: "no"
+
+  official-corpus-seed:
+    profiles:
+      - seed
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./src:/app/src
+      - ./corpus:/app/corpus
+    command: ["python", "-m", "play_book_studio.cli", "official-gold-import", "--root-dir", "/app", "--chunks-path", "/app/corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl", "--index", "--index-limit", "${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}", "--refresh-qdrant-payloads", "--refresh-limit", "${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}"]
+    restart: "no"
+
   qdrant-seed:
     profiles:
       - seed
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
       - .env
@@ -61,17 +155,16 @@ services:
     volumes:
       - ./src:/app/src
       - ./artifacts:/app/artifacts
-      - ./data:/app/data
-      - ./manifests:/app/manifests
+      - ./corpus:/app/corpus
       - ./reports:/app/reports
       - ./tmp:/app/tmp
-    command: ["python", "-m", "play_book_studio.cli", "course-qdrant-upsert", "--root-dir", "/app", "--course-dir", "data/course_pbs"]
+    command: ["python", "-m", "play_book_studio.cli", "course-qdrant-upsert", "--root-dir", "/app", "--course-dir", "corpus/sources/kmsc/parsed-preview/course_pbs"]
     restart: "no"
 
   web:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       target: web
     depends_on:
       app:
@@ -87,5 +180,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  postgres_storage:
+    name: ${POSTGRES_VOLUME_NAME:-ocp-rag-chatbot_postgres_storage}
   qdrant_storage:
-    name: ocp-rag-chatbot_qdrant_storage
+    name: ${QDRANT_VOLUME_NAME:-ocp-rag-chatbot_qdrant_storage}

@@ -120,7 +120,6 @@ class Settings(SettingsPathMixin):
     graph_boost_top_n: int = 8
     graph_max_edge_fanout: int = 12
     llm_endpoint: str = ""
-    llm_api_key: str = ""
     llm_model: str = ""
     llm_temperature: float = 0.2
     llm_max_tokens: int = 1100
@@ -140,12 +139,15 @@ class Settings(SettingsPathMixin):
     surya_ocr_endpoint: str = ""
     surya_health_endpoint: str = ""
     surya_timeout_seconds: float = 30.0
-    qwen_vision_endpoint: str = ""
-    qwen_vision_api_key: str = ""
-    qwen_vision_model: str = ""
-    qwen_vision_timeout_seconds: float = 30.0
     ocp_api_base_url: str = ""
     ocp_api_token: str = ""
+    terminal_enabled: bool = False
+    terminal_host: str = "127.0.0.1"
+    terminal_ws_port: int = 8770
+    terminal_shell: str = ""
+    terminal_workdir_override: str = ""
+    terminal_session_ttl_seconds: int = 1800
+    terminal_max_output_bytes: int = 1048576
     scm_github_client_id: str = ""
     scm_github_client_secret: str = ""
     scm_gitlab_client_id: str = ""
@@ -330,7 +332,6 @@ def load_settings(root_dir: str | Path) -> Settings:
         graph_boost_top_n=int(effective_env.get("GRAPH_BOOST_TOP_N", "8")),
         graph_max_edge_fanout=int(effective_env.get("GRAPH_MAX_EDGE_FANOUT", "12")),
         llm_endpoint=effective_env.get("LLM_ENDPOINT", "").strip().rstrip("/"),
-        llm_api_key=effective_env.get("LLM_API_KEY", "").strip(),
         llm_model=effective_env.get("LLM_MODEL", "").strip(),
         llm_temperature=float(effective_env.get("LLM_TEMPERATURE", "0.2")),
         llm_max_tokens=int(effective_env.get("LLM_MAX_TOKENS", "1100")),
@@ -363,12 +364,16 @@ def load_settings(root_dir: str | Path) -> Settings:
         surya_ocr_endpoint=effective_env.get("SURYA_OCR", "").strip().rstrip("/"),
         surya_health_endpoint=effective_env.get("SURYA_HEALTH", "").strip().rstrip("/"),
         surya_timeout_seconds=float(effective_env.get("SURYA_TIMEOUT_SECONDS", "30")),
-        qwen_vision_endpoint=effective_env.get("QWEN_VISION_ENDPOINT", "").strip().rstrip("/"),
-        qwen_vision_api_key=effective_env.get("QWEN_VISION_API_KEY", "").strip(),
-        qwen_vision_model=effective_env.get("QWEN_VISION_MODEL", "").strip(),
-        qwen_vision_timeout_seconds=float(effective_env.get("QWEN_VISION_TIMEOUT_SECONDS", "30")),
         ocp_api_base_url=effective_env.get("OCP_API_BASE_URL", "").strip().rstrip("/"),
         ocp_api_token=effective_env.get("OCP_API_TOKEN", "").strip(),
+        terminal_enabled=effective_env.get("TERMINAL_ENABLED", "false").lower()
+        in {"1", "true", "yes", "on"},
+        terminal_host=effective_env.get("TERMINAL_HOST", "127.0.0.1").strip() or "127.0.0.1",
+        terminal_ws_port=int(effective_env.get("TERMINAL_WS_PORT", "8770")),
+        terminal_shell=effective_env.get("TERMINAL_SHELL", "").strip(),
+        terminal_workdir_override=effective_env.get("TERMINAL_WORKDIR", "").strip(),
+        terminal_session_ttl_seconds=int(effective_env.get("TERMINAL_SESSION_TTL_SECONDS", "1800")),
+        terminal_max_output_bytes=int(effective_env.get("TERMINAL_MAX_OUTPUT_BYTES", "1048576")),
         scm_github_client_id=effective_env.get("SCM_GITHUB_CLIENT_ID", "").strip(),
         scm_github_client_secret=effective_env.get("SCM_GITHUB_CLIENT_SECRET", "").strip(),
         scm_gitlab_client_id=effective_env.get("SCM_GITLAB_CLIENT_ID", "").strip(),

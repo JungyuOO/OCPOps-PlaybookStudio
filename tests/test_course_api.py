@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import sys
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-from play_book_studio.app.course_api import (
+import play_book_studio.http.course_api as course_api
+from play_book_studio.http.course_api import (
     _apply_course_answer_typography,
     _course_answer_style_issues,
     _course_chat_payload,
@@ -22,13 +25,13 @@ from play_book_studio.app.course_api import (
 
 
 def _write_chunk(root: Path, chunk_id: str, payload: dict) -> None:
-    chunks_dir = root / "data" / "course_pbs" / "chunks"
+    chunks_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "chunks"
     chunks_dir.mkdir(parents=True, exist_ok=True)
     (chunks_dir / f"{chunk_id}.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _write_chunks_jsonl(root: Path, rows: list[dict]) -> None:
-    course_dir = root / "data" / "course_pbs"
+    course_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs"
     course_dir.mkdir(parents=True, exist_ok=True)
     (course_dir / "chunks.jsonl").write_text(
         "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
@@ -37,24 +40,34 @@ def _write_chunks_jsonl(root: Path, rows: list[dict]) -> None:
 
 
 def _write_manifest(root: Path, payload: dict) -> None:
-    manifests_dir = root / "data" / "course_pbs" / "manifests"
+    manifests_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
     manifests_dir.mkdir(parents=True, exist_ok=True)
     (manifests_dir / "course_v1.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _write_guides(root: Path, payload: dict) -> None:
-    manifests_dir = root / "data" / "course_pbs" / "manifests"
+    manifests_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
     manifests_dir.mkdir(parents=True, exist_ok=True)
     (manifests_dir / "ops_learning_guides_v1.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def _write_learning_chunks(root: Path, rows: list[dict]) -> None:
-    manifests_dir = root / "data" / "course_pbs" / "manifests"
+    manifests_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
     manifests_dir.mkdir(parents=True, exist_ok=True)
     (manifests_dir / "ops_learning_chunks_v1.jsonl").write_text(
         "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
         encoding="utf-8",
     )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_course_runtime(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    course_api._COURSE_CHUNK_CACHE.clear()
+    course_api._COURSE_SINGLE_CHUNK_CACHE.clear()
+    yield
+    course_api._COURSE_CHUNK_CACHE.clear()
+    course_api._COURSE_SINGLE_CHUNK_CACHE.clear()
 
 
 @contextmanager
@@ -89,6 +102,146 @@ def test_load_chunk_reads_consolidated_chunks_jsonl() -> None:
 
     assert payload["title"] == "단일 파일 청크"
     assert payload["schema_version"] == "ppt_chunk_v1"
+
+
+def test_load_chunk_prefers_postgres_course_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    with _temp_root() as root:
+        course_api._COURSE_CHUNK_CACHE.clear()
+        course_api._COURSE_SINGLE_CHUNK_CACHE.clear()
+        monkeypatch.setattr(
+            course_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+        )
+        monkeypatch.setattr(
+            course_api,
+            "_load_course_chunks_from_database",
+            lambda _root: [
+                {
+                    "chunk_id": "db-chunk",
+                    "stage_id": "db-stage",
+                    "title": "DB backed chunk",
+                    "body_md": "Loaded from PostgreSQL course_chunks.",
+                }
+            ],
+        )
+
+        payload = _load_chunk(root, "db-chunk")
+
+    assert payload["title"] == "DB backed chunk"
+    assert payload["schema_version"] == "ppt_chunk_v1"
+
+
+def test_load_chunk_does_not_fall_back_to_files_when_database_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _temp_root() as root:
+        _write_chunks_jsonl(
+            root,
+            [
+                {
+                    "chunk_id": "file-chunk",
+                    "title": "File fallback chunk",
+                    "body_md": "This file chunk should not leak.",
+                }
+            ],
+        )
+        monkeypatch.setattr(
+            course_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+        )
+        monkeypatch.setattr(course_api, "_load_course_chunks_from_database", lambda _root: [])
+
+        with pytest.raises(FileNotFoundError):
+            _load_chunk(root, "file-chunk")
+
+
+def test_load_manifest_prefers_postgres_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
+    with _temp_root() as root:
+        monkeypatch.setattr(
+            course_api,
+            "_load_course_manifest_from_database",
+            lambda _root: {
+                "canonical_model": "course_manifest_v1",
+                "stages": [{"stage_id": "db-stage", "title": "DB Stage"}],
+            },
+        )
+
+        manifest = course_api._load_manifest(root)
+
+    assert manifest["stages"][0]["stage_id"] == "db-stage"
+
+
+def test_load_manifest_does_not_fall_back_to_files_when_database_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _temp_root() as root:
+        _write_manifest(
+            root,
+            {
+                "canonical_model": "course_manifest_v1",
+                "stages": [{"stage_id": "file-stage", "title": "File Stage"}],
+            },
+        )
+        monkeypatch.setattr(
+            course_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+        )
+        monkeypatch.setattr(course_api, "_load_course_manifest_from_database", lambda _root: None)
+
+        with pytest.raises(FileNotFoundError):
+            course_api._load_manifest(root)
+
+
+def test_ops_learning_guides_do_not_fall_back_to_files_when_database_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _temp_root() as root:
+        _write_guides(
+            root,
+            {
+                "guides": [
+                    {
+                        "stage_id": "perf_test",
+                        "title": "File fallback guide",
+                        "steps": [{"user_query": "This file guide should not leak"}],
+                    }
+                ]
+            },
+        )
+        monkeypatch.setattr(
+            course_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+        )
+        monkeypatch.setitem(sys.modules, "psycopg", None)
+
+        payload = course_api._load_ops_learning_guides(root)
+
+    assert payload == {"canonical_model": "ops_learning_guide_v1", "guides": []}
+
+
+def test_ops_learning_chunks_do_not_fall_back_to_files_when_database_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _temp_root() as root:
+        _write_learning_chunks(
+            root,
+            [
+                {
+                    "learning_chunk_id": "guide::file-step",
+                    "title": "File fallback learning chunk",
+                }
+            ],
+        )
+        monkeypatch.setattr(course_api, "load_settings", lambda _root: SimpleNamespace(database_url="postgresql://unit-test"))
+        monkeypatch.setitem(sys.modules, "psycopg", None)
+
+        rows = course_api._load_ops_learning_chunks(root)
+
+    assert rows == []
 
 
 def test_resolve_course_path_rejects_assets_outside_workspace() -> None:
@@ -130,19 +283,19 @@ def test_course_asset_endpoint_serves_only_course_assets() -> None:
             self.content_type = content_type
 
     with _temp_root() as root:
-        asset = root / "data" / "course_pbs" / "assets" / "a.png"
+        asset = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "assets" / "a.png"
         asset.parent.mkdir(parents=True, exist_ok=True)
         asset.write_bytes(b"png-bytes")
 
         handler = Handler()
-        handled = handle_course_get(handler, "/api/v1/course/assets", "path=data/course_pbs/assets/a.png", root_dir=root)
+        handled = handle_course_get(handler, "/api/v1/course/assets", "path=corpus/sources/kmsc/parsed-preview/course_pbs/assets/a.png", root_dir=root)
 
         assert handled is True
         assert handler.bytes_payload == b"png-bytes"
         assert handler.content_type == "image/png"
 
         blocked = Handler()
-        handle_course_get(blocked, "/api/v1/course/assets", "path=data/course_pbs/chunks/a.json", root_dir=root)
+        handle_course_get(blocked, "/api/v1/course/assets", "path=corpus/sources/kmsc/parsed-preview/course_pbs/chunks/a.json", root_dir=root)
         assert blocked.status == 400
 
 
@@ -165,16 +318,100 @@ def test_course_asset_endpoint_converts_browser_incompatible_image_payloads() ->
     with _temp_root() as root:
         from PIL import Image
 
-        asset = root / "data" / "course_pbs" / "assets" / "wmf-like.png"
+        asset = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "assets" / "wmf-like.png"
         asset.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (2, 2), color="white").save(asset, format="BMP")
 
         handler = Handler()
-        handled = handle_course_get(handler, "/api/v1/course/assets", "path=data/course_pbs/assets/wmf-like.png", root_dir=root)
+        handled = handle_course_get(handler, "/api/v1/course/assets", "path=corpus/sources/kmsc/parsed-preview/course_pbs/assets/wmf-like.png", root_dir=root)
 
         assert handled is True
         assert handler.content_type == "image/png"
         assert handler.bytes_payload.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_course_asset_endpoint_prefers_postgres_asset_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Handler:
+        def __init__(self) -> None:
+            self.json_payload = None
+            self.status = None
+            self.bytes_payload = b""
+            self.content_type = ""
+
+        def _send_json(self, payload: dict, status=200) -> None:  # noqa: ANN001
+            self.json_payload = payload
+            self.status = status
+
+        def _send_bytes(self, payload: bytes, *, content_type: str) -> None:
+            self.bytes_payload = payload
+            self.content_type = content_type
+
+    with _temp_root() as root:
+        monkeypatch.setattr(course_api, "load_settings", lambda _root: SimpleNamespace(database_url="postgresql://unit-test"))
+        monkeypatch.setattr(
+            course_api,
+            "_load_course_asset_from_database",
+            lambda _root, asset_path: {
+                "asset_path": asset_path,
+                "content_type": "image/png",
+                "content": b"db-image-bytes",
+            },
+        )
+
+        handler = Handler()
+        handled = handle_course_get(
+            handler,
+            "/api/v1/course/assets",
+            "path=corpus/sources/kmsc/parsed-preview/course_pbs/assets/db-only.png",
+            root_dir=root,
+        )
+
+    assert handled is True
+    assert handler.bytes_payload == b"db-image-bytes"
+    assert handler.content_type == "image/png"
+
+
+def test_course_asset_endpoint_does_not_fall_back_to_files_when_database_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Handler:
+        def __init__(self) -> None:
+            self.json_payload = None
+            self.status = None
+            self.bytes_payload = b""
+            self.content_type = ""
+
+        def _send_json(self, payload: dict, status=200) -> None:  # noqa: ANN001
+            self.json_payload = payload
+            self.status = status
+
+        def _send_bytes(self, payload: bytes, *, content_type: str) -> None:
+            self.bytes_payload = payload
+            self.content_type = content_type
+
+    with _temp_root() as root:
+        asset = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "assets" / "file-only.png"
+        asset.parent.mkdir(parents=True, exist_ok=True)
+        asset.write_bytes(b"file-image-bytes")
+        monkeypatch.setattr(
+            course_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+        )
+        monkeypatch.setattr(course_api, "_load_course_asset_from_database", lambda _root, asset_path: None)
+
+        handler = Handler()
+        handled = handle_course_get(
+            handler,
+            "/api/v1/course/assets",
+            "path=corpus/sources/kmsc/parsed-preview/course_pbs/assets/file-only.png",
+            root_dir=root,
+        )
+
+    assert handled is True
+    assert handler.status == 404
+    assert handler.bytes_payload == b""
+    assert handler.json_payload == {"error": "Course asset not found in PostgreSQL"}
 
 
 def test_course_chat_uses_ops_learning_guide_before_raw_chunk_route() -> None:
@@ -259,8 +496,8 @@ def test_course_chat_uses_ops_learning_guide_before_raw_chunk_route() -> None:
 
 
 def test_course_chat_retrieves_ops_learning_chunk_without_exact_golden_query(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
-    monkeypatch.setattr("play_book_studio.app.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
     with _temp_root() as root:
         source_id = "perf-source"
         next_source_id = "perf-next"
@@ -379,9 +616,9 @@ def test_course_chat_rewrites_ops_learning_answer_with_llm_prompt(monkeypatch: p
     monkeypatch.setenv("COURSE_CHAT_LLM_REWRITE", "true")
     monkeypatch.setenv("LLM_ENDPOINT", "http://fake-llm/v1")
     monkeypatch.setenv("LLM_MODEL", "fake-model")
-    monkeypatch.setattr("play_book_studio.app.course_api.LLMClient", FakeLLMClient)
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
-    monkeypatch.setattr("play_book_studio.app.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
+    monkeypatch.setattr("play_book_studio.http.course_api.LLMClient", FakeLLMClient)
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
 
     with _temp_root() as root:
         source_id = "perf-source"
@@ -459,9 +696,9 @@ def test_course_chat_llm_selector_chooses_grounding_candidate(monkeypatch: pytes
     monkeypatch.setenv("COURSE_CHAT_LLM_REWRITE", "true")
     monkeypatch.setenv("LLM_ENDPOINT", "http://fake-llm/v1")
     monkeypatch.setenv("LLM_MODEL", "fake-model")
-    monkeypatch.setattr("play_book_studio.app.course_api.LLMClient", FakeLLMClient)
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
-    monkeypatch.setattr("play_book_studio.app.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
+    monkeypatch.setattr("play_book_studio.http.course_api.LLMClient", FakeLLMClient)
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
 
     with _temp_root() as root:
         _write_chunk(
@@ -639,7 +876,7 @@ def test_load_chunk_projects_missing_index_contract_fields() -> None:
 
 def test_course_chunk_viewer_meta_and_html_support_workspace_preview() -> None:
     with _temp_root() as root:
-        assets_dir = root / "data" / "course_pbs" / "assets"
+        assets_dir = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "assets"
         assets_dir.mkdir(parents=True, exist_ok=True)
         (assets_dir / "chunk-01__img_01.png").write_bytes(b"not-a-real-png")
         _write_chunk(
@@ -653,12 +890,12 @@ def test_course_chunk_viewer_meta_and_html_support_workspace_preview() -> None:
                 "chunk_kind": "test_case_summary",
                 "body_md": "Running 상태를 확인한다.",
                 "search_text": "TEST-01 Running Ready",
-                "source_pptx": "study-docs/unit.pptx",
-                "slide_refs": [{"slide_no": 3, "pptx": "study-docs/unit.pptx"}],
+                "source_pptx": "corpus/sources/kmsc/raw/unit.pptx",
+                "slide_refs": [{"slide_no": 3, "pptx": "corpus/sources/kmsc/raw/unit.pptx"}],
                 "image_attachments": [
                     {
                         "asset_id": "chunk-01::asset:01",
-                        "asset_path": "data/course_pbs/assets/chunk-01__img_01.png",
+                        "asset_path": "corpus/sources/kmsc/parsed-preview/course_pbs/assets/chunk-01__img_01.png",
                         "slide_no": 3,
                         "visual_summary": "Pod Running screen",
                     }
@@ -675,11 +912,11 @@ def test_course_chunk_viewer_meta_and_html_support_workspace_preview() -> None:
     assert meta["source_lane"] == "study_docs_course_runtime"
     assert viewer_html is not None
     assert "Pod Running 확인" in viewer_html
-    assert "/api/v1/course/assets?path=data/course_pbs/assets/chunk-01__img_01.png" in viewer_html
+    assert "/api/v1/course/assets?path=corpus/sources/kmsc/parsed-preview/course_pbs/assets/chunk-01__img_01.png" in viewer_html
 
 
 def test_course_chat_separates_study_docs_official_docs_and_guided_next_step(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
     current_id = "unit-test--TEST-UN-OCP-30-01--summary"
     next_id = "unit-test--TEST-UN-OCP-30-02--summary"
     with _temp_root() as root:
@@ -694,8 +931,8 @@ def test_course_chat_separates_study_docs_official_docs_and_guided_next_step(mon
                 "chunk_kind": "test_case_summary",
                 "body_md": "마스터노드에서 etcd 백업을 수행한다.",
                 "search_text": "TEST-UN-OCP-30-01 etcd 백업 수행. 주요 기술: ETCD.",
-                "source_pptx": "study-docs/unit.pptx",
-                "slide_refs": [{"slide_no": 10, "pptx": "study-docs/unit.pptx"}],
+                "source_pptx": "corpus/sources/kmsc/raw/unit.pptx",
+                "slide_refs": [{"slide_no": 10, "pptx": "corpus/sources/kmsc/raw/unit.pptx"}],
                 "related_official_docs": [
                     {"score": 0.42, "title": "low doc", "section_title": "ignored"},
                     {
@@ -727,8 +964,8 @@ def test_course_chat_separates_study_docs_official_docs_and_guided_next_step(mon
                 "chunk_kind": "test_case_summary",
                 "body_md": "백업 파일 생성 여부를 확인한다.",
                 "search_text": "TEST-UN-OCP-30-02 etcd 백업 확인. 주요 기술: ETCD.",
-                "source_pptx": "study-docs/unit.pptx",
-                "slide_refs": [{"slide_no": 11, "pptx": "study-docs/unit.pptx"}],
+                "source_pptx": "corpus/sources/kmsc/raw/unit.pptx",
+                "slide_refs": [{"slide_no": 11, "pptx": "corpus/sources/kmsc/raw/unit.pptx"}],
                 "related_official_docs": [],
                 "tour_stop": {
                     "stop_order": 2,
@@ -759,7 +996,7 @@ def test_course_chat_separates_study_docs_official_docs_and_guided_next_step(mon
 
 
 def test_course_chat_uses_stage_official_route_when_chunk_mapping_is_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
     chunk_id = "completion--CH-01--summary"
     with _temp_root() as root:
         _write_chunk(
@@ -773,8 +1010,8 @@ def test_course_chat_uses_stage_official_route_when_chunk_mapping_is_absent(monk
                 "chunk_kind": "chapter_summary",
                 "body_md": "완료보고 첫 장",
                 "search_text": "CH-01 완료보고 완료본",
-                "source_pptx": "study-docs/completion.pptx",
-                "slide_refs": [{"slide_no": 1, "pptx": "study-docs/completion.pptx"}],
+                "source_pptx": "corpus/sources/kmsc/raw/completion.pptx",
+                "slide_refs": [{"slide_no": 1, "pptx": "corpus/sources/kmsc/raw/completion.pptx"}],
                 "related_official_docs": [],
                 "tour_stop": {
                     "stop_order": 1,
@@ -816,7 +1053,7 @@ def test_course_chat_uses_stage_official_route_when_chunk_mapping_is_absent(monk
 
 
 def test_course_chat_returns_ranked_image_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
     chunk_id = "unit-test--image-evidence"
     with _temp_root() as root:
         _write_chunk(
@@ -830,8 +1067,8 @@ def test_course_chat_returns_ranked_image_evidence(monkeypatch: pytest.MonkeyPat
                 "chunk_kind": "test_case_summary",
                 "body_md": "oc get pods 결과에서 Running 상태를 확인한다.",
                 "search_text": "TEST-IMG-01 Running Ready 상태 확인",
-                "source_pptx": "study-docs/unit.pptx",
-                "slide_refs": [{"slide_no": 3, "pptx": "study-docs/unit.pptx"}],
+                "source_pptx": "corpus/sources/kmsc/raw/unit.pptx",
+                "slide_refs": [{"slide_no": 3, "pptx": "corpus/sources/kmsc/raw/unit.pptx"}],
                 "image_attachments": [
                     {
                         "asset_id": "asset-running",
@@ -860,7 +1097,7 @@ def test_course_chat_returns_ranked_image_evidence(monkeypatch: pytest.MonkeyPat
 
 
 def test_course_chat_image_evidence_prefers_query_matched_state_and_role(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("play_book_studio.app.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
     chunk_id = "perf-test--dashboard-ready"
     with _temp_root() as root:
         _write_chunk(
@@ -874,8 +1111,8 @@ def test_course_chat_image_evidence_prefers_query_matched_state_and_role(monkeyp
                 "chunk_kind": "perf_slide_detail",
                 "body_md": "Prometheus dashboard and Ready condition evidence.",
                 "search_text": "PERF-IMG-01 Prometheus dashboard Ready condition.",
-                "source_pptx": "study-docs/perf.pptx",
-                "slide_refs": [{"slide_no": 58, "pptx": "study-docs/perf.pptx"}],
+                "source_pptx": "corpus/sources/kmsc/raw/perf.pptx",
+                "slide_refs": [{"slide_no": 58, "pptx": "corpus/sources/kmsc/raw/perf.pptx"}],
                 "image_attachments": [
                     {
                         "asset_id": "asset-command",

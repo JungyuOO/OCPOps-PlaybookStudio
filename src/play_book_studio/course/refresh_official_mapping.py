@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import COURSE_PBS_DIR
+
 from .pipeline.canonical import attach_course_tour_metadata, build_course_manifest
 from .pipeline.official_doc_matcher import match_official_docs
 from .pipeline.official_routes import attach_stage_official_routes
@@ -103,7 +105,7 @@ def _write_chunks(course_dir: Path, chunks: list[dict[str, Any]]) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Refresh official-doc links for existing course chunks without rerunning OCR.")
     parser.add_argument("--root-dir", type=Path, default=Path("."))
-    parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
+    parser.add_argument("--course-dir", type=Path, default=COURSE_PBS_DIR)
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--min-score", type=float, default=0.65)
     parser.add_argument("--min-overlap", type=int, default=2)

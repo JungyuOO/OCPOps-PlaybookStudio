@@ -18,6 +18,13 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from play_book_studio.config.corpus_paths import (
+    ANSWER_EVAL_CASES_PATH,
+    ANSWER_EVAL_REALWORLD_CASES_PATH,
+    PBS_CHAT_QUALITY_CASES_PATH,
+    PBS_CHAT_QUALITY_EXTENDED_CASES_PATH,
+)
+
 
 SECTION_NUMBER_PREFIX_RE = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s+")
 LOW_CONFIDENCE_RE = re.compile(r"(low retrieval confidence|점수가 낮|정확히 맞물리는 점수가 낮)", re.IGNORECASE)
@@ -126,10 +133,10 @@ def _case_from_starter(item: dict[str, Any], case_id: str) -> SmokeCase:
 
 def _manifest_cases(root_dir: Path, limit: int) -> list[SmokeCase]:
     paths = [
-        root_dir / "manifests" / "pbs_chat_quality_cases.jsonl",
-        root_dir / "manifests" / "pbs_chat_quality_extended_cases.jsonl",
-        root_dir / "manifests" / "answer_eval_cases.jsonl",
-        root_dir / "manifests" / "answer_eval_realworld_cases.jsonl",
+        root_dir / PBS_CHAT_QUALITY_CASES_PATH,
+        root_dir / PBS_CHAT_QUALITY_EXTENDED_CASES_PATH,
+        root_dir / ANSWER_EVAL_CASES_PATH,
+        root_dir / ANSWER_EVAL_REALWORLD_CASES_PATH,
     ]
     cases: list[SmokeCase] = []
     seen: set[str] = set()

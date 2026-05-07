@@ -17,6 +17,9 @@ class SessionContext:
     ocp_version: str | None = None
     selected_draft_ids: list[str] = field(default_factory=list)
     restrict_uploaded_sources: bool = True
+    owner_user_id: str | None = None
+    active_repository_id: str | None = None
+    active_document_id: str | None = None
     unresolved_question: str | None = None
 
     @classmethod
@@ -43,6 +46,9 @@ class SessionContext:
                 str(item).strip() for item in selected_draft_ids if str(item).strip()
             ],
             restrict_uploaded_sources=bool(payload.get("restrict_uploaded_sources", True)),
+            owner_user_id=(str(payload.get("owner_user_id") or "").strip() or None),
+            active_repository_id=(str(payload.get("active_repository_id") or "").strip() or None),
+            active_document_id=(str(payload.get("active_document_id") or "").strip() or None),
             unresolved_question=payload.get("unresolved_question"),
         )
 
@@ -65,6 +71,10 @@ class RetrievalHit:
     fused_score: float = 0.0
     section_id: str = ""
     section_path: tuple[str, ...] = field(default_factory=tuple)
+    section_number: str = ""
+    heading_title: str = ""
+    source_anchor: str = ""
+    toc_path: tuple[str, ...] = field(default_factory=tuple)
     chunk_type: str = "reference"
     source_id: str = ""
     source_lane: str = "official_ko"
@@ -81,6 +91,12 @@ class RetrievalHit:
     operator_names: tuple[str, ...] = field(default_factory=tuple)
     verification_hints: tuple[str, ...] = field(default_factory=tuple)
     graph_relations: tuple[str, ...] = field(default_factory=tuple)
+    asset_ids: tuple[str, ...] = field(default_factory=tuple)
+    repository_id: str = ""
+    document_source_id: str = ""
+    owner_user_id: str = ""
+    visibility: str = ""
+    source_scope: str = ""
     component_scores: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

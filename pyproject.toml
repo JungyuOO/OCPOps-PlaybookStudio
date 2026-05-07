@@ -16,12 +16,14 @@ dependencies = [
   "neo4j>=5.28",
   "networkx>=3.5",
   "onnxruntime>=1.20",
+  "psycopg[binary]>=3.2",
   "python-pptx>=1.0.2",
   "pypdf>=6.0",
   "pypdfium2>=4.30",
   "rapidocr>=3.7.0",
   "requests>=2.31",
   "sentence-transformers==5.3.0",
+  "websockets>=15.0",
 ]
 
 [project.optional-dependencies]
@@ -42,3 +44,4 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = ["tmp", ".venv", "__pycache__"]
+addopts = ["-p", "no:cacheprovider"]

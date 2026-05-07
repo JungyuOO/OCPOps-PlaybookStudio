@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from play_book_studio.app.wiki_user_overlay import build_wiki_overlay_signal_payload
+from play_book_studio.http.wiki_user_overlay import build_wiki_overlay_signal_payload
 from play_book_studio.retrieval.intake_overlay import has_active_customer_pack_selection
 from play_book_studio.retrieval.models import RetrievalHit
 from play_book_studio.retrieval.models import SessionContext
@@ -1659,6 +1659,10 @@ def assemble_context(
                 excerpt=citation_excerpt,
                 section_path=hit.section_path,
                 section_path_label=" > ".join(hit.section_path) if hit.section_path else hit.section,
+                section_number=hit.section_number,
+                heading_title=hit.heading_title,
+                source_anchor=hit.source_anchor,
+                toc_path=hit.toc_path,
                 chunk_type=hit.chunk_type,
                 semantic_role=hit.semantic_role,
                 source_collection=hit.source_collection,
@@ -1668,6 +1672,7 @@ def assemble_context(
                 k8s_objects=hit.k8s_objects,
                 operator_names=hit.operator_names,
                 verification_hints=hit.verification_hints,
+                asset_ids=hit.asset_ids,
             )
         )
 

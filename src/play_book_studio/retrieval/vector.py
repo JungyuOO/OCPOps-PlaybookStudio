@@ -27,6 +27,10 @@ def hit_from_payload(payload: dict[str, Any], *, source: str, score: float) -> R
         raw_score=float(score),
         fused_score=float(score),
         section_path=tuple(str(item) for item in (payload.get("section_path") or []) if str(item).strip()),
+        section_number=str(payload.get("section_number", "")),
+        heading_title=str(payload.get("heading_title", "")),
+        source_anchor=str(payload.get("source_anchor", "")),
+        toc_path=tuple(str(item) for item in (payload.get("toc_path") or []) if str(item).strip()),
         chunk_type=str(payload.get("chunk_type", "reference")),
         source_id=str(payload.get("source_id", "")),
         source_lane=str(payload.get("source_lane", "official_ko")),
@@ -44,6 +48,12 @@ def hit_from_payload(payload: dict[str, Any], *, source: str, score: float) -> R
         verification_hints=tuple(
             str(item) for item in (payload.get("verification_hints") or []) if str(item).strip()
         ),
+        asset_ids=tuple(str(item) for item in (payload.get("asset_ids") or []) if str(item).strip()),
+        repository_id=str(payload.get("repository_id", "")),
+        document_source_id=str(payload.get("document_source_id", "") or payload.get("source_id", "")),
+        owner_user_id=str(payload.get("owner_user_id", "")),
+        visibility=str(payload.get("visibility", "")),
+        source_scope=str(payload.get("source_scope", "")),
     )
 
 
@@ -54,6 +64,7 @@ class VectorRetriever:
         self.settings = settings
         self.embedding_client = EmbeddingClient(settings)
         self.request_timeout_seconds = max(float(self.settings.request_timeout_seconds), 1.0)
+        self.database_url = settings.database_url.strip()
 
     def search(self, query: str, top_k: int) -> list[RetrievalHit]:
         hits, _runtime = self.search_with_trace(query, top_k)
@@ -111,6 +122,7 @@ class VectorRetriever:
                         score=float(point.get("score", 0.0)),
                     )
                 )
+            hits, hydration = self._hydrate_hits_from_database(hits)
             return (
                 hits,
                 {
@@ -119,7 +131,28 @@ class VectorRetriever:
                     "errors": errors,
                     "hit_count": len(hits),
                     "top_score": float(points[0].get("score", 0.0)) if points else None,
+                    "hydration": hydration,
                 },
             )
 
         raise ValueError(last_error)
+
+    def _hydrate_hits_from_database(self, hits: list[RetrievalHit]) -> tuple[list[RetrievalHit], dict[str, Any]]:
+        hydration: dict[str, Any] = {
+            "status": "disabled",
+            "requested_count": len(hits),
+            "hydrated_count": 0,
+        }
+        if not hits or not self.database_url:
+            return hits, hydration
+        import psycopg
+
+        from play_book_studio.retrieval.chunk_hydration import hydrate_retrieval_hits
+
+        with psycopg.connect(self.database_url) as connection:
+            hydrated = hydrate_retrieval_hits(connection, hits)
+        hydration["status"] = "ready"
+        hydration["hydrated_count"] = sum(
+            1 for original, canonical in zip(hits, hydrated, strict=True) if original is not canonical
+        )
+        return hydrated, hydration

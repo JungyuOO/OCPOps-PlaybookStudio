@@ -10,6 +10,20 @@ import argparse
 import json
 from pathlib import Path
 
+from play_book_studio.config.corpus_paths import (
+    ANSWER_EVAL_CASES_PATH,
+    COURSE_OPS_LEARNING_GOLDEN_CASES_PATH,
+    COURSE_PBS_DIR,
+    COURSE_QA_ACCEPTED_CASES_PATH,
+    COURSE_QA_CASES_PATH,
+    COURSE_QA_REJECTED_CASES_PATH,
+    COURSE_QA_REPORT_PATH,
+    OFFICIAL_GOLD_CHUNKS_PATH,
+    OPS_LEARNING_ANCHOR_AUDIT_PATH,
+    OPS_LEARNING_CHUNKS_PATH,
+    OPS_LEARNING_GUIDES_PATH,
+    RAGAS_EVAL_CASES_PATH,
+)
 from play_book_studio.config.settings import load_effective_env, load_settings
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -66,7 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument(
         "--cases",
         type=Path,
-        default=ROOT / "manifests" / "answer_eval_cases.jsonl",
+        default=ANSWER_EVAL_CASES_PATH,
     )
     _add_runtime_args(eval_parser)
 
@@ -74,7 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
     ragas_parser.add_argument(
         "--cases",
         type=Path,
-        default=ROOT / "manifests" / "ragas_eval_cases.jsonl",
+        default=RAGAS_EVAL_CASES_PATH,
     )
     ragas_parser.add_argument("--batch-size", type=int, default=2)
     ragas_parser.add_argument("--judge-model", default=None)
@@ -116,16 +130,167 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compact_graph_parser.add_argument("--output", type=Path, default=None)
 
+    db_migrate_parser = subparsers.add_parser(
+        "db-migrate",
+        help="Apply PostgreSQL migrations for ingestion runtime tables",
+    )
+    db_migrate_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    db_migrate_parser.add_argument("--database-url", default="")
+    db_migrate_parser.add_argument("--migrations-dir", type=Path, default=Path("db/migrations"))
+    db_migrate_parser.add_argument("--dry-run", action="store_true")
+
+    upload_ingest_parser = subparsers.add_parser(
+        "upload-ingest",
+        help="Parse an uploaded document and persist its blocks/assets/chunks to PostgreSQL",
+    )
+    upload_ingest_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    upload_ingest_parser.add_argument("--path", type=Path, required=True)
+    upload_ingest_parser.add_argument("--database-url", default="")
+    upload_ingest_parser.add_argument("--tenant-slug", default="public")
+    upload_ingest_parser.add_argument("--tenant-name", default="Public")
+    upload_ingest_parser.add_argument("--workspace-slug", default="default")
+    upload_ingest_parser.add_argument("--workspace-name", default="Default")
+    upload_ingest_parser.add_argument("--created-by", default="")
+    upload_ingest_parser.add_argument("--storage-key", default="")
+    upload_ingest_parser.add_argument("--repository-id", default="")
+    upload_ingest_parser.add_argument("--repository-slug", default="")
+    upload_ingest_parser.add_argument("--repository-title", default="")
+    upload_ingest_parser.add_argument("--repository-kind", default="")
+    upload_ingest_parser.add_argument("--visibility", default="")
+    upload_ingest_parser.add_argument("--source-scope", default="user_upload")
+    upload_ingest_parser.add_argument("--chunk-max-chars", type=int, default=1800)
+    upload_ingest_parser.add_argument("--chunk-overlap-blocks", type=int, default=1)
+    upload_ingest_parser.add_argument("--dry-run", action="store_true")
+
+    corpus_ingest_parser = subparsers.add_parser(
+        "corpus-ingest",
+        help="Parse a local official/study corpus folder into shared PostgreSQL document repositories",
+    )
+    corpus_ingest_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    corpus_ingest_parser.add_argument("--source-dir", type=Path, required=True)
+    corpus_ingest_parser.add_argument("--corpus-kind", choices=("official_docs", "study_docs"), required=True)
+    corpus_ingest_parser.add_argument("--database-url", default="")
+    corpus_ingest_parser.add_argument("--tenant-slug", default="public")
+    corpus_ingest_parser.add_argument("--tenant-name", default="Public")
+    corpus_ingest_parser.add_argument("--workspace-slug", default="default")
+    corpus_ingest_parser.add_argument("--workspace-name", default="Default")
+    corpus_ingest_parser.add_argument("--chunk-max-chars", type=int, default=1800)
+    corpus_ingest_parser.add_argument("--chunk-overlap-blocks", type=int, default=1)
+    corpus_ingest_parser.add_argument("--index", action="store_true")
+    corpus_ingest_parser.add_argument("--collection", default="")
+    corpus_ingest_parser.add_argument("--dry-run", action="store_true")
+
+    db_qdrant_index_parser = subparsers.add_parser(
+        "db-qdrant-index",
+        help="Embed pending PostgreSQL document chunks and upsert them to Qdrant",
+    )
+    db_qdrant_index_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    db_qdrant_index_parser.add_argument("--database-url", default="")
+    db_qdrant_index_parser.add_argument("--collection", default="")
+    db_qdrant_index_parser.add_argument("--source-scope", default="")
+    db_qdrant_index_parser.add_argument("--limit", type=int, default=100)
+
+    db_qdrant_backfill_parser = subparsers.add_parser(
+        "db-qdrant-backfill",
+        help="Record qdrant_index_entries for PostgreSQL chunks whose Qdrant points already exist",
+    )
+    db_qdrant_backfill_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    db_qdrant_backfill_parser.add_argument("--database-url", default="")
+    db_qdrant_backfill_parser.add_argument("--collection", default="")
+    db_qdrant_backfill_parser.add_argument("--limit", type=int, default=1000)
+    db_qdrant_backfill_parser.add_argument("--batch-size", type=int, default=256)
+
+    db_qdrant_refresh_parser = subparsers.add_parser(
+        "db-qdrant-refresh-payloads",
+        help="Refresh Qdrant payloads whose PostgreSQL-derived payload hash changed",
+    )
+    db_qdrant_refresh_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    db_qdrant_refresh_parser.add_argument("--database-url", default="")
+    db_qdrant_refresh_parser.add_argument("--collection", default="")
+    db_qdrant_refresh_parser.add_argument("--source-scope", default="")
+    db_qdrant_refresh_parser.add_argument("--limit", type=int, default=1000)
+    db_qdrant_refresh_parser.add_argument("--batch-size", type=int, default=256)
+
+    db_corpus_status_parser = subparsers.add_parser(
+        "db-corpus-status",
+        help="Report PostgreSQL corpus and qdrant_index_entries readiness",
+    )
+    db_corpus_status_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    db_corpus_status_parser.add_argument("--database-url", default="")
+    db_corpus_status_parser.add_argument("--collection", default="")
+
+    course_runtime_status_parser = subparsers.add_parser(
+        "course-runtime-status",
+        help="Report PostgreSQL course runtime readiness for chunks, assets, and manifest",
+    )
+    course_runtime_status_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    course_runtime_status_parser.add_argument("--database-url", default="")
+    course_runtime_status_parser.add_argument("--course-slug", default="project-playbook")
+
+    official_gold_import_parser = subparsers.add_parser(
+        "official-gold-import",
+        help="Import existing official gold retrieval chunks into PostgreSQL document repositories",
+    )
+    official_gold_import_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    official_gold_import_parser.add_argument(
+        "--chunks-path",
+        type=Path,
+        default=OFFICIAL_GOLD_CHUNKS_PATH,
+    )
+    official_gold_import_parser.add_argument("--database-url", default="")
+    official_gold_import_parser.add_argument("--tenant-slug", default="public")
+    official_gold_import_parser.add_argument("--tenant-name", default="Public")
+    official_gold_import_parser.add_argument("--workspace-slug", default="default")
+    official_gold_import_parser.add_argument("--workspace-name", default="Default")
+    official_gold_import_parser.add_argument("--limit", type=int, default=0)
+    official_gold_import_parser.add_argument("--index", action="store_true")
+    official_gold_import_parser.add_argument("--index-limit", type=int, default=0)
+    official_gold_import_parser.add_argument("--refresh-qdrant-payloads", action="store_true")
+    official_gold_import_parser.add_argument("--collection", default="")
+    official_gold_import_parser.add_argument("--refresh-limit", type=int, default=0)
+    official_gold_import_parser.add_argument("--refresh-batch-size", type=int, default=256)
+    official_gold_import_parser.add_argument("--dry-run", action="store_true")
+
+    learning_seed_parser = subparsers.add_parser(
+        "learning-seed-import",
+        help="Import guided learning path seed manifests into PostgreSQL",
+    )
+    learning_seed_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    learning_seed_parser.add_argument(
+        "--guides-path",
+        type=Path,
+        default=OPS_LEARNING_GUIDES_PATH,
+    )
+    learning_seed_parser.add_argument("--database-url", default="")
+    learning_seed_parser.add_argument("--tenant-slug", default="public")
+    learning_seed_parser.add_argument("--tenant-name", default="Public")
+    learning_seed_parser.add_argument("--workspace-slug", default="default")
+    learning_seed_parser.add_argument("--workspace-name", default="Default")
+    learning_seed_parser.add_argument("--dry-run", action="store_true")
+
+    course_chunk_import_parser = subparsers.add_parser(
+        "course-chunk-import",
+        help="Import Study-docs course chunks into PostgreSQL for runtime course viewers",
+    )
+    course_chunk_import_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    course_chunk_import_parser.add_argument("--course-dir", type=Path, default=COURSE_PBS_DIR)
+    course_chunk_import_parser.add_argument("--database-url", default="")
+    course_chunk_import_parser.add_argument("--course-slug", default="project-playbook")
+    course_chunk_import_parser.add_argument("--limit", type=int, default=0)
+    course_chunk_import_parser.add_argument("--skip-assets", action="store_true")
+    course_chunk_import_parser.add_argument("--skip-manifest", action="store_true")
+    course_chunk_import_parser.add_argument("--dry-run", action="store_true")
+
     course_qa_parser = subparsers.add_parser(
         "course-qa",
         help="Generate, quality-gate, and run Study-docs course chat QA cases",
     )
     course_qa_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_qa_parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
-    course_qa_parser.add_argument("--cases-path", type=Path, default=Path("manifests/course_qa_cases.jsonl"))
-    course_qa_parser.add_argument("--accepted-path", type=Path, default=Path("manifests/course_qa_cases.accepted.jsonl"))
-    course_qa_parser.add_argument("--rejected-path", type=Path, default=Path("manifests/course_qa_cases.rejected.jsonl"))
-    course_qa_parser.add_argument("--report-path", type=Path, default=Path("data/course_pbs/manifests/course_qa_report.json"))
+    course_qa_parser.add_argument("--course-dir", type=Path, default=COURSE_PBS_DIR)
+    course_qa_parser.add_argument("--cases-path", type=Path, default=COURSE_QA_CASES_PATH)
+    course_qa_parser.add_argument("--accepted-path", type=Path, default=COURSE_QA_ACCEPTED_CASES_PATH)
+    course_qa_parser.add_argument("--rejected-path", type=Path, default=COURSE_QA_REJECTED_CASES_PATH)
+    course_qa_parser.add_argument("--report-path", type=Path, default=COURSE_QA_REPORT_PATH)
     course_qa_parser.add_argument("--target-count", type=int, default=96)
     course_qa_parser.add_argument("--min-accepted", type=int, default=None)
     course_qa_parser.add_argument("--allow-rejected", action="store_true")
@@ -138,7 +303,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Upsert existing Study-docs course and ops learning chunks into Qdrant",
     )
     course_qdrant_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_qdrant_parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
+    course_qdrant_parser.add_argument("--course-dir", type=Path, default=COURSE_PBS_DIR)
     course_qdrant_parser.add_argument("--limit", type=int, default=0)
     course_qdrant_parser.add_argument("--skip-course", action="store_true")
     course_qdrant_parser.add_argument("--skip-ops-learning", action="store_true")
@@ -148,7 +313,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Generate Course QA browser audit pages and optionally capture them with Playwright",
     )
     course_visual_audit_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_visual_audit_parser.add_argument("--cases-path", type=Path, default=Path("manifests/course_qa_cases.accepted.jsonl"))
+    course_visual_audit_parser.add_argument("--cases-path", type=Path, default=COURSE_QA_ACCEPTED_CASES_PATH)
     course_visual_audit_parser.add_argument("--output-dir", type=Path, default=Path("output/playwright/course-qa-audit"))
     course_visual_audit_parser.add_argument("--capture", action="store_true")
     course_visual_audit_parser.add_argument("--host", default="127.0.0.1")
@@ -161,7 +326,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run Playwright smoke checks against the built Course UI",
     )
     course_ui_smoke_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_ui_smoke_parser.add_argument("--cases-path", type=Path, default=Path("manifests/course_qa_cases.accepted.jsonl"))
+    course_ui_smoke_parser.add_argument("--cases-path", type=Path, default=COURSE_QA_ACCEPTED_CASES_PATH)
     course_ui_smoke_parser.add_argument("--output-dir", type=Path, default=Path("output/playwright/course-ui-smoke"))
     course_ui_smoke_parser.add_argument("--scenario-count", type=int, default=12)
     course_ui_smoke_parser.add_argument("--host", default="127.0.0.1")
@@ -174,11 +339,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Build the Study-docs operational learning source-anchor audit manifest",
     )
     course_ops_anchor_audit_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_ops_anchor_audit_parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
+    course_ops_anchor_audit_parser.add_argument("--course-dir", type=Path, default=COURSE_PBS_DIR)
     course_ops_anchor_audit_parser.add_argument(
         "--output-path",
         type=Path,
-        default=Path("data/course_pbs/manifests/ops_learning_anchor_audit_v1.json"),
+        default=OPS_LEARNING_ANCHOR_AUDIT_PATH,
     )
 
     course_ops_guides_parser = subparsers.add_parser(
@@ -186,21 +351,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Build initial Study-docs operational learning guides and beginner golden cases",
     )
     course_ops_guides_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_ops_guides_parser.add_argument("--course-dir", type=Path, default=Path("data/course_pbs"))
+    course_ops_guides_parser.add_argument("--course-dir", type=Path, default=COURSE_PBS_DIR)
     course_ops_guides_parser.add_argument(
         "--guides-path",
         type=Path,
-        default=Path("data/course_pbs/manifests/ops_learning_guides_v1.json"),
+        default=OPS_LEARNING_GUIDES_PATH,
     )
     course_ops_guides_parser.add_argument(
         "--golden-path",
         type=Path,
-        default=Path("manifests/course_ops_learning_golden_cases.jsonl"),
+        default=COURSE_OPS_LEARNING_GOLDEN_CASES_PATH,
     )
     course_ops_guides_parser.add_argument(
         "--learning-chunks-path",
         type=Path,
-        default=Path("data/course_pbs/manifests/ops_learning_chunks_v1.jsonl"),
+        default=OPS_LEARNING_CHUNKS_PATH,
     )
 
     return parser
@@ -227,7 +392,7 @@ def _warmup_ui_runtime(answerer: ChatAnswerer) -> None:
 
 
 def _run_ui(args: argparse.Namespace) -> int:
-    from play_book_studio.app.server import serve
+    from play_book_studio.http.server import serve
 
     answerer = _build_answerer()
     if getattr(args, "warmup_reranker", False):
@@ -361,7 +526,7 @@ def _run_ragas(args: argparse.Namespace) -> int:
 
 
 def _run_runtime(args: argparse.Namespace) -> int:
-    from play_book_studio.app.runtime_report import write_runtime_report
+    from play_book_studio.http.runtime_report import write_runtime_report
 
     output_path, report = write_runtime_report(
         ROOT,
@@ -376,7 +541,7 @@ def _run_runtime(args: argparse.Namespace) -> int:
 
 
 def _run_maintenance_smoke(args: argparse.Namespace) -> int:
-    from play_book_studio.app.runtime_maintenance_smoke import write_runtime_maintenance_smoke
+    from play_book_studio.http.runtime_maintenance_smoke import write_runtime_maintenance_smoke
 
     output_path, payload = write_runtime_maintenance_smoke(
         ROOT,
@@ -391,7 +556,7 @@ def _run_maintenance_smoke(args: argparse.Namespace) -> int:
 
 
 def _run_private_lane_smoke(args: argparse.Namespace) -> int:
-    from play_book_studio.app.private_lane_smoke import write_private_lane_smoke
+    from play_book_studio.http.private_lane_smoke import write_private_lane_smoke
 
     output_path, payload = write_private_lane_smoke(
         ROOT,
@@ -430,6 +595,558 @@ def _run_graph_compact(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_db_migrate(args: argparse.Namespace) -> int:
+    from play_book_studio.db.migrations import apply_migrations, list_migrations
+
+    root_dir = args.root_dir.resolve()
+    migrations_dir = args.migrations_dir
+    if not migrations_dir.is_absolute():
+        migrations_dir = root_dir / migrations_dir
+    migrations_dir = migrations_dir.resolve()
+
+    if args.dry_run:
+        migrations = list_migrations(migrations_dir)
+        print(
+            json.dumps(
+                {
+                    "dry_run": True,
+                    "migrations_dir": str(migrations_dir),
+                    "migration_count": len(migrations),
+                    "migrations": [
+                        {
+                            "version": migration.version,
+                            "checksum": migration.checksum,
+                            "path": str(migration.path),
+                        }
+                        for migration in migrations
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    result = apply_migrations(database_url, migrations_dir)
+    print(
+        json.dumps(
+            {
+                "dry_run": False,
+                "migrations_dir": str(migrations_dir),
+                **result,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _upload_ingest_summary(parsed, chunks, *, persisted=None) -> dict:
+    return {
+        "filename": parsed.filename,
+        "document_format": parsed.document_format,
+        "mime_type": parsed.mime_type,
+        "sha256": parsed.sha256,
+        "status": parsed.status,
+        "warning_count": len(parsed.warnings),
+        "warnings": list(parsed.warnings),
+        "block_count": len(parsed.blocks),
+        "asset_count": len(parsed.assets),
+        "chunk_count": len(chunks),
+        "sections": [
+            list(chunk.section_path)
+            for chunk in chunks
+            if chunk.section_path
+        ],
+        "persisted": None if persisted is None else {
+            "document_source_id": persisted.document_source_id,
+            "document_version_id": persisted.document_version_id,
+            "parse_job_id": persisted.parse_job_id,
+            "parsed_document_id": persisted.parsed_document_id,
+            "repository_id": persisted.repository_id,
+            "block_count": len(persisted.block_ids),
+            "asset_count": len(persisted.asset_ids),
+            "chunk_count": len(persisted.chunk_ids),
+        },
+    }
+
+
+def _run_upload_ingest(args: argparse.Namespace) -> int:
+    from play_book_studio.db.document_repository import persist_parsed_upload_document
+    from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
+    from play_book_studio.ingestion.vision import build_qwen_image_describer
+
+    root_dir = args.root_dir.resolve()
+    source_path = args.path
+    if not source_path.is_absolute():
+        source_path = root_dir / source_path
+    source_path = source_path.resolve()
+    if not source_path.exists():
+        print(f"upload source does not exist: {source_path}")
+        return 1
+
+    settings = load_settings(root_dir)
+    parsed = parse_upload_document(source_path, image_describer=build_qwen_image_describer(settings))
+    chunks = build_document_chunks(
+        parsed,
+        max_chars=args.chunk_max_chars,
+        overlap_blocks=args.chunk_overlap_blocks,
+    )
+    if args.dry_run:
+        print(json.dumps(_upload_ingest_summary(parsed, chunks), ensure_ascii=False, indent=2))
+        return 0
+
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        persisted = persist_parsed_upload_document(
+            connection,
+            parsed,
+            chunks,
+            tenant_slug=args.tenant_slug,
+            tenant_name=args.tenant_name,
+            workspace_slug=args.workspace_slug,
+            workspace_name=args.workspace_name,
+            storage_key=args.storage_key,
+            created_by=args.created_by,
+            repository_id=args.repository_id,
+            repository_slug=args.repository_slug,
+            repository_title=args.repository_title,
+            repository_kind=args.repository_kind,
+            visibility=args.visibility,
+            source_scope=args.source_scope,
+        )
+    print(json.dumps(_upload_ingest_summary(parsed, chunks, persisted=persisted), ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_corpus_ingest(args: argparse.Namespace) -> int:
+    from play_book_studio.ingestion.corpus_import import build_corpus_import_plan, import_corpus_documents
+
+    root_dir = args.root_dir.resolve()
+    source_dir = args.source_dir
+    if not source_dir.is_absolute():
+        source_dir = root_dir / source_dir
+    source_dir = source_dir.resolve()
+    if args.dry_run:
+        print(json.dumps(build_corpus_import_plan(source_dir, corpus_kind=args.corpus_kind), ensure_ascii=False, indent=2))
+        return 0
+
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        result = import_corpus_documents(
+            connection,
+            source_dir=source_dir,
+            corpus_kind=args.corpus_kind,
+            tenant_slug=args.tenant_slug,
+            tenant_name=args.tenant_name,
+            workspace_slug=args.workspace_slug,
+            workspace_name=args.workspace_name,
+            chunk_max_chars=args.chunk_max_chars,
+            chunk_overlap_blocks=args.chunk_overlap_blocks,
+            index=bool(args.index),
+            settings=settings,
+            collection=args.collection,
+        )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if int(result.get("failed_count") or 0) == 0 else 1
+
+
+def _run_db_qdrant_index(args: argparse.Namespace) -> int:
+    from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        result = index_pending_document_chunks(
+            settings,
+            connection,
+            collection=args.collection.strip() or None,
+            source_scope=args.source_scope,
+            limit=args.limit,
+        )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_db_qdrant_backfill(args: argparse.Namespace) -> int:
+    from play_book_studio.db.qdrant_indexer import backfill_existing_qdrant_index_entries
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        result = backfill_existing_qdrant_index_entries(
+            settings,
+            connection,
+            collection=args.collection.strip() or None,
+            limit=args.limit,
+            batch_size=args.batch_size,
+        )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_db_qdrant_refresh_payloads(args: argparse.Namespace) -> int:
+    from play_book_studio.db.qdrant_indexer import refresh_stale_qdrant_payloads
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        result = refresh_stale_qdrant_payloads(
+            settings,
+            connection,
+            collection=args.collection.strip() or None,
+            source_scope=args.source_scope,
+            limit=args.limit,
+            batch_size=args.batch_size,
+        )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_db_corpus_status(args: argparse.Namespace) -> int:
+    from play_book_studio.db.corpus_status import build_corpus_status
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    payload = build_corpus_status(
+        database_url=database_url,
+        collection=args.collection.strip() or settings.qdrant_collection,
+    )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if bool(payload.get("ready")) else 1
+
+
+def _run_course_runtime_status(args: argparse.Namespace) -> int:
+    from play_book_studio.db.course_runtime_status import build_course_runtime_status
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    payload = build_course_runtime_status(
+        database_url=database_url,
+        course_slug=args.course_slug,
+    )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if bool(payload.get("ready")) else 1
+
+
+def _run_official_gold_import(args: argparse.Namespace) -> int:
+    from play_book_studio.ingestion.official_gold_import import (
+        build_official_gold_import_plan,
+        import_official_gold_chunks,
+    )
+
+    root_dir = args.root_dir.resolve()
+    chunks_path = args.chunks_path
+    if not chunks_path.is_absolute():
+        chunks_path = root_dir / chunks_path
+    chunks_path = chunks_path.resolve()
+    if args.dry_run:
+        print(
+            json.dumps(
+                build_official_gold_import_plan(chunks_path, limit=args.limit),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        result = import_official_gold_chunks(
+            connection,
+            chunks_path=chunks_path,
+            tenant_slug=args.tenant_slug,
+            tenant_name=args.tenant_name,
+            workspace_slug=args.workspace_slug,
+            workspace_name=args.workspace_name,
+            limit=args.limit,
+        )
+        payload = result.to_dict()
+        if args.index:
+            from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
+
+            index_limit = args.index_limit or max(result.imported_chunk_count, 1000)
+            payload["qdrant_index"] = index_pending_document_chunks(
+                settings,
+                connection,
+                collection=args.collection.strip() or None,
+                source_scope="official_docs",
+                limit=index_limit,
+            )
+        if args.refresh_qdrant_payloads:
+            from play_book_studio.db.qdrant_indexer import refresh_stale_qdrant_payloads
+
+            refresh_limit = args.refresh_limit or max(result.imported_chunk_count, 1000)
+            payload["qdrant_refresh"] = refresh_stale_qdrant_payloads(
+                settings,
+                connection,
+                collection=args.collection.strip() or None,
+                source_scope="official_docs",
+                limit=refresh_limit,
+                batch_size=args.refresh_batch_size,
+            )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _learning_seed_summary(seed, *, persisted=None) -> dict:
+    step_count = len(seed.steps)
+    lab_task_count = sum(len(step.lab_tasks) for step in seed.steps)
+    command_check_count = sum(len(task.command_checks) for step in seed.steps for task in step.lab_tasks)
+    return {
+        "slug": seed.slug,
+        "title": seed.title,
+        "audience": seed.audience,
+        "ocp_version": seed.ocp_version,
+        "language": seed.language,
+        "source_kind": seed.source_kind,
+        "source_ref": seed.source_ref,
+        "step_count": step_count,
+        "lab_task_count": lab_task_count,
+        "command_check_count": command_check_count,
+        "persisted": None if persisted is None else {
+            "learning_path_id": persisted.learning_path_id,
+            "step_count": len(persisted.step_ids),
+            "lab_task_count": len(persisted.lab_task_ids),
+            "command_check_count": len(persisted.command_check_ids),
+        },
+    }
+
+
+def _run_learning_seed_import(args: argparse.Namespace) -> int:
+    from play_book_studio.course.learning_path_seed import load_ops_learning_guides_seed
+    from play_book_studio.db.learning_repository import persist_learning_path
+
+    root_dir = args.root_dir.resolve()
+    guides_path = args.guides_path
+    if not guides_path.is_absolute():
+        guides_path = root_dir / guides_path
+    guides_path = guides_path.resolve()
+    if not guides_path.exists():
+        print(f"learning guides seed does not exist: {guides_path}")
+        return 1
+
+    seed = load_ops_learning_guides_seed(guides_path)
+    if args.dry_run:
+        print(json.dumps(_learning_seed_summary(seed), ensure_ascii=False, indent=2))
+        return 0
+
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        persisted = persist_learning_path(
+            connection,
+            seed,
+            tenant_slug=args.tenant_slug,
+            tenant_name=args.tenant_name,
+            workspace_slug=args.workspace_slug,
+            workspace_name=args.workspace_name,
+        )
+    print(json.dumps(_learning_seed_summary(seed, persisted=persisted), ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_course_chunk_import(args: argparse.Namespace) -> int:
+    from play_book_studio.course.qdrant_course import load_course_chunks
+    from play_book_studio.db.course_repository import (
+        build_course_asset_record,
+        import_course_manifest,
+        import_course_assets,
+        import_course_chunks,
+    )
+
+    root_dir = args.root_dir.resolve()
+    course_dir = args.course_dir
+    if not course_dir.is_absolute():
+        course_dir = root_dir / course_dir
+    course_dir = course_dir.resolve()
+    chunks = load_course_chunks(course_dir)
+    limit = max(0, int(args.limit or 0))
+    if limit:
+        chunks = chunks[:limit]
+    source_ref = str(course_dir.relative_to(root_dir)) if course_dir.is_relative_to(root_dir) else str(course_dir)
+    manifest_path = course_dir / "manifests" / "course_v1.json"
+    manifest_payload: dict | None = None
+    manifest_source_ref = ""
+    if not args.skip_manifest and manifest_path.exists():
+        manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest_source_ref = str(manifest_path.relative_to(root_dir)) if manifest_path.is_relative_to(root_dir) else str(manifest_path)
+    asset_records = []
+    missing_assets: list[str] = []
+    seen_asset_paths: set[str] = set()
+    if not args.skip_assets:
+        for chunk in chunks:
+            attachments = chunk.get("image_attachments") if isinstance(chunk.get("image_attachments"), list) else []
+            for attachment in attachments:
+                if not isinstance(attachment, dict):
+                    continue
+                asset_path = str(attachment.get("asset_path") or "").strip().replace("\\", "/")
+                if not asset_path or asset_path in seen_asset_paths:
+                    continue
+                seen_asset_paths.add(asset_path)
+                resolved = Path(asset_path)
+                if not resolved.is_absolute():
+                    resolved = root_dir / resolved
+                resolved = resolved.resolve()
+                if not resolved.exists() or not resolved.is_file():
+                    missing_assets.append(asset_path)
+                    continue
+                asset_records.append(
+                    build_course_asset_record(
+                        asset_key=asset_path,
+                        asset_path=asset_path,
+                        content=resolved.read_bytes(),
+                        payload={
+                            "asset_id": str(attachment.get("asset_id") or ""),
+                            "attachment_id": str(attachment.get("attachment_id") or ""),
+                            "chunk_id": str(chunk.get("chunk_id") or ""),
+                            "slide_no": int(attachment.get("slide_no") or 0),
+                            "visual_summary": str(attachment.get("visual_summary") or ""),
+                            "ocr_text": str(attachment.get("ocr_text") or ""),
+                            "instructional_role": str(attachment.get("instructional_role") or ""),
+                        },
+                        course_slug=args.course_slug,
+                        source_ref=source_ref,
+                    )
+                )
+    if args.dry_run:
+        print(
+            json.dumps(
+                {
+                    "dry_run": True,
+                    "course_slug": args.course_slug,
+                    "source_ref": source_ref,
+                    "chunk_count": len(chunks),
+                    "asset_count": len(asset_records),
+                    "missing_asset_count": len(missing_assets),
+                    "missing_assets": missing_assets[:10],
+                    "manifest_loaded": manifest_payload is not None,
+                    "manifest_stage_count": len(manifest_payload.get("stages") or []) if isinstance(manifest_payload, dict) else 0,
+                    "first_chunk_id": str(chunks[0].get("chunk_id") or "") if chunks else "",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        chunk_result = import_course_chunks(
+            connection,
+            chunks,
+            course_slug=args.course_slug,
+            source_ref=source_ref,
+        )
+        asset_result = (
+            {
+                "course_slug": args.course_slug,
+                "source_ref": source_ref,
+                "scanned_count": 0,
+                "imported_count": 0,
+                "skipped_count": 0,
+            }
+            if args.skip_assets
+            else import_course_assets(
+                connection,
+                asset_records,
+                course_slug=args.course_slug,
+                source_ref=source_ref,
+            )
+        )
+        manifest_result = (
+            {
+                "course_slug": args.course_slug,
+                "manifest_key": "course_v1",
+                "stage_count": 0,
+                "stop_count": 0,
+                "source_ref": "",
+            }
+            if manifest_payload is None
+            else import_course_manifest(
+                connection,
+                manifest_payload,
+                course_slug=args.course_slug,
+                manifest_key="course_v1",
+                source_ref=manifest_source_ref,
+            )
+        )
+    result = {
+        "course_slug": args.course_slug,
+        "source_ref": source_ref,
+        "chunks": chunk_result,
+        "assets": asset_result,
+        "manifest": manifest_result,
+        "missing_asset_count": len(missing_assets),
+        "missing_assets": missing_assets[:10],
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if not missing_assets else 1
+
+
 def main() -> int:
     args = build_parser().parse_args()
     if args.command == "ui":
@@ -448,6 +1165,28 @@ def main() -> int:
         return _run_private_lane_smoke(args)
     if args.command == "graph-compact":
         return _run_graph_compact(args)
+    if args.command == "db-migrate":
+        return _run_db_migrate(args)
+    if args.command == "upload-ingest":
+        return _run_upload_ingest(args)
+    if args.command == "corpus-ingest":
+        return _run_corpus_ingest(args)
+    if args.command == "db-qdrant-index":
+        return _run_db_qdrant_index(args)
+    if args.command == "db-qdrant-backfill":
+        return _run_db_qdrant_backfill(args)
+    if args.command == "db-qdrant-refresh-payloads":
+        return _run_db_qdrant_refresh_payloads(args)
+    if args.command == "db-corpus-status":
+        return _run_db_corpus_status(args)
+    if args.command == "course-runtime-status":
+        return _run_course_runtime_status(args)
+    if args.command == "official-gold-import":
+        return _run_official_gold_import(args)
+    if args.command == "learning-seed-import":
+        return _run_learning_seed_import(args)
+    if args.command == "course-chunk-import":
+        return _run_course_chunk_import(args)
     if args.command == "course-qa":
         from play_book_studio.course.quality_eval import run_quality_eval
 

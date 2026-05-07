@@ -6,20 +6,29 @@ Target layout:
 
 ```text
 corpus/
-├─ sources/
-│  ├─ official/
-│  ├─ kmsc/
-│  └─ demo/
-└─ manifests/
-   ├─ official/
-   ├─ kmsc/
-   └─ eval/
+|-- sources/
+|   |-- official/
+|   |-- kmsc/
+|   `-- demo/
+`-- manifests/
+    |-- official/
+    |-- kmsc/
+    `-- eval/
+```
+
+Current transitional layout:
+
+```text
+corpus/
+|-- data/
+|-- manifests/
+`-- study-docs/
 ```
 
 Migration targets:
 
-- `study-docs/**` -> `corpus/sources/kmsc/raw/**`
-- selected `data/gold_*` -> `corpus/sources/official/imported-gold/**`
+- `corpus/sources/kmsc/raw/**` -> `corpus/sources/kmsc/raw/**`
+- selected `corpus/data/gold_*` -> `corpus/sources/official/imported-gold/**`
 - eval JSONL manifests -> `corpus/manifests/eval/**`
 
 Operational rule:
