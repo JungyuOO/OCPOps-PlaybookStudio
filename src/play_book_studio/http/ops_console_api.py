@@ -21,6 +21,7 @@ REAL_OCP_CONNECT_TIMEOUT_SECONDS = 10
 REAL_OCP_READ_TIMEOUT_SECONDS = 20
 REAL_OCP_RETRY_ATTEMPTS = 3
 REAL_OCP_RETRY_BACKOFF_SECONDS = 0.6
+ENV_OCP_CONNECTION_ID = "env_ocp"
 RESOURCE_KIND_LABELS = {
     "pods": "Pod",
     "deployments": "Deployment",
@@ -230,6 +231,40 @@ def _real_ocp_config(root_dir: Path, connection: dict[str, Any] | None = None) -
         "token": token,
         "namespace": namespace,
     }
+
+
+def _env_ocp_connection(root_dir: Path) -> dict[str, Any] | None:
+    config = _real_ocp_config(root_dir)
+    if config is None:
+        return None
+    return {
+        "workspace_id": "ws_default",
+        "connection_id": ENV_OCP_CONNECTION_ID,
+        "display_name": "Environment Cluster",
+        "cluster_url": config["base_url"],
+        "auth_mode": "token",
+        "verify_ssl": False,
+        "default_namespace": config["namespace"],
+        "username_hint": "env-token",
+        "secret_ref": "env://OCP_API_TOKEN",
+        "save_profile": False,
+        "status": "connected",
+        "connection_mode": "live",
+        "last_verified_at": _now_iso(),
+        "expires_at": "",
+    }
+
+
+def _with_env_ocp_connection(root_dir: Path, state: dict[str, Any]) -> dict[str, Any]:
+    env_connection = _env_ocp_connection(root_dir)
+    if env_connection is None:
+        return state
+    existing = [
+        connection for connection in state["connections"]
+        if str(connection.get("connection_id") or "") != ENV_OCP_CONNECTION_ID
+    ]
+    state["connections"] = [env_connection, *existing]
+    return state
 
 
 def _public_connection(connection: dict[str, Any]) -> dict[str, Any]:
@@ -2581,7 +2616,7 @@ def _redirect(handler: Any, location: str) -> None:
 
 
 def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Path) -> bool:
-    state = _load_state(root_dir)
+    state = _with_env_ocp_connection(root_dir, _load_state(root_dir))
     if path == "/api/v1/workspaces":
         handler._send_json({"items": state["workspaces"]})
         return True

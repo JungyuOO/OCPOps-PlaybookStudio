@@ -1,14 +1,16 @@
 import { Sparkles, Moon, Sun } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { ROUTES, buildSharedLandingHref } from '../../routing/routes';
+import { buildSharedLandingHref } from '../../routing/routes';
 
 type WorkspaceHeaderProps = {
   globalTheme: 'dark' | 'light';
+  onOpenDashboard: () => void;
   onOpenLibrary: () => void;
   onToggleGlobalTheme: () => void;
 };
 
 export default function WorkspaceHeader({
+  onOpenDashboard,
   onOpenLibrary,
   onToggleGlobalTheme,
   globalTheme,
@@ -29,7 +31,7 @@ export default function WorkspaceHeader({
             {globalTheme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
           </button>
         </div>
-        <Link to={ROUTES.opsOverview} className="nav-btn nav-link-btn">Ops Console</Link>
+        <button className="nav-btn" onClick={onOpenDashboard} type="button">Dashboard</button>
         <button className="nav-btn" onClick={onOpenLibrary} type="button">Playbook Library</button>
       </div>
     </header>

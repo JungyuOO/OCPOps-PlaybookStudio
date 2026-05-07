@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Book, ShieldCheck, Layers, MessageSquare, PlaySquare } from 'lucide-react';
 import gsap from 'gsap';
-import { ROUTES, buildSharedLandingHref } from '../routing/routes';
+import { buildSharedLandingHref } from '../routing/routes';
 import './ProjectDetailsPage.css';
 
 export default function ProjectDetailsPage() {
@@ -27,9 +27,6 @@ export default function ProjectDetailsPage() {
             <span>Back to Home</span>
           </Link>
           <h2 className="sidebar-title gradient-text">Project Contracts</h2>
-          <Link to={ROUTES.opsOverview} className="details-ops-link">
-            <span>Open Ops Console</span>
-          </Link>
         </div>
 
         <ul className="sidebar-menu">

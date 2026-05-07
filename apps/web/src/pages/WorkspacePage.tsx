@@ -22,6 +22,7 @@ import {
   Clock3,
   Compass,
   Terminal as TerminalIcon,
+  X,
 } from 'lucide-react';
 import gsap from 'gsap';
 import './WorkspacePage.css';
@@ -61,7 +62,9 @@ import {
   loadCustomerPackDraft,
   loadDataControlRoom,
   loadDbChatMessages,
+  loadDocumentIngestStatus,
   loadDocumentRepositories,
+  loadSignals,
   loadWikiOverlaySignals,
   loadWikiOverlays,
   loadSession,
@@ -79,7 +82,16 @@ import {
   uploadDocumentIngestion,
 } from '../lib/runtimeApi';
 import {
+  loadOcpStatus,
+  loadOcpMetrics,
+  loadOcpOverview,
+  loadResourceDetail,
+  loadResources,
   listOcpProfiles,
+  type OcpResourceItem,
+  type OcpMetricsResponse,
+  type OcpOverview,
+  type ResourceDetailResponse,
   type OcpConnection,
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../routing/routes';
@@ -120,6 +132,9 @@ interface ViewerActiveSection {
 }
 
 const WORKSPACE_ACTIVE_SOURCE_STORAGE_KEY = 'workspace.activeSourceId';
+const WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY = 'workspace.activeDocumentId';
+const WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY = 'workspace.activeDocumentTitle';
+const WORKSPACE_INGESTION_STATUS_STORAGE_KEY = 'workspace.ingestionStatus';
 
 function loadStoredActiveSourceId(): string | null {
   if (typeof window === 'undefined') {
@@ -127,6 +142,18 @@ function loadStoredActiveSourceId(): string | null {
   }
   const value = window.localStorage.getItem(WORKSPACE_ACTIVE_SOURCE_STORAGE_KEY);
   return value && value.trim() ? value : null;
+}
+
+function loadStoredIngestionStatus(): IngestionStatusBanner | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) as IngestionStatusBanner : null;
+  } catch {
+    return null;
+  }
 }
 
 function citationEvidenceTitle(citation: ChatCitation): string {
@@ -143,7 +170,31 @@ function citationEvidenceMeta(citation: ChatCitation): string {
 
 type LeftPanelMode = 'history' | 'outline' | 'signals';
 type RightPanelMode = 'viewer' | 'terminal';
+type WorkspaceChatMode = 'document' | 'live_cluster';
+type ClusterConnectionStatus = 'not_connected' | 'connecting' | 'connected' | 'error';
 type SignalsFavoriteFilter = 'favorites' | 'edited';
+const CLUSTER_RESOURCE_OPTIONS = ['pods', 'deployments', 'services', 'routes', 'events'] as const;
+type ClusterResourceKind = typeof CLUSTER_RESOURCE_OPTIONS[number];
+
+interface ClusterSignalEvent {
+  id: string;
+  timestamp: string;
+  operationType: string;
+  resourceKind: string;
+  resourceName: string;
+  namespace: string;
+  status: string;
+  sourceCommand: string;
+}
+
+interface IngestionStatusBanner {
+  status: 'recognizing' | 'parsing' | 'embedding' | 'indexing' | 'ready' | 'failed';
+  message: string;
+  filename?: string;
+  repositoryId?: string;
+  documentSourceId?: string;
+  updatedAt: string;
+}
 interface OutlineLinkItem {
   id: string;
   label: string;
@@ -667,6 +718,64 @@ function NoAnswerAcquisitionCard({
 
 const FALLBACK_CLUSTER_USER_LABEL = 'Undefined';
 
+function normalizeClusterConnectionStatus(connection?: OcpConnection | null): ClusterConnectionStatus {
+  const status = connection?.status?.toLowerCase().trim();
+  if (!connection || !status || status === 'disconnected' || status === 'not_connected') {
+    return 'not_connected';
+  }
+  if (status === 'connected' || status === 'ready' || status === 'active') {
+    return 'connected';
+  }
+  if (status === 'connecting' || status === 'pending' || status === 'testing') {
+    return 'connecting';
+  }
+  return 'error';
+}
+
+function detectClusterSignal(command: string): Omit<ClusterSignalEvent, 'id' | 'timestamp' | 'status'> | null {
+  const normalized = command.trim().replace(/\s+/g, ' ');
+  const match = normalized.match(/^(oc|kubectl)\s+(create|apply|delete|edit|patch|rollout|scale|expose|adm|set\s+image)\b/i);
+  if (!match) {
+    return null;
+  }
+  const operationType = match[2].toLowerCase();
+  const namespaceMatch = normalized.match(/(?:^|\s)(?:-n|--namespace)\s+([^\s]+)/i);
+  const namespace = namespaceMatch?.[1] ?? 'default';
+  const afterOperation = normalized.slice(match[0].length).trim();
+  const tokens = afterOperation.split(/\s+/).filter(Boolean);
+  const resourceKind = tokens.find((token) => !token.startsWith('-') && !token.includes('=')) ?? 'resource';
+  const resourceName = tokens.find((token, index) => index > 0 && !token.startsWith('-') && !token.includes('=')) ?? '';
+  return {
+    operationType,
+    resourceKind,
+    resourceName,
+    namespace,
+    sourceCommand: command,
+  };
+}
+
+function signalEventFromApi(item: {
+  signal_id: string;
+  timestamp: string;
+  operation_type: string;
+  resource_kind: string;
+  resource_name: string;
+  namespace: string;
+  status: string;
+  source_command: string;
+}): ClusterSignalEvent {
+  return {
+    id: item.signal_id,
+    timestamp: item.timestamp,
+    operationType: item.operation_type,
+    resourceKind: item.resource_kind,
+    resourceName: item.resource_name,
+    namespace: item.namespace,
+    status: item.status,
+    sourceCommand: item.source_command,
+  };
+}
+
 function runtimePathFromUrl(viewerUrl: string): string {
   try {
     const parsed = new URL(viewerUrl, window.location.origin);
@@ -1015,9 +1124,21 @@ export default function WorkspacePage() {
   const [query, setQuery] = useState('');
   const [sessionId, setSessionId] = useState(() => makeId('ID'));
   const [testMode, setTestMode] = useState(false);
-  const [rightPanelMode, setRightPanelMode] = useState<RightPanelMode>('viewer');
+  const [rightPanelMode, setRightPanelMode] = useState<RightPanelMode>('terminal');
   const [activeTestTrace, setActiveTestTrace] = useState<WorkspaceTestTrace | null>(null);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(() => loadStoredActiveSourceId());
+  const [activeDocumentId, setActiveDocumentId] = useState(() => {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    return window.localStorage.getItem(WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY) || '';
+  });
+  const [activeDocumentTitle, setActiveDocumentTitle] = useState(() => {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    return window.localStorage.getItem(WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY) || '';
+  });
   const [preview, setPreview] = useState<PreviewState>({ kind: 'empty' });
   const [evidenceDrawer, setEvidenceDrawer] = useState<EvidenceDrawerState>({ kind: 'closed' });
   const [viewerPageMode, setViewerPageMode] = useState<ViewerPageMode>('single');
@@ -1102,6 +1223,22 @@ export default function WorkspacePage() {
   });
   const [footerConnections, setFooterConnections] = useState<OcpConnection[]>([]);
   const [isFooterProfileLoading, setIsFooterProfileLoading] = useState(false);
+  const [currentMode, setCurrentMode] = useState<WorkspaceChatMode>('document');
+  const [clusterConnectionStatus, setClusterConnectionStatus] = useState<ClusterConnectionStatus>('not_connected');
+  const [selectedResourceKind, setSelectedResourceKind] = useState<ClusterResourceKind>('pods');
+  const [selectedResourceNamespace, setSelectedResourceNamespace] = useState('default');
+  const [clusterResources, setClusterResources] = useState<OcpResourceItem[]>([]);
+  const [isClusterResourceLoading, setIsClusterResourceLoading] = useState(false);
+  const [clusterResourceError, setClusterResourceError] = useState('');
+  const [resourceYamlDetail, setResourceYamlDetail] = useState<ResourceDetailResponse | null>(null);
+  const [isResourceYamlLoading, setIsResourceYamlLoading] = useState(false);
+  const [signalEvents, setSignalEvents] = useState<ClusterSignalEvent[]>([]);
+  const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [dashboardOverview, setDashboardOverview] = useState<OcpOverview | null>(null);
+  const [dashboardMetrics, setDashboardMetrics] = useState<OcpMetricsResponse | null>(null);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState('');
+  const [ingestionStatusBanner, setIngestionStatusBanner] = useState<IngestionStatusBanner | null>(() => loadStoredIngestionStatus());
 
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1159,18 +1296,227 @@ export default function WorkspacePage() {
     return username || displayName || FALLBACK_CLUSTER_USER_LABEL;
   }, [activeFooterConnection]);
   const wikiOverlayUserId = footerProfileName;
+  const isClusterConnected = clusterConnectionStatus === 'connected';
+  const clusterStatusLabel =
+    clusterConnectionStatus === 'connected'
+      ? 'Connected'
+      : clusterConnectionStatus === 'connecting'
+        ? 'Connecting'
+        : clusterConnectionStatus === 'error'
+          ? 'Error'
+          : 'Not connected';
 
   const refreshFooterProfile = useCallback(async () => {
     setIsFooterProfileLoading(true);
     try {
       const connections = await listOcpProfiles(opsWorkspaceId);
       setFooterConnections(connections);
+      setClusterConnectionStatus(normalizeClusterConnectionStatus(
+        connections.find((item) => item.connection_id === opsConnectionId) ?? connections[0] ?? null,
+      ));
     } catch (error) {
       console.error(error);
+      setClusterConnectionStatus('error');
     } finally {
       setIsFooterProfileLoading(false);
     }
-  }, [opsWorkspaceId]);
+  }, [opsConnectionId, opsWorkspaceId]);
+
+  useEffect(() => {
+    if (!activeFooterConnection) {
+      setClusterConnectionStatus('not_connected');
+      return;
+    }
+    setClusterConnectionStatus(normalizeClusterConnectionStatus(activeFooterConnection));
+    let cancelled = false;
+    loadOcpStatus(activeFooterConnection.connection_id)
+      .then((connection) => {
+        if (cancelled) {
+          return;
+        }
+        setClusterConnectionStatus(normalizeClusterConnectionStatus(connection));
+        setFooterConnections((current) => current.map((item) => (
+          item.connection_id === connection.connection_id ? { ...item, ...connection } : item
+        )));
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error(error);
+          setClusterConnectionStatus('error');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeFooterConnection?.connection_id]);
+
+  useEffect(() => {
+    if (currentMode === 'live_cluster' && !isClusterConnected) {
+      setCurrentMode('document');
+    }
+  }, [currentMode, isClusterConnected]);
+
+  useEffect(() => {
+    if (activeFooterConnection?.default_namespace && selectedResourceNamespace === 'default') {
+      setSelectedResourceNamespace(activeFooterConnection.default_namespace);
+    }
+  }, [activeFooterConnection?.default_namespace, selectedResourceNamespace]);
+
+  const refreshClusterResources = useCallback(async () => {
+    if (!isClusterConnected || !activeFooterConnection) {
+      setClusterResources([]);
+      setClusterResourceError('');
+      return;
+    }
+    const namespace = selectedResourceNamespace.trim() || activeFooterConnection.default_namespace || 'default';
+    setIsClusterResourceLoading(true);
+    setClusterResourceError('');
+    try {
+      const response = await loadResources(activeFooterConnection.connection_id, selectedResourceKind, namespace);
+      setClusterResources(response.items ?? []);
+    } catch (error) {
+      console.error(error);
+      setClusterResources([]);
+      setClusterResourceError('Cluster resource list is unavailable.');
+    } finally {
+      setIsClusterResourceLoading(false);
+    }
+  }, [
+    activeFooterConnection,
+    isClusterConnected,
+    selectedResourceKind,
+    selectedResourceNamespace,
+  ]);
+
+  useEffect(() => {
+    if (leftPanelMode === 'outline') {
+      void refreshClusterResources();
+    }
+  }, [leftPanelMode, refreshClusterResources]);
+
+  async function openClusterResourceYaml(resource: OcpResourceItem): Promise<void> {
+    if (!activeFooterConnection || !isClusterConnected) {
+      return;
+    }
+    const namespace = resource.namespace || selectedResourceNamespace.trim() || activeFooterConnection.default_namespace || 'default';
+    setIsResourceYamlLoading(true);
+    setClusterResourceError('');
+    try {
+      const detail = await loadResourceDetail(
+        activeFooterConnection.connection_id,
+        selectedResourceKind,
+        namespace,
+        resource.name,
+      );
+      setResourceYamlDetail(detail);
+    } catch (error) {
+      console.error(error);
+      setClusterResourceError('Resource YAML is unavailable.');
+    } finally {
+      setIsResourceYamlLoading(false);
+    }
+  }
+
+  const refreshSignalEvents = useCallback(async () => {
+    try {
+      const payload = await loadSignals(50);
+      if (payload.database === 'postgres') {
+        setSignalEvents(payload.items.map(signalEventFromApi));
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
+  const handleTerminalCommandSubmitted = useCallback((command: string) => {
+    const signal = detectClusterSignal(command);
+    if (!signal) {
+      return;
+    }
+    setSignalEvents((current) => [{
+      ...signal,
+      id: makeId('signal'),
+      timestamp: new Date().toISOString(),
+      status: isClusterConnected ? 'observed' : 'cluster_unverified',
+    }, ...current].slice(0, 40));
+    setLeftPanelMode('signals');
+    window.setTimeout(() => { void refreshSignalEvents(); }, 800);
+    if (isClusterConnected) {
+      void refreshClusterResources();
+    }
+  }, [isClusterConnected, refreshClusterResources, refreshSignalEvents]);
+
+  const refreshDashboard = useCallback(async () => {
+    if (!activeFooterConnection || !isClusterConnected) {
+      setDashboardOverview(null);
+      setDashboardMetrics(null);
+      setDashboardError('Cluster가 연결되어 있지 않습니다.');
+      return;
+    }
+    const namespace = selectedResourceNamespace.trim() || activeFooterConnection.default_namespace || 'default';
+    setIsDashboardLoading(true);
+    setDashboardError('');
+    try {
+      const [overview, metrics] = await Promise.all([
+        loadOcpOverview(activeFooterConnection.connection_id),
+        loadOcpMetrics(activeFooterConnection.connection_id, namespace),
+      ]);
+      setDashboardOverview(overview);
+      setDashboardMetrics(metrics);
+    } catch (error) {
+      console.error(error);
+      setDashboardOverview(null);
+      setDashboardMetrics(null);
+      setDashboardError('Cluster dashboard data is unavailable.');
+    } finally {
+      setIsDashboardLoading(false);
+    }
+  }, [activeFooterConnection, isClusterConnected, selectedResourceNamespace]);
+
+  useEffect(() => {
+    if (dashboardOpen) {
+      void refreshDashboard();
+    }
+  }, [dashboardOpen, refreshDashboard]);
+
+  useEffect(() => {
+    void refreshSignalEvents();
+  }, [refreshSignalEvents]);
+
+  useEffect(() => {
+    if (!ingestionStatusBanner?.repositoryId && !ingestionStatusBanner?.documentSourceId) {
+      return;
+    }
+    let cancelled = false;
+    const refreshStatus = async () => {
+      try {
+        const payload = await loadDocumentIngestStatus({
+          repositoryId: ingestionStatusBanner.repositoryId,
+          documentSourceId: ingestionStatusBanner.documentSourceId,
+        });
+        const latest = payload.latest;
+        if (!latest || cancelled) {
+          return;
+        }
+        const nextBanner: IngestionStatusBanner = {
+          status: latest.ready ? 'ready' : latest.status === 'failed' ? 'failed' : 'indexing',
+          message: latest.message,
+          filename: latest.original_filename || latest.title,
+          repositoryId: latest.repository_id,
+          documentSourceId: latest.document_source_id,
+          updatedAt: latest.updated_at,
+        };
+        setIngestionStatusBanner(nextBanner);
+        window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    void refreshStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [ingestionStatusBanner?.documentSourceId, ingestionStatusBanner?.repositoryId]);
 
   const refreshWikiOverlays = useCallback(async () => {
     setIsOverlayLoading(true);
@@ -1221,6 +1567,24 @@ export default function WorkspacePage() {
       window.localStorage.removeItem(WORKSPACE_ACTIVE_SOURCE_STORAGE_KEY);
     }
   }, [activeSourceId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (activeDocumentId) {
+      window.localStorage.setItem(WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY, activeDocumentId);
+    } else {
+      window.localStorage.removeItem(WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY);
+    }
+  }, [activeDocumentId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (activeDocumentTitle) {
+      window.localStorage.setItem(WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY, activeDocumentTitle);
+    } else {
+      window.localStorage.removeItem(WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY);
+    }
+  }, [activeDocumentTitle]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1382,10 +1746,6 @@ export default function WorkspacePage() {
     setMessages([]);
     setUserScrolledUp(false);
     void refreshSessionList();
-  }
-
-  function openOpsRoute(path: string): void {
-    navigate(path);
   }
 
   async function handleSessionResume(targetSessionId: string): Promise<void> {
@@ -1680,6 +2040,20 @@ export default function WorkspacePage() {
     () => documentRepositories.find((repository) => activeSourceId === `repository:${repository.repository_id}`) ?? null,
     [activeSourceId, documentRepositories],
   );
+
+  const activeRepositoryDocument = useMemo(
+    () => activeRepository?.documents?.find((document) => document.document_source_id === activeDocumentId) ?? null,
+    [activeDocumentId, activeRepository],
+  );
+
+  const activeDocumentScopeLabel = activeDocumentId
+    ? activeRepositoryDocument?.title || activeRepositoryDocument?.filename || activeDocumentTitle || 'Scoped document'
+    : '';
+
+  const clearActiveDocumentScope = useCallback(() => {
+    setActiveDocumentId('');
+    setActiveDocumentTitle('');
+  }, []);
 
   const currentViewerPath = useMemo(
     () => {
@@ -2436,16 +2810,33 @@ export default function WorkspacePage() {
     }
 
     try {
+      setIngestionStatusBanner({
+        status: 'parsing',
+        message: '문서 파싱중입니다.',
+        filename: file.name,
+        updatedAt: new Date().toISOString(),
+      });
       const uploaded = await uploadDocumentIngestion(file, {
         index: true,
         repositoryId: activeRepository?.repository_id,
       });
       const repositoryPayload = await loadDocumentRepositories().catch(() => ({ repositories: [] }));
       const repositoryId = uploaded.repository_id || uploaded.persisted?.repository_id || activeRepository?.repository_id || '';
+      const documentSourceId = uploaded.persisted?.document_source_id || '';
       setDocumentRepositories(repositoryPayload.repositories ?? []);
       if (repositoryId) {
         setActiveSourceId(`repository:${repositoryId}`);
       }
+      const nextBanner: IngestionStatusBanner = {
+        status: 'ready',
+        message: '문서 준비가 완료되었습니다.',
+        filename: uploaded.filename || file.name,
+        repositoryId,
+        documentSourceId,
+        updatedAt: new Date().toISOString(),
+      };
+      setIngestionStatusBanner(nextBanner);
+      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
       setPreview({ kind: 'empty' });
     } catch (error) {
       console.error(error);
@@ -2548,6 +2939,7 @@ export default function WorkspacePage() {
         restrictUploadedSources: Boolean(activeDraft),
         routeKind: messageRouteKind,
         activeRepositoryId: activeRepository?.repository_id,
+        activeDocumentId,
         learningIndex: resolvedLearningIndex,
         learningCategoryKey: resolvedCategoryKey,
         learningCategoryLabel: resolvedCategoryLabel,
@@ -2917,6 +3309,7 @@ export default function WorkspacePage() {
     },
     tone: activeSourceId === source.id ? 'default' : 'muted',
   }));
+  const previewTitle = preview.kind === 'empty' ? '' : preview.title;
   const viewerSurfaceTitle = rightPanelMode === 'terminal' ? 'Terminal Session' : 'Wiki Viewer';
   const viewerDocumentToolbar = !testMode && currentOverlayTarget ? (
     <div className="viewer-header-toolbar" role="toolbar" aria-label="위키 뷰어 액션">
@@ -3037,6 +3430,7 @@ export default function WorkspacePage() {
 
       <WorkspaceHeader
         globalTheme={globalTheme}
+        onOpenDashboard={() => setDashboardOpen(true)}
         onOpenLibrary={() => navigate('/playbook-library')}
         onToggleGlobalTheme={handleToggleGlobalTheme}
       />
@@ -3179,6 +3573,83 @@ export default function WorkspacePage() {
                 </div>
               ) : leftPanelMode === 'outline' ? (
                 <div className="outline-panel">
+                  <section className="outline-surface-card outline-surface-card--document cluster-resource-explorer">
+                    <div className="outline-section-head">
+                      <div className="outline-section-copy">
+                        <strong>Cluster Resources</strong>
+                        <span>{isClusterConnected ? activeFooterConnection?.display_name || activeFooterConnection?.cluster_url : 'Cluster is not connected'}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="cluster-resource-refresh"
+                        onClick={() => { void refreshClusterResources(); }}
+                        disabled={!isClusterConnected || isClusterResourceLoading}
+                      >
+                        {isClusterResourceLoading ? 'Loading' : 'Refresh'}
+                      </button>
+                    </div>
+                    <div className="cluster-resource-controls">
+                      <label>
+                        <span>Kind</span>
+                        <select
+                          value={selectedResourceKind}
+                          onChange={(event) => setSelectedResourceKind(event.target.value as ClusterResourceKind)}
+                          disabled={!isClusterConnected}
+                        >
+                          {CLUSTER_RESOURCE_OPTIONS.map((kind) => (
+                            <option key={kind} value={kind}>{kind}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Namespace</span>
+                        <input
+                          type="text"
+                          value={selectedResourceNamespace}
+                          onChange={(event) => setSelectedResourceNamespace(event.target.value)}
+                          disabled={!isClusterConnected}
+                          placeholder={activeFooterConnection?.default_namespace || 'default'}
+                        />
+                      </label>
+                    </div>
+                    {!isClusterConnected ? (
+                      <div className="outline-empty">
+                        <p>Cluster가 연결되어 있지 않습니다.</p>
+                      </div>
+                    ) : clusterResourceError ? (
+                      <div className="outline-empty">
+                        <p>{clusterResourceError}</p>
+                      </div>
+                    ) : isClusterResourceLoading ? (
+                      <div className="outline-empty">
+                        <div className="loading-spinner-small"></div>
+                        <p>Loading cluster resources</p>
+                      </div>
+                    ) : clusterResources.length === 0 ? (
+                      <div className="outline-empty">
+                        <p>No {selectedResourceKind} found.</p>
+                      </div>
+                    ) : (
+                      <div className="cluster-resource-list">
+                        {clusterResources.map((resource) => (
+                          <button
+                            key={`${resource.kind}:${resource.namespace}:${resource.name}`}
+                            type="button"
+                            className="cluster-resource-item"
+                            onClick={() => { void openClusterResourceYaml(resource); }}
+                          >
+                            <span className="cluster-resource-title">{resource.name}</span>
+                            <span className="cluster-resource-meta">
+                              {resource.kind} · {resource.namespace || selectedResourceNamespace}
+                              {resource.phase ? ` · ${resource.phase}` : ''}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                  {false && (
+                    <>
                   {outlineCategoryGroups.length > 0 && (
                     <section className="outline-category-board outline-surface-card outline-surface-card--catalog">
                       <div className="outline-section-head">
@@ -3274,7 +3745,7 @@ export default function WorkspacePage() {
                     <div className="outline-section-head">
                       <div className="outline-section-copy">
                         <strong>{isGuidedSurface ? 'Current Stop' : 'Current Document'}</strong>
-                        {preview.kind !== 'empty' && <span>{preview.title}</span>}
+                        {previewTitle && <span>{previewTitle}</span>}
                       </div>
                       {outlineTocNodes.length > 0 && <span>{outlineTocNodes.length}</span>}
                     </div>
@@ -3285,7 +3756,7 @@ export default function WorkspacePage() {
                     ) : (
                       <>
                         <div className="outline-toc-header">
-                          <strong className="outline-toc-title">{preview.kind !== 'empty' ? preview.title : ''}</strong>
+                          <strong className="outline-toc-title">{previewTitle}</strong>
                           {outlineBreadcrumb.length > 0 && (
                             <span className="outline-toc-breadcrumb">{outlineBreadcrumb.join(' › ')}</span>
                           )}
@@ -3371,9 +3842,40 @@ export default function WorkspacePage() {
                       )}
                     </details>
                   )}
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="signals-panel">
+                  <section className="signals-card cluster-signals-card">
+                    <div className="signals-card-title">
+                      <TerminalIcon size={14} />
+                      <span>Cluster Operations</span>
+                    </div>
+                    {signalEvents.length === 0 ? (
+                      <span className="signals-empty">CLI operation signal이 아직 없습니다.</span>
+                    ) : (
+                      <div className="cluster-signal-list">
+                        {signalEvents.map((signal) => (
+                          <article key={signal.id} className="cluster-signal-item">
+                            <div className="cluster-signal-head">
+                              <strong>{signal.operationType}</strong>
+                              <span>{signal.status}</span>
+                            </div>
+                            <div className="cluster-signal-meta">
+                              {signal.resourceKind}
+                              {signal.resourceName ? ` · ${signal.resourceName}` : ''}
+                              {signal.namespace ? ` · ${signal.namespace}` : ''}
+                            </div>
+                            <code>{signal.sourceCommand}</code>
+                            <time>{new Date(signal.timestamp).toLocaleTimeString()}</time>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                  {false && (
+                    <>
                   {(isOverlayLoading || isOverlaySaving) && <div className="signals-status">syncing</div>}
                   <div className="signals-card">
                     <div className="signals-card-title">
@@ -3448,6 +3950,8 @@ export default function WorkspacePage() {
                       )) : <span className="signals-empty">없음</span>}
                     </div>
                   </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -3455,17 +3959,20 @@ export default function WorkspacePage() {
                 <div className="profile-container profile-container-ops">
                   <div className="profile-avatar profile-avatar-ops">
                     <Cpu size={18} />
-                    <div className={`status-dot-online ${activeFooterConnection ? '' : 'status-dot-idle'}`}></div>
+                    <div className={`status-dot-online ${isClusterConnected ? '' : 'status-dot-idle'}`}></div>
                   </div>
                   <div className="profile-ops-summary">
                     <button
                       className={`profile-ops-name-btn ${activeFooterConnection ? '' : 'is-undefined'}`}
                       type="button"
-                      onClick={() => openOpsRoute(activeFooterConnection ? ROUTES.opsOverview : ROUTES.opsConnections)}
-                      title={activeFooterConnection ? 'Open Ops Console' : 'Connect OpenShift cluster'}
+                      onClick={() => setDashboardOpen(true)}
+                      title={activeFooterConnection ? 'Open cluster dashboard' : 'Cluster is not connected'}
                     >
                       {isFooterProfileLoading ? 'Syncing' : footerProfileName}
                     </button>
+                    <span className={`profile-cluster-status profile-cluster-status--${clusterConnectionStatus}`}>
+                      {clusterStatusLabel}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -3492,6 +3999,23 @@ export default function WorkspacePage() {
                       <PanelRightClose size={16} />
                     </button>
                   )}
+                </div>
+              )}
+              {ingestionStatusBanner && (
+                <div className={`ingestion-status-banner ingestion-status-banner--${ingestionStatusBanner.status}`}>
+                  <div>
+                    <strong>{ingestionStatusBanner.message}</strong>
+                    {ingestionStatusBanner.filename ? <span>{ingestionStatusBanner.filename}</span> : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIngestionStatusBanner(null);
+                      window.localStorage.removeItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY);
+                    }}
+                  >
+                    Dismiss
+                  </button>
                 </div>
               )}
               <div className="chat-messages" ref={chatMessagesRef}>
@@ -3726,6 +4250,53 @@ export default function WorkspacePage() {
               )}
 
               <div className="chat-input-wrapper">
+                <div className="chat-mode-switch" role="tablist" aria-label="Chat mode">
+                  <button
+                    type="button"
+                    className={`chat-mode-btn ${currentMode === 'document' ? 'active' : ''}`}
+                    onClick={() => setCurrentMode('document')}
+                    aria-selected={currentMode === 'document'}
+                  >
+                    <BookOpen size={14} />
+                    Document Learning
+                  </button>
+                  <button
+                    type="button"
+                    className={`chat-mode-btn ${currentMode === 'live_cluster' ? 'active' : ''}`}
+                    onClick={() => {
+                      if (isClusterConnected) {
+                        setCurrentMode('live_cluster');
+                      }
+                    }}
+                    aria-selected={currentMode === 'live_cluster'}
+                    disabled={!isClusterConnected}
+                    title={isClusterConnected ? 'Live Cluster Mode' : 'Cluster is not connected'}
+                  >
+                    <Cpu size={14} />
+                    Live Cluster
+                  </button>
+                  <span className={`chat-mode-status chat-mode-status--${clusterConnectionStatus}`}>
+                    {clusterStatusLabel}
+                  </span>
+                </div>
+                {(activeRepository || activeDocumentId) && (
+                  <div className="chat-scope-status">
+                    <BookOpen size={14} />
+                    <div>
+                      <span>{activeDocumentId ? 'Document-scoped RAG' : 'Repository-scoped RAG'}</span>
+                      <strong>
+                        {activeDocumentId
+                          ? activeDocumentScopeLabel
+                          : activeRepository?.title || activeRepository?.slug || 'Active repository'}
+                      </strong>
+                    </div>
+                    {activeDocumentId ? (
+                      <button type="button" onClick={clearActiveDocumentScope} title="Use whole repository">
+                        <X size={14} />
+                      </button>
+                    ) : null}
+                  </div>
+                )}
                 <div className="input-container glass-panel">
                   <input
                     type="text"
@@ -3883,7 +4454,10 @@ export default function WorkspacePage() {
             )}
           >
             {rightPanelMode === 'terminal' ? (
-              <TerminalSessionPanel learningContext={terminalLearningContext} />
+              <TerminalSessionPanel
+                learningContext={terminalLearningContext}
+                onCommandSubmitted={handleTerminalCommandSubmitted}
+              />
             ) : (
               <>
             {testMode && (
@@ -4082,6 +4656,124 @@ export default function WorkspacePage() {
                 )}
               </div>
             </aside>
+          </div>
+        )}
+        {(resourceYamlDetail || isResourceYamlLoading) && (
+          <div className="cluster-yaml-modal-layer">
+            <button
+              className="cluster-yaml-modal-scrim"
+              type="button"
+              aria-label="Close resource YAML"
+              onClick={() => setResourceYamlDetail(null)}
+            />
+            <section className="cluster-yaml-modal" role="dialog" aria-modal="true" aria-label="Cluster resource YAML">
+              <header className="cluster-yaml-modal-head">
+                <div>
+                  <span>Resource YAML</span>
+                  <h3>{resourceYamlDetail?.name || 'Loading resource'}</h3>
+                  {resourceYamlDetail ? <p>{resourceYamlDetail.kind} · {resourceYamlDetail.namespace}</p> : null}
+                </div>
+                <button type="button" onClick={() => setResourceYamlDetail(null)}>Close</button>
+              </header>
+              {isResourceYamlLoading ? (
+                <div className="outline-empty">
+                  <div className="loading-spinner-small"></div>
+                  <p>Loading YAML</p>
+                </div>
+              ) : (
+                <pre className="cluster-yaml-modal-body">{resourceYamlDetail?.manifest_yaml || ''}</pre>
+              )}
+            </section>
+          </div>
+        )}
+        {dashboardOpen && (
+          <div className="cluster-yaml-modal-layer">
+            <button
+              className="cluster-yaml-modal-scrim"
+              type="button"
+              aria-label="Close dashboard"
+              onClick={() => setDashboardOpen(false)}
+            />
+            <section className="dashboard-modal" role="dialog" aria-modal="true" aria-label="Cluster Dashboard">
+              <header className="cluster-yaml-modal-head">
+                <div>
+                  <span>Dashboard</span>
+                  <h3>{activeFooterConnection?.display_name || 'Cluster Dashboard'}</h3>
+                  <p>{isClusterConnected ? activeFooterConnection?.cluster_url : 'Cluster가 연결되어 있지 않습니다.'}</p>
+                </div>
+                <div className="dashboard-modal-actions">
+                  <button type="button" onClick={() => { void refreshDashboard(); }} disabled={isDashboardLoading || !isClusterConnected}>
+                    {isDashboardLoading ? 'Loading' : 'Refresh'}
+                  </button>
+                  <button type="button" onClick={() => setDashboardOpen(false)}>Close</button>
+                </div>
+              </header>
+              <div className="dashboard-modal-body">
+                {!isClusterConnected ? (
+                  <div className="outline-empty"><p>Cluster가 연결되어 있지 않습니다.</p></div>
+                ) : dashboardError ? (
+                  <div className="outline-empty"><p>{dashboardError}</p></div>
+                ) : isDashboardLoading ? (
+                  <div className="outline-empty">
+                    <div className="loading-spinner-small"></div>
+                    <p>Loading cluster dashboard</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="dashboard-summary-grid">
+                      <article>
+                        <span>Health</span>
+                        <strong>{dashboardMetrics?.source.live ? 'Live' : dashboardMetrics ? 'Available' : 'Unavailable'}</strong>
+                        <small>{dashboardMetrics?.source.provider || 'no metric source'}</small>
+                      </article>
+                      <article>
+                        <span>Namespaces</span>
+                        <strong>{dashboardOverview?.namespace_count ?? '-'}</strong>
+                        <small>{dashboardOverview?.default_namespace || selectedResourceNamespace}</small>
+                      </article>
+                      <article>
+                        <span>Warnings</span>
+                        <strong>{dashboardMetrics?.summary.warning_events ?? '-'}</strong>
+                        <small>recent events</small>
+                      </article>
+                      <article>
+                        <span>Degraded</span>
+                        <strong>{dashboardMetrics?.summary.degraded_deployments ?? '-'}</strong>
+                        <small>deployments</small>
+                      </article>
+                    </div>
+                    <div className="dashboard-section-grid">
+                      <section>
+                        <h4>Resource Summary</h4>
+                        <div className="dashboard-resource-list">
+                          {Object.entries(dashboardOverview?.resource_counts ?? {}).length === 0 ? (
+                            <span className="signals-empty">Resource summary unavailable.</span>
+                          ) : Object.entries(dashboardOverview?.resource_counts ?? {}).map(([kind, count]) => (
+                            <div key={kind}>
+                              <span>{kind}</span>
+                              <strong>{count}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                      <section>
+                        <h4>Recent Signals</h4>
+                        <div className="dashboard-signal-list">
+                          {signalEvents.slice(0, 5).length === 0 ? (
+                            <span className="signals-empty">CLI signal이 아직 없습니다.</span>
+                          ) : signalEvents.slice(0, 5).map((signal) => (
+                            <div key={signal.id}>
+                              <strong>{signal.operationType}</strong>
+                              <span>{signal.resourceKind}{signal.resourceName ? ` · ${signal.resourceName}` : ''}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    </div>
+                  </>
+                )}
+              </div>
+            </section>
           </div>
         )}
       </main>

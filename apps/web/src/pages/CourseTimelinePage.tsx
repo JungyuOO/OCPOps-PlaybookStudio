@@ -297,7 +297,6 @@ export default function CourseTimelinePage() {
         <div className="course-inline-links">
           <Link to={ROUTES.pbsStudio}>Playbook Studio</Link>
           <Link to={ROUTES.pbsPlaybookLibrary}>Playbook Library</Link>
-          <Link to={ROUTES.opsOverview}>Operations Console</Link>
         </div>
       </div>
     </div>

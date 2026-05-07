@@ -69,6 +69,9 @@ def context_with_request_overrides(
     requested_repository_id = str(payload.get("active_repository_id") or "").strip()
     if requested_repository_id:
         context.active_repository_id = requested_repository_id
+    requested_document_id = str(payload.get("active_document_id") or "").strip()
+    if requested_document_id:
+        context.active_document_id = requested_document_id
     requested_version = str(payload.get("ocp_version") or "").strip()
     if requested_version:
         context.ocp_version = requested_version

@@ -140,6 +140,23 @@ export interface UploadIngestResponse {
   source_scope?: string;
 }
 
+export interface DocumentRepositoryDocument {
+  document_source_id: string;
+  parsed_document_id: string;
+  title: string;
+  filename: string;
+  source_kind: string;
+  mime_type: string;
+  source_scope: string;
+  visibility: string;
+  metadata: Record<string, unknown>;
+  parse_status: string;
+  chunk_count: number;
+  indexed_chunk_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DocumentRepository {
   repository_id: string;
   slug: string;
@@ -149,6 +166,7 @@ export interface DocumentRepository {
   owner_user_id: string;
   metadata: Record<string, unknown>;
   document_count: number;
+  documents?: DocumentRepositoryDocument[];
   last_document_at: string;
   updated_at: string;
 }
@@ -772,6 +790,49 @@ export interface RepositoryFavoritesResponse {
   groups: Record<string, RepositoryFavorite[]>;
 }
 
+export interface SignalEventRecord {
+  signal_id: string;
+  timestamp: string;
+  operation_type: string;
+  resource_kind: string;
+  resource_name: string;
+  namespace: string;
+  status: string;
+  source_command: string;
+  terminal_session_id: string;
+}
+
+export interface SignalsResponse {
+  database: 'postgres' | 'disabled' | string;
+  count: number;
+  items: SignalEventRecord[];
+}
+
+export interface DocumentIngestStatusItem {
+  document_source_id: string;
+  repository_id: string;
+  title: string;
+  original_filename: string;
+  source_scope: string;
+  visibility: string;
+  parse_job_id: string;
+  parse_status: string;
+  error_message: string;
+  chunk_count: number;
+  indexed_count: number;
+  updated_at: string;
+  ready: boolean;
+  status: string;
+  message: string;
+}
+
+export interface DocumentIngestStatusResponse {
+  database: 'postgres' | 'disabled' | string;
+  count: number;
+  items: DocumentIngestStatusItem[];
+  latest: DocumentIngestStatusItem | null;
+}
+
 export interface RepositoryUnansweredItem {
   query: string;
   rewritten_query: string;
@@ -1100,6 +1161,7 @@ export async function sendChat(payload: {
   learningTargetTitle?: string;
   learningTargetViewerPath?: string;
   activeRepositoryId?: string;
+  activeDocumentId?: string;
 }): Promise<ChatResponse> {
   return requestJson<ChatResponse>('/api/chat', {
     method: 'POST',
@@ -1118,6 +1180,7 @@ export async function sendChat(payload: {
       learning_target_title: payload.learningTargetTitle ?? '',
       learning_target_viewer_path: payload.learningTargetViewerPath ?? '',
       active_repository_id: payload.activeRepositoryId ?? '',
+      active_document_id: payload.activeDocumentId ?? '',
     }),
   });
 }
@@ -1138,6 +1201,7 @@ export async function sendChatStream(
     learningTargetTitle?: string;
     learningTargetViewerPath?: string;
     activeRepositoryId?: string;
+    activeDocumentId?: string;
   },
   onEvent: (event: ChatStreamEvent) => void,
 ): Promise<ChatResponse> {
@@ -1162,6 +1226,7 @@ export async function sendChatStream(
       learning_target_title: payload.learningTargetTitle ?? '',
       learning_target_viewer_path: payload.learningTargetViewerPath ?? '',
       active_repository_id: payload.activeRepositoryId ?? '',
+      active_document_id: payload.activeDocumentId ?? '',
     }),
   });
   if (!response.ok || !response.body) {
@@ -1300,6 +1365,21 @@ export async function uploadDocumentIngestion(
 
 export async function loadDocumentRepositories(): Promise<DocumentRepositoriesResponse> {
   return requestJson<DocumentRepositoriesResponse>('/api/repositories/documents');
+}
+
+export async function loadDocumentIngestStatus(params: {
+  repositoryId?: string;
+  documentSourceId?: string;
+} = {}): Promise<DocumentIngestStatusResponse> {
+  const query = new URLSearchParams();
+  if (params.repositoryId) query.set('repository_id', params.repositoryId);
+  if (params.documentSourceId) query.set('document_source_id', params.documentSourceId);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return requestJson<DocumentIngestStatusResponse>(`/api/documents/ingest-status${suffix}`);
+}
+
+export async function loadSignals(limit = 50): Promise<SignalsResponse> {
+  return requestJson<SignalsResponse>(`/api/signals?limit=${encodeURIComponent(String(limit))}`);
 }
 
 export async function captureCustomerPackDraft(draftId: string): Promise<CustomerPackDraft> {

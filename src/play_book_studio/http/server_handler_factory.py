@@ -26,6 +26,8 @@ from play_book_studio.http.ops_console_api import (
 )
 from play_book_studio.http.upload_api import handle_upload_ingest as _handle_upload_ingest_request
 from play_book_studio.http.repository_api import handle_document_repositories as _handle_document_repositories_request
+from play_book_studio.http.document_status_api import handle_document_status as _handle_document_status_request
+from play_book_studio.http.signals_api import handle_signals as _handle_signals_request
 from play_book_studio.http.chat_history_api import (
     handle_chat_history_archive as _handle_chat_history_archive_request,
     handle_chat_history_messages as _handle_chat_history_messages_request,
@@ -236,6 +238,18 @@ def _build_handler(
             if request_path == "/api/repositories/documents":
                 self._handle_document_repositories(parsed_request.query)
                 return
+            if request_path == "/api/documents/ingest-status":
+                self._handle_document_status(parsed_request.query)
+                return
+            if request_path.startswith("/api/documents/") and request_path.endswith("/status"):
+                document_source_id = request_path.removeprefix("/api/documents/").removesuffix("/status").strip("/")
+                query = parsed_request.query
+                separator = "&" if query else ""
+                self._handle_document_status(f"{query}{separator}document_source_id={document_source_id}")
+                return
+            if request_path == "/api/signals":
+                self._handle_signals(parsed_request.query)
+                return
             if request_path == "/api/wiki-overlays":
                 self._handle_wiki_user_overlays(parsed_request.query)
                 return
@@ -396,6 +410,20 @@ def _build_handler(
                 query,
                 root_dir=root_dir,
                 owner_user_id=self._session_owner().owner_hash,
+            )
+
+        def _handle_document_status(self, query: str) -> None:
+            _handle_document_status_request(
+                self,
+                query,
+                root_dir=root_dir,
+            )
+
+        def _handle_signals(self, query: str) -> None:
+            _handle_signals_request(
+                self,
+                query,
+                root_dir=root_dir,
             )
 
         def _handle_repository_unanswered(self, query: str) -> None:

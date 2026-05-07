@@ -7,6 +7,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-playbookstudio}
       POSTGRES_USER: ${POSTGRES_USER:-playbookstudio}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_storage:/var/lib/postgresql/data
     healthcheck:
@@ -41,15 +43,13 @@ services:
       TERMINAL_ENABLED: ${TERMINAL_ENABLED:-false}
       TERMINAL_HOST: 0.0.0.0
       TERMINAL_WS_PORT: ${TERMINAL_WS_PORT:-8770}
-      TERMINAL_SHELL: ${TERMINAL_SHELL:-/bin/bash}
+      TERMINAL_SHELL: ${TERMINAL_SHELL:-/app/scripts/terminal-entrypoint.sh}
     depends_on:
       postgres:
         condition: service_healthy
       qdrant:
         condition: service_started
       db-migrate:
-        condition: service_completed_successfully
-      course-runtime-seed:
         condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"

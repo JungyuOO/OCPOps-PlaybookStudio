@@ -28,6 +28,7 @@ export interface TerminalLearningContext {
 interface TerminalSessionPanelProps {
   learningContext?: TerminalLearningContext;
   onCommandCheckResult?: (event: TerminalSocketEvent) => void;
+  onCommandSubmitted?: (command: string) => void;
 }
 
 function defaultTerminalWebSocketUrl(): string {
@@ -40,11 +41,12 @@ function defaultTerminalWebSocketUrl(): string {
   return `${protocol}//${host}:8770`;
 }
 
-export default function TerminalSessionPanel({ learningContext, onCommandCheckResult }: TerminalSessionPanelProps) {
+export default function TerminalSessionPanel({ learningContext, onCommandCheckResult, onCommandSubmitted }: TerminalSessionPanelProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const commandBufferRef = useRef('');
   const [connectionKey, setConnectionKey] = useState(0);
   const [state, setState] = useState<TerminalConnectionState>('connecting');
   const [sessionMeta, setSessionMeta] = useState({ shell: '', workdir: '' });
@@ -121,6 +123,17 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
     socketRef.current = socket;
 
     const inputDisposable = terminal.onData((data) => {
+      if (data === '\r') {
+        const command = commandBufferRef.current.trim();
+        commandBufferRef.current = '';
+        if (command) {
+          onCommandSubmitted?.(command);
+        }
+      } else if (data === '\u007f') {
+        commandBufferRef.current = commandBufferRef.current.slice(0, -1);
+      } else if (!data.startsWith('\u001b')) {
+        commandBufferRef.current += data;
+      }
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'input', data }));
       }
@@ -190,7 +203,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [connectionKey, onCommandCheckResult, stableLearningContext, wsUrl]);
+  }, [connectionKey, onCommandCheckResult, onCommandSubmitted, stableLearningContext, wsUrl]);
 
   return (
     <section className="terminal-session-shell" aria-label="Terminal Session">

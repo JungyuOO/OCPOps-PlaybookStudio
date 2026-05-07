@@ -3,7 +3,6 @@ import WorkspacePage from '../pages/WorkspacePage';
 import LlmWikiBookPage from '../pages/LlmWikiBookPage';
 import PlaybookLibraryPage from '../pages/PlaybookLibraryPage';
 import ProjectDetailsPage from '../pages/ProjectDetailsPage';
-import OpsConsolePage from '../pages/OpsConsolePage';
 import CourseTimelinePage from '../pages/CourseTimelinePage';
 import CourseStagePage from '../pages/CourseStagePage';
 import CourseChunkPage from '../pages/CourseChunkPage';
@@ -39,13 +38,13 @@ export default function AppRoutes() {
       <Route path="/course/stages/:stageId" element={<CourseStagePage />} />
       <Route path="/course/chunks/:chunkId" element={<CourseChunkPage />} />
       <Route path="/course/atlas/:chunkId" element={<CourseAtlasPage />} />
-      <Route path={ROUTES.opsWorkspaces} element={<OpsConsolePage />} />
-      <Route path={ROUTES.opsConnections} element={<OpsConsolePage />} />
-      <Route path={ROUTES.opsOverview} element={<OpsConsolePage />} />
-      <Route path={ROUTES.opsResources} element={<OpsConsolePage />} />
-      <Route path={ROUTES.opsLibrary} element={<OpsConsolePage />} />
-      <Route path={ROUTES.opsChat} element={<OpsConsolePage />} />
-      <Route path={ROUTES.opsActions} element={<OpsConsolePage />} />
+      <Route path={ROUTES.opsWorkspaces} element={<AliasRedirect to={ROUTES.pbsStudio} />} />
+      <Route path={ROUTES.opsConnections} element={<AliasRedirect to={ROUTES.pbsStudio} />} />
+      <Route path={ROUTES.opsOverview} element={<AliasRedirect to={ROUTES.pbsStudio} />} />
+      <Route path={ROUTES.opsResources} element={<AliasRedirect to={ROUTES.pbsStudio} />} />
+      <Route path={ROUTES.opsLibrary} element={<AliasRedirect to={ROUTES.pbsPlaybookLibrary} />} />
+      <Route path={ROUTES.opsChat} element={<AliasRedirect to={ROUTES.pbsStudio} />} />
+      <Route path={ROUTES.opsActions} element={<AliasRedirect to={ROUTES.pbsStudio} />} />
       <Route path="*" element={<Navigate replace to={ROUTES.sharedHome} />} />
     </Routes>
   );

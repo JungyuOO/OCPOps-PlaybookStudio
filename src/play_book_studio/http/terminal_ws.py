@@ -354,22 +354,36 @@ async def _handle_terminal_connection(
     async def pump_output() -> None:
         exit_sent = False
         while True:
-            output_chunks: dict[str, list[str]] = {"stdout": [], "stderr": []}
+            output_chunks: list[dict[str, str]] = []
             for event in session.drain():
                 if event.type == "output":
-                    output_chunks.setdefault(event.stream, []).append(event.data)
+                    if output_chunks and output_chunks[-1]["stream"] == event.stream:
+                        output_chunks[-1]["data"] += event.data
+                    else:
+                        output_chunks.append({"stream": event.stream, "data": event.data})
                 elif event.type == "error":
                     recorder.record_error(event.data)
-                payload = {
-                    "type": event.type,
-                    "stream": event.stream,
-                    "data": event.data,
-                }
-                await websocket.send(_json_event(payload))
-            for stream, chunks in output_chunks.items():
-                if chunks:
-                    for event in recorder.record_output(stream=stream, data="".join(chunks)):
-                        await websocket.send(_json_event(event))
+                    await websocket.send(
+                        _json_event(
+                            {
+                                "type": event.type,
+                                "stream": event.stream,
+                                "data": event.data,
+                            }
+                        )
+                    )
+            for chunk in output_chunks:
+                await websocket.send(
+                    _json_event(
+                        {
+                            "type": "output",
+                            "stream": chunk["stream"],
+                            "data": chunk["data"],
+                        }
+                    )
+                )
+                for event in recorder.record_output(stream=chunk["stream"], data=chunk["data"]):
+                    await websocket.send(_json_event(event))
             exit_code = session.poll_exit_code()
             if exit_code is not None and not exit_sent:
                 exit_sent = True

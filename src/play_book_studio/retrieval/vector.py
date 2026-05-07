@@ -50,6 +50,7 @@ def hit_from_payload(payload: dict[str, Any], *, source: str, score: float) -> R
         ),
         asset_ids=tuple(str(item) for item in (payload.get("asset_ids") or []) if str(item).strip()),
         repository_id=str(payload.get("repository_id", "")),
+        document_source_id=str(payload.get("document_source_id", "") or payload.get("source_id", "")),
         owner_user_id=str(payload.get("owner_user_id", "")),
         visibility=str(payload.get("visibility", "")),
         source_scope=str(payload.get("source_scope", "")),

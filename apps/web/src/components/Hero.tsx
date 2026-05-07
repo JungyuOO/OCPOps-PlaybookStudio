@@ -60,9 +60,6 @@ export default function Hero() {
             <span>Launch Studio</span>
             <ArrowRight size={18} />
           </Link>
-          <Link to={ROUTES.opsOverview} className="secondary-cta">
-            <span>Open Ops Console</span>
-          </Link>
         </div>
       </div>
 

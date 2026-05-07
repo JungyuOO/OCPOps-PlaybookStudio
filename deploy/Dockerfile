@@ -19,8 +19,18 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     build-essential \
+    ca-certificates \
+    curl \
     git \
+    gzip \
+    tar \
     && rm -rf /var/lib/apt/lists/*
+
+ARG OC_CLIENT_ARCHIVE_URL=https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
+RUN curl -fsSL "${OC_CLIENT_ARCHIVE_URL}" -o /tmp/openshift-client-linux.tar.gz \
+    && tar -xzf /tmp/openshift-client-linux.tar.gz -C /usr/local/bin oc kubectl \
+    && chmod +x /usr/local/bin/oc /usr/local/bin/kubectl \
+    && rm -f /tmp/openshift-client-linux.tar.gz
 
 COPY pyproject.toml README.md /app/
 
@@ -32,6 +42,8 @@ RUN python -c "import subprocess, sys, tomllib; deps = tomllib.load(open('pyproj
 
 COPY src /app/src
 COPY db /app/db
+COPY deploy/scripts /app/scripts
+RUN chmod +x /app/scripts/terminal-entrypoint.sh
 RUN pip install --no-cache-dir --no-deps -e .
 
 COPY --from=frontend-build /app/apps/web/dist /app/apps/web/dist

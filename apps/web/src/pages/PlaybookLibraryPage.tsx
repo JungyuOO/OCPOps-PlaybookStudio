@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Activity,
@@ -43,6 +43,8 @@ import {
   type RepositoryFavorite,
   type RepositorySearchResult,
   type RepositoryUnansweredItem,
+  type DocumentRepository,
+  type DocumentRepositoryDocument,
   type UploadIngestResponse,
   uploadDocumentIngestion,
   loadDataControlRoom,
@@ -52,6 +54,7 @@ import {
   loadCustomerPackBook,
   loadRepositoryFavorites,
   loadRepositoryUnanswered,
+  loadDocumentRepositories,
   loadOfficialSourceCatalog,
   materializeOfficialSourceCandidate,
   removeRepositoryFavorite,
@@ -67,6 +70,9 @@ type PipelineStage = 'idle' | 'uploading' | 'capturing' | 'normalizing' | 'done'
 type FactoryLane = 'tools' | 'user';
 type FactoryRunMode = 'auto' | 'manual';
 type OfficialSourceBasisKey = 'official_repo' | 'official_homepage';
+const WORKSPACE_INGESTION_STATUS_STORAGE_KEY = 'workspace.ingestionStatus';
+const WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY = 'workspace.activeDocumentId';
+const WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY = 'workspace.activeDocumentTitle';
 
 interface LogEntry {
   time: string;
@@ -245,6 +251,47 @@ const SUPPORTED_FORMATS = [
   { ext: 'HTML', via: 'Native' },
   { ext: 'Image', via: 'OCR' },
 ];
+
+const WIKI_CATEGORIES = [
+  { key: 'install', label: 'Install', terms: ['install', 'installation', 'installer', 'day-1', 'cluster installation'] },
+  { key: 'operations', label: 'Operations', terms: ['operation', 'operator', 'node', 'machine', 'upgrade', 'update', 'backup', 'restore'] },
+  { key: 'storage', label: 'Storage', terms: ['storage', 'persistent', 'volume', 'pvc', 'csi', 'odf'] },
+  { key: 'observability', label: 'Observability', terms: ['observability', 'monitor', 'logging', 'metric', 'alert', 'telemetry'] },
+  { key: 'security', label: 'Security', terms: ['security', 'auth', 'identity', 'rbac', 'certificate', 'compliance', 'oauth'] },
+  { key: 'networking', label: 'Networking', terms: ['network', 'ingress', 'route', 'dns', 'service', 'ovn', 'load balanc'] },
+  { key: 'troubleshooting', label: 'Troubleshooting', terms: ['troubleshoot', 'support', 'debug', 'must-gather', 'error', 'failure'] },
+] as const;
+
+type WikiCategoryKey = typeof WIKI_CATEGORIES[number]['key'];
+
+interface RepositoryDocumentRow {
+  repository: DocumentRepository;
+  document: DocumentRepositoryDocument;
+  categoryKey: WikiCategoryKey;
+}
+
+function documentSearchText(document: DocumentRepositoryDocument, repository?: DocumentRepository): string {
+  const metadata = document.metadata ?? {};
+  return [
+    document.title,
+    document.filename,
+    document.source_kind,
+    document.source_scope,
+    repository?.slug,
+    repository?.title,
+    metadata.book_slug,
+    metadata.book_title,
+    metadata.category,
+    metadata.source_collection,
+    metadata.viewer_path,
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function inferWikiCategory(document: DocumentRepositoryDocument, repository?: DocumentRepository): WikiCategoryKey {
+  const text = documentSearchText(document, repository);
+  const matched = WIKI_CATEGORIES.find((category) => category.terms.some((term) => text.includes(term)));
+  return matched?.key ?? 'operations';
+}
 
 const FACTORY_PIPELINE_STEPS: Record<FactoryLane, Array<{ badge: string; title: string; description: string }>> = {
   tools: [
@@ -614,8 +661,10 @@ const PlaybookLibraryPage: React.FC = () => {
   const [openCatalogRowSlug, setOpenCatalogRowSlug] = useState<string | null>(null);
   const [repositoryFavorites, setRepositoryFavorites] = useState<RepositoryFavorite[]>([]);
   const [repositoryUnanswered, setRepositoryUnanswered] = useState<RepositoryUnansweredItem[]>([]);
+  const [documentRepositories, setDocumentRepositories] = useState<DocumentRepository[]>([]);
   const [repositoryStage, setRepositoryStage] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [repositoryError, setRepositoryError] = useState('');
+  const [activeWikiCategory, setActiveWikiCategory] = useState<WikiCategoryKey>('install');
   const [repositoryMeta, setRepositoryMeta] = useState<{ rewrittenQuery: string; authMode: 'token' | 'public' }>({
     rewrittenQuery: '',
     authMode: 'public',
@@ -653,6 +702,12 @@ const PlaybookLibraryPage: React.FC = () => {
       .catch(() => setRepositoryUnanswered([]));
   }, []);
 
+  const refreshDocumentRepositories = useCallback(() => {
+    loadDocumentRepositories()
+      .then((payload) => setDocumentRepositories(payload.repositories ?? []))
+      .catch(() => setDocumentRepositories([]));
+  }, []);
+
   const refreshOfficialCatalog = useCallback(() => {
     loadOfficialSourceCatalog()
       .then((payload) => {
@@ -673,7 +728,26 @@ const PlaybookLibraryPage: React.FC = () => {
     refreshRepositoryFavorites();
     refreshRepositoryUnanswered();
     refreshOfficialCatalog();
-  }, [refreshOfficialCatalog, refreshRepositoryFavorites, refreshRepositoryUnanswered]);
+    refreshDocumentRepositories();
+  }, [refreshDocumentRepositories, refreshOfficialCatalog, refreshRepositoryFavorites, refreshRepositoryUnanswered]);
+
+  const openRepositoryInChat = useCallback((repository: DocumentRepository) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('workspace.activeSourceId', `repository:${repository.repository_id}`);
+      window.localStorage.removeItem('workspace.activeDocumentId');
+      window.localStorage.removeItem(WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY);
+    }
+    navigate(ROUTES.pbsStudio);
+  }, [navigate]);
+
+  const openDocumentInChat = useCallback((repository: DocumentRepository, document: DocumentRepositoryDocument) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('workspace.activeSourceId', `repository:${repository.repository_id}`);
+      window.localStorage.setItem(WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY, document.document_source_id);
+      window.localStorage.setItem(WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY, document.title || document.filename || 'Scoped document');
+    }
+    navigate(ROUTES.pbsStudio);
+  }, [navigate]);
 
   useEffect(() => {
     refreshData();
@@ -821,11 +895,29 @@ const PlaybookLibraryPage: React.FC = () => {
 
     try {
       setPipelineStage('uploading');
+      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify({
+        status: 'recognizing',
+        message: '문서 인식중입니다.',
+        filename: file.name,
+        updatedAt: new Date().toISOString(),
+      }));
       addLog('info', `Uploading '${file.name}' to document ingestion...`);
 
       setPipelineStage('capturing');
+      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify({
+        status: 'parsing',
+        message: '문서 파싱중입니다.',
+        filename: file.name,
+        updatedAt: new Date().toISOString(),
+      }));
       addLog('info', 'Parsing source into Markdown blocks and semantic chunks...');
       setPipelineStage('normalizing');
+      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify({
+        status: 'indexing',
+        message: '인덱싱중입니다.',
+        filename: file.name,
+        updatedAt: new Date().toISOString(),
+      }));
       addLog('info', 'Persisting chunks to PostgreSQL and indexing them for RAG...');
       const ingest = await uploadDocumentIngestion(file, { index: true });
       const indexedCount = ingest.index?.indexed_count ?? 0;
@@ -838,6 +930,14 @@ const PlaybookLibraryPage: React.FC = () => {
       }
 
       setPipelineStage('done');
+      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify({
+        status: 'ready',
+        message: '문서 준비가 완료되었습니다.',
+        filename: ingest.filename || file.name,
+        repositoryId: ingest.repository_id || ingest.persisted?.repository_id || '',
+        documentSourceId: ingest.persisted?.document_source_id || '',
+        updatedAt: new Date().toISOString(),
+      }));
       addLog('success', `'${ingest.filename}' is now available to the RAG corpus.`);
       refreshData();
       setTimeout(() => { setPipelineStage('idle'); setCurrentFile(''); }, 6000);
@@ -845,6 +945,12 @@ const PlaybookLibraryPage: React.FC = () => {
       const msg = errorMessage(error, 'Unknown error');
       setPipelineStage('error');
       setErrorMsg(msg);
+      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify({
+        status: 'failed',
+        message: '문서 처리에 실패했습니다.',
+        filename: file.name,
+        updatedAt: new Date().toISOString(),
+      }));
       addLog('error', `Pipeline failed: ${msg}`);
       setTimeout(() => { setPipelineStage('idle'); setCurrentFile(''); }, 5000);
     }
@@ -1416,6 +1522,36 @@ const PlaybookLibraryPage: React.FC = () => {
   const officialPlaybookBooks = [...(controlRoom?.manualbooks?.books ?? [])];
   const userLibraryBucket = controlRoom?.customer_pack_runtime_books ?? controlRoom?.user_library_books;
   const userCorpusBooks = [...(controlRoom?.user_library_corpus?.books ?? [])];
+  const repositoryDocumentRows = useMemo<RepositoryDocumentRow[]>(
+    () => documentRepositories.flatMap((repository) =>
+      (repository.documents ?? []).map((document) => ({
+        repository,
+        document,
+        categoryKey: inferWikiCategory(document, repository),
+      })),
+    ),
+    [documentRepositories],
+  );
+  const officialDocumentRows = useMemo(
+    () => repositoryDocumentRows.filter(({ document, repository }) => {
+      const scope = String(document.source_scope || repository.metadata?.source_scope || '').toLowerCase();
+      const visibility = String(document.visibility || repository.visibility || '').toLowerCase();
+      return scope.includes('official') || visibility === 'global_shared' || repository.repository_kind === 'official';
+    }),
+    [repositoryDocumentRows],
+  );
+  const userUploadDocumentRows = useMemo(
+    () => repositoryDocumentRows.filter(({ document, repository }) => {
+      const scope = String(document.source_scope || repository.metadata?.source_scope || '').toLowerCase();
+      const visibility = String(document.visibility || repository.visibility || '').toLowerCase();
+      return scope.includes('user') || visibility === 'private_user';
+    }),
+    [repositoryDocumentRows],
+  );
+  const activeWikiDocumentRows = useMemo(
+    () => officialDocumentRows.filter((row) => row.categoryKey === activeWikiCategory),
+    [activeWikiCategory, officialDocumentRows],
+  );
   const approvedRuntimeBooks = summary?.approved_runtime_count ?? summary?.gold_book_count ?? controlRoom?.gold_books?.length ?? 0;
   const userLibraryBooks = [...(userLibraryBucket?.books ?? [])];
   const userLibraryBookCount = summary?.customer_pack_runtime_book_count
@@ -1616,41 +1752,106 @@ const PlaybookLibraryPage: React.FC = () => {
             <div className="header-text">
               <h1>Playbook Library</h1>
               <p className="text-muted">
-                {viewMode === 'repository'
-                  ? 'Book Factory & Asset Repository'
-                  : 'Operational Wiki'}
+                Repository 기반 공식 문서와 업로드 문서를 한 곳에서 관리합니다.
               </p>
             </div>
           </div>
 
           <div className="header-actions">
-            <div className="view-toggle">
-              <button
-                className={viewMode === 'monitoring' ? 'active' : ''}
-                onClick={() => navigate('/playbook-library/control-tower')}
-              >
-                <Activity size={16} />
-                <span>Operational Wiki</span>
-              </button>
-              <button
-                className={viewMode === 'repository' ? 'active' : ''}
-                onClick={() => navigate('/playbook-library/repository')}
-              >
-                <Database size={16} />
-                <span>Repository</span>
-              </button>
-              <Link to={ROUTES.opsOverview} className="view-toggle-link">
-                <ShieldCheck size={16} />
-                <span>Ops Console</span>
-              </Link>
-            </div>
+            <button className="library-dashboard-link" type="button" onClick={() => navigate('/')}>
+              Playbook Studio
+            </button>
           </div>
         </div>
       </header>
 
       <main className="library-main">
+        <div className="library-shell">
+          <aside className="library-sidebar" aria-label="Playbook Library categories">
+            <section>
+              <h2>Wiki</h2>
+              <button
+                type="button"
+                className={`library-sidebar-item ${viewMode === 'monitoring' ? 'active' : ''}`}
+                onClick={() => navigate('/playbook-library/control-tower')}
+              >
+                <Activity size={15} />
+                <span>Operational Wiki</span>
+              </button>
+              {WIKI_CATEGORIES.map((category) => (
+                <button
+                  key={category.key}
+                  type="button"
+                  className={`library-sidebar-item ${activeWikiCategory === category.key && viewMode === 'monitoring' ? 'active' : 'muted'}`}
+                  onClick={() => {
+                    setActiveWikiCategory(category.key);
+                    navigate('/playbook-library/control-tower');
+                  }}
+                >
+                  <BookOpen size={15} />
+                  <span>{category.label}</span>
+                </button>
+              ))}
+            </section>
+            <section>
+              <h2>Repository</h2>
+              <button
+                type="button"
+                className={`library-sidebar-item ${viewMode === 'repository' ? 'active' : ''}`}
+                onClick={() => navigate('/playbook-library/repository')}
+              >
+                <UploadCloud size={15} />
+                <span>My Uploads</span>
+              </button>
+            </section>
+          </aside>
+          <div className="library-content-panel">
         {viewMode === 'monitoring' ? (
           <div className="monitoring-view">
+            <section className="operational-shelf box-container">
+              <div className="operational-shelf-header">
+                <div>
+                  <span className="operational-shelf-eyebrow">Official Documents</span>
+                  <h2>{WIKI_CATEGORIES.find((category) => category.key === activeWikiCategory)?.label ?? 'Wiki'} documents</h2>
+                  <p>PostgreSQL document_sources 기준으로 분류된 공식 문서입니다. 문서별 채팅은 해당 document_source_id로 RAG 범위를 고정합니다.</p>
+                </div>
+                <span className="operational-library-count">{activeWikiDocumentRows.length.toLocaleString()} docs</span>
+              </div>
+              {activeWikiDocumentRows.length === 0 ? (
+                <div className="repo-empty">
+                  <Database size={36} />
+                  <p>이 카테고리에 매핑된 공식 문서가 아직 없습니다.</p>
+                </div>
+              ) : (
+                <div className="operational-library-grid">
+                  {activeWikiDocumentRows.map(({ repository, document }) => (
+                    <article
+                      key={document.document_source_id}
+                      className="operational-library-card operational-library-card--document"
+                    >
+                      <div className="operational-card-open">
+                        <span className="operational-library-card-badge">{document.source_scope || repository.visibility}</span>
+                        <strong>{document.title || document.filename}</strong>
+                        <span className="operational-card-open-subtitle">
+                          {document.chunk_count.toLocaleString()} chunks / {document.indexed_chunk_count.toLocaleString()} indexed
+                        </span>
+                      </div>
+                      <div className="library-document-actions">
+                        <button
+                          type="button"
+                          className="library-document-chat-btn"
+                          onClick={() => openDocumentInChat(repository, document)}
+                        >
+                          <MessageSquare size={14} />
+                          <span>Ask this document</span>
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
             {operationalWikiBooks.length > 0 && (
               <section className="operational-shelf box-container">
                 <div className="operational-shelf-header">
@@ -1900,6 +2101,44 @@ const PlaybookLibraryPage: React.FC = () => {
               accept={DOCUMENT_INGEST_UPLOAD_ACCEPT}
               onChange={handleUpload}
             />
+
+            <section className="library-repository-strip box-container">
+              <div className="section-header">
+                <div>
+                  <h2>Repository Documents</h2>
+                  <p className="text-muted">PostgreSQL repository 기준으로 업로드/공유 문서를 선택해 Chat 범위를 고정합니다.</p>
+                </div>
+                <button type="button" className="library-dashboard-link" onClick={refreshDocumentRepositories}>
+                  Refresh
+                </button>
+              </div>
+              {userUploadDocumentRows.length === 0 ? (
+                <div className="repo-empty">
+                  <Database size={36} />
+                  <p>아직 조회 가능한 repository 문서가 없습니다.</p>
+                </div>
+              ) : (
+                <div className="library-repository-grid">
+                  {userUploadDocumentRows.map(({ repository, document }) => (
+                    <article className="library-repository-card" key={document.document_source_id}>
+                      <div>
+                        <span className="library-repository-scope">{document.source_scope || repository.visibility || repository.repository_kind}</span>
+                        <h3>{document.title || document.filename}</h3>
+                        <p>{repository.visibility} · {repository.document_count} docs</p>
+                      </div>
+                      <div className="library-document-actions">
+                        <button type="button" onClick={() => openDocumentInChat(repository, document)}>
+                          Ask this document
+                        </button>
+                        <button type="button" onClick={() => openRepositoryInChat(repository)}>
+                          Chat with repository
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
 
             <section className="pipeline-section box-container factory-workbench-section">
               <div className="factory-workbench-top">
@@ -2958,6 +3197,8 @@ const PlaybookLibraryPage: React.FC = () => {
             )}
           </div>
         )}
+          </div>
+        </div>
       </main>
 
       {/* Preview Popover */}

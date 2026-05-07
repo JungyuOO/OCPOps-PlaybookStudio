@@ -684,6 +684,82 @@ def list_document_repositories(
             (tenant_slug, workspace_slug, owner_user_id),
         )
         rows = cursor.fetchall()
+        repository_ids = [str(row[0]) for row in rows]
+        documents_by_repository: dict[str, list[dict[str, Any]]] = {repository_id: [] for repository_id in repository_ids}
+        if repository_ids:
+            cursor.execute(
+                """
+                SELECT
+                    ds.repository_id::text,
+                    ds.id::text,
+                    COALESCE(pd.id::text, '') AS parsed_document_id,
+                    COALESCE(NULLIF(pd.title, ''), ds.filename) AS title,
+                    ds.filename,
+                    ds.source_kind,
+                    ds.mime_type,
+                    ds.source_scope,
+                    ds.visibility,
+                    ds.metadata,
+                    COALESCE(pj.status, CASE WHEN pd.id IS NULL THEN 'pending' ELSE 'completed' END) AS parse_status,
+                    count(dc.id)::int AS chunk_count,
+                    count(qie.chunk_id)::int AS indexed_chunk_count,
+                    ds.created_at,
+                    COALESCE(max(pd.created_at), ds.created_at) AS updated_at
+                FROM document_sources ds
+                LEFT JOIN LATERAL (
+                    SELECT parsed_documents.*
+                    FROM parsed_documents
+                    WHERE parsed_documents.document_source_id = ds.id
+                    ORDER BY parsed_documents.created_at DESC
+                    LIMIT 1
+                ) pd ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT parse_jobs.status
+                    FROM parse_jobs
+                    WHERE parse_jobs.document_source_id = ds.id
+                    ORDER BY parse_jobs.created_at DESC
+                    LIMIT 1
+                ) pj ON TRUE
+                LEFT JOIN document_chunks dc ON dc.parsed_document_id = pd.id
+                LEFT JOIN qdrant_index_entries qie ON qie.chunk_id = dc.id
+                WHERE ds.repository_id = ANY(%s::uuid[])
+                GROUP BY
+                    ds.repository_id,
+                    ds.id,
+                    pd.id,
+                    pd.title,
+                    ds.filename,
+                    ds.source_kind,
+                    ds.mime_type,
+                    ds.source_scope,
+                    ds.visibility,
+                    ds.metadata,
+                    pj.status,
+                    ds.created_at
+                ORDER BY ds.created_at DESC, title ASC
+                """,
+                (repository_ids,),
+            )
+            for doc_row in cursor.fetchall():
+                repository_id = str(doc_row[0])
+                documents_by_repository.setdefault(repository_id, []).append(
+                    {
+                        "document_source_id": str(doc_row[1]),
+                        "parsed_document_id": str(doc_row[2] or ""),
+                        "title": str(doc_row[3] or ""),
+                        "filename": str(doc_row[4] or ""),
+                        "source_kind": str(doc_row[5] or ""),
+                        "mime_type": str(doc_row[6] or ""),
+                        "source_scope": str(doc_row[7] or ""),
+                        "visibility": str(doc_row[8] or ""),
+                        "metadata": dict(doc_row[9] or {}),
+                        "parse_status": str(doc_row[10] or ""),
+                        "chunk_count": int(doc_row[11] or 0),
+                        "indexed_chunk_count": int(doc_row[12] or 0),
+                        "created_at": doc_row[13].isoformat() if doc_row[13] is not None else "",
+                        "updated_at": doc_row[14].isoformat() if doc_row[14] is not None else "",
+                    }
+                )
     return [
         {
             "repository_id": str(row[0]),
@@ -694,6 +770,7 @@ def list_document_repositories(
             "owner_user_id": str(row[5] or ""),
             "metadata": dict(row[6] or {}),
             "document_count": int(row[7] or 0),
+            "documents": documents_by_repository.get(str(row[0]), []),
             "last_document_at": row[8].isoformat() if row[8] is not None else "",
             "updated_at": row[9].isoformat() if row[9] is not None else "",
         }

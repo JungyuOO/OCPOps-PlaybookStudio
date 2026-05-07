@@ -72,6 +72,8 @@ class TerminalSession:
         env = os.environ.copy()
         env.update(self.config.env)
         env.setdefault("PYTHONIOENCODING", "utf-8")
+        if not env.get("TERM"):
+            env["TERM"] = "xterm-256color"
         self._process = subprocess.Popen(
             self.shell_args,
             cwd=self.config.workdir,

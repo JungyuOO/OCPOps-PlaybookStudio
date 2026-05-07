@@ -4,6 +4,12 @@ from .models import RetrievalHit, SessionContext
 
 
 def hit_visible_to_session(hit: RetrievalHit, context: SessionContext | None) -> bool:
+    active_document_id = str(getattr(context, "active_document_id", "") or "").strip()
+    if active_document_id:
+        hit_document_id = str(getattr(hit, "document_source_id", "") or getattr(hit, "source_id", "") or "").strip()
+        if hit_document_id != active_document_id:
+            return False
+
     visibility = str(getattr(hit, "visibility", "") or "").strip()
     source_scope = str(getattr(hit, "source_scope", "") or "").strip()
     if not visibility and not source_scope:
