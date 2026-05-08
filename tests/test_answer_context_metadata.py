@@ -21,6 +21,7 @@ def test_assemble_context_preserves_section_metadata_on_citations() -> None:
         heading_title="Pods",
         source_anchor="pods",
         toc_path=("1 Workloads", "1.2 Pods"),
+        asset_ids=("asset-a", "asset-b"),
     )
 
     bundle = assemble_context([hit], query="pod status", max_chunks=1)
@@ -30,4 +31,6 @@ def test_assemble_context_preserves_section_metadata_on_citations() -> None:
     assert citation.heading_title == "Pods"
     assert citation.source_anchor == "pods"
     assert citation.toc_path == ("1 Workloads", "1.2 Pods")
+    assert citation.asset_ids == ("asset-a", "asset-b")
     assert citation.to_dict()["toc_path"] == ("1 Workloads", "1.2 Pods")
+    assert citation.to_dict()["asset_id"] == "asset-a"

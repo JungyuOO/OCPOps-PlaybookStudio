@@ -214,6 +214,7 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "source_kind": str(row.get("source_kind") or "upload"),
         "chunk_type": str(row.get("chunk_type") or "document"),
         "source_id": source_id,
+        "document_source_id": document_source_id,
         "source_lane": source_lane,
         "source_type": source_type,
         "source_collection": source_collection,

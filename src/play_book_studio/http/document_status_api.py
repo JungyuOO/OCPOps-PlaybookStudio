@@ -18,6 +18,12 @@ def _status_message(status: str, indexed_count: int, chunk_count: int) -> str:
     return "문서 준비가 완료되었습니다."
 
 
+def _jsonable(value: Any) -> Any:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
 def build_document_status_response(root_dir: Path, query: str) -> dict[str, Any]:
     database_url = load_settings(root_dir).database_url.strip()
     if not database_url:
@@ -96,7 +102,7 @@ def build_document_status_response(root_dir: Path, query: str) -> dict[str, Any]
         indexed_count = int(row.get("indexed_count") or 0)
         ready = status in {"completed", "done", "ready"} and (not chunk_count or indexed_count >= chunk_count)
         items.append({
-            **dict(row),
+            **{key: _jsonable(value) for key, value in dict(row).items()},
             "ready": ready,
             "status": "ready" if ready else status,
             "message": _status_message(status, indexed_count, chunk_count),
