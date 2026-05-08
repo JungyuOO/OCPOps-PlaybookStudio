@@ -35,6 +35,7 @@ import {
   type CustomerPackBook,
   type CustomerPackDraft,
   type DocumentRepository,
+  type DocumentRepositoryDocument,
   type DerivedAsset,
   type LibraryBook,
   type SessionSummary,
@@ -137,6 +138,15 @@ const WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY = 'workspace.activeDocumentTit
 const WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY = 'workspace.activeCategoryKey';
 const WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY = 'workspace.activeCategoryLabel';
 const WORKSPACE_INGESTION_STATUS_STORAGE_KEY = 'workspace.ingestionStatus';
+
+function workspaceMetadataRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function workspaceMetadataString(metadata: Record<string, unknown> | undefined, key: string): string {
+  const value = metadata?.[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
 
 function loadStoredActiveSourceId(): string | null {
   if (typeof window === 'undefined') {
@@ -2078,9 +2088,42 @@ export default function WorkspacePage() {
     [activeDocumentId, activeRepository],
   );
 
+  const activeNextLearningDocuments = useMemo(() => {
+    if (!activeRepository || !activeRepositoryDocument) {
+      return [] as DocumentRepositoryDocument[];
+    }
+    const learning = workspaceMetadataRecord(activeRepositoryDocument.metadata?.learning);
+    const nextRefs = Array.isArray(learning.next_refs) ? learning.next_refs : [];
+    const documents = activeRepository.documents ?? [];
+    return nextRefs
+      .map((ref) => {
+        const record = workspaceMetadataRecord(ref);
+        const bookSlug = workspaceMetadataString(record, 'book_slug');
+        const documentSourceId = workspaceMetadataString(record, 'document_source_id');
+        return documents.find((document) => {
+          const metadata = document.metadata ?? {};
+          return (
+            (documentSourceId && document.document_source_id === documentSourceId)
+            || (bookSlug && workspaceMetadataString(metadata, 'book_slug') === bookSlug)
+          );
+        }) ?? null;
+      })
+      .filter((document): document is DocumentRepositoryDocument => Boolean(document))
+      .slice(0, 3);
+  }, [activeRepository, activeRepositoryDocument]);
+
   const activeDocumentScopeLabel = activeDocumentId
     ? activeRepositoryDocument?.title || activeRepositoryDocument?.filename || activeDocumentTitle || 'Scoped document'
     : '';
+
+  const selectActiveDocumentScope = useCallback((document: DocumentRepositoryDocument) => {
+    setActiveDocumentId(document.document_source_id);
+    setActiveDocumentTitle(document.title || document.filename || 'Scoped document');
+    const categoryKey = workspaceMetadataString(document.metadata, 'category_key');
+    const categoryLabel = workspaceMetadataString(document.metadata, 'category_label');
+    setActiveCategoryKey(categoryKey);
+    setActiveCategoryLabel(categoryLabel || categoryKey);
+  }, []);
 
   const clearActiveDocumentScope = useCallback(() => {
     setActiveDocumentId('');
@@ -4325,6 +4368,21 @@ export default function WorkspacePage() {
                       </strong>
                       {activeDocumentId && activeCategoryLabel ? (
                         <small>{activeCategoryLabel}</small>
+                      ) : null}
+                      {activeDocumentId && activeNextLearningDocuments.length ? (
+                        <div className="chat-scope-next">
+                          <span>다음 학습</span>
+                          {activeNextLearningDocuments.map((document) => (
+                            <button
+                              key={document.document_source_id}
+                              type="button"
+                              onClick={() => selectActiveDocumentScope(document)}
+                              title="이 문서만 범위로 설정합니다"
+                            >
+                              {document.title || document.filename || 'Next document'}
+                            </button>
+                          ))}
+                        </div>
                       ) : null}
                     </div>
                     {activeDocumentId ? (

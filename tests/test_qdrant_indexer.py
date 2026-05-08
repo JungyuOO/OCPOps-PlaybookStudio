@@ -178,6 +178,31 @@ def test_qdrant_payload_from_row_preserves_official_gold_metadata():
     assert payload["source_scope"] == "official_docs"
 
 
+def test_qdrant_payload_from_row_preserves_learning_metadata_refs():
+    row = {
+        **_chunk_row(),
+        "chunk_metadata": {
+            "learning": {
+                "stage_id": "install-001",
+                "next_refs": [{"ref_type": "document", "book_slug": "nodes", "reason": "다음 학습 단계"}],
+            }
+        },
+        "source_metadata": {
+            "learning": {
+                "stage_id": "install-001",
+                "prerequisite_refs": [{"ref_type": "document", "book_slug": "overview", "reason": "이전 학습 단계"}],
+            }
+        },
+    }
+
+    payload = qdrant_payload_from_row(row)
+
+    assert payload["learning"]["document"]["stage_id"] == "install-001"
+    assert payload["learning"]["chunk"]["next_refs"][0]["book_slug"] == "nodes"
+    assert payload["learning"]["refs"]["prerequisite_refs"][0]["book_slug"] == "overview"
+    assert payload["learning"]["refs"]["next_refs"][0]["book_slug"] == "nodes"
+
+
 def test_qdrant_candidate_from_row_hashes_stable_payload():
     candidate = qdrant_candidate_from_row(_chunk_row())
 

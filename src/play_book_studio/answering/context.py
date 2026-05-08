@@ -1673,6 +1673,7 @@ def assemble_context(
                 operator_names=hit.operator_names,
                 verification_hints=hit.verification_hints,
                 asset_ids=hit.asset_ids,
+                learning=hit.learning,
             )
         )
 
@@ -1690,6 +1691,17 @@ def assemble_context(
             prompt_lines.append("verification_hints:")
             for hint in citation.verification_hints[:3]:
                 prompt_lines.append(f"- {hint}")
+        learning_refs = citation.learning.get("refs") if isinstance(citation.learning, dict) else {}
+        if isinstance(learning_refs, dict) and learning_refs.get("next_refs"):
+            prompt_lines.append("learning_next_refs:")
+            for ref in learning_refs.get("next_refs", [])[:3]:
+                if isinstance(ref, dict):
+                    prompt_lines.append(
+                        "- {book_slug}: {reason}".format(
+                            book_slug=str(ref.get("book_slug") or "").strip(),
+                            reason=str(ref.get("reason") or "").strip(),
+                        )
+                    )
         prompt_lines.append("")
 
     return ContextBundle(

@@ -198,6 +198,7 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
         or source_metadata.get("viewer_path")
         or f"/uploads/documents/{document_source_id}/chunks/{chunk_id}"
     )
+    learning_metadata = _learning_metadata(chunk_metadata, parsed_metadata, source_metadata)
     return {
         "chunk_id": chunk_id,
         "book_slug": book_slug,
@@ -244,8 +245,33 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "k8s_objects": _string_list(chunk_metadata.get("k8s_objects")),
         "operator_names": _string_list(chunk_metadata.get("operator_names")),
         "verification_hints": _string_list(chunk_metadata.get("verification_hints")),
+        "learning": learning_metadata,
         "chunk_metadata": chunk_metadata,
     }
+
+
+def _learning_metadata(
+    chunk_metadata: dict[str, Any],
+    parsed_metadata: dict[str, Any],
+    source_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    source_learning = source_metadata.get("learning")
+    parsed_learning = parsed_metadata.get("learning")
+    chunk_learning = chunk_metadata.get("learning")
+    payload = {
+        "document": source_learning if isinstance(source_learning, dict) else {},
+        "parsed_document": parsed_learning if isinstance(parsed_learning, dict) else {},
+        "chunk": chunk_learning if isinstance(chunk_learning, dict) else {},
+    }
+    refs: dict[str, Any] = {}
+    for source in (payload["document"], payload["parsed_document"], payload["chunk"]):
+        for key in ("prerequisite_refs", "next_refs", "related_refs", "lab_refs"):
+            value = source.get(key)
+            if isinstance(value, list) and value and key not in refs:
+                refs[key] = value
+    if refs:
+        payload["refs"] = refs
+    return payload
 
 
 def index_pending_document_chunks(
