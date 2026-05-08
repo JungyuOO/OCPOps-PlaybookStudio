@@ -71,6 +71,63 @@ def test_private_hits_are_hidden_without_active_repository_selection():
     assert not hit_visible_to_session(private_hit, context)
 
 
+def test_active_document_filters_shared_hits():
+    context = SessionContext(owner_user_id="owner-a", active_document_id="doc-a")
+    visible = _hit(
+        chunk_id="doc-a-hit",
+        document_source_id="doc-a",
+        visibility="workspace_shared",
+        source_scope="study_docs",
+    )
+    wrong_document = _hit(
+        chunk_id="doc-b-hit",
+        document_source_id="doc-b",
+        visibility="workspace_shared",
+        source_scope="study_docs",
+    )
+
+    assert [hit.chunk_id for hit in filter_hits_by_session_scope([visible, wrong_document], context=context)] == [
+        "doc-a-hit"
+    ]
+
+
+def test_active_document_still_requires_private_repository_scope():
+    context = SessionContext(
+        owner_user_id="owner-a",
+        active_repository_id="repo-a",
+        active_document_id="doc-a",
+    )
+    visible = _hit(
+        chunk_id="visible-private-doc",
+        repository_id="repo-a",
+        document_source_id="doc-a",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+    )
+    wrong_document = _hit(
+        chunk_id="wrong-private-doc",
+        repository_id="repo-a",
+        document_source_id="doc-b",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+    )
+    wrong_repository = _hit(
+        chunk_id="wrong-private-repo",
+        repository_id="repo-b",
+        document_source_id="doc-a",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+    )
+
+    assert [
+        hit.chunk_id
+        for hit in filter_hits_by_session_scope([visible, wrong_document, wrong_repository], context=context)
+    ] == ["visible-private-doc"]
+
+
 def test_shared_hits_are_visible_across_owners():
     assert hit_visible_to_session(
         _hit(visibility="workspace_shared", owner_user_id="owner-b", source_scope="study_docs"),
@@ -85,6 +142,7 @@ def test_vector_payload_preserves_repository_scope_fields():
             "book_slug": "uploaded-documents",
             "text": "body",
             "repository_id": "repo-a",
+            "document_source_id": "doc-a",
             "owner_user_id": "owner-a",
             "visibility": "private_user",
             "source_scope": "user_upload",
@@ -94,6 +152,7 @@ def test_vector_payload_preserves_repository_scope_fields():
     )
 
     assert hit.repository_id == "repo-a"
+    assert hit.document_source_id == "doc-a"
     assert hit.owner_user_id == "owner-a"
     assert hit.visibility == "private_user"
     assert hit.source_scope == "user_upload"

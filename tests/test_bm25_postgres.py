@@ -92,6 +92,7 @@ def test_load_bm25_rows_from_connection_builds_runtime_payload_rows():
     assert rows[0]["text"] == "oc get pods 명령으로 Pod 상태를 확인한다."
     assert rows[0]["section_number"] == "1.2"
     assert rows[0]["heading_title"] == "Pods"
+    assert rows[0]["document_source_id"] == "cccccccc-cccc-cccc-cccc-cccccccccccc"
     assert rows[0]["source_scope"] == "study_docs"
     assert rows[0]["repository_id"] == "dddddddd-dddd-dddd-dddd-dddddddddddd"
     assert rows[0]["cli_commands"] == ["oc get pods"]
@@ -118,6 +119,7 @@ def test_bm25_index_can_search_postgres_payload_rows():
     assert hits[0].toc_path == ("1 Workloads", "1.2 Pods")
     assert hits[0].cli_commands == ("oc get pods",)
     assert hits[0].asset_ids == ("asset-a",)
+    assert hits[0].document_source_id == "cccccccc-cccc-cccc-cccc-cccccccccccc"
     assert hits[0].repository_id == "dddddddd-dddd-dddd-dddd-dddddddddddd"
     assert hits[0].visibility == "workspace_shared"
     assert hits[0].source_scope == "study_docs"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
@@ -28,13 +29,34 @@ def _signal_from_command(row: dict[str, Any]) -> dict[str, Any] | None:
     if not match:
         return None
     rest = command[match.end():].strip()
-    tokens = [token for token in re.split(r"\s+", rest) if token]
+    try:
+        tokens = shlex.split(rest)
+    except ValueError:
+        tokens = [token for token in re.split(r"\s+", rest) if token]
     namespace = "default"
     for index, token in enumerate(tokens):
         if token in {"-n", "--namespace"} and index + 1 < len(tokens):
             namespace = tokens[index + 1]
             break
-    resource_tokens = [token for token in tokens if not token.startswith("-") and "=" not in token]
+    resource_tokens: list[str] = []
+    skip_next = False
+    for index, token in enumerate(tokens):
+        if skip_next:
+            skip_next = False
+            continue
+        if token in {"-f", "--filename", "-k", "--kustomize"}:
+            skip_next = True
+            continue
+        if token in {"-n", "--namespace"}:
+            skip_next = True
+            continue
+        if token.startswith("-") or "=" in token:
+            continue
+        if "/" in token or token.endswith((".yaml", ".yml", ".json")):
+            continue
+        resource_tokens.append(token)
+    if match.group(2).lower() == "apply" and not resource_tokens:
+        resource_tokens = ["manifest"]
     return {
         "signal_id": str(row.get("id") or ""),
         "timestamp": str(row.get("created_at") or ""),

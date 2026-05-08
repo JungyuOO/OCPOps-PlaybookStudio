@@ -112,6 +112,7 @@ def test_hydrate_retrieval_hits_rebuilds_hits_from_canonical_db_rows():
     assert hydrated[0].heading_title == "Canonical"
     assert hydrated[0].source_anchor == "canonical"
     assert hydrated[0].toc_path == ("1.1 Canonical",)
+    assert hydrated[0].document_source_id == "cccccccc-cccc-cccc-cccc-cccccccccccc"
     assert hydrated[0].repository_id == "dddddddd-dddd-dddd-dddd-dddddddddddd"
     assert hydrated[0].owner_user_id == "owner-a"
     assert hydrated[0].visibility == "workspace_shared"

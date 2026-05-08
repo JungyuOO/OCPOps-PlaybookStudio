@@ -73,6 +73,8 @@ type OfficialSourceBasisKey = 'official_repo' | 'official_homepage';
 const WORKSPACE_INGESTION_STATUS_STORAGE_KEY = 'workspace.ingestionStatus';
 const WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY = 'workspace.activeDocumentId';
 const WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY = 'workspace.activeDocumentTitle';
+const WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY = 'workspace.activeCategoryKey';
+const WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY = 'workspace.activeCategoryLabel';
 
 interface LogEntry {
   time: string;
@@ -270,8 +272,42 @@ interface RepositoryDocumentRow {
   categoryKey: WikiCategoryKey;
 }
 
+function metadataString(metadata: Record<string, unknown> | undefined, key: string): string {
+  const value = metadata?.[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function metadataList(metadata: Record<string, unknown> | undefined, key: string): string[] {
+  const value = metadata?.[key];
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return [value.trim()];
+  }
+  return [];
+}
+
+function wikiCategoryFromValue(value: string): WikiCategoryKey | null {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  const direct = WIKI_CATEGORIES.find(
+    (category) => category.key === normalized || category.label.toLowerCase() === normalized,
+  );
+  if (direct) {
+    return direct.key;
+  }
+  const matched = WIKI_CATEGORIES.find((category) =>
+    category.terms.some((term) => normalized.includes(term)),
+  );
+  return matched?.key ?? null;
+}
+
 function documentSearchText(document: DocumentRepositoryDocument, repository?: DocumentRepository): string {
   const metadata = document.metadata ?? {};
+  const repositoryMetadata = repository?.metadata ?? {};
   return [
     document.title,
     document.filename,
@@ -279,15 +315,48 @@ function documentSearchText(document: DocumentRepositoryDocument, repository?: D
     document.source_scope,
     repository?.slug,
     repository?.title,
+    repository?.repository_kind,
+    repository?.visibility,
     metadata.book_slug,
     metadata.book_title,
     metadata.category,
+    metadata.category_key,
     metadata.source_collection,
     metadata.viewer_path,
+    metadata.source_scope,
+    repositoryMetadata.book_slug,
+    repositoryMetadata.book_title,
+    repositoryMetadata.category,
+    repositoryMetadata.category_key,
+    repositoryMetadata.source_collection,
+    repositoryMetadata.source_scope,
+    ...metadataList(metadata, 'toc_path'),
+    ...metadataList(repositoryMetadata, 'toc_path'),
   ].filter(Boolean).join(' ').toLowerCase();
 }
 
 function inferWikiCategory(document: DocumentRepositoryDocument, repository?: DocumentRepository): WikiCategoryKey {
+  const metadata = document.metadata ?? {};
+  const repositoryMetadata = repository?.metadata ?? {};
+  const metadataCandidates = [
+    metadataString(metadata, 'category_key'),
+    metadataString(metadata, 'category'),
+    metadataString(repositoryMetadata, 'category_key'),
+    metadataString(repositoryMetadata, 'category'),
+    metadataString(metadata, 'book_slug'),
+    metadataString(repositoryMetadata, 'book_slug'),
+    document.source_scope,
+    metadataString(metadata, 'source_scope'),
+    metadataString(repositoryMetadata, 'source_scope'),
+    ...metadataList(metadata, 'toc_path'),
+    ...metadataList(repositoryMetadata, 'toc_path'),
+  ];
+  for (const candidate of metadataCandidates) {
+    const category = wikiCategoryFromValue(candidate);
+    if (category) {
+      return category;
+    }
+  }
   const text = documentSearchText(document, repository);
   const matched = WIKI_CATEGORIES.find((category) => category.terms.some((term) => text.includes(term)));
   return matched?.key ?? 'operations';
@@ -736,15 +805,29 @@ const PlaybookLibraryPage: React.FC = () => {
       window.localStorage.setItem('workspace.activeSourceId', `repository:${repository.repository_id}`);
       window.localStorage.removeItem('workspace.activeDocumentId');
       window.localStorage.removeItem(WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY);
+      window.localStorage.removeItem(WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY);
+      window.localStorage.removeItem(WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY);
     }
     navigate(ROUTES.pbsStudio);
   }, [navigate]);
 
-  const openDocumentInChat = useCallback((repository: DocumentRepository, document: DocumentRepositoryDocument) => {
+  const openDocumentInChat = useCallback((
+    repository: DocumentRepository,
+    document: DocumentRepositoryDocument,
+    categoryKey?: WikiCategoryKey,
+  ) => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('workspace.activeSourceId', `repository:${repository.repository_id}`);
       window.localStorage.setItem(WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY, document.document_source_id);
       window.localStorage.setItem(WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY, document.title || document.filename || 'Scoped document');
+      if (categoryKey) {
+        const category = WIKI_CATEGORIES.find((item) => item.key === categoryKey);
+        window.localStorage.setItem(WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY, categoryKey);
+        window.localStorage.setItem(WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY, category?.label ?? categoryKey);
+      } else {
+        window.localStorage.removeItem(WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY);
+        window.localStorage.removeItem(WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY);
+      }
     }
     navigate(ROUTES.pbsStudio);
   }, [navigate]);
@@ -1824,7 +1907,7 @@ const PlaybookLibraryPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="operational-library-grid">
-                  {activeWikiDocumentRows.map(({ repository, document }) => (
+                  {activeWikiDocumentRows.map(({ repository, document, categoryKey }) => (
                     <article
                       key={document.document_source_id}
                       className="operational-library-card operational-library-card--document"
@@ -1840,7 +1923,7 @@ const PlaybookLibraryPage: React.FC = () => {
                         <button
                           type="button"
                           className="library-document-chat-btn"
-                          onClick={() => openDocumentInChat(repository, document)}
+                          onClick={() => openDocumentInChat(repository, document, categoryKey)}
                         >
                           <MessageSquare size={14} />
                           <span>Ask this document</span>
@@ -2119,7 +2202,7 @@ const PlaybookLibraryPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="library-repository-grid">
-                  {userUploadDocumentRows.map(({ repository, document }) => (
+                  {userUploadDocumentRows.map(({ repository, document, categoryKey }) => (
                     <article className="library-repository-card" key={document.document_source_id}>
                       <div>
                         <span className="library-repository-scope">{document.source_scope || repository.visibility || repository.repository_kind}</span>
@@ -2127,7 +2210,7 @@ const PlaybookLibraryPage: React.FC = () => {
                         <p>{repository.visibility} · {repository.document_count} docs</p>
                       </div>
                       <div className="library-document-actions">
-                        <button type="button" onClick={() => openDocumentInChat(repository, document)}>
+                        <button type="button" onClick={() => openDocumentInChat(repository, document, categoryKey)}>
                           Ask this document
                         </button>
                         <button type="button" onClick={() => openRepositoryInChat(repository)}>

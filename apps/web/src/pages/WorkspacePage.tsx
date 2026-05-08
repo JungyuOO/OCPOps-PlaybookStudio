@@ -134,6 +134,8 @@ interface ViewerActiveSection {
 const WORKSPACE_ACTIVE_SOURCE_STORAGE_KEY = 'workspace.activeSourceId';
 const WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY = 'workspace.activeDocumentId';
 const WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY = 'workspace.activeDocumentTitle';
+const WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY = 'workspace.activeCategoryKey';
+const WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY = 'workspace.activeCategoryLabel';
 const WORKSPACE_INGESTION_STATUS_STORAGE_KEY = 'workspace.ingestionStatus';
 
 function loadStoredActiveSourceId(): string | null {
@@ -1139,6 +1141,18 @@ export default function WorkspacePage() {
     }
     return window.localStorage.getItem(WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY) || '';
   });
+  const [activeCategoryKey, setActiveCategoryKey] = useState(() => {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    return window.localStorage.getItem(WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY) || '';
+  });
+  const [activeCategoryLabel, setActiveCategoryLabel] = useState(() => {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    return window.localStorage.getItem(WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY) || '';
+  });
   const [preview, setPreview] = useState<PreviewState>({ kind: 'empty' });
   const [evidenceDrawer, setEvidenceDrawer] = useState<EvidenceDrawerState>({ kind: 'closed' });
   const [viewerPageMode, setViewerPageMode] = useState<ViewerPageMode>('single');
@@ -1585,6 +1599,24 @@ export default function WorkspacePage() {
       window.localStorage.removeItem(WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY);
     }
   }, [activeDocumentTitle]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (activeCategoryKey) {
+      window.localStorage.setItem(WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY, activeCategoryKey);
+    } else {
+      window.localStorage.removeItem(WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY);
+    }
+  }, [activeCategoryKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (activeCategoryLabel) {
+      window.localStorage.setItem(WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY, activeCategoryLabel);
+    } else {
+      window.localStorage.removeItem(WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY);
+    }
+  }, [activeCategoryLabel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2053,6 +2085,8 @@ export default function WorkspacePage() {
   const clearActiveDocumentScope = useCallback(() => {
     setActiveDocumentId('');
     setActiveDocumentTitle('');
+    setActiveCategoryKey('');
+    setActiveCategoryLabel('');
   }, []);
 
   const currentViewerPath = useMemo(
@@ -4289,6 +4323,9 @@ export default function WorkspacePage() {
                           ? activeDocumentScopeLabel
                           : activeRepository?.title || activeRepository?.slug || 'Active repository'}
                       </strong>
+                      {activeDocumentId && activeCategoryLabel ? (
+                        <small>{activeCategoryLabel}</small>
+                      ) : null}
                     </div>
                     {activeDocumentId ? (
                       <button type="button" onClick={clearActiveDocumentScope} title="Use whole repository">
