@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
+from play_book_studio.config.corpus_paths import CORPUS_DATA_DIR
 from play_book_studio.http.server_chat import (
     handle_chat as _handle_chat_request,
     handle_chat_stream as _handle_chat_stream_request,
@@ -162,8 +163,8 @@ def _build_handler(
                     return
             if request_path.startswith("/playbooks/wiki-assets/"):
                 relative = request_path.removeprefix("/playbooks/wiki-assets/").strip("/")
-                asset_path = (root_dir / "data" / "wiki_assets" / relative).resolve()
-                assets_root = (root_dir / "data" / "wiki_assets").resolve()
+                assets_root = (root_dir / CORPUS_DATA_DIR / "wiki_assets").resolve()
+                asset_path = (assets_root / relative).resolve()
                 if asset_path.is_file() and (asset_path == assets_root or assets_root in asset_path.parents):
                     content_type = mimetypes.guess_type(str(asset_path))[0] or "application/octet-stream"
                     self._send_bytes(asset_path.read_bytes(), content_type=content_type)
