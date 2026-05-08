@@ -83,6 +83,43 @@ def build_learning_document_index(relative_paths: tuple[str, ...], *, corpus_kin
     return node_by_path
 
 
+def build_learning_book_index(book_slugs: tuple[str, ...], *, corpus_kind: str) -> dict[str, dict[str, Any]]:
+    """Build learning metadata keyed by official book slug."""
+
+    exact_slugs = tuple(str(slug or "").strip() for slug in book_slugs if str(slug or "").strip())
+    nodes: list[dict[str, Any]] = []
+    for ordinal, slug in enumerate(exact_slugs, start=1):
+        category_key = infer_category_key(slug)
+        nodes.append(
+            {
+                "relative_path": f"{slug}.json",
+                "book_slug": slug,
+                "category_key": category_key,
+                "category_label": CATEGORY_LABELS.get(category_key, "Wiki"),
+                "stage_order": CATEGORY_ORDER.get(category_key, 100) * 1000 + ordinal,
+                "stage_id": f"{category_key}-{ordinal:03d}",
+                "title_hint": _title_hint(Path(slug)),
+            }
+        )
+    sorted_nodes = sorted(nodes, key=lambda item: (int(item["stage_order"]), str(item["book_slug"])))
+    for index, item in enumerate(sorted_nodes):
+        previous_item = sorted_nodes[index - 1] if index > 0 else None
+        next_item = sorted_nodes[index + 1] if index + 1 < len(sorted_nodes) else None
+        item["learning"] = {
+            "track": "ocp-foundation" if _normalize_corpus_kind(corpus_kind) == "official_docs" else "workspace-study",
+            "stage_id": item["stage_id"],
+            "stage_order": item["stage_order"],
+            "difficulty": "beginner",
+            "persona": ["beginner", "platform-admin"],
+            "estimated_minutes": 15,
+            "prerequisite_refs": [_document_ref(previous_item, "이전 학습 단계") for previous_item in [previous_item] if previous_item],
+            "next_refs": [_document_ref(next_item, "다음 학습 단계") for next_item in [next_item] if next_item],
+            "related_refs": _related_refs(item, sorted_nodes),
+            "lab_refs": [],
+        }
+    return {str(node["book_slug"]): node for node in sorted_nodes}
+
+
 def attach_learning_metadata(
     parsed: ParsedUploadDocument,
     chunks: tuple[DocumentChunk, ...],
@@ -187,16 +224,33 @@ def _related_refs(item: dict[str, Any], nodes: list[dict[str, Any]]) -> list[dic
 
 def _chunk_learning_metadata(chunk: DocumentChunk, document_learning: dict[str, Any]) -> dict[str, Any]:
     heading = chunk.heading_title or (chunk.toc_path[-1] if chunk.toc_path else "")
+    return build_chunk_learning_metadata(
+        document_learning,
+        ordinal=chunk.ordinal,
+        section_number=chunk.section_number,
+        heading=heading,
+        text=chunk.embedding_text,
+    )
+
+
+def build_chunk_learning_metadata(
+    document_learning: dict[str, Any],
+    *,
+    ordinal: int,
+    section_number: str = "",
+    heading: str = "",
+    text: str = "",
+) -> dict[str, Any]:
     return {
         "track": document_learning.get("track"),
         "stage_id": document_learning.get("stage_id"),
         "stage_order": document_learning.get("stage_order"),
-        "section_role": "step" if chunk.section_number or heading else "context",
-        "step_order": chunk.ordinal + 1,
+        "section_role": "step" if section_number or heading else "context",
+        "step_order": int(ordinal) + 1,
         "user_goal": heading,
         "next_refs": list(document_learning.get("next_refs") or []),
         "related_refs": list(document_learning.get("related_refs") or []),
-        "command_hints": _command_hints(chunk.embedding_text),
+        "command_hints": _command_hints(text),
     }
 
 
@@ -245,6 +299,8 @@ def _fallback_node(relative_path: str, corpus_kind: str) -> dict[str, Any]:
 
 __all__ = [
     "attach_learning_metadata",
+    "build_chunk_learning_metadata",
+    "build_learning_book_index",
     "build_learning_document_index",
     "infer_category_key",
 ]
