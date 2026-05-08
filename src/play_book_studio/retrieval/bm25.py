@@ -63,6 +63,7 @@ def _row_to_hit(row: dict, score: float) -> RetrievalHit:
         owner_user_id=str(row.get("owner_user_id", "")),
         visibility=str(row.get("visibility", "")),
         source_scope=str(row.get("source_scope", "")),
+        learning=row.get("learning") if isinstance(row.get("learning"), dict) else {},
     )
 
 

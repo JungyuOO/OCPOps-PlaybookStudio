@@ -97,6 +97,7 @@ class RetrievalHit:
     owner_user_id: str = ""
     visibility: str = ""
     source_scope: str = ""
+    learning: dict[str, Any] = field(default_factory=dict)
     component_scores: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

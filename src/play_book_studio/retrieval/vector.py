@@ -54,6 +54,7 @@ def hit_from_payload(payload: dict[str, Any], *, source: str, score: float) -> R
         owner_user_id=str(payload.get("owner_user_id", "")),
         visibility=str(payload.get("visibility", "")),
         source_scope=str(payload.get("source_scope", "")),
+        learning=payload.get("learning") if isinstance(payload.get("learning"), dict) else {},
     )
 
 

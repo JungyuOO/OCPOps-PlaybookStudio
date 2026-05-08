@@ -5,10 +5,14 @@ from pathlib import Path
 
 from play_book_studio.cli import build_parser
 from play_book_studio.ingestion.official_gold_import import (
+    _chunk_metadata,
     _heading_title,
+    _learning_by_book_slug,
     _normalized_chunk_text,
+    _official_chunk_metadata,
     _section_number,
     _section_path,
+    _source_metadata,
     _source_anchor,
     _toc_path,
     build_official_gold_import_plan,
@@ -63,6 +67,9 @@ def test_build_official_gold_import_plan_groups_chunks_by_source():
     assert plan["visibility"] == "global_shared"
     assert plan["source_scope"] == "official_docs"
     assert [item["chunk_count"] for item in plan["sources"]] == [2, 1]
+    architecture = next(item for item in plan["sources"] if item["book_slug"] == "architecture")
+    assert architecture["category_key"] == "wiki"
+    assert architecture["next_refs"]
 
 
 def test_official_gold_import_parser_accepts_args():
@@ -119,3 +126,40 @@ def test_official_gold_import_derives_section_metadata_without_body_prefixes():
     assert _source_anchor(row) == "routes"
     assert _toc_path(row) == ["1 Networking", "1.1 Routes and services"]
     assert _normalized_chunk_text(row) == "Route body text."
+
+
+def test_official_gold_import_adds_learning_metadata_to_source_and_chunks():
+    grouped = {
+        "openshift:overview": [
+            {"book_slug": "overview", "book_title": "Overview", "source_id": "openshift:overview"}
+        ],
+        "openshift:installation_overview": [
+            {
+                "book_slug": "installation_overview",
+                "book_title": "Installation overview",
+                "source_id": "openshift:installation_overview",
+                "section": "1.1 Verify install",
+                "cli_commands": ["oc get co"],
+            }
+        ],
+    }
+    learning_by_book = _learning_by_book_slug(grouped)
+
+    source_metadata = _source_metadata(
+        "openshift:overview",
+        grouped["openshift:overview"],
+        TEST_TMP / "chunks.jsonl",
+        learning_by_book=learning_by_book,
+    )
+    chunk_metadata = _official_chunk_metadata(
+        grouped["openshift:installation_overview"][0],
+        ordinal=0,
+        learning_by_book=learning_by_book,
+    )
+
+    assert source_metadata["learning"]["track"] == "ocp-foundation"
+    assert source_metadata["learning"]["next_refs"][0]["book_slug"] == "installation_overview"
+    assert source_metadata["category_key"] == "wiki"
+    assert chunk_metadata["book_slug"] == "installation_overview"
+    assert chunk_metadata["learning"]["section_role"] == "step"
+    assert chunk_metadata["learning"]["command_hints"] == ["oc get co"]

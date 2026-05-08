@@ -137,6 +137,38 @@ def test_import_corpus_documents_preserves_section_metadata(monkeypatch):
     assert verify_chunk.heading_title == "Verify"
     assert verify_chunk.source_anchor == "1.1-install-verify"
     assert verify_chunk.toc_path == ("1 Install", "1.1 Verify")
+    assert verify_chunk.metadata["learning"]["section_role"] == "step"
+    assert verify_chunk.metadata["learning"]["command_hints"] == ["oc get nodes"]
+
+
+def test_import_corpus_documents_adds_learning_refs(monkeypatch):
+    source_dir = _case_dir("learning_refs")
+    (source_dir / "01-overview.md").write_text("# Overview\n\nOCP concepts.", encoding="utf-8")
+    (source_dir / "02-install.md").write_text("# Install\n\nInstall the cluster.", encoding="utf-8")
+    calls = []
+
+    def fake_persist(connection, parsed, chunks, **kwargs):
+        calls.append((connection, parsed, chunks, kwargs))
+        return Stored()
+
+    monkeypatch.setattr(corpus_import, "persist_parsed_upload_document", fake_persist)
+
+    result = import_corpus_documents(
+        FakeConnection(),
+        source_dir=source_dir,
+        corpus_kind="official_docs",
+        chunk_max_chars=200,
+        chunk_overlap_blocks=0,
+    )
+
+    assert result["imported_count"] == 2
+    first_parsed = calls[0][1]
+    second_parsed = calls[1][1]
+    assert first_parsed.metadata["learning"]["track"] == "ocp-foundation"
+    assert first_parsed.metadata["learning"]["next_refs"][0]["book_slug"] == "02-install"
+    assert second_parsed.metadata["learning"]["prerequisite_refs"][0]["book_slug"] == "01-overview"
+    assert first_parsed.metadata["category_key"] == "wiki"
+    assert second_parsed.metadata["category_key"] == "install"
 
 
 def test_import_corpus_documents_skips_exact_duplicate_sources(monkeypatch):

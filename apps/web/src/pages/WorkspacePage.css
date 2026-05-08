@@ -3034,13 +3034,48 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  gap: 6px;
+  min-width: 28px;
   height: 28px;
+  padding: 0 8px;
   border: 1px solid rgba(216, 243, 255, 0.18);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.06);
   color: #d8f3ff;
   cursor: pointer;
+}
+
+.chat-scope-clear-btn span {
+  color: inherit;
+  font-size: 11px;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.chat-scope-next {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.chat-scope-next span {
+  color: #86c7e3;
+  font-size: 11px;
+  text-transform: none;
+}
+
+.chat-scope-next button {
+  width: auto;
+  max-width: 220px;
+  height: 24px;
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-color: rgba(82, 190, 255, 0.28);
+  color: #e5f7ff;
 }
 
 .ingestion-status-banner {

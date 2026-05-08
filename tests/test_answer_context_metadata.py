@@ -22,6 +22,13 @@ def test_assemble_context_preserves_section_metadata_on_citations() -> None:
         source_anchor="pods",
         toc_path=("1 Workloads", "1.2 Pods"),
         asset_ids=("asset-a", "asset-b"),
+        learning={
+            "refs": {
+                "next_refs": [
+                    {"ref_type": "document", "book_slug": "deployments", "reason": "다음 학습 단계"}
+                ]
+            }
+        },
     )
 
     bundle = assemble_context([hit], query="pod status", max_chunks=1)
@@ -32,5 +39,8 @@ def test_assemble_context_preserves_section_metadata_on_citations() -> None:
     assert citation.source_anchor == "pods"
     assert citation.toc_path == ("1 Workloads", "1.2 Pods")
     assert citation.asset_ids == ("asset-a", "asset-b")
+    assert citation.learning["refs"]["next_refs"][0]["book_slug"] == "deployments"
+    assert "learning_next_refs:" in bundle.prompt_context
+    assert "- deployments: 다음 학습 단계" in bundle.prompt_context
     assert citation.to_dict()["toc_path"] == ("1 Workloads", "1.2 Pods")
     assert citation.to_dict()["asset_id"] == "asset-a"

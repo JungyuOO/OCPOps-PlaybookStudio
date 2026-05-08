@@ -19,6 +19,12 @@ from play_book_studio.db.document_repository import (
     _upsert_tenant,
     _upsert_workspace,
 )
+from play_book_studio.ingestion.learning_metadata import (
+    CATEGORY_LABELS,
+    build_chunk_learning_metadata,
+    build_learning_book_index,
+    infer_category_key,
+)
 
 _SECTION_NUMBER_RE = re.compile(r"^\s*((?:\d+\.)+\d+|\d+)(?:[.)]|\.?)\s+(.+?)\s*$")
 
@@ -50,6 +56,7 @@ class OfficialGoldImportSummary:
 def build_official_gold_import_plan(chunks_path: Path, *, limit: int = 0) -> dict[str, Any]:
     rows = _load_gold_chunk_rows(chunks_path, limit=limit)
     grouped = _group_rows_by_source(rows)
+    learning_by_book = _learning_by_book_slug(grouped)
     return {
         "chunks_path": str(chunks_path.resolve()),
         "source_count": len(grouped),
@@ -63,6 +70,18 @@ def build_official_gold_import_plan(chunks_path: Path, *, limit: int = 0) -> dic
                 "source_key": source_key,
                 "book_slug": str(source_rows[0].get("book_slug") or source_key),
                 "title": _source_title(source_rows),
+                "category_key": str(
+                    (learning_by_book.get(str(source_rows[0].get("book_slug") or source_key)) or {}).get("category_key")
+                    or infer_category_key(str(source_rows[0].get("book_slug") or source_key))
+                ),
+                "next_refs": list(
+                    (
+                        (learning_by_book.get(str(source_rows[0].get("book_slug") or source_key)) or {})
+                        .get("learning")
+                        or {}
+                    ).get("next_refs")
+                    or []
+                ),
                 "chunk_count": len(source_rows),
             }
             for source_key, source_rows in sorted(grouped.items())
@@ -82,6 +101,7 @@ def import_official_gold_chunks(
 ) -> OfficialGoldImportSummary:
     rows = _load_gold_chunk_rows(chunks_path, limit=limit)
     grouped = _group_rows_by_source(rows)
+    learning_by_book = _learning_by_book_slug(grouped)
     imported_chunk_count = 0
     repository_id = ""
 
@@ -113,6 +133,7 @@ def import_official_gold_chunks(
                     source_key=source_key,
                     rows=source_rows,
                     chunks_path=chunks_path,
+                    learning_by_book=learning_by_book,
                 )
                 version_id = _upsert_official_document_version(
                     cursor,
@@ -133,6 +154,7 @@ def import_official_gold_chunks(
                     parse_job_id=parse_job_id,
                     source_key=source_key,
                     rows=source_rows,
+                    learning_by_book=learning_by_book,
                 )
                 for ordinal, row in enumerate(source_rows):
                     _upsert_official_document_chunk(
@@ -140,6 +162,7 @@ def import_official_gold_chunks(
                         parsed_document_id=parsed_document_id,
                         row=row,
                         ordinal=ordinal,
+                        learning_by_book=learning_by_book,
                     )
                     imported_chunk_count += 1
 
@@ -171,6 +194,14 @@ def _group_rows_by_source(rows: list[dict[str, Any]]) -> dict[str, list[dict[str
     for row in rows:
         grouped[_source_key(row)].append(row)
     return dict(grouped)
+
+
+def _learning_by_book_slug(grouped: dict[str, list[dict[str, Any]]]) -> dict[str, dict[str, Any]]:
+    book_slugs = tuple(
+        str((source_rows[0] if source_rows else {}).get("book_slug") or source_key).strip()
+        for source_key, source_rows in sorted(grouped.items())
+    )
+    return build_learning_book_index(book_slugs, corpus_kind="official_docs")
 
 
 def _source_key(row: dict[str, Any]) -> str:
@@ -328,12 +359,48 @@ def _chunk_metadata(row: dict[str, Any]) -> dict[str, Any]:
     return {key: row[key] for key in keep_keys if key in row}
 
 
-def _source_metadata(source_key: str, rows: list[dict[str, Any]], chunks_path: Path) -> dict[str, Any]:
+def _official_chunk_metadata(
+    row: dict[str, Any],
+    *,
+    ordinal: int,
+    learning_by_book: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    section_path = _section_path(row)
+    section_number = _section_number(row)
+    heading_title = _heading_title(row, section_path)
+    chunk_text = _normalized_chunk_text(row)
+    metadata = _chunk_metadata(row)
+    book_slug = str(row.get("book_slug") or "").strip()
+    learning = dict(((learning_by_book or {}).get(book_slug) or {}).get("learning") or {})
+    metadata["learning"] = build_chunk_learning_metadata(
+        learning,
+        ordinal=int(row.get("ordinal") if row.get("ordinal") is not None else ordinal),
+        section_number=section_number,
+        heading=heading_title,
+        text="\n".join([chunk_text, " ".join(str(item) for item in row.get("cli_commands", []) if str(item).strip())]),
+    )
+    return metadata
+
+
+def _source_metadata(
+    source_key: str,
+    rows: list[dict[str, Any]],
+    chunks_path: Path,
+    *,
+    learning_by_book: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     first = rows[0] if rows else {}
+    book_slug = str(first.get("book_slug") or source_key)
+    learning_node = (learning_by_book or {}).get(book_slug) or {}
+    category_key = str(learning_node.get("category_key") or infer_category_key(book_slug))
     return {
         **_chunk_metadata(first),
         "source_id": source_key,
-        "book_slug": str(first.get("book_slug") or source_key),
+        "book_slug": book_slug,
+        "book_title": _source_title(rows),
+        "category_key": category_key,
+        "category_label": str(learning_node.get("category_label") or CATEGORY_LABELS.get(category_key, "Wiki")),
+        "learning": dict(learning_node.get("learning") or {}),
         "document_format": "official_gold_jsonl",
         "source_scope": "official_docs",
         "visibility": "global_shared",
@@ -351,6 +418,7 @@ def _upsert_official_document_source(
     source_key: str,
     rows: list[dict[str, Any]],
     chunks_path: Path,
+    learning_by_book: dict[str, dict[str, Any]],
 ) -> str:
     first = rows[0]
     source_id = _stable_uuid("official-gold-source", source_key)
@@ -383,7 +451,7 @@ def _upsert_official_document_source(
             f"{str(first.get('book_slug') or source_key)}.jsonl",
             source_sha256,
             _official_gold_storage_key(source_key),
-            _json(_source_metadata(source_key, rows, chunks_path)),
+            _json(_source_metadata(source_key, rows, chunks_path, learning_by_book=learning_by_book)),
             repository_id,
         ),
     )
@@ -446,8 +514,11 @@ def _upsert_official_parsed_document(
     parse_job_id: str,
     source_key: str,
     rows: list[dict[str, Any]],
+    learning_by_book: dict[str, dict[str, Any]],
 ) -> str:
     parsed_document_id = _stable_uuid("official-gold-parsed-document", source_key)
+    book_slug = str((rows[0] if rows else {}).get("book_slug") or source_key).strip()
+    learning = dict(((learning_by_book or {}).get(book_slug) or {}).get("learning") or {})
     cursor.execute(
         """
         INSERT INTO parsed_documents (
@@ -466,7 +537,7 @@ def _upsert_official_parsed_document(
             version_id,
             parse_job_id,
             _source_title(rows),
-            _json({"source_key": source_key, "chunk_count": len(rows), "document_format": "official_gold_jsonl"}),
+            _json({"source_key": source_key, "chunk_count": len(rows), "document_format": "official_gold_jsonl", "learning": learning}),
         ),
     )
     return _fetch_id(cursor)
@@ -478,6 +549,7 @@ def _upsert_official_document_chunk(
     parsed_document_id: str,
     row: dict[str, Any],
     ordinal: int,
+    learning_by_book: dict[str, dict[str, Any]],
 ) -> str:
     chunk_id = _uuid_from_row_chunk_id(row)
     section_path = _section_path(row)
@@ -486,6 +558,7 @@ def _upsert_official_document_chunk(
     source_anchor = _source_anchor(row)
     toc_path = _toc_path(row)
     chunk_text = _normalized_chunk_text(row)
+    metadata = _official_chunk_metadata(row, ordinal=ordinal, learning_by_book=learning_by_book)
     cursor.execute(
         """
         INSERT INTO document_chunks (
@@ -538,7 +611,7 @@ def _upsert_official_document_chunk(
             heading_title,
             source_anchor,
             _json(toc_path),
-            _json(_chunk_metadata(row)),
+            _json(metadata),
             parsed_document_id,
         ),
     )
