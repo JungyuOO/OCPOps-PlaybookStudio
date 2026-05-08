@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from http import HTTPStatus
 from pathlib import Path
@@ -32,6 +31,7 @@ from play_book_studio.http.source_books import (
     parse_entity_hub_viewer_path,
     parse_figure_viewer_path,
 )
+from play_book_studio.http.source_books_wiki_relations import _figure_assets, _figure_viewer_href
 from play_book_studio.http.source_books_customer_pack import (
     internal_customer_pack_viewer_html as _internal_customer_pack_viewer_html,
 )
@@ -344,13 +344,7 @@ def handle_runtime_figures(handler: Any, query: str, *, root_dir: Path) -> None:
         limit = max(1, min(12, int(limit_raw or "3")))
     except ValueError:
         limit = 3
-    asset_path = root_dir / "data" / "wiki_relations" / "figure_assets.json"
-    if not asset_path.exists():
-        handler._send_json({"count": 0, "items": []})
-        return
-    payload = json.loads(asset_path.read_text(encoding="utf-8"))
-    entries = payload.get("entries") if isinstance(payload.get("entries"), dict) else {}
-    items = entries.get(book_slug) if isinstance(entries, dict) else []
+    items = _figure_assets().get(book_slug, [])
     if not isinstance(items, list):
         items = []
     normalized: list[dict[str, Any]] = []
@@ -360,7 +354,7 @@ def handle_runtime_figures(handler: Any, query: str, *, root_dir: Path) -> None:
         normalized.append(
             {
                 "caption": str(item.get("caption") or item.get("alt") or "Figure"),
-                "viewer_path": str(item.get("viewer_path") or "").strip(),
+                "viewer_path": _figure_viewer_href(book_slug, item),
                 "asset_url": str(item.get("asset_url") or "").strip(),
                 "asset_kind": str(item.get("asset_kind") or "figure"),
                 "diagram_type": str(item.get("diagram_type") or "").strip(),

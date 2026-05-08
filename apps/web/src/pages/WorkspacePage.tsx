@@ -4328,8 +4328,14 @@ export default function WorkspacePage() {
                       ) : null}
                     </div>
                     {activeDocumentId ? (
-                      <button type="button" onClick={clearActiveDocumentScope} title="Use whole repository">
+                      <button
+                        type="button"
+                        className="chat-scope-clear-btn"
+                        onClick={clearActiveDocumentScope}
+                        title="문서 범위를 해제하고 repository 전체로 질문합니다"
+                      >
                         <X size={14} />
+                        <span>문서 범위 해제</span>
                       </button>
                     ) : null}
                   </div>
