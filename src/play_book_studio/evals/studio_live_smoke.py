@@ -24,11 +24,17 @@ from play_book_studio.config.corpus_paths import (
     PBS_CHAT_QUALITY_CASES_PATH,
     PBS_CHAT_QUALITY_EXTENDED_CASES_PATH,
 )
+from play_book_studio.retrieval.query import has_command_request
 
 
 SECTION_NUMBER_PREFIX_RE = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s+")
 LOW_CONFIDENCE_RE = re.compile(r"(low retrieval confidence|점수가 낮|정확히 맞물리는 점수가 낮)", re.IGNORECASE)
 FENCED_CODE_RE = re.compile(r"```[^\n`]*\n([\s\S]*?)```")
+SHELL_COMMAND_RE = re.compile(
+    r"\b(?:oc|kubectl|openshift-install|journalctl|systemctl|helm|curl)\b(?:\s+[^\n`]+)?",
+    re.IGNORECASE,
+)
+RAW_CODE_MARKUP_RE = re.compile(r"\[/?CODE[^\]]*\]", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -189,6 +195,10 @@ def _citation_text(citations: list[dict[str, Any]]) -> str:
     return "\n".join(parts).lower()
 
 
+def _has_shell_command(text: str) -> bool:
+    return bool(SHELL_COMMAND_RE.search(text or ""))
+
+
 def _validate_case(case: SmokeCase, status: int, events: list[dict[str, Any]], raw: str) -> dict[str, Any]:
     result = next(
         (
@@ -226,6 +236,10 @@ def _validate_case(case: SmokeCase, status: int, events: list[dict[str, Any]], r
         failures.append("unexpected_clarification")
     if not citations and result.get("response_kind") == "rag":
         failures.append("missing_citations")
+    if has_command_request(case.query) and not _has_shell_command(
+        "\n".join([answer, _citation_text(citations)])
+    ):
+        failures.append("command_query_missing_grounded_command")
     if any(index < 1 or index > len(citations) for index in cited_indices):
         failures.append("invalid_citation_index")
     answer_cites_source = bool(re.search(r"\[\d+\]", answer))
@@ -237,6 +251,9 @@ def _validate_case(case: SmokeCase, status: int, events: list[dict[str, Any]], r
         viewer_path = str(citation.get("viewer_path") or "")
         if not viewer_path:
             failures.append("citation_missing_viewer_path")
+            break
+        if RAW_CODE_MARKUP_RE.search(str(citation.get("excerpt") or "")):
+            failures.append("citation_raw_code_markup")
             break
     if any(SECTION_NUMBER_PREFIX_RE.search(suggestion) for suggestion in suggestions):
         failures.append("section_numbered_suggestion")

@@ -5,6 +5,7 @@ from play_book_studio.answering.models import AnswerResult, Citation
 from play_book_studio.http.presenters import _citation_display_payload
 from play_book_studio.http.session_flow import suggest_follow_up_questions
 from play_book_studio.http.sessions import ChatSession
+from play_book_studio.evals.studio_live_smoke import SmokeCase, _validate_case
 from play_book_studio.retrieval.intent_detectors import has_command_request
 from play_book_studio.retrieval.models import RetrievalHit, SessionContext
 from play_book_studio.retrieval.scoring import fuse_ranked_hits
@@ -119,3 +120,69 @@ def test_citation_display_payload_strips_code_markup() -> None:
     assert "[/CODE" not in payload["excerpt"]
     assert "oc get namespaces" in payload["excerpt"]
     assert payload["command_preview"] == ["oc get namespaces"]
+
+
+def test_live_smoke_flags_command_answers_without_grounded_command() -> None:
+    detail = _validate_case(
+        SmokeCase(case_id="command-missing", query="네임스페이스 확인하는 명령어가 뭐야?"),
+        200,
+        [
+            {"type": "answer_delta"},
+            {
+                "type": "result",
+                "payload": {
+                    "answer": "답변: 관련 문서를 먼저 확인하세요 [1].",
+                    "response_kind": "rag",
+                    "warnings": [],
+                    "cited_indices": [1],
+                    "suggested_queries": [],
+                    "citations": [
+                        {
+                            "index": 1,
+                            "book_slug": "applications",
+                            "section": "Namespaces",
+                            "viewer_path": "/docs/namespaces",
+                            "excerpt": "Namespace overview.",
+                            "cli_commands": [],
+                        }
+                    ],
+                },
+            },
+        ],
+        "",
+    )
+
+    assert "command_query_missing_grounded_command" in detail["failures"]
+
+
+def test_live_smoke_flags_raw_code_markup_in_citation_preview() -> None:
+    detail = _validate_case(
+        SmokeCase(case_id="raw-code", query="네임스페이스 확인하는 명령어가 뭐야?"),
+        200,
+        [
+            {"type": "answer_delta"},
+            {
+                "type": "result",
+                "payload": {
+                    "answer": "답변: 아래 명령을 사용하세요 [1].\n\n```bash\noc get namespaces\n```",
+                    "response_kind": "rag",
+                    "warnings": [],
+                    "cited_indices": [1],
+                    "suggested_queries": ["`oc get namespaces` 결과에서 무엇을 확인해야 해?"],
+                    "citations": [
+                        {
+                            "index": 1,
+                            "book_slug": "applications",
+                            "section": "Namespaces",
+                            "viewer_path": "/docs/namespaces",
+                            "excerpt": "[CODE] oc get namespaces [/CODE]",
+                            "cli_commands": ["oc get namespaces"],
+                        }
+                    ],
+                },
+            },
+        ],
+        "",
+    )
+
+    assert "citation_raw_code_markup" in detail["failures"]
