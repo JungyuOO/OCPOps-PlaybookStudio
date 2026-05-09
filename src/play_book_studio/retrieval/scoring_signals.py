@@ -9,6 +9,7 @@ from .query import (
     has_backup_restore_intent,
     has_certificate_monitor_intent,
     has_cluster_node_usage_intent,
+    has_command_request,
     has_doc_locator_intent,
     has_hosted_control_plane_signal,
     has_machine_config_reboot_intent,
@@ -58,6 +59,7 @@ class ScoreSignals:
     crash_loop_intent: bool
     pod_lifecycle_intent: bool
     oc_login_intent: bool
+    command_request_intent: bool
     concept_like_intent: bool
     generic_intro_intent: bool
 
@@ -99,6 +101,7 @@ def build_score_signals(query: str, *, context: SessionContext) -> ScoreSignals:
         crash_loop_intent=has_crash_loop_troubleshooting_intent(query),
         pod_lifecycle_intent=pod_lifecycle_intent,
         oc_login_intent=bool(OC_LOGIN_RE.search(query)),
+        command_request_intent=has_command_request(query),
         concept_like_intent=any(
             (
                 generic_intro_intent,

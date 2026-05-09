@@ -394,6 +394,45 @@ def _suggestions_from_retrieval_hits(result: AnswerResult, *, require_token_over
                 return suggestions
     return suggestions
 
+
+def _clean_command_label(command: str) -> str:
+    cleaned = re.sub(r"\s+", " ", str(command or "").strip().lstrip("$").strip())
+    if len(cleaned) > 80:
+        cleaned = cleaned[:77].rstrip() + "..."
+    return cleaned
+
+
+def _suggestions_from_citations(result: AnswerResult) -> list[str]:
+    suggestions: list[str] = []
+    seen: set[str] = set()
+
+    def add(candidate: str) -> None:
+        cleaned = (candidate or "").strip()
+        if not cleaned:
+            return
+        lowered = cleaned.lower()
+        if lowered in seen:
+            return
+        seen.add(lowered)
+        suggestions.append(cleaned)
+
+    for citation in result.citations[:4]:
+        section = _clean_suggestion_section(str(getattr(citation, "section", "") or ""))
+        commands = [
+            _clean_command_label(command)
+            for command in (getattr(citation, "cli_commands", ()) or ())
+            if _clean_command_label(command)
+        ]
+        if commands:
+            add(f"`{commands[0]}` 명령은 언제 쓰면 돼?")
+            add(f"`{commands[0]}` 결과에서 무엇을 확인해야 해?")
+        if section and not _is_bad_suggestion_section(section):
+            add(f"{section} 기준으로 다음에 확인할 것은 뭐야?")
+        if len(suggestions) >= 3:
+            break
+    return dedupe_suggestions(suggestions, query=result.query or "", limit=3)
+
+
 def suggest_follow_up_questions(*, session: ChatSession, result: AnswerResult) -> list[str]:
     query = (result.query or "").strip()
     normalized = query.lower()
@@ -438,6 +477,7 @@ def suggest_follow_up_questions(*, session: ChatSession, result: AnswerResult) -
 
     play_plan = build_next_play_plan(session_topic=topic, result=result)
     plan_candidates = play_plan.as_list() if play_plan is not None else []
+    grounded_candidates = _suggestions_from_citations(result)
 
     candidates: list[str] = []
 
@@ -553,7 +593,7 @@ def suggest_follow_up_questions(*, session: ChatSession, result: AnswerResult) -
         ]
 
     subject = _suggestion_subject(query=query, topic=topic, primary=primary)
-    source_candidates = plan_candidates + candidates
+    source_candidates = grounded_candidates + plan_candidates + candidates
     if not source_candidates:
         source_candidates = fallback_follow_up_questions(query=query)
     else:
