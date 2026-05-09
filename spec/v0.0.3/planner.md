@@ -29,7 +29,7 @@ v0.0.3의 1순위 목표는 현재 로컬 CRC 기준으로 잡혀 있는 OpenShi
 - [x] 앱 컨테이너에서 `api.ocp.cywell.local:6443` 네트워크 도달성 검증 경로 추가
 - [x] Terminal Session UI에 연결 대상 cluster/server를 표시
 - [x] `/tmp/playbookstudio-oc-login.log` 실패 원인을 API/Token/TLS/Network로 읽기 쉽게 노출
-- [ ] Ops Console 또는 cluster status API가 remote SNO 상태를 기준으로 health를 표시
+- [x] Ops Console 또는 cluster status API가 remote SNO 상태를 기준으로 health를 표시
 - [x] 원격 SNO 연결 smoke test 절차 문서화
 - [x] frontend production build
 - [x] backend focused tests
@@ -254,3 +254,4 @@ Ops Console live cluster status is connected
 - 2026-05-09: User-provided kubeconfig confirms API endpoint `https://api.ocp.cywell.local:6443`. The kubeconfig current-context namespace was `hcl-appscan-storage`, but that is HCL AppScan specific and must not become the PBS default namespace. Host DNS resolves the API to `192.168.119.8`; host and app container both successfully call `/version`. Local ignored `.env` was updated to `OCP_API_BASE_URL=https://api.ocp.cywell.local:6443` and `OCP_DEFAULT_NAMESPACE` should stay empty unless a PBS-safe namespace is chosen.
 - 2026-05-09: App container was rebuilt/recreated with the new API URL and web was rebuilt. Container-level `/version` check succeeds. Direct `oc login --server="$OCP_API_BASE_URL" --token="$OCP_API_TOKEN" --insecure-skip-tls-verify=true` reaches the API but fails with `The token provided is invalid or expired.` Next blocker is refreshing local secret `OCP_API_TOKEN`, not API reachability.
 - 2026-05-09: User created PBS test namespace `pbs-test`. Local ignored `.env` now sets `OCP_DEFAULT_NAMESPACE=pbs-test`; app was force-recreated. App container smoke passed: `oc login` as `admin`, `oc whoami --show-server` -> `https://api.ocp.cywell.local:6443`, `oc project pbs-test`, `oc get namespace pbs-test`, and `oc get nodes` returned the SNO node.
+- 2026-05-09: Ops Console env connection now reads `OCP_DEFAULT_NAMESPACE`; `/api/v1/auth/ocp/profiles?workspace_id=ws_default` returns `env_ocp` live profile with `default_namespace=pbs-test`, and overview/namespaces APIs load from configured OCP API. Terminal WebSocket smoke passed: ready payload included `cluster_server=https://api.ocp.cywell.local:6443` and shell output reached `OpenShift CLI login ready`.

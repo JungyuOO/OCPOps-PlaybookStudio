@@ -141,6 +141,7 @@ class Settings(SettingsPathMixin):
     surya_timeout_seconds: float = 30.0
     ocp_api_base_url: str = ""
     ocp_api_token: str = ""
+    ocp_default_namespace: str = ""
     terminal_enabled: bool = False
     terminal_host: str = "127.0.0.1"
     terminal_ws_port: int = 8770
@@ -366,6 +367,7 @@ def load_settings(root_dir: str | Path) -> Settings:
         surya_timeout_seconds=float(effective_env.get("SURYA_TIMEOUT_SECONDS", "30")),
         ocp_api_base_url=effective_env.get("OCP_API_BASE_URL", "").strip().rstrip("/"),
         ocp_api_token=effective_env.get("OCP_API_TOKEN", "").strip(),
+        ocp_default_namespace=effective_env.get("OCP_DEFAULT_NAMESPACE", "").strip(),
         terminal_enabled=effective_env.get("TERMINAL_ENABLED", "false").lower()
         in {"1", "true", "yes", "on"},
         terminal_host=effective_env.get("TERMINAL_HOST", "127.0.0.1").strip() or "127.0.0.1",
