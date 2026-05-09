@@ -25,7 +25,7 @@ v0.0.3의 1순위 목표는 현재 로컬 CRC 기준으로 잡혀 있는 OpenShi
 
 - [x] 원격 SNO `192.168.119.23` 연결 방식 확정
 - [x] `.env`/example/docs의 OCP 연결 값을 remote SNO 기준으로 정리
-- [ ] Terminal Session auto-login이 remote SNO API에 성공하는지 검증
+- [x] Terminal Session auto-login이 remote SNO API에 성공하는지 검증
 - [x] 앱 컨테이너에서 `api.ocp.cywell.local:6443` 네트워크 도달성 검증 경로 추가
 - [x] Terminal Session UI에 연결 대상 cluster/server를 표시
 - [x] `/tmp/playbookstudio-oc-login.log` 실패 원인을 API/Token/TLS/Network로 읽기 쉽게 노출
@@ -253,3 +253,4 @@ Ops Console live cluster status is connected
 - 2026-05-09: Host reachability: `Test-NetConnection 192.168.119.23 -Port 22` succeeded. `curl -k https://192.168.119.23:6443/version` failed with connection refused/unreachable, and ports `80`, `443`, `6443`, `22623` failed. Next concrete blocker is API endpoint/DNS/firewall confirmation, not frontend WebSocket wiring.
 - 2026-05-09: User-provided kubeconfig confirms API endpoint `https://api.ocp.cywell.local:6443`. The kubeconfig current-context namespace was `hcl-appscan-storage`, but that is HCL AppScan specific and must not become the PBS default namespace. Host DNS resolves the API to `192.168.119.8`; host and app container both successfully call `/version`. Local ignored `.env` was updated to `OCP_API_BASE_URL=https://api.ocp.cywell.local:6443` and `OCP_DEFAULT_NAMESPACE` should stay empty unless a PBS-safe namespace is chosen.
 - 2026-05-09: App container was rebuilt/recreated with the new API URL and web was rebuilt. Container-level `/version` check succeeds. Direct `oc login --server="$OCP_API_BASE_URL" --token="$OCP_API_TOKEN" --insecure-skip-tls-verify=true` reaches the API but fails with `The token provided is invalid or expired.` Next blocker is refreshing local secret `OCP_API_TOKEN`, not API reachability.
+- 2026-05-09: User created PBS test namespace `pbs-test`. Local ignored `.env` now sets `OCP_DEFAULT_NAMESPACE=pbs-test`; app was force-recreated. App container smoke passed: `oc login` as `admin`, `oc whoami --show-server` -> `https://api.ocp.cywell.local:6443`, `oc project pbs-test`, `oc get namespace pbs-test`, and `oc get nodes` returned the SNO node.
