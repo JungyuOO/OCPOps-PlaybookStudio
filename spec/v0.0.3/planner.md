@@ -85,7 +85,7 @@ v0.0.3의 1순위 목표는 현재 로컬 CRC 기준으로 잡혀 있는 OpenShi
 OCP_API_BASE_URL=https://api.ocp.cywell.local:6443
 OCP_API_TOKEN=<remote-sno-token>
 OCP_INSECURE_SKIP_TLS_VERIFY=true
-OCP_DEFAULT_NAMESPACE=<optional>
+OCP_DEFAULT_NAMESPACE=
 TERMINAL_ENABLED=true
 TERMINAL_WS_PORT=8770
 TERMINAL_SHELL=/app/scripts/terminal-entrypoint.sh
@@ -125,7 +125,8 @@ v0.0.3 P0는 먼저 `oc login` 대상 API endpoint를 확정한다. 만약 SNO A
 - `.env.production.example` 또는 README에 remote SNO용 예시 추가
 - `.env`의 로컬 CRC 값은 로컬 파일로만 유지하고 credential은 커밋하지 않는다
 - `docker-compose.yml`은 현재처럼 `.env`를 app에 주입하되, remote SNO에 필요한 env 누락이 없는지 확인
-- `OCP_INSECURE_SKIP_TLS_VERIFY`, `OCP_DEFAULT_NAMESPACE`가 app service에 전달되는지 검증
+- `OCP_INSECURE_SKIP_TLS_VERIFY`가 app service에 전달되는지 검증
+- `OCP_DEFAULT_NAMESPACE`는 기본 비움으로 둔다. 특정 업무 namespace는 사용자가 명시 선택할 때만 설정한다.
 
 후보 변경:
 
@@ -250,5 +251,5 @@ Ops Console live cluster status is connected
 - 2026-05-09: 원격 SNO 대상은 `192.168.119.23`으로 시작한다. 우선 가정 API는 `https://192.168.119.23:6443`이며, 실제 API DNS가 다르면 hosts/DNS 매핑을 추가한다.
 - 2026-05-09: Terminal ready payload와 UI에 `cluster_server` 표시를 추가했다. `terminal-entrypoint.sh`는 `/version` reachability check, login failure classification, sanitized log tail 출력으로 강화했다. `.env.production.example`/README에 remote SNO env 예시를 추가했고, 당시 로컬 `.env`의 `OCP_API_BASE_URL`은 git 미추적 상태로 최초 후보 `https://192.168.119.23:6443`에 맞췄다. 검증: `npm --prefix apps/web run build`, `pytest tests/test_ops_console_api.py tests/test_learning_api.py -q`, `bash -n deploy/scripts/terminal-entrypoint.sh`.
 - 2026-05-09: Host reachability: `Test-NetConnection 192.168.119.23 -Port 22` succeeded. `curl -k https://192.168.119.23:6443/version` failed with connection refused/unreachable, and ports `80`, `443`, `6443`, `22623` failed. Next concrete blocker is API endpoint/DNS/firewall confirmation, not frontend WebSocket wiring.
-- 2026-05-09: User-provided kubeconfig confirms API endpoint `https://api.ocp.cywell.local:6443` with namespace `hcl-appscan-storage`. Host DNS resolves it to `192.168.119.8`; host and app container both successfully call `/version`. Local ignored `.env` was updated to `OCP_API_BASE_URL=https://api.ocp.cywell.local:6443`.
+- 2026-05-09: User-provided kubeconfig confirms API endpoint `https://api.ocp.cywell.local:6443`. The kubeconfig current-context namespace was `hcl-appscan-storage`, but that is HCL AppScan specific and must not become the PBS default namespace. Host DNS resolves the API to `192.168.119.8`; host and app container both successfully call `/version`. Local ignored `.env` was updated to `OCP_API_BASE_URL=https://api.ocp.cywell.local:6443` and `OCP_DEFAULT_NAMESPACE` should stay empty unless a PBS-safe namespace is chosen.
 - 2026-05-09: App container was rebuilt/recreated with the new API URL and web was rebuilt. Container-level `/version` check succeeds. Direct `oc login --server="$OCP_API_BASE_URL" --token="$OCP_API_TOKEN" --insecure-skip-tls-verify=true` reaches the API but fails with `The token provided is invalid or expired.` Next blocker is refreshing local secret `OCP_API_TOKEN`, not API reachability.
