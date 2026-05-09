@@ -6,8 +6,9 @@ v0.0.3의 1순위 목표는 현재 로컬 CRC 기준으로 잡혀 있는 OpenShi
 
 대상 원격 서버:
 
-- Remote host / SNO endpoint candidate: `192.168.119.23`
-- Expected OpenShift API candidate: `https://192.168.119.23:6443`
+- Remote host / SSH endpoint: `192.168.119.23`
+- OpenShift API endpoint: `https://api.ocp.cywell.local:6443`
+- Current API DNS resolution: `api.ocp.cywell.local -> 192.168.119.8`
 - Current local config to replace: `OCP_API_BASE_URL=https://host.docker.internal:6443`
 
 보안 전제:
@@ -22,10 +23,10 @@ v0.0.3의 1순위 목표는 현재 로컬 CRC 기준으로 잡혀 있는 OpenShi
 
 ### Core (P0 - v0.0.3 릴리스 기준)
 
-- [ ] 원격 SNO `192.168.119.23` 연결 방식 확정
+- [x] 원격 SNO `192.168.119.23` 연결 방식 확정
 - [x] `.env`/example/docs의 OCP 연결 값을 remote SNO 기준으로 정리
 - [ ] Terminal Session auto-login이 remote SNO API에 성공하는지 검증
-- [x] 앱 컨테이너에서 `192.168.119.23:6443` 네트워크 도달성 검증 경로 추가
+- [x] 앱 컨테이너에서 `api.ocp.cywell.local:6443` 네트워크 도달성 검증 경로 추가
 - [x] Terminal Session UI에 연결 대상 cluster/server를 표시
 - [x] `/tmp/playbookstudio-oc-login.log` 실패 원인을 API/Token/TLS/Network로 읽기 쉽게 노출
 - [ ] Ops Console 또는 cluster status API가 remote SNO 상태를 기준으로 health를 표시
@@ -81,7 +82,7 @@ v0.0.3의 1순위 목표는 현재 로컬 CRC 기준으로 잡혀 있는 OpenShi
 필수 확인값:
 
 ```text
-OCP_API_BASE_URL=https://192.168.119.23:6443
+OCP_API_BASE_URL=https://api.ocp.cywell.local:6443
 OCP_API_TOKEN=<remote-sno-token>
 OCP_INSECURE_SKIP_TLS_VERIFY=true
 OCP_DEFAULT_NAMESPACE=<optional>
@@ -93,8 +94,8 @@ TERMINAL_SHELL=/app/scripts/terminal-entrypoint.sh
 검증 순서:
 
 ```bash
-curl -k https://192.168.119.23:6443/version
-oc login --server=https://192.168.119.23:6443 --token="$OCP_API_TOKEN" --insecure-skip-tls-verify=true
+curl -k https://api.ocp.cywell.local:6443/version
+oc login --server=https://api.ocp.cywell.local:6443 --token="$OCP_API_TOKEN" --insecure-skip-tls-verify=true
 oc whoami
 oc get clusterversion
 oc get nodes -o wide
@@ -102,16 +103,16 @@ oc get nodes -o wide
 
 주의:
 
-- `192.168.119.23`이 OpenShift API endpoint가 아니라 SNO host의 SSH/IP일 수도 있다.
-- API가 VIP/DNS 기반이면 실제 endpoint는 `https://api.<cluster-domain>:6443`일 수 있다.
-- 이 경우 앱 컨테이너의 DNS/hosts 설정에 `api.<cluster-domain> -> 192.168.119.23` 매핑이 필요하다.
+- `192.168.119.23`은 OpenShift API endpoint가 아니라 remote server SSH/IP로 확인됐다.
+- API는 kubeconfig의 `server:` 값인 `https://api.ocp.cywell.local:6443`를 사용한다.
+- 현재 Windows host와 app container 모두 `api.ocp.cywell.local -> 192.168.119.8`로 해석하고 `/version` 응답이 정상이다.
 - 2026-05-09 host reachability check 결과 `192.168.119.23:22`는 열려 있지만 `:6443`, `:22623`, `:443`, `:80`은 닿지 않았다. 따라서 현재 IP는 remote server SSH endpoint로는 유효해 보이나, OpenShift API endpoint로는 아직 확정할 수 없다.
 
 결정 분기:
 
 ```text
 브라우저 Terminal Session -> PBS app WebSocket(:8770)
-Terminal shell이 oc login -> OpenShift API(:6443 또는 api.<cluster-domain>:6443)
+Terminal shell이 oc login -> OpenShift API(`https://api.ocp.cywell.local:6443`)
 Terminal shell 자체를 remote server로 열기 -> SSH 192.168.119.23:22 + key/password 정책 필요
 ```
 
@@ -154,7 +155,7 @@ v0.0.3 P0는 먼저 `oc login` 대상 API endpoint를 확정한다. 만약 SNO A
 
 - WebSocket 연결 상태: connected/error/closed
 - shell label
-- active cluster server: `192.168.119.23:6443` 또는 API URL host
+- active cluster server: `https://api.ocp.cywell.local:6443`
 - current identity: `oc whoami` 결과를 추후 API로 받을 수 있으면 표시
 
 최소 구현은 ready event metadata에 cluster target을 포함하는 방식:
@@ -211,7 +212,7 @@ Manual browser smoke:
 
 ```text
 Workspace -> Terminal Session opens
-Terminal prints OpenShift CLI login ready: https://192.168.119.23:6443
+Terminal prints OpenShift CLI login ready: https://api.ocp.cywell.local:6443
 oc whoami returns expected user/service account
 oc get nodes shows the SNO node
 Ops Console live cluster status is connected
@@ -222,7 +223,7 @@ Ops Console live cluster status is connected
 ## 완료 기준 (DoD)
 
 1. `feat/v0.0.3/remote-sno-terminal` 브랜치에서 remote SNO 연결 계획과 구현이 분리되어 추적된다.
-2. 앱 컨테이너 내부 Terminal Session이 `192.168.119.23` SNO API에 `oc login`할 수 있다.
+2. 앱 컨테이너 내부 Terminal Session이 `https://api.ocp.cywell.local:6443` SNO API에 `oc login`할 수 있다.
 3. Terminal UI가 WebSocket 연결 성공과 OpenShift login 성공/실패를 구분해 보여준다.
 4. 실패 시 `/tmp/playbookstudio-oc-login.log`를 직접 찾지 않아도 원인 힌트를 UI/terminal 출력에서 볼 수 있다.
 5. Ops Console cluster 연결 상태가 remote SNO 기준으로 표시된다.
@@ -234,7 +235,7 @@ Ops Console live cluster status is connected
 
 ## 위험과 주의사항
 
-- Direct IP `https://192.168.119.23:6443`는 인증서 검증에 실패할 수 있다.
+- Direct IP `https://192.168.119.23:6443`가 아니라 kubeconfig의 API DNS `https://api.ocp.cywell.local:6443`를 사용해야 한다.
 - SNO API가 DNS name만 허용되는 설치라면 Docker container에서 hosts/DNS 매핑이 필요하다.
 - `OCP_API_TOKEN`은 만료될 수 있으므로 실패 원인을 token expiry와 network failure로 분리해야 한다.
 - Terminal WebSocket 포트 `8770`이 방화벽/브라우저에서 접근 가능해야 한다.
@@ -247,5 +248,7 @@ Ops Console live cluster status is connected
 
 - 2026-05-09: v0.0.2 완료 브랜치 `feat/v0.0.2/metadata-ref-flow`를 `7f354b2`까지 push한 뒤 v0.0.3 브랜치 `feat/v0.0.3/remote-sno-terminal`을 생성했다.
 - 2026-05-09: 원격 SNO 대상은 `192.168.119.23`으로 시작한다. 우선 가정 API는 `https://192.168.119.23:6443`이며, 실제 API DNS가 다르면 hosts/DNS 매핑을 추가한다.
-- 2026-05-09: Terminal ready payload와 UI에 `cluster_server` 표시를 추가했다. `terminal-entrypoint.sh`는 `/version` reachability check, login failure classification, sanitized log tail 출력으로 강화했다. `.env.production.example`/README에 remote SNO env 예시를 추가했고, 로컬 `.env`의 `OCP_API_BASE_URL`은 git 미추적 상태로 `https://192.168.119.23:6443`에 맞췄다. 검증: `npm --prefix apps/web run build`, `pytest tests/test_ops_console_api.py tests/test_learning_api.py -q`, `bash -n deploy/scripts/terminal-entrypoint.sh`.
+- 2026-05-09: Terminal ready payload와 UI에 `cluster_server` 표시를 추가했다. `terminal-entrypoint.sh`는 `/version` reachability check, login failure classification, sanitized log tail 출력으로 강화했다. `.env.production.example`/README에 remote SNO env 예시를 추가했고, 당시 로컬 `.env`의 `OCP_API_BASE_URL`은 git 미추적 상태로 최초 후보 `https://192.168.119.23:6443`에 맞췄다. 검증: `npm --prefix apps/web run build`, `pytest tests/test_ops_console_api.py tests/test_learning_api.py -q`, `bash -n deploy/scripts/terminal-entrypoint.sh`.
 - 2026-05-09: Host reachability: `Test-NetConnection 192.168.119.23 -Port 22` succeeded. `curl -k https://192.168.119.23:6443/version` failed with connection refused/unreachable, and ports `80`, `443`, `6443`, `22623` failed. Next concrete blocker is API endpoint/DNS/firewall confirmation, not frontend WebSocket wiring.
+- 2026-05-09: User-provided kubeconfig confirms API endpoint `https://api.ocp.cywell.local:6443` with namespace `hcl-appscan-storage`. Host DNS resolves it to `192.168.119.8`; host and app container both successfully call `/version`. Local ignored `.env` was updated to `OCP_API_BASE_URL=https://api.ocp.cywell.local:6443`.
+- 2026-05-09: App container was rebuilt/recreated with the new API URL and web was rebuilt. Container-level `/version` check succeeds. Direct `oc login --server="$OCP_API_BASE_URL" --token="$OCP_API_TOKEN" --insecure-skip-tls-verify=true` reaches the API but fails with `The token provided is invalid or expired.` Next blocker is refreshing local secret `OCP_API_TOKEN`, not API reachability.
