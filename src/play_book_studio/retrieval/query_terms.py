@@ -24,6 +24,8 @@ _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
     "rbac",
     "yaml",
     "oc",
+    "oc project",
+    "oc config view",
     "admin",
     "edit",
     "view",

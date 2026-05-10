@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .intents import (
     has_cluster_node_usage_intent,
+    has_command_request,
     has_deployment_scaling_intent,
     has_node_drain_intent,
     has_pod_pending_troubleshooting_intent,
@@ -11,6 +12,32 @@ from .intents import (
 
 
 def append_operation_project_node_deployment_terms(normalized: str, terms: list[str]) -> None:
+    if has_command_request(normalized) and any(
+        token in normalized for token in ("namespace", "namespaces", "네임스페이스", "project", "projects", "프로젝트")
+    ):
+        terms.extend(
+            [
+                "CLI 프로필",
+                "현재 프로젝트 보기",
+                "current project",
+                "namespace",
+                "current-context",
+                "oc project",
+                "oc config view",
+            ]
+        )
+    if any(token in normalized for token in ("bootstrap", "부트스트랩")) and any(
+        token in normalized for token in ("확인", "기다", "wait", "complete", "완료", "단계", "흐름")
+    ):
+        terms.extend(
+            [
+                "Waiting for the bootstrap process to complete",
+                "wait-for bootstrap-complete",
+                "openshift-install",
+                "installation_directory",
+                "log-level",
+            ]
+        )
     if "clusteroperator" in normalized or "cluster operator" in normalized or "clusteroperators" in normalized:
         terms.extend(
             [

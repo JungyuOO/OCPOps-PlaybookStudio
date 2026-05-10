@@ -55,7 +55,24 @@ def _query_matches_hit_object(query: str, hit: RetrievalHit) -> bool:
         )
         if token in (hit.text or "").lower()
     )
-    return any(term in lowered_query for term in object_terms)
+    aliases = {
+        "namespace": ("namespace", "namespaces", "네임스페이스", "프로젝트"),
+        "namespaces": ("namespace", "namespaces", "네임스페이스", "프로젝트"),
+        "project": ("project", "projects", "프로젝트", "네임스페이스"),
+        "projects": ("project", "projects", "프로젝트", "네임스페이스"),
+        "pod": ("pod", "pods", "파드"),
+        "pods": ("pod", "pods", "파드"),
+        "event": ("event", "events", "이벤트"),
+        "events": ("event", "events", "이벤트"),
+        "route": ("route", "routes", "라우트"),
+        "routes": ("route", "routes", "라우트"),
+        "pvc": ("pvc", "persistentvolumeclaim", "persistent volume claim"),
+        "persistentvolumeclaim": ("pvc", "persistentvolumeclaim", "persistent volume claim"),
+    }
+    return any(
+        any(alias in lowered_query for alias in aliases.get(term, (term,)))
+        for term in object_terms
+    )
 
 
 def apply_hit_adjustments(
