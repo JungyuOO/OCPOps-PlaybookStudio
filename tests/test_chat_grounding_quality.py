@@ -259,6 +259,41 @@ def test_follow_up_questions_are_grounded_in_citation_commands() -> None:
     assert all("문서" not in suggestion for suggestion in suggestions[:1])
 
 
+def test_follow_up_questions_rotate_from_citation_seed_and_stay_grounded() -> None:
+    first = AnswerResult(
+        query="현재 프로젝트 확인 명령은?",
+        mode="chat",
+        answer="답변: `oc project` [1].",
+        rewritten_query="현재 프로젝트 확인 명령은?",
+        response_kind="rag",
+        citations=[_citation(cli_commands=("oc project",), excerpt="현재 프로젝트 보기")],
+        cited_indices=[1],
+    )
+    second = AnswerResult(
+        query="bootstrap 기다리는 단계에서 뭘 확인해야 해?",
+        mode="chat",
+        answer="답변: `openshift-install wait-for bootstrap-complete` [1].",
+        rewritten_query="bootstrap 기다리는 단계에서 뭘 확인해야 해?",
+        response_kind="rag",
+        citations=[
+            _citation(
+                excerpt="Waiting for the bootstrap process to complete.",
+                cli_commands=("openshift-install --dir <installation_directory> wait-for bootstrap-complete --log-level=info",),
+            )
+        ],
+        cited_indices=[1],
+    )
+
+    first_suggestions = suggest_follow_up_questions(session=ChatSession(session_id="s1"), result=first)
+    second_suggestions = suggest_follow_up_questions(session=ChatSession(session_id="s2"), result=second)
+
+    assert first_suggestions
+    assert second_suggestions
+    assert first_suggestions != second_suggestions
+    assert any("oc project" in suggestion or "namespace" in suggestion for suggestion in first_suggestions)
+    assert any("bootstrap" in suggestion or "openshift-install" in suggestion for suggestion in second_suggestions)
+
+
 def test_citation_display_payload_strips_code_markup() -> None:
     payload = _citation_display_payload(
         _citation(

@@ -292,3 +292,32 @@ Acceptance:
 - Suggested questions are generated from retrieved evidence and current context, not static global cards.
 - Citation previews are clean and source-inspectable.
 - Chunking changes, if any, are justified by an audit and before/after retrieval evidence.
+
+## Progress Log
+
+- 2026-05-09: Created the v0.0.4 plan on `feat/v0.0.4/adaptive-install-guide`.
+- 2026-05-09: Re-scoped the plan from a bootstrap-only fix to broader PBS Chat quality work after user clarification.
+- 2026-05-09: Added command intent detection, command-bearing chunk scoring, citation command previews, and grounded follow-up suggestions for command citations.
+- 2026-05-09: Added namespace/current-project/bootstrap regression cases to eval manifests and live smoke validation for missing command grounding/raw code preview leakage.
+- 2026-05-10: Fixed live command/install regressions through retrieval query expansion, context selection, command extraction, and low-confidence guard tuning. Verified `namespace`, `current project/namespace`, and `bootstrap wait` live `/api/chat/stream` cases as `rag` with warnings cleared.
+- 2026-05-10: Added readable v0.0.4 eval manifests for Pending pod, route timeout, project-vs-namespace concept, install troubleshooting document lookup, and unsupported Helm/nginx ingress command requests.
+- 2026-05-10: Replaced citation follow-up generation with source-grounded command/section templates and stable seed rotation. Playwright verified Studio renders grounded bootstrap suggestions from the cited `openshift-install ... wait-for bootstrap-complete` command.
+- 2026-05-10: Added repeatable chunk quality audit code and generated `spec/v0.0.4/chunk_quality_audit.md` plus JSON. Current audit recommends `audit_before_rechunking`: fix retrieval/metadata/preview paths first, and only split/reimport chunks with before/after eval evidence.
+
+## Current Status
+
+P0 baseline is implemented for the representative regression path:
+
+- command lookup guardrails
+- install guidance answer shape
+- grounded command/section suggestions
+- citation preview cleanup
+- expanded eval fixtures
+- chunk audit report
+- backend, frontend build, live stream, and Playwright UI smoke verification
+
+Known follow-up beyond this v0.0.4 baseline:
+
+- Run the full extended eval manifest against the live answerer and tune failures by bucket.
+- Add source metadata to suggestion click events if the UI later needs to preserve `source_chunk_id` separately from the suggested question text.
+- Rechunk only after a focused before/after retrieval experiment on the audit-flagged `raw_code_markup`, `command_dense_chunk`, and `mixed_procedure_navigation` samples.
