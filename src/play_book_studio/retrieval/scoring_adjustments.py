@@ -1,6 +1,8 @@
 # hit 하나에 적용할 fusion 점수 조정 규칙을 조립한다.
 from __future__ import annotations
 
+import re
+
 from .models import RetrievalHit
 from .query import contains_hangul
 from .scoring_adjustments_core import apply_core_adjustments
@@ -24,6 +26,73 @@ def _has_shell_command_text(text: str) -> bool:
             "curl ",
         )
     )
+
+
+_PLACEHOLDER_RE = re.compile(r"<[^>]+>|\{[^}]+\}|\[[^\]]+\]")
+
+
+def _hit_search_text(hit: RetrievalHit) -> str:
+    return "\n".join(
+        (
+            hit.text or "",
+            hit.section or "",
+            hit.heading_title or "",
+            hit.chapter or "",
+            " ".join(hit.cli_commands),
+            " ".join(hit.k8s_objects),
+            " ".join(hit.verification_hints),
+        )
+    ).lower()
+
+
+def _term_matches_text(term: str, text: str) -> bool:
+    normalized_term = re.sub(r"\s+", " ", (term or "").strip().lower())
+    if not normalized_term:
+        return False
+    if normalized_term in text:
+        return True
+    without_placeholders = _PLACEHOLDER_RE.sub(" ", normalized_term)
+    if without_placeholders.strip() and without_placeholders.strip() in text:
+        return True
+    if without_placeholders.strip().endswith("s") and without_placeholders.strip()[:-1] in text:
+        return True
+    if without_placeholders.strip() and f"{without_placeholders.strip()}s" in text:
+        return True
+    tokens = [
+        token
+        for token in re.split(r"[^a-z0-9_.-]+", without_placeholders)
+        if len(token) >= 2 and token not in {"name", "namespace", "operator"}
+    ]
+    if tokens and all((token in text or f"{token}s" in text) for token in tokens):
+        return True
+    return len(tokens) >= 2 and all(token in text for token in tokens)
+
+
+def _apply_intent_profile_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
+    profile = signals.intent_profile
+    if not profile.needs_command or profile.confidence < 0.7:
+        return
+
+    search_text = _hit_search_text(hit)
+    if any(_term_matches_text(command, search_text) for command in profile.primary_commands):
+        hit.fused_score *= 1.42
+        hit.component_scores["intent_profile_primary_command_boost"] = 1.42
+        return
+
+    has_command_surface = bool(hit.cli_commands or _has_shell_command_text(search_text))
+    if signals.command_request_intent and profile.primary_commands and has_command_surface:
+        hit.fused_score *= 0.88
+        hit.component_scores["intent_profile_command_mismatch_penalty"] = 0.88
+        return
+
+    if any(_term_matches_text(term, search_text) for term in profile.evidence_terms):
+        hit.fused_score *= 1.16
+        hit.component_scores["intent_profile_evidence_boost"] = 1.16
+        return
+
+    if signals.command_request_intent and has_command_surface:
+        hit.fused_score *= 0.88
+        hit.component_scores["intent_profile_command_mismatch_penalty"] = 0.88
 
 
 def _query_matches_hit_object(query: str, hit: RetrievalHit) -> bool:
@@ -124,6 +193,8 @@ def apply_hit_adjustments(
         if _query_matches_hit_object(signals.query, hit):
             hit.fused_score *= 1.12
             hit.component_scores["command_intent_object_match_boost"] = 1.12
+
+    _apply_intent_profile_adjustments(hit, signals=signals)
 
     apply_core_adjustments(hit, signals=signals)
 

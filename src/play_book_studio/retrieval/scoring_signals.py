@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .models import SessionContext
+from .intent_profile import IntentProfile, build_intent_profile
 from .query import (
     OC_LOGIN_RE,
     has_backup_restore_intent,
@@ -36,6 +37,7 @@ from .ranking import extract_structured_query_terms as _extract_structured_query
 class ScoreSignals:
     query: str
     context_text: str
+    intent_profile: IntentProfile
     structured_query_terms: tuple[str, ...]
     book_boosts: dict[str, float]
     book_penalties: dict[str, float]
@@ -65,6 +67,7 @@ class ScoreSignals:
 
 
 def build_score_signals(query: str, *, context: SessionContext) -> ScoreSignals:
+    intent_profile = build_intent_profile(query)
     structured_query_terms = tuple(_extract_structured_query_terms(query))
     book_boosts, book_penalties = query_book_adjustments(query, context=context)
     compare_intent = has_openshift_kubernetes_compare_intent(query)
@@ -78,6 +81,7 @@ def build_score_signals(query: str, *, context: SessionContext) -> ScoreSignals:
     return ScoreSignals(
         query=query,
         context_text=context_text,
+        intent_profile=intent_profile,
         structured_query_terms=structured_query_terms,
         book_boosts=book_boosts,
         book_penalties=book_penalties,

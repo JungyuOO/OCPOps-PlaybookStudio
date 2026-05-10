@@ -9,6 +9,7 @@ from play_book_studio.http.presenters import _citation_display_payload
 from play_book_studio.http.session_flow import suggest_follow_up_questions
 from play_book_studio.http.sessions import ChatSession
 from play_book_studio.evals.studio_live_smoke import SmokeCase, _validate_case
+from play_book_studio.retrieval.intent_profile import build_intent_profile
 from play_book_studio.retrieval.intent_detectors import has_command_request
 from play_book_studio.retrieval.models import RetrievalHit, SessionContext
 from play_book_studio.retrieval.query_terms import normalize_query
@@ -87,6 +88,36 @@ def test_command_lookup_boosts_command_bearing_chunks() -> None:
     assert "command_intent_cli_commands_boost" in hits[0].component_scores
 
 
+def test_intent_profile_prefers_matching_command_over_generic_cli_command() -> None:
+    current_context_hit = _hit(
+        "current-context",
+        text="CLI profile commands show the selected project namespace. $ oc project",
+        cli_commands=("oc project",),
+        chunk_type="command",
+        book_slug="cli_tools",
+        raw_score=0.32,
+    )
+    namespace_list_hit = _hit(
+        "namespace-list",
+        text="List namespaces and projects with oc get namespaces or oc get projects.",
+        cli_commands=("oc get namespaces", "oc get projects"),
+        chunk_type="command",
+        book_slug="cli_tools",
+        raw_score=0.26,
+    )
+
+    hits = fuse_ranked_hits(
+        "네임스페이스 목록 확인하려면 무슨 명령어를 쳐야 해?",
+        {"bm25": [current_context_hit, namespace_list_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "namespace-list"
+    assert hits[0].component_scores["intent_profile_primary_command_boost"] == 1.42
+    assert "intent_profile_command_mismatch_penalty" in hits[1].component_scores
+
+
 def test_command_context_selects_cli_profile_commands_instead_of_clarifying() -> None:
     query = "\ub124\uc784\uc2a4\ud398\uc774\uc2a4 \ud655\uc778\ud558\ub294 \uba85\ub839\uc5b4\uac00 \ubb50\uc57c?"
     concept_hit = _hit(
@@ -154,13 +185,29 @@ def test_current_project_command_context_prefers_view_over_set_context() -> None
 
 
 def test_namespace_command_query_expands_toward_cli_profile_docs() -> None:
+    profile = build_intent_profile(
+        "\ub124\uc784\uc2a4\ud398\uc774\uc2a4 \ud655\uc778\ud558\ub294 \uba85\ub839\uc5b4\uac00 \ubb50\uc57c?"
+    )
     normalized = normalize_query(
         "\ub124\uc784\uc2a4\ud398\uc774\uc2a4 \ud655\uc778\ud558\ub294 \uba85\ub839\uc5b4\uac00 \ubb50\uc57c?"
     )
 
+    assert profile.intent == "command_lookup"
+    assert profile.target_object == "namespace"
+    assert profile.primary_commands == ("oc project", "oc config view")
     assert "현재 프로젝트 보기" in normalized
-    assert "oc project" in normalized
     assert "config view" in normalized
+
+
+def test_namespace_list_command_query_expands_toward_namespace_list_docs() -> None:
+    profile = build_intent_profile("네임스페이스 목록 확인하려면 무슨 명령어를 쳐야 해?")
+    normalized = normalize_query("네임스페이스 목록 확인하려면 무슨 명령어를 쳐야 해?")
+
+    assert profile.intent == "command_lookup"
+    assert profile.task == "list"
+    assert profile.primary_commands == ("oc get namespaces", "oc get projects")
+    assert "namespaces" in normalized
+    assert "projects" in normalized
 
 
 def test_install_guidance_context_selects_bootstrap_wait_command() -> None:
@@ -201,6 +248,47 @@ def test_bootstrap_guidance_query_expands_toward_wait_doc() -> None:
     assert "process" in normalized
     assert "complete" in normalized
     assert "wait-for bootstrap-complete" in normalized
+
+
+def test_clusteroperator_korean_query_expands_to_clusteroperator_command() -> None:
+    profile = build_intent_profile("클러스터 오퍼레이터가 Degraded인지 한 번에 보는 명령어 알려줘")
+    normalized = normalize_query("클러스터 오퍼레이터가 Degraded인지 한 번에 보는 명령어 알려줘")
+
+    assert profile.target_object == "clusteroperator"
+    assert profile.primary_commands[0] == "oc get clusteroperators"
+    assert "ClusterOperator" in profile.evidence_terms
+    assert "clusteroperators" in normalized
+
+
+def test_command_learning_query_expands_node_debug_and_mcp_terms() -> None:
+    node_profile = build_intent_profile("노드 호스트에 들어가서 확인하려면 oc debug 다음에 뭘 쳐야 해?")
+    mcp_profile = build_intent_profile("MachineConfigPool 적용이 늦을 때 상태 확인하는 명령어 뭐부터 봐?")
+    node_debug = normalize_query("노드 호스트에 들어가서 확인하려면 oc debug 다음에 뭘 쳐야 해?")
+    mcp = normalize_query("MachineConfigPool 적용이 늦을 때 상태 확인하는 명령어 뭐부터 봐?")
+
+    assert node_profile.task == "host-debug"
+    assert node_profile.primary_commands == ("oc debug node/<node-name>", "chroot /host")
+    assert mcp_profile.target_object == "machineconfigpool"
+    assert mcp_profile.primary_commands[0] == "oc get mcp"
+    assert "chroot /host" in node_debug
+    assert "machine config pool" in mcp_profile.evidence_terms
+    assert "machine-config" in mcp
+
+
+def test_command_learning_profiles_cover_access_pvc_logs_routes_and_etcd() -> None:
+    previous_logs = build_intent_profile("pod 이전 로그 확인하려면 무슨 명령어를 써?")
+    pvc = build_intent_profile("PVC가 Pending이면 뭐부터 확인하는 명령어가 좋아?")
+    rbac = build_intent_profile("alice가 pods delete 권한 있는지 can-i로 확인하는 명령어 뭐야?")
+    route = build_intent_profile("route랑 service 연결 상태 확인하는 명령어 알려줘")
+    etcd = build_intent_profile("etcd 백업하려면 oc debug 이후에 어떤 명령 흐름이야?")
+
+    assert previous_logs.primary_commands == ("oc logs <pod-name> -n <namespace> --previous",)
+    assert pvc.target_object == "persistentvolumeclaim"
+    assert "oc describe pvc <pvc-name> -n <namespace>" in pvc.primary_commands
+    assert rbac.primary_commands[0] == "oc auth can-i delete pods -n <namespace>"
+    assert "oc get service -n <namespace>" in route.primary_commands
+    assert "chroot /host" in etcd.primary_commands
+    assert "cluster-backup.sh" in etcd.primary_commands
 
 
 def test_low_confidence_guard_allows_bootstrap_wait_grounding() -> None:
@@ -372,3 +460,42 @@ def test_live_smoke_flags_raw_code_markup_in_citation_preview() -> None:
     )
 
     assert "citation_raw_code_markup" in detail["failures"]
+
+
+def test_live_smoke_flags_missing_command_learning_terms() -> None:
+    detail = _validate_case(
+        SmokeCase(
+            case_id="v006-missing-term",
+            query="노드 CPU랑 메모리 사용량을 확인하는 oc 명령어 뭐야?",
+            must_include_terms=("oc adm top nodes",),
+            expected_citation_terms=("oc adm top nodes",),
+        ),
+        200,
+        [
+            {"type": "answer_delta"},
+            {
+                "type": "result",
+                "payload": {
+                    "answer": "답변: 노드 상태는 관련 문서의 절차를 확인하세요 [1].",
+                    "response_kind": "rag",
+                    "warnings": [],
+                    "cited_indices": [1],
+                    "suggested_queries": [],
+                    "citations": [
+                        {
+                            "index": 1,
+                            "book_slug": "nodes",
+                            "section": "노드",
+                            "viewer_path": "/docs/nodes",
+                            "excerpt": "Node overview.",
+                            "cli_commands": [],
+                        }
+                    ],
+                },
+            },
+        ],
+        "",
+    )
+
+    assert "missing_required_term:oc adm top nodes" in detail["failures"]
+    assert "missing_citation_term:oc adm top nodes" in detail["failures"]
