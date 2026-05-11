@@ -80,7 +80,7 @@ def test_starter_questions_are_loaded_from_manifests() -> None:
     assert groups["faq"]["questions"][0]["question"] == "Operator가 Degraded일 때 CSV 상태를 어떻게 확인해?"
     assert groups["learning"]["questions"][0]["source"] == "ocp420_repo_wide_source_manifest"
     assert groups["operations"]["questions"][0]["source"].endswith("ops_learning_chunks_v1.jsonl")
-    assert groups["operations"]["questions"][0]["question"] == "성능 목표와 조건 먼저 보기에서 TPS 목표, 테스트 환경 기준으로 먼저 확인할 것은 뭐야?"
+    assert groups["operations"]["questions"][0]["question"] == "성능 테스트 결과를 받으면 목표와 조건은 어떻게 먼저 확인해?"
     assert "병목은 어디부터" not in groups["operations"]["questions"][0]["question"]
     assert payload["learning_sequence"][0]["learning_index"] == 0
 
@@ -142,6 +142,7 @@ def test_starter_questions_use_postgres_official_metadata_when_database_is_confi
     assert groups["faq"]["questions"][0]["source"] == "postgres.official_docs"
     assert groups["faq"]["questions"][0]["target_book_slug"] == "machine_configuration"
     assert "What should" not in groups["faq"]["questions"][0]["question"]
+    assert "문서를 기준으로" not in groups["faq"]["questions"][0]["question"]
     assert payload["learning_sequence"][2]["target_viewer_path"] == "/playbooks/wiki-runtime/active/machine_configuration/index.html"
 
 
@@ -178,7 +179,7 @@ def test_postgres_official_faq_questions_are_actionable_korean(monkeypatch) -> N
 
     assert questions
     assert all("What should" not in question for question in questions)
-    assert any("검증 및 문제 해결" in question for question in questions)
+    assert any(question.endswith("확인하면 돼?") for question in questions)
 
 
 def test_learning_starter_questions_include_terminal_context_when_available(monkeypatch) -> None:

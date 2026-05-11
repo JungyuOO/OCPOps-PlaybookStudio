@@ -109,9 +109,20 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
+    const socket = new WebSocket(wsUrl);
+    socketRef.current = socket;
+
+    const sendTerminalResize = (): void => {
+      if (socket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      socket.send(JSON.stringify({ type: 'resize', cols: terminal.cols, rows: terminal.rows }));
+    };
+
     const fitTerminal = (): void => {
       try {
         fitAddon.fit();
+        sendTerminalResize();
       } catch {
         // The fit addon throws when the panel is still measuring at zero size.
       }
@@ -119,9 +130,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
     window.requestAnimationFrame(fitTerminal);
     const resizeObserver = new ResizeObserver(fitTerminal);
     resizeObserver.observe(host);
-
-    const socket = new WebSocket(wsUrl);
-    socketRef.current = socket;
+    const resizeDisposable = terminal.onResize(sendTerminalResize);
 
     const inputDisposable = terminal.onData((data) => {
       if (data === '\r') {
@@ -182,6 +191,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
 
     socket.addEventListener('open', () => {
       setState('connected');
+      fitTerminal();
       if (stableLearningContext) {
         socket.send(JSON.stringify({ type: 'context', ...stableLearningContext }));
       }
@@ -238,6 +248,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
 
     return () => {
       inputDisposable.dispose();
+      resizeDisposable.dispose();
       host.removeEventListener('paste', pasteHandler);
       resizeObserver.disconnect();
       socket.close();

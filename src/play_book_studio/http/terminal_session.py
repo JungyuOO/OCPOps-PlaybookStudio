@@ -57,6 +57,7 @@ class TerminalSession:
         self._limit_reported = False
         self._closed = threading.Event()
         self._readers: list[threading.Thread] = []
+        self._pty_master_fd: int | None = None
 
     @property
     def shell_args(self) -> list[str]:
@@ -69,6 +70,8 @@ class TerminalSession:
     def start(self) -> "TerminalSession":
         if self._process is not None:
             return self
+        if os.name != "nt":
+            return self._start_posix_pty()
         env = os.environ.copy()
         env.update(self.config.env)
         env.setdefault("PYTHONIOENCODING", "utf-8")
@@ -90,12 +93,60 @@ class TerminalSession:
         self._start_reader("stderr")
         return self
 
+    def _start_posix_pty(self) -> "TerminalSession":
+        import pty
+
+        env = os.environ.copy()
+        env.update(self.config.env)
+        env.setdefault("PYTHONIOENCODING", "utf-8")
+        env.setdefault("TERM", "xterm-256color")
+        env.setdefault("COLUMNS", "80")
+        env.setdefault("LINES", "24")
+        master_fd, slave_fd = pty.openpty()
+        self._pty_master_fd = master_fd
+        try:
+            self._process = subprocess.Popen(
+                self.shell_args,
+                cwd=self.config.workdir,
+                env=env,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                close_fds=True,
+                preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+            )
+        finally:
+            os.close(slave_fd)
+        self._start_pty_reader()
+        return self
+
     def write(self, data: str) -> None:
+        if self._pty_master_fd is not None:
+            process = self._process
+            if process is None or process.poll() is not None:
+                return
+            os.write(self._pty_master_fd, data.encode("utf-8", errors="replace"))
+            return
         process = self._process
         if process is None or process.stdin is None or process.poll() is not None:
             return
         process.stdin.write(data)
         process.stdin.flush()
+
+    def resize(self, *, cols: int, rows: int) -> None:
+        master_fd = self._pty_master_fd
+        if master_fd is None:
+            return
+        safe_cols = max(20, min(int(cols or 80), 300))
+        safe_rows = max(5, min(int(rows or 24), 120))
+        try:
+            import fcntl
+            import struct
+            import termios
+
+            fcntl.ioctl(master_fd, termios.TIOCSWINSZ, struct.pack("HHHH", safe_rows, safe_cols, 0, 0))
+        except Exception:  # noqa: BLE001
+            return
 
     def drain(self, *, max_events: int = 200) -> list[TerminalOutputEvent]:
         drained: list[TerminalOutputEvent] = []
@@ -118,12 +169,24 @@ class TerminalSession:
         self._closed.set()
         process = self._process
         if process is None or process.poll() is not None:
+            self._close_pty()
             return
         process.terminate()
         try:
             process.wait(timeout=2)
         except subprocess.TimeoutExpired:
             process.kill()
+        self._close_pty()
+
+    def _close_pty(self) -> None:
+        master_fd = self._pty_master_fd
+        self._pty_master_fd = None
+        if master_fd is None:
+            return
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
 
     def _start_reader(self, stream: TerminalStream) -> None:
         process = self._process
@@ -140,6 +203,40 @@ class TerminalSession:
         )
         thread.start()
         self._readers.append(thread)
+
+    def _start_pty_reader(self) -> None:
+        thread = threading.Thread(
+            target=self._read_pty,
+            name=f"terminal-session-{self.session_id}-pty",
+            daemon=True,
+        )
+        thread.start()
+        self._readers.append(thread)
+
+    def _read_pty(self) -> None:
+        while not self._closed.is_set():
+            master_fd = self._pty_master_fd
+            if master_fd is None:
+                break
+            try:
+                raw = os.read(master_fd, 4096)
+            except OSError:
+                break
+            if not raw:
+                break
+            data = raw.decode("utf-8", errors="replace")
+            self._output_bytes += len(raw)
+            if self._output_bytes <= self.config.max_output_bytes:
+                self._events.put(TerminalOutputEvent(type="output", stream="stdout", data=data))
+            elif not self._limit_reported:
+                self._limit_reported = True
+                self._events.put(
+                    TerminalOutputEvent(
+                        type="error",
+                        stream="stdout",
+                        data="Terminal output limit reached; further output was truncated.",
+                    )
+                )
 
     def _read_pipe(self, stream: TerminalStream, pipe) -> None:
         while not self._closed.is_set():

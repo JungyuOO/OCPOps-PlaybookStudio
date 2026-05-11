@@ -248,17 +248,12 @@ def _official_faq_questions_from_db(database_url: str) -> list[dict[str, Any]]:
 
 
 def _official_faq_query(rule: StarterCategoryRule, title: str) -> str:
-    clean_title = _clean_title(title)
-    templates = {
-        "day2": "{title} 문서를 기준으로 설치 후 구성에서 먼저 확인할 설정과 명령어는 뭐야?",
-        "operations": "{title} 문서를 기준으로 운영 상태를 볼 때 먼저 확인할 리소스와 명령어는 뭐야?",
-        "storage": "{title} 문서를 기준으로 스토리지나 백업 문제를 확인할 때 어떤 상태값과 명령어부터 보면 돼?",
-        "security": "{title} 문서를 기준으로 권한, 인증, 보안 설정에서 먼저 확인할 항목은 뭐야?",
-        "networking": "{title} 문서를 기준으로 Route, Ingress, DNS 연결 문제를 어떤 순서로 보면 돼?",
-        "troubleshooting": "{title} 문서를 기준으로 장애를 좁힐 때 먼저 확인할 증상, 로그, 명령어는 뭐야?",
-    }
-    template = templates.get(rule.key, "{title} 문서를 기준으로 먼저 확인할 항목과 명령어는 뭐야?")
-    return template.format(title=clean_title)
+    return _compose_beginner_question(
+        lane="official",
+        title=title,
+        goal=rule.description,
+        terms=list(rule.patterns),
+    )
 
 def _entry_haystack(entry: dict[str, Any]) -> str:
     values: list[str] = []
@@ -305,10 +300,7 @@ def _learning_questions(root_dir: Path) -> list[dict[str, Any]]:
         title = _clean_title(str((entry or {}).get("title") or rule.label))
         book_slug = LEARNING_TARGET_BOOK_SLUGS.get(rule.key) or str((entry or {}).get("book_slug") or "").strip()
         viewer_path = str((entry or {}).get("viewer_path") or "").strip()
-        if rule.key == "install":
-            question = f"OCP를 처음 시작할 때 {title} 문서는 무엇부터 이해하면 돼?"
-        else:
-            question = f"{rule.label} 단계에서는 {title} 기준으로 무엇을 순서대로 학습하면 돼?"
+        question = _beginner_learning_question(rule, title)
         terminal_context = terminal_contexts[index] if index < len(terminal_contexts) else {}
         questions.append(
             _starter_question(
@@ -328,6 +320,15 @@ def _learning_questions(root_dir: Path) -> list[dict[str, Any]]:
             )
         )
     return questions
+
+
+def _beginner_learning_question(rule: StarterCategoryRule, title: str) -> str:
+    return _compose_beginner_question(
+        lane="learning",
+        title=title,
+        goal=rule.description,
+        terms=list(rule.patterns),
+    )
 
 
 def _learning_terminal_contexts(root_dir: Path) -> list[dict[str, str]]:
@@ -420,11 +421,156 @@ def _ops_chunk_question(chunk: dict[str, Any]) -> str:
         for item in chunk.get("source_terms", [])
         if str(item).strip()
     ] if isinstance(chunk.get("source_terms"), list) else []
-    if terms:
-        return f"{title}에서 {', '.join(terms[:2])} 기준으로 먼저 확인할 것은 뭐야?"
-    if goal:
-        return f"{title}에서 {goal} 기준으로 먼저 확인할 것은 뭐야?"
-    return f"{title}에서 먼저 확인할 운영 기준은 뭐야?"
+    return _compose_beginner_question(
+        lane="operations",
+        title=title,
+        goal=goal,
+        terms=terms,
+    )
+
+
+def _context_text(*parts: Any) -> str:
+    return " ".join(
+        " ".join(str(item) for item in part if str(item).strip())
+        if isinstance(part, list)
+        else str(part or "")
+        for part in parts
+    )
+
+
+def _starter_topic_terms(*parts: Any) -> str:
+    text = _context_text(*parts).lower()
+    if any(token in text for token in ("postinstall", "post-install", "post installation", "day-2", "day 2", "day two")):
+        return "postinstall"
+    if any(token in text for token in ("install", "설치", "discovery", "bootstrap")):
+        return "install"
+    if any(token in text for token in ("namespace", "project", "네임스페이스", "프로젝트")):
+        return "namespace"
+    if any(token in text for token in ("pod", "파드", "container", "컨테이너")):
+        return "pod"
+    if any(token in text for token in ("service", "route", "ingress", "서비스", "라우트")):
+        return "network"
+    if any(token in text for token in ("secret", "configmap", "config", "시크릿", "컨피그")):
+        return "config"
+    if any(token in text for token in ("performance", "tps", "jmeter", "성능", "부하", "병목")):
+        return "performance"
+    if any(token in text for token in ("pipeline", "deploy", "배포", "파이프라인", "cicd", "ci/cd")):
+        return "deploy"
+    if any(token in text for token in ("storage", "pvc", "volume", "스토리지", "볼륨")):
+        return "storage"
+    if any(token in text for token in ("log", "metric", "monitor", "로그", "메트릭", "모니터")):
+        return "observability"
+    if any(token in text for token in ("권한", "rbac", "role", "auth", "user", "사용자")):
+        return "security"
+    return ""
+
+
+def _beginner_subject_from_context(
+    *,
+    topic: str,
+    title: str,
+    goal: str = "",
+    terms: list[str] | None = None,
+) -> str:
+    terms = terms or []
+    text = _context_text(title, goal, terms).lower()
+    if topic == "install":
+        if "bootstrap" in text:
+            return "설치 진행 상태"
+        return "OCP 설치"
+    if topic == "namespace":
+        return "namespace"
+    if topic == "pod":
+        return "Pod 상태"
+    if topic == "network":
+        if "overview" in text or "개요" in text:
+            return "앱 접속 경로"
+        if "route" in text or "라우트" in text:
+            return "Service와 Route 연결"
+        return "앱 접속 경로"
+    if topic == "config":
+        if "secret" in text or "시크릿" in text:
+            return "Secret 설정"
+        return "ConfigMap 설정"
+    if topic == "performance":
+        return "성능 테스트 결과"
+    if topic == "deploy":
+        return "앱 배포"
+    if topic == "storage":
+        return "PVC와 볼륨"
+    if topic == "observability":
+        if "metric" in text or "메트릭" in text:
+            return "로그와 메트릭"
+        return "로그와 이벤트"
+    if topic == "security":
+        return "권한 문제"
+    if topic == "postinstall" or "postinstall" in text or "post-install" in text or "post installation" in text or "day-2" in text or "day 2" in text:
+        return "설치 후 작업"
+    for term in terms:
+        cleaned = _clean_title(term)
+        if cleaned:
+            return cleaned
+    cleaned_title = _clean_title(title)
+    if cleaned_title and cleaned_title.lower() not in {"operations", "troubleshooting", "day-2", "day 2"}:
+        return cleaned_title
+    return "처음 해야 할 일"
+
+
+def _compose_beginner_question(
+    *,
+    lane: str,
+    title: str,
+    goal: str = "",
+    terms: list[str] | None = None,
+) -> str:
+    terms = terms or []
+    topic = _starter_topic_terms(title, goal, terms)
+    subject = _beginner_subject_from_context(topic=topic, title=title, goal=goal, terms=terms)
+    subject_topic = f"{subject}{_topic_particle(subject)}"
+    text = _context_text(title, goal, terms).lower()
+
+    if topic == "install":
+        if "bootstrap" in text or "검증" in text or "validation" in text:
+            return f"{subject}{_subject_particle(subject)} 정상인지 처음에 어디서 확인하면 돼?"
+        return f"{subject_topic} 어떤 순서로 시작하면 돼?"
+    if topic in {"namespace", "pod", "network", "config", "storage", "observability", "security"}:
+        if lane == "learning":
+            return f"{subject_topic} 뭔지부터 알고 싶은데 어디서 확인하면 돼?"
+        return f"{subject_topic} 처음에 어디서 확인하면 돼?"
+    if topic == "performance":
+        return f"{subject}{_object_particle(subject)} 받으면 목표와 조건은 어떻게 먼저 확인해?"
+    if topic == "deploy":
+        return f"{subject_topic} 처음에 어떤 순서로 진행하면 돼?"
+    if topic == "postinstall" or "postinstall" in text or "post-install" in text or "post installation" in text or "day-2" in text or "day 2" in text:
+        return f"{subject_topic} 무엇부터 이어서 진행하면 돼?"
+    if "troubleshoot" in text or "failure" in text or "problem" in text or "장애" in text or "문제" in text:
+        return f"{subject}{_subject_particle(subject)} 안 될 때 어디부터 확인하면 돼?"
+    if lane == "learning":
+        return f"{subject_topic} 처음에 어떤 순서로 배우면 돼?"
+    return f"{subject_topic} 처음에 무엇부터 확인하면 돼?"
+
+
+def _has_final_consonant(text: str) -> bool:
+    stripped = str(text or "").strip()
+    if not stripped:
+        return False
+    char = stripped[-1]
+    code = ord(char)
+    if 0xAC00 <= code <= 0xD7A3:
+        return (code - 0xAC00) % 28 != 0
+    return False
+
+
+def _topic_particle(text: str) -> str:
+    return "은" if _has_final_consonant(text) else "는"
+
+
+def _subject_particle(text: str) -> str:
+    return "이" if _has_final_consonant(text) else "가"
+
+
+def _object_particle(text: str) -> str:
+    return "을" if _has_final_consonant(text) else "를"
 
 def _operations_questions(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
     chunks, source_label = _load_ops_learning_chunks_payload(root_dir)
@@ -454,7 +600,7 @@ def build_studio_starter_questions(root_dir: Path, *, seed: str = "") -> dict[st
     operation_candidates, operations_source = _operations_questions(root)
     operations = _stable_sample(operation_candidates, count=2, seed=f"{seed}:operations")
     learning_sequence = _learning_questions(root)
-    learning = learning_sequence[:2]
+    learning = _stable_sample(learning_sequence, count=2, seed=f"{seed}:learning")
     questions_by_group = {
         "faq": official,
         "learning": learning,

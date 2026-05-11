@@ -435,7 +435,12 @@ async def _handle_terminal_connection(
                     )
                 )
             elif message_type == "resize":
-                continue
+                try:
+                    cols = int(message.get("cols") or 80)
+                    rows = int(message.get("rows") or 24)
+                except (TypeError, ValueError):
+                    continue
+                session.resize(cols=cols, rows=rows)
             elif message_type == "close":
                 break
     finally:
