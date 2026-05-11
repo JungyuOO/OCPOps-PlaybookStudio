@@ -30,6 +30,7 @@ Then run seed/import jobs when the server has the seed input directories:
 ```powershell
 docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm course-runtime-seed
 docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm official-corpus-seed
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm kmsc-corpus-seed
 docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm qdrant-seed
 ```
 
@@ -47,7 +48,8 @@ Expected Qdrant collections for the current dataset:
 - `course_pbs_ko`
 - `course_ops_learning_ko`
 
-`openshift_docs` should have the same count as:
+`openshift_docs` should include official corpus chunks plus KMSC study document
+chunks. Official-only count should match:
 
 ```powershell
 (Get-Content corpus\sources\official\imported-gold\gold_corpus_ko\chunks.jsonl | Measure-Object -Line).Lines
@@ -71,6 +73,14 @@ scope:
 
 ```powershell
 docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm official-corpus-seed
+```
+
+For KMSC operational/study documents, this imports `corpus/sources/kmsc/raw`
+into PostgreSQL with `source_scope=study_docs` and indexes the chunks into
+`openshift_docs`:
+
+```powershell
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm kmsc-corpus-seed
 ```
 
 For course vectors:
@@ -162,7 +172,7 @@ docker compose -f docker-compose.image.yml --env-file .env up -d postgres qdrant
 Run one-shot corpus seed jobs:
 
 ```bash
-docker compose -f docker-compose.image.yml --env-file .env --profile seed up official-corpus-seed course-runtime-seed qdrant-seed
+docker compose -f docker-compose.image.yml --env-file .env --profile seed up official-corpus-seed kmsc-corpus-seed course-runtime-seed qdrant-seed
 ```
 
 Start app and web:

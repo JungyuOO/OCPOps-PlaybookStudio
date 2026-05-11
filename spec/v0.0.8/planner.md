@@ -22,11 +22,12 @@ v0.0.8은 RAG 품질 개선 자체보다 배포 재현성을 개선하는 버전
 - [x] 서버에서 repo clone 없이 compose/env만으로 실행 가능한 명령 문서화
 - [x] official corpus seed job이 image 내부 `/app/corpus`를 읽도록 구성
 - [x] course/study corpus seed job이 image 내부 `/app/corpus`를 읽도록 구성
+- [x] KMSC 운영 문서 seed job이 image 내부 `/app/corpus/sources/kmsc/raw`를 일반 RAG로 import하도록 구성
 - [x] Qdrant seed job이 image 내부 `/app/corpus`를 읽도록 구성
 - [x] course/study asset import가 image 내부 embedded corpus asset을 찾도록 보정
 - [x] Terminal WebSocket 8770 외부 노출 유지
 - [x] compose config 검증
-- [ ] 변경분 커밋 및 원격 push
+- [x] 변경분 커밋 및 원격 push
 
 ### Extras (P1 — 여유 있으면 포함)
 
@@ -89,6 +90,7 @@ docker-compose.image.yml
 
 ```text
 /app/corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl
+/app/corpus/sources/kmsc/raw/**/*.pptx
 /app/corpus/sources/kmsc/parsed-preview/course_pbs/chunks.jsonl
 /app/corpus/manifests/**
 ```
@@ -250,7 +252,7 @@ Actions > Publish Docker Images > Run workflow > tag: dev
 ```bash
 docker compose -f docker-compose.image.yml --env-file .env pull
 docker compose -f docker-compose.image.yml --env-file .env up -d postgres qdrant
-docker compose -f docker-compose.image.yml --env-file .env --profile seed up official-corpus-seed course-runtime-seed qdrant-seed
+docker compose -f docker-compose.image.yml --env-file .env --profile seed up official-corpus-seed kmsc-corpus-seed course-runtime-seed qdrant-seed
 docker compose -f docker-compose.image.yml --env-file .env up -d app web
 ```
 
@@ -264,11 +266,12 @@ docker compose -f docker-compose.image.yml --env-file .env up -d app web
 4. official corpus seed가 image 내부 `/app/corpus`를 사용한다.
 5. course/study seed가 image 내부 `/app/corpus`를 사용한다.
 6. course/study seed의 `data/course_pbs/assets/*` 참조가 embedded corpus asset으로 정상 import된다.
-7. Qdrant seed가 image 내부 `/app/corpus`를 사용한다.
-8. Terminal WebSocket 8770이 외부 노출된다.
-9. compose config 검증이 통과한다.
-10. 배포 문서에 build/push/server deploy 절차가 있다.
-11. v0.0.8 브랜치가 원격에 push되어 있다.
+7. KMSC 운영 문서가 `study_docs` scope로 PostgreSQL/Qdrant 일반 RAG에 seed된다.
+8. Qdrant seed가 image 내부 `/app/corpus`를 사용한다.
+9. Terminal WebSocket 8770이 외부 노출된다.
+10. compose config 검증이 통과한다.
+11. 배포 문서에 build/push/server deploy 절차가 있다.
+12. v0.0.8 브랜치가 원격에 push되어 있다.
 
 ---
 
@@ -286,4 +289,6 @@ docker compose -f docker-compose.image.yml --env-file .env up -d app web
 - 2026-05-11: `docker compose -f deploy/docker-compose.prod.yml --env-file .env.production.example config --quiet` 통과.
 - 2026-05-11: GHCR image 기반 서버 seed 중 `course-runtime-seed`가 청크의 legacy `data/course_pbs/assets/*` 경로 때문에 asset을 찾지 못하는 것을 확인했다.
 - 2026-05-11: `course-chunk-import`에서 legacy course asset 경로를 `/app/corpus/sources/kmsc/parsed-preview/course_pbs/assets/*`로 fallback 해석하도록 보정했다.
+- 2026-05-11: KMSC 운영 문서 raw PPTX 12개가 image-only seed에서 일반 `study_docs` RAG로 import되지 않는 것을 확인했다.
+- 2026-05-11: `kmsc-corpus-seed`를 추가해 KMSC 운영 문서를 `document_chunks(source_scope=study_docs)`와 `openshift_docs` Qdrant collection에 index하도록 구성했다.
 
