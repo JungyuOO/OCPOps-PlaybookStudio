@@ -74,7 +74,7 @@ RBAC_USER_VALUE_PATTERNS = (
     ),
 )
 _COMMAND_TOKEN_RE = re.compile(
-    r"\b(?:oc(?:\s+adm)?\s+[a-z0-9-]+(?:\s+[a-z0-9-]+)?|kubectl\s+[a-z0-9-]+(?:\s+[a-z0-9-]+)?|lsblk|df\s+-h|journalctl|must-gather)\b",
+    r"\b(?:oc(?:\s+adm)?\s+[a-z0-9-]+(?:\s+[a-z0-9-]+)?|kubectl\s+[a-z0-9-]+(?:\s+[a-z0-9-]+)?|openshift-install\s+[a-z0-9-]+(?:\s+[a-z0-9-]+)?|lsblk|df\s+-h|journalctl|must-gather)\b",
     re.IGNORECASE,
 )
 FENCED_CODE_BLOCK_RE = re.compile(r"\n*```[\s\S]*?```\n*", re.DOTALL)
@@ -472,6 +472,7 @@ def _looks_like_shell_command(value: str) -> bool:
             "etcdctl ",
             "helm ",
             "curl ",
+            "openshift-install ",
             "openssl ",
             "journalctl ",
             "systemctl ",
@@ -1851,7 +1852,7 @@ def strip_ungrounded_code_blocks(answer_text: str, *, citations) -> str:
 
     cleaned = FENCED_CODE_BLOCK_RE.sub(replace_block, answer_text or "")
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    if removed_count and notice not in cleaned:
+    if removed_count and notice not in cleaned and not grounded_commands:
         cleaned = f"{cleaned.rstrip()}\n\n{notice}"
     return cleaned.strip()
 

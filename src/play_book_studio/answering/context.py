@@ -16,6 +16,7 @@ from play_book_studio.retrieval.intake_overlay import has_active_customer_pack_s
 from play_book_studio.retrieval.models import RetrievalHit
 from play_book_studio.retrieval.models import SessionContext
 from play_book_studio.retrieval.query import (
+    has_command_request,
     has_backup_restore_intent,
     has_cluster_node_usage_intent,
     has_crash_loop_troubleshooting_intent,
@@ -76,7 +77,11 @@ def _trim_command_candidate(value: str) -> str:
         if marker_index > 0:
             command = command[:marker_index].strip()
     command = command.strip("` ")
-    if not re.search(r"^(?:oc|kubectl|etcdctl|/[A-Za-z0-9_./-]*cluster-backup\.sh|cluster-backup\.sh)\b", command):
+    if not re.search(
+        r"^(?:oc|kubectl|etcdctl|openshift-install|"
+        r"/[A-Za-z0-9_./-]*cluster-backup\.sh|cluster-backup\.sh)\b",
+        command,
+    ):
         return ""
     return command[:240].strip()
 
@@ -92,7 +97,8 @@ def _commands_from_excerpt(excerpt: str) -> tuple[str, ...]:
         if command:
             commands.append(command)
     for match in re.finditer(
-        r"(?:(?:oc|kubectl|etcdctl)\s+[^`\[]+|/[A-Za-z0-9_./-]*cluster-backup\.sh\s+[^`\[]+|cluster-backup\.sh\s+[^`\[]+)",
+        r"(?:(?:oc|kubectl|etcdctl|openshift-install)\s+[^`\[]+|"
+        r"/[A-Za-z0-9_./-]*cluster-backup\.sh\s+[^`\[]+|cluster-backup\.sh\s+[^`\[]+)",
         excerpt or "",
     ):
         command = _trim_command_candidate(match.group(0))
@@ -213,6 +219,87 @@ def _procedure_chunk_priority(hit: RetrievalHit) -> int:
     if hit.semantic_role == "procedure":
         return 2
     return 3
+
+
+def _is_install_guidance_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return (
+        any(token in lowered for token in ("bootstrap", "부트스트랩", "install", "설치"))
+        and any(token in lowered for token in ("확인", "기다", "wait", "complete", "완료", "단계", "흐름"))
+    )
+
+
+def _all_hit_commands(hit: RetrievalHit) -> tuple[str, ...]:
+    return (*tuple(str(command or "") for command in hit.cli_commands), *_commands_from_excerpt(hit.text))
+
+
+def _command_lookup_priority(hit: RetrievalHit, query: str) -> tuple[int, int, int]:
+    lowered_query = (query or "").lower()
+    lowered_section = (hit.section or "").lower()
+    lowered_text = (hit.text or "").lower()
+    commands = tuple(command.lower() for command in _all_hit_commands(hit))
+    haystack = " ".join((lowered_section, lowered_text, " ".join(commands)))
+
+    score = 50
+    if commands:
+        score -= 12
+    score += _procedure_chunk_priority(hit) * 2
+
+    namespace_query = any(token in lowered_query for token in ("namespace", "namespaces", "네임스페이스"))
+    current_project_query = any(
+        token in lowered_query
+        for token in ("current", "현재", "어느 프로젝트", "어느 namespace", "어느 네임스페이스")
+    )
+    project_query = any(token in lowered_query for token in ("project", "projects", "프로젝트"))
+
+    if namespace_query and any("oc get ns" in command or "oc get namespace" in command for command in commands):
+        score -= 22
+    if namespace_query and any("namespace=" in command or "--namespace" in command or " -n " in command for command in commands):
+        score -= 8
+    if (current_project_query or project_query) and any(command.startswith("oc project") for command in commands):
+        score -= 20
+    if (current_project_query or project_query) and any("oc config view" in command for command in commands):
+        score -= 14
+    if any(token in lowered_query for token in ("확인", "view", "보여", "보기")) and any(
+        token in haystack for token in ("현재 프로젝트 보기", "viewing-the-current-project")
+    ):
+        score -= 24
+    if any(token in lowered_query for token in ("확인", "current", "현재")) and any(
+        "set-context" in command for command in commands
+    ):
+        score += 22
+    if any(token in lowered_query for token in ("확인", "current", "현재")) and any(
+        token in haystack for token in ("수동 구성", "manual configuration")
+    ):
+        score += 10
+    if any(token in haystack for token in ("cli profile", "cli 프로필", "current-context", "namespace:")):
+        score -= 6
+    if namespace_query and any(token in haystack for token in ("delete pods", "서비스가 중단", "remove all")):
+        score += 18
+
+    return (score, 0 if hit.book_slug == "cli_tools" else 1, _procedure_chunk_priority(hit))
+
+
+def _install_guidance_priority(hit: RetrievalHit) -> tuple[int, int, int]:
+    lowered_section = (hit.section or "").lower()
+    commands = tuple(command.lower() for command in _all_hit_commands(hit))
+    haystack = " ".join((lowered_section, (hit.text or "").lower(), " ".join(commands)))
+
+    score = 50
+    if "waiting for the bootstrap process to complete" in haystack:
+        score -= 22
+    if any("openshift-install" in command and "wait-for bootstrap-complete" in command for command in commands):
+        score -= 20
+    if "bootstrap-complete" in haystack:
+        score -= 10
+    score += _procedure_chunk_priority(hit) * 2
+
+    preferred_books = {
+        "installing_on_any_platform": 0,
+        "support": 1,
+        "installation_overview": 2,
+    }
+    return (score, preferred_books.get(hit.book_slug, 9), _procedure_chunk_priority(hit))
 
 
 def _session_mentions_mco(session_context: SessionContext | None) -> bool:
@@ -731,6 +818,8 @@ def _should_force_clarification(
             has_cluster_node_usage_intent(normalized),
             has_deployment_scaling_intent(normalized),
             has_registry_storage_ops_intent(normalized),
+            has_command_request(normalized),
+            _is_install_guidance_query(normalized),
             _is_intro_recommendation_query(normalized),
         ]
     ):
@@ -800,6 +889,8 @@ def _select_hits(
         [
             _is_oc_login_query(normalized),
             _is_auth_can_i_query(normalized),
+            has_command_request(normalized),
+            _is_install_guidance_query(normalized),
             has_backup_restore_intent(normalized),
             has_crash_loop_troubleshooting_intent(normalized),
             has_rbac_intent(normalized),
@@ -838,6 +929,32 @@ def _select_hits(
             ranked_hits,
             key=lambda hit: (
                 *_auth_can_i_hit_priority(hit),
+                -_hit_score(hit),
+                hit.book_slug,
+                hit.chunk_id,
+            ),
+        )
+        support_window = ranked_hits[: max(max_chunks * 2, 8)]
+        top_score = _hit_score(support_window[0])
+        top_book = support_window[0].book_slug
+    elif has_command_request(normalized):
+        ranked_hits = sorted(
+            ranked_hits,
+            key=lambda hit: (
+                *_command_lookup_priority(hit, normalized),
+                -_hit_score(hit),
+                hit.book_slug,
+                hit.chunk_id,
+            ),
+        )
+        support_window = ranked_hits[: max(max_chunks * 2, 8)]
+        top_score = _hit_score(support_window[0])
+        top_book = support_window[0].book_slug
+    elif _is_install_guidance_query(normalized):
+        ranked_hits = sorted(
+            ranked_hits,
+            key=lambda hit: (
+                *_install_guidance_priority(hit),
                 -_hit_score(hit),
                 hit.book_slug,
                 hit.chunk_id,
@@ -1283,6 +1400,32 @@ def _select_hits(
             locked_allowed_books = True
         else:
             for book_slug in ("cli_tools", "authentication_and_authorization", "postinstallation_configuration"):
+                if best_book_scores.get(book_slug, 0.0) >= top_score * 0.44:
+                    allowed_books.add(book_slug)
+    if has_command_request(normalized):
+        command_books = tuple(
+            book_slug
+            for book_slug in ("cli_tools", "applications", "authentication_and_authorization", "support")
+            if best_book_scores.get(book_slug, 0.0) > 0.0
+        )
+        if command_books:
+            allowed_books = set(command_books)
+            locked_allowed_books = True
+        else:
+            for book_slug in ("cli_tools", "applications", "authentication_and_authorization", "support"):
+                if best_book_scores.get(book_slug, 0.0) >= top_score * 0.44:
+                    allowed_books.add(book_slug)
+    if _is_install_guidance_query(normalized):
+        install_books = tuple(
+            book_slug
+            for book_slug in ("installing_on_any_platform", "support", "installation_overview")
+            if best_book_scores.get(book_slug, 0.0) > 0.0
+        )
+        if install_books:
+            allowed_books = set(install_books)
+            locked_allowed_books = True
+        else:
+            for book_slug in ("installing_on_any_platform", "support", "installation_overview"):
                 if best_book_scores.get(book_slug, 0.0) >= top_score * 0.44:
                     allowed_books.add(book_slug)
     if topic_preferred_books:

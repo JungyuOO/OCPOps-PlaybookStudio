@@ -24,11 +24,17 @@ from play_book_studio.config.corpus_paths import (
     PBS_CHAT_QUALITY_CASES_PATH,
     PBS_CHAT_QUALITY_EXTENDED_CASES_PATH,
 )
+from play_book_studio.retrieval.query import has_command_request
 
 
 SECTION_NUMBER_PREFIX_RE = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s+")
 LOW_CONFIDENCE_RE = re.compile(r"(low retrieval confidence|점수가 낮|정확히 맞물리는 점수가 낮)", re.IGNORECASE)
 FENCED_CODE_RE = re.compile(r"```[^\n`]*\n([\s\S]*?)```")
+SHELL_COMMAND_RE = re.compile(
+    r"\b(?:oc|kubectl|openshift-install|journalctl|systemctl|helm|curl)\b(?:\s+[^\n`]+)?",
+    re.IGNORECASE,
+)
+RAW_CODE_MARKUP_RE = re.compile(r"\[/?CODE[^\]]*\]", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -38,6 +44,11 @@ class SmokeCase:
     route_kind: str = ""
     source: str = ""
     mode: str = "ops"
+    query_type: str = ""
+    must_include_terms: tuple[str, ...] = ()
+    must_not_include_terms: tuple[str, ...] = ()
+    expected_citation_terms: tuple[str, ...] = ()
+    forbidden_citation_terms: tuple[str, ...] = ()
     learning_index: int | None = None
     learning_category_key: str = ""
     learning_category_label: str = ""
@@ -122,6 +133,7 @@ def _case_from_starter(item: dict[str, Any], case_id: str) -> SmokeCase:
         route_kind=str(item.get("route_kind") or "").strip(),
         source=str(item.get("source") or "starter").strip(),
         mode="course" if str(item.get("route_kind") or "") == "course" else "ops",
+        query_type=str(item.get("query_type") or "").strip(),
         learning_index=item.get("learning_index") if isinstance(item.get("learning_index"), int) else None,
         learning_category_key=str(item.get("category_key") or "").strip(),
         learning_category_label=str(item.get("category_label") or "").strip(),
@@ -131,7 +143,30 @@ def _case_from_starter(item: dict[str, Any], case_id: str) -> SmokeCase:
     )
 
 
+def _tuple_terms(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(str(item).strip() for item in value if str(item).strip())
+
+
+def _case_from_manifest_row(row: dict[str, Any], *, case_id: str, source: str) -> SmokeCase:
+    return SmokeCase(
+        case_id=str(row.get("case_id") or row.get("id") or case_id).strip(),
+        query=str(row.get("query") or "").strip(),
+        route_kind=str(row.get("route_kind") or "official").strip(),
+        source=str(row.get("source") or source).strip(),
+        mode=str(row.get("mode") or "ops").strip(),
+        query_type=str(row.get("query_type") or "").strip(),
+        must_include_terms=_tuple_terms(row.get("must_include_terms")),
+        must_not_include_terms=_tuple_terms(row.get("must_not_include_terms")),
+        expected_citation_terms=_tuple_terms(row.get("expected_citation_terms")),
+        forbidden_citation_terms=_tuple_terms(row.get("forbidden_citation_terms")),
+    )
+
+
 def _manifest_cases(root_dir: Path, limit: int) -> list[SmokeCase]:
+    if limit == 0:
+        return []
     paths = [
         root_dir / PBS_CHAT_QUALITY_CASES_PATH,
         root_dir / PBS_CHAT_QUALITY_EXTENDED_CASES_PATH,
@@ -149,16 +184,34 @@ def _manifest_cases(root_dir: Path, limit: int) -> list[SmokeCase]:
                 continue
             seen.add(query)
             cases.append(
-                SmokeCase(
+                _case_from_manifest_row(
+                    row,
                     case_id=f"manifest:{path.name}:{len(cases)}",
-                    query=query,
-                    route_kind="official",
                     source=str(path.relative_to(root_dir)),
-                    mode=str(row.get("mode") or "ops"),
                 )
             )
             if len(cases) >= limit:
                 return cases
+    return cases
+
+
+def _custom_manifest_cases(root_dir: Path, paths: list[str]) -> list[SmokeCase]:
+    cases: list[SmokeCase] = []
+    for raw_path in paths:
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = root_dir / path
+        for row in _iter_jsonl(path):
+            query = str(row.get("query") or "").strip()
+            if not query:
+                continue
+            cases.append(
+                _case_from_manifest_row(
+                    row,
+                    case_id=f"case-file:{path.name}:{len(cases)}",
+                    source=str(path.relative_to(root_dir)) if path.is_relative_to(root_dir) else str(path),
+                )
+            )
     return cases
 
 
@@ -187,6 +240,16 @@ def _citation_text(citations: list[dict[str, Any]]) -> str:
         parts.append(str(citation.get("excerpt") or ""))
         parts.extend(str(command) for command in citation.get("cli_commands") or [])
     return "\n".join(parts).lower()
+
+
+def _normalized_contains(haystack: str, needle: str) -> bool:
+    normalized_haystack = re.sub(r"\s+", " ", haystack or "").casefold()
+    normalized_needle = re.sub(r"\s+", " ", needle or "").casefold()
+    return normalized_needle in normalized_haystack
+
+
+def _has_shell_command(text: str) -> bool:
+    return bool(SHELL_COMMAND_RE.search(text or ""))
 
 
 def _validate_case(case: SmokeCase, status: int, events: list[dict[str, Any]], raw: str) -> dict[str, Any]:
@@ -218,6 +281,8 @@ def _validate_case(case: SmokeCase, status: int, events: list[dict[str, Any]], r
     citations = [item for item in result.get("citations") or [] if isinstance(item, dict)]
     cited_indices = [int(index) for index in result.get("cited_indices") or [] if isinstance(index, int)]
     suggestions = [str(item).strip() for item in result.get("suggested_queries") or [] if str(item).strip()]
+    answer_search_text = "\n".join([answer, _citation_text(citations)])
+    citation_search_text = _citation_text(citations)
     if len(answer.strip()) < 40:
         failures.append("short_answer")
     if LOW_CONFIDENCE_RE.search(answer) or any(LOW_CONFIDENCE_RE.search(warning) for warning in warnings):
@@ -226,6 +291,20 @@ def _validate_case(case: SmokeCase, status: int, events: list[dict[str, Any]], r
         failures.append("unexpected_clarification")
     if not citations and result.get("response_kind") == "rag":
         failures.append("missing_citations")
+    if has_command_request(case.query) and not _has_shell_command(answer_search_text):
+        failures.append("command_query_missing_grounded_command")
+    for term in case.must_include_terms:
+        if not _normalized_contains(answer_search_text, term):
+            failures.append(f"missing_required_term:{term}")
+    for term in case.must_not_include_terms:
+        if _normalized_contains(answer_search_text, term):
+            failures.append(f"forbidden_answer_term:{term}")
+    for term in case.expected_citation_terms:
+        if not _normalized_contains(citation_search_text, term):
+            failures.append(f"missing_citation_term:{term}")
+    for term in case.forbidden_citation_terms:
+        if _normalized_contains(citation_search_text, term):
+            failures.append(f"forbidden_citation_term:{term}")
     if any(index < 1 or index > len(citations) for index in cited_indices):
         failures.append("invalid_citation_index")
     answer_cites_source = bool(re.search(r"\[\d+\]", answer))
@@ -237,6 +316,9 @@ def _validate_case(case: SmokeCase, status: int, events: list[dict[str, Any]], r
         viewer_path = str(citation.get("viewer_path") or "")
         if not viewer_path:
             failures.append("citation_missing_viewer_path")
+            break
+        if RAW_CODE_MARKUP_RE.search(str(citation.get("excerpt") or "")):
+            failures.append("citation_raw_code_markup")
             break
     if any(SECTION_NUMBER_PREFIX_RE.search(suggestion) for suggestion in suggestions):
         failures.append("section_numbered_suggestion")
@@ -254,7 +336,10 @@ def _validate_case(case: SmokeCase, status: int, events: list[dict[str, Any]], r
         "parent_id": case.parent_id,
         "query": case.query,
         "source": case.source,
+        "query_type": case.query_type,
         "route_kind": case.route_kind,
+        "must_include_terms": list(case.must_include_terms),
+        "expected_citation_terms": list(case.expected_citation_terms),
         "response_kind": result.get("response_kind"),
         "event_types": sorted(set(event_types)),
         "answer_len": len(answer),
@@ -281,9 +366,13 @@ def _validate_case(case: SmokeCase, status: int, events: list[dict[str, Any]], r
 
 def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
     root_dir = Path(args.root_dir).resolve()
-    starter_cases, learning_sequence = _starter_cases(args.base_url)
+    starter_cases: list[SmokeCase] = []
+    learning_sequence: list[SmokeCase] = []
+    if not args.skip_starters:
+        starter_cases, learning_sequence = _starter_cases(args.base_url)
+    custom_cases = _custom_manifest_cases(root_dir, list(args.case_file or []))
     manifest_cases = _manifest_cases(root_dir, max(0, args.manifest_limit))
-    queue: list[SmokeCase] = [*starter_cases, *learning_sequence, *manifest_cases]
+    queue: list[SmokeCase] = [*custom_cases, *starter_cases, *learning_sequence, *manifest_cases]
     if args.limit > 0:
         queue = queue[: args.limit]
     details: list[dict[str, Any]] = []
@@ -325,6 +414,7 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
                         route_kind=case.route_kind,
                         source="suggested_query",
                         mode=case.mode,
+                        query_type=case.query_type,
                         parent_id=parent_id,
                     )
                 )
@@ -352,6 +442,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root-dir", default=".")
     parser.add_argument("--limit", type=int, default=80, help="Maximum total cases including follow-ups. Use 0 for all queued cases.")
     parser.add_argument("--manifest-limit", type=int, default=80)
+    parser.add_argument("--case-file", action="append", default=[], help="Additional JSONL case manifest to run before starters.")
+    parser.add_argument("--skip-starters", action="store_true", help="Only run custom/default manifest cases, not generated starter questions.")
     parser.add_argument("--followups-per-case", type=int, default=1)
     parser.add_argument("--report-path", default="reports/studio_live_smoke_report.json")
     return parser

@@ -134,6 +134,29 @@ def test_ops_console_connection_recommendations_and_resources_flow() -> None:
             assert recommendations[0]["resource_name"] == "payments-api"
 
 
+def test_ops_console_env_connection_uses_default_namespace(monkeypatch) -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        monkeypatch.setattr(
+            ops_console_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(
+                ocp_api_base_url="https://api.ocp.cywell.local:6443",
+                ocp_api_token="sha256~unit-test",
+                ocp_default_namespace="pbs-test",
+            ),
+        )
+
+        with _test_server(root) as base_url:
+            profiles_response = requests.get(f"{base_url}/api/v1/auth/ocp/profiles?workspace_id=ws_default", timeout=10)
+            profiles_response.raise_for_status()
+            profiles = profiles_response.json()["items"]
+
+            assert profiles[0]["connection_id"] == ops_console_api.ENV_OCP_CONNECTION_ID
+            assert profiles[0]["cluster_url"] == "https://api.ocp.cywell.local:6443"
+            assert profiles[0]["default_namespace"] == "pbs-test"
+
+
 def test_ops_console_actions_execute_scale_updates_resource_manifest() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)

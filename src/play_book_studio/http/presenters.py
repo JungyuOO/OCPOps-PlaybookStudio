@@ -61,6 +61,36 @@ def _citation_href(citation: Citation) -> str:
     if citation.anchor:
         return f"{citation.source_url}#{citation.anchor}"
     return citation.source_url
+
+
+CODE_WRAPPER_RE = re.compile(r"\[/?CODE[^\]]*\]", re.IGNORECASE)
+CODE_FENCE_RE = re.compile(r"```[a-zA-Z0-9_-]*\s*([\s\S]*?)```", re.MULTILINE)
+
+
+def _clean_citation_excerpt(excerpt: str) -> str:
+    cleaned = str(excerpt or "")
+    cleaned = CODE_FENCE_RE.sub(lambda match: match.group(1).strip(), cleaned)
+    cleaned = CODE_WRAPPER_RE.sub("", cleaned)
+    cleaned = html.unescape(cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) > 420:
+        cleaned = cleaned[:417].rstrip() + "..."
+    return cleaned
+
+
+def _citation_display_payload(citation: Citation) -> dict[str, Any]:
+    payload = citation.to_dict()
+    payload["excerpt"] = _clean_citation_excerpt(str(payload.get("excerpt") or ""))
+    commands = [
+        str(command or "").strip().lstrip("$").strip()
+        for command in (payload.get("cli_commands") or [])
+        if str(command or "").strip()
+    ]
+    if commands:
+        payload["command_preview"] = commands[:3]
+    return payload
+
+
 def _humanize_book_slug(book_slug: str) -> str:
     return " ".join(part for part in str(book_slug or "").replace("_", " ").split())
 def _core_pack_payload(*, version: str | None = None, language: str | None = None) -> dict[str, str]:
@@ -481,7 +511,7 @@ def _serialize_citation_uncached(
             or _display_source_heading(str(customer_pack_meta.get("section") or citation.section or citation.anchor))
         )
         return {
-            **citation.to_dict(),
+            **_citation_display_payload(citation),
             "section": _display_source_heading(
                 str(customer_pack_meta.get("section") or citation.section or citation.anchor)
             ),
@@ -524,7 +554,7 @@ def _serialize_citation_uncached(
             heading=section,
         )
         return {
-            **citation.to_dict(),
+            **_citation_display_payload(citation),
             "section": section,
             "href": href,
             "book_title": book_title,
@@ -555,7 +585,7 @@ def _serialize_citation_uncached(
         heading=section,
     )
     return {
-        **citation.to_dict(),
+        **_citation_display_payload(citation),
         "section": section,
         "href": href,
         "book_title": book_title,

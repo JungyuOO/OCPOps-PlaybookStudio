@@ -191,6 +191,26 @@ def has_deployment_scaling_intent(query: str) -> bool:
 
 def has_command_request(query: str) -> bool:
     normalized = query or ""
+    lowered = normalized.lower()
+    if any(
+        token in lowered
+        for token in (
+            "명령",
+            "명령어",
+            "커맨드",
+            "cli",
+            "command",
+            "what command",
+            "which command",
+            "어떤 명령",
+            "무슨 명령",
+            "뭐 쳐",
+            "뭘 쳐",
+            "뭐 입력",
+            "뭘 입력",
+        )
+    ):
+        return True
     return bool(
         re.search(
             r"(명령어|커맨드|cli|oc\s|kubectl\s|yaml|예시|예제로|어떤 명령|뭐라고 쳐|입력하면)",

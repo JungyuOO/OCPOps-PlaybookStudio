@@ -1,6 +1,7 @@
 # 채팅 세션 문맥, follow-up, 추천 질문 규칙을 담당한다.
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any
 
@@ -394,6 +395,146 @@ def _suggestions_from_retrieval_hits(result: AnswerResult, *, require_token_over
                 return suggestions
     return suggestions
 
+
+def _clean_command_label(command: str) -> str:
+    cleaned = re.sub(r"\s+", " ", str(command or "").strip().lstrip("$").strip())
+    if len(cleaned) > 80:
+        cleaned = cleaned[:77].rstrip() + "..."
+    return cleaned
+
+
+def _suggestions_from_citations(result: AnswerResult) -> list[str]:
+    suggestions: list[str] = []
+    seen: set[str] = set()
+
+    def add(candidate: str) -> None:
+        cleaned = (candidate or "").strip()
+        if not cleaned:
+            return
+        lowered = cleaned.lower()
+        if lowered in seen:
+            return
+        seen.add(lowered)
+        suggestions.append(cleaned)
+
+    for citation in result.citations[:4]:
+        section = _clean_suggestion_section(str(getattr(citation, "section", "") or ""))
+        commands = [
+            _clean_command_label(command)
+            for command in (getattr(citation, "cli_commands", ()) or ())
+            if _clean_command_label(command)
+        ]
+        if commands:
+            add(f"`{commands[0]}` 명령은 언제 쓰면 돼?")
+            add(f"`{commands[0]}` 결과에서 무엇을 확인해야 해?")
+        if section and not _is_bad_suggestion_section(section):
+            add(f"{section} 기준으로 다음에 확인할 것은 뭐야?")
+        if len(suggestions) >= 3:
+            break
+    return dedupe_suggestions(suggestions, query=result.query or "", limit=3)
+
+
+def _stable_rotate(items: list[str], *, seed: str) -> list[str]:
+    if len(items) <= 1:
+        return items
+    digest = hashlib.sha256(seed.encode("utf-8", errors="ignore")).hexdigest()
+    offset = int(digest[:8], 16) % len(items)
+    return items[offset:] + items[:offset]
+
+
+def _citation_seed(result: AnswerResult) -> str:
+    chunk_ids = "|".join(str(getattr(citation, "chunk_id", "") or "") for citation in result.citations[:4])
+    commands = "|".join(
+        str(command or "")
+        for citation in result.citations[:4]
+        for command in (getattr(citation, "cli_commands", ()) or ())[:2]
+    )
+    return "|".join((result.query or "", result.rewritten_query or "", chunk_ids, commands))
+
+
+def _command_follow_up_templates(command: str, *, section: str, query: str) -> list[str]:
+    lowered = " ".join((command, section, query)).lower()
+    label = _clean_command_label(command)
+    if not label:
+        return []
+    if "bootstrap-complete" in lowered or "openshift-install" in lowered:
+        return [
+            f"`{label}` 실행 중 완료 신호는 무엇을 보면 돼?",
+            f"`{label}` 명령이 실패하면 어떤 로그 수준으로 다시 확인해야 해?",
+            "bootstrap 완료 후 다음 설치 단계는 뭐야?",
+        ]
+    if "oc project" in lowered or "current-context" in lowered:
+        return [
+            f"`{label}` 결과에서 현재 프로젝트를 어떻게 판단해?",
+            "특정 namespace로 전환하려면 어떤 명령을 써야 해?",
+            "현재 kubeconfig context까지 같이 확인하려면 뭘 보면 돼?",
+        ]
+    if "oc logs" in lowered:
+        return [
+            f"`{label}`에서 이전 컨테이너 로그까지 보려면 어떤 옵션을 써?",
+            "로그 다음에는 이벤트와 describe 중 무엇을 먼저 봐야 해?",
+            "CrashLoopBackOff이면 어떤 로그를 추가로 확인해야 해?",
+        ]
+    if "events" in lowered:
+        return [
+            f"`{label}` 결과에서 Warning 이벤트를 어떻게 좁혀?",
+            "이벤트 다음에는 어떤 describe 명령을 봐야 해?",
+            "namespace별 최신 이벤트만 보려면 어떻게 정렬해?",
+        ]
+    if "route" in lowered or "svc" in lowered or "service" in lowered:
+        return [
+            f"`{label}` 결과에서 라우트와 서비스 연결을 어떻게 확인해?",
+            "서비스 endpoint가 비어 있으면 다음에 무엇을 봐야 해?",
+            "Route TLS나 timeout 설정은 어디서 확인해?",
+        ]
+    return [
+        f"`{label}` 명령은 언제 쓰면 돼?",
+        f"`{label}` 결과에서 무엇을 확인해야 해?",
+        f"`{label}`가 실패하면 다음에 어떤 근거를 봐야 해?",
+    ]
+
+
+def _section_follow_up_templates(section: str) -> list[str]:
+    cleaned = _clean_suggestion_section(section)
+    if not cleaned or _is_bad_suggestion_section(cleaned):
+        return []
+    return [
+        f"{cleaned} 기준으로 다음 확인 단계는 뭐야?",
+        f"{cleaned} 절차에서 흔한 실패 지점은 뭐야?",
+        f"{cleaned} 내용을 초보자용 3단계로 다시 정리해줘",
+    ]
+
+
+def _suggestions_from_citations(result: AnswerResult) -> list[str]:
+    suggestions: list[str] = []
+    seen: set[str] = set()
+
+    def add(candidate: str) -> None:
+        cleaned = (candidate or "").strip()
+        if not cleaned:
+            return
+        lowered = cleaned.lower()
+        if lowered in seen:
+            return
+        seen.add(lowered)
+        suggestions.append(cleaned)
+
+    for citation in result.citations[:4]:
+        section = _clean_suggestion_section(str(getattr(citation, "section", "") or ""))
+        commands = [
+            _clean_command_label(command)
+            for command in (getattr(citation, "cli_commands", ()) or ())
+            if _clean_command_label(command)
+        ]
+        for command in commands[:2]:
+            for candidate in _command_follow_up_templates(command, section=section, query=result.query or ""):
+                add(candidate)
+        for candidate in _section_follow_up_templates(section):
+            add(candidate)
+    rotated = _stable_rotate(suggestions, seed=_citation_seed(result))
+    return dedupe_suggestions(rotated, query=result.query or "", limit=3)
+
+
 def suggest_follow_up_questions(*, session: ChatSession, result: AnswerResult) -> list[str]:
     query = (result.query or "").strip()
     normalized = query.lower()
@@ -438,6 +579,7 @@ def suggest_follow_up_questions(*, session: ChatSession, result: AnswerResult) -
 
     play_plan = build_next_play_plan(session_topic=topic, result=result)
     plan_candidates = play_plan.as_list() if play_plan is not None else []
+    grounded_candidates = _suggestions_from_citations(result)
 
     candidates: list[str] = []
 
@@ -553,7 +695,7 @@ def suggest_follow_up_questions(*, session: ChatSession, result: AnswerResult) -
         ]
 
     subject = _suggestion_subject(query=query, topic=topic, primary=primary)
-    source_candidates = plan_candidates + candidates
+    source_candidates = grounded_candidates + plan_candidates + candidates
     if not source_candidates:
         source_candidates = fallback_follow_up_questions(query=query)
     else:

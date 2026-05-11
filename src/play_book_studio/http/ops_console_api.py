@@ -216,14 +216,15 @@ def _real_ocp_config(root_dir: Path, connection: dict[str, Any] | None = None) -
     settings = _ops_settings(root_dir)
     env_base_url = str(getattr(settings, "ocp_api_base_url", "") or "").strip().rstrip("/")
     env_token = str(getattr(settings, "ocp_api_token", "") or "").strip()
+    env_namespace = str(getattr(settings, "ocp_default_namespace", "") or "").strip()
     if connection is None:
         base_url = env_base_url
         token = env_token
-        namespace = "demo"
+        namespace = env_namespace or "default"
     else:
         base_url = str(connection.get("cluster_url") or env_base_url).strip().rstrip("/")
         token = str(connection.get("_token") or env_token).strip()
-        namespace = str(connection.get("default_namespace") or "demo").strip() or "demo"
+        namespace = str(connection.get("default_namespace") or env_namespace or "default").strip() or "default"
     if not base_url or not token:
         return None
     return {

@@ -29,7 +29,10 @@ def apply_node_and_deployment_adjustments(
             penalties.get("installation_overview", 1.0),
             0.74,
         )
-        penalties["cli_tools"] = min(penalties.get("cli_tools", 1.0), 0.76)
+        if "uncordon" in normalized.lower() or any(token in normalized for token in ("다시", "허용", "끝나")):
+            boosts["cli_tools"] = max(boosts.get("cli_tools", 1.0), 1.22)
+        else:
+            penalties["cli_tools"] = min(penalties.get("cli_tools", 1.0), 0.76)
 
     if has_cluster_node_usage_intent(normalized):
         boosts["support"] = max(boosts.get("support", 1.0), 1.5)

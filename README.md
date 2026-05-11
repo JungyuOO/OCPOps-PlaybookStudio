@@ -85,6 +85,20 @@
 docker compose up -d --build app web qdrant
 ```
 
+## Remote SNO 터미널 연결
+
+Terminal Session의 브라우저 WebSocket은 앱 서버의 `:8770`으로 붙고, 실제 OpenShift 접속은 앱 컨테이너 내부 shell에서 `oc login`으로 수행합니다.
+
+```env
+OCP_API_BASE_URL=https://api.ocp.cywell.local:6443
+OCP_API_TOKEN=<remote-sno-token>
+OCP_INSECURE_SKIP_TLS_VERIFY=true
+TERMINAL_ENABLED=true
+TERMINAL_SHELL=/app/scripts/terminal-entrypoint.sh
+```
+
+원격 서버 SSH 접속 IP가 `192.168.119.23`이어도 OpenShift API는 kubeconfig의 `server:` 값인 `https://api.ocp.cywell.local:6443`를 사용합니다. 이 DNS는 현재 `192.168.119.8`로 해석됩니다. 토큰과 kubeconfig는 git에 넣지 말고 private `.env` 또는 배포 secret으로만 주입합니다.
+
 ## 최소 검증
 
 ```powershell

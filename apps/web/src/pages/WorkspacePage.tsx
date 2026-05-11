@@ -2132,6 +2132,14 @@ export default function WorkspacePage() {
     setActiveCategoryLabel('');
   }, []);
 
+  const clearActiveRepositoryScope = useCallback(() => {
+    setActiveSourceId(null);
+    setActiveDocumentId('');
+    setActiveDocumentTitle('');
+    setActiveCategoryKey('');
+    setActiveCategoryLabel('');
+  }, []);
+
   const currentViewerPath = useMemo(
     () => {
       if (preview.kind === 'viewer') {
@@ -4385,17 +4393,16 @@ export default function WorkspacePage() {
                         </div>
                       ) : null}
                     </div>
-                    {activeDocumentId ? (
-                      <button
-                        type="button"
-                        className="chat-scope-clear-btn"
-                        onClick={clearActiveDocumentScope}
-                        title="문서 범위를 해제하고 repository 전체로 질문합니다"
-                      >
-                        <X size={14} />
-                        <span>문서 범위 해제</span>
-                      </button>
-                    ) : null}
+                    <button
+                      type="button"
+                      className="chat-scope-clear-btn"
+                      onClick={activeDocumentId ? clearActiveDocumentScope : clearActiveRepositoryScope}
+                      title={activeDocumentId ? '문서 범위를 해제하고 repository 전체로 질문합니다' : 'Repository 범위를 해제하고 전체 문서에서 질문합니다'}
+                      aria-label={activeDocumentId ? 'Clear document scope' : 'Clear repository scope'}
+                    >
+                      <X size={14} />
+                      <span>{activeDocumentId ? '문서 범위 해제' : 'Repository 범위 해제'}</span>
+                    </button>
                   </div>
                 )}
                 <div className="input-container glass-panel">

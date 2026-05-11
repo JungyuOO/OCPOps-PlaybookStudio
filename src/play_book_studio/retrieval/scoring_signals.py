@@ -4,11 +4,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .models import SessionContext
+from .intent_profile import IntentProfile, build_intent_profile
 from .query import (
     OC_LOGIN_RE,
     has_backup_restore_intent,
     has_certificate_monitor_intent,
     has_cluster_node_usage_intent,
+    has_command_request,
     has_doc_locator_intent,
     has_hosted_control_plane_signal,
     has_machine_config_reboot_intent,
@@ -35,6 +37,7 @@ from .ranking import extract_structured_query_terms as _extract_structured_query
 class ScoreSignals:
     query: str
     context_text: str
+    intent_profile: IntentProfile
     structured_query_terms: tuple[str, ...]
     book_boosts: dict[str, float]
     book_penalties: dict[str, float]
@@ -58,11 +61,13 @@ class ScoreSignals:
     crash_loop_intent: bool
     pod_lifecycle_intent: bool
     oc_login_intent: bool
+    command_request_intent: bool
     concept_like_intent: bool
     generic_intro_intent: bool
 
 
 def build_score_signals(query: str, *, context: SessionContext) -> ScoreSignals:
+    intent_profile = build_intent_profile(query)
     structured_query_terms = tuple(_extract_structured_query_terms(query))
     book_boosts, book_penalties = query_book_adjustments(query, context=context)
     compare_intent = has_openshift_kubernetes_compare_intent(query)
@@ -76,6 +81,7 @@ def build_score_signals(query: str, *, context: SessionContext) -> ScoreSignals:
     return ScoreSignals(
         query=query,
         context_text=context_text,
+        intent_profile=intent_profile,
         structured_query_terms=structured_query_terms,
         book_boosts=book_boosts,
         book_penalties=book_penalties,
@@ -99,6 +105,7 @@ def build_score_signals(query: str, *, context: SessionContext) -> ScoreSignals:
         crash_loop_intent=has_crash_loop_troubleshooting_intent(query),
         pod_lifecycle_intent=pod_lifecycle_intent,
         oc_login_intent=bool(OC_LOGIN_RE.search(query)),
+        command_request_intent=has_command_request(query),
         concept_like_intent=any(
             (
                 generic_intro_intent,

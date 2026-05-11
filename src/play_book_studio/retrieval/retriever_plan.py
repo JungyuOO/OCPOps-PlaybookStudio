@@ -9,6 +9,7 @@ from .query import (
     detect_unsupported_product,
     has_backup_restore_intent,
     has_certificate_monitor_intent,
+    has_command_request,
     has_doc_locator_intent,
     has_follow_up_reference,
     has_openshift_kubernetes_compare_intent,
@@ -57,6 +58,11 @@ def build_retrieval_plan(
         or has_doc_locator_intent(normalized_query)
         or has_backup_restore_intent(normalized_query)
         or has_certificate_monitor_intent(normalized_query)
+        or has_command_request(normalized_query)
+        or (
+            any(token in normalized_query for token in ("bootstrap", "부트스트랩"))
+            and any(token in normalized_query for token in ("확인", "기다", "wait", "complete", "완료", "단계"))
+        )
         or follow_up_detected
     ):
         effective_candidate_k = max(candidate_k, 40)

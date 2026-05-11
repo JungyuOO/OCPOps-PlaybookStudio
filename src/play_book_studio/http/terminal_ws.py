@@ -331,6 +331,7 @@ async def _handle_terminal_connection(
     *args: object,
     config: TerminalSessionConfig,
     database_url: str = "",
+    cluster_server: str = "",
 ) -> None:
     session = TerminalSession(config).start()
     recorder = TerminalEventRecorder(
@@ -347,6 +348,7 @@ async def _handle_terminal_connection(
                 "persisted_session_id": recorder.terminal_session_id,
                 "shell": session.shell_label,
                 "workdir": str(config.workdir),
+                "cluster_server": cluster_server,
             }
         )
     )
@@ -457,10 +459,17 @@ def start_terminal_websocket_server(*, settings: Settings, root_dir: Path) -> th
     host = settings.terminal_host
     port = settings.terminal_ws_port
     database_url = settings.database_url
+    cluster_server = settings.ocp_api_base_url
 
     async def run_server() -> None:
         async def handler(websocket, *args: object) -> None:
-            await _handle_terminal_connection(websocket, *args, config=config, database_url=database_url)
+            await _handle_terminal_connection(
+                websocket,
+                *args,
+                config=config,
+                database_url=database_url,
+                cluster_server=cluster_server,
+            )
 
         async with websocket_serve(handler, host, port):
             await asyncio.Future()

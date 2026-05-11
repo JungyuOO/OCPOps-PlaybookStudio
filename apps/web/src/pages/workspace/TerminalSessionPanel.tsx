@@ -10,6 +10,7 @@ interface TerminalSocketEvent {
   data?: string;
   shell?: string;
   workdir?: string;
+  cluster_server?: string;
   exit_code?: number;
   lab_task_id?: string;
   command_check_id?: string;
@@ -49,7 +50,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
   const commandBufferRef = useRef('');
   const [connectionKey, setConnectionKey] = useState(0);
   const [state, setState] = useState<TerminalConnectionState>('connecting');
-  const [sessionMeta, setSessionMeta] = useState({ shell: '', workdir: '' });
+  const [sessionMeta, setSessionMeta] = useState({ shell: '', workdir: '', clusterServer: '' });
   const [recentCheckResults, setRecentCheckResults] = useState<TerminalSocketEvent[]>([]);
   const wsUrl = useMemo(defaultTerminalWebSocketUrl, []);
   const stableLearningContext = useMemo<TerminalLearningContext | undefined>(() => {
@@ -77,7 +78,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
     }
 
     setState('connecting');
-    setSessionMeta({ shell: '', workdir: '' });
+    setSessionMeta({ shell: '', workdir: '', clusterServer: '' });
     const terminal = new Terminal({
       cursorBlink: true,
       convertEol: true,
@@ -158,6 +159,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
         setSessionMeta({
           shell: payload.shell ?? '',
           workdir: payload.workdir ?? '',
+          clusterServer: payload.cluster_server ?? '',
         });
         terminal.writeln(`Connected: ${payload.shell ?? 'shell'}`);
         return;
@@ -213,6 +215,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
           <strong>{state === 'connected' ? 'Connected' : state === 'connecting' ? 'Connecting' : state === 'error' ? 'Connection error' : 'Closed'}</strong>
           {sessionMeta.shell ? <span>{sessionMeta.shell}</span> : null}
           {sessionMeta.workdir ? <span>{sessionMeta.workdir}</span> : null}
+          {sessionMeta.clusterServer ? <span title={sessionMeta.clusterServer}>Cluster {sessionMeta.clusterServer}</span> : null}
           {stableLearningContext?.labTaskId ? <span>Lab attached</span> : null}
         </div>
         <button

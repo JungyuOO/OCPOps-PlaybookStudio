@@ -290,6 +290,13 @@ def _is_low_confidence_retrieval(
     has_command_grounding = any(citation.cli_commands for citation in citations)
     if has_command_request(query) and has_command_grounding and coverage >= 0.2:
         return False
+    if has_command_request(query) and has_command_grounding and max(max_fused, max_pre_rerank, max_vector) >= 0.02:
+        return False
+    if any(token in normalized_query for token in ("bootstrap", "부트스트랩")) and any(
+        token in citation_haystack
+        for token in ("bootstrap-complete", "wait-for bootstrap", "openshift-install", "waiting for the bootstrap")
+    ):
+        return False
     weighted_score = (coverage * 0.62) + (max(max_pre_rerank, max_vector) * 1.8) + (0.12 if max_fused > 0 else 0)
     return coverage < 0.28 and weighted_score < 0.46
 
