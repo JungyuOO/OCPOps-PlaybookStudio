@@ -75,9 +75,9 @@ scope:
 docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm official-corpus-seed
 ```
 
-For KMSC operational/study documents, this imports `corpus/sources/kmsc/raw`
-into PostgreSQL with `source_scope=study_docs` and indexes the chunks into
-`openshift_docs`:
+For KMSC operational/study documents, this imports the tracked parsed course
+chunks under `corpus/sources/kmsc/parsed-preview/course_pbs` into PostgreSQL
+with `source_scope=study_docs` and indexes the chunks into `openshift_docs`:
 
 ```powershell
 docker compose -f deploy/docker-compose.prod.yml --env-file .env.production --profile seed run --rm kmsc-corpus-seed

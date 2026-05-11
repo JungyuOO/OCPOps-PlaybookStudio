@@ -73,3 +73,26 @@ def test_course_chunk_import_parser_accepts_dry_run_args():
     assert args.course_dir == Path("corpus/sources/kmsc/parsed-preview/course_pbs")
     assert args.limit == 3
     assert args.dry_run is True
+
+
+def test_kmsc_course_import_parser_accepts_dry_run_args():
+    args = build_parser().parse_args(
+        [
+            "kmsc-course-import",
+            "--root-dir",
+            str(REPO_ROOT),
+            "--course-dir",
+            "corpus/sources/kmsc/parsed-preview/course_pbs",
+            "--index",
+            "--collection",
+            "openshift_docs",
+            "--dry-run",
+        ]
+    )
+
+    assert args.command == "kmsc-course-import"
+    assert args.root_dir == REPO_ROOT
+    assert args.course_dir == Path("corpus/sources/kmsc/parsed-preview/course_pbs")
+    assert args.index is True
+    assert args.collection == "openshift_docs"
+    assert args.dry_run is True

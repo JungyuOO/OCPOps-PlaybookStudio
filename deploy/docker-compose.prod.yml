@@ -173,7 +173,7 @@ services:
       - app_storage:/app/storage
       - app_reports:/app/reports
       - app_tmp:/app/tmp
-    command: ["python", "-m", "play_book_studio.cli", "corpus-ingest", "--root-dir", "/app", "--source-dir", "${KMSC_CORPUS_SOURCE_DIR:-/app/corpus/sources/kmsc/raw}", "--corpus-kind", "study_docs", "--index", "--collection", "${QDRANT_COLLECTION:-openshift_docs}"]
+    command: ["python", "-m", "play_book_studio.cli", "kmsc-course-import", "--root-dir", "/app", "--course-dir", "${KMSC_COURSE_SOURCE_DIR:-/app/corpus/sources/kmsc/parsed-preview/course_pbs}", "--index", "--collection", "${QDRANT_COLLECTION:-openshift_docs}"]
     restart: "no"
 
   qdrant-seed:
