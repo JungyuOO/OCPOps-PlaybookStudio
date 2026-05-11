@@ -224,7 +224,7 @@ def _official_faq_questions_from_db(database_url: str) -> list[dict[str, Any]]:
         questions.append(
             _starter_question(
                 lane="faq",
-                question=f"What should I check first in {title}?",
+                question=_official_faq_query(rule, title),
                 route_kind="official",
                 source="postgres.official_docs",
                 category_key=rule.key,
@@ -239,11 +239,25 @@ def _official_faq_questions_from_db(database_url: str) -> list[dict[str, Any]]:
     return [
         _starter_question(
             lane="faq",
-            question="What official OpenShift document should I start from for this issue?",
+            question="OpenShift 문제를 공식 문서 기준으로 진단할 때 어떤 문서와 확인 명령부터 보면 돼?",
             route_kind="official",
             source="postgres.official_docs",
         )
     ]
+
+
+def _official_faq_query(rule: StarterCategoryRule, title: str) -> str:
+    clean_title = _clean_title(title)
+    templates = {
+        "day2": "{title} 문서 기준으로 설치 후 구성에서 먼저 확인할 설정과 명령은 뭐야?",
+        "operations": "{title} 문서 기준으로 운영 상태를 점검할 때 먼저 볼 리소스와 명령은 뭐야?",
+        "storage": "{title} 문서 기준으로 스토리지나 백업 문제를 확인할 때 어떤 상태값과 명령부터 보면 돼?",
+        "security": "{title} 문서 기준으로 권한, 인증서, 보안 설정을 점검할 때 먼저 확인할 항목은 뭐야?",
+        "networking": "{title} 문서 기준으로 Route, Ingress, DNS 연결 문제를 진단할 때 어떤 순서로 보면 돼?",
+        "troubleshooting": "{title} 문서 기준으로 장애를 좁힐 때 먼저 확인할 증상, 로그, 명령은 뭐야?",
+    }
+    template = templates.get(rule.key, "{title} 문서 기준으로 먼저 확인할 항목과 명령은 뭐야?")
+    return template.format(title=clean_title)
 
 
 def _entry_haystack(entry: dict[str, Any]) -> str:

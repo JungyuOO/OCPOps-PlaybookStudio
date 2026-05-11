@@ -145,7 +145,45 @@ def test_starter_questions_use_postgres_official_metadata_when_database_is_confi
 
     assert groups["faq"]["questions"][0]["source"] == "postgres.official_docs"
     assert groups["faq"]["questions"][0]["target_book_slug"] == "machine_configuration"
+    assert "What should" not in groups["faq"]["questions"][0]["question"]
+    assert "문서 기준" in groups["faq"]["questions"][0]["question"]
     assert payload["learning_sequence"][2]["target_viewer_path"] == "/playbooks/wiki-runtime/active/machine_configuration/index.html"
+
+
+def test_postgres_official_faq_questions_are_actionable_korean(monkeypatch) -> None:
+    root = TEST_TMP / "db_official_troubleshooting"
+    root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(
+        starter_questions,
+        "load_settings",
+        lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+    )
+    monkeypatch.setattr(
+        starter_questions,
+        "_official_manifest_entries_from_db",
+        lambda _database_url: [
+            {
+                "book_slug": "validation_and_troubleshooting",
+                "title": "검증 및 문제 해결",
+                "viewer_path": "/playbooks/wiki-runtime/active/validation_and_troubleshooting/index.html",
+                "topic_path": ["Troubleshooting", "Validation and troubleshooting"],
+                "section_family": ["troubleshooting"],
+                "source_relative_path": "validation_and_troubleshooting/index.html",
+            }
+        ],
+    )
+
+    payload = build_studio_starter_questions(root, seed="stable")
+    questions = [
+        item["question"]
+        for group in payload["groups"]
+        if group["key"] == "faq"
+        for item in group["questions"]
+    ]
+
+    assert questions
+    assert all("What should" not in question for question in questions)
+    assert any("검증 및 문제 해결 문서 기준으로 장애를 좁힐 때" in question for question in questions)
 
 
 def test_learning_starter_questions_include_terminal_context_when_available(monkeypatch) -> None:
