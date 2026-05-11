@@ -174,3 +174,5 @@ app
 - 2026-05-11: Postgres/Qdrant는 우선 클러스터 내부에 같이 띄우고, 용량 문제가 생기면 외부 DB/Qdrant로 전환하기로 했다.
 - 2026-05-11: 브라우저 Terminal WebSocket 기본 경로를 같은 origin의 `/terminal-ws/`로 변경하고 nginx proxy를 추가했다.
 - 2026-05-11: OpenShift core/app/job manifest와 apply/cleanup script 초안을 작성했다.
+- 2026-05-11: Studio 자주 묻는 질문에서 `What should I check first in ...?` 영어 fallback이 공식 문서 제목과 섞여 낮은 품질 질문을 만드는 문제를 확인했다.
+- 2026-05-11: Postgres official metadata 기반 FAQ를 한국어 운영 질문 템플릿으로 교체해 문서 제목, 점검 대상, 명령/로그 확인 의도가 함께 들어가도록 수정했다.
