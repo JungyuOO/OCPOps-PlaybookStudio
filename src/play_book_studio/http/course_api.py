@@ -2330,12 +2330,21 @@ def _public_ops_learning_answer_lines(
     for learning_index, learning_chunk in enumerate(learning_chunks[:2], start=1):
         title = _public_course_text(learning_chunk.get("title") or "운영 학습 단계", limit=120)
         goal = _public_course_text(learning_chunk.get("learning_goal") or learning_chunk.get("beginner_explanation") or "", limit=260)
+        sequence = learning_chunk.get("operational_sequence") if isinstance(learning_chunk.get("operational_sequence"), list) else []
+        look_for = learning_chunk.get("what_to_look_for") if isinstance(learning_chunk.get("what_to_look_for"), list) else []
         lines.append(title)
         if goal:
             lines.append(goal)
-        sequence = learning_chunk.get("operational_sequence") if isinstance(learning_chunk.get("operational_sequence"), list) else []
-        look_for = learning_chunk.get("what_to_look_for") if isinstance(learning_chunk.get("what_to_look_for"), list) else []
         source_index = min(learning_index, citation_count)
+        look_for_terms = [
+            _public_course_text(item, limit=80)
+            for item in look_for[:3]
+            if _public_course_text(item, limit=80)
+        ]
+        if look_for_terms:
+            lines.append(
+                f"먼저 {', '.join(look_for_terms)}를 기준으로 현재 결과가 목표, 환경, 반복 조건 중 어디에 걸리는지 나눠 봅니다. [{source_index}]"
+            )
         for index, item in enumerate(sequence[:3], start=1):
             text = _public_course_text(item, limit=560)
             if text:
@@ -2356,6 +2365,11 @@ def _public_ops_learning_answer_lines(
                 lines.append(f"- 정상/진행 상태: {', '.join(_public_course_text(item, limit=60) for item in normal_state[:4] if _public_course_text(item, limit=60))}")
             if failure_state:
                 lines.append(f"- 실패/주의 상태: {', '.join(_public_course_text(item, limit=60) for item in failure_state[:4] if _public_course_text(item, limit=60))}")
+        source_summary = _public_course_text(learning_chunk.get("source_summary") or "", limit=300)
+        if source_summary:
+            lines.append("")
+            lines.append("판단 기준")
+            lines.append(f"- {source_summary} [{source_index}]")
         support_lines = _ops_learning_support_lines(learning_chunk, chunks, source_index=source_index)
         if support_lines:
             lines.append("")

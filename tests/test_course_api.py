@@ -710,6 +710,8 @@ def test_course_chat_ops_learning_answer_includes_grounded_support_details(
 
     assert response["sources"][0]["chunk_id"] == source_id
     assert "평균 TPS 10% 향상" in response["answer"]
+    assert "먼저 TPS, Staging, 테스트 환경" in response["answer"]
+    assert "판단 기준" in response["answer"]
     assert "근거에서 확인할 항목" in response["answer"]
     assert "Staging" in response["answer"]
     assert "Apache JMeter" in response["answer"]
