@@ -38,6 +38,7 @@ run_job() {
 run_job db-migrate job-db-migrate.yaml
 run_job official-corpus-seed job-official-corpus-seed.yaml
 run_job kmsc-corpus-seed job-kmsc-corpus-seed.yaml
+run_job learning-seed job-learning-seed.yaml
 run_job course-runtime-seed job-course-runtime-seed.yaml
 run_job qdrant-seed job-qdrant-seed.yaml
 
