@@ -1040,11 +1040,8 @@ def _run_course_chunk_import(args: argparse.Namespace) -> int:
                 if not asset_path or asset_path in seen_asset_paths:
                     continue
                 seen_asset_paths.add(asset_path)
-                resolved = Path(asset_path)
-                if not resolved.is_absolute():
-                    resolved = root_dir / resolved
-                resolved = resolved.resolve()
-                if not resolved.exists() or not resolved.is_file():
+                resolved = _resolve_course_asset_file(root_dir, course_dir, asset_path)
+                if resolved is None:
                     missing_assets.append(asset_path)
                     continue
                 asset_records.append(
@@ -1145,6 +1142,30 @@ def _run_course_chunk_import(args: argparse.Namespace) -> int:
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if not missing_assets else 1
+
+
+def _resolve_course_asset_file(root_dir: Path, course_dir: Path, asset_path: str) -> Path | None:
+    normalized = str(asset_path or "").strip().replace("\\", "/")
+    if not normalized:
+        return None
+
+    candidate = Path(normalized)
+    candidates: list[Path] = []
+    if candidate.is_absolute():
+        candidates.append(candidate)
+    else:
+        candidates.append(root_dir / candidate)
+        parts = candidate.parts
+        if parts and parts[0] == "assets":
+            candidates.append(course_dir / candidate)
+        if len(parts) >= 4 and parts[0] == "data" and parts[2] == "assets":
+            candidates.append(course_dir / "assets" / Path(*parts[3:]))
+
+    for path in candidates:
+        resolved = path.resolve()
+        if resolved.exists() and resolved.is_file():
+            return resolved
+    return None
 
 
 def main() -> int:
