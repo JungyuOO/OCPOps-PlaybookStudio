@@ -42,6 +42,7 @@ RUN python -c "import subprocess, sys, tomllib; deps = tomllib.load(open('pyproj
 
 COPY src /app/src
 COPY db /app/db
+COPY corpus /app/corpus
 COPY deploy/scripts /app/scripts
 RUN chmod +x /app/scripts/terminal-entrypoint.sh
 RUN pip install --no-cache-dir --no-deps -e .
