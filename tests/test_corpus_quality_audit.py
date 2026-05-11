@@ -53,7 +53,7 @@ def test_audit_chunk_rows_reports_rag_input_quality_signals() -> None:
     assert report["mojibake"]["examples"][0]["chunk_id"] == "good"
 
 
-def test_audit_chunk_rows_flags_image_evidence_without_direct_asset() -> None:
+def test_audit_chunk_rows_counts_ops_learning_image_evidence_assets() -> None:
     rows = [
         {
             "learning_chunk_id": "ops-step",
@@ -61,6 +61,7 @@ def test_audit_chunk_rows_flags_image_evidence_without_direct_asset() -> None:
             "source_chunk_ids": ["source-chunk"],
             "embedding_text": "Review the performance goal, workload profile, and bottleneck notes before tuning.",
             "image_evidence_texts": ["JMeter screenshot summary"],
+            "image_evidence_assets": [{"asset_path": "data/course_pbs/assets/jmeter.png"}],
         }
     ]
 
@@ -68,8 +69,8 @@ def test_audit_chunk_rows_flags_image_evidence_without_direct_asset() -> None:
 
     assert report["missing_source_count"] == 0
     assert report["image_reference_count"] == 1
-    assert report["asset_reference_count"] == 0
-    assert report["image_without_direct_asset_count"] == 1
+    assert report["asset_reference_count"] == 1
+    assert report["image_without_direct_asset_count"] == 0
 
 
 def test_chunk_text_uses_nested_index_texts_for_course_chunks() -> None:

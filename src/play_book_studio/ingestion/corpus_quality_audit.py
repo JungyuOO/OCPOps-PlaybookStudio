@@ -266,6 +266,8 @@ def _has_command_reference(row: dict[str, Any], text: str) -> bool:
 def _has_image_reference(row: dict[str, Any]) -> bool:
     if isinstance(row.get("image_attachments"), list) and row["image_attachments"]:
         return True
+    if isinstance(row.get("image_evidence_assets"), list) and row["image_evidence_assets"]:
+        return True
     if isinstance(row.get("image_evidence_texts"), list) and row["image_evidence_texts"]:
         return True
     facets = row.get("facets")
@@ -275,6 +277,9 @@ def _has_image_reference(row: dict[str, Any]) -> bool:
 def _asset_reference_count(row: dict[str, Any]) -> int:
     count = 0
     for attachment in row.get("image_attachments") or []:
+        if isinstance(attachment, dict) and str(attachment.get("asset_path") or "").strip():
+            count += 1
+    for attachment in row.get("image_evidence_assets") or []:
         if isinstance(attachment, dict) and str(attachment.get("asset_path") or "").strip():
             count += 1
     return count

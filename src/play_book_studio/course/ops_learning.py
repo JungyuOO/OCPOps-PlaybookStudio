@@ -1016,6 +1016,44 @@ def _source_image_texts(source_chunks: list[dict[str, Any]]) -> list[str]:
     return list(dict.fromkeys(row for row in rows if row))[:12]
 
 
+def _source_image_assets(source_chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for chunk in source_chunks:
+        chunk_id = str(chunk.get("chunk_id") or "")
+        native_id = str(chunk.get("native_id") or "")
+        attachments = chunk.get("image_attachments") if isinstance(chunk.get("image_attachments"), list) else []
+        for attachment in attachments:
+            if not isinstance(attachment, dict):
+                continue
+            asset_path = str(attachment.get("asset_path") or "").strip()
+            if not asset_path:
+                continue
+            key = str(attachment.get("asset_id") or asset_path)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(
+                {
+                    "asset_id": str(attachment.get("asset_id") or ""),
+                    "asset_path": asset_path,
+                    "source_chunk_id": chunk_id,
+                    "native_id": native_id,
+                    "slide_no": int(attachment.get("slide_no") or 0),
+                    "instructional_role": str(attachment.get("instructional_role") or ""),
+                    "instructional_roles": list(attachment.get("instructional_roles") or [])
+                    if isinstance(attachment.get("instructional_roles"), list)
+                    else [],
+                    "state_signal": str(attachment.get("state_signal") or ""),
+                    "summary": _public_learning_text(
+                        attachment.get("visual_summary") or attachment.get("caption_text") or attachment.get("ocr_text"),
+                        limit=240,
+                    ),
+                }
+            )
+    return rows[:12]
+
+
 def _source_image_roles(step: dict[str, Any], source_chunks: list[dict[str, Any]]) -> list[str]:
     requirements = step.get("evidence_requirements") if isinstance(step.get("evidence_requirements"), dict) else {}
     roles = _unique_strings(requirements.get("image_roles") if isinstance(requirements.get("image_roles"), list) else [], limit=80)
@@ -1194,6 +1232,7 @@ def build_ops_learning_chunks(
                 "next_guide": step.get("next_guide") if isinstance(step.get("next_guide"), dict) else None,
                 "query_variants": _query_variants_for_step(guide, step, terms),
                 "image_evidence_texts": _source_image_texts(source_chunks),
+                "image_evidence_assets": _source_image_assets(source_chunks),
                 "quality": step.get("quality") if isinstance(step.get("quality"), dict) else {"status": "draft", "needs_review": []},
             }
             learning_chunk["embedding_text"] = _learning_embedding_text(learning_chunk)
