@@ -3247,6 +3247,21 @@ export default function WorkspacePage() {
     () => [...messages].reverse().find((message) => message.role === 'assistant') ?? null,
     [messages],
   );
+  const visibleMessages = useMemo(
+    () => messages.filter((message) => (
+      message.role !== 'assistant'
+      || message.content.trim()
+      || !isSending
+    )),
+    [isSending, messages],
+  );
+  const showThinkingIndicator = useMemo(() => {
+    if (!isSending) {
+      return false;
+    }
+    const lastMessage = messages[messages.length - 1];
+    return !lastMessage || lastMessage.role !== 'assistant' || !lastMessage.content.trim();
+  }, [isSending, messages]);
   const activeBookSlug = useMemo(() => {
     if (preview.kind === 'viewer' && preview.meta?.book_slug) {
       return preview.meta.book_slug;
@@ -4162,7 +4177,7 @@ export default function WorkspacePage() {
                     )}
                   </div>
                 )}
-                {messages.map((message) => (
+                {visibleMessages.map((message) => (
                   <div key={message.id} className={`message-row ${message.role}`}>
                     <div className="message-bubble glass-panel">
                       <div className="message-content">
@@ -4319,7 +4334,7 @@ export default function WorkspacePage() {
                   </div>
                 ))}
 
-                {isSending && <ThinkingIndicator />}
+                {showThinkingIndicator && <ThinkingIndicator />}
 
                 <div ref={scrollAnchorRef} />
               </div>
