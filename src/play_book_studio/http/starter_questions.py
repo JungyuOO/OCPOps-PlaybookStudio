@@ -1,4 +1,4 @@
-"""Studio starter question payloads derived from runtime manifests."""
+﻿"""Studio starter question payloads derived from runtime manifests."""
 
 from __future__ import annotations
 
@@ -42,9 +42,9 @@ STARTER_CATEGORY_RULES: tuple[StarterCategoryRule, ...] = (
 )
 
 STARTER_GROUPS = (
-    {"key": "faq", "title": "자주 묻는 질문", "description": "공식 문서 fast path"},
-    {"key": "learning", "title": "학습용 단계별 질문", "description": "Install부터 순서대로"},
-    {"key": "operations", "title": "실운영 질문", "description": "Study-docs 기준"},
+    {"key": "faq", "title": "자주 묻는 질문", "description": "공식 문서 기반 시작 질문"},
+    {"key": "learning", "title": "단계별 학습 질문", "description": "OCP를 처음 익히는 흐름"},
+    {"key": "operations", "title": "실운영 문서 질문", "description": "KMSC 운영 문서 기반 질문"},
 )
 
 LEARNING_TARGET_BOOK_SLUGS: dict[str, str] = {
@@ -250,16 +250,15 @@ def _official_faq_questions_from_db(database_url: str) -> list[dict[str, Any]]:
 def _official_faq_query(rule: StarterCategoryRule, title: str) -> str:
     clean_title = _clean_title(title)
     templates = {
-        "day2": "{title} 문서 기준으로 설치 후 구성에서 먼저 확인할 설정과 명령은 뭐야?",
-        "operations": "{title} 문서 기준으로 운영 상태를 점검할 때 먼저 볼 리소스와 명령은 뭐야?",
-        "storage": "{title} 문서 기준으로 스토리지나 백업 문제를 확인할 때 어떤 상태값과 명령부터 보면 돼?",
-        "security": "{title} 문서 기준으로 권한, 인증서, 보안 설정을 점검할 때 먼저 확인할 항목은 뭐야?",
-        "networking": "{title} 문서 기준으로 Route, Ingress, DNS 연결 문제를 진단할 때 어떤 순서로 보면 돼?",
-        "troubleshooting": "{title} 문서 기준으로 장애를 좁힐 때 먼저 확인할 증상, 로그, 명령은 뭐야?",
+        "day2": "{title} 문서를 기준으로 설치 후 구성에서 먼저 확인할 설정과 명령어는 뭐야?",
+        "operations": "{title} 문서를 기준으로 운영 상태를 볼 때 먼저 확인할 리소스와 명령어는 뭐야?",
+        "storage": "{title} 문서를 기준으로 스토리지나 백업 문제를 확인할 때 어떤 상태값과 명령어부터 보면 돼?",
+        "security": "{title} 문서를 기준으로 권한, 인증, 보안 설정에서 먼저 확인할 항목은 뭐야?",
+        "networking": "{title} 문서를 기준으로 Route, Ingress, DNS 연결 문제를 어떤 순서로 보면 돼?",
+        "troubleshooting": "{title} 문서를 기준으로 장애를 좁힐 때 먼저 확인할 증상, 로그, 명령어는 뭐야?",
     }
-    template = templates.get(rule.key, "{title} 문서 기준으로 먼저 확인할 항목과 명령은 뭐야?")
+    template = templates.get(rule.key, "{title} 문서를 기준으로 먼저 확인할 항목과 명령어는 뭐야?")
     return template.format(title=clean_title)
-
 
 def _entry_haystack(entry: dict[str, Any]) -> str:
     values: list[str] = []
@@ -426,7 +425,6 @@ def _ops_chunk_question(chunk: dict[str, Any]) -> str:
     if goal:
         return f"{title}에서 {goal} 기준으로 먼저 확인할 것은 뭐야?"
     return f"{title}에서 먼저 확인할 운영 기준은 뭐야?"
-
 
 def _operations_questions(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
     chunks, source_label = _load_ops_learning_chunks_payload(root_dir)
