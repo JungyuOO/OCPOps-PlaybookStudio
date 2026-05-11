@@ -58,5 +58,7 @@ FROM nginx:1.27-alpine AS web
 
 COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=frontend-build /app/apps/web/dist /usr/share/nginx/html
+RUN chgrp -R 0 /var/cache/nginx /var/run /var/log/nginx /etc/nginx/conf.d /usr/share/nginx/html \
+    && chmod -R g=u /var/cache/nginx /var/run /var/log/nginx /etc/nginx/conf.d /usr/share/nginx/html
 
-EXPOSE 80
+EXPOSE 8080

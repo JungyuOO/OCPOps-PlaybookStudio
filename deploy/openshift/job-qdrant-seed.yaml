@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: qdrant-seed
+  namespace: pbs-ocpops
+  labels:
+    app.kubernetes.io/name: qdrant-seed
+    app.kubernetes.io/component: seed
+    app.kubernetes.io/part-of: playbookstudio
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: qdrant-seed
+        app.kubernetes.io/component: seed
+        app.kubernetes.io/part-of: playbookstudio
+    spec:
+      restartPolicy: Never
+      serviceAccountName: playbookstudio
+      containers:
+        - name: qdrant-seed
+          image: ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: playbookstudio-config
+          command:
+            - python
+            - -m
+            - play_book_studio.cli
+            - course-qdrant-upsert
+            - --root-dir
+            - /app
+            - --course-dir
+            - /app/corpus/sources/kmsc/parsed-preview/course_pbs
