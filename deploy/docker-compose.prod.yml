@@ -58,6 +58,8 @@ services:
       - ../storage:/app/storage
       - ../reports:/app/reports
       - app_tmp:/app/tmp
+    ports:
+      - "${TERMINAL_WS_BIND:-0.0.0.0:8770}:8770"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=5)"]
       interval: 15s

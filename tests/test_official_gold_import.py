@@ -128,6 +128,22 @@ def test_official_gold_import_derives_section_metadata_without_body_prefixes():
     assert _normalized_chunk_text(row) == "Route body text."
 
 
+def test_official_gold_import_normalizes_internal_code_markup():
+    row = {
+        "book_slug": "cli_tools",
+        "book_title": "CLI tools",
+        "section": "1.1 Check namespaces",
+        "text": 'CLI tools\n\n[CODE language="shell-session"]\n$ oc get ns\n[/CODE]',
+    }
+
+    normalized = _normalized_chunk_text(row)
+
+    assert "[CODE" not in normalized
+    assert "[/CODE]" not in normalized
+    assert "```shell" in normalized
+    assert "$ oc get ns" in normalized
+
+
 def test_official_gold_import_adds_learning_metadata_to_source_and_chunks():
     grouped = {
         "openshift:overview": [

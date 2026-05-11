@@ -11,8 +11,9 @@ import uuid
 from dataclasses import dataclass
 
 from .models import ChunkRecord, NormalizedSection
+from .internal_markup import render_internal_markup_for_retrieval
 from .sentence_model import load_sentence_model
-from play_book_studio.config.corpus_policy import chunk_profile_for_book_slug
+from play_book_studio.config.corpus_policy import chunk_profile_for_section
 from play_book_studio.config.settings import Settings
 
 
@@ -170,12 +171,18 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
     chunks: list[ChunkRecord] = []
 
     for section in sections:
-        chunk_size, chunk_overlap = chunk_profile_for_book_slug(
+        chunk_size, chunk_overlap = chunk_profile_for_section(
             section.book_slug,
+            semantic_role=section.semantic_role,
+            has_cli_commands=bool(section.cli_commands),
+            has_error_strings=bool(section.error_strings),
+            block_kinds=section.block_kinds,
             default_chunk_size=settings.chunk_size,
             default_chunk_overlap=settings.chunk_overlap,
         )
         prefix = _section_prefix(section)
+        prefix_tokens = token_counter.count(prefix)
+        body_chunk_size = max(48, chunk_size - prefix_tokens)
         blocks = _split_blocks(section.text)
         current_blocks: list[str] = []
         current_tokens = 0
@@ -186,7 +193,7 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
             if not current_blocks:
                 return
             body = "\n\n".join(current_blocks).strip()
-            final_text = f"{prefix}{body}".strip()
+            final_text = render_internal_markup_for_retrieval(f"{prefix}{body}".strip())
             token_count = token_counter.count(final_text)
             raw_key = f"{section.book_slug}:{section.anchor}:{ordinal}:{final_text}"
             chunk_id = str(uuid.uuid5(uuid.NAMESPACE_URL, raw_key))
@@ -266,20 +273,20 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
 
         for block in blocks:
             block_tokens = token_counter.count(block)
-            if block_tokens > chunk_size and block.startswith("[CODE]"):
+            if block_tokens > body_chunk_size and block.startswith("[CODE"):
                 finalize()
                 current_blocks = [block]
                 current_tokens = block_tokens
                 finalize()
                 continue
-            if block_tokens > chunk_size:
+            if block_tokens > body_chunk_size:
                 finalize()
-                for piece in _hard_split_text(block, token_counter, chunk_size):
+                for piece in _hard_split_text(block, token_counter, body_chunk_size):
                     current_blocks = [piece]
                     current_tokens = token_counter.count(piece)
                     finalize()
                 continue
-            if current_tokens and current_tokens + block_tokens > chunk_size:
+            if current_tokens and current_tokens + block_tokens > body_chunk_size:
                 finalize()
             current_blocks.append(block)
             current_tokens += block_tokens

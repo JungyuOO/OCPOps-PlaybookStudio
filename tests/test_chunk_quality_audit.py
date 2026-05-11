@@ -39,7 +39,53 @@ def test_chunk_quality_audit_counts_command_and_markup_issues() -> None:
     assert payload["issue_counts"]["raw_code_markup"] == 1
     assert payload["issue_counts"]["code_plus_navigation"] == 1
     assert payload["issue_counts"]["oversized_chunk"] == 1
+    assert "oversized_char_chunk" not in payload["issue_counts"]
     assert payload["issue_samples"]["raw_code_markup"][0]["chunk_id"] == "cmd-1"
+
+
+def test_chunk_quality_audit_counts_undersized_and_char_oversized_chunks() -> None:
+    payload = build_chunk_quality_audit(
+        [
+            {
+                "chunk_id": "small-1",
+                "text": "oc get ns",
+                "token_count": 3,
+                "chunk_type": "command",
+                "cli_commands": ["oc get ns"],
+                "display_language": "ko",
+            },
+            {
+                "chunk_id": "char-big-1",
+                "text": "가" * 2700,
+                "token_count": 100,
+                "chunk_type": "concept",
+                "cli_commands": [],
+                "display_language": "ko",
+            },
+        ]
+    )
+
+    assert payload["issue_counts"]["undersized_chunk"] == 1
+    assert payload["issue_counts"]["oversized_char_chunk"] == 1
+
+
+def test_chunk_quality_audit_reads_course_index_text_schema() -> None:
+    payload = build_chunk_quality_audit(
+        [
+            {
+                "chunk_id": "course-1",
+                "chunk_kind": "design_summary",
+                "index_texts": {
+                    "dense_text": "DSGN-001 서비스 구성도\noc get pods -n demo\nOpenShift 라우터 구성",
+                },
+            }
+        ]
+    )
+
+    assert payload["chunk_count"] == 1
+    assert payload["char_count"]["max"] > 0
+    assert payload["chunk_type_counts"]["design_summary"] == 1
+    assert payload["command_chunks"]["count"] == 1
 
 
 def test_v004_readable_eval_manifests_are_valid_jsonl() -> None:

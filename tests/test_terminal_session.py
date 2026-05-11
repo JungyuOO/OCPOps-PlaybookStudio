@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from play_book_studio.db.terminal_learning_repository import CommandCheck, evaluate_command_check_output
 from play_book_studio.http.terminal_session import TerminalSessionConfig, resolve_shell_args
@@ -61,3 +66,30 @@ def test_evaluate_command_check_output_requires_scoped_stdout_match():
     assert pending.matched is False
     assert passed.status == "passed"
     assert passed.matched is True
+
+
+def test_terminal_entrypoint_does_not_fallback_to_local_shell_without_cluster_config():
+    bash_path = shutil.which("bash")
+    if bash_path is None:
+        pytest.skip("bash is not available in this environment")
+    if "system32" in bash_path.lower().replace("/", "\\"):
+        pytest.skip("Windows WSL shim bash cannot read native workspace paths")
+    script_path = REPO_ROOT / "deploy" / "scripts" / "terminal-entrypoint.sh"
+    env = os.environ.copy()
+    env.pop("OCP_API_BASE_URL", None)
+    env.pop("OCP_API_TOKEN", None)
+
+    result = subprocess.run(
+        [bash_path, str(script_path)],
+        input="echo SHOULD_NOT_RUN\n",
+        text=True,
+        capture_output=True,
+        env=env,
+        timeout=5,
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 1
+    assert "Local shell fallback is disabled" in output
+    assert "클러스터 재연결이 필요합니다" in output
+    assert "SHOULD_NOT_RUN" not in output

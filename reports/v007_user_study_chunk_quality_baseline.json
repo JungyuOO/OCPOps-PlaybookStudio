@@ -1,0 +1,211 @@
+{
+  "schema": "pbs_chunk_quality_audit_v1",
+  "chunk_count": 523,
+  "token_count": {
+    "p50": 25,
+    "p75": 42,
+    "p90": 62,
+    "p95": 72,
+    "max": 125
+  },
+  "char_count": {
+    "p50": 171,
+    "p90": 423,
+    "max": 623
+  },
+  "section_depth": {
+    "p50": 0,
+    "p90": 0,
+    "max": 0
+  },
+  "command_chunks": {
+    "count": 125,
+    "ratio": 0.239,
+    "command_count_p90": 2,
+    "command_count_max": 6
+  },
+  "language": {
+    "hangul_ratio_p50": 0.2162,
+    "hangul_ratio_p10": 0.0995
+  },
+  "chunk_type_counts": {
+    "chapter_slide_detail": 25,
+    "chapter_summary": 6,
+    "design_summary": 52,
+    "integration_scenario_summary": 5,
+    "integration_slide_detail": 22,
+    "perf_section_summary": 13,
+    "perf_slide_detail": 40,
+    "test_case_expected": 90,
+    "test_case_method": 90,
+    "test_case_summary": 90,
+    "test_case_verification": 90
+  },
+  "top_books": {
+    "unknown": 523
+  },
+  "issue_counts": {
+    "command_dense_chunk": 13,
+    "undersized_chunk": 160
+  },
+  "issue_rates": {
+    "command_dense_chunk": 0.0249,
+    "undersized_chunk": 0.3059
+  },
+  "issue_samples": {
+    "undersized_chunk": [
+      {
+        "chunk_id": "architecture--DSGN-005-003--default--none--design-summary--summary--a339ccbe",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "design_summary",
+        "token_count": 0,
+        "reason": "undersized_chunk",
+        "preview": "DSGN-005-003 OCP 사용 네트워크 장비 구분. architecture 단계의 design_summary 청크. OCP 사용 네트워크 장비 구분 DSGN-005-003"
+      },
+      {
+        "chunk_id": "architecture--DSGN-005-004--default--none--design-summary--summary--bdabcfa1",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "design_summary",
+        "token_count": 0,
+        "reason": "undersized_chunk",
+        "preview": "DSGN-005-004 OCP 네트워크 서비스 흐름도. architecture 단계의 design_summary 청크. DSGN-005-004 OCP 네트워크 서비스 흐름도"
+      },
+      {
+        "chunk_id": "architecture--DSGN-005-005--default--none--design-summary--summary--7b920437",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "design_summary",
+        "token_count": 0,
+        "reason": "undersized_chunk",
+        "preview": "DSGN-005-005 전체 네트워크 구성도. architecture 단계의 design_summary 청크. DSGN-005-005 전체 네트워크 구성도 네트워크/영역: DMZ."
+      },
+      {
+        "chunk_id": "architecture--DSGN-005-006--default--none--design-summary--summary--c8d1c7e2",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "design_summary",
+        "token_count": 0,
+        "reason": "undersized_chunk",
+        "preview": "DSGN-005-006 노드 구성도. architecture 단계의 design_summary 청크. DSGN-005-006 노드 구성도 주요 기술: HAProxy. 네트워크/영역: DMZ, 외부, 내부."
+      },
+      {
+        "chunk_id": "architecture--DSGN-005-016--default--none--design-summary--summary--85ea5d11",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "design_summary",
+        "token_count": 0,
+        "reason": "undersized_chunk",
+        "preview": "DSGN-005-016 가상 및 물리 노드 네트워크 및 도메인. architecture 단계의 design_summary 청크. 가상서버 DSGN-005-016"
+      },
+      {
+        "chunk_id": "architecture--DSGN-005-018--default--none--design-summary--summary--6b434d7c",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "design_summary",
+        "token_count": 0,
+        "reason": "undersized_chunk",
+        "preview": "DSGN-005-018 가상 및 물리 노드 네트워크 및 도메인. architecture 단계의 design_summary 청크. 물리서버 DSGN-005-018"
+      },
+      {
+        "chunk_id": "architecture--DSGN-005-019--default--none--design-summary--summary--d16a72b3",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "design_summary",
+        "token_count": 0,
+        "reason": "undersized_chunk",
+        "preview": "DSGN-005-019 가상 및 물리 노드 네트워크 및 도메인. architecture 단계의 design_summary 청크. 물리서버 DSGN-005-019"
+      },
+      {
+        "chunk_id": "architecture--DSGN-005-020--default--none--design-summary--summary--875b055d",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "design_summary",
+        "token_count": 0,
+        "reason": "undersized_chunk",
+        "preview": "DSGN-005-020 Node별 용량 산정. architecture 단계의 design_summary 청크. DSGN-005-020 Node별 용량 산정"
+      }
+    ],
+    "command_dense_chunk": [
+      {
+        "chunk_id": "unit-test--TEST-UN-OCP-08-02--plan--none--test-case-summary--summary--e428f3e2",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "test_case_summary",
+        "token_count": 0,
+        "reason": "command_dense_chunk",
+        "preview": "TEST-UN-OCP-08-02 1. 구성 및 컴포넌트 기능 확인. unit_test 단계의 test_case_summary 청크. Master API 구성 Master API 서비스 확인 TEST-UN-OCP-08-02 oc get co로 ClusterOperator의 모든 컴포넌트의 AVAILABLE가 True kube-apiserver-* 파드가 ready 1/1 default 네임스페이스의 kubernetes endpo"
+      },
+      {
+        "chunk_id": "unit-test--TEST-UN-OCP-08-04--plan--none--test-case-summary--summary--0d7798fe",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "test_case_summary",
+        "token_count": 0,
+        "reason": "command_dense_chunk",
+        "preview": "TEST-UN-OCP-08-04 1. 구성 및 컴포넌트 기능 확인. unit_test 단계의 test_case_summary 청크. Monitoring 서비스 Prometheus 서비스 확인 TEST-UN-OCP-08-04 ClusterOperator의 monitoring AVAILABLE가 True Prometheus 파드가 Running Prometheus 서비스 확인 Prometheus pvc가 Bound # oc get"
+      },
+      {
+        "chunk_id": "unit-test--TEST-UN-OCP-08-04--plan--none--test-case-ver-045909--verification--5629b623",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "test_case_verification",
+        "token_count": 0,
+        "reason": "command_dense_chunk",
+        "preview": "TEST-UN-OCP-08-04 TEST-UN-OCP-08-04 verification. unit_test 단계의 test_case_verification 청크. # oc get co monitoring ClusterOperator 확인 Prometheus Pod/Service/Endpoint 확인 # oc get pods -n openshift-monitoring -l app.kubernetes.io/name=promethe"
+      },
+      {
+        "chunk_id": "unit-test--TEST-UN-OCP-08-05--plan--none--test-case-summary--summary--22b1cbf5",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "test_case_summary",
+        "token_count": 0,
+        "reason": "command_dense_chunk",
+        "preview": "TEST-UN-OCP-08-05 1. 구성 및 컴포넌트 기능 확인. unit_test 단계의 test_case_summary 청크. Monitoring 서비스 AlertManager 서비스 확인 TEST-UN-OCP-08-05 ClusterOperator의 monitoring 상태 정상 Alertmanager 파드가 Running Alertmanager 서비스 확인 Alertmanager pvc가 Bound # oc get c"
+      },
+      {
+        "chunk_id": "unit-test--TEST-UN-OCP-08-05--plan--none--test-case-ver-045909--verification--a255141f",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "test_case_verification",
+        "token_count": 0,
+        "reason": "command_dense_chunk",
+        "preview": "TEST-UN-OCP-08-05 TEST-UN-OCP-08-05 verification. unit_test 단계의 test_case_verification 청크. # oc get co monitoring ClusterOperator 확인 Alertmanager StatefulSet/Pod/Service/Endpoint 확인 # oc -n openshift-monitoring get statefulsets.apps alertma"
+      },
+      {
+        "chunk_id": "unit-test--TEST-UN-OCP-08-06--plan--none--test-case-summary--summary--2dfada56",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "test_case_summary",
+        "token_count": 0,
+        "reason": "command_dense_chunk",
+        "preview": "TEST-UN-OCP-08-06 1. 구성 및 컴포넌트 기능 확인. unit_test 단계의 test_case_summary 청크. Logging 서비스 Loki 서비스 확인 TEST-UN-OCP-08-06 LokiStack의 파드가 Running LokiStack서비스 확인 LokiStack 엔드포인트 확인 LokiStack 라우트 확인(도메인/연결된 서비스이름) LokiStack CR/Pod/Service/Endpoint/"
+      },
+      {
+        "chunk_id": "unit-test--TEST-UN-OCP-08-06--plan--none--test-case-ver-045909--verification--3821bb7a",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "test_case_verification",
+        "token_count": 0,
+        "reason": "command_dense_chunk",
+        "preview": "TEST-UN-OCP-08-06 TEST-UN-OCP-08-06 verification. unit_test 단계의 test_case_verification 청크. LokiStack CR/Pod/Service/Endpoint/Route 확인 # oc -n openshift-logging get lokistack # oc -n openshift-logging get pods -l app.kubernetes.io/name=lokis"
+      },
+      {
+        "chunk_id": "unit-test--TEST-UN-OCP-08-07--plan--none--test-case-summary--summary--ce8971f4",
+        "book_slug": "",
+        "section": "",
+        "chunk_type": "test_case_summary",
+        "token_count": 0,
+        "reason": "command_dense_chunk",
+        "preview": "TEST-UN-OCP-08-07 1. 구성 및 컴포넌트 기능 확인. unit_test 단계의 test_case_summary 청크. ServieMesh 서비스 ServiceMesh 서비스 확인 TEST-UN-OCP-08-07 istio-system의 SMCP리소스 Ready 가 8/8 istiod를 적용할 네임스페이스에 sidecar 적용 확인 istio ingress endpoints 확인 # oc -n istio-syste"
+      }
+    ]
+  },
+  "decision": {
+    "recommendation": "keep_chunking_stable",
+    "reason": "Use retrieval/eval failures to target metadata or child chunk changes; do not reimport the corpus until raw markup, oversized, or mixed-procedure evidence crosses the threshold."
+  },
+  "source_path": "corpus\\sources\\kmsc\\parsed-preview\\course_pbs\\chunks.jsonl",
+  "source_label": "user-study-course-pbs"
+}

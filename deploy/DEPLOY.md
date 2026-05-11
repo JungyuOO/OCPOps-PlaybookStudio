@@ -110,7 +110,12 @@ docker compose -f deploy/docker-compose.prod.yml --env-file .env.production ps
 ## Notes
 
 - `web` is exposed by `WEB_BIND`, default `0.0.0.0:8080`.
+- Terminal WebSocket is exposed by `TERMINAL_WS_BIND`, default `0.0.0.0:8770`.
 - Qdrant binds to localhost by default for safety.
 - The app uses Qdrant over the internal Docker network: `http://qdrant:6333`.
 - The production app container no longer mounts `corpus/`; that directory is
   only a seed/import input.
+- For the cywell-host deployment, copy `.env.production.example` to
+  `.env.production`, keep `PLAYBOOKSTUDIO_PUBLIC_URL=http://192.168.119.23:8080`,
+  and replace only secrets such as `POSTGRES_PASSWORD`, `DATABASE_URL`, and
+  `OCP_API_TOKEN`.

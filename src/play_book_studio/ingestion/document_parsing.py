@@ -321,7 +321,7 @@ def _detect_zip_document_format(path: Path, suffix: str) -> DocumentFormat:
 def build_document_chunks(
     parsed: ParsedUploadDocument,
     *,
-    max_chars: int = 1800,
+    max_chars: int = 1400,
     overlap_blocks: int = 1,
 ) -> tuple[DocumentChunk, ...]:
     chunks: list[DocumentChunk] = []
@@ -344,13 +344,20 @@ def build_document_chunks(
         asset_ids = tuple(dict.fromkeys(asset_id for block in current for asset_id in block.asset_ids))
         block_ordinals = tuple(block.ordinal for block in current)
         chunk_key = f"{parsed.document_id}:{ordinal}"
+        stripped_markdown = _strip_markdown(markdown)
+        section_context = " > ".join(part for part in section_path if part)
+        embedding_text = (
+            f"{section_context}\n\n{stripped_markdown}"
+            if section_context and section_context not in stripped_markdown
+            else stripped_markdown
+        )
         chunks.append(
             DocumentChunk(
                 chunk_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{chunk_key}:{markdown}")),
                 chunk_key=chunk_key,
                 ordinal=ordinal,
                 markdown=markdown,
-                embedding_text=_strip_markdown(markdown),
+                embedding_text=embedding_text,
                 section_path=section_path,
                 section_number=section_block.section_number if section_block else "",
                 heading_title=section_block.heading_title if section_block else "",
@@ -363,6 +370,8 @@ def build_document_chunks(
                     "document_format": parsed.document_format,
                     "page_start": min(page_numbers) if page_numbers else None,
                     "page_end": max(page_numbers) if page_numbers else None,
+                    "chunk_char_count": len(markdown),
+                    "block_count": len(current),
                 },
             )
         )
