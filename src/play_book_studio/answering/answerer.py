@@ -34,6 +34,7 @@ from play_book_studio.retrieval.query import (
     is_explainer_query,
     is_generic_intro_query,
 )
+from play_book_studio.retrieval.query_understanding import has_beginner_troubleshooting_intent
 
 from .answer_text_commands import (
     build_deployment_scaling_answer,
@@ -299,6 +300,24 @@ def _is_low_confidence_retrieval(
         or is_explainer_query(query)
         or _is_guided_learning_question(query)
         or _is_supported_ops_learning_question(query)
+    ):
+        return False
+    if has_beginner_troubleshooting_intent(query) and any(
+        token in citation_haystack
+        for token in (
+            "troubleshooting",
+            "events",
+            "describe",
+            "logs",
+            "secret",
+            "configmap",
+            "configuration",
+            "pod",
+            "workloads",
+            "applications",
+            "상태",
+            "오류",
+        )
     ):
         return False
     coverage = _citation_token_coverage(query, citations)

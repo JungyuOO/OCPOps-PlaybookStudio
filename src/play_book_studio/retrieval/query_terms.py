@@ -11,6 +11,7 @@ from .text_utils import (
 from .query_terms_core import append_core_query_terms
 from .query_terms_etcd import append_etcd_query_terms
 from .query_terms_operations import append_operation_query_terms
+from .query_understanding import understand_query
 
 
 _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
@@ -69,6 +70,13 @@ _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
     "chroot",
     "chroot /host",
     "bootstrap-complete",
+    "configmap",
+    "configmaps",
+    "secret",
+    "secrets",
+    "troubleshooting",
+    "events",
+    "condition",
 }
 
 
@@ -106,6 +114,7 @@ def normalize_query(query: str) -> str:
         return normalized
 
     terms: list[str] = []
+    terms.extend(understand_query(normalized).retrieval_terms)
     append_core_query_terms(normalized, terms)
     append_operation_query_terms(normalized, terms)
     append_etcd_query_terms(normalized, terms)

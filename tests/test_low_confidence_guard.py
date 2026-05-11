@@ -104,6 +104,26 @@ def test_low_confidence_guard_allows_ocp_install_overview_grounding() -> None:
     )
 
 
+def test_low_confidence_guard_allows_beginner_secret_config_troubleshooting_grounding() -> None:
+    assert not _is_low_confidence_retrieval(
+        query="Secret config error keeps happening",
+        citations=[
+            _citation(
+                book_slug="applications",
+                section="Troubleshooting application configuration",
+                excerpt="Use oc describe pod to inspect events and verify Secret or ConfigMap volume and environment variable configuration.",
+            )
+        ],
+        selected_hits=[
+            {
+                "fused_score": 0.03,
+                "pre_rerank_fused_score": 0.02,
+                "vector_score": 0.02,
+            }
+        ],
+    )
+
+
 def test_low_confidence_followups_use_retrieval_hits_without_overlap() -> None:
     session = ChatSession(session_id="s1", mode="ops")
     result = AnswerResult(
