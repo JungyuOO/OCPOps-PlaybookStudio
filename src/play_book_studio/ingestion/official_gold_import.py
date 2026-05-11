@@ -25,6 +25,7 @@ from play_book_studio.ingestion.learning_metadata import (
     build_learning_book_index,
     infer_category_key,
 )
+from play_book_studio.ingestion.internal_markup import render_internal_markup_for_retrieval
 
 _SECTION_NUMBER_RE = re.compile(r"^\s*((?:\d+\.)+\d+|\d+)(?:[.)]|\.?)\s+(.+?)\s*$")
 
@@ -322,7 +323,7 @@ def _normalized_chunk_text(row: dict[str, Any]) -> str:
         lines.pop(0)
     while lines and not lines[0].strip():
         lines.pop(0)
-    return "\n".join(lines).strip() or text
+    return render_internal_markup_for_retrieval("\n".join(lines).strip() or text)
 
 
 def _chunk_metadata(row: dict[str, Any]) -> dict[str, Any]:

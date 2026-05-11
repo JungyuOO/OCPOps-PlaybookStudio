@@ -1,4 +1,4 @@
-# PlayBookStudio Server Deployment
+﻿# PlayBookStudio Server Deployment
 
 This deployment keeps application images separate from runtime data.
 The server must have Docker Compose, the repository files, PostgreSQL,
@@ -107,10 +107,83 @@ docker compose -f deploy/docker-compose.prod.yml --env-file .env.production up -
 docker compose -f deploy/docker-compose.prod.yml --env-file .env.production ps
 ```
 
+## Image-Only Deployment
+
+Use this path when the server must not clone or build the repository. The app
+image includes `/app/corpus`, so seed jobs can import official and course
+documents from the image itself.
+
+Build and push images from a developer or CI machine:
+
+```powershell
+docker build -f deploy/Dockerfile --target app -t ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev .
+docker build -f deploy/Dockerfile --target web -t ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev .
+docker push ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev
+docker push ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev
+```
+
+Or publish from GitHub Actions without a local GitHub token:
+
+```text
+Actions > Publish Docker Images > Run workflow > tag: dev
+```
+
+The workflow pushes both images to GHCR:
+
+```text
+ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev
+ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev
+```
+
+On the server, place only these files in a deployment directory:
+
+```text
+docker-compose.image.yml
+.env
+```
+
+Set the image names and secrets in `.env`:
+
+```env
+PLAYBOOKSTUDIO_APP_IMAGE=ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev
+PLAYBOOKSTUDIO_WEB_IMAGE=ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev
+PLAYBOOKSTUDIO_PUBLIC_URL=http://192.168.119.23:8080
+TERMINAL_PUBLIC_WS_URL=ws://192.168.119.23:8770
+OCP_API_TOKEN=replace-with-remote-sno-token
+```
+
+Pull and start database services:
+
+```bash
+docker compose -f docker-compose.image.yml --env-file .env pull
+docker compose -f docker-compose.image.yml --env-file .env up -d postgres qdrant
+```
+
+Run one-shot corpus seed jobs:
+
+```bash
+docker compose -f docker-compose.image.yml --env-file .env --profile seed up official-corpus-seed course-runtime-seed qdrant-seed
+```
+
+Start app and web:
+
+```bash
+docker compose -f docker-compose.image.yml --env-file .env up -d app web
+docker compose -f docker-compose.image.yml --env-file .env ps
+```
+
 ## Notes
 
 - `web` is exposed by `WEB_BIND`, default `0.0.0.0:8080`.
+- Terminal WebSocket is exposed by `TERMINAL_WS_BIND`, default `0.0.0.0:8770`.
 - Qdrant binds to localhost by default for safety.
 - The app uses Qdrant over the internal Docker network: `http://qdrant:6333`.
 - The production app container no longer mounts `corpus/`; that directory is
   only a seed/import input.
+- The image-only app container includes `corpus/` at `/app/corpus`; do not put
+  `.env` or other secret files in the image.
+- For the cywell-host deployment, copy `.env.production.example` to
+  `.env.production`, keep `PLAYBOOKSTUDIO_PUBLIC_URL=http://192.168.119.23:8080`,
+  and replace only secrets such as `POSTGRES_PASSWORD`, `DATABASE_URL`, and
+  `OCP_API_TOKEN`.
+

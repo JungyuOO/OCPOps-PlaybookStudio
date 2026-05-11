@@ -41,6 +41,9 @@ class FakeCursor:
         return (self.return_ids.pop(0),)
 
     def fetchall(self):
+        last_sql = self.calls[-1][0] if self.calls else ""
+        if "FROM document_sources ds" in last_sql:
+            return []
         return [
             (
                 "99999999-9999-9999-9999-999999999999",
@@ -154,6 +157,16 @@ def test_build_parsed_document_rows_maps_parser_output_to_schema_rows():
     assert rows.chunks[0]["heading_title"] == "Architecture"
     assert rows.chunks[0]["source_anchor"] == "architecture"
     assert rows.chunks[0]["token_count"] > 0
+
+
+def test_build_document_chunks_keeps_section_context_in_embedding_text_after_split():
+    parsed = _parsed_document()
+    chunks = build_document_chunks(parsed, max_chars=45, overlap_blocks=0)
+
+    assert len(chunks) >= 2
+    assert all(chunk.section_path == ("Architecture",) for chunk in chunks)
+    assert all(chunk.embedding_text.startswith("Architecture") for chunk in chunks)
+    assert all(chunk.metadata["chunk_char_count"] > 0 for chunk in chunks)
 
 
 def test_build_parsed_document_rows_supports_shared_official_scope():

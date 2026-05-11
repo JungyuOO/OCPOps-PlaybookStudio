@@ -12,6 +12,13 @@ print_login_log_tail() {
   fi
 }
 
+fail_cluster_terminal() {
+  echo "Cluster terminal connection is not ready."
+  echo "클러스터 재연결이 필요합니다. OpenShift API URL과 토큰을 갱신한 뒤 Terminal Session을 다시 연결하세요."
+  echo "Local shell fallback is disabled. This terminal opens only after a successful OpenShift CLI login."
+  exit 1
+}
+
 classify_login_failure() {
   if [ ! -f "${login_log}" ]; then
     echo "OpenShift CLI login failure type: unknown (login log missing)"
@@ -62,16 +69,17 @@ if command -v oc >/dev/null 2>&1 && [ -n "${OCP_API_BASE_URL:-}" ] && [ -n "${OC
     if [ -n "${OCP_DEFAULT_NAMESPACE:-}" ]; then
       oc project "${OCP_DEFAULT_NAMESPACE}" >/tmp/playbookstudio-oc-project.log 2>&1 || true
     fi
+    exec /bin/bash -i
   else
     echo "OpenShift CLI login failed for ${OCP_API_BASE_URL}."
     classify_login_failure
     print_login_log_tail
+    fail_cluster_terminal
   fi
 else
   echo "OpenShift CLI auto-login skipped. oc, OCP_API_BASE_URL, or OCP_API_TOKEN is missing."
   command -v oc >/dev/null 2>&1 || echo "Missing: oc CLI"
   [ -n "${OCP_API_BASE_URL:-}" ] || echo "Missing: OCP_API_BASE_URL"
   [ -n "${OCP_API_TOKEN:-}" ] || echo "Missing: OCP_API_TOKEN"
+  fail_cluster_terminal
 fi
-
-exec /bin/bash -i
