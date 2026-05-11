@@ -23,6 +23,7 @@ v0.0.8은 RAG 품질 개선 자체보다 배포 재현성을 개선하는 버전
 - [x] official corpus seed job이 image 내부 `/app/corpus`를 읽도록 구성
 - [x] course/study corpus seed job이 image 내부 `/app/corpus`를 읽도록 구성
 - [x] Qdrant seed job이 image 내부 `/app/corpus`를 읽도록 구성
+- [x] course/study asset import가 image 내부 embedded corpus asset을 찾도록 보정
 - [x] Terminal WebSocket 8770 외부 노출 유지
 - [x] compose config 검증
 - [ ] 변경분 커밋 및 원격 push
@@ -262,11 +263,12 @@ docker compose -f docker-compose.image.yml --env-file .env up -d app web
 3. 서버는 repo clone 없이 compose/env만으로 image pull 배포가 가능하다.
 4. official corpus seed가 image 내부 `/app/corpus`를 사용한다.
 5. course/study seed가 image 내부 `/app/corpus`를 사용한다.
-6. Qdrant seed가 image 내부 `/app/corpus`를 사용한다.
-7. Terminal WebSocket 8770이 외부 노출된다.
-8. compose config 검증이 통과한다.
-9. 배포 문서에 build/push/server deploy 절차가 있다.
-10. v0.0.8 브랜치가 원격에 push되어 있다.
+6. course/study seed의 `data/course_pbs/assets/*` 참조가 embedded corpus asset으로 정상 import된다.
+7. Qdrant seed가 image 내부 `/app/corpus`를 사용한다.
+8. Terminal WebSocket 8770이 외부 노출된다.
+9. compose config 검증이 통과한다.
+10. 배포 문서에 build/push/server deploy 절차가 있다.
+11. v0.0.8 브랜치가 원격에 push되어 있다.
 
 ---
 
@@ -282,4 +284,6 @@ docker compose -f docker-compose.image.yml --env-file .env up -d app web
 - 2026-05-11: `.github/workflows/publish-images.yml`를 추가해 GHCR에 app/web image를 push하도록 구성했다.
 - 2026-05-11: `docker compose -f deploy/docker-compose.image.yml --env-file .env.production.example config --quiet` 통과.
 - 2026-05-11: `docker compose -f deploy/docker-compose.prod.yml --env-file .env.production.example config --quiet` 통과.
+- 2026-05-11: GHCR image 기반 서버 seed 중 `course-runtime-seed`가 청크의 legacy `data/course_pbs/assets/*` 경로 때문에 asset을 찾지 못하는 것을 확인했다.
+- 2026-05-11: `course-chunk-import`에서 legacy course asset 경로를 `/app/corpus/sources/kmsc/parsed-preview/course_pbs/assets/*`로 fallback 해석하도록 보정했다.
 

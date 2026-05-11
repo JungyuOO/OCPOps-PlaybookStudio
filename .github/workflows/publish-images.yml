@@ -10,7 +10,6 @@ on:
   push:
     branches:
       - dev
-      - feat/v0.0.8/image-based-deploy
     paths:
       - .github/workflows/publish-images.yml
       - deploy/Dockerfile
