@@ -281,6 +281,22 @@ def build_parser() -> argparse.ArgumentParser:
     course_chunk_import_parser.add_argument("--skip-manifest", action="store_true")
     course_chunk_import_parser.add_argument("--dry-run", action="store_true")
 
+    kmsc_course_import_parser = subparsers.add_parser(
+        "kmsc-course-import",
+        help="Import tracked KMSC course chunks into the shared study_docs document RAG",
+    )
+    kmsc_course_import_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    kmsc_course_import_parser.add_argument("--course-dir", type=Path, default=COURSE_PBS_DIR)
+    kmsc_course_import_parser.add_argument("--database-url", default="")
+    kmsc_course_import_parser.add_argument("--tenant-slug", default="public")
+    kmsc_course_import_parser.add_argument("--tenant-name", default="Public")
+    kmsc_course_import_parser.add_argument("--workspace-slug", default="default")
+    kmsc_course_import_parser.add_argument("--workspace-name", default="Default")
+    kmsc_course_import_parser.add_argument("--limit", type=int, default=0)
+    kmsc_course_import_parser.add_argument("--index", action="store_true")
+    kmsc_course_import_parser.add_argument("--collection", default="")
+    kmsc_course_import_parser.add_argument("--dry-run", action="store_true")
+
     course_qa_parser = subparsers.add_parser(
         "course-qa",
         help="Generate, quality-gate, and run Study-docs course chat QA cases",
@@ -1168,6 +1184,53 @@ def _resolve_course_asset_file(root_dir: Path, course_dir: Path, asset_path: str
     return None
 
 
+def _run_kmsc_course_import(args: argparse.Namespace) -> int:
+    from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
+    from play_book_studio.ingestion.kmsc_course_import import (
+        build_kmsc_course_import_plan,
+        import_kmsc_course_chunks,
+    )
+
+    root_dir = args.root_dir.resolve()
+    course_dir = args.course_dir
+    if not course_dir.is_absolute():
+        course_dir = root_dir / course_dir
+    course_dir = course_dir.resolve()
+    limit = max(0, int(args.limit or 0))
+    if args.dry_run:
+        print(json.dumps(build_kmsc_course_import_plan(course_dir, limit=limit), ensure_ascii=False, indent=2))
+        return 0
+
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        summary = import_kmsc_course_chunks(
+            connection,
+            course_dir=course_dir,
+            tenant_slug=args.tenant_slug,
+            tenant_name=args.tenant_name,
+            workspace_slug=args.workspace_slug,
+            workspace_name=args.workspace_name,
+            limit=limit,
+        ).to_dict()
+        if args.index:
+            summary["qdrant_index"] = index_pending_document_chunks(
+                settings,
+                connection,
+                collection=args.collection.strip() or None,
+                source_scope="study_docs",
+                limit=max(100, int(summary.get("imported_chunk_count") or 0)),
+            )
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main() -> int:
     args = build_parser().parse_args()
     if args.command == "ui":
@@ -1208,6 +1271,8 @@ def main() -> int:
         return _run_learning_seed_import(args)
     if args.command == "course-chunk-import":
         return _run_course_chunk_import(args)
+    if args.command == "kmsc-course-import":
+        return _run_kmsc_course_import(args)
     if args.command == "course-qa":
         from play_book_studio.course.quality_eval import run_quality_eval
 

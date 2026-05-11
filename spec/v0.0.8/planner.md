@@ -22,7 +22,7 @@ v0.0.8은 RAG 품질 개선 자체보다 배포 재현성을 개선하는 버전
 - [x] 서버에서 repo clone 없이 compose/env만으로 실행 가능한 명령 문서화
 - [x] official corpus seed job이 image 내부 `/app/corpus`를 읽도록 구성
 - [x] course/study corpus seed job이 image 내부 `/app/corpus`를 읽도록 구성
-- [x] KMSC 운영 문서 seed job이 image 내부 `/app/corpus/sources/kmsc/raw`를 일반 RAG로 import하도록 구성
+- [x] KMSC 운영 문서 seed job이 image 내부 `/app/corpus/sources/kmsc/parsed-preview/course_pbs`를 일반 RAG로 import하도록 구성
 - [x] Qdrant seed job이 image 내부 `/app/corpus`를 읽도록 구성
 - [x] course/study asset import가 image 내부 embedded corpus asset을 찾도록 보정
 - [x] Terminal WebSocket 8770 외부 노출 유지
@@ -90,7 +90,6 @@ docker-compose.image.yml
 
 ```text
 /app/corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl
-/app/corpus/sources/kmsc/raw/**/*.pptx
 /app/corpus/sources/kmsc/parsed-preview/course_pbs/chunks.jsonl
 /app/corpus/manifests/**
 ```
@@ -291,4 +290,6 @@ docker compose -f docker-compose.image.yml --env-file .env up -d app web
 - 2026-05-11: `course-chunk-import`에서 legacy course asset 경로를 `/app/corpus/sources/kmsc/parsed-preview/course_pbs/assets/*`로 fallback 해석하도록 보정했다.
 - 2026-05-11: KMSC 운영 문서 raw PPTX 12개가 image-only seed에서 일반 `study_docs` RAG로 import되지 않는 것을 확인했다.
 - 2026-05-11: `kmsc-corpus-seed`를 추가해 KMSC 운영 문서를 `document_chunks(source_scope=study_docs)`와 `openshift_docs` Qdrant collection에 index하도록 구성했다.
+- 2026-05-11: raw PPTX는 `.gitignore` 대상이라 GHCR image에 포함되지 않는 것을 서버 seed 실패로 확인했다.
+- 2026-05-11: `kmsc-corpus-seed`를 tracked `course_pbs/chunks.jsonl` 기반 `kmsc-course-import`로 전환했다.
 
