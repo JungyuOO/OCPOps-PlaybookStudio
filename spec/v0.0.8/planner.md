@@ -1,4 +1,4 @@
-# v0.0.8 — Image-Based Server Deployment with Embedded Corpus
+﻿# v0.0.8 — Image-Based Server Deployment with Embedded Corpus
 
 ## 목표
 
@@ -18,6 +18,7 @@ v0.0.8은 RAG 품질 개선 자체보다 배포 재현성을 개선하는 버전
 - [x] app Docker image에 `corpus/` 포함
 - [x] image-only compose 파일 추가
 - [x] app/web image 이름을 env로 바꿀 수 있게 구성
+- [x] GitHub Actions 기반 GHCR publish workflow 추가
 - [x] 서버에서 repo clone 없이 compose/env만으로 실행 가능한 명령 문서화
 - [x] official corpus seed job이 image 내부 `/app/corpus`를 읽도록 구성
 - [x] course/study corpus seed job이 image 내부 `/app/corpus`를 읽도록 구성
@@ -231,10 +232,16 @@ docker compose -f deploy/docker-compose.image.yml --env-file .env.production.exa
 ### Build / Push 예시
 
 ```powershell
-docker build -f deploy/Dockerfile --target app -t registry.example.com/ocpops/playbookstudio-app:dev .
-docker build -f deploy/Dockerfile --target web -t registry.example.com/ocpops/playbookstudio-web:dev .
-docker push registry.example.com/ocpops/playbookstudio-app:dev
-docker push registry.example.com/ocpops/playbookstudio-web:dev
+docker build -f deploy/Dockerfile --target app -t ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev .
+docker build -f deploy/Dockerfile --target web -t ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev .
+docker push ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev
+docker push ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev
+```
+
+### GitHub Actions Publish
+
+```text
+Actions > Publish Docker Images > Run workflow > tag: dev
 ```
 
 ### Server Deploy 예시
@@ -272,5 +279,7 @@ docker compose -f docker-compose.image.yml --env-file .env up -d app web
 - 2026-05-11: image-only seed job이 `/app/corpus`에서 official/course/Qdrant seed를 수행하도록 구성했다.
 - 2026-05-11: `.env.production.example`에 image name, public URL, terminal URL, bind 값을 추가했다.
 - 2026-05-11: `deploy/DEPLOY.md`에 image-only build/push/server deploy 절차를 추가했다.
+- 2026-05-11: `.github/workflows/publish-images.yml`를 추가해 GHCR에 app/web image를 push하도록 구성했다.
 - 2026-05-11: `docker compose -f deploy/docker-compose.image.yml --env-file .env.production.example config --quiet` 통과.
 - 2026-05-11: `docker compose -f deploy/docker-compose.prod.yml --env-file .env.production.example config --quiet` 통과.
+

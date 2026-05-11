@@ -29,7 +29,7 @@ services:
     restart: unless-stopped
 
   app:
-    image: ${PLAYBOOKSTUDIO_APP_IMAGE:-registry.example.com/ocpops/playbookstudio-app:dev}
+    image: ${PLAYBOOKSTUDIO_APP_IMAGE:-ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev}
     env_file:
       - ${APP_ENV_FILE:-.env}
     environment:
@@ -68,7 +68,7 @@ services:
     restart: unless-stopped
 
   db-migrate:
-    image: ${PLAYBOOKSTUDIO_APP_IMAGE:-registry.example.com/ocpops/playbookstudio-app:dev}
+    image: ${PLAYBOOKSTUDIO_APP_IMAGE:-ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev}
     env_file:
       - ${APP_ENV_FILE:-.env}
     environment:
@@ -83,7 +83,7 @@ services:
   course-runtime-seed:
     profiles:
       - seed
-    image: ${PLAYBOOKSTUDIO_APP_IMAGE:-registry.example.com/ocpops/playbookstudio-app:dev}
+    image: ${PLAYBOOKSTUDIO_APP_IMAGE:-ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev}
     env_file:
       - ${APP_ENV_FILE:-.env}
     environment:
@@ -101,7 +101,7 @@ services:
   official-corpus-seed:
     profiles:
       - seed
-    image: ${PLAYBOOKSTUDIO_APP_IMAGE:-registry.example.com/ocpops/playbookstudio-app:dev}
+    image: ${PLAYBOOKSTUDIO_APP_IMAGE:-ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev}
     env_file:
       - ${APP_ENV_FILE:-.env}
     environment:
@@ -133,7 +133,7 @@ services:
   qdrant-seed:
     profiles:
       - seed
-    image: ${PLAYBOOKSTUDIO_APP_IMAGE:-registry.example.com/ocpops/playbookstudio-app:dev}
+    image: ${PLAYBOOKSTUDIO_APP_IMAGE:-ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev}
     env_file:
       - ${APP_ENV_FILE:-.env}
     environment:
@@ -156,7 +156,7 @@ services:
     restart: "no"
 
   web:
-    image: ${PLAYBOOKSTUDIO_WEB_IMAGE:-registry.example.com/ocpops/playbookstudio-web:dev}
+    image: ${PLAYBOOKSTUDIO_WEB_IMAGE:-ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev}
     depends_on:
       app:
         condition: service_healthy

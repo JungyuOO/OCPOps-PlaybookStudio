@@ -1,4 +1,4 @@
-# PlayBookStudio Server Deployment
+﻿# PlayBookStudio Server Deployment
 
 This deployment keeps application images separate from runtime data.
 The server must have Docker Compose, the repository files, PostgreSQL,
@@ -116,10 +116,23 @@ documents from the image itself.
 Build and push images from a developer or CI machine:
 
 ```powershell
-docker build -f deploy/Dockerfile --target app -t registry.example.com/ocpops/playbookstudio-app:dev .
-docker build -f deploy/Dockerfile --target web -t registry.example.com/ocpops/playbookstudio-web:dev .
-docker push registry.example.com/ocpops/playbookstudio-app:dev
-docker push registry.example.com/ocpops/playbookstudio-web:dev
+docker build -f deploy/Dockerfile --target app -t ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev .
+docker build -f deploy/Dockerfile --target web -t ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev .
+docker push ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev
+docker push ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev
+```
+
+Or publish from GitHub Actions without a local GitHub token:
+
+```text
+Actions > Publish Docker Images > Run workflow > tag: dev
+```
+
+The workflow pushes both images to GHCR:
+
+```text
+ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev
+ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev
 ```
 
 On the server, place only these files in a deployment directory:
@@ -132,8 +145,8 @@ docker-compose.image.yml
 Set the image names and secrets in `.env`:
 
 ```env
-PLAYBOOKSTUDIO_APP_IMAGE=registry.example.com/ocpops/playbookstudio-app:dev
-PLAYBOOKSTUDIO_WEB_IMAGE=registry.example.com/ocpops/playbookstudio-web:dev
+PLAYBOOKSTUDIO_APP_IMAGE=ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev
+PLAYBOOKSTUDIO_WEB_IMAGE=ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev
 PLAYBOOKSTUDIO_PUBLIC_URL=http://192.168.119.23:8080
 TERMINAL_PUBLIC_WS_URL=ws://192.168.119.23:8770
 OCP_API_TOKEN=replace-with-remote-sno-token
@@ -173,3 +186,4 @@ docker compose -f docker-compose.image.yml --env-file .env ps
   `.env.production`, keep `PLAYBOOKSTUDIO_PUBLIC_URL=http://192.168.119.23:8080`,
   and replace only secrets such as `POSTGRES_PASSWORD`, `DATABASE_URL`, and
   `OCP_API_TOKEN`.
+
