@@ -142,6 +142,40 @@ services:
     command: ["python", "-m", "play_book_studio.cli", "official-gold-import", "--root-dir", "/app", "--chunks-path", "/app/corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl", "--index", "--index-limit", "${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}", "--refresh-qdrant-payloads", "--refresh-limit", "${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}"]
     restart: "no"
 
+  kmsc-corpus-seed:
+    profiles:
+      - seed
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_RECREATE_COLLECTION: "false"
+      ARTIFACTS_DIR: /app/artifacts
+      OBJECT_STORAGE_ROOT: /app/storage
+      CORPUS_SEED_DIR: /app/corpus
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - app_artifacts:/app/artifacts
+      - app_storage:/app/storage
+      - app_reports:/app/reports
+      - app_tmp:/app/tmp
+    command: ["python", "-m", "play_book_studio.cli", "corpus-ingest", "--root-dir", "/app", "--source-dir", "${KMSC_CORPUS_SOURCE_DIR:-/app/corpus/sources/kmsc/raw}", "--corpus-kind", "study_docs", "--index", "--collection", "${QDRANT_COLLECTION:-openshift_docs}"]
+    restart: "no"
+
   qdrant-seed:
     profiles:
       - seed
