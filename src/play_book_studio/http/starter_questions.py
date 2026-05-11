@@ -14,6 +14,7 @@ from play_book_studio.config.corpus_paths import (
     ANSWER_EVAL_REALWORLD_CASES_PATH,
     OCP420_REPO_WIDE_SOURCE_MANIFEST_PATH,
     OCP420_SOURCE_FIRST_FULL_REBUILD_MANIFEST_PATH,
+    OPS_LEARNING_CHUNKS_PATH,
     OPS_LEARNING_GUIDES_PATH,
     PBS_CHAT_QUALITY_CASES_PATH,
 )
@@ -392,34 +393,60 @@ def _load_ops_learning_guides_payload(root_dir: Path) -> tuple[dict[str, Any], s
     )
 
 
+def _load_ops_learning_chunks_payload(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if database_url:
+        try:
+            import psycopg
+
+            from play_book_studio.db.learning_repository import load_ops_learning_chunks_payload
+
+            with psycopg.connect(database_url) as connection:
+                rows = load_ops_learning_chunks_payload(connection, workspace_slug="default")
+            return rows, "postgres.learning_steps"
+        except Exception:  # noqa: BLE001
+            return [], "postgres.learning_steps"
+    return (
+        _iter_jsonl(root_dir / OPS_LEARNING_CHUNKS_PATH),
+        OPS_LEARNING_CHUNKS_PATH.as_posix(),
+    )
+
+
+def _ops_chunk_question(chunk: dict[str, Any]) -> str:
+    title = _clean_title(str(chunk.get("title") or "운영 절차"))
+    goal = _clean_title(str(chunk.get("learning_goal") or chunk.get("source_summary") or ""))
+    terms = [
+        _clean_title(str(item))
+        for item in chunk.get("source_terms", [])
+        if str(item).strip()
+    ] if isinstance(chunk.get("source_terms"), list) else []
+    if terms:
+        return f"{title}에서 {', '.join(terms[:2])} 기준으로 먼저 확인할 것은 뭐야?"
+    if goal:
+        return f"{title}에서 {goal} 기준으로 먼저 확인할 것은 뭐야?"
+    return f"{title}에서 먼저 확인할 운영 기준은 뭐야?"
+
+
 def _operations_questions(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
-    payload, source_label = _load_ops_learning_guides_payload(root_dir)
-    guides = payload.get("guides")
+    chunks, source_label = _load_ops_learning_chunks_payload(root_dir)
     candidates: list[dict[str, Any]] = []
-    if not isinstance(guides, list):
-        return candidates, source_label
-    for guide in guides:
-        if not isinstance(guide, dict):
+    for chunk in chunks:
+        if not isinstance(chunk, dict):
             continue
-        steps = guide.get("steps")
-        if not isinstance(steps, list):
+        question = _ops_chunk_question(chunk).strip()
+        if not question:
             continue
-        for step in steps:
-            if not isinstance(step, dict):
-                continue
-            query = str(step.get("user_query") or "").strip()
-            if not query:
-                continue
-            candidates.append(
-                _starter_question(
-                    lane="operations",
-                    question=query,
-                    route_kind="course",
-                    source=source_label,
-                    category_key=str(guide.get("stage_id") or ""),
-                    category_label=str(guide.get("title") or ""),
-                )
+        candidates.append(
+            _starter_question(
+                lane="operations",
+                question=question,
+                route_kind="course",
+                source=source_label,
+                category_key=str(chunk.get("stage_id") or ""),
+                category_label=str(chunk.get("course_title") or ""),
             )
+        )
     return candidates, source_label
 
 

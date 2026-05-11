@@ -2446,18 +2446,20 @@ def _public_ops_guide_answer_lines(
     if objective:
         lines.append(objective)
         lines.append("")
-    outline = step.get("answer_outline") if isinstance(step.get("answer_outline"), list) else []
     citation_count = max(1, len(chunks))
-    for index, item in enumerate(outline, start=1):
-        source_index = min(index, citation_count)
-        text = _public_course_text(item, limit=260)
-        if text:
-            lines.append(f"{index}. {text} [{source_index}]")
-    if not outline:
-        for index, chunk in enumerate(chunks, start=1):
-            label = _public_chunk_label(chunk)
-            summary = _public_course_text(_chunk_learning_summary(chunk), limit=300)
+    for index, chunk in enumerate(chunks, start=1):
+        label = _public_chunk_label(chunk)
+        summary = _public_course_text(_chunk_learning_summary(chunk), limit=300)
+        detail = _public_course_text(_chunk_grounded_detail(chunk), limit=360)
+        if summary:
             lines.append(f"{index}. {label}: {summary} [{index}]")
+        elif detail:
+            lines.append(f"{index}. {label}: {detail} [{index}]")
+    if not chunks:
+        source_terms = step.get("expected_terms") if isinstance(step.get("expected_terms"), list) else []
+        source_text = ", ".join(_public_course_text(item, limit=80) for item in source_terms[:4] if _public_course_text(item, limit=80))
+        if source_text:
+            lines.append(f"1. 먼저 관련 근거 청크를 다시 검색하고, {source_text} 기준으로 확인하세요. [{citation_count}]")
     if chunks:
         lines.extend(["", "근거에서 확인되는 연결"])
         for index, chunk in enumerate(chunks[:3], start=1):

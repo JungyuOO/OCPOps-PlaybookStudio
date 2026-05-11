@@ -83,6 +83,27 @@ def test_low_confidence_guard_allows_guided_learning_questions() -> None:
     )
 
 
+def test_low_confidence_guard_allows_ocp_install_overview_grounding() -> None:
+    assert not _is_low_confidence_retrieval(
+        query="OCP 설치 어떻게 해",
+        citations=[
+            _citation(
+                book_slug="installation_overview",
+                section="OpenShift Container Platform 설치 정보",
+                excerpt="OpenShift Container Platform 설치 프로그램은 클러스터를 배포하는 여러 설치 방법을 제공합니다.",
+            )
+        ],
+        selected_hits=[
+            {
+                "section": "OpenShift Container Platform 설치 정보",
+                "book_slug": "installation_overview",
+                "fused_score": -4.0,
+                "pre_rerank_fused_score": 0.01,
+            }
+        ],
+    )
+
+
 def test_low_confidence_followups_use_retrieval_hits_without_overlap() -> None:
     session = ChatSession(session_id="s1", mode="ops")
     result = AnswerResult(
