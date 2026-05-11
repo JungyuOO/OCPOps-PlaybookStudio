@@ -121,3 +121,6 @@ schemas/**
 
 corpus
 corpus/**
+
+!corpus/
+!corpus/**
