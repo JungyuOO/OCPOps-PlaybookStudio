@@ -30,11 +30,12 @@ def test_starter_group_labels_are_readable_korean() -> None:
 def test_official_faq_questions_are_composed_as_beginner_language() -> None:
     question = _official_faq_query(_rule("troubleshooting"), "검증 및 문제 해결")
 
-    assert question.endswith("확인하면 돼?")
+    assert question == "문제 해결이 안 될 때 어디부터 확인하면 돼?"
     assert "What should" not in question
     assert "문서를 기준으로" not in question
     assert "Day-2" not in question
     assert "검증 및 문제 해결 기준으로" not in question
+    assert "troubleshoot" not in question.lower()
 
 
 def test_learning_questions_are_beginner_natural_language() -> None:
@@ -60,6 +61,32 @@ def test_operations_chunk_question_uses_chunk_context_without_fixed_query_varian
     assert question == "성능 테스트 결과를 받으면 목표와 조건은 어떻게 먼저 확인해?"
     assert "성능 테스트는 어떤 목표와 조건부터 확인해야 해?" not in question
     assert "성능 목표와 조건 먼저 보기에서" not in question
+
+
+def test_operations_chunk_question_does_not_expose_chunk_title_suffix() -> None:
+    question = _ops_chunk_question(
+        {
+            "title": "노드 상태 검증부터 보기",
+            "learning_goal": "노드 상태를 검증한다.",
+            "source_terms": ["노드 상태", "검증"],
+        }
+    )
+
+    assert question == "노드 상태는 처음에 어디서 확인하면 돼?"
+    assert "검증부터 보기" not in question
+
+
+def test_operations_chunk_question_cleans_generic_section_suffix() -> None:
+    question = _ops_chunk_question(
+        {
+            "title": "사업 범위와 추진 배경 보기",
+            "learning_goal": "사업 범위와 추진 배경을 확인한다.",
+            "source_terms": ["사업 범위", "추진 배경"],
+        }
+    )
+
+    assert question == "사업 범위와 추진 배경은 처음에 무엇부터 확인하면 돼?"
+    assert "보기" not in question
 
 
 def test_empty_starter_payload_keeps_readable_group_titles(tmp_path: Path) -> None:

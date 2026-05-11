@@ -29,11 +29,16 @@ v0.1.1은 PlayBookStudio를 OCP를 한 번도 설치하거나 배포해 본 적 
 - [x] 청크 metadata 기반 초보자 질문 작문 로직 추가
 - [x] 시작 질문이 요청 seed마다 rotate되는지 테스트 추가
 - [x] 시작 질문이 문서 제목만 붙인 문장이 아닌지 테스트 추가
+- [x] Playwright smoke에서 발견한 영어 내부 term/troubleshoot 노출과 청크 제목 suffix 노출 수정
+- [x] 실운영 문서 제목 fallback에서 `보기`, `확인하기` 같은 섹션 suffix 제거
 - [x] Terminal Session을 Linux 배포 환경에서 PTY 기반으로 실행하도록 변경
 - [x] xterm cols/rows resize를 서버 PTY에 전달하도록 변경
+- [x] 로컬 `docker-compose.yml` web 포트/healthcheck를 nginx `listen 8080` 기준으로 정렬
 - [ ] 터미널 paste/Ctrl+V 기존 동작 회귀 방지 확인
 - [x] starter question focused tests 실행
 - [x] frontend build 실행
+- [x] Playwright로 로컬 Studio 시작 질문 smoke 확인
+- [ ] 유효한 OCP 토큰 환경에서 Terminal wrap/backspace 수동 smoke 확인
 
 ## 시작 질문 개선 방향
 
@@ -104,3 +109,8 @@ npm --prefix apps/web run build
 - 2026-05-11: `pytest tests/test_starter_questions.py tests/test_starter_questions_readable.py -q --basetemp tmp/pytest` 통과.
 - 2026-05-11: `python -m py_compile`로 변경 Python 모듈 문법 검증 통과.
 - 2026-05-11: `npm --prefix apps/web run build` 통과. Vite chunk size warning은 기존 번들 크기 경고로 남아 있다.
+- 2026-05-11: Playwright smoke 중 로컬 compose가 nginx 8080 리슨 설정과 다르게 `8080:80`으로 매핑되어 `ERR_EMPTY_RESPONSE`가 나는 문제를 발견했다. 루트 compose의 web 포트와 healthcheck를 8080 기준으로 수정했다.
+- 2026-05-11: Playwright snapshot에서 `troubleshoot가...`, `노드 상태 검증부터 보기...`처럼 내부 term/title 흔적이 남는 것을 확인했다. troubleshooting/node 주제 추출을 추가해 초보자 질문으로 다시 변환하도록 보정했다.
+- 2026-05-11: 재확인 중 `사업 범위와 추진 배경 보기`, `아키텍처 구성 결과 확인하기`처럼 문서 섹션 suffix가 노출되는 것을 확인했다. 제목 fallback을 subject로 쓸 때 suffix를 제거하도록 수정했다.
+- 2026-05-11: Playwright snapshot 기준 시작 질문은 `노드 상태는 처음에 어디서 확인하면 돼?`, `앱 배포는 처음에 어떤 순서로 진행하면 돼?`, `PVC와 볼륨은 뭔지부터 알고 싶은데 어디서 확인하면 돼?` 형태로 확인했다.
+- 2026-05-11: 터미널은 현재 로컬 `.env`의 OCP token이 만료되어 세션이 즉시 종료된다. 로컬 shell fallback 없이 클러스터 재연결 안내가 뜨는 것은 확인했지만, wrap/backspace와 paste는 유효 토큰 환경에서 재확인이 필요하다.

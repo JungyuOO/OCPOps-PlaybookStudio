@@ -442,8 +442,12 @@ def _starter_topic_terms(*parts: Any) -> str:
     text = _context_text(*parts).lower()
     if any(token in text for token in ("postinstall", "post-install", "post installation", "day-2", "day 2", "day two")):
         return "postinstall"
+    if any(token in text for token in ("troubleshoot", "issue", "failure", "debug", "problem", "장애", "문제", "오류")):
+        return "troubleshooting"
     if any(token in text for token in ("install", "설치", "discovery", "bootstrap")):
         return "install"
+    if any(token in text for token in ("node", "노드")):
+        return "node"
     if any(token in text for token in ("namespace", "project", "네임스페이스", "프로젝트")):
         return "namespace"
     if any(token in text for token in ("pod", "파드", "container", "컨테이너")):
@@ -482,6 +486,8 @@ def _beginner_subject_from_context(
         return "namespace"
     if topic == "pod":
         return "Pod 상태"
+    if topic == "node":
+        return "노드 상태"
     if topic == "network":
         if "overview" in text or "개요" in text:
             return "앱 접속 경로"
@@ -504,16 +510,33 @@ def _beginner_subject_from_context(
         return "로그와 이벤트"
     if topic == "security":
         return "권한 문제"
+    if topic == "troubleshooting":
+        return "문제 해결"
     if topic == "postinstall" or "postinstall" in text or "post-install" in text or "post installation" in text or "day-2" in text or "day 2" in text:
         return "설치 후 작업"
+    cleaned_title = _clean_subject_title(title)
+    if cleaned_title and cleaned_title.lower() not in {"operations", "troubleshooting", "day-2", "day 2"}:
+        return cleaned_title
     for term in terms:
         cleaned = _clean_title(term)
         if cleaned:
             return cleaned
-    cleaned_title = _clean_title(title)
-    if cleaned_title and cleaned_title.lower() not in {"operations", "troubleshooting", "day-2", "day 2"}:
-        return cleaned_title
     return "처음 해야 할 일"
+
+
+def _clean_subject_title(title: str) -> str:
+    cleaned = _clean_title(title)
+    for pattern in (
+        r"\s*결과\s*확인하기$",
+        r"\s*상태\s*검증부터\s*보기$",
+        r"\s*검증부터\s*보기$",
+        r"\s*먼저\s*보기$",
+        r"\s*부터\s*보기$",
+        r"\s*확인하기$",
+        r"\s*보기$",
+    ):
+        cleaned = re.sub(pattern, "", cleaned).strip()
+    return cleaned or _clean_title(title)
 
 
 def _compose_beginner_question(
@@ -533,7 +556,7 @@ def _compose_beginner_question(
         if "bootstrap" in text or "검증" in text or "validation" in text:
             return f"{subject}{_subject_particle(subject)} 정상인지 처음에 어디서 확인하면 돼?"
         return f"{subject_topic} 어떤 순서로 시작하면 돼?"
-    if topic in {"namespace", "pod", "network", "config", "storage", "observability", "security"}:
+    if topic in {"namespace", "pod", "node", "network", "config", "storage", "observability", "security"}:
         if lane == "learning":
             return f"{subject_topic} 뭔지부터 알고 싶은데 어디서 확인하면 돼?"
         return f"{subject_topic} 처음에 어디서 확인하면 돼?"
@@ -543,7 +566,7 @@ def _compose_beginner_question(
         return f"{subject_topic} 처음에 어떤 순서로 진행하면 돼?"
     if topic == "postinstall" or "postinstall" in text or "post-install" in text or "post installation" in text or "day-2" in text or "day 2" in text:
         return f"{subject_topic} 무엇부터 이어서 진행하면 돼?"
-    if "troubleshoot" in text or "failure" in text or "problem" in text or "장애" in text or "문제" in text:
+    if topic == "troubleshooting" or "troubleshoot" in text or "failure" in text or "problem" in text or "장애" in text or "문제" in text:
         return f"{subject}{_subject_particle(subject)} 안 될 때 어디부터 확인하면 돼?"
     if lane == "learning":
         return f"{subject_topic} 처음에 어떤 순서로 배우면 돼?"
