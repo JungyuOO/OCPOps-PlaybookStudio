@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set +e
 
-export KUBECONFIG="${KUBECONFIG:-/tmp/playbookstudio-kubeconfig}"
+if [ -n "${KUBECONFIG:-}" ]; then
+  export KUBECONFIG
+else
+  export KUBECONFIG="$(mktemp /tmp/playbookstudio-kubeconfig.XXXXXX)"
+fi
 login_log=/tmp/playbookstudio-oc-login.log
 version_log=/tmp/playbookstudio-oc-version.log
 
@@ -30,6 +34,8 @@ classify_login_failure() {
     echo "OpenShift CLI login failure type: tls/certificate"
   elif grep -Eqi 'no route to host|connection refused|timed out|timeout|could not resolve|name or service not known|network is unreachable' "${login_log}"; then
     echo "OpenShift CLI login failure type: network/dns"
+  elif grep -Eqi 'error loading config file|mapping values are not allowed|yaml:' "${login_log}"; then
+    echo "OpenShift CLI login failure type: kubeconfig"
   else
     echo "OpenShift CLI login failure type: unknown"
   fi
