@@ -34,11 +34,11 @@ v0.1.1은 PlayBookStudio를 OCP를 한 번도 설치하거나 배포해 본 적 
 - [x] Terminal Session을 Linux 배포 환경에서 PTY 기반으로 실행하도록 변경
 - [x] xterm cols/rows resize를 서버 PTY에 전달하도록 변경
 - [x] 로컬 `docker-compose.yml` web 포트/healthcheck를 nginx `listen 8080` 기준으로 정렬
-- [ ] 터미널 paste/Ctrl+V 기존 동작 회귀 방지 확인
+- [x] 터미널 paste/Ctrl+V 기존 동작 회귀 방지 확인
 - [x] starter question focused tests 실행
 - [x] frontend build 실행
 - [x] Playwright로 로컬 Studio 시작 질문 smoke 확인
-- [ ] 유효한 OCP 토큰 환경에서 Terminal wrap/backspace 수동 smoke 확인
+- [x] 유효한 OCP 토큰 환경에서 Terminal wrap/backspace 수동 smoke 확인
 
 ## 시작 질문 개선 방향
 
@@ -114,3 +114,6 @@ npm --prefix apps/web run build
 - 2026-05-11: 재확인 중 `사업 범위와 추진 배경 보기`, `아키텍처 구성 결과 확인하기`처럼 문서 섹션 suffix가 노출되는 것을 확인했다. 제목 fallback을 subject로 쓸 때 suffix를 제거하도록 수정했다.
 - 2026-05-11: Playwright snapshot 기준 시작 질문은 `노드 상태는 처음에 어디서 확인하면 돼?`, `앱 배포는 처음에 어떤 순서로 진행하면 돼?`, `PVC와 볼륨은 뭔지부터 알고 싶은데 어디서 확인하면 돼?` 형태로 확인했다.
 - 2026-05-11: 터미널은 현재 로컬 `.env`의 OCP token이 만료되어 세션이 즉시 종료된다. 로컬 shell fallback 없이 클러스터 재연결 안내가 뜨는 것은 확인했지만, wrap/backspace와 paste는 유효 토큰 환경에서 재확인이 필요하다.
+- 2026-05-11: `.env` 토큰 갱신 후 app/web을 재기동했고, Playwright snapshot에서 `OpenShift CLI login ready`와 shell prompt를 확인했다.
+- 2026-05-11: synthetic paste 이벤트와 실제 Ctrl+V clipboard 입력을 모두 확인했다. `echo PASTE_OK_2`, `echo CTRLV_OK`가 터미널에서 실행되어 출력됐다.
+- 2026-05-11: 180자 이상 긴 명령어를 wrap 상태로 입력한 뒤 `BAD` 3글자를 Backspace로 삭제하고 `OK`를 입력했다. 화면 wrap이 깨지지 않았고 실행 결과에도 삭제된 `BAD`가 남지 않았다.

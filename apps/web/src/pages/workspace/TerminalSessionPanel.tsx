@@ -189,6 +189,49 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
     };
     host.addEventListener('paste', pasteHandler);
 
+    const keydownHandler = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || event.key.toLowerCase() !== 'v' || (!event.ctrlKey && !event.metaKey)) {
+        return;
+      }
+      const clipboard = navigator.clipboard;
+      if (!clipboard?.readText) {
+        return;
+      }
+      event.preventDefault();
+      void clipboard.readText().then((text) => {
+        if (!text) {
+          return;
+        }
+        terminal.focus();
+        appendCommandBuffer(text);
+        sendTerminalInput(text);
+      }).catch(() => {
+        // Browser clipboard permission can be denied; native paste remains as a fallback.
+      });
+    };
+    host.addEventListener('keydown', keydownHandler);
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown' || event.key.toLowerCase() !== 'v' || (!event.ctrlKey && !event.metaKey)) {
+        return true;
+      }
+      const clipboard = navigator.clipboard;
+      if (!clipboard?.readText) {
+        return true;
+      }
+      event.preventDefault();
+      void clipboard.readText().then((text) => {
+        if (!text) {
+          return;
+        }
+        terminal.focus();
+        appendCommandBuffer(text);
+        sendTerminalInput(text);
+      }).catch(() => {
+        // Let xterm/browser defaults handle environments without clipboard permission.
+      });
+      return false;
+    });
+
     socket.addEventListener('open', () => {
       setState('connected');
       fitTerminal();
@@ -250,6 +293,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
       inputDisposable.dispose();
       resizeDisposable.dispose();
       host.removeEventListener('paste', pasteHandler);
+      host.removeEventListener('keydown', keydownHandler);
       resizeObserver.disconnect();
       socket.close();
       terminal.dispose();
