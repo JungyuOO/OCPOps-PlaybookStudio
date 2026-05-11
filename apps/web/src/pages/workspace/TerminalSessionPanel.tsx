@@ -38,8 +38,8 @@ function defaultTerminalWebSocketUrl(): string {
     return configured;
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.hostname || '127.0.0.1';
-  return `${protocol}//${host}:8770`;
+  const host = window.location.host || '127.0.0.1';
+  return `${protocol}//${host}/terminal-ws/`;
 }
 
 export default function TerminalSessionPanel({ learningContext, onCommandCheckResult, onCommandSubmitted }: TerminalSessionPanelProps) {

@@ -1,0 +1,231 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pbs-ocpops
+  labels:
+    app.kubernetes.io/part-of: playbookstudio
+    playbookstudio.cywell/display-name: PBS-OCPOps
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: playbookstudio
+  namespace: pbs-ocpops
+  labels:
+    app.kubernetes.io/part-of: playbookstudio
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: playbookstudio-config
+  namespace: pbs-ocpops
+data:
+  PLAYBOOKSTUDIO_APP_IMAGE: ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev
+  PLAYBOOKSTUDIO_WEB_IMAGE: ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev
+  POSTGRES_DB: playbookstudio
+  POSTGRES_USER: admin
+  EMBEDDING_BASE_URL: http://tei.cywell.co.kr/v1
+  EMBEDDING_MODEL: dragonkue/bge-m3-ko
+  EMBEDDING_DEVICE: auto
+  EMBEDDING_BATCH_SIZE: "32"
+  EMBEDDING_TIMEOUT_SECONDS: "8"
+  QDRANT_URL: http://qdrant:6333
+  QDRANT_COLLECTION: openshift_docs
+  QDRANT_VECTOR_SIZE: "1024"
+  QDRANT_DISTANCE: Cosine
+  QDRANT_UPSERT_BATCH_SIZE: "128"
+  QDRANT_RECREATE_COLLECTION: "false"
+  OFFICIAL_CORPUS_INDEX_LIMIT: "50000"
+  OFFICIAL_CORPUS_REFRESH_LIMIT: "50000"
+  LLM_ENDPOINT: http://cllm.cywell.co.kr/v1
+  LLM_MODEL: Qwen/Qwen3.5-9B
+  OCP_API_BASE_URL: https://api.ocp.cywell.local:6443
+  OCP_INSECURE_SKIP_TLS_VERIFY: "true"
+  OCP_DEFAULT_NAMESPACE: pbs-ocpops
+  TERMINAL_ENABLED: "true"
+  TERMINAL_HOST: 0.0.0.0
+  TERMINAL_WS_PORT: "8770"
+  TERMINAL_SHELL: /app/scripts/terminal-entrypoint.sh
+  TERMINAL_SESSION_TTL_SECONDS: "1800"
+  TERMINAL_MAX_OUTPUT_BYTES: "1048576"
+  RERANKER_ENABLED: "true"
+  RERANKER_TOP_N: "12"
+  RERANKER_BATCH_SIZE: "8"
+  RERANKER_DEVICE: auto
+  ARTIFACTS_DIR: /app/artifacts
+  OBJECT_STORAGE_ROOT: /app/storage
+  CORPUS_SEED_DIR: /app/corpus
+  SOURCE_MANIFEST_PATH: /app/corpus/manifests/official/ocp_ko_4_20_approved_ko.json
+  KMSC_COURSE_SOURCE_DIR: /app/corpus/sources/kmsc/parsed-preview/course_pbs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: pbs-ocpops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qdrant-storage
+  namespace: pbs-ocpops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 30Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-storage
+  namespace: pbs-ocpops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: pbs-ocpops
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: playbookstudio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/part-of: playbookstudio
+    spec:
+      serviceAccountName: playbookstudio
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg16
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: playbookstudio-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: playbookstudio-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: playbookstudio-secret
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "admin", "-d", "playbookstudio"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: pbs-ocpops
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: playbookstudio
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qdrant
+  namespace: pbs-ocpops
+  labels:
+    app.kubernetes.io/name: qdrant
+    app.kubernetes.io/part-of: playbookstudio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qdrant
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: qdrant
+        app.kubernetes.io/part-of: playbookstudio
+    spec:
+      serviceAccountName: playbookstudio
+      containers:
+        - name: qdrant
+          image: qdrant/qdrant:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6333
+              name: http
+            - containerPort: 6334
+              name: grpc
+          volumeMounts:
+            - name: qdrant-storage
+              mountPath: /qdrant/storage
+          readinessProbe:
+            httpGet:
+              path: /collections
+              port: 6333
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: qdrant-storage
+          persistentVolumeClaim:
+            claimName: qdrant-storage
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  namespace: pbs-ocpops
+  labels:
+    app.kubernetes.io/name: qdrant
+    app.kubernetes.io/part-of: playbookstudio
+spec:
+  selector:
+    app.kubernetes.io/name: qdrant
+  ports:
+    - name: http
+      port: 6333
+      targetPort: 6333
+    - name: grpc
+      port: 6334
+      targetPort: 6334
