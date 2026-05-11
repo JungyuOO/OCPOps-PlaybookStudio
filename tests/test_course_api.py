@@ -371,6 +371,53 @@ def test_course_asset_endpoint_prefers_postgres_asset_payload(monkeypatch: pytes
     assert handler.content_type == "image/png"
 
 
+def test_course_asset_endpoint_accepts_legacy_data_asset_paths_from_postgres(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Handler:
+        def __init__(self) -> None:
+            self.json_payload = None
+            self.status = None
+            self.bytes_payload = b""
+            self.content_type = ""
+
+        def _send_json(self, payload: dict, status=200) -> None:  # noqa: ANN001
+            self.json_payload = payload
+            self.status = status
+
+        def _send_bytes(self, payload: bytes, *, content_type: str) -> None:
+            self.bytes_payload = payload
+            self.content_type = content_type
+
+    captured: dict[str, str] = {}
+
+    with _temp_root() as root:
+        monkeypatch.setattr(course_api, "load_settings", lambda _root: SimpleNamespace(database_url="postgresql://unit-test"))
+
+        def load_db_asset(_root: Path, asset_path: str) -> dict[str, Any]:
+            captured["asset_path"] = asset_path
+            return {
+                "asset_path": asset_path,
+                "content_type": "image/png",
+                "content": b"legacy-db-image",
+            }
+
+        monkeypatch.setattr(course_api, "_load_course_asset_from_database", load_db_asset)
+
+        handler = Handler()
+        handled = handle_course_get(
+            handler,
+            "/api/v1/course/assets",
+            "path=data/course_pbs/assets/perf-test__img_02.png",
+            root_dir=root,
+        )
+
+    assert handled is True
+    assert captured["asset_path"] == "data/course_pbs/assets/perf-test__img_02.png"
+    assert handler.bytes_payload == b"legacy-db-image"
+    assert handler.content_type == "image/png"
+
+
 def test_course_asset_endpoint_does_not_fall_back_to_files_when_database_is_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -583,6 +630,62 @@ def test_course_chat_retrieves_ops_learning_chunk_without_exact_golden_query(mon
     guided = next(item for item in response["artifacts"] if item["kind"] == "course_guided_tour")
     assert [item["role"] for item in guided["items"]] == ["current", "next"]
     assert all(not str(item["reason"]).startswith("retrieved_context_variant") for item in guided["items"])
+
+
+def test_course_chat_ops_learning_answer_includes_grounded_support_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("play_book_studio.http.course_api.search_course_and_official", lambda settings, query: ([], []))
+    monkeypatch.setattr("play_book_studio.http.course_api.search_ops_learning_chunks", lambda settings, query, top_k=5: [])
+    with _temp_root() as root:
+        source_id = "perf-goal-source"
+        _write_chunk(
+            root,
+            source_id,
+            {
+                "chunk_id": source_id,
+                "stage_id": "perf_test",
+                "title": "Performance test methodology",
+                "native_id": "PERF-3",
+                "body_md": "The performance test target is average TPS 10% improvement. Staging DBMS resources differ from production, and tuning plus retest can repeat two or three times.",
+                "search_text": "average TPS 10% improvement Staging DBMS production tuning retest",
+                "visual_text": "JMeter load test and metric chart evidence show TPS and interval conditions.",
+                "related_official_docs": [],
+            },
+        )
+        _write_learning_chunks(
+            root,
+            [
+                {
+                    "learning_chunk_id": "performance_bottleneck_review::perf_goal_context",
+                    "chunk_type": "ops_learning_step",
+                    "guide_id": "performance_bottleneck_review",
+                    "step_id": "perf_goal_context",
+                    "stage_id": "perf_test",
+                    "title": "성능 목표와 조건 먼저 보기",
+                    "learning_goal": "TPS 목표, 환경 차이, 테스트 반복 조건을 확인한다.",
+                    "operational_sequence": [
+                        "성능 테스트 목표 및 방법론 평균 TPS 10% 향상",
+                        "운영환경과 달리 Staging 환경의 DBMS 자원에서 테스트한다.",
+                    ],
+                    "what_to_look_for": ["TPS", "Staging", "테스트 환경"],
+                    "source_terms": ["TPS", "Staging", "테스트 환경", "튜닝", "재테스트"],
+                    "source_summary": "성능 테스트 목표는 평균 TPS 10% 향상이며 Staging 환경과 운영환경의 자원 차이를 분리해서 본다.",
+                    "image_evidence_texts": ["Apache JMeter 부하 테스트 설정 화면과 TPS 차트가 함께 있다."],
+                    "source_chunk_ids": [source_id],
+                    "query_variants": ["성능 테스트는 어떤 목표와 조건부터 확인해야 해?"],
+                }
+            ],
+        )
+
+        response = _course_chat_payload(root, {"message": "성능 테스트 목표와 조건은 뭐부터 확인해?", "stage_id": "perf_test"})
+
+    assert response["sources"][0]["chunk_id"] == source_id
+    assert "평균 TPS 10% 향상" in response["answer"]
+    assert "근거에서 확인할 항목" in response["answer"]
+    assert "Staging" in response["answer"]
+    assert "Apache JMeter" in response["answer"]
+    assert "JMeter load" in response["answer"]
 
 
 def test_course_chat_rewrites_ops_learning_answer_with_llm_prompt(monkeypatch: pytest.MonkeyPatch) -> None:

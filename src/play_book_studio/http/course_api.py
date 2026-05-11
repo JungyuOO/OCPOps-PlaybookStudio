@@ -427,6 +427,14 @@ def _resolve_course_path(root_dir: Path, path_like: str) -> Path:
     return resolved
 
 
+def _legacy_course_asset_file(root_dir: Path, asset_path_raw: str) -> Path | None:
+    normalized = str(asset_path_raw or "").strip().replace("\\", "/")
+    parts = Path(normalized).parts
+    if len(parts) >= 4 and parts[0] == "data" and parts[1] == "course_pbs" and parts[2] == "assets":
+        return (_course_root(root_dir) / "assets" / Path(*parts[3:])).resolve()
+    return None
+
+
 def _course_asset_content_type(path: Path) -> str:
     suffix = path.suffix.lower()
     if suffix == ".jpg" or suffix == ".jpeg":
@@ -2350,6 +2358,10 @@ def _public_ops_learning_answer_lines(
                 lines.append(f"- 정상/진행 상태: {', '.join(_public_course_text(item, limit=60) for item in normal_state[:4] if _public_course_text(item, limit=60))}")
             if failure_state:
                 lines.append(f"- 실패/주의 상태: {', '.join(_public_course_text(item, limit=60) for item in failure_state[:4] if _public_course_text(item, limit=60))}")
+        support_lines = _ops_learning_support_lines(learning_chunk, chunks, source_index=source_index)
+        if support_lines:
+            lines.append("")
+            lines.extend(support_lines)
     if official_doc_intent and official_docs:
         lines.extend(["", "공식문서 확인"])
         source_index = len(chunks) + 1
@@ -2372,6 +2384,49 @@ def _public_ops_learning_answer_lines(
             summary = _public_course_text(item.get("summary") or "", limit=140)
             lines.append(f"- slide {item.get('slide_no') or 0}: {item.get('instructional_role') or 'image'}{state} - {summary}")
     return [line for line in lines if str(line).strip()]
+
+
+def _ops_learning_support_lines(
+    learning_chunk: dict[str, Any],
+    chunks: list[dict[str, Any]],
+    *,
+    source_index: int,
+) -> list[str]:
+    lines: list[str] = []
+    terms = [
+        _public_course_text(item, limit=80)
+        for item in learning_chunk.get("source_terms", [])
+        if str(item).strip()
+    ] if isinstance(learning_chunk.get("source_terms"), list) else []
+    terms = [term for term in dict.fromkeys(terms) if term][:6]
+    if terms:
+        lines.append("근거에서 확인할 항목")
+        lines.append(f"- {', '.join(terms)} [{source_index}]")
+
+    source_summary = _public_course_text(learning_chunk.get("source_summary") or "", limit=320)
+    if source_summary and source_summary not in {"3", "4"}:
+        if not lines:
+            lines.append("근거에서 확인할 항목")
+        lines.append(f"- 자료 요약: {source_summary} [{source_index}]")
+
+    image_texts = [
+        _public_course_text(item, limit=220)
+        for item in learning_chunk.get("image_evidence_texts", [])
+        if str(item).strip()
+    ] if isinstance(learning_chunk.get("image_evidence_texts"), list) else []
+    image_texts = [item for item in dict.fromkeys(image_texts) if item][:2]
+    for item in image_texts:
+        if not lines:
+            lines.append("근거에서 확인할 항목")
+        lines.append(f"- 화면 근거: {item} [{source_index}]")
+
+    if chunks:
+        detail = _public_course_text(_chunk_grounded_detail(chunks[0]), limit=320)
+        if detail and detail != source_summary:
+            if not lines:
+                lines.append("근거에서 확인할 항목")
+            lines.append(f"- 원본 chunk 근거: {detail} [{source_index}]")
+    return lines
 
 
 def _public_ops_guide_answer_lines(
@@ -3494,7 +3549,8 @@ def handle_course_get(handler: Any, path: str, query: str, *, root_dir: Path) ->
             handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return True
         assets_root = (_course_root(root_dir) / "assets").resolve()
-        if not asset_path_raw or not _is_relative_to(asset_path, assets_root):
+        legacy_asset_path = _legacy_course_asset_file(root_dir, asset_path_raw)
+        if not asset_path_raw or not (_is_relative_to(asset_path, assets_root) or legacy_asset_path is not None):
             handler._send_json({"error": "Course asset path must be under corpus/sources/kmsc/parsed-preview/course_pbs/assets"}, HTTPStatus.BAD_REQUEST)
             return True
         if asset_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
@@ -3511,6 +3567,8 @@ def handle_course_get(handler: Any, path: str, query: str, *, root_dir: Path) ->
         if load_settings(root_dir).database_url.strip():
             handler._send_json({"error": "Course asset not found in PostgreSQL"}, HTTPStatus.NOT_FOUND)
             return True
+        if legacy_asset_path is not None:
+            asset_path = legacy_asset_path
         if not asset_path.exists() or not asset_path.is_file():
             handler._send_json({"error": "Course asset not found"}, HTTPStatus.NOT_FOUND)
             return True
