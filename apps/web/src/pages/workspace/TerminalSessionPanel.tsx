@@ -140,6 +140,46 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
       }
     });
 
+    const sendTerminalInput = (data: string): void => {
+      if (!data) {
+        return;
+      }
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'input', data }));
+      }
+    };
+
+    const appendCommandBuffer = (data: string): void => {
+      for (const char of data) {
+        if (char === '\r' || char === '\n') {
+          const command = commandBufferRef.current.trim();
+          commandBufferRef.current = '';
+          if (command) {
+            onCommandSubmitted?.(command);
+          }
+        } else if (char === '\u007f' || char === '\b') {
+          commandBufferRef.current = commandBufferRef.current.slice(0, -1);
+        } else if (!char.startsWith('\u001b')) {
+          commandBufferRef.current += char;
+        }
+      }
+    };
+
+    const pasteHandler = (event: ClipboardEvent): void => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      const text = event.clipboardData?.getData('text/plain') ?? '';
+      if (!text) {
+        return;
+      }
+      event.preventDefault();
+      terminal.focus();
+      appendCommandBuffer(text);
+      sendTerminalInput(text);
+    };
+    host.addEventListener('paste', pasteHandler);
+
     socket.addEventListener('open', () => {
       setState('connected');
       if (stableLearningContext) {
@@ -198,6 +238,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
 
     return () => {
       inputDisposable.dispose();
+      host.removeEventListener('paste', pasteHandler);
       resizeObserver.disconnect();
       socket.close();
       terminal.dispose();
