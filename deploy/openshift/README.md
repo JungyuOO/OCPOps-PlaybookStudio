@@ -17,6 +17,7 @@ curl -L -O https://raw.githubusercontent.com/JungyuOO/OCPOps-PlaybookStudio/dev/
 curl -L -O https://raw.githubusercontent.com/JungyuOO/OCPOps-PlaybookStudio/dev/deploy/openshift/job-db-migrate.yaml
 curl -L -O https://raw.githubusercontent.com/JungyuOO/OCPOps-PlaybookStudio/dev/deploy/openshift/job-official-corpus-seed.yaml
 curl -L -O https://raw.githubusercontent.com/JungyuOO/OCPOps-PlaybookStudio/dev/deploy/openshift/job-kmsc-corpus-seed.yaml
+curl -L -O https://raw.githubusercontent.com/JungyuOO/OCPOps-PlaybookStudio/dev/deploy/openshift/job-learning-seed.yaml
 curl -L -O https://raw.githubusercontent.com/JungyuOO/OCPOps-PlaybookStudio/dev/deploy/openshift/job-course-runtime-seed.yaml
 curl -L -O https://raw.githubusercontent.com/JungyuOO/OCPOps-PlaybookStudio/dev/deploy/openshift/job-qdrant-seed.yaml
 curl -L -O https://raw.githubusercontent.com/JungyuOO/OCPOps-PlaybookStudio/dev/deploy/openshift/apply-playbookstudio.sh
@@ -54,6 +55,7 @@ oc get pods -n pbs-ocpops
 oc get route -n pbs-ocpops
 oc logs job/official-corpus-seed -n pbs-ocpops --tail=80
 oc logs job/kmsc-corpus-seed -n pbs-ocpops --tail=80
+oc logs job/learning-seed -n pbs-ocpops --tail=80
 ```
 
 Open the `playbookstudio` Route host in a browser.
