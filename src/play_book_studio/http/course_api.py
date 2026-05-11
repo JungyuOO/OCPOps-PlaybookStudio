@@ -1105,11 +1105,9 @@ def _build_course_answer_rewrite_messages(
     ]
     guide_payload: dict[str, Any] = {}
     if isinstance(guide_step, dict):
-        outline = guide_step.get("answer_outline") if isinstance(guide_step.get("answer_outline"), list) else []
         guide_payload = {
             "title": _public_course_text(guide_step.get("card_text") or "", limit=120),
             "learning_objective": _public_course_text(guide_step.get("learning_objective") or "", limit=260),
-            "answer_outline": [_public_course_text(item, limit=260) for item in outline[:5] if _public_course_text(item, limit=260)],
         }
     evidence = {
         "sources": source_rows,

@@ -632,6 +632,34 @@ def test_course_chat_retrieves_ops_learning_chunk_without_exact_golden_query(mon
     assert all(not str(item["reason"]).startswith("retrieved_context_variant") for item in guided["items"])
 
 
+def test_course_answer_rewrite_evidence_excludes_answer_outline() -> None:
+    messages = course_api._build_course_answer_rewrite_messages(
+        query="성능 병목은 어디부터 봐?",
+        draft_answer="DB 응답 지연부터 확인한다. [1]",
+        sources=[{"index": 1, "title": "성능 병목", "stage_id": "perf_test", "source_kind": "course"}],
+        learning_chunks=[
+            {
+                "title": "성능 병목 확인",
+                "learning_goal": "DB 응답 지연과 Connection Pool 대기를 먼저 확인한다.",
+                "beginner_explanation": "성능 결과에서 병목 근거를 운영자가 볼 수 있게 정리한다.",
+                "operational_sequence": ["DB SQL response latency evidence를 먼저 확인한다."],
+                "what_to_look_for": ["DB SQL response latency"],
+            }
+        ],
+        guide_step={
+            "card_text": "병목과 개선 포인트 확인하기",
+            "learning_objective": "DB SQL 응답 지연, Connection Pool, HPA를 순서대로 확인한다.",
+            "answer_outline": ["This fixed outline must not be copied into rewrite evidence."],
+        },
+    )
+
+    user_message = messages[-1]["content"]
+
+    assert "This fixed outline must not be copied" not in user_message
+    assert "answer_outline" not in user_message
+    assert "ops_learning_chunks" in user_message
+
+
 def test_course_chat_ops_learning_answer_includes_grounded_support_details(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
