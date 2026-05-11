@@ -6,7 +6,7 @@ from play_book_studio.answering.answer_text_commands import build_grounded_comma
 from play_book_studio.answering.answer_text_commands import strip_ungrounded_code_blocks
 from play_book_studio.answering.models import AnswerResult, Citation
 from play_book_studio.http.presenters import _citation_display_payload
-from play_book_studio.http.session_flow import suggest_follow_up_questions
+from play_book_studio.http.session_flow import dedupe_suggestions, suggest_follow_up_questions
 from play_book_studio.http.sessions import ChatSession
 from play_book_studio.evals.studio_live_smoke import SmokeCase, _validate_case
 from play_book_studio.retrieval.intent_profile import build_intent_profile
@@ -380,6 +380,24 @@ def test_follow_up_questions_rotate_from_citation_seed_and_stay_grounded() -> No
     assert first_suggestions != second_suggestions
     assert any("oc project" in suggestion or "namespace" in suggestion for suggestion in first_suggestions)
     assert any("bootstrap" in suggestion or "openshift-install" in suggestion for suggestion in second_suggestions)
+
+
+def test_follow_up_suggestions_filter_mojibake_like_text_without_literal_glyphs() -> None:
+    broken = "\u8b1b\u4e11\u89c0\u4e11 기준으로 설명해줘"
+    suggestions = dedupe_suggestions(
+        [
+            broken,
+            "네임스페이스 상태 확인 방법을 알려줘",
+            "oc get namespaces 결과에서 무엇을 확인해야 해?",
+        ],
+        query="namespace 확인 명령어가 뭐야?",
+    )
+
+    assert broken not in suggestions
+    assert suggestions == [
+        "네임스페이스 상태 확인 방법을 알려줘",
+        "oc get namespaces 결과에서 무엇을 확인해야 해?",
+    ]
 
 
 def test_citation_display_payload_strips_code_markup() -> None:
