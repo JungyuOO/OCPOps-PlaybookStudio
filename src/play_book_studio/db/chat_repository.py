@@ -259,6 +259,74 @@ def list_chat_messages(
     ]
 
 
+def list_chat_quality_question_candidates(
+    connection,
+    *,
+    tenant_slug: str = "public",
+    workspace_slug: str = "default",
+    anonymous_user_id: str = "",
+    user_id: str = "",
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    effective_limit = max(1, min(int(limit), 100))
+    owner_filter_sql = ""
+    params: list[Any] = [tenant_slug, workspace_slug]
+    if anonymous_user_id:
+        owner_filter_sql += " AND cs.anonymous_user_id = %s"
+        params.append(anonymous_user_id)
+    if user_id:
+        owner_filter_sql += " AND cs.user_id = %s"
+        params.append(user_id)
+    params.append(effective_limit)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT
+                u.content,
+                COALESCE(a.metadata->>'response_kind', '') AS response_kind,
+                COALESCE(a.metadata->>'rewritten_query', '') AS rewritten_query,
+                count(*)::int AS occurrence_count,
+                max(a.created_at) AS last_seen_at
+            FROM chat_messages u
+            JOIN chat_sessions cs ON cs.id = u.chat_session_id
+            JOIN tenants t ON t.id = cs.tenant_id
+            JOIN workspaces w ON w.id = cs.workspace_id
+            JOIN chat_messages a ON a.chat_session_id = u.chat_session_id
+              AND a.role = 'assistant'
+              AND COALESCE(a.metadata->>'turn_id', '') = COALESCE(u.metadata->>'turn_id', '')
+            WHERE t.slug = %s
+              AND w.slug = %s
+              AND cs.status = 'active'
+              AND u.role = 'user'
+              AND length(trim(u.content)) BETWEEN 3 AND 220
+              AND COALESCE(a.metadata->>'response_kind', '') <> 'smalltalk'
+              {owner_filter_sql}
+            GROUP BY u.content, response_kind, rewritten_query
+            ORDER BY
+                CASE response_kind
+                    WHEN 'clarification' THEN 3
+                    WHEN 'no_answer' THEN 2
+                    ELSE 1
+                END DESC,
+                occurrence_count DESC,
+                last_seen_at DESC
+            LIMIT %s
+            """,
+            tuple(params),
+        )
+        rows = cursor.fetchall()
+    return [
+        {
+            "query": str(row[0] or ""),
+            "response_kind": str(row[1] or ""),
+            "rewritten_query": str(row[2] or ""),
+            "occurrence_count": int(row[3] or 0),
+            "last_seen_at": row[4].isoformat() if row[4] is not None else "",
+        }
+        for row in rows
+    ]
+
+
 def archive_chat_session(
     connection,
     *,
@@ -385,6 +453,7 @@ def persist_chat_turn(
 __all__ = [
     "StoredChatTurn",
     "archive_chat_session",
+    "list_chat_quality_question_candidates",
     "list_chat_messages",
     "list_chat_sessions",
     "persist_chat_turn",

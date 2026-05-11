@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from play_book_studio.db.chat_repository import (
     archive_chat_session,
+    list_chat_quality_question_candidates,
     list_chat_messages,
     list_chat_sessions,
     persist_chat_turn,
@@ -186,3 +187,32 @@ def test_archive_chat_session_scopes_update_to_owner_and_client_session():
     assert "cs.client_session_id = %s" in sql_text
     assert "cs.status = 'active'" in sql_text
     assert connection.cursor_obj.calls[0][1] == ("public", "default", "owner-hash", "", "client-session")
+
+
+def test_list_chat_quality_question_candidates_prioritizes_problematic_turns():
+    connection = FakeConnection()
+    connection.cursor_obj.fetchall_rows = [
+        (
+            "OCP 설치 어떻게 해",
+            "clarification",
+            "OpenShift Container Platform 설치",
+            3,
+            datetime(2026, 5, 4, tzinfo=timezone.utc),
+        )
+    ]
+
+    candidates = list_chat_quality_question_candidates(
+        connection,
+        anonymous_user_id="owner-hash",
+        limit=10,
+    )
+
+    sql_text = "\n".join(sql for sql, _params in connection.cursor_obj.calls)
+    assert "JOIN chat_messages a" in sql_text
+    assert "a.metadata->>'turn_id'" in sql_text
+    assert "WHEN 'clarification' THEN 3" in sql_text
+    assert "cs.anonymous_user_id = %s" in sql_text
+    assert connection.cursor_obj.calls[0][1] == ("public", "default", "owner-hash", 10)
+    assert candidates[0]["query"] == "OCP 설치 어떻게 해"
+    assert candidates[0]["response_kind"] == "clarification"
+    assert candidates[0]["occurrence_count"] == 3
