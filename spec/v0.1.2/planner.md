@@ -85,14 +85,17 @@ ChatGPT 웹 프로젝트에 동일 문서 PDF를 넣었을 때처럼, 짧은 질
 
 ## 단계 그룹화 (Phase 분리)
 
-v0.1.2는 RAG 데이터 계층 재구축 릴리즈이며, 청크 스키마와 검색 인덱스가 함께 바뀐다. 그러나 모든 작업의 위험도가 같지는 않다. **재색인이 필요한 작업과 그렇지 않은 작업을 분리하여 4개 phase로 묶고**, A → B → C → D 순서로 진행한다. Phase A는 별도 PR로 먼저 머지해 리뷰/롤백을 단순화한다. Phase B만 재색인 1회를 묶어서 처리하고, 나머지는 코드 변경 + JSON 추가 + 평가 검증 수준이다.
+v0.1.2는 RAG 데이터 계층 재구축 릴리즈이며, 청크 스키마와 검색 인덱스가 함께 바뀐다. 그러나 모든 작업의 위험도가 같지는 않다. **재색인이 필요한 작업과 그렇지 않은 작업, 그리고 사용자 가시 클린업과 retrieval 보강을 분리하여 5개 PR을 가진 4개 phase로 묶고**, A.1 → A.2 → B → C → D 순서로 진행한다.
 
-| Phase | 내용 | 재색인 필요 | 사용자 가시성 | PR 전략 |
-|---|---|---|---|---|
-| **A** | markup/command sanitize, FAQ lane eval JSONL 노출 차단, nav-only chunk를 retrieval 후처리에서 런타임 휴리스틱으로 down-rank (DB 컬럼 추가 없음) | X | 즉시: `oc [/CODE]` 등 잔류 제거, 평가셋 question 노출 차단, nav-only 청크 단독 인용 감소 | 별도 PR로 먼저 머지 |
-| **B** | chunk size 정책 + parent-child emit + navigation_only DB 컬럼 영구화 + LLM context 확대 + KMSC beginner_narrative + ops_learning auto-derive + chunk question candidates 사전 생성 + starter_questions/follow-up 재설계 → **한 번에 재색인 1회** | O (1회) | 답변 깊이/길이 증가, 추천 질문 다양화/회전, 운영 답변 narrative 확장 | 하나의 PR로 묶어 머지 (중간 partial deploy 금지) |
-| **C** | concept synonym JSON 사전 + query_understanding intent 4개 추가 + cross-lingual rewrite + v012 beginner 6개 eval 통과 | X | retrieval 정확도, 짧은 자연어 질문 대응 | 별도 PR |
-| **D** | Playwright smoke + OCP rollout + live smoke + v0.1.1 잔여 (terminal paste/wrap) | X | 최종 사용자 검증 | 머지 후 실행 |
+PR 분리의 핵심 원칙은 **"코드 머지 시점"과 "eval 통과 검증 시점"을 분리**한다는 것이다. retrieval 보강 코드(intent 추가, concept synonym, cross-lingual rewrite, v012 eval JSONL 파일 자체)는 Phase A.2에서 일찍 머지되어 Phase B 재색인 전후 회귀 비교의 기준선이 되고, "v012 6개 통과" 선언은 Phase B 재색인 이후 Phase C에서만 한다.
+
+| Phase | PR | 내용 | 재색인 | 사용자 가시성 | 평가 기준 |
+|---|---|---|---|---|---|
+| **A.1** | PR #1 | markup/command sanitize + FAQ lane eval JSONL 노출 차단 + nav-only chunk 런타임 휴리스틱 down-rank (DB 컬럼 추가 없음) | X | 즉시: `oc [/CODE]` 잔류 제거, 평가셋 question 노출 차단, nav-only 단독 인용 감소 | studio_live_smoke 회귀 없음 |
+| **A.2** | PR #2 | query_understanding intent 4개 추가 + concept synonym JSON 사전 + cross-lingual rewrite + v012 beginner eval JSONL 파일 추가 (통과 검증은 미실시) | X | retrieval term 확장, eval set만 정의 | retrieval eval 회귀 없음, v012 통과 여부는 측정만 하고 gate 아님 |
+| **B** | PR #3 | chunk size 정책 + parent-child emit + navigation_only DB 컬럼 영구화 + LLM context 확대 + KMSC beginner_narrative + ops_learning auto-derive + chunk question candidates 사전 생성 + starter_questions/follow-up 재설계 → **한 번에 재색인 1회** | O (1회) | 답변 깊이/길이 증가, 추천 질문 다양화/회전, 운영 답변 narrative 확장 | studio_live_smoke pass rate ≥ 0.85, 청크 품질 baseline 회귀 비교 |
+| **C** | PR #4 또는 리포트 | v012 beginner 6개 통과 + 회귀 비교 리포트 + 필요 시 query/synonym tune | X | retrieval 정확도, 짧은 자연어 질문 대응 확정 | v012 6개 모두 통과 |
+| **D** | 운영 | Playwright smoke + OCP rollout + live smoke + v0.1.1 잔여 (terminal paste/wrap) | X | 최종 사용자 검증 | live smoke 통과 |
 
 Step 1-16과의 매핑:
 
@@ -101,7 +104,7 @@ Step 1-16과의 매핑:
   Step 1   v0.1.2 브랜치 + planner 확정
   Step 2   v012_chunk_quality_before 등 baseline 리포트 동결
 
-Phase A  (별도 PR, 재색인 없음)
+Phase A.1  (PR #1, 재색인 없음, 사용자 가시 클린업)
   Step 3   internal markup / cli_commands sanitize
   Step 4 일부   navigation_only를 retrieval 후처리에서 런타임 휴리스틱으로 down-rank
                 (이 단계에서는 DB 컬럼 추가하지 않고 chunking.py 메모리 플래그 또는
@@ -109,22 +112,36 @@ Phase A  (별도 PR, 재색인 없음)
   Step 10 일부  starter_questions FAQ lane의 평가셋 JSONL 직접 query 노출 분기 제거
                 (chunk pool 기반 sampling으로 전환하기 전 단계로, 기존
                  _compose_beginner_question fallback에 임시 의존)
+  Step 15 일부  session_flow의 section title 노출 정리(_clean_subject_title 통과 후만 사용)
 
-Phase B  (단일 PR로 묶음, 끝에 재색인 1회)
+Phase A.2  (PR #2, 재색인 없음, retrieval add-on 코드 머지)
+  Step 11      query_understanding intent 4개 추가 (deployment_yaml_authoring,
+                pod_resource_inspection, service_failure_diagnosis, namespace_create)
+                + retrieval term 보강 + cross-lingual rewrite (deterministic 규칙)
+  Step 12      concept synonym JSON 사전(ocp_concept_synonyms_v1.json) 신규 추가 +
+                retrieval/concept_expansion.py 신규 + query.py에 expand 결과 merge
+  Step 13 코드만   pbs_chat_quality_v012_beginner_cases.jsonl 파일과
+                tests/test_answer_quality_v012_beginner.py 스켈레톤 추가
+                (통과 단정은 하지 않고, 현재 fail/pass 분포만 기록)
+
+Phase B  (PR #3, 단일 PR로 묶음, 끝에 재색인 1회)
   Step 4 마저  navigation_only를 DB 컬럼으로 영구화하고 인덱스 추가
+                (A.1의 런타임 휴리스틱과 동일 규칙 공유, 결과 차이 0 확인)
   Step 5       chunk size 정책 재조정 + parent-child emit
   Step 6       max_chunks/max_chars_per_chunk 확대
   Step 7       KMSC beginner_narrative pre-generation
   Step 8       ops_learning_chunks auto-derive (18 → 100+)
   Step 9       chunk.starter_question_candidates / followup_question_candidates 사전 생성
   Step 10 마저 starter_questions/session_flow를 chunk 후보 pool 기반으로 재설계
+                (A.1에서 임시 의존한 _compose_beginner_question fallback을 격하)
   Step 14      전체 재청킹/재색인 (공식 + KMSC, Qdrant + Postgres)
 
-Phase C  (별도 PR, 재색인 없음)
-  Step 11      query_understanding intent 4개 + retrieval term 보강 +
-                cross-lingual rewrite
-  Step 12      concept synonym JSON 사전 도입 및 query expansion 연결
-  Step 13      v012 beginner 6개 eval case 통과
+Phase C  (PR #4 또는 리포트, 재색인 없음, eval 통과 검증)
+  Step 13 통과 v012 beginner 6개 eval case 통과 단정 활성화
+  회귀 비교    reports/v012_studio_live_smoke_after.json,
+                v012_retrieval_eval_after.json, v012_answer_eval_after.json 생성
+  필요 시 tune   concept synonym 누락, intent 매치 누락, chunk question candidate
+                품질 문제 발견 시 작은 follow-up PR로 보강
 
 Phase D  (배포 단계)
   Step 15      UI/Playwright smoke
@@ -133,11 +150,13 @@ Phase D  (배포 단계)
 
 원칙:
 
+- **PR 분리의 핵심은 회귀 측정 단위 분리.** A.1 머지 후 measure → A.2 머지 후 measure → B 머지 후 measure 흐름을 만들어 각 변경의 효과를 독립적으로 본다.
 - Phase B는 **중간 partial deploy 금지**. parent-child emit과 question candidates 생성, starter_questions 재설계 중 일부만 배포되면 검색기와 답변/추천 질문이 일관성을 잃는다. 코드 + 재색인 + DB 마이그레이션을 한 PR에 묶고, dev 환경에서 재색인까지 끝낸 뒤에 머지한다.
-- Phase A에서 nav-only down-rank는 휴리스틱(체크: line ≤ 2, body token < 60, chunk_type=reference, "이 문서에서는 X를 다룹니다" 패턴)으로만 처리한다. Phase B에서 DB 컬럼으로 승격될 때 휴리스틱 동작 결과와 차이가 발생하지 않도록 동일 규칙을 공유한다.
-- Phase C의 cross-lingual rewrite와 synonym expansion은 retrieval add-on이며, 원본 한국어 query는 항상 BM25 입력으로 유지한다.
+- A.1에서 nav-only down-rank는 휴리스틱(체크: line ≤ 2, body token < 60, chunk_type=reference, "이 문서에서는 X를 다룹니다" 패턴)으로만 처리한다. Phase B에서 DB 컬럼으로 승격될 때 휴리스틱 동작 결과와 차이가 발생하지 않도록 동일 규칙을 공유하고, 차이 0를 테스트로 확인한다.
+- A.2의 cross-lingual rewrite와 synonym expansion은 retrieval add-on이며, 원본 한국어 query는 항상 BM25 입력으로 유지한다. A.2 머지 직후에는 v012 6개 통과를 강제하지 않는다(작은 청크 상태로는 narrative 깊이가 부족해 일부 케이스가 자연스럽게 fail로 측정될 수 있다).
+- Phase C는 신규 기능 PR이라기보다 **"Phase B 결과를 v012 6개 기준으로 통과 단정하고 회귀 리포트를 동결하는 단계"** 다. 통과 실패 시 작은 follow-up PR로만 보강하고, 큰 청크 정책 재변경은 v0.1.3으로 이월한다.
 - 각 Phase 시작 전에 이전 Phase의 회귀 평가(retrieval eval, answer eval, studio_live_smoke)를 통과해야 한다. 실패 시 다음 Phase로 넘어가지 않는다.
-- v0.1.2 최종 릴리즈는 Phase D 완료 시점이며, Phase A·B·C 각각이 단독으로는 v0.1.2 릴리즈로 간주되지 않는다.
+- v0.1.2 최종 릴리즈는 Phase D 완료 시점이며, Phase A.1·A.2·B·C 각각이 단독으로는 v0.1.2 릴리즈로 간주되지 않는다.
 
 ---
 
@@ -936,4 +955,5 @@ oc rollout status deployment/web -n pbs-ocpops
 - 2026-05-11: starter_questions FAQ lane이 여전히 평가셋 JSONL의 query 필드를 직접 노출하는 fallback 경로가 남아 있어, v0.1.2에서 완전 차단하기로 결정.
 - 2026-05-11: 8-토픽 STARTER_CATEGORY_RULES + 13-키워드 _starter_topic_terms + 토픽별 고정 한국어 명사/어미는 사실상 ~40가지 변주만 가능한 템플릿 시스템임을 확인. chunk.starter_question_candidates 사전 생성으로 전환하기로 결정.
 - 2026-05-11: 16 step을 4개 phase로 묶기로 결정. Phase A(코드만, 별도 PR) → Phase B(재색인 1회 묶음 PR) → Phase C(검색 보강 PR) → Phase D(배포). Phase B 중간 partial deploy는 금지하며, Phase A는 markup leak 가시성 때문에 별도 PR로 먼저 머지한다.
+- 2026-05-12: Phase A를 A.1과 A.2 두 PR로 추가 분리. A.1은 사용자 가시 클린업(markup/cli sanitize, FAQ JSONL 노출 차단, nav-only 휴리스틱, section title 노출 정리)이고 A.2는 retrieval add-on 코드 머지(query_understanding intent 4개, concept synonym JSON, cross-lingual rewrite, v012 eval JSONL 파일과 테스트 스켈레톤 추가). "코드 머지 시점"과 "eval 통과 검증 시점"을 분리해 Phase B 재색인 전후 회귀 비교의 기준선을 만든다. v012 6개 통과 단정은 Phase C에서만 한다.
 - 2026-05-11: 사용자 결정에 따라 GraphDB/Neo4j 등 별도 그래프 인프라는 도입하지 않는다. VectorDB(Qdrant) + BM25(Postgres) hybrid를 유지하고, 개념 인접 검색은 `corpus/manifests/concepts/ocp_concept_synonyms_v1.json` 정적 JSON 사전 + 정규식 매칭 + retrieval_terms list extend 수준으로만 처리한다. 기존 `retrieval/graph_runtime.py`(로컬 sidecar JSON 메타데이터 부가 레이어)는 v0.1.2에서 손대지 않는다.
