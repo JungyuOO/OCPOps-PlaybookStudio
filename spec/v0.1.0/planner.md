@@ -499,3 +499,10 @@ oc rollout status deployment/web -n pbs-ocpops
 - 2026-05-11: 라이트 모드에서 suggested query chip, welcome question card, lane badge 텍스트가 밝은 배경 위에서 사라지는 문제를 수정했다. light theme 전용 foreground/background/border를 분리했다. 검증: `npm --prefix apps/web run build`.
 - 2026-05-11: 코퍼스 청크 품질 검증을 위해 `corpus-quality-audit` CLI와 단위 테스트를 추가했다. 로컬 감사 기준 official 27,907개, KMSC course 523개, ops learning 18개 청크가 존재하며, missing text/id 중복은 없었다. KMSC course는 4,000자 초과 청크 8개, ops learning은 4,000자 초과 청크 7개와 직접 asset path 없는 image evidence 13개가 확인되어 다음 작업에서 KMSC 이미지/청크 연결 품질을 개선한다.
 - 2026-05-11: ops learning chunk 생성 시 원본 KMSC chunk의 이미지 asset metadata를 `image_evidence_assets`로 보존하도록 변경하고 `ops_learning_chunks_v1.jsonl`을 재생성했다. 감사 결과 ops learning의 `asset_reference_count`가 0개에서 84개로 증가했고 `image_without_direct_asset_count`는 13개에서 0개로 줄었다. 검증: `pytest tests/test_course_ops_learning.py tests/test_corpus_quality_audit.py tests/test_course_api.py -q --basetemp tmp/pytest`.
+
+## 2026-05-11 추가 작업 메모
+
+- 특정 질문 전용 보정이 아니라 `install_overview`, `command_lookup`, `troubleshooting`, `secret_config_*`, `concept_explanation` 의도 전체에 적용되는 beginner grounded answer shaping 레이어를 추가했다.
+- 사용자 질문 로그는 RAG 입력으로 쓰지 않고, query understanding 결과와 검색된 citation/cli_commands만 사용해서 약한 답변을 구조화한다.
+- 검증 예시는 `OCP 설치 어떻게 해?`, `네임스페이스 확인 명령어가 뭐야?`, `Secret 컨피그가 계속 오류뜨는데 왜 이래?`이지만, 구현은 고정 Q/A가 아니라 의도와 근거 기반 shape만 적용한다.
+- 검증 명령: `pytest tests/test_beginner_grounded_answer_shape.py tests/test_query_understanding.py tests/test_low_confidence_guard.py tests/test_chat_grounding_quality.py tests/test_prompt_answer_shapes.py -q --basetemp tmp/pytest`.
