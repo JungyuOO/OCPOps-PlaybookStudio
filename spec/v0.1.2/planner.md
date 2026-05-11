@@ -55,7 +55,7 @@ ChatGPT 웹 프로젝트에 동일 문서 PDF를 넣었을 때처럼, 짧은 질
 - [ ] `oc auth can-i`, `oc adm top pods`, `oc set resources`, `oc create namespace`, `oc apply -f` 등 자주 쓰는 명령에 대한 retrieval 안정성 회복
 - [ ] cross-lingual query expansion 보강 (`yaml`, `deployment`, `리소스 사용량` → 영어 keyword 동반)
 - [ ] Service 장애 / Deployment YAML 작성 / Pod 리소스 확인 intent 추가
-- [ ] 온톨로지/그래프 보강: Pod-Service-Endpoint-Route, Deployment-ReplicaSet-Pod, Secret/ConfigMap-Volume-envFrom 노드 정의 및 retrieval 시 인접 노드 chunk 확장
+- [ ] 개념 동의어/인접 사전 JSON으로 query expansion 보강: Pod-Service-Endpoint-Route, Deployment-ReplicaSet-Pod, Secret/ConfigMap-Volume-envFrom 등 인접 개념 term 확장 (GraphDB 미사용, VectorDB + 사전 JSON만 사용)
 - [ ] retrieval 실패 회귀 case를 v0.1.2 eval set에 추가하고 통과시키기
 - [ ] studio_live_smoke pass rate 0.66 → 0.85 이상으로 회복
 - [ ] backend focused tests 통과
@@ -71,7 +71,7 @@ ChatGPT 웹 프로젝트에 동일 문서 PDF를 넣었을 때처럼, 짧은 질
 - [ ] 답변 평가용 golden set을 6개 초보자 대표 질문 시나리오로 확장
 - [ ] 응답 품질 회귀 테스트를 Playwright smoke와 연결
 - [ ] retrieval trace를 chat_turns에 더 풍부하게 저장하여 품질 분석 강화
-- [ ] graph_runtime을 활용한 개념 인접성 기반 reranker 보강
+- [ ] 개념 동의어 사전을 활용한 인접성 기반 score 가중치 (reranker가 아니라 BM25/vector hit의 후처리 boost)
 
 ### 비범위 (v0.1.3 이후)
 
@@ -79,7 +79,7 @@ ChatGPT 웹 프로젝트에 동일 문서 PDF를 넣었을 때처럼, 짧은 질
 - 모든 KMSC 문서를 LLM으로 재요약하여 청크 본문 자체를 재생성
 - Cross-encoder reranker의 finetune
 - 외부 RAG SaaS와의 hybrid 비교 평가
-- 완전한 ontology DSL 정의 및 KGQA 스타일 검색
+- GraphDB(Neo4j 등) 도입, 완전한 ontology DSL 정의, KGQA 스타일 검색
 
 ---
 
@@ -362,9 +362,19 @@ namespace_create
 
 기존 intent도 retrieval_terms를 보강한다. (예: command_lookup이면 OCP CLI 4.20 명령군과 일반 oc verb를 모두 노출)
 
-### 10. 온톨로지/그래프 보강
+### 10. 개념 동의어/인접 사전 기반 query expansion 보강
 
-`retrieval/graph_runtime.py` 와 `corpus/data/wiki_relations`를 활용해 다음 개념 노드를 정의한다.
+GraphDB(Neo4j 등)나 별도 그래프 인프라는 도입하지 않는다. 검색의 메인 경로는 v0.1.0/v0.1.1과 동일하게 BM25(Postgres) + Vector(Qdrant) hybrid이며, v0.1.2에서는 정적 JSON 사전 한 개로 query expansion만 보강한다.
+
+`retrieval/graph_runtime.py`는 기존에 sidecar JSON에서 book 간 관계 metadata를 lookup해 retrieval hit에 부가하는 보조 레이어로만 동작하고 있으며 (graph_backend 기본값 `local`, Neo4j는 옵션, 현재 `.env`에 graph 관련 설정 0개), v0.1.2 작업 범위에서는 이 모듈을 확장하지 않고 그대로 둔다.
+
+대신 다음 신규 JSON 사전을 도입한다.
+
+```text
+corpus/manifests/concepts/ocp_concept_synonyms_v1.json
+```
+
+이 사전에는 다음 25개 정도의 핵심 OCP 개념만 정의한다.
 
 ```text
 Pod, Deployment, ReplicaSet, StatefulSet, DaemonSet, Job, CronJob
@@ -376,19 +386,19 @@ Node, MachineSet, MachineConfig, MachineConfigPool, ClusterOperator
 oc, kubectl, openshift-install
 ```
 
-각 노드는 다음 메타데이터를 가진다.
+각 항목은 다음 필드만 가지며, "노드" 같은 그래프 용어는 쓰지 않는다.
 
 ```text
-node_id          (e.g. ocp:resource:Service)
-display_name_ko  "Service / 서비스"
-synonyms         ["svc", "서비스", "Service"]
-adjacent_nodes   {"is_consumed_by": ["Deployment"], "exposes_via": ["Route", "Ingress"]}
-related_chunks   chunk_id list (자동 link)
+concept_id        (e.g. ocp:resource:Service)
+display_name_ko   "Service / 서비스"
+synonyms          ["svc", "서비스", "Service"]   # 정규식 매칭용
+adjacent_terms    ["Endpoint", "EndpointSlice", "Route", "Pod selector",
+                   "oc describe svc", "oc get endpoints"]   # query에 추가할 검색어
 ```
 
-query에 노드 매치가 일어나면 adjacent_nodes로 retrieval term을 확장한다. 예: "Service쪽 장애" → Service + Endpoint + Route + Pod selector + oc describe svc.
+query에 synonym 매치가 일어나면 adjacent_terms를 retrieval terms에 단순 append한다. 예: "Service쪽 장애" → Service + Endpoint + Route + Pod selector + oc describe svc.
 
-본격적인 KG는 v0.1.3 이후이며, v0.1.2에서는 위 25개 정도의 핵심 노드와 인접 관계만 정의하고 query 확장에 사용한다.
+구현은 순수 JSON 로딩 + 정규식 매칭 + list extend로 끝낸다. graph 자료구조, 인접 행렬, 트래버설 알고리즘 같은 것은 도입하지 않는다. v0.1.3 이후에도 GraphDB 도입은 비범위로 유지하며, 사전 규모가 커지면 같은 JSON에 항목을 추가하는 방식으로 확장한다.
 
 ### 11. Eval 회귀 case 추가
 
@@ -654,20 +664,33 @@ src/play_book_studio/retrieval/rewrite.py
 
 테스트: `tests/test_query_understanding.py` 보강 (intent 4개 추가), `tests/test_query_rewrite_cross_lingual.py`.
 
-### Step 12. 온톨로지 그래프 노드 정의 및 query 확장
+### Step 12. 개념 동의어 사전 도입 및 query expansion 연결
+
+GraphDB/Neo4j는 도입하지 않는다. 순수 정적 JSON 사전 1개로 처리한다.
 
 수정 파일:
 
 ```text
-corpus/manifests/graph/ocp_concept_graph_v1.json   (신규)
-  - 25개 핵심 노드, synonyms, adjacent_nodes
-src/play_book_studio/retrieval/graph_runtime.py
-  - ocp_concept_graph_v1을 로드하여 인접 노드 term 확장
+corpus/manifests/concepts/ocp_concept_synonyms_v1.json   (신규)
+  - 25개 항목 (Pod, Deployment, Service, Route, Namespace, Secret, ConfigMap,
+    PVC, Node, MachineConfigPool, ClusterOperator 등)
+  - 각 항목 필드: concept_id, display_name_ko, synonyms, adjacent_terms
+  - 기존 graph_runtime sidecar와 별도 파일이며, graph_runtime은 손대지 않음
+
+src/play_book_studio/retrieval/concept_expansion.py   (신규)
+  - load_concept_synonyms() 한 번 로드 후 lru_cache
+  - expand_query_terms(query: str) -> list[str]
+    1) query에 synonym regex 매치
+    2) 매치된 concept의 adjacent_terms를 list로 append
+    3) 중복 제거 후 반환
+  - graph 자료구조 없음, 단순 dict + 정규식
+
 src/play_book_studio/retrieval/query.py
-  - graph_runtime의 adjacent terms를 retrieval terms에 merge
+  - understand_query 결과에 concept_expansion.expand_query_terms 결과를 retrieval_terms에 merge
+  - 기존 query_terms_* 정규식 사전과 동일한 자리에 추가
 ```
 
-테스트: `tests/test_graph_concept_expansion.py`.
+테스트: `tests/test_concept_synonym_expansion.py` (사전 로딩, regex 매치, adjacent_terms append, 중복 제거, 빈 query/없는 concept fallback).
 
 ### Step 13. v012 eval 회귀 case 추가 및 통과
 
@@ -839,7 +862,7 @@ oc rollout status deployment/web -n pbs-ocpops
 | 청크 사이즈 확대로 BM25 정확도 감소 | leaf chunk가 너무 커지면 keyword 매치 좁아짐 | parent-child 구조의 leaf는 96~128 유지 |
 | ops_learning 자동 derive 결과 품질 | curated 18개 대비 noise 가능성 | curated와 auto-derived를 별도 stage로 운영, lane별 가중치 |
 | eval 회귀 | 기존 통과 케이스가 깨질 가능성 | 모든 변경 후 retrieval + answer eval + studio_live_smoke 회귀 비교 |
-| graph 노드 정의 누락 | 핵심 25개 외 누락 개념 | v0.1.3에서 운영 로그 기반 추가, v0.1.2는 핵심 25만 |
+| 개념 동의어 사전 누락 | 핵심 25개 외 누락 개념 | v0.1.3에서 운영 로그 기반 추가, v0.1.2는 핵심 25개만 |
 | 한국어 사용자 질의에 대한 cross-lingual rewrite 과적합 | rewrite가 영어 term을 과도하게 끌어와 한국어 청크를 밀어냄 | rewrite 결과를 add-on으로 추가하되 원본 한국어 query를 우선 BM25에 유지 |
 | starter_question_candidates 사전 생성이 오래 걸림 | 27,907개 + KMSC 523 + 자동 ops_learning 200 | 백그라운드 배치, 우선 lane(operations, learning)부터 채움 |
 
@@ -854,3 +877,4 @@ oc rollout status deployment/web -n pbs-ocpops
 - 2026-05-11: ops_learning_chunks가 18개에 그쳐 operations lane 회전이 단조롭다. KMSC 523개 청크에서 자동 derive하여 100개 이상으로 확장하기로 결정.
 - 2026-05-11: starter_questions FAQ lane이 여전히 평가셋 JSONL의 query 필드를 직접 노출하는 fallback 경로가 남아 있어, v0.1.2에서 완전 차단하기로 결정.
 - 2026-05-11: 8-토픽 STARTER_CATEGORY_RULES + 13-키워드 _starter_topic_terms + 토픽별 고정 한국어 명사/어미는 사실상 ~40가지 변주만 가능한 템플릿 시스템임을 확인. chunk.starter_question_candidates 사전 생성으로 전환하기로 결정.
+- 2026-05-11: 사용자 결정에 따라 GraphDB/Neo4j 등 별도 그래프 인프라는 도입하지 않는다. VectorDB(Qdrant) + BM25(Postgres) hybrid를 유지하고, 개념 인접 검색은 `corpus/manifests/concepts/ocp_concept_synonyms_v1.json` 정적 JSON 사전 + 정규식 매칭 + retrieval_terms list extend 수준으로만 처리한다. 기존 `retrieval/graph_runtime.py`(로컬 sidecar JSON 메타데이터 부가 레이어)는 v0.1.2에서 손대지 않는다.
