@@ -11,6 +11,15 @@
 - [x] Phase A.2 Step 11: query_understanding intent 4개 + deterministic cross-lingual rewrite terms 추가
 - [x] Phase A.2 Step 12: static concept synonym JSON + concept_expansion 연결(GraphDB 없음)
 - [x] Phase A.2 Step 13 코드만: v012 beginner eval JSONL + schema/expansion test scaffold 추가
+- [x] Phase B Step 14 일부: official gold chunks parent/leaf 보강 후 Postgres/Qdrant 재색인 완료
+  - official gold: leaf 27,907개 + parent 5,815개 = 33,722개
+  - official 신규 parent 5,815개 임베딩/색인, 기존 leaf 27,907개 payload refresh 완료
+  - KMSC shared study_docs: 기존 523개 + source-scoped synthetic parent 100개 = 623개 import/index 완료
+  - course runtime: chunks 523개, assets 775개, manifest 1개 정상 import
+  - course Qdrant: `course_pbs_ko` 523개, `course_ops_learning_ko` 100개 upsert
+  - DB corpus readiness: official_docs 33,722개, study_docs 1,225개, qdrant_index_parity true
+  - `reports/v012_chunk_quality_after.json` 생성: row_count 34,263, mojibake_suspect_count 0
+  - GitHub 100MB 제한 때문에 보강된 official JSONL 자체는 커밋하지 않고, seed 시 `official-gold-import --enrich-runtime-metadata`로 컨테이너 안에서 재생성하도록 변경
 
 ## 목표
 

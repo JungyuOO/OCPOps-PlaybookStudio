@@ -24,8 +24,8 @@ def build_chunk_question_candidates(chunk: dict[str, Any]) -> dict[str, list[str
     starter: list[str] = []
     followup: list[str] = []
     if commands:
-        starter.append(f"{subject} 확인할 때 어떤 명령어부터 쓰면 돼?")
-        followup.append(f"{commands[0]} 결과에서 무엇을 보면 돼?")
+        starter.append(f"{subject} 확인하려면 어떤 명령어부터 쓰면 돼?")
+        followup.append(f"{commands[0]} 결과에서 뭘 보면 돼?")
         followup.append(f"{subject} 명령 결과가 이상하면 다음에 어디를 확인해?")
     else:
         starter.append(f"{subject} 처음에는 무엇부터 확인하면 돼?")
@@ -34,7 +34,7 @@ def build_chunk_question_candidates(chunk: dict[str, Any]) -> dict[str, list[str
         starter.insert(0, f"{subject} 문제가 생기면 원인을 어디서부터 좁히면 돼?")
         followup.append(f"{subject} 상태가 계속 나쁘면 로그와 이벤트는 어떻게 봐?")
     if _looks_like_authoring(text):
-        starter.insert(0, f"{subject} 작성할 때 기본 구조는 어떻게 잡으면 돼?")
+        starter.insert(0, f"{subject} 작성할 때 기본 구조는 어떻게 넣으면 돼?")
         followup.append(f"{subject} 적용한 뒤 정상 여부는 어떻게 확인해?")
 
     return {
@@ -89,15 +89,18 @@ def _subject(*, title: str, objects: list[str], text: str) -> str:
         return objects[0]
     if title:
         return title
-    if "install" in text.lower() or "설치" in text:
+    lowered = text.lower()
+    if "install" in lowered or "설치" in text:
         return "OCP 설치"
+    if "troubleshoot" in lowered or "문제" in text:
+        return "문제 해결"
     return "이 절차"
 
 
 def _looks_like_troubleshooting(text: str) -> bool:
     lowered = text.lower()
     return any(token in lowered for token in ("error", "fail", "degraded", "pending", "troubleshoot")) or any(
-        token in text for token in ("오류", "장애", "실패", "문제", "원인")
+        token in text for token in ("오류", "실패", "문제", "원인", "장애")
     )
 
 

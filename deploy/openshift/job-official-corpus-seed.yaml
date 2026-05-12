@@ -42,6 +42,7 @@ spec:
             - /app
             - --chunks-path
             - /app/corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl
+            - --enrich-runtime-metadata
             - --index
             - --index-limit
             - "50000"

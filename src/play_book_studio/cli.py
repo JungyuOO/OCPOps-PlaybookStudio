@@ -258,6 +258,8 @@ def build_parser() -> argparse.ArgumentParser:
     official_gold_import_parser.add_argument("--collection", default="")
     official_gold_import_parser.add_argument("--refresh-limit", type=int, default=0)
     official_gold_import_parser.add_argument("--refresh-batch-size", type=int, default=256)
+    official_gold_import_parser.add_argument("--enrich-runtime-metadata", action="store_true")
+    official_gold_import_parser.add_argument("--bm25-path", type=Path, default=None)
     official_gold_import_parser.add_argument("--dry-run", action="store_true")
 
     learning_seed_parser = subparsers.add_parser(
@@ -908,14 +910,27 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
     if not chunks_path.is_absolute():
         chunks_path = root_dir / chunks_path
     chunks_path = chunks_path.resolve()
-    if args.dry_run:
-        print(
-            json.dumps(
-                build_official_gold_import_plan(chunks_path, limit=args.limit),
-                ensure_ascii=False,
-                indent=2,
-            )
+    bm25_path = args.bm25_path
+    if bm25_path is not None and not bm25_path.is_absolute():
+        bm25_path = root_dir / bm25_path
+    if bm25_path is not None:
+        bm25_path = bm25_path.resolve()
+    elif args.enrich_runtime_metadata:
+        bm25_path = load_settings(root_dir).bm25_corpus_path.resolve()
+    enrich_report = None
+    if args.enrich_runtime_metadata:
+        from play_book_studio.ingestion.official_gold_enrichment import enrich_official_gold_chunks
+
+        enrich_report = enrich_official_gold_chunks(
+            chunks_path,
+            bm25_path=bm25_path,
+            dry_run=bool(args.dry_run),
         )
+    if args.dry_run:
+        payload = build_official_gold_import_plan(chunks_path, limit=args.limit)
+        if enrich_report is not None:
+            payload["official_gold_enrichment"] = enrich_report
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
 
     settings = load_settings(root_dir)
@@ -937,6 +952,8 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
             limit=args.limit,
         )
         payload = result.to_dict()
+        if enrich_report is not None:
+            payload["official_gold_enrichment"] = enrich_report
         if args.index:
             from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
 
