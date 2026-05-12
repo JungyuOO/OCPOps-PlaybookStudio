@@ -1,0 +1,155 @@
+{
+  "schema": "ocp_concept_synonyms_v1",
+  "concepts": [
+    {
+      "concept_id": "ocp:resource:Pod",
+      "display_name_ko": "Pod / 파드",
+      "synonyms": ["pod", "pods", "파드", "컨테이너"],
+      "adjacent_terms": ["Pod", "container", "oc get pods", "oc describe pod", "oc logs", "restartCount", "CrashLoopBackOff"]
+    },
+    {
+      "concept_id": "ocp:resource:Deployment",
+      "display_name_ko": "Deployment / 배포",
+      "synonyms": ["deployment", "deployments", "배포", "디플로이먼트"],
+      "adjacent_terms": ["Deployment", "kind: Deployment", "ReplicaSet", "Pod template", "oc apply -f", "oc rollout status deployment", "oc get deployments"]
+    },
+    {
+      "concept_id": "ocp:resource:Service",
+      "display_name_ko": "Service / 서비스",
+      "synonyms": ["service", "services", "svc", "서비스"],
+      "adjacent_terms": ["Service", "Endpoint", "EndpointSlice", "Route", "selector", "targetPort", "oc describe service", "oc get endpoints"]
+    },
+    {
+      "concept_id": "ocp:resource:Route",
+      "display_name_ko": "Route / 라우트",
+      "synonyms": ["route", "routes", "라우트", "외부접속", "브라우저 접속"],
+      "adjacent_terms": ["Route", "Ingress", "Service", "host", "TLS", "oc get route", "oc describe route", "oc expose service"]
+    },
+    {
+      "concept_id": "ocp:resource:Namespace",
+      "display_name_ko": "Namespace / Project / 네임스페이스",
+      "synonyms": ["namespace", "namespaces", "project", "projects", "네임스페이스", "프로젝트"],
+      "adjacent_terms": ["Namespace", "Project", "oc new-project", "oc create namespace", "oc get namespaces", "oc project"]
+    },
+    {
+      "concept_id": "ocp:resource:Secret",
+      "display_name_ko": "Secret / 시크릿",
+      "synonyms": ["secret", "secrets", "시크릿", "비밀값"],
+      "adjacent_terms": ["Secret", "ConfigMap", "envFrom", "volume mount", "oc get secret", "oc describe secret"]
+    },
+    {
+      "concept_id": "ocp:resource:ConfigMap",
+      "display_name_ko": "ConfigMap / 컨피그맵",
+      "synonyms": ["configmap", "config map", "configmaps", "컨피그맵", "컨피그"],
+      "adjacent_terms": ["ConfigMap", "Secret", "environment variables", "volume mount", "oc get configmap", "oc describe configmap"]
+    },
+    {
+      "concept_id": "ocp:resource:PVC",
+      "display_name_ko": "PVC / PersistentVolumeClaim / 저장공간",
+      "synonyms": ["pvc", "persistentvolumeclaim", "persistent volume claim", "볼륨", "저장공간", "스토리지"],
+      "adjacent_terms": ["PersistentVolumeClaim", "PersistentVolume", "StorageClass", "Bound", "Pending", "oc get pvc", "oc describe pvc"]
+    },
+    {
+      "concept_id": "ocp:resource:Node",
+      "display_name_ko": "Node / 노드",
+      "synonyms": ["node", "nodes", "노드", "서버"],
+      "adjacent_terms": ["Node", "Ready", "NotReady", "oc get nodes", "oc describe node", "oc adm top nodes", "oc debug node"]
+    },
+    {
+      "concept_id": "ocp:resource:ClusterOperator",
+      "display_name_ko": "ClusterOperator / 클러스터 오퍼레이터",
+      "synonyms": ["clusteroperator", "clusteroperators", "cluster operator", "오퍼레이터"],
+      "adjacent_terms": ["ClusterOperator", "Available", "Progressing", "Degraded", "oc get clusteroperators", "oc describe clusteroperator"]
+    },
+    {
+      "concept_id": "ocp:resource:MachineConfigPool",
+      "display_name_ko": "MachineConfigPool / MCP",
+      "synonyms": ["machineconfigpool", "machine config pool", "mcp"],
+      "adjacent_terms": ["MachineConfigPool", "MachineConfig", "UPDATED", "UPDATING", "DEGRADED", "oc get mcp", "oc describe mcp"]
+    },
+    {
+      "concept_id": "ocp:auth:RBAC",
+      "display_name_ko": "RBAC / 권한",
+      "synonyms": ["rbac", "role", "rolebinding", "clusterrole", "권한", "접근권한"],
+      "adjacent_terms": ["Role", "RoleBinding", "ClusterRole", "ClusterRoleBinding", "oc auth can-i", "oc adm policy add-role-to-user"]
+    },
+    {
+      "concept_id": "ocp:workload:ResourceUsage",
+      "display_name_ko": "Resource usage / 리소스 사용량",
+      "synonyms": ["리소스 사용량", "cpu", "memory", "메모리", "자원 사용량", "사용량"],
+      "adjacent_terms": ["resource usage", "CPU", "memory", "requests", "limits", "oc adm top pods", "oc adm top nodes"]
+    },
+    {
+      "concept_id": "ocp:troubleshooting:Events",
+      "display_name_ko": "Events / 이벤트",
+      "synonyms": ["event", "events", "이벤트", "오류", "에러"],
+      "adjacent_terms": ["Events", "Warning", "FailedScheduling", "oc get events", "oc describe pod", "condition"]
+    },
+    {
+      "concept_id": "ocp:install:SNO",
+      "display_name_ko": "Single Node OpenShift / SNO",
+      "synonyms": ["sno", "single node openshift", "단일 노드", "서버 한대", "서버 1대"],
+      "adjacent_terms": ["Single Node OpenShift", "Assisted Installer", "Agent-based Installer", "bootstrap", "pull secret", "openshift-install"]
+    },
+    {
+      "concept_id": "ocp:resource:ReplicaSet",
+      "display_name_ko": "ReplicaSet / 레플리카셋",
+      "synonyms": ["replicaset", "replica set", "rs", "레플리카셋"],
+      "adjacent_terms": ["ReplicaSet", "Deployment", "Pod", "replicas", "oc get replicasets", "oc scale deployment"]
+    },
+    {
+      "concept_id": "ocp:resource:DaemonSet",
+      "display_name_ko": "DaemonSet / 데몬셋",
+      "synonyms": ["daemonset", "daemon set", "ds", "데몬셋"],
+      "adjacent_terms": ["DaemonSet", "node selector", "oc get daemonsets", "oc describe daemonset", "desired", "available"]
+    },
+    {
+      "concept_id": "ocp:resource:StatefulSet",
+      "display_name_ko": "StatefulSet / 스테이트풀셋",
+      "synonyms": ["statefulset", "stateful set", "sts", "스테이트풀셋"],
+      "adjacent_terms": ["StatefulSet", "PVC", "headless service", "ordered rollout", "oc get statefulsets", "oc describe statefulset"]
+    },
+    {
+      "concept_id": "ocp:network:Ingress",
+      "display_name_ko": "Ingress / 인그레스",
+      "synonyms": ["ingress", "ingresses", "인그레스"],
+      "adjacent_terms": ["Ingress", "Route", "Service", "IngressController", "router", "oc get ingress", "oc get route"]
+    },
+    {
+      "concept_id": "ocp:workload:HPA",
+      "display_name_ko": "HorizontalPodAutoscaler / HPA",
+      "synonyms": ["hpa", "horizontalpodautoscaler", "autoscale", "오토스케일", "자동확장"],
+      "adjacent_terms": ["HorizontalPodAutoscaler", "metrics", "CPU utilization", "oc autoscale", "oc get hpa", "oc describe hpa"]
+    },
+    {
+      "concept_id": "ocp:image:ImagePull",
+      "display_name_ko": "Image pull / 이미지 풀",
+      "synonyms": ["imagepullbackoff", "errimagepull", "이미지 pull", "이미지 풀", "이미지 오류"],
+      "adjacent_terms": ["ImagePullBackOff", "ErrImagePull", "image registry", "pull secret", "oc describe pod", "oc get events"]
+    },
+    {
+      "concept_id": "ocp:operator:Operator",
+      "display_name_ko": "Operator / 오퍼레이터",
+      "synonyms": ["operator", "operators", "csv", "subscription", "오퍼레이터"],
+      "adjacent_terms": ["Operator", "ClusterServiceVersion", "Subscription", "InstallPlan", "CatalogSource", "oc get csv", "oc get subscription"]
+    },
+    {
+      "concept_id": "ocp:storage:Etcd",
+      "display_name_ko": "etcd / etcd 백업",
+      "synonyms": ["etcd", "백업", "복구", "backup", "restore"],
+      "adjacent_terms": ["etcd", "cluster-backup.sh", "snapshot", "restore", "quorum", "oc debug node", "chroot /host"]
+    },
+    {
+      "concept_id": "ocp:image:Registry",
+      "display_name_ko": "Image registry / 이미지 레지스트리",
+      "synonyms": ["registry", "레지스트리", "image registry", "이미지 레지스트리"],
+      "adjacent_terms": ["image registry", "ImageContentSourcePolicy", "mirror registry", "pull secret", "oc get configs.imageregistry.operator.openshift.io"]
+    },
+    {
+      "concept_id": "ocp:api:CustomResource",
+      "display_name_ko": "CustomResource / CRD",
+      "synonyms": ["crd", "customresource", "custom resource", "customresourcedefinition", "사용자 정의 리소스"],
+      "adjacent_terms": ["CustomResourceDefinition", "CustomResource", "API group", "oc get crd", "oc explain", "operator"]
+    }
+  ]
+}

@@ -8,6 +8,9 @@
 - [x] Phase A.1 Step 4 일부: navigation-only hit 런타임 down-rank 추가(DB 컬럼 없음)
 - [x] Phase A.1 Step 10 일부: starter FAQ lane에서 eval JSONL query 직접 노출 제거
 - [x] Phase A.1 Step 15 일부: citation section label 노출 전 sanitize 적용
+- [x] Phase A.2 Step 11: query_understanding intent 4개 + deterministic cross-lingual rewrite terms 추가
+- [x] Phase A.2 Step 12: static concept synonym JSON + concept_expansion 연결(GraphDB 없음)
+- [x] Phase A.2 Step 13 코드만: v012 beginner eval JSONL + schema/expansion test scaffold 추가
 
 ## 목표
 
