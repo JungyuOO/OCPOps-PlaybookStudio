@@ -4,6 +4,14 @@
 ## 진행 메모 (2026-05-12)
 
 - [x] 사전 작업 Step 2: `reports/v012_chunk_quality_before.json`, `reports/v012_chunk_quality_before.md`, `reports/v012_studio_live_smoke_before.json` baseline 동결
+- [x] Phase C Step 13 일부: `reports/v012_retrieval_eval_after.json` 생성
+  - retrieval eval: 18건, hit@1 0.8889, hit@3 0.9444, hit@5 0.9444, warning_free_rate 1.0
+  - landing query: hit@1 0.5, hit@3 0.75, hit@5 1.0. 다음 보강 대상은 landing top1 정렬과 relation-aware miss 1건
+- [ ] Phase C Step 13 일부: `reports/v012_studio_live_smoke_after.json` 기준 미달
+  - 80건 중 47건 pass, pass_rate 0.5875. starter endpoint 502는 `target_anchor` payload 계약 보강으로 해결
+  - RBAC `oc auth can-i`와 `oc login` 계열은 intent 우선순위 보강으로 no-answer에서 citation 기반 답변으로 개선
+  - 남은 큰 이슈는 ResourceQuota/LimitRange/ImagePullBackOff/finalizer 등 운영 객체 질문에서 command book lock 또는 answer shaping이 엉뚱한 CLI 템플릿을 선택하는 문제
+  - 다음 작업은 특정 Q-A 고정이 아니라 intent profile evidence fallback, citation signal matching, answer template selection 순서를 더 일반화하는 방향으로 진행
 - [x] Phase A.1 Step 3: context citation excerpt/cli command/section label 내부 markup sanitize
 - [x] Phase A.1 Step 4 일부: navigation-only hit 런타임 down-rank 추가(DB 컬럼 없음)
 - [x] Phase A.1 Step 10 일부: starter FAQ lane에서 eval JSONL query 직접 노출 제거
@@ -986,3 +994,9 @@ oc rollout status deployment/web -n pbs-ocpops
 
 - 2026-05-12: Phase B 일부 구현. `document_chunks`에 `navigation_only`, parent-child, starter/followup candidate, beginner narrative 컬럼을 추가하는 `0008_chunk_runtime_enrichment` migration을 작성했고, official/KMSC import와 Qdrant payload, `RetrievalHit`, vector hydration, context cap(8 chunks/2000 chars, parent 1800 chars)을 연결했다. `starter_questions`는 DB chunk candidate pool을 우선 사용하고, 없을 때만 기존 manifest/ops learning fallback을 사용한다. 검증: `tests/test_chunk_runtime_enrichment.py`, `tests/test_corpus_policy.py`, `tests/test_db_migrations.py`, `tests/test_qdrant_indexer.py`, `tests/test_answer_context_metadata.py`, `tests/test_chunk_hydration.py`, `tests/test_starter_questions.py`, `tests/test_starter_questions_readable.py` 통과. 남음: Step 7/8의 KMSC beginner narrative 및 ops_learning_chunks 100+ 자동 확장, Step 14 전체 재청킹/재색인.
 - 2026-05-12: Phase B Step 7/8 구현. `ingestion/kmsc_beginner_narrative.py`를 추가해 KMSC chunk title/body/image metadata 기반 beginner narrative와 ops learning chunk를 deterministic하게 파생한다. `load_ops_learning_chunks()`는 curated 18개를 유지하면서 course chunk에서 자동 후보를 보강해 최소 100개를 반환한다. 실제 corpus 확인 결과 100개(자동 생성 82개) 로딩. 검증: `tests/test_kmsc_beginner_narrative.py`, `tests/test_course_ops_learning.py`, `tests/test_course_api.py` 통과. 남음: Step 14 전체 재청킹/재색인 및 Phase C live smoke 비교.
+- 2026-05-12: Phase A.1/Step 10 일부 추가 보강. ResourceQuota/LimitRange 계열에서 KMSC 원문 명령이 `oc patch ... # oc get ...`처럼 한 줄에 섞여 들어와 답변이 수정 명령 중심으로 흐르는 문제를 수정했다. citation command를 `#` 기준으로 분해하고, ResourceQuota/LimitRange 질문에서는 read-only 확인 명령(`oc get resourcequotas ...`)을 우선 선택한다. citation 확정 이후 status 전용 답변을 다시 승격하고, 충분한 코드 블록이 있는 구체 답변을 beginner generic command formatter가 덮어쓰지 않도록 조정했다.
+- 2026-05-12: 검증 결과. `pytest -q tests/test_chat_grounding_quality.py tests/test_starter_questions.py tests/test_answer_eval_quality.py tests/test_query_understanding.py`는 41개 통과. v012 beginner answer eval은 6/6 통과, pass_rate 1.0, warning_free_rate 1.0이며 provenance noise는 `v012-beginner-002` 1건 남음. 로컬 API smoke에서 `ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?`는 warning 없이 `oc get resourcequotas -n chak-test` 중심 답변으로 반환됐다.
+- 2026-05-12: full `studio_live_smoke` 재실행. `reports/v012_studio_live_smoke_after.json` 갱신 결과 80건 중 49건 통과(pass_rate 0.6125)로 이전 47건 대비 개선됐지만 DoD(0.85)에는 미달. ResourceQuota/LimitRange missing required term은 해소됐고, 남은 큰 실패군은 Node/namespace 같은 기본 명령, MCO/CVO/DNS/NetworkPolicy/SCC/ImagePullBackOff/registry/ODF/monitoring intent가 잘못된 문서 또는 generic command formatter로 빠지는 케이스다. 다음 보강은 특정 질문 하나가 아니라 intent profile + context evidence recovery + answer shaping의 공통 경로에서 처리해야 한다.
+- 2026-05-12: 운영 intent profile 보강. Node status, MCO, CVO, DNS, NetworkPolicy, allowed registry, internal image registry, SCC를 별도 profile로 분리하고 context recovery가 `query_terms`까지 evidence 후보로 쓰도록 확장했다. `oc debug node` 질문은 node status보다 host-debug가 먼저 매칭되도록 우선순위를 조정했다.
+- 2026-05-12: CLI command sanitize 보강. OCR/문장형 citation에 `oc get node ... 명령어 실행 결과`, `oc edit ... oc new-project ... oc get networkpolicy ...`처럼 여러 명령과 설명이 한 줄에 섞인 경우 `#`, 반복 `oc`, 한국어 설명 marker를 기준으로 후보 명령을 분리한다. 검증: `tests/test_chat_grounding_quality.py::test_embedded_cli_text_is_split_before_answering`, `test_beginner_command_lookup_sanitizes_embedded_cli_text` 추가 및 통과. 전체 focused suite는 43개 통과.
+- 2026-05-12: 최신 상태. v012 beginner answer eval은 재실행 후에도 6/6 통과, pass_rate 1.0 유지. 단, 실제 API focused check에서 MCO와 ResourceQuota는 개선 확인됐지만 Node/namespace/NetworkPolicy/ImagePullBackOff는 아직 완전하지 않다. 특히 Node/NetworkPolicy는 citation command sanitize가 일부 적용됐지만 final answer 경로에서 여전히 generic formatter가 개입하므로 다음 작업은 status-answer 우선순위와 citation command parity를 더 좁혀야 한다.

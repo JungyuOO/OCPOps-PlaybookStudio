@@ -484,21 +484,44 @@ def _looks_like_shell_command(value: str) -> bool:
     )
 
 
+def _clean_shell_command_candidate(value: str) -> str:
+    cleaned = (value or "").strip().lstrip("$").strip()
+    cleaned = re.sub(r"^#+\s*", "", cleaned).strip()
+    cleaned = re.split(
+        r"\s+(?:CLI|Web Console|Administration\s*->|Console\s*->|명령어|실행 결과|결과인|TEST-[A-Z]+-|이 이미지는)\b",
+        cleaned,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip()
+    cleaned = re.sub(r"\s+oc$", "", cleaned, flags=re.IGNORECASE).strip()
+    return cleaned.rstrip(" .;'\"")
+
+
+def _iter_shell_command_candidates(value: str) -> list[str]:
+    candidates: list[str] = []
+    for segment in re.split(r"\s+#\s+", value or ""):
+        for part in re.split(r"\s+(?=oc\s+|kubectl\s+|openshift-install\s+)", segment.strip()):
+            cleaned = _clean_shell_command_candidate(part)
+            if cleaned:
+                candidates.append(cleaned)
+    return candidates
+
+
 def _ordered_citation_commands(citation, *, limit: int = 3) -> list[str]:
     commands: list[str] = []
     seen: set[str] = set()
 
     for command in (_citation_value(citation, "cli_commands", ()) or ()):
-        normalized = (command or "").strip().lstrip("$").strip()
-        if not _looks_like_shell_command(normalized):
-            continue
-        key = normalized.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        commands.append(normalized)
-        if len(commands) >= limit:
-            return commands
+        for normalized in _iter_shell_command_candidates(str(command or "")):
+            if not _looks_like_shell_command(normalized):
+                continue
+            key = normalized.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            commands.append(normalized)
+            if len(commands) >= limit:
+                return commands
 
     if commands:
         return commands
@@ -511,7 +534,7 @@ def _extract_grounded_commands(*texts: str, limit: int = 3) -> list[str]:
     seen: set[str] = set()
 
     def add(candidate: str) -> None:
-        normalized = (candidate or "").strip().lstrip("$").strip()
+        normalized = _clean_shell_command_candidate(candidate)
         if not _looks_like_shell_command(normalized):
             return
         if normalized in seen:
@@ -526,7 +549,8 @@ def _extract_grounded_commands(*texts: str, limit: int = 3) -> list[str]:
             if raw_line.strip().startswith("#"):
                 continue
             line = raw_line.strip().lstrip("-*").strip()
-            add(line)
+            for segment in _iter_shell_command_candidates(line):
+                add(segment)
         if len(commands) >= limit:
             break
 
@@ -571,12 +595,12 @@ def _collect_verification_hints(citations, *, limit: int = 2) -> list[str]:
 
 
 def _first_citation_has_signal(citations, tokens: tuple[str, ...]) -> bool:
-    return bool(citations) and any(token in _citation_text(citations[0]) for token in tokens)
+    return bool(citations) and any(token.lower() in _citation_text(citations[0]) for token in tokens)
 
 
 def _first_signal_citation_index(citations, tokens: tuple[str, ...]) -> int | None:
     for index, citation in enumerate(citations, start=1):
-        if any(token in _citation_text(citation) for token in tokens):
+        if any(token.lower() in _citation_text(citation) for token in tokens):
             return index
     return None
 
@@ -790,14 +814,24 @@ def _quota_limit_answer(query: str, citations) -> str | None:
         return None
     ref = citation_marker(citations, citation_index)
     if _has_limitrange_query(query):
+        commands = [
+            command
+            for command in _collect_ordered_grounded_commands(citations, limit=8)
+            if re.match(r"oc\s+(?:get|describe)\s+limitranges?\b", command, flags=re.IGNORECASE)
+        ] or ["oc get limitrange -n <namespace>", "oc describe limitrange <limitrange-name> -n <namespace>"]
         return (
             f"답변: LimitRange 때문에 컨테이너 리소스 요청이 거절되는지 먼저 namespace 정책을 확인합니다 {ref}.\n\n"
-            "```bash\noc get limitrange -n <namespace>\noc describe limitrange <limitrange-name> -n <namespace>\n```\n\n"
+            f"```bash\n{chr(10).join(commands[:2])}\n```\n\n"
             f"Pod 이벤트의 거절 메시지와 LimitRange의 min/max/default/defaultRequest 값을 맞춰 보면 어떤 request/limit이 정책을 넘었는지 확인할 수 있습니다 {ref}."
         )
+    commands = [
+        command
+        for command in _collect_ordered_grounded_commands(citations, limit=8)
+        if re.match(r"oc\s+get\s+resourcequotas?\b", command, flags=re.IGNORECASE)
+    ] or ["oc get resourcequota -n <namespace>"]
     return (
         f"답변: ResourceQuota 때문에 Pod 생성이 막혔는지는 quota 사용량과 이벤트를 같이 봅니다 {ref}.\n\n"
-        "```bash\noc get resourcequota -n <namespace>\noc describe resourcequota <quota-name> -n <namespace>\noc get events -n <namespace> --sort-by=.lastTimestamp\n```\n\n"
+        f"```bash\n{chr(10).join(commands[:2])}\n```\n\n"
         f"hard/used 값이 한도에 닿았거나 이벤트에 quota 초과 메시지가 있으면 CPU, memory, object count 중 어느 항목이 막는지 좁히면 됩니다 {ref}."
     )
 
@@ -1141,31 +1175,7 @@ def build_grounded_command_guide_answer(
 ) -> str | None:
     if not citations:
         return None
-    status_answer = (
-        _oc_login_answer(query, citations)
-        or _view_role_answer(query, citations)
-        or _scc_answer(query, citations)
-        or _serviceaccount_answer(query, citations)
-        or _auth_can_i_answer(query, citations)
-        or _previous_logs_answer(query, citations)
-        or _clusteroperator_status_answer(query, citations)
-        or _pdb_answer(query, citations)
-        or _hpa_answer(query, citations)
-        or _quota_limit_answer(query, citations)
-        or _pvc_pending_answer(query, citations)
-        or _events_answer(query, citations)
-        or _route_tls_answer(query, citations)
-        or _route_timeout_answer(query, citations)
-        or _service_route_answer(query, citations)
-        or _networkpolicy_answer(query, citations)
-        or _egress_answer(query, citations)
-        or _registry_policy_answer(query, citations)
-        or _audit_answer(query, citations)
-        or _finalizer_answer(query, citations)
-        or _prometheus_alert_answer(query, citations)
-        or _operator_status_answer(query, citations)
-        or _mco_status_answer(query, citations)
-    )
+    status_answer = build_grounded_status_answer(query=query, citations=citations)
     if status_answer is not None:
         return status_answer
     first_step_answer = build_first_step_grounded_answer(
@@ -1216,6 +1226,40 @@ def build_grounded_command_guide_answer(
             f"{verification}"
         )
     return f"{intro} [1].\n\n{code_blocks}{verification}"
+
+
+def build_grounded_status_answer(
+    *,
+    query: str,
+    citations,
+) -> str | None:
+    if not citations:
+        return None
+    return (
+        _oc_login_answer(query, citations)
+        or _view_role_answer(query, citations)
+        or _scc_answer(query, citations)
+        or _serviceaccount_answer(query, citations)
+        or _auth_can_i_answer(query, citations)
+        or _previous_logs_answer(query, citations)
+        or _clusteroperator_status_answer(query, citations)
+        or _pdb_answer(query, citations)
+        or _hpa_answer(query, citations)
+        or _quota_limit_answer(query, citations)
+        or _pvc_pending_answer(query, citations)
+        or _events_answer(query, citations)
+        or _route_tls_answer(query, citations)
+        or _route_timeout_answer(query, citations)
+        or _service_route_answer(query, citations)
+        or _networkpolicy_answer(query, citations)
+        or _egress_answer(query, citations)
+        or _registry_policy_answer(query, citations)
+        or _audit_answer(query, citations)
+        or _finalizer_answer(query, citations)
+        or _prometheus_alert_answer(query, citations)
+        or _operator_status_answer(query, citations)
+        or _mco_status_answer(query, citations)
+    )
 
 
 def _rbac_grounded_excerpt_text(citations) -> str:
@@ -1862,6 +1906,7 @@ __all__ = [
     "build_first_step_grounded_answer",
     "build_deployment_scaling_answer",
     "build_grounded_command_guide_answer",
+    "build_grounded_status_answer",
     "citation_marker",
     "deployment_scaling_signal",
     "extract_replica_counts",

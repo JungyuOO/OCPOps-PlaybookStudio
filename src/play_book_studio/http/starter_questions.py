@@ -111,6 +111,7 @@ def _starter_question(
     target_book_slug: str = "",
     target_title: str = "",
     target_viewer_path: str = "",
+    target_anchor: str = "",
     learning_path_id: str = "",
     learning_step_id: str = "",
     lab_task_id: str = "",
@@ -133,6 +134,8 @@ def _starter_question(
         payload["target_title"] = target_title
     if target_viewer_path:
         payload["target_viewer_path"] = target_viewer_path
+    if target_anchor:
+        payload["target_anchor"] = target_anchor
     if learning_path_id:
         payload["learning_path_id"] = learning_path_id
     if learning_step_id:

@@ -4,6 +4,7 @@ from play_book_studio.answering.context import assemble_context
 from play_book_studio.answering.answerer import _is_low_confidence_retrieval
 from play_book_studio.answering.answer_text_commands import build_grounded_command_guide_answer
 from play_book_studio.answering.answer_text_commands import strip_ungrounded_code_blocks
+from play_book_studio.answering.answer_text_formatting import shape_beginner_grounded_answer
 from play_book_studio.answering.models import AnswerResult, Citation
 from play_book_studio.http.presenters import _citation_display_payload
 from play_book_studio.http.session_flow import dedupe_suggestions, suggest_follow_up_questions
@@ -289,6 +290,173 @@ def test_command_learning_profiles_cover_access_pvc_logs_routes_and_etcd() -> No
     assert "oc get service -n <namespace>" in route.primary_commands
     assert "chroot /host" in etcd.primary_commands
     assert "cluster-backup.sh" in etcd.primary_commands
+
+
+def test_beginner_ops_profiles_do_not_collapse_to_namespace_lookup() -> None:
+    rbac = build_intent_profile("현재 사용자가 특정 namespace에서 pods를 delete 할 수 있는지 확인하는 명령은?")
+    login = build_intent_profile("oc login이 실패할 때 토큰이나 서버 URL 문제를 먼저 어떻게 확인해?")
+    quota = build_intent_profile("ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?")
+    limit = build_intent_profile("LimitRange 때문에 컨테이너 리소스 요청이 거절될 수 있는지 확인하려면?")
+    image_pull = build_intent_profile("ImagePullBackOff가 뜰 때 pull secret과 registry 쪽을 어떤 순서로 확인해?")
+    node = build_intent_profile("Node 확인하려면 어떤 명령어부터 쓰면 돼?")
+    namespace = build_intent_profile("네임스페이스 확인하는 명령어가 뭐야?")
+    network = build_intent_profile("NetworkPolicy 때문에 Pod 통신이 막힌 건지 확인하려면 뭘 봐야 해?")
+    dns = build_intent_profile("클러스터 DNS 문제가 의심되면 어떤 리소스 상태부터 확인해야 해?")
+    mco = build_intent_profile("Machine Config Operator 상태를 먼저 확인하는 명령을 알려줘")
+    cvo = build_intent_profile("Cluster Version Operator가 업데이트를 못 하고 있으면 어디부터 확인해?")
+    registry = build_intent_profile("허용된 registry만 쓰도록 제한하는 설정은 어디서 확인해?")
+
+    assert rbac.target_object == "rbac"
+    assert rbac.primary_commands[0] == "oc auth can-i delete pods -n <namespace>"
+    assert login.target_object == "oc-login"
+    assert login.primary_commands[0] == "oc login --token=<token> --server=<api-url>"
+    assert quota.target_object == "resourcequota"
+    assert "ResourceQuota" in quota.evidence_terms
+    assert limit.target_object == "limitrange"
+    assert "LimitRange" in limit.evidence_terms
+    assert image_pull.task == "image-pull"
+    assert "ImagePullBackOff" in image_pull.evidence_terms
+    assert node.target_object == "node"
+    assert node.primary_commands[0] == "oc get nodes"
+    assert namespace.target_object == "namespace"
+    assert namespace.primary_commands[0] == "oc project"
+    assert network.target_object == "networkpolicy"
+    assert "NetworkPolicy" in network.evidence_terms
+    assert dns.target_object == "dns"
+    assert "openshift-dns" in dns.evidence_terms
+    assert mco.target_object == "machineconfigpool"
+    assert "Machine Config Operator" in mco.evidence_terms
+    assert cvo.target_object == "clusterversion"
+    assert "Cluster Version Operator" in cvo.evidence_terms
+    assert registry.target_object == "image-config"
+    assert "allowedRegistries" in registry.evidence_terms
+
+
+def test_context_assembly_recovers_intent_evidence_outside_command_book_lock() -> None:
+    quota_hit = _hit(
+        "resourcequota-kmsc",
+        text=(
+            "ResourceQuota 생성 후 확인. kind: ResourceQuota. "
+            "hard pods requests.cpu requests.memory. oc get resourcequotas -n chak-test"
+        ),
+        book_slug="kmsc-operations",
+        section="OCP 프로젝트 관리 테스트",
+        raw_score=0.9,
+    )
+    unrelated_cli_hit = _hit(
+        "pod-top",
+        text="Pod CPU memory metrics. oc adm top pod --namespace=NAMESPACE",
+        cli_commands=("oc adm top pod --namespace=NAMESPACE",),
+        book_slug="cli_tools",
+        section="oc adm top pod",
+        raw_score=0.7,
+    )
+
+    bundle = assemble_context(
+        [quota_hit, unrelated_cli_hit],
+        query="ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?",
+        max_chunks=4,
+    )
+
+    assert bundle.citations
+    assert bundle.citations[0].chunk_id == "resourcequota-kmsc"
+
+
+def test_command_signal_matching_is_case_insensitive() -> None:
+    citation = _citation(
+        excerpt="ResourceQuota hard/used 값을 보고 quota 초과 여부를 판단합니다.",
+        cli_commands=("oc get resourcequota -n <namespace>",),
+    )
+
+    answer = build_grounded_command_guide_answer(
+        query="ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "ResourceQuota" in answer
+    assert "oc get resourcequota" in answer
+
+
+def test_resourcequota_answer_prefers_read_only_grounded_command() -> None:
+    citation = _citation(
+        excerpt="ResourceQuota hard/used 값을 보고 quota 초과 여부를 판단합니다.",
+        cli_commands=(
+            "oc patch resourcequotas test-compute -n chak-test --type=merge --patch "
+            '\'{"spec":{"hard":{"pods":"2"}}}\' # oc get resourcequotas -n chak-test CLI 또는 Web Console 에서 확인',
+        ),
+    )
+
+    answer = build_grounded_command_guide_answer(
+        query="ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "oc get resourcequotas -n chak-test" in answer
+    assert "oc patch resourcequotas" not in answer
+
+
+def test_beginner_shape_preserves_specific_resourcequota_answer() -> None:
+    citation = _citation(
+        excerpt="ResourceQuota hard/used 값을 보고 quota 초과 여부를 판단합니다.",
+        cli_commands=("oc get resourcequotas -n chak-test",),
+    )
+    answer = build_grounded_command_guide_answer(
+        query="ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?",
+        citations=[citation],
+    )
+
+    shaped = shape_beginner_grounded_answer(
+        answer or "",
+        query="ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?",
+        citations=[citation],
+    )
+
+    assert "ResourceQuota 때문에 Pod 생성이 막혔는지는" in shaped
+    assert "명령어 확인 요청" not in shaped
+
+
+def test_embedded_cli_text_is_split_before_answering() -> None:
+    network = _citation(
+        excerpt="NetworkPolicy가 Pod 통신을 제한할 수 있습니다.",
+        cli_commands=("oc edit template <project_template> -n openshift-config oc new-project <project> oc get networkpolicy oc",),
+    )
+    node = _citation(
+        excerpt="노드 목록에서 Ready 상태를 확인합니다.",
+        cli_commands=("oc get node show-labels' 명령어 실행 결과인 노드 목록이 표시되어 있습니다.",),
+    )
+
+    network_answer = build_grounded_command_guide_answer(
+        query="NetworkPolicy 때문에 Pod 통신이 막힌 건지 확인하려면 뭘 봐야 해?",
+        citations=[network],
+    )
+    node_answer = build_grounded_command_guide_answer(
+        query="Node 확인하려면 어떤 명령어부터 쓰면 돼?",
+        citations=[node],
+    )
+
+    assert network_answer is not None
+    assert "oc get networkpolicy" in network_answer
+    assert "oc edit template" not in network_answer
+    assert node_answer is not None
+    assert "명령어 실행 결과" not in node_answer
+
+
+def test_beginner_command_lookup_sanitizes_embedded_cli_text() -> None:
+    citation = _citation(
+        excerpt="노드 목록에서 Ready 상태를 확인합니다.",
+        cli_commands=("oc get node show-labels' 명령어 실행 결과인 노드 목록이 표시되어 있습니다.",),
+    )
+
+    answer = shape_beginner_grounded_answer(
+        "확인하면 됩니다.",
+        query="Node 확인하려면 어떤 명령어부터 쓰면 돼?",
+        citations=[citation],
+    )
+
+    assert "oc get node show-labels" in answer
+    assert "명령어 실행 결과" not in answer
 
 
 def test_low_confidence_guard_allows_bootstrap_wait_grounding() -> None:

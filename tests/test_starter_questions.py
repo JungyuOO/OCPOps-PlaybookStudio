@@ -182,6 +182,20 @@ def test_starter_questions_prefer_chunk_candidate_questions_when_available(monke
     assert faq_questions[0]["target_book_slug"] == "applications"
 
 
+def test_starter_question_preserves_target_anchor() -> None:
+    question = starter_questions._starter_question(
+        lane="faq",
+        question="배포한 앱이 안 뜨면 어디부터 확인해야 해?",
+        route_kind="chat",
+        source="postgres.document_chunks",
+        target_book_slug="applications",
+        target_viewer_path="/playbooks/wiki-runtime/active/applications/index.html",
+        target_anchor="route-service-check",
+    )
+
+    assert question["target_anchor"] == "route-service-check"
+
+
 def test_postgres_official_faq_questions_are_actionable_korean(monkeypatch) -> None:
     root = TEST_TMP / "db_official_troubleshooting"
     root.mkdir(parents=True, exist_ok=True)

@@ -39,6 +39,7 @@ from play_book_studio.retrieval.query_understanding import has_beginner_troubles
 from .answer_text_commands import (
     build_deployment_scaling_answer,
     build_grounded_command_guide_answer,
+    build_grounded_status_answer,
     has_sufficient_command_grounding,
     shape_etcd_backup_answer,
     strip_ungrounded_code_blocks,
@@ -1182,6 +1183,15 @@ class ChatAnswerer:
                 grounded_command_answer,
                 context_bundle.citations,
             )
+            status_answer = build_grounded_status_answer(
+                query=query,
+                citations=final_citations or context_bundle.citations,
+            )
+            if status_answer is not None and status_answer != answer_text:
+                answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
+                    status_answer,
+                    final_citations or context_bundle.citations,
+                )
             beginner_shaped_answer_text = shape_beginner_grounded_answer(
                 answer_text,
                 query=query,

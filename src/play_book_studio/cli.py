@@ -23,6 +23,7 @@ from play_book_studio.config.corpus_paths import (
     OPS_LEARNING_CHUNKS_PATH,
     OPS_LEARNING_GUIDES_PATH,
     RAGAS_EVAL_CASES_PATH,
+    RETRIEVAL_EVAL_CASES_PATH,
 )
 from play_book_studio.config.settings import load_effective_env, load_settings
 
@@ -85,6 +86,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     eval_parser.add_argument("--database-url", default="")
     _add_runtime_args(eval_parser)
+
+    retrieval_eval_parser = subparsers.add_parser("retrieval-eval", help="Run retrieval evaluation cases")
+    retrieval_eval_parser.add_argument(
+        "--cases",
+        type=Path,
+        default=RETRIEVAL_EVAL_CASES_PATH,
+    )
+    retrieval_eval_parser.add_argument("--database-url", default="")
+    retrieval_eval_parser.add_argument("--output", type=Path, default=None)
+    _add_runtime_args(retrieval_eval_parser)
 
     ragas_parser = subparsers.add_parser("ragas", help="Run RAGAS evaluation")
     ragas_parser.add_argument(
@@ -492,6 +503,88 @@ def _run_eval(args: argparse.Namespace) -> int:
     output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"wrote answer eval report: {output_path}")
     print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _retrieval_trace_book_slugs(trace: dict, key: str) -> list[str]:
+    return [
+        str(item.get("book_slug", ""))
+        for item in trace.get(key, [])
+        if str(item.get("book_slug", "")).strip()
+    ]
+
+
+def _run_retrieval_eval(args: argparse.Namespace) -> int:
+    from dataclasses import replace
+
+    from play_book_studio.evals.retrieval_eval import summarize_case_results
+    from play_book_studio.retrieval import ChatRetriever
+    from play_book_studio.retrieval.models import SessionContext
+
+    settings = load_settings(ROOT)
+    if args.database_url.strip():
+        settings = replace(settings, database_url=args.database_url.strip())
+    retriever = ChatRetriever.from_settings(settings)
+    cases = _read_jsonl(args.cases)
+    details: list[dict] = []
+    for case in cases:
+        context = SessionContext.from_dict(case.get("context") or case.get("session_context"))
+        result = retriever.retrieve(
+            str(case.get("query", "")),
+            context=context,
+            top_k=args.top_k,
+            candidate_k=args.candidate_k,
+        )
+        top_hits = [
+            {
+                "chunk_id": hit.chunk_id,
+                "book_slug": hit.book_slug,
+                "section": hit.section,
+                "anchor": hit.anchor,
+                "viewer_path": hit.viewer_path,
+                "score": hit.fused_score or hit.raw_score,
+            }
+            for hit in result.hits
+        ]
+        trace = result.trace or {}
+        details.append(
+            {
+                "id": case.get("id", ""),
+                "mode": case.get("mode", "retrieval"),
+                "query_type": case.get("query_type", case.get("category", "unknown")),
+                "query": case.get("query", ""),
+                "rewritten_query": result.rewritten_query,
+                "expected_book_slugs": list(case.get("expected_book_slugs", [])),
+                "expected_landing_terms": list(case.get("expected_landing_terms", [])),
+                "top_book_slugs": [hit["book_slug"] for hit in top_hits],
+                "top_hits": top_hits,
+                "warnings": list(trace.get("warnings", [])),
+                "bm25_top_book_slugs": _retrieval_trace_book_slugs(trace, "bm25"),
+                "vector_top_book_slugs": _retrieval_trace_book_slugs(trace, "vector"),
+                "hybrid_top_book_slugs": _retrieval_trace_book_slugs(trace, "hybrid"),
+                "reranked_top_book_slugs": _retrieval_trace_book_slugs(trace, "reranked"),
+                "rewrite_applied": bool(trace.get("plan", {}).get("rewrite_applied", False)),
+                "rewrite_reason": str(trace.get("plan", {}).get("rewrite_reason", "")),
+                "follow_up_detected": bool(trace.get("plan", {}).get("follow_up_detected", False)),
+                "vector_endpoint_used": str(trace.get("vector_runtime", {}).get("endpoint_used", "")),
+                "hybrid_top_support": str(trace.get("ablation", {}).get("hybrid_top_support", "")),
+                "rerank_top1_changed": bool(trace.get("reranker", {}).get("top1_changed", False)),
+                "rerank_reasons": list(trace.get("reranker", {}).get("reasons", [])),
+            }
+        )
+
+    report = {
+        "cases_file": str(args.cases),
+        "top_k": args.top_k,
+        "candidate_k": args.candidate_k,
+        **summarize_case_results(details),
+        "details": details,
+    }
+    output_path = args.output or settings.retrieval_eval_report_path
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"wrote retrieval eval report: {output_path}")
+    print(json.dumps({key: report[key] for key in ("case_count", "overall", "graph_signal_counts")}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -1271,6 +1364,8 @@ def main() -> int:
         return _run_ask(args)
     if args.command == "eval":
         return _run_eval(args)
+    if args.command == "retrieval-eval":
+        return _run_retrieval_eval(args)
     if args.command == "ragas":
         return _run_ragas(args)
     if args.command == "runtime":

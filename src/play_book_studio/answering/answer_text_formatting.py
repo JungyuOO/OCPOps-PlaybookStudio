@@ -584,7 +584,7 @@ def _weak_or_thin_answer(answer_text: str) -> bool:
         return True
     if WEAK_INSTALL_ANSWER_RE.search(normalized):
         return True
-    if "```" in normalized and len(normalized) >= 220:
+    if "```" in normalized and len(normalized) >= 160:
         return False
     if re.search(r"(?m)^\s*(?:[-*]|\d+\.)\s+", normalized) and len(normalized) >= 260:
         return False
@@ -609,18 +609,38 @@ def _generic_grounded_commands(citations) -> list[str]:
     for citation in citations or []:
         cli_commands = _citation_value(citation, "cli_commands", ()) or ()
         if isinstance(cli_commands, str):
-            commands.append(cli_commands)
+            raw_commands = [cli_commands]
         else:
-            commands.extend(str(command) for command in cli_commands if command)
+            raw_commands = [str(command) for command in cli_commands if command]
+        for raw_command in raw_commands:
+            for segment in re.split(r"\s+#\s+", raw_command):
+                for part in re.split(r"\s+(?=oc\s+|kubectl\s+|openshift-install\s+)", segment.strip()):
+                    cleaned_segment = re.sub(
+                        r"\s+(?:CLI|Web Console|Administration\s*->|Console\s*->|명령어|실행 결과|결과인|TEST-[A-Z]+-|이 이미지는)\b.*$",
+                        "",
+                        part.strip().lstrip("$").strip(),
+                        flags=re.IGNORECASE,
+                    )
+                    cleaned_segment = re.sub(r"\s+oc$", "", cleaned_segment, flags=re.IGNORECASE).strip(" #.;'\"")
+                    if cleaned_segment:
+                        commands.append(cleaned_segment)
         text = _citation_text(citation)
-        commands.extend(
-            match.group(0).strip()
-            for match in re.finditer(
-                r"(?:oc|kubectl|openshift-install|etcdctl|podman|curl|openssl|journalctl|systemctl)\s+[^\n`]+",
-                text,
-                flags=re.IGNORECASE,
-            )
-        )
+        for match in re.finditer(
+            r"(?:oc|kubectl|openshift-install|etcdctl|podman|curl|openssl|journalctl|systemctl)\s+[^\n`]+",
+            text,
+            flags=re.IGNORECASE,
+        ):
+            for segment in re.split(r"\s+#\s+", match.group(0).strip()):
+                for part in re.split(r"\s+(?=oc\s+|kubectl\s+|openshift-install\s+)", segment.strip()):
+                    cleaned_segment = re.sub(
+                        r"\s+(?:CLI|Web Console|Administration\s*->|Console\s*->|명령어|실행 결과|결과인|TEST-[A-Z]+-|이 이미지는)\b.*$",
+                        "",
+                        part.strip().lstrip("$").strip(),
+                        flags=re.IGNORECASE,
+                    )
+                    cleaned_segment = re.sub(r"\s+oc$", "", cleaned_segment, flags=re.IGNORECASE).strip(" #.;'\"")
+                    if cleaned_segment:
+                        commands.append(cleaned_segment)
     deduped: list[str] = []
     for command in commands:
         cleaned = re.sub(r"\s+", " ", str(command or "")).strip(" $")
@@ -629,8 +649,29 @@ def _generic_grounded_commands(citations) -> list[str]:
     return deduped[:4]
 
 
+def _prefer_read_only_commands_for_query(query: str, commands: list[str]) -> list[str]:
+    lowered_query = (query or "").lower()
+    if "resourcequota" in lowered_query or "resource quota" in lowered_query or "quota" in lowered_query:
+        preferred = [
+            command
+            for command in commands
+            if re.match(r"oc\s+get\s+resourcequotas?\b", command, flags=re.IGNORECASE)
+        ]
+        if preferred:
+            return preferred[:2]
+    if "limitrange" in lowered_query or "limit range" in lowered_query:
+        preferred = [
+            command
+            for command in commands
+            if re.match(r"oc\s+(?:get|describe)\s+limitranges?\b", command, flags=re.IGNORECASE)
+        ]
+        if preferred:
+            return preferred[:2]
+    return commands
+
+
 def _shape_command_lookup_answer(query: str, citations) -> str:
-    commands = _generic_grounded_commands(citations)
+    commands = _prefer_read_only_commands_for_query(query, _generic_grounded_commands(citations))
     if not commands:
         return ""
     index = _install_evidence_index(citations, *commands)

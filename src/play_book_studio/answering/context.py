@@ -35,6 +35,7 @@ from play_book_studio.retrieval.query import (
     is_generic_intro_query,
 )
 from play_book_studio.retrieval.query_understanding import understand_query
+from play_book_studio.retrieval.intent_profile import build_intent_profile
 
 from .doc_locator_intent import is_cross_document_follow_query
 from .models import Citation, ContextBundle
@@ -1888,6 +1889,36 @@ def assemble_context(
                 hit.chunk_id,
             ),
         )[:max_chunks]
+    intent_profile = build_intent_profile(query)
+    intent_terms = tuple(
+        term.casefold()
+        for term in (*intent_profile.evidence_terms, *intent_profile.primary_commands, *intent_profile.query_terms)
+        if term.strip()
+    )
+    if intent_terms:
+        def hit_matches_intent_terms(hit: RetrievalHit) -> bool:
+            haystack = " ".join(
+                [
+                    hit.book_slug,
+                    hit.section,
+                    hit.text,
+                    " ".join(hit.cli_commands),
+                    " ".join(hit.k8s_objects),
+                    " ".join(hit.operator_names),
+                ]
+            ).casefold()
+            return any(term and term in haystack for term in intent_terms)
+
+        intent_matched_hits = sorted(
+            [hit for hit in hits if hit_matches_intent_terms(hit)],
+            key=lambda hit: (
+                -_hit_score(hit),
+                hit.book_slug,
+                hit.chunk_id,
+            ),
+        )[:max_chunks]
+        if intent_matched_hits and not any(hit_matches_intent_terms(hit) for hit in selected_hits):
+            selected_hits = intent_matched_hits
     if overlay_exact_scores or overlay_book_scores:
         selected_hits = sorted(
             selected_hits,
