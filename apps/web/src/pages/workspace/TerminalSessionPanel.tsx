@@ -109,9 +109,20 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
+    const socket = new WebSocket(wsUrl);
+    socketRef.current = socket;
+
+    const sendTerminalResize = (): void => {
+      if (socket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      socket.send(JSON.stringify({ type: 'resize', cols: terminal.cols, rows: terminal.rows }));
+    };
+
     const fitTerminal = (): void => {
       try {
         fitAddon.fit();
+        sendTerminalResize();
       } catch {
         // The fit addon throws when the panel is still measuring at zero size.
       }
@@ -119,9 +130,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
     window.requestAnimationFrame(fitTerminal);
     const resizeObserver = new ResizeObserver(fitTerminal);
     resizeObserver.observe(host);
-
-    const socket = new WebSocket(wsUrl);
-    socketRef.current = socket;
+    const resizeDisposable = terminal.onResize(sendTerminalResize);
 
     const inputDisposable = terminal.onData((data) => {
       if (data === '\r') {
@@ -140,8 +149,92 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
       }
     });
 
+    const sendTerminalInput = (data: string): void => {
+      if (!data) {
+        return;
+      }
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'input', data }));
+      }
+    };
+
+    const appendCommandBuffer = (data: string): void => {
+      for (const char of data) {
+        if (char === '\r' || char === '\n') {
+          const command = commandBufferRef.current.trim();
+          commandBufferRef.current = '';
+          if (command) {
+            onCommandSubmitted?.(command);
+          }
+        } else if (char === '\u007f' || char === '\b') {
+          commandBufferRef.current = commandBufferRef.current.slice(0, -1);
+        } else if (!char.startsWith('\u001b')) {
+          commandBufferRef.current += char;
+        }
+      }
+    };
+
+    const pasteHandler = (event: ClipboardEvent): void => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      const text = event.clipboardData?.getData('text/plain') ?? '';
+      if (!text) {
+        return;
+      }
+      event.preventDefault();
+      terminal.focus();
+      appendCommandBuffer(text);
+      sendTerminalInput(text);
+    };
+    host.addEventListener('paste', pasteHandler);
+
+    const keydownHandler = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || event.key.toLowerCase() !== 'v' || (!event.ctrlKey && !event.metaKey)) {
+        return;
+      }
+      const clipboard = navigator.clipboard;
+      if (!clipboard?.readText) {
+        return;
+      }
+      event.preventDefault();
+      void clipboard.readText().then((text) => {
+        if (!text) {
+          return;
+        }
+        terminal.focus();
+        appendCommandBuffer(text);
+        sendTerminalInput(text);
+      }).catch(() => {
+        // Browser clipboard permission can be denied; native paste remains as a fallback.
+      });
+    };
+    host.addEventListener('keydown', keydownHandler);
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown' || event.key.toLowerCase() !== 'v' || (!event.ctrlKey && !event.metaKey)) {
+        return true;
+      }
+      const clipboard = navigator.clipboard;
+      if (!clipboard?.readText) {
+        return true;
+      }
+      event.preventDefault();
+      void clipboard.readText().then((text) => {
+        if (!text) {
+          return;
+        }
+        terminal.focus();
+        appendCommandBuffer(text);
+        sendTerminalInput(text);
+      }).catch(() => {
+        // Let xterm/browser defaults handle environments without clipboard permission.
+      });
+      return false;
+    });
+
     socket.addEventListener('open', () => {
       setState('connected');
+      fitTerminal();
       if (stableLearningContext) {
         socket.send(JSON.stringify({ type: 'context', ...stableLearningContext }));
       }
@@ -198,6 +291,9 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
 
     return () => {
       inputDisposable.dispose();
+      resizeDisposable.dispose();
+      host.removeEventListener('paste', pasteHandler);
+      host.removeEventListener('keydown', keydownHandler);
       resizeObserver.disconnect();
       socket.close();
       terminal.dispose();

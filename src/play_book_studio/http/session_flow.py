@@ -219,6 +219,28 @@ def _is_ambiguous_doc_suggestion(candidate: str) -> bool:
     return bool(_AMBIGUOUS_DOC_SUGGESTION_RE.search(cleaned))
 
 
+def _looks_broken_suggestion(candidate: str) -> bool:
+    text = str(candidate or "").strip()
+    if not text:
+        return True
+    if "\ufffd" in text:
+        return True
+    hangul = sum(1 for char in text if "\uac00" <= char <= "\ud7a3")
+    hangul_jamo = sum(1 for char in text if "\u3130" <= char <= "\u318f")
+    cjk = sum(1 for char in text if "\u4e00" <= char <= "\u9fff")
+    latin = sum(1 for char in text if char.isascii() and char.isalpha())
+    if hangul_jamo >= 3:
+        return True
+    if cjk >= 3 and hangul == 0 and latin < 3:
+        return True
+    significant = cjk + hangul + latin
+    if cjk >= 3 and significant and cjk / significant >= 0.25:
+        return True
+    if cjk >= 4 and cjk > hangul:
+        return True
+    return False
+
+
 def dedupe_suggestions(candidates: list[str], *, query: str, limit: int = 3) -> list[str]:
     normalized_query = (query or "").strip().lower()
     seen: set[str] = set()
@@ -228,6 +250,8 @@ def dedupe_suggestions(candidates: list[str], *, query: str, limit: int = 3) -> 
         if not cleaned:
             continue
         if _is_ambiguous_doc_suggestion(cleaned):
+            continue
+        if _looks_broken_suggestion(cleaned):
             continue
         lowered = cleaned.lower()
         if lowered == normalized_query or lowered in seen:
@@ -460,7 +484,7 @@ def _command_follow_up_templates(command: str, *, section: str, query: str) -> l
     if "bootstrap-complete" in lowered or "openshift-install" in lowered:
         return [
             f"`{label}` 실행 중 완료 신호는 무엇을 보면 돼?",
-            f"`{label}` 명령이 실패하면 어떤 로그 수준으로 다시 확인해야 해?",
+            f"`{label}` 명령이 실패하면 어떤 로그부터 확인해야 해?",
             "bootstrap 완료 후 다음 설치 단계는 뭐야?",
         ]
     if "oc project" in lowered or "current-context" in lowered:
@@ -483,9 +507,9 @@ def _command_follow_up_templates(command: str, *, section: str, query: str) -> l
         ]
     if "route" in lowered or "svc" in lowered or "service" in lowered:
         return [
-            f"`{label}` 결과에서 라우트와 서비스 연결을 어떻게 확인해?",
-            "서비스 endpoint가 비어 있으면 다음에 무엇을 봐야 해?",
-            "Route TLS나 timeout 설정은 어디서 확인해?",
+            f"`{label}` 결과에서 Route와 Service 연결을 어떻게 확인해?",
+            "Service endpoint가 비어 있으면 다음에 무엇을 봐야 해?",
+            "Route TLS와 timeout 설정은 어디서 확인해?",
         ]
     return [
         f"`{label}` 명령은 언제 쓰면 돼?",

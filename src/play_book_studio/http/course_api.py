@@ -1105,11 +1105,9 @@ def _build_course_answer_rewrite_messages(
     ]
     guide_payload: dict[str, Any] = {}
     if isinstance(guide_step, dict):
-        outline = guide_step.get("answer_outline") if isinstance(guide_step.get("answer_outline"), list) else []
         guide_payload = {
             "title": _public_course_text(guide_step.get("card_text") or "", limit=120),
             "learning_objective": _public_course_text(guide_step.get("learning_objective") or "", limit=260),
-            "answer_outline": [_public_course_text(item, limit=260) for item in outline[:5] if _public_course_text(item, limit=260)],
         }
     evidence = {
         "sources": source_rows,
@@ -2332,12 +2330,21 @@ def _public_ops_learning_answer_lines(
     for learning_index, learning_chunk in enumerate(learning_chunks[:2], start=1):
         title = _public_course_text(learning_chunk.get("title") or "운영 학습 단계", limit=120)
         goal = _public_course_text(learning_chunk.get("learning_goal") or learning_chunk.get("beginner_explanation") or "", limit=260)
+        sequence = learning_chunk.get("operational_sequence") if isinstance(learning_chunk.get("operational_sequence"), list) else []
+        look_for = learning_chunk.get("what_to_look_for") if isinstance(learning_chunk.get("what_to_look_for"), list) else []
         lines.append(title)
         if goal:
             lines.append(goal)
-        sequence = learning_chunk.get("operational_sequence") if isinstance(learning_chunk.get("operational_sequence"), list) else []
-        look_for = learning_chunk.get("what_to_look_for") if isinstance(learning_chunk.get("what_to_look_for"), list) else []
         source_index = min(learning_index, citation_count)
+        look_for_terms = [
+            _public_course_text(item, limit=80)
+            for item in look_for[:3]
+            if _public_course_text(item, limit=80)
+        ]
+        if look_for_terms:
+            lines.append(
+                f"먼저 {', '.join(look_for_terms)}를 기준으로 현재 결과가 목표, 환경, 반복 조건 중 어디에 걸리는지 나눠 봅니다. [{source_index}]"
+            )
         for index, item in enumerate(sequence[:3], start=1):
             text = _public_course_text(item, limit=560)
             if text:
@@ -2358,6 +2365,11 @@ def _public_ops_learning_answer_lines(
                 lines.append(f"- 정상/진행 상태: {', '.join(_public_course_text(item, limit=60) for item in normal_state[:4] if _public_course_text(item, limit=60))}")
             if failure_state:
                 lines.append(f"- 실패/주의 상태: {', '.join(_public_course_text(item, limit=60) for item in failure_state[:4] if _public_course_text(item, limit=60))}")
+        source_summary = _public_course_text(learning_chunk.get("source_summary") or "", limit=300)
+        if source_summary:
+            lines.append("")
+            lines.append("판단 기준")
+            lines.append(f"- {source_summary} [{source_index}]")
         support_lines = _ops_learning_support_lines(learning_chunk, chunks, source_index=source_index)
         if support_lines:
             lines.append("")
@@ -2446,18 +2458,20 @@ def _public_ops_guide_answer_lines(
     if objective:
         lines.append(objective)
         lines.append("")
-    outline = step.get("answer_outline") if isinstance(step.get("answer_outline"), list) else []
     citation_count = max(1, len(chunks))
-    for index, item in enumerate(outline, start=1):
-        source_index = min(index, citation_count)
-        text = _public_course_text(item, limit=260)
-        if text:
-            lines.append(f"{index}. {text} [{source_index}]")
-    if not outline:
-        for index, chunk in enumerate(chunks, start=1):
-            label = _public_chunk_label(chunk)
-            summary = _public_course_text(_chunk_learning_summary(chunk), limit=300)
+    for index, chunk in enumerate(chunks, start=1):
+        label = _public_chunk_label(chunk)
+        summary = _public_course_text(_chunk_learning_summary(chunk), limit=300)
+        detail = _public_course_text(_chunk_grounded_detail(chunk), limit=360)
+        if summary:
             lines.append(f"{index}. {label}: {summary} [{index}]")
+        elif detail:
+            lines.append(f"{index}. {label}: {detail} [{index}]")
+    if not chunks:
+        source_terms = step.get("expected_terms") if isinstance(step.get("expected_terms"), list) else []
+        source_text = ", ".join(_public_course_text(item, limit=80) for item in source_terms[:4] if _public_course_text(item, limit=80))
+        if source_text:
+            lines.append(f"1. 먼저 관련 근거 청크를 다시 검색하고, {source_text} 기준으로 확인하세요. [{citation_count}]")
     if chunks:
         lines.extend(["", "근거에서 확인되는 연결"])
         for index, chunk in enumerate(chunks[:3], start=1):

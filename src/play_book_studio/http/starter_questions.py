@@ -1,4 +1,4 @@
-"""Studio starter question payloads derived from runtime manifests."""
+﻿"""Studio starter question payloads derived from runtime manifests."""
 
 from __future__ import annotations
 
@@ -10,12 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from play_book_studio.config.corpus_paths import (
-    ANSWER_EVAL_CASES_PATH,
-    ANSWER_EVAL_REALWORLD_CASES_PATH,
     OCP420_REPO_WIDE_SOURCE_MANIFEST_PATH,
     OCP420_SOURCE_FIRST_FULL_REBUILD_MANIFEST_PATH,
+    OPS_LEARNING_CHUNKS_PATH,
     OPS_LEARNING_GUIDES_PATH,
-    PBS_CHAT_QUALITY_CASES_PATH,
 )
 from play_book_studio.config.settings import load_settings
 from play_book_studio.db.official_documents import load_official_manifest_entries
@@ -41,9 +39,9 @@ STARTER_CATEGORY_RULES: tuple[StarterCategoryRule, ...] = (
 )
 
 STARTER_GROUPS = (
-    {"key": "faq", "title": "자주 묻는 질문", "description": "공식 문서 fast path"},
-    {"key": "learning", "title": "학습용 단계별 질문", "description": "Install부터 순서대로"},
-    {"key": "operations", "title": "실운영 질문", "description": "Study-docs 기준"},
+    {"key": "faq", "title": "자주 묻는 질문", "description": "공식 문서 기반 시작 질문"},
+    {"key": "learning", "title": "단계별 학습 질문", "description": "OCP를 처음 익히는 흐름"},
+    {"key": "operations", "title": "실운영 문서 질문", "description": "KMSC 운영 문서 기반 질문"},
 )
 
 LEARNING_TARGET_BOOK_SLUGS: dict[str, str] = {
@@ -150,42 +148,33 @@ def _official_faq_questions(root_dir: Path) -> list[dict[str, Any]]:
     if database_url:
         return _official_faq_questions_from_db(database_url)
 
+    return _official_faq_questions_from_entries(
+        _manifest_entries(root_dir),
+        source="official.source_manifest",
+    )
+
+
+def _official_faq_questions_from_entries(entries: list[dict[str, Any]], *, source: str) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
-    entries_by_slug = {
-        str(entry.get("book_slug") or "").strip(): entry
-        for entry in _manifest_entries(root_dir)
-        if str(entry.get("book_slug") or "").strip()
-    }
-    for path in (
-        root_dir / PBS_CHAT_QUALITY_CASES_PATH,
-        root_dir / ANSWER_EVAL_CASES_PATH,
-        root_dir / ANSWER_EVAL_REALWORLD_CASES_PATH,
-    ):
-        for row in _iter_jsonl(path):
-            query = str(row.get("query") or "").strip()
-            query_type = str(row.get("query_type") or "").strip().lower()
-            if not query:
-                continue
-            if query_type not in {"ops_command", "ops_procedure", "ops_troubleshooting"}:
-                continue
-            if bool(row.get("clarification_expected")) or bool(row.get("no_answer_expected")):
-                continue
-            expected_books = row.get("expected_book_slugs")
-            if not isinstance(expected_books, list) or not expected_books:
-                continue
-            target_book_slug = str(expected_books[0] or "").strip()
-            target_entry = entries_by_slug.get(target_book_slug, {})
-            candidates.append(
-                _starter_question(
-                    lane="faq",
-                    question=query,
-                    route_kind="official",
-                    source=path.name,
-                    target_book_slug=target_book_slug,
-                    target_title=str(target_entry.get("title") or target_book_slug.replace("_", " ").title()),
-                    target_viewer_path=str(target_entry.get("viewer_path") or ""),
-                )
+    for rule in STARTER_CATEGORY_RULES:
+        entry = _best_entry_for_category(entries, rule)
+        if not entry:
+            continue
+        title = _clean_title(str(entry.get("title") or rule.label))
+        book_slug = str(entry.get("book_slug") or "").strip()
+        candidates.append(
+            _starter_question(
+                lane="faq",
+                question=_official_faq_query(rule, title),
+                route_kind="official",
+                source=source,
+                category_key=rule.key,
+                category_label=rule.label,
+                target_book_slug=book_slug,
+                target_title=title,
+                target_viewer_path=str(entry.get("viewer_path") or ""),
             )
+        )
     return candidates
 
 
@@ -211,29 +200,10 @@ def _official_manifest_entries_from_db(database_url: str) -> list[dict[str, Any]
 
 
 def _official_faq_questions_from_db(database_url: str) -> list[dict[str, Any]]:
-    entries = _official_manifest_entries_from_db(database_url)
-    questions: list[dict[str, Any]] = []
-    for rule in STARTER_CATEGORY_RULES:
-        if rule.key not in {"day2", "operations", "storage", "security", "networking", "troubleshooting"}:
-            continue
-        entry = _best_entry_for_category(entries, rule)
-        if not entry:
-            continue
-        title = _clean_title(str(entry.get("title") or rule.label))
-        book_slug = str(entry.get("book_slug") or "").strip()
-        questions.append(
-            _starter_question(
-                lane="faq",
-                question=_official_faq_query(rule, title),
-                route_kind="official",
-                source="postgres.official_docs",
-                category_key=rule.key,
-                category_label=rule.label,
-                target_book_slug=book_slug,
-                target_title=title,
-                target_viewer_path=str(entry.get("viewer_path") or ""),
-            )
-        )
+    questions = _official_faq_questions_from_entries(
+        _official_manifest_entries_from_db(database_url),
+        source="postgres.official_docs",
+    )
     if questions:
         return questions
     return [
@@ -247,18 +217,12 @@ def _official_faq_questions_from_db(database_url: str) -> list[dict[str, Any]]:
 
 
 def _official_faq_query(rule: StarterCategoryRule, title: str) -> str:
-    clean_title = _clean_title(title)
-    templates = {
-        "day2": "{title} 문서 기준으로 설치 후 구성에서 먼저 확인할 설정과 명령은 뭐야?",
-        "operations": "{title} 문서 기준으로 운영 상태를 점검할 때 먼저 볼 리소스와 명령은 뭐야?",
-        "storage": "{title} 문서 기준으로 스토리지나 백업 문제를 확인할 때 어떤 상태값과 명령부터 보면 돼?",
-        "security": "{title} 문서 기준으로 권한, 인증서, 보안 설정을 점검할 때 먼저 확인할 항목은 뭐야?",
-        "networking": "{title} 문서 기준으로 Route, Ingress, DNS 연결 문제를 진단할 때 어떤 순서로 보면 돼?",
-        "troubleshooting": "{title} 문서 기준으로 장애를 좁힐 때 먼저 확인할 증상, 로그, 명령은 뭐야?",
-    }
-    template = templates.get(rule.key, "{title} 문서 기준으로 먼저 확인할 항목과 명령은 뭐야?")
-    return template.format(title=clean_title)
-
+    return _compose_beginner_question(
+        lane="official",
+        title=title,
+        goal=rule.description,
+        terms=list(rule.patterns),
+    )
 
 def _entry_haystack(entry: dict[str, Any]) -> str:
     values: list[str] = []
@@ -305,10 +269,7 @@ def _learning_questions(root_dir: Path) -> list[dict[str, Any]]:
         title = _clean_title(str((entry or {}).get("title") or rule.label))
         book_slug = LEARNING_TARGET_BOOK_SLUGS.get(rule.key) or str((entry or {}).get("book_slug") or "").strip()
         viewer_path = str((entry or {}).get("viewer_path") or "").strip()
-        if rule.key == "install":
-            question = f"OCP를 처음 시작할 때 {title} 문서는 무엇부터 이해하면 돼?"
-        else:
-            question = f"{rule.label} 단계에서는 {title} 기준으로 무엇을 순서대로 학습하면 돼?"
+        question = _beginner_learning_question(rule, title)
         terminal_context = terminal_contexts[index] if index < len(terminal_contexts) else {}
         questions.append(
             _starter_question(
@@ -328,6 +289,15 @@ def _learning_questions(root_dir: Path) -> list[dict[str, Any]]:
             )
         )
     return questions
+
+
+def _beginner_learning_question(rule: StarterCategoryRule, title: str) -> str:
+    return _compose_beginner_question(
+        lane="learning",
+        title=title,
+        goal=rule.description,
+        terms=list(rule.patterns),
+    )
 
 
 def _learning_terminal_contexts(root_dir: Path) -> list[dict[str, str]]:
@@ -392,34 +362,227 @@ def _load_ops_learning_guides_payload(root_dir: Path) -> tuple[dict[str, Any], s
     )
 
 
+def _load_ops_learning_chunks_payload(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if database_url:
+        try:
+            import psycopg
+
+            from play_book_studio.db.learning_repository import load_ops_learning_chunks_payload
+
+            with psycopg.connect(database_url) as connection:
+                rows = load_ops_learning_chunks_payload(connection, workspace_slug="default")
+            return rows, "postgres.learning_steps"
+        except Exception:  # noqa: BLE001
+            return [], "postgres.learning_steps"
+    return (
+        _iter_jsonl(root_dir / OPS_LEARNING_CHUNKS_PATH),
+        OPS_LEARNING_CHUNKS_PATH.as_posix(),
+    )
+
+
+def _ops_chunk_question(chunk: dict[str, Any]) -> str:
+    title = _clean_title(str(chunk.get("title") or "운영 절차"))
+    goal = _clean_title(str(chunk.get("learning_goal") or chunk.get("source_summary") or ""))
+    terms = [
+        _clean_title(str(item))
+        for item in chunk.get("source_terms", [])
+        if str(item).strip()
+    ] if isinstance(chunk.get("source_terms"), list) else []
+    return _compose_beginner_question(
+        lane="operations",
+        title=title,
+        goal=goal,
+        terms=terms,
+    )
+
+
+def _context_text(*parts: Any) -> str:
+    return " ".join(
+        " ".join(str(item) for item in part if str(item).strip())
+        if isinstance(part, list)
+        else str(part or "")
+        for part in parts
+    )
+
+
+def _starter_topic_terms(*parts: Any) -> str:
+    text = _context_text(*parts).lower()
+    if any(token in text for token in ("postinstall", "post-install", "post installation", "day-2", "day 2", "day two")):
+        return "postinstall"
+    if any(token in text for token in ("troubleshoot", "issue", "failure", "debug", "problem", "장애", "문제", "오류")):
+        return "troubleshooting"
+    if any(token in text for token in ("install", "설치", "discovery", "bootstrap")):
+        return "install"
+    if any(token in text for token in ("node", "노드")):
+        return "node"
+    if any(token in text for token in ("namespace", "project", "네임스페이스", "프로젝트")):
+        return "namespace"
+    if any(token in text for token in ("pod", "파드", "container", "컨테이너")):
+        return "pod"
+    if any(token in text for token in ("service", "route", "ingress", "서비스", "라우트")):
+        return "network"
+    if any(token in text for token in ("secret", "configmap", "config", "시크릿", "컨피그")):
+        return "config"
+    if any(token in text for token in ("performance", "tps", "jmeter", "성능", "부하", "병목")):
+        return "performance"
+    if any(token in text for token in ("pipeline", "deploy", "배포", "파이프라인", "cicd", "ci/cd")):
+        return "deploy"
+    if any(token in text for token in ("storage", "pvc", "volume", "스토리지", "볼륨")):
+        return "storage"
+    if any(token in text for token in ("log", "metric", "monitor", "로그", "메트릭", "모니터")):
+        return "observability"
+    if any(token in text for token in ("권한", "rbac", "role", "auth", "user", "사용자")):
+        return "security"
+    return ""
+
+
+def _beginner_subject_from_context(
+    *,
+    topic: str,
+    title: str,
+    goal: str = "",
+    terms: list[str] | None = None,
+) -> str:
+    terms = terms or []
+    text = _context_text(title, goal, terms).lower()
+    if topic == "install":
+        if "bootstrap" in text:
+            return "설치 진행 상태"
+        return "OCP 설치"
+    if topic == "namespace":
+        return "namespace"
+    if topic == "pod":
+        return "Pod 상태"
+    if topic == "node":
+        return "노드 상태"
+    if topic == "network":
+        if "overview" in text or "개요" in text:
+            return "앱 접속 경로"
+        if "route" in text or "라우트" in text:
+            return "Service와 Route 연결"
+        return "앱 접속 경로"
+    if topic == "config":
+        if "secret" in text or "시크릿" in text:
+            return "Secret 설정"
+        return "ConfigMap 설정"
+    if topic == "performance":
+        return "성능 테스트 결과"
+    if topic == "deploy":
+        return "앱 배포"
+    if topic == "storage":
+        return "PVC와 볼륨"
+    if topic == "observability":
+        if "metric" in text or "메트릭" in text:
+            return "로그와 메트릭"
+        return "로그와 이벤트"
+    if topic == "security":
+        return "권한 문제"
+    if topic == "troubleshooting":
+        return "문제 해결"
+    if topic == "postinstall" or "postinstall" in text or "post-install" in text or "post installation" in text or "day-2" in text or "day 2" in text:
+        return "설치 후 작업"
+    cleaned_title = _clean_subject_title(title)
+    if cleaned_title and cleaned_title.lower() not in {"operations", "troubleshooting", "day-2", "day 2"}:
+        return cleaned_title
+    for term in terms:
+        cleaned = _clean_title(term)
+        if cleaned:
+            return cleaned
+    return "처음 해야 할 일"
+
+
+def _clean_subject_title(title: str) -> str:
+    cleaned = _clean_title(title)
+    for pattern in (
+        r"\s*결과\s*확인하기$",
+        r"\s*상태\s*검증부터\s*보기$",
+        r"\s*검증부터\s*보기$",
+        r"\s*먼저\s*보기$",
+        r"\s*부터\s*보기$",
+        r"\s*확인하기$",
+        r"\s*보기$",
+    ):
+        cleaned = re.sub(pattern, "", cleaned).strip()
+    return cleaned or _clean_title(title)
+
+
+def _compose_beginner_question(
+    *,
+    lane: str,
+    title: str,
+    goal: str = "",
+    terms: list[str] | None = None,
+) -> str:
+    terms = terms or []
+    topic = _starter_topic_terms(title, goal, terms)
+    subject = _beginner_subject_from_context(topic=topic, title=title, goal=goal, terms=terms)
+    subject_topic = f"{subject}{_topic_particle(subject)}"
+    text = _context_text(title, goal, terms).lower()
+
+    if topic == "install":
+        if "bootstrap" in text or "검증" in text or "validation" in text:
+            return f"{subject}{_subject_particle(subject)} 정상인지 처음에 어디서 확인하면 돼?"
+        return f"{subject_topic} 어떤 순서로 시작하면 돼?"
+    if topic in {"namespace", "pod", "node", "network", "config", "storage", "observability", "security"}:
+        if lane == "learning":
+            return f"{subject_topic} 뭔지부터 알고 싶은데 어디서 확인하면 돼?"
+        return f"{subject_topic} 처음에 어디서 확인하면 돼?"
+    if topic == "performance":
+        return f"{subject}{_object_particle(subject)} 받으면 목표와 조건은 어떻게 먼저 확인해?"
+    if topic == "deploy":
+        return f"{subject_topic} 처음에 어떤 순서로 진행하면 돼?"
+    if topic == "postinstall" or "postinstall" in text or "post-install" in text or "post installation" in text or "day-2" in text or "day 2" in text:
+        return f"{subject_topic} 무엇부터 이어서 진행하면 돼?"
+    if topic == "troubleshooting" or "troubleshoot" in text or "failure" in text or "problem" in text or "장애" in text or "문제" in text:
+        return f"{subject}{_subject_particle(subject)} 안 될 때 어디부터 확인하면 돼?"
+    if lane == "learning":
+        return f"{subject_topic} 처음에 어떤 순서로 배우면 돼?"
+    return f"{subject_topic} 처음에 무엇부터 확인하면 돼?"
+
+
+def _has_final_consonant(text: str) -> bool:
+    stripped = str(text or "").strip()
+    if not stripped:
+        return False
+    char = stripped[-1]
+    code = ord(char)
+    if 0xAC00 <= code <= 0xD7A3:
+        return (code - 0xAC00) % 28 != 0
+    return False
+
+
+def _topic_particle(text: str) -> str:
+    return "은" if _has_final_consonant(text) else "는"
+
+
+def _subject_particle(text: str) -> str:
+    return "이" if _has_final_consonant(text) else "가"
+
+
+def _object_particle(text: str) -> str:
+    return "을" if _has_final_consonant(text) else "를"
+
 def _operations_questions(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
-    payload, source_label = _load_ops_learning_guides_payload(root_dir)
-    guides = payload.get("guides")
+    chunks, source_label = _load_ops_learning_chunks_payload(root_dir)
     candidates: list[dict[str, Any]] = []
-    if not isinstance(guides, list):
-        return candidates, source_label
-    for guide in guides:
-        if not isinstance(guide, dict):
+    for chunk in chunks:
+        if not isinstance(chunk, dict):
             continue
-        steps = guide.get("steps")
-        if not isinstance(steps, list):
+        question = _ops_chunk_question(chunk).strip()
+        if not question:
             continue
-        for step in steps:
-            if not isinstance(step, dict):
-                continue
-            query = str(step.get("user_query") or "").strip()
-            if not query:
-                continue
-            candidates.append(
-                _starter_question(
-                    lane="operations",
-                    question=query,
-                    route_kind="course",
-                    source=source_label,
-                    category_key=str(guide.get("stage_id") or ""),
-                    category_label=str(guide.get("title") or ""),
-                )
+        candidates.append(
+            _starter_question(
+                lane="operations",
+                question=question,
+                route_kind="course",
+                source=source_label,
+                category_key=str(chunk.get("stage_id") or ""),
+                category_label=str(chunk.get("course_title") or ""),
             )
+        )
     return candidates, source_label
 
 
@@ -429,7 +592,7 @@ def build_studio_starter_questions(root_dir: Path, *, seed: str = "") -> dict[st
     operation_candidates, operations_source = _operations_questions(root)
     operations = _stable_sample(operation_candidates, count=2, seed=f"{seed}:operations")
     learning_sequence = _learning_questions(root)
-    learning = learning_sequence[:2]
+    learning = _stable_sample(learning_sequence, count=2, seed=f"{seed}:learning")
     questions_by_group = {
         "faq": official,
         "learning": learning,
@@ -446,7 +609,7 @@ def build_studio_starter_questions(root_dir: Path, *, seed: str = "") -> dict[st
         ],
         "learning_sequence": learning_sequence,
         "sources": {
-            "faq": "corpus/manifests/eval/pbs_chat_quality_cases*.jsonl",
+            "faq": "official.source_manifest",
             "learning": "corpus/manifests/official/ocp420_repo_wide_source_manifest.json",
             "operations": operations_source,
         },

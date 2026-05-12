@@ -180,6 +180,15 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_ingest_parser.add_argument("--collection", default="")
     corpus_ingest_parser.add_argument("--dry-run", action="store_true")
 
+    corpus_quality_audit_parser = subparsers.add_parser(
+        "corpus-quality-audit",
+        help="Audit tracked corpus JSONL chunks for RAG input quality signals",
+    )
+    corpus_quality_audit_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    corpus_quality_audit_parser.add_argument("--output", type=Path, default=None)
+    corpus_quality_audit_parser.add_argument("--max-examples", type=int, default=5)
+    corpus_quality_audit_parser.add_argument("--fail-on-mojibake-ratio", type=float, default=None)
+
     db_qdrant_index_parser = subparsers.add_parser(
         "db-qdrant-index",
         help="Embed pending PostgreSQL document chunks and upsert them to Qdrant",
@@ -1255,6 +1264,24 @@ def main() -> int:
         return _run_upload_ingest(args)
     if args.command == "corpus-ingest":
         return _run_corpus_ingest(args)
+    if args.command == "corpus-quality-audit":
+        from play_book_studio.ingestion.corpus_quality_audit import audit_runtime_corpus
+
+        root_dir = args.root_dir.resolve()
+        report = audit_runtime_corpus(root_dir, max_examples=max(0, int(args.max_examples or 0)))
+        output = json.dumps(report, ensure_ascii=False, indent=2)
+        if args.output:
+            output_path = (root_dir / args.output).resolve() if not args.output.is_absolute() else args.output.resolve()
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(output + "\n", encoding="utf-8")
+        print(output)
+        threshold = args.fail_on_mojibake_ratio
+        if threshold is not None:
+            for target in report["targets"]:
+                ratio = float(target.get("mojibake", {}).get("suspect_ratio") or 0.0)
+                if ratio > float(threshold):
+                    return 1
+        return 0
     if args.command == "db-qdrant-index":
         return _run_db_qdrant_index(args)
     if args.command == "db-qdrant-backfill":

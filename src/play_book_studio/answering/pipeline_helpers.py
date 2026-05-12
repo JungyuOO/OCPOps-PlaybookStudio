@@ -17,6 +17,7 @@ from .answer_text import (
     reshape_ops_answer_text,
     strip_ungrounded_code_blocks,
     shape_actionable_ops_answer,
+    shape_beginner_grounded_answer,
     shape_rbac_follow_up_answer,
     shape_certificate_monitor_answer,
     shape_crash_loop_troubleshooting,
@@ -84,6 +85,11 @@ def generate_grounded_answer_text(
         mode=mode,
     )
     answer_text = ensure_korean_product_terms(answer_text, query=query)
+    answer_text = shape_beginner_grounded_answer(
+        answer_text,
+        query=query,
+        citations=citations,
+    )
     answer_text = align_answer_to_grounded_commands(
         answer_text,
         query=query,

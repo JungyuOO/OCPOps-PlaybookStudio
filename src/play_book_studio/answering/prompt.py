@@ -24,11 +24,31 @@ from play_book_studio.retrieval.query import (
     has_rbac_intent,
     is_generic_intro_query,
 )
+from play_book_studio.retrieval.query_understanding import understand_query
 
 from .models import ContextBundle
 
 
 def _intent_shape_hint(query: str) -> str:
+    understanding = understand_query(query)
+    if understanding.has_intent("install_overview"):
+        return (
+            "설치 개요 질문이면 '먼저 결론 -> 설치 방식 비교 -> 초보자 기준 추천 -> 설치 전 준비물 -> 실제 흐름 -> 확인 명령' "
+            "순서로 답한다. Assisted Installer, Agent-based Installer, SNO, IPI, UPI는 근거에 있을 때만 비교하고, 모르면 단정하지 않는다."
+        )
+    if understanding.has_intent("secret_config_troubleshooting"):
+        return (
+            "Secret/ConfigMap 오류 질문이면 '가장 먼저 볼 것 -> 확인 명령 -> 정상/비정상 판단 기준 -> 다음 분기' 순서로 답한다. "
+            "근거에 있는 경우 pod events, oc describe, mounted volume, envFrom/env, key/name mismatch를 우선 확인하게 한다."
+        )
+    if understanding.has_intent("troubleshooting"):
+        return (
+            "문제 해결 질문이면 증상을 좁히기 전에 먼저 확인할 리소스와 명령을 제시하고, 각 명령 결과에서 무엇이 정상이거나 비정상인지 판단 기준을 함께 쓴다."
+        )
+    if understanding.has_intent("command_lookup"):
+        return (
+            "명령어 질문이면 첫 문장에 바로 핵심 명령을 말하고, 코드 블록 다음에 namespace/project 범위와 출력에서 확인할 값을 설명한다."
+        )
     if has_openshift_kubernetes_compare_intent(query):
         return (
             "질문이 비교형이면 '공통 기반 1문장 -> 핵심 차이 2~3개 -> 실무에서 무엇이 달라지는지 1문장' "

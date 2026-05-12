@@ -13,6 +13,24 @@ from .intents import (
 )
 
 
+def _has_install_overview_intent(normalized: str) -> bool:
+    lowered = str(normalized or "").lower()
+    has_product = (
+        "ocp" in lowered
+        or "openshift" in lowered
+        or "오픈시프트" in normalized
+        or "오픈 시프트" in normalized
+    )
+    has_install = (
+        "설치" in normalized
+        or "구축" in normalized
+        or "install" in lowered
+        or "installation" in lowered
+        or "installer" in lowered
+    )
+    return has_product and has_install
+
+
 def apply_overview_discovery_adjustments(
     normalized: str,
     *,
@@ -58,6 +76,20 @@ def apply_overview_discovery_adjustments(
         penalties["api_overview"] = 0.78
         penalties["project_apis"] = 0.82
         penalties["release_notes"] = 0.55
+
+    if _has_install_overview_intent(normalized):
+        boosts["installation_overview"] = max(boosts.get("installation_overview", 1.0), 2.35)
+        boosts["install_modes"] = max(boosts.get("install_modes", 1.0), 1.95)
+        boosts["installing_on_any_platform"] = max(boosts.get("installing_on_any_platform", 1.0), 1.86)
+        boosts["installing_on_bare_metal"] = max(boosts.get("installing_on_bare_metal", 1.0), 1.72)
+        boosts["installing_with_agent_based_installer"] = max(
+            boosts.get("installing_with_agent_based_installer", 1.0),
+            1.72,
+        )
+        penalties["release_notes"] = min(penalties.get("release_notes", 1.0), 0.42)
+        penalties["api_overview"] = min(penalties.get("api_overview", 1.0), 0.58)
+        penalties["cli_tools"] = min(penalties.get("cli_tools", 1.0), 0.62)
+        penalties["support"] = min(penalties.get("support", 1.0), 0.72)
 
     if has_openshift_kubernetes_compare_intent(normalized) and not route_ingress_compare:
         boosts["architecture"] = max(boosts.get("architecture", 1.0), 1.28)

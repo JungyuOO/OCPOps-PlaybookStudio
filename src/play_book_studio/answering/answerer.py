@@ -34,6 +34,7 @@ from play_book_studio.retrieval.query import (
     is_explainer_query,
     is_generic_intro_query,
 )
+from play_book_studio.retrieval.query_understanding import has_beginner_troubleshooting_intent
 
 from .answer_text_commands import (
     build_deployment_scaling_answer,
@@ -209,6 +210,24 @@ def _is_guided_learning_question(query: str) -> bool:
     return bool(_GUIDED_LEARNING_QUESTION_RE.search(query or ""))
 
 
+def _is_install_overview_question(query: str) -> bool:
+    lowered = str(query or "").lower()
+    has_product = (
+        "ocp" in lowered
+        or "openshift" in lowered
+        or "오픈시프트" in str(query or "")
+        or "오픈 시프트" in str(query or "")
+    )
+    has_install = (
+        "설치" in str(query or "")
+        or "구축" in str(query or "")
+        or "install" in lowered
+        or "installation" in lowered
+        or "installer" in lowered
+    )
+    return has_product and has_install
+
+
 def _retrieval_hits_for_clarification(hits: list) -> list[dict]:
     rows: list[dict] = []
     for hit in hits[:3]:
@@ -283,6 +302,24 @@ def _is_low_confidence_retrieval(
         or _is_supported_ops_learning_question(query)
     ):
         return False
+    if has_beginner_troubleshooting_intent(query) and any(
+        token in citation_haystack
+        for token in (
+            "troubleshooting",
+            "events",
+            "describe",
+            "logs",
+            "secret",
+            "configmap",
+            "configuration",
+            "pod",
+            "workloads",
+            "applications",
+            "상태",
+            "오류",
+        )
+    ):
+        return False
     coverage = _citation_token_coverage(query, citations)
     max_fused = _selected_hit_score(selected_hits, "fused_score")
     max_pre_rerank = _selected_hit_score(selected_hits, "pre_rerank_fused_score")
@@ -295,6 +332,23 @@ def _is_low_confidence_retrieval(
     if any(token in normalized_query for token in ("bootstrap", "부트스트랩")) and any(
         token in citation_haystack
         for token in ("bootstrap-complete", "wait-for bootstrap", "openshift-install", "waiting for the bootstrap")
+    ):
+        return False
+    if _is_install_overview_question(query) and any(
+        token in citation_haystack
+        for token in (
+            "installation_overview",
+            "install_modes",
+            "installing_on_any_platform",
+            "installing_on_bare_metal",
+            "installing_with_agent_based_installer",
+            "assisted installer",
+            "agent-based installer",
+            "single-node",
+            "single node",
+            "openshift-install",
+            "설치",
+        )
     ):
         return False
     weighted_score = (coverage * 0.62) + (max(max_pre_rerank, max_vector) * 1.8) + (0.12 if max_fused > 0 else 0)

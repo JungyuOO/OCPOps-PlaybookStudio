@@ -34,6 +34,9 @@ from play_book_studio.http.chat_history_api import (
     handle_chat_history_messages as _handle_chat_history_messages_request,
     handle_chat_history_sessions as _handle_chat_history_sessions_request,
 )
+from play_book_studio.http.chat_quality_api import (
+    handle_chat_quality_query_insights as _handle_chat_quality_query_insights_request,
+)
 from play_book_studio.http.learning_api import (
     handle_learning_command_results as _handle_learning_command_results_request,
     handle_learning_paths as _handle_learning_paths_request,
@@ -184,6 +187,9 @@ def _build_handler(
                 return
             if request_path == "/api/studio/starter-questions":
                 _handle_studio_starter_questions(self, parsed_request.query, root_dir=root_dir)
+                return
+            if request_path == "/api/chat-quality/query-insights":
+                _handle_chat_quality_query_insights_request(self, parsed_request.query, root_dir=root_dir)
                 return
             if request_path == "/api/learning-paths":
                 _handle_learning_paths_request(self, parsed_request.query, root_dir=root_dir)

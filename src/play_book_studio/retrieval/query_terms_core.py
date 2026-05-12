@@ -32,6 +32,8 @@ from .intents import (
 
 
 _LATIN_RE = re.compile(r"[A-Za-z]")
+_OPENSHIFT_PRODUCT_RE = re.compile(r"(?<![a-z0-9])ocp(?![a-z0-9])|openshift|오픈\s*시프트|오픈시프트", re.IGNORECASE)
+_INSTALL_OVERVIEW_RE = re.compile(r"설치|install|installation|installer|클러스터.*구축|구축.*클러스터", re.IGNORECASE)
 
 
 def _english_expansion_enabled(normalized: str) -> bool:
@@ -47,6 +49,28 @@ def append_core_query_terms(normalized: str, terms: list[str]) -> None:
         terms.extend(["OpenShift", "Container", "Platform"])
     if OPENSHIFT_RE.search(normalized) and allow_english:
         terms.append("OpenShift")
+    if _OPENSHIFT_PRODUCT_RE.search(normalized):
+        terms.extend(["OpenShift Container Platform", "OCP", "OpenShift"])
+    if _OPENSHIFT_PRODUCT_RE.search(normalized) and _INSTALL_OVERVIEW_RE.search(normalized):
+        terms.extend(
+            [
+                "OpenShift Container Platform 설치 정보",
+                "설치 개요",
+                "클러스터 설치",
+                "설치 프로그램",
+                "Assisted Installer",
+                "Agent-based Installer",
+                "Single Node OpenShift",
+                "SNO",
+                "IPI",
+                "UPI",
+                "installing a cluster",
+                "installation overview",
+                "preparing to install",
+                "pull secret",
+                "kubeconfig",
+            ]
+        )
     if KUBERNETES_RE.search(normalized) and allow_english:
         terms.append("Kubernetes")
     if ARCHITECTURE_RE.search(normalized):

@@ -200,7 +200,13 @@ def test_build_ops_learning_chunks_creates_second_corpus_without_fixed_answer_ou
                 "body_md": f"DB SQL response latency and DB Connection Pool waits are the first bottleneck evidence. {long_sequence}",
                 "search_text": "DB SQL response latency DB Connection Pool HPA HAProxy bottleneck",
                 "image_attachments": [
-                    {"instructional_role": "dashboard_metric", "visual_summary": "Prometheus dashboard shows high response latency."}
+                    {
+                        "asset_id": "perf-dashboard",
+                        "asset_path": "data/course_pbs/assets/perf-dashboard.png",
+                        "slide_no": 4,
+                        "instructional_role": "dashboard_metric",
+                        "visual_summary": "Prometheus dashboard shows high response latency.",
+                    }
                 ],
             },
         )
@@ -242,6 +248,8 @@ def test_build_ops_learning_chunks_creates_second_corpus_without_fixed_answer_ou
     assert any("Connection Pool" in item for item in learning["operational_sequence"])
     assert any(len(item) > 180 and "latency drops after the new pods become ready" in item for item in learning["operational_sequence"])
     assert "dashboard_metric" in learning["visual_evidence_roles"]
+    assert learning["image_evidence_assets"][0]["asset_path"] == "data/course_pbs/assets/perf-dashboard.png"
+    assert learning["image_evidence_assets"][0]["source_chunk_id"] == chunk_id
     assert all(not ops_learning.INTERNAL_ID_RE.search(item) for item in learning["query_variants"])
 
 
