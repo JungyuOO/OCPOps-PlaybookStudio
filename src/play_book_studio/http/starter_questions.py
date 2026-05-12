@@ -10,13 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from play_book_studio.config.corpus_paths import (
-    ANSWER_EVAL_CASES_PATH,
-    ANSWER_EVAL_REALWORLD_CASES_PATH,
     OCP420_REPO_WIDE_SOURCE_MANIFEST_PATH,
     OCP420_SOURCE_FIRST_FULL_REBUILD_MANIFEST_PATH,
     OPS_LEARNING_CHUNKS_PATH,
     OPS_LEARNING_GUIDES_PATH,
-    PBS_CHAT_QUALITY_CASES_PATH,
 )
 from play_book_studio.config.settings import load_settings
 from play_book_studio.db.official_documents import load_official_manifest_entries
@@ -151,42 +148,33 @@ def _official_faq_questions(root_dir: Path) -> list[dict[str, Any]]:
     if database_url:
         return _official_faq_questions_from_db(database_url)
 
+    return _official_faq_questions_from_entries(
+        _manifest_entries(root_dir),
+        source="official.source_manifest",
+    )
+
+
+def _official_faq_questions_from_entries(entries: list[dict[str, Any]], *, source: str) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
-    entries_by_slug = {
-        str(entry.get("book_slug") or "").strip(): entry
-        for entry in _manifest_entries(root_dir)
-        if str(entry.get("book_slug") or "").strip()
-    }
-    for path in (
-        root_dir / PBS_CHAT_QUALITY_CASES_PATH,
-        root_dir / ANSWER_EVAL_CASES_PATH,
-        root_dir / ANSWER_EVAL_REALWORLD_CASES_PATH,
-    ):
-        for row in _iter_jsonl(path):
-            query = str(row.get("query") or "").strip()
-            query_type = str(row.get("query_type") or "").strip().lower()
-            if not query:
-                continue
-            if query_type not in {"ops_command", "ops_procedure", "ops_troubleshooting"}:
-                continue
-            if bool(row.get("clarification_expected")) or bool(row.get("no_answer_expected")):
-                continue
-            expected_books = row.get("expected_book_slugs")
-            if not isinstance(expected_books, list) or not expected_books:
-                continue
-            target_book_slug = str(expected_books[0] or "").strip()
-            target_entry = entries_by_slug.get(target_book_slug, {})
-            candidates.append(
-                _starter_question(
-                    lane="faq",
-                    question=query,
-                    route_kind="official",
-                    source=path.name,
-                    target_book_slug=target_book_slug,
-                    target_title=str(target_entry.get("title") or target_book_slug.replace("_", " ").title()),
-                    target_viewer_path=str(target_entry.get("viewer_path") or ""),
-                )
+    for rule in STARTER_CATEGORY_RULES:
+        entry = _best_entry_for_category(entries, rule)
+        if not entry:
+            continue
+        title = _clean_title(str(entry.get("title") or rule.label))
+        book_slug = str(entry.get("book_slug") or "").strip()
+        candidates.append(
+            _starter_question(
+                lane="faq",
+                question=_official_faq_query(rule, title),
+                route_kind="official",
+                source=source,
+                category_key=rule.key,
+                category_label=rule.label,
+                target_book_slug=book_slug,
+                target_title=title,
+                target_viewer_path=str(entry.get("viewer_path") or ""),
             )
+        )
     return candidates
 
 
@@ -212,29 +200,10 @@ def _official_manifest_entries_from_db(database_url: str) -> list[dict[str, Any]
 
 
 def _official_faq_questions_from_db(database_url: str) -> list[dict[str, Any]]:
-    entries = _official_manifest_entries_from_db(database_url)
-    questions: list[dict[str, Any]] = []
-    for rule in STARTER_CATEGORY_RULES:
-        if rule.key not in {"day2", "operations", "storage", "security", "networking", "troubleshooting"}:
-            continue
-        entry = _best_entry_for_category(entries, rule)
-        if not entry:
-            continue
-        title = _clean_title(str(entry.get("title") or rule.label))
-        book_slug = str(entry.get("book_slug") or "").strip()
-        questions.append(
-            _starter_question(
-                lane="faq",
-                question=_official_faq_query(rule, title),
-                route_kind="official",
-                source="postgres.official_docs",
-                category_key=rule.key,
-                category_label=rule.label,
-                target_book_slug=book_slug,
-                target_title=title,
-                target_viewer_path=str(entry.get("viewer_path") or ""),
-            )
-        )
+    questions = _official_faq_questions_from_entries(
+        _official_manifest_entries_from_db(database_url),
+        source="postgres.official_docs",
+    )
     if questions:
         return questions
     return [
@@ -640,7 +609,7 @@ def build_studio_starter_questions(root_dir: Path, *, seed: str = "") -> dict[st
         ],
         "learning_sequence": learning_sequence,
         "sources": {
-            "faq": "corpus/manifests/eval/pbs_chat_quality_cases*.jsonl",
+            "faq": "official.source_manifest",
             "learning": "corpus/manifests/official/ocp420_repo_wide_source_manifest.json",
             "operations": operations_source,
         },

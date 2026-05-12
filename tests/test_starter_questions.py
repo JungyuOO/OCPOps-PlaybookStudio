@@ -77,12 +77,15 @@ def test_starter_questions_are_loaded_from_manifests() -> None:
     payload = build_studio_starter_questions(TEST_TMP, seed="stable")
     groups = {group["key"]: group for group in payload["groups"]}
 
-    assert groups["faq"]["questions"][0]["question"] == "Operator가 Degraded일 때 CSV 상태를 어떻게 확인해?"
+    assert groups["faq"]["questions"][0]["source"] == "official.source_manifest"
+    assert groups["faq"]["questions"][0]["question"] != "Operator가 Degraded일 때 CSV 상태를 어떻게 확인해?"
+    assert groups["faq"]["questions"][0]["target_book_slug"] in {"installing", "monitoring"}
     assert groups["learning"]["questions"][0]["source"] == "ocp420_repo_wide_source_manifest"
     assert groups["operations"]["questions"][0]["source"].endswith("ops_learning_chunks_v1.jsonl")
     assert groups["operations"]["questions"][0]["question"] == "성능 테스트 결과를 받으면 목표와 조건은 어떻게 먼저 확인해?"
     assert "병목은 어디부터" not in groups["operations"]["questions"][0]["question"]
     assert payload["learning_sequence"][0]["learning_index"] == 0
+    assert payload["sources"]["faq"] == "official.source_manifest"
 
 
 def test_starter_questions_do_not_fall_back_to_files_when_database_is_configured(monkeypatch) -> None:

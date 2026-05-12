@@ -1,5 +1,14 @@
 # v0.1.2 청크 품질 재구축과 초보자 답변 깊이 개선
 
+
+## 진행 메모 (2026-05-12)
+
+- [x] 사전 작업 Step 2: `reports/v012_chunk_quality_before.json`, `reports/v012_chunk_quality_before.md`, `reports/v012_studio_live_smoke_before.json` baseline 동결
+- [x] Phase A.1 Step 3: context citation excerpt/cli command/section label 내부 markup sanitize
+- [x] Phase A.1 Step 4 일부: navigation-only hit 런타임 down-rank 추가(DB 컬럼 없음)
+- [x] Phase A.1 Step 10 일부: starter FAQ lane에서 eval JSONL query 직접 노출 제거
+- [x] Phase A.1 Step 15 일부: citation section label 노출 전 sanitize 적용
+
 ## 목표
 
 v0.1.0이 RAG 파이프라인의 의도 분석/answer shape/스트리밍을 잡았고, v0.1.1이 추천 질문의 표면 톤을 초보자 어휘로 다듬었다면, v0.1.2는 **답변과 추천 질문이 빈약한 근본 원인인 "청크 데이터 품질"을 정면으로 다룬다.**

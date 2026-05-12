@@ -37,6 +37,7 @@ from play_book_studio.retrieval.query import (
 
 from .doc_locator_intent import is_cross_document_follow_query
 from .models import Citation, ContextBundle
+from .sanitize import sanitize_cli_command, sanitize_section_label, strip_internal_markup
 
 
 SPACE_RE = re.compile(r"\s+")
@@ -55,12 +56,11 @@ AUTH_CAN_I_QUERY_RE = re.compile(
 
 
 def _normalize_excerpt(text: str) -> str:
-    return SPACE_RE.sub(" ", (text or "").strip())
+    return SPACE_RE.sub(" ", strip_internal_markup(text))
 
 
 def _trim_command_candidate(value: str) -> str:
-    command = SPACE_RE.sub(" ", str(value or "").strip()).strip()
-    command = command.removeprefix("$ ").strip()
+    command = SPACE_RE.sub(" ", sanitize_cli_command(value)).strip()
     for marker in (
         " [/CODE]",
         " [CODE",
@@ -84,6 +84,43 @@ def _trim_command_candidate(value: str) -> str:
     ):
         return ""
     return command[:240].strip()
+
+
+NAVIGATION_ONLY_LABELS = (
+    "related documents",
+    "related document",
+    "open document",
+    "close",
+    "next",
+    "previous",
+    "관련 문서",
+    "문서 열기",
+    "닫기",
+    "다음",
+    "이전",
+)
+
+
+def _is_navigation_only_hit(hit: RetrievalHit) -> bool:
+    if hit.cli_commands or _commands_from_excerpt(hit.text):
+        return False
+    text = strip_internal_markup(hit.text)
+    lowered = text.lower()
+    nav_label_count = sum(1 for label in NAVIGATION_ONLY_LABELS if label in lowered or label in text)
+    if nav_label_count < 2:
+        return False
+    content_lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip()
+        and not any(label in line.lower() or label in line for label in NAVIGATION_ONLY_LABELS)
+    ]
+    content_chars = sum(len(line) for line in content_lines)
+    return content_chars < 180
+
+
+def _demote_navigation_only_hits(hits: list[RetrievalHit]) -> list[RetrievalHit]:
+    return sorted(hits, key=lambda hit: (1 if _is_navigation_only_hit(hit) else 0))
 
 
 def _commands_from_excerpt(excerpt: str) -> tuple[str, ...]:
@@ -117,7 +154,11 @@ def _commands_from_excerpt(excerpt: str) -> tuple[str, ...]:
 
 def _citation_cli_commands(hit: RetrievalHit, excerpt: str) -> tuple[str, ...]:
     extracted = list(_commands_from_excerpt(excerpt))
-    existing = [str(command or "").strip() for command in hit.cli_commands if str(command or "").strip()]
+    existing = [
+        sanitize_cli_command(command)
+        for command in hit.cli_commands
+        if sanitize_cli_command(command)
+    ]
     merged: list[str] = []
     seen: set[str] = set()
     for command in [*extracted, *existing]:
@@ -1283,6 +1324,11 @@ def _select_hits(
         top_score = _hit_score(support_window[0])
         top_book = support_window[0].book_slug
 
+    ranked_hits = _demote_navigation_only_hits(ranked_hits)
+    support_window = ranked_hits[: max(max_chunks * 2, 8)]
+    top_score = _hit_score(support_window[0])
+    top_book = support_window[0].book_slug
+
     book_counts = Counter(hit.book_slug for hit in support_window)
     best_book_scores: dict[str, float] = defaultdict(float)
     for hit in support_window:
@@ -1795,13 +1841,21 @@ def assemble_context(
                 index=len(citations) + 1,
                 chunk_id=hit.chunk_id,
                 book_slug=hit.book_slug,
-                section=hit.section,
+                section=sanitize_section_label(hit.section) or hit.section,
                 anchor=hit.anchor,
                 source_url=hit.source_url,
                 viewer_path=hit.viewer_path,
                 excerpt=citation_excerpt,
                 section_path=hit.section_path,
-                section_path_label=" > ".join(hit.section_path) if hit.section_path else hit.section,
+                section_path_label=(
+                    " > ".join(
+                        part
+                        for part in (sanitize_section_label(item) for item in hit.section_path)
+                        if part
+                    )
+                    if hit.section_path
+                    else sanitize_section_label(hit.section) or hit.section
+                ),
                 section_number=hit.section_number,
                 heading_title=hit.heading_title,
                 source_anchor=hit.source_anchor,
@@ -1810,7 +1864,7 @@ def assemble_context(
                 semantic_role=hit.semantic_role,
                 source_collection=hit.source_collection,
                 block_kinds=hit.block_kinds,
-                cli_commands=_citation_cli_commands(hit, citation_excerpt),
+                cli_commands=_citation_cli_commands(hit, hit.text),
                 error_strings=hit.error_strings,
                 k8s_objects=hit.k8s_objects,
                 operator_names=hit.operator_names,
