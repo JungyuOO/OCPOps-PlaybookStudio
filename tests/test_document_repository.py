@@ -252,11 +252,14 @@ def test_list_document_repositories_filters_by_owner_scope():
         tenant_slug="public",
         workspace_slug="default",
         owner_user_id="tester",
+        collection="openshift_docs",
     )
 
     sql_text = "\n".join(sql for sql, _params in connection.cursor_obj.calls)
     assert "FROM repositories r" in sql_text
     assert "r.visibility IN ('workspace_shared', 'global_shared') OR r.owner_user_id = %s" in sql_text
+    indexed_call = next(call for call in connection.cursor_obj.calls if "LEFT JOIN qdrant_index_entries qie" in call[0])
     assert connection.cursor_obj.calls[0][1] == ("public", "default", "tester")
+    assert indexed_call[1] == ("openshift_docs", "openshift_docs", ["99999999-9999-9999-9999-999999999999"])
     assert repositories[0]["repository_id"] == "99999999-9999-9999-9999-999999999999"
     assert repositories[0]["document_count"] == 2

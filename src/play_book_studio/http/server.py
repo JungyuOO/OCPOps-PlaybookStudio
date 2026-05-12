@@ -23,16 +23,6 @@ def _warmup_runtime_components(answerer: ChatAnswerer, root_dir: Path) -> None:
         print("[server] course runtime warmed")
     except Exception as exc:  # noqa: BLE001
         print(f"[server] course warmup failed: {exc}")
-    reranker = getattr(getattr(answerer, "retriever", None), "reranker", None)
-    if reranker is None:
-        return
-    try:
-        warmed = reranker.warmup()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[server] reranker warmup failed: {exc}")
-        return
-    if warmed:
-        print(f"[server] reranker warmed: {reranker.model_name}")
 
 
 def _start_runtime_warmup(answerer: ChatAnswerer, root_dir: Path) -> threading.Thread | None:

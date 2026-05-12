@@ -57,6 +57,46 @@ def test_health_payload_marks_seed_inputs_not_required_in_database_runtime(monke
     assert runtime["seed_inputs"]["source_manifest_path"]
 
 
+def test_health_payload_reports_qdrant_live_errors(monkeypatch) -> None:
+    root = _workspace("health_qdrant_error")
+    (root / ".env").write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://unit-test",
+                "QDRANT_URL=http://qdrant.example",
+                "QDRANT_COLLECTION=openshift_docs",
+                "ARTIFACTS_DIR=artifacts",
+                "LLM_ENDPOINT=http://llm.example/v1",
+                "LLM_MODEL=Qwen/Qwen3.5-9B",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(presenters_runtime, "build_corpus_status", lambda **_kwargs: {"ready": True})
+    monkeypatch.setattr(presenters_runtime, "build_course_runtime_status", lambda **_kwargs: {"ready": True})
+    monkeypatch.setattr(
+        presenters_runtime,
+        "graph_sidecar_compact_artifact_status",
+        lambda _settings: {"ready": True},
+    )
+    monkeypatch.setattr(
+        presenters_runtime,
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("bad qdrant url")),
+    )
+    answerer = SimpleNamespace(
+        settings=load_settings(root),
+        llm_client=SimpleNamespace(runtime_metadata=lambda: {}),
+    )
+
+    payload = presenters_runtime._build_health_payload(answerer)
+    qdrant_live = payload["runtime"]["qdrant_live"]
+
+    assert qdrant_live["status"] == "error"
+    assert qdrant_live["ready"] is False
+    assert "bad qdrant url" in qdrant_live["error"]
+
+
 def test_runtime_report_marks_legacy_files_as_seed_inputs_in_database_runtime(monkeypatch) -> None:
     root = _workspace("runtime_report")
     (root / ".env").write_text(

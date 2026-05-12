@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import threading
 import time
 from email.parser import BytesParser
 from email.policy import default as default_email_policy
@@ -26,9 +25,6 @@ if TYPE_CHECKING:
     from play_book_studio.answering.models import AnswerResult
 
 FRONTEND_DIST_DIRNAME = "apps/web/dist"
-DATA_CONTROL_ROOM_CACHE_TTL_SECONDS = 30.0
-
-
 def _frontend_dist_dir(root_dir: Path) -> Path:
     return (root_dir / FRONTEND_DIST_DIRNAME).resolve()
 
@@ -93,30 +89,6 @@ def _parse_multipart_form_data(raw_body: bytes, content_type: str) -> dict[str, 
     return payload
 
 
-class _TimedValueCache:
-    def __init__(self, ttl_seconds: float) -> None:
-        self.ttl_seconds = ttl_seconds
-        self._lock = threading.Lock()
-        self._items: dict[str, tuple[float, Any]] = {}
-
-    def get(self, key: str) -> Any | None:
-        now = time.monotonic()
-        with self._lock:
-            cached = self._items.get(key)
-            if cached is None:
-                return None
-            created_at, value = cached
-            if now - created_at > self.ttl_seconds:
-                self._items.pop(key, None)
-                return None
-            return value
-
-    def set(self, key: str, value: Any) -> Any:
-        with self._lock:
-            self._items[key] = (time.monotonic(), value)
-        return value
-
-
 def _build_chat_payload(
     *,
     root_dir: Path,
@@ -178,19 +150,17 @@ def _build_chat_payload(
     if result.response_kind == "no_answer":
         payload["acquisition"] = {
             "kind": "repository_search",
-            "title": "현재 Playbook Library에 해당 자료가 없습니다.",
-            "body": "자료 추가를 원하시면 체크 후 확인을 눌러주세요.",
-            "checkbox_label": "Repository에서 우선순위로 필요한 데이터 찾기",
-            "confirm_label": "확인",
+            "title": "답변 근거가 부족합니다.",
+            "body": "이 질문을 Source Request로 저장하고, Repository에서 필요한 공식 원천 문서 후보를 바로 찾습니다.",
+            "checkbox_label": "이 질문을 자료 보강 요청으로 등록",
+            "confirm_label": "자료 보강 요청",
             "repository_query": (result.rewritten_query or result.query or "").strip(),
         }
     return payload
 
 
 __all__ = [
-    "DATA_CONTROL_ROOM_CACHE_TTL_SECONDS",
     "FRONTEND_DIST_DIRNAME",
-    "_TimedValueCache",
     "_build_chat_payload",
     "_decode_multipart_text",
     "_frontend_dist_dir",

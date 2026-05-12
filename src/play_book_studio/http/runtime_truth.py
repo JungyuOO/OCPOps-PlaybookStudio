@@ -30,8 +30,13 @@ def _is_approved_ko(entry: dict[str, Any]) -> bool:
 
 
 def official_runtime_grade(entry: dict[str, Any]) -> str:
-    if _is_approved_ko(entry):
+    explicit_grade = _normalized(entry.get("grade")).lower()
+    if explicit_grade == "gold":
         return "Gold"
+    if explicit_grade == "silver":
+        return "Silver"
+    if explicit_grade == "bronze":
+        return "Bronze"
     source_type = _normalized(entry.get("source_type"))
     if source_type in {
         "topic_playbook",
@@ -41,6 +46,8 @@ def official_runtime_grade(entry: dict[str, Any]) -> str:
         "synthesized_playbook",
     }:
         return "Bronze"
+    if _is_approved_ko(entry):
+        return "Silver"
     return "Silver"
 
 
@@ -50,7 +57,7 @@ def official_runtime_truth_payload(*, settings: Settings, manifest_entry: dict[s
     publication_state = _normalized(manifest_entry.get("publication_state"))
     parser_backend = _normalized(manifest_entry.get("parser_backend"))
     source_lane = _normalized(manifest_entry.get("source_lane"))
-    if _is_approved_ko(manifest_entry):
+    if official_runtime_grade(manifest_entry) == "Gold":
         runtime_truth_label = f"{pack_label} Gold Playbook" if pack_label else "Gold Playbook"
         return {
             "source_lane": source_lane,

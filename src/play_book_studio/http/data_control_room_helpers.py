@@ -179,21 +179,24 @@ def _candidate_playbook_dirs(*paths: Path, expected_count: int) -> tuple[Path | 
 
 def _summarize_eval(report: dict[str, Any], *, overall_key: str = "overall") -> dict[str, Any]:
     overall = report.get(overall_key) if isinstance(report.get(overall_key), dict) else {}
+    if not overall and overall_key == "overall" and isinstance(report.get("summary"), dict):
+        overall = report.get("summary") or {}
     payload: dict[str, Any] = {"exists": bool(report)}
-    for key in (
-        "case_count",
-        "book_hit_at_1",
-        "book_hit_at_3",
-        "book_hit_at_5",
-        "pass_rate",
-        "avg_citation_precision",
-        "answer_present_rate",
-        "faithfulness",
-        "answer_relevancy",
-    ):
-        value = overall.get(key)
+    metric_aliases = {
+        "case_count": ("case_count",),
+        "book_hit_at_1": ("book_hit_at_1", "expected_hit_at_1"),
+        "book_hit_at_3": ("book_hit_at_3", "expected_hit_at_3"),
+        "book_hit_at_5": ("book_hit_at_5", "expected_hit_at_5"),
+        "pass_rate": ("pass_rate",),
+        "avg_citation_precision": ("avg_citation_precision",),
+        "answer_present_rate": ("answer_present_rate",),
+        "faithfulness": ("faithfulness",),
+        "answer_relevancy": ("answer_relevancy",),
+    }
+    for output_key, keys in metric_aliases.items():
+        value = next((overall.get(key) for key in keys if overall.get(key) is not None), None)
         if value is not None:
-            payload[key] = value
+            payload[output_key] = value
     return payload
 
 

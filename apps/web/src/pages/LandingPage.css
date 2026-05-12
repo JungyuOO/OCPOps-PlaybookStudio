@@ -1,0 +1,40 @@
+.landing-theme-controls {
+  position: fixed;
+  top: 24px;
+  right: 32px;
+  z-index: 120;
+}
+
+.landing-theme-toggle-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: var(--pbs-theme-transition), transform 0.2s ease;
+}
+
+.landing-theme-toggle-btn:hover {
+  border-color: rgba(0, 209, 255, 0.34);
+  background: rgba(0, 209, 255, 0.1);
+  color: var(--accent-cyan);
+  transform: translateY(-1px);
+}
+
+[data-theme='light'] .landing-theme-toggle-btn {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.86);
+  color: #334155;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+[data-theme='light'] .landing-theme-toggle-btn:hover {
+  border-color: rgba(0, 122, 153, 0.26);
+  background: rgba(231, 248, 252, 0.94);
+  color: var(--accent-cyan);
+}

@@ -255,11 +255,81 @@ def _snapshot_exists(snapshot: dict[str, Any]) -> bool:
     return bool(snapshot.get("exists"))
 
 
+def _runtime_qdrant_parity_status(runtime_report: dict[str, Any]) -> str:
+    candidates: list[dict[str, Any]] = []
+    runtime = runtime_report.get("runtime") if isinstance(runtime_report.get("runtime"), dict) else {}
+    probes = runtime_report.get("probes") if isinstance(runtime_report.get("probes"), dict) else {}
+    runtime_db = runtime.get("db_corpus") if isinstance(runtime.get("db_corpus"), dict) else {}
+    if runtime_db:
+        candidates.append(runtime_db)
+    local_ui = probes.get("local_ui") if isinstance(probes.get("local_ui"), dict) else {}
+    health_payload = local_ui.get("health_payload") if isinstance(local_ui.get("health_payload"), dict) else {}
+    health_runtime = health_payload.get("runtime") if isinstance(health_payload.get("runtime"), dict) else {}
+    health_db = health_runtime.get("db_corpus") if isinstance(health_runtime.get("db_corpus"), dict) else {}
+    if health_db:
+        candidates.append(health_db)
+    if not candidates:
+        return "unknown"
+    if any(candidate.get("qdrant_index_parity") is False for candidate in candidates):
+        return "fail"
+    if any(candidate.get("qdrant_index_parity") is True for candidate in candidates):
+        return "pass"
+    return "unknown"
+
+
+MIN_EVAL_CASE_COUNT = 20
+MIN_RETRIEVAL_HIT_AT_3 = 0.95
+MIN_ANSWER_PASS_RATE = 0.95
+MIN_CITATION_PRECISION = 0.8
+MIN_RAGAS_FAITHFULNESS = 0.8
+
+
+def _eval_overall(report: dict[str, Any]) -> dict[str, Any]:
+    overall = report.get("overall") if isinstance(report.get("overall"), dict) else {}
+    if not overall and isinstance(report.get("summary"), dict):
+        overall = report.get("summary") or {}
+    return overall
+
+
+def _metric_float(overall: dict[str, Any], *keys: str) -> float | None:
+    for key in keys:
+        value = overall.get(key)
+        if value is None:
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _quality_gate(
+    blockers: list[str],
+    *,
+    name: str,
+    metric: float | None,
+    minimum: float,
+    blocker: str,
+) -> dict[str, Any]:
+    passed = metric is not None and metric >= minimum
+    if not passed:
+        blockers.append(blocker if metric is not None else f"{name}_missing")
+    return {
+        "metric": metric,
+        "minimum": minimum,
+        "passed": passed,
+    }
+
+
 def _build_certification_contract(
     *,
     report_snapshots: dict[str, dict[str, Any]],
     approved_wiki_runtime_books: dict[str, Any],
     canonical_grade_source: dict[str, Any],
+    runtime_report: dict[str, Any],
+    retrieval_report: dict[str, Any],
+    answer_report: dict[str, Any],
+    ragas_report: dict[str, Any],
 ) -> dict[str, Any]:
     blockers: list[str] = []
     warnings: list[str] = []
@@ -285,6 +355,71 @@ def _build_certification_contract(
     )
     if recovery_count > 0:
         blockers.append("gold_recovery_items_present")
+    qdrant_parity_status = _runtime_qdrant_parity_status(runtime_report)
+    if qdrant_parity_status == "fail":
+        blockers.append("qdrant_parity_failed")
+    elif qdrant_parity_status == "unknown":
+        blockers.append("qdrant_parity_unknown")
+
+    retrieval_overall = _eval_overall(retrieval_report)
+    answer_overall = _eval_overall(answer_report)
+    ragas_overall = _eval_overall(ragas_report)
+    quality_gates: dict[str, dict[str, Any]] = {}
+    if _snapshot_exists(report_snapshots.get("retrieval_eval", {})):
+        retrieval_case_count = _metric_float(retrieval_overall, "case_count")
+        if retrieval_case_count is None or retrieval_case_count < MIN_EVAL_CASE_COUNT:
+            blockers.append("retrieval_eval_case_count_below_minimum")
+        quality_gates["retrieval_case_count"] = {
+            "metric": retrieval_case_count,
+            "minimum": MIN_EVAL_CASE_COUNT,
+            "passed": retrieval_case_count is not None and retrieval_case_count >= MIN_EVAL_CASE_COUNT,
+        }
+        quality_gates["retrieval_hit_at_3"] = _quality_gate(
+            blockers,
+            name="retrieval_hit_at_3",
+            metric=_metric_float(retrieval_overall, "book_hit_at_3", "expected_hit_at_3"),
+            minimum=MIN_RETRIEVAL_HIT_AT_3,
+            blocker="retrieval_hit_at_3_below_threshold",
+        )
+    if _snapshot_exists(report_snapshots.get("answer_eval", {})):
+        answer_case_count = _metric_float(answer_overall, "case_count")
+        if answer_case_count is None or answer_case_count < MIN_EVAL_CASE_COUNT:
+            blockers.append("answer_eval_case_count_below_minimum")
+        quality_gates["answer_case_count"] = {
+            "metric": answer_case_count,
+            "minimum": MIN_EVAL_CASE_COUNT,
+            "passed": answer_case_count is not None and answer_case_count >= MIN_EVAL_CASE_COUNT,
+        }
+        quality_gates["answer_pass_rate"] = _quality_gate(
+            blockers,
+            name="answer_pass_rate",
+            metric=_metric_float(answer_overall, "pass_rate"),
+            minimum=MIN_ANSWER_PASS_RATE,
+            blocker="answer_pass_rate_below_threshold",
+        )
+        quality_gates["citation_precision"] = _quality_gate(
+            blockers,
+            name="citation_precision",
+            metric=_metric_float(answer_overall, "avg_citation_precision"),
+            minimum=MIN_CITATION_PRECISION,
+            blocker="citation_precision_below_threshold",
+        )
+    if _snapshot_exists(report_snapshots.get("ragas_eval", {})):
+        ragas_case_count = _metric_float(ragas_overall, "case_count")
+        if ragas_case_count is None or ragas_case_count < MIN_EVAL_CASE_COUNT:
+            blockers.append("ragas_eval_case_count_below_minimum")
+        quality_gates["ragas_case_count"] = {
+            "metric": ragas_case_count,
+            "minimum": MIN_EVAL_CASE_COUNT,
+            "passed": ragas_case_count is not None and ragas_case_count >= MIN_EVAL_CASE_COUNT,
+        }
+        quality_gates["ragas_faithfulness"] = _quality_gate(
+            blockers,
+            name="ragas_faithfulness",
+            metric=_metric_float(ragas_overall, "faithfulness"),
+            minimum=MIN_RAGAS_FAITHFULNESS,
+            blocker="ragas_faithfulness_below_threshold",
+        )
     certified_count = len(
         [
             book
@@ -303,6 +438,15 @@ def _build_certification_contract(
         "warnings": warnings,
         "gold_certified_count": certified_count,
         "gold_recovery_count": recovery_count,
+        "qdrant_parity_status": qdrant_parity_status,
+        "quality_gates": quality_gates,
+        "quality_thresholds": {
+            "minimum_eval_case_count": MIN_EVAL_CASE_COUNT,
+            "minimum_retrieval_hit_at_3": MIN_RETRIEVAL_HIT_AT_3,
+            "minimum_answer_pass_rate": MIN_ANSWER_PASS_RATE,
+            "minimum_citation_precision": MIN_CITATION_PRECISION,
+            "minimum_ragas_faithfulness": MIN_RAGAS_FAITHFULNESS,
+        },
         "required_reports": {
             key: {
                 "exists": _snapshot_exists(report_snapshots.get(key, {})),
@@ -461,7 +605,15 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         translation_lane_path=translation_lane_path,
     )
     answer_overall = answer_report.get("overall") if isinstance(answer_report.get("overall"), dict) else {}
+    retrieval_overall = (
+        retrieval_report.get("overall") if isinstance(retrieval_report.get("overall"), dict) else {}
+    )
     ragas_overall = ragas_report.get("overall") if isinstance(ragas_report.get("overall"), dict) else {}
+    if not ragas_overall and isinstance(ragas_report.get("summary"), dict):
+        ragas_overall = ragas_report.get("summary") or {}
+    retrieval_hit_at_1 = retrieval_overall.get("book_hit_at_1")
+    if retrieval_hit_at_1 is None:
+        retrieval_hit_at_1 = retrieval_overall.get("expected_hit_at_1")
     runtime_app = runtime_report.get("app") if isinstance(runtime_report.get("app"), dict) else {}
     runtime_runtime = runtime_report.get("runtime") if isinstance(runtime_report.get("runtime"), dict) else {}
     runtime_probes = runtime_report.get("probes") if isinstance(runtime_report.get("probes"), dict) else {}
@@ -487,6 +639,10 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         report_snapshots=report_snapshots,
         approved_wiki_runtime_books=approved_wiki_runtime_books,
         canonical_grade_source=canonical_grade_source,
+        runtime_report=runtime_report,
+        retrieval_report=retrieval_report,
+        answer_report=answer_report,
+        ragas_report=ragas_report,
     )
     effective_release_blocking = bool(verdict.get("release_blocking")) or bool(certification.get("release_blocking"))
     effective_gate_status = str(verdict.get("status") or "").strip() or "unknown"
@@ -548,7 +704,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "playable_asset_count": playable_asset_count,
             "extra_corpus_book_count": len(extra_materialized_corpus_slugs),
             "extra_manualbook_count": len(extra_materialized_manualbook_slugs),
-            "retrieval_hit_at_1": retrieval_report.get("overall", {}).get("book_hit_at_1"),
+            "retrieval_hit_at_1": retrieval_hit_at_1,
             "answer_pass_rate": answer_overall.get("pass_rate"),
             "citation_precision": answer_overall.get("avg_citation_precision"),
             "ragas_faithfulness": ragas_overall.get("faithfulness"),

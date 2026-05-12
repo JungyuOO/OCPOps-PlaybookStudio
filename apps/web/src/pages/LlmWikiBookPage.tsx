@@ -164,6 +164,7 @@ export default function LlmWikiBookPage() {
       } catch (error) {
         console.error(error);
         if (!cancelled) {
+          setManualBooks([]);
           setBootstrapError(error instanceof Error ? error.message : 'llmwikibook bootstrap failed');
         }
       } finally {
@@ -804,14 +805,34 @@ export default function LlmWikiBookPage() {
     </div>
   );
 
+  function wikiRuntimeBadge(book: WorkspaceManualBook): string {
+    const gateStatus = String(book.language_gate_status || '').trim().toLowerCase();
+    if (gateStatus === 'fail') {
+      return 'Blocked';
+    }
+    if (gateStatus === 'warning') {
+      return 'Review';
+    }
+    return String(book.grade || '').trim() || 'Runtime';
+  }
+
+  function wikiRuntimeSummary(book: WorkspaceManualBook): string {
+    const gateStatus = String(book.language_gate_status || '').trim().toLowerCase();
+    const reason = String(book.language_gate_reason || '').trim();
+    if (!gateStatus || gateStatus === 'pass') {
+      return '';
+    }
+    return reason ? `language gate: ${reason}` : `language gate: ${gateStatus}`;
+  }
+
   const officialNavItems = useMemo<LlmWikiBookNavItem[]>(() => {
     return outlineFamilies.flatMap((family) => {
       const familyBooks = [family.primary, ...family.variants];
       return familyBooks.map((book, index) => ({
         id: `manual:${book.book_slug}`,
         label: index === 0 ? family.primary.title : describeOutlineVariant(book),
-        summary: '',
-        badge: book.grade,
+        summary: wikiRuntimeSummary(book),
+        badge: wikiRuntimeBadge(book),
         active: activeSourceId === `manual:${book.book_slug}`,
         depth: index === 0 ? 0 : 1,
       }));

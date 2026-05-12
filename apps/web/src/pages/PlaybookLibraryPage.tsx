@@ -153,7 +153,7 @@ interface DocumentReaderState {
 }
 
 type LibraryScopeFilter = 'all' | 'official_docs' | 'study_docs' | 'user_upload';
-type LibraryQualityFilter = 'all' | 'approved_ko' | 'needs_review' | 'original' | 'gold';
+type LibraryQualityFilter = 'all' | 'approved_ko' | 'needs_review' | 'original' | 'source_gold';
 type LibraryIndexFilter = 'all' | 'ready' | 'needs_index' | 'zero_chunks';
 
 function activeWikiScopeFromRoute(pathname: string, searchParams: URLSearchParams): ActiveWikiScope {
@@ -202,19 +202,27 @@ function isDocumentReadable(document: DocumentRepositoryDocument): boolean {
   return isRepositoryDocumentOperationallyReady(document) && Boolean(String(document.parsed_document_id || '').trim());
 }
 
-function documentReadBlockReason(document: DocumentRepositoryDocument): string {
+function documentReadBlockReasons(document: DocumentRepositoryDocument): string[] {
   if (isDocumentReadable(document)) {
-    return '';
+    return [];
   }
+  const reasons: string[] = [];
   const parseStatus = String(document.parse_status || '').trim();
   const chunkCount = Number(document.chunk_count || 0);
   if (!String(document.parsed_document_id || '').trim()) {
-    return 'parsed_document_id 없음';
+    reasons.push('parsed_document_id 없음');
   }
   if (!Number.isFinite(chunkCount) || chunkCount <= 0) {
-    return 'chunk 없음';
+    reasons.push('chunk 없음');
   }
-  return parseStatus ? `parse_status=${parseStatus}` : 'parse_status 확인 필요';
+  if (!isRepositoryDocumentOperationallyReady(document)) {
+    reasons.push(parseStatus ? `parse_status=${parseStatus}` : 'parse_status 확인 필요');
+  }
+  return reasons.length > 0 ? reasons : ['문서 검수 필요'];
+}
+
+function documentReadBlockReason(document: DocumentRepositoryDocument): string {
+  return documentReadBlockReasons(document).join(' · ');
 }
 
 function isOperationalWikiRuntimeBook(book: LibraryBook): boolean {
@@ -697,16 +705,31 @@ function isCustomerRepositoryDocument(row: RepositoryDocumentRow): boolean {
   );
 }
 
-function documentQualityChips(row: RepositoryDocumentRow): string[] {
+function documentBookSlug(row: RepositoryDocumentRow): string {
+  const metadata = row.document.metadata ?? {};
+  const repositoryMetadata = row.repository.metadata ?? {};
+  return (
+    metadataString(metadata, 'book_slug')
+    || metadataString(repositoryMetadata, 'book_slug')
+    || row.repository.slug
+  ).trim();
+}
+
+function documentQualityChips(row: RepositoryDocumentRow, runtimeBook?: LibraryBook): string[] {
   const { document } = row;
   const metadata = document.metadata ?? {};
   const parseStatus = String(document.parse_status || '').trim();
   const readBlockReason = documentReadBlockReason(document);
+  const certifiedGold = runtimeBook?.certified_gold === true && runtimeBook?.gold_contract_status === 'gold_certified';
+  const recoveryGold = runtimeBook?.gold_contract_status === 'gold_recovery' || runtimeBook?.certified_gold === false;
   const chips = [
     document.source_scope,
     parseStatus ? `parse_${parseStatus}` : '',
     readBlockReason ? 'read_blocked' : 'readable',
-    document.source_kind?.includes('gold') ? 'gold' : '',
+    document.source_kind?.includes('gold') ? 'source_gold' : '',
+    certifiedGold ? 'certified_gold' : '',
+    recoveryGold ? 'gold_recovery' : '',
+    recoveryGold && runtimeBook?.gold_recovery_group ? runtimeBook.gold_recovery_group : '',
     metadataString(metadata, 'approval_state'),
     metadataString(metadata, 'review_status'),
     metadataString(metadata, 'translation_status'),
@@ -1558,6 +1581,9 @@ const PlaybookLibraryPage: React.FC = () => {
     document: DocumentRepositoryDocument,
     categoryKey?: WikiCategoryKey,
   ) => {
+    if (!isDocumentReadable(document)) {
+      return;
+    }
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('workspace.activeSourceId', `repository:${repository.repository_id}`);
       window.localStorage.setItem(WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY, document.document_source_id);
@@ -2264,7 +2290,7 @@ const PlaybookLibraryPage: React.FC = () => {
     if (nextQuery.trim()) {
       params.set('q', nextQuery.trim());
     }
-    navigate(`/playbook-library/repository?${params.toString()}`);
+    navigate(`/playbook-library?${params.toString()}`);
     requestAnimationFrame(() => repositorySearchInputRef.current?.focus());
     if (nextQuery.trim()) {
       await runRepositorySearch(nextQuery);
@@ -2273,7 +2299,7 @@ const PlaybookLibraryPage: React.FC = () => {
 
   const openUserDocsUpload = (openPicker = false) => {
     setFactoryLane('user');
-    navigate('/playbook-library/repository?scope=uploads&panel=factory&lane=uploads');
+    navigate('/playbook-library?scope=uploads&lane=uploads');
     if (openPicker) {
       requestAnimationFrame(() => fileInputRef.current?.click());
     }
@@ -2645,6 +2671,10 @@ const PlaybookLibraryPage: React.FC = () => {
   const qdrantEntryCount = runtimeDbCorpus?.qdrant_index_entries ?? totalIndexedRepositoryChunks;
   const allOperationalWikiBooks = [...(controlRoom?.approved_wiki_runtime_books?.books ?? [])].filter(isOperationalWikiRuntimeBook);
   const operationalWikiRecoveryRows = goldRecoveryRows(controlRoom?.approved_wiki_runtime_books);
+  const operationalWikiBookBySlug = useMemo(() => {
+    const items = [...allOperationalWikiBooks, ...operationalWikiRecoveryRows];
+    return new Map(items.map((book) => [book.book_slug, book]));
+  }, [allOperationalWikiBooks, operationalWikiRecoveryRows]);
   const operationalWikiRecoveryBooks = operationalWikiHiddenCount(controlRoom?.approved_wiki_runtime_books);
   const operationalWikiGateNotice = operationalWikiRecoveryBooks > 0
     ? operationalWikiHiddenMessage(operationalWikiRecoveryRows, operationalWikiRecoveryBooks)
@@ -2825,11 +2855,11 @@ const PlaybookLibraryPage: React.FC = () => {
   const handleLibraryScopeFilterChange = (value: LibraryScopeFilter) => {
     setLibraryScopeFilter(value);
     if (value === 'official_docs') {
-      navigate('/playbook-library/control-tower?scope=official');
+      navigate('/playbook-library?scope=official');
       return;
     }
     if (value === 'study_docs') {
-      navigate('/playbook-library/repository?scope=customer&lane=customer');
+      navigate('/playbook-library?scope=customer&lane=customer');
       return;
     }
     if (value === 'user_upload') {
@@ -2916,7 +2946,7 @@ const PlaybookLibraryPage: React.FC = () => {
               <ArrowLeft size={20} />
             </button>
             <div className="header-text">
-              <h1>Playbook Library</h1>
+              <h1>WIKI Library</h1>
               <p className="text-muted">
                 WIKI 데이터, 검수 상태, 원천 보강 루프를 한 화면에서 관리합니다.
               </p>
@@ -2946,7 +2976,7 @@ const PlaybookLibraryPage: React.FC = () => {
                 className={`library-sidebar-item ${activeWikiScope === 'official' ? 'active' : ''}`}
                 onClick={() => {
                   setLibraryScopeFilter('official_docs');
-                  navigate('/playbook-library/control-tower?scope=official');
+                  navigate('/playbook-library?scope=official');
                 }}
               >
                 <Activity size={15} />
@@ -2958,7 +2988,7 @@ const PlaybookLibraryPage: React.FC = () => {
                 className={`library-sidebar-item ${activeWikiScope === 'customer' ? 'active' : ''}`}
                 onClick={() => {
                   setLibraryScopeFilter('study_docs');
-                  navigate('/playbook-library/repository?scope=customer&lane=customer');
+                  navigate('/playbook-library?scope=customer&lane=customer');
                 }}
               >
                 <Database size={15} />
@@ -3061,7 +3091,7 @@ const PlaybookLibraryPage: React.FC = () => {
                 <option value="approved_ko">approved_ko</option>
                 <option value="needs_review">needs_review</option>
                 <option value="original">original</option>
-                <option value="gold">gold</option>
+                <option value="source_gold">source_gold</option>
               </select>
               <select value={libraryIndexFilter} onChange={(event) => setLibraryIndexFilter(event.target.value as LibraryIndexFilter)}>
                 <option value="all">All index states</option>
@@ -3102,31 +3132,51 @@ const PlaybookLibraryPage: React.FC = () => {
                           {document.chunk_count.toLocaleString()} chunks / {document.indexed_chunk_count.toLocaleString()} indexed
                         </span>
                         <div className="library-document-chip-row">
-                          {documentQualityChips({ repository, document, categoryKey }).map((chip) => (
+                          {documentQualityChips(
+                            { repository, document, categoryKey },
+                            operationalWikiBookBySlug.get(documentBookSlug({ repository, document, categoryKey })),
+                          ).map((chip) => (
                             <span key={chip} className="library-document-chip">{chip}</span>
                           ))}
                           <span className={`library-document-chip library-document-chip--${documentIndexStatus({ repository, document, categoryKey })}`}>
                             {indexStatusLabel(documentIndexStatus({ repository, document, categoryKey }))}
                           </span>
                         </div>
+                        {!isDocumentReadable(document) && (
+                          <span className="library-document-read-block">
+                            <AlertCircle size={13} />
+                            {documentReadBlockReason(document)}
+                          </span>
+                        )}
                       </div>
                       <div className="library-document-actions">
                         <button
                           type="button"
                           className={`library-document-chat-btn ${isDocumentReadable(document) ? '' : 'library-document-chat-btn--blocked'}`}
                           title={documentReadBlockReason(document) || 'Read document'}
-                          onClick={() => { void openDocumentReader(repository, document); }}
+                          disabled={!isDocumentReadable(document)}
+                          onClick={() => {
+                            if (isDocumentReadable(document)) {
+                              void openDocumentReader(repository, document);
+                            }
+                          }}
                         >
                           <BookOpen size={14} />
-                          <span>Read</span>
+                          <span>{isDocumentReadable(document) ? 'Read' : 'Needs repair'}</span>
                         </button>
                         <button
                           type="button"
-                          className="library-document-chat-btn"
-                          onClick={() => openDocumentInChat(repository, document, categoryKey)}
+                          className={`library-document-chat-btn ${isDocumentReadable(document) ? '' : 'library-document-chat-btn--blocked'}`}
+                          title={documentReadBlockReason(document) || 'Ask this document'}
+                          disabled={!isDocumentReadable(document)}
+                          onClick={() => {
+                            if (isDocumentReadable(document)) {
+                              openDocumentInChat(repository, document, categoryKey);
+                            }
+                          }}
                         >
                           <MessageSquare size={14} />
-                          <span>Ask this document</span>
+                          <span>{isDocumentReadable(document) ? 'Ask this document' : 'Repair before ask'}</span>
                         </button>
                       </div>
                     </article>
@@ -3490,28 +3540,52 @@ const PlaybookLibraryPage: React.FC = () => {
                         <h3>{document.title || document.filename}</h3>
                         <p>{document.chunk_count.toLocaleString()} chunks · {document.indexed_chunk_count.toLocaleString()} indexed</p>
                         <div className="library-document-chip-row">
-                          {documentQualityChips({ repository, document, categoryKey }).map((chip) => (
+                          {documentQualityChips(
+                            { repository, document, categoryKey },
+                            operationalWikiBookBySlug.get(documentBookSlug({ repository, document, categoryKey })),
+                          ).map((chip) => (
                             <span key={chip} className="library-document-chip">{chip}</span>
                           ))}
                           <span className={`library-document-chip library-document-chip--${documentIndexStatus({ repository, document, categoryKey })}`}>
                             {indexStatusLabel(documentIndexStatus({ repository, document, categoryKey }))}
                           </span>
                         </div>
+                        {!isDocumentReadable(document) && (
+                          <span className="library-document-read-block">
+                            <AlertCircle size={13} />
+                            {documentReadBlockReason(document)}
+                          </span>
+                        )}
                       </div>
                       <div className="library-document-actions">
                         <button
                           type="button"
                           className={isDocumentReadable(document) ? '' : 'library-document-chat-btn--blocked'}
                           title={documentReadBlockReason(document) || 'Read document'}
-                          onClick={() => { void openDocumentReader(repository, document); }}
+                          disabled={!isDocumentReadable(document)}
+                          onClick={() => {
+                            if (isDocumentReadable(document)) {
+                              void openDocumentReader(repository, document);
+                            }
+                          }}
                         >
-                          Read
+                          {isDocumentReadable(document) ? 'Read' : 'Needs repair'}
                         </button>
-                        <button type="button" onClick={() => openDocumentInChat(repository, document, categoryKey)}>
-                          Ask this document
+                        <button
+                          type="button"
+                          className={isDocumentReadable(document) ? '' : 'library-document-chat-btn--blocked'}
+                          title={documentReadBlockReason(document) || 'Ask this document'}
+                          disabled={!isDocumentReadable(document)}
+                          onClick={() => {
+                            if (isDocumentReadable(document)) {
+                              openDocumentInChat(repository, document, categoryKey);
+                            }
+                          }}
+                        >
+                          {isDocumentReadable(document) ? 'Ask this document' : 'Repair before ask'}
                         </button>
                         <button type="button" onClick={() => openRepositoryInChat(repository)}>
-                          Chat with repository
+                          Ask this collection
                         </button>
                       </div>
                     </article>
@@ -5179,11 +5253,18 @@ const PlaybookLibraryPage: React.FC = () => {
                   </span>
                 </div>
                 <div className="library-document-chip-row">
-                  {documentQualityChips({
-                    repository: documentReader.repository,
-                    document: documentReader.source,
-                    categoryKey: inferWikiCategory(documentReader.source, documentReader.repository),
-                  }).map((chip) => (
+                  {documentQualityChips(
+                    {
+                      repository: documentReader.repository,
+                      document: documentReader.source,
+                      categoryKey: inferWikiCategory(documentReader.source, documentReader.repository),
+                    },
+                    operationalWikiBookBySlug.get(documentBookSlug({
+                      repository: documentReader.repository,
+                      document: documentReader.source,
+                      categoryKey: inferWikiCategory(documentReader.source, documentReader.repository),
+                    })),
+                  ).map((chip) => (
                     <span key={chip} className="library-document-chip">{chip}</span>
                   ))}
                   {documentReader.payload?.markdown_total_chars ? (

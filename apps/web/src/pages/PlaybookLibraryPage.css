@@ -484,6 +484,19 @@
   color: #fecaca;
 }
 
+.library-document-read-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  max-width: 100%;
+  color: #ffd493;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1180px) {
   .library-main {
     padding-inline: 20px;
@@ -6409,4 +6422,16 @@ details.factory-block:not([open]) .factory-block-toggle svg {
   border-color: rgba(245, 158, 11, 0.26);
   background: rgba(245, 158, 11, 0.09);
   color: #ffd493;
+}
+
+.library-document-actions button:disabled,
+.library-document-chat-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.library-document-actions button:disabled:hover,
+.library-document-chat-btn:disabled:hover {
+  border-color: rgba(245, 158, 11, 0.26);
+  background: rgba(245, 158, 11, 0.09);
 }

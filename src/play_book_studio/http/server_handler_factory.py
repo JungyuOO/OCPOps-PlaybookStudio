@@ -26,7 +26,10 @@ from play_book_studio.http.ops_console_api import (
     handle_ops_console_put as _handle_ops_console_put_request,
 )
 from play_book_studio.http.upload_api import handle_upload_ingest as _handle_upload_ingest_request
-from play_book_studio.http.repository_api import handle_document_repositories as _handle_document_repositories_request
+from play_book_studio.http.repository_api import (
+    handle_document_reader as _handle_document_reader_request,
+    handle_document_repositories as _handle_document_repositories_request,
+)
 from play_book_studio.http.document_status_api import handle_document_status as _handle_document_status_request
 from play_book_studio.http.signals_api import handle_signals as _handle_signals_request
 from play_book_studio.http.chat_history_api import (
@@ -68,6 +71,14 @@ from play_book_studio.http.server_routes import (
     handle_repository_official_catalog_request as _handle_repository_official_catalog_request,
     handle_repository_official_materialize_request as _handle_repository_official_materialize_request,
     handle_repository_search as _handle_repository_search_request,
+    handle_repository_source_discovery_judge_reports as _handle_repository_source_discovery_judge_reports_request,
+    handle_repository_source_discovery_judge_replay as _handle_repository_source_discovery_judge_replay_request,
+    handle_repository_source_discovery_judge_save as _handle_repository_source_discovery_judge_save_request,
+    handle_repository_source_discovery_plan as _handle_repository_source_discovery_plan_request,
+    handle_repository_source_discovery_search as _handle_repository_source_discovery_search_request,
+    handle_repository_source_discovery_verification_queue as _handle_repository_source_discovery_verification_queue_request,
+    handle_repository_source_discovery_verification_save as _handle_repository_source_discovery_verification_save_request,
+    handle_repository_source_request_save as _handle_repository_source_request_save_request,
     handle_repository_unanswered as _handle_repository_unanswered_request,
     handle_runtime_figures as _handle_runtime_figures_request,
     handle_source_meta as _handle_source_meta_request,
@@ -78,8 +89,6 @@ from play_book_studio.http.server_routes import (
     handle_wiki_user_overlays as _handle_wiki_user_overlays_request,
 )
 from play_book_studio.http.server_support import (
-    DATA_CONTROL_ROOM_CACHE_TTL_SECONDS,
-    _TimedValueCache,
     _build_chat_payload,
     _resolve_frontend_asset,
 )
@@ -112,7 +121,6 @@ def _build_handler(
     # 실제로 연결하는 구간이다.
     answerer_lock = threading.Lock()
     current_llm_signature = _llm_runtime_signature(answerer.settings)
-    data_control_room_cache = _TimedValueCache(DATA_CONTROL_ROOM_CACHE_TTL_SECONDS)
 
     def current_answerer() -> ChatAnswerer:
         nonlocal answerer, current_llm_signature
@@ -239,11 +247,20 @@ def _build_handler(
             if request_path == "/api/repositories/unanswered":
                 self._handle_repository_unanswered(parsed_request.query)
                 return
+            if request_path == "/api/repositories/source-discovery/verification-queue":
+                self._handle_repository_source_discovery_verification_queue(parsed_request.query)
+                return
+            if request_path == "/api/repositories/source-discovery/judge":
+                self._handle_repository_source_discovery_judge_reports(parsed_request.query)
+                return
             if request_path == "/api/repositories/favorites":
                 self._handle_repository_favorites(parsed_request.query)
                 return
             if request_path == "/api/repositories/documents":
                 self._handle_document_repositories(parsed_request.query)
+                return
+            if request_path == "/api/repositories/document-reader":
+                self._handle_document_reader(parsed_request.query)
                 return
             if request_path == "/api/documents/ingest-status":
                 self._handle_document_status(parsed_request.query)
@@ -340,6 +357,24 @@ def _build_handler(
             if parsed_request.path == "/api/repositories/official-materialize":
                 self._handle_repository_official_materialize(payload)
                 return
+            if parsed_request.path == "/api/repositories/source-request":
+                self._handle_repository_source_request_save(payload)
+                return
+            if parsed_request.path == "/api/repositories/source-discovery/plan":
+                self._handle_repository_source_discovery_plan(payload)
+                return
+            if parsed_request.path == "/api/repositories/source-discovery/search":
+                self._handle_repository_source_discovery_search(payload)
+                return
+            if parsed_request.path == "/api/repositories/source-discovery/verification-queue":
+                self._handle_repository_source_discovery_verification_save(payload)
+                return
+            if parsed_request.path == "/api/repositories/source-discovery/judge/replay":
+                self._handle_repository_source_discovery_judge_replay(payload)
+                return
+            if parsed_request.path == "/api/repositories/source-discovery/judge":
+                self._handle_repository_source_discovery_judge_save(payload)
+                return
             if parsed_request.path == "/api/wiki-overlays":
                 self._handle_wiki_user_overlay_save(payload)
                 return
@@ -419,6 +454,14 @@ def _build_handler(
                 owner_user_id=self._session_owner().owner_hash,
             )
 
+        def _handle_document_reader(self, query: str) -> None:
+            _handle_document_reader_request(
+                self,
+                query,
+                root_dir=root_dir,
+                owner_user_id=self._session_owner().owner_hash,
+            )
+
         def _handle_document_status(self, query: str) -> None:
             _handle_document_status_request(
                 self,
@@ -438,6 +481,59 @@ def _build_handler(
                 self,
                 query,
                 root_dir=root_dir,
+            )
+
+        def _handle_repository_source_discovery_plan(self, payload: dict[str, Any]) -> None:
+            _handle_repository_source_discovery_plan_request(
+                self,
+                payload,
+                root_dir=root_dir,
+            )
+
+        def _handle_repository_source_discovery_search(self, payload: dict[str, Any]) -> None:
+            _handle_repository_source_discovery_search_request(
+                self,
+                payload,
+                root_dir=root_dir,
+            )
+
+        def _handle_repository_source_discovery_verification_queue(self, query: str) -> None:
+            _handle_repository_source_discovery_verification_queue_request(
+                self,
+                query,
+                root_dir=root_dir,
+            )
+
+        def _handle_repository_source_discovery_verification_save(self, payload: dict[str, Any]) -> None:
+            _handle_repository_source_discovery_verification_save_request(
+                self,
+                payload,
+                root_dir=root_dir,
+            )
+
+        def _handle_repository_source_discovery_judge_reports(self, query: str) -> None:
+            _handle_repository_source_discovery_judge_reports_request(
+                self,
+                query,
+                root_dir=root_dir,
+            )
+
+        def _handle_repository_source_discovery_judge_save(self, payload: dict[str, Any]) -> None:
+            _handle_repository_source_discovery_judge_save_request(
+                self,
+                payload,
+                root_dir=root_dir,
+            )
+
+        def _handle_repository_source_discovery_judge_replay(self, payload: dict[str, Any]) -> None:
+            _handle_repository_source_discovery_judge_replay_request(
+                self,
+                payload,
+                root_dir=root_dir,
+                current_answerer=current_answerer,
+                context_with_request_overrides=_context_with_request_overrides,
+                build_chat_payload=_build_chat_payload,
+                owner_user_id=self._session_owner().owner_hash,
             )
 
         def _handle_repository_official_catalog(self, query: str) -> None:
@@ -463,17 +559,11 @@ def _build_handler(
 
         def _handle_data_control_room(self, query: str) -> None:
             del query
-            cached_payload = data_control_room_cache.get("payload")
-            if isinstance(cached_payload, dict):
-                self._send_json(cached_payload)
-                return
-            payload = _handle_data_control_room_request(
+            _handle_data_control_room_request(
                 self,
                 "",
                 root_dir=root_dir,
             )
-            if payload is not None:
-                data_control_room_cache.set("payload", payload)
 
         def _handle_buyer_packet(self, query: str) -> None:
             _handle_buyer_packet_request(
@@ -537,30 +627,24 @@ def _build_handler(
         def _handle_customer_pack_book(self, query: str) -> None: _handle_customer_pack_book_request(self, query, root_dir=root_dir)
         def _handle_customer_pack_draft_create(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_draft_create_request(self, payload, root_dir=root_dir)
-            data_control_room_cache.set("payload", None)
         def _handle_customer_pack_ingest(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_ingest_request(self, payload, root_dir=root_dir)
-            data_control_room_cache.set("payload", None)
         def _handle_customer_pack_capture(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_capture_request(self, payload, root_dir=root_dir)
-            data_control_room_cache.set("payload", None)
         def _handle_customer_pack_normalize(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_normalize_request(self, payload, root_dir=root_dir)
-            data_control_room_cache.set("payload", None)
         def _handle_customer_pack_delete_draft(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_delete_draft_request(self, payload, root_dir=root_dir)
-            data_control_room_cache.set("payload", None)
         def _handle_upload_ingest(self, payload: dict[str, Any]) -> None:
             owner = self._session_owner()
             payload.setdefault("created_by", owner.owner_hash)
             _handle_upload_ingest_request(self, payload, root_dir=root_dir)
-            data_control_room_cache.set("payload", None)
         def _handle_repository_favorites_save(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_save_request(self, payload, root_dir=root_dir)
         def _handle_repository_favorites_remove(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_remove_request(self, payload, root_dir=root_dir)
         def _handle_repository_official_materialize(self, payload: dict[str, Any]) -> None:
-            result = _handle_repository_official_materialize_request(self, payload, root_dir=root_dir)
-            if result is not None:
-                data_control_room_cache.set("payload", None)
+            _handle_repository_official_materialize_request(self, payload, root_dir=root_dir)
+        def _handle_repository_source_request_save(self, payload: dict[str, Any]) -> None:
+            _handle_repository_source_request_save_request(self, payload, root_dir=root_dir)
         def _handle_wiki_user_overlay_save(self, payload: dict[str, Any]) -> None: _handle_wiki_user_overlay_save_request(self, payload, root_dir=root_dir)
         def _handle_wiki_user_overlay_remove(self, payload: dict[str, Any]) -> None: _handle_wiki_user_overlay_remove_request(self, payload, root_dir=root_dir)
 

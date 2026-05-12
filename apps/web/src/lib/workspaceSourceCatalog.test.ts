@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { LibraryBook } from './runtimeApi';
+import type { HiddenLibraryBook, LibraryBook } from './runtimeApi';
 import { resolveWorkspaceSourceBooks } from './workspaceSourceCatalog';
 
 function makeBook(book_slug: string, overrides: Partial<LibraryBook> = {}): LibraryBook {
@@ -15,6 +15,7 @@ function makeBook(book_slug: string, overrides: Partial<LibraryBook> = {}): Libr
     viewer_path: overrides.viewer_path ?? `/docs/ocp/4.20/ko/${book_slug}/index.html`,
     source_url: overrides.source_url ?? `https://example.com/${book_slug}`,
     updated_at: overrides.updated_at ?? '2026-04-17T04:00:00+09:00',
+    runtime_readable: overrides.runtime_readable ?? true,
   };
 }
 
@@ -22,12 +23,6 @@ type WorkspaceSourceRoom = NonNullable<Parameters<typeof resolveWorkspaceSourceB
 
 function makeRoom(overrides: Partial<WorkspaceSourceRoom> = {}): WorkspaceSourceRoom {
   return {
-    known_books: [],
-    gold_books: [],
-    manualbooks: {
-      selected_dir: '',
-      books: [],
-    },
     ...overrides,
   };
 }
@@ -35,11 +30,6 @@ function makeRoom(overrides: Partial<WorkspaceSourceRoom> = {}): WorkspaceSource
 describe('resolveWorkspaceSourceBooks', () => {
   it('prefers latest pipeline playbooks over the broader source catalog', () => {
     const room = makeRoom({
-      known_books: [makeBook('networking'), makeBook('storage'), makeBook('security')],
-      manualbooks: {
-        selected_dir: '',
-        books: [makeBook('networking')],
-      },
       approved_wiki_runtime_books: {
         selected_dir: '',
         books: [
@@ -65,15 +55,44 @@ describe('resolveWorkspaceSourceBooks', () => {
           makeBook('storage', { grade: 'Silver' }),
         ],
       },
-      known_books: [
-        makeBook('networking'),
-        makeBook('storage'),
-      ],
     });
 
     expect(resolveWorkspaceSourceBooks(room).map((book) => book.book_slug)).toEqual([
       'networking',
       'storage',
     ]);
+  });
+
+  it('does not fall back to ungated books when the runtime gate is present but empty', () => {
+    const room = makeRoom({
+      approved_wiki_runtime_books: {
+        selected_dir: '',
+        books: [],
+        hidden_books: [{ ...makeBook('broken_doc', { runtime_readable: false }), hidden_reason: 'runtime_not_readable::zero_sections' } as HiddenLibraryBook],
+        hidden_count: 1,
+      },
+    });
+
+    expect(resolveWorkspaceSourceBooks(room)).toEqual([]);
+  });
+
+  it('does not fall back to ungated books when the runtime gate bucket is missing', () => {
+    const room = makeRoom({});
+
+    expect(resolveWorkspaceSourceBooks(room)).toEqual([]);
+  });
+
+  it('filters non-readable rows from the approved runtime bucket', () => {
+    const room = makeRoom({
+      approved_wiki_runtime_books: {
+        selected_dir: '',
+        books: [
+          makeBook('readable_doc'),
+          makeBook('broken_doc', { runtime_readable: false }),
+        ],
+      },
+    });
+
+    expect(resolveWorkspaceSourceBooks(room).map((book) => book.book_slug)).toEqual(['readable_doc']);
   });
 });

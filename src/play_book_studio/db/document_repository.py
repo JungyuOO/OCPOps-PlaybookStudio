@@ -651,6 +651,7 @@ def list_document_repositories(
     workspace_slug: str = "default",
     owner_user_id: str = "",
     include_shared: bool = True,
+    collection: str = "",
 ) -> list[dict[str, Any]]:
     shared_visibility_sql = "r.visibility IN ('workspace_shared', 'global_shared')"
     scope_sql = f"({shared_visibility_sql} OR r.owner_user_id = %s)" if include_shared else "r.owner_user_id = %s"
@@ -721,7 +722,9 @@ def list_document_repositories(
                     LIMIT 1
                 ) pj ON TRUE
                 LEFT JOIN document_chunks dc ON dc.parsed_document_id = pd.id
-                LEFT JOIN qdrant_index_entries qie ON qie.chunk_id = dc.id
+                LEFT JOIN qdrant_index_entries qie
+                    ON qie.chunk_id = dc.id
+                   AND (%s = '' OR qie.collection = %s)
                 WHERE ds.repository_id = ANY(%s::uuid[])
                 GROUP BY
                     ds.repository_id,
@@ -738,7 +741,7 @@ def list_document_repositories(
                     ds.created_at
                 ORDER BY ds.created_at DESC, title ASC
                 """,
-                (repository_ids,),
+                (collection, collection, repository_ids),
             )
             for doc_row in cursor.fetchall():
                 repository_id = str(doc_row[0])
@@ -778,10 +781,192 @@ def list_document_repositories(
     ]
 
 
+def _uuid_or_empty(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        return str(uuid.UUID(text))
+    except ValueError:
+        return ""
+
+
+def load_document_reader(
+    connection,
+    *,
+    tenant_slug: str = "public",
+    workspace_slug: str = "default",
+    owner_user_id: str = "",
+    include_shared: bool = True,
+    document_source_id: str = "",
+    parsed_document_id: str = "",
+    limit: int = 80,
+    offset: int = 0,
+) -> dict[str, Any] | None:
+    source_id = _uuid_or_empty(document_source_id)
+    parsed_id = _uuid_or_empty(parsed_document_id)
+    if not source_id and not parsed_id:
+        raise ValueError("document_source_id or parsed_document_id is required")
+
+    chunk_limit = max(1, min(int(limit or 80), 200))
+    chunk_offset = max(0, int(offset or 0))
+    markdown_preview_limit = 6000
+    shared_visibility_sql = "r.visibility IN ('workspace_shared', 'global_shared')"
+    scope_sql = f"({shared_visibility_sql} OR r.owner_user_id = %s)" if include_shared else "r.owner_user_id = %s"
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT
+                ds.id::text AS document_source_id,
+                COALESCE(pd.id::text, '') AS parsed_document_id,
+                COALESCE(NULLIF(pd.title, ''), ds.filename) AS title,
+                ds.filename,
+                ds.source_kind,
+                ds.mime_type,
+                ds.source_scope,
+                ds.visibility,
+                ds.metadata AS source_metadata,
+                CASE
+                    WHEN %s = 0 THEN left(COALESCE(pd.markdown, ''), %s)
+                    ELSE ''
+                END AS markdown,
+                COALESCE(pd.metadata, '{{}}'::jsonb) AS parsed_metadata,
+                COALESCE(pd.outline, '[]'::jsonb) AS outline,
+                ds.created_at,
+                COALESCE(pd.created_at, ds.created_at) AS updated_at,
+                char_length(COALESCE(pd.markdown, ''))::int AS markdown_total_chars,
+                char_length(COALESCE(pd.markdown, '')) > %s AS markdown_truncated
+            FROM document_sources ds
+            JOIN repositories r ON r.id = ds.repository_id
+            JOIN tenants t ON t.id = r.tenant_id
+            JOIN workspaces w ON w.id = r.workspace_id
+            LEFT JOIN LATERAL (
+                SELECT parsed_documents.*
+                FROM parsed_documents
+                WHERE parsed_documents.document_source_id = ds.id
+                  AND (%s = '' OR parsed_documents.id = %s::uuid)
+                ORDER BY parsed_documents.created_at DESC
+                LIMIT 1
+            ) pd ON TRUE
+            WHERE t.slug = %s
+              AND w.slug = %s
+              AND {scope_sql}
+              AND (
+                (%s <> '' AND ds.id = %s::uuid AND (%s = '' OR pd.id IS NOT NULL))
+                OR
+                (%s = '' AND %s <> '' AND pd.id = %s::uuid)
+              )
+            LIMIT 1
+            """,
+            (
+                chunk_offset,
+                markdown_preview_limit,
+                markdown_preview_limit,
+                parsed_id,
+                parsed_id or None,
+                tenant_slug,
+                workspace_slug,
+                owner_user_id,
+                source_id,
+                source_id or None,
+                parsed_id,
+                source_id,
+                parsed_id,
+                parsed_id or None,
+            ),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+
+        resolved_source_id = str(row[0])
+        resolved_parsed_id = str(row[1] or "")
+        total_chunks = 0
+        chunks: list[dict[str, Any]] = []
+        if resolved_parsed_id:
+            cursor.execute(
+                "SELECT count(*)::int FROM document_chunks WHERE parsed_document_id = %s::uuid",
+                (resolved_parsed_id,),
+            )
+            total_chunks = int((cursor.fetchone() or [0])[0] or 0)
+            cursor.execute(
+                """
+                SELECT
+                    id::text,
+                    chunk_key,
+                    ordinal,
+                    chunk_type,
+                    markdown,
+                    embedding_text,
+                    token_count,
+                    page_start,
+                    page_end,
+                    section_path,
+                    section_number,
+                    heading_title,
+                    source_anchor,
+                    toc_path,
+                    asset_ids,
+                    metadata
+                FROM document_chunks
+                WHERE parsed_document_id = %s::uuid
+                ORDER BY ordinal ASC, created_at ASC
+                LIMIT %s OFFSET %s
+                """,
+                (resolved_parsed_id, chunk_limit, chunk_offset),
+            )
+            for chunk_row in cursor.fetchall():
+                chunks.append(
+                    {
+                        "chunk_id": str(chunk_row[0]),
+                        "chunk_key": str(chunk_row[1] or ""),
+                        "ordinal": int(chunk_row[2] or 0),
+                        "chunk_type": str(chunk_row[3] or ""),
+                        "markdown": str(chunk_row[4] or ""),
+                        "text": str(chunk_row[5] or chunk_row[4] or ""),
+                        "token_count": int(chunk_row[6] or 0),
+                        "page_start": chunk_row[7],
+                        "page_end": chunk_row[8],
+                        "section_path": list(chunk_row[9] or []),
+                        "section_number": str(chunk_row[10] or ""),
+                        "heading_title": str(chunk_row[11] or ""),
+                        "source_anchor": str(chunk_row[12] or ""),
+                        "toc_path": list(chunk_row[13] or []),
+                        "asset_ids": list(chunk_row[14] or []),
+                        "metadata": dict(chunk_row[15] or {}),
+                    }
+                )
+
+    return {
+        "document_source_id": resolved_source_id,
+        "parsed_document_id": resolved_parsed_id,
+        "title": str(row[2] or ""),
+        "filename": str(row[3] or ""),
+        "source_kind": str(row[4] or ""),
+        "mime_type": str(row[5] or ""),
+        "source_scope": str(row[6] or ""),
+        "visibility": str(row[7] or ""),
+        "metadata": dict(row[8] or {}),
+        "markdown": str(row[9] or ""),
+        "parsed_metadata": dict(row[10] or {}),
+        "outline": list(row[11] or []),
+        "created_at": row[12].isoformat() if row[12] is not None else "",
+        "updated_at": row[13].isoformat() if row[13] is not None else "",
+        "markdown_total_chars": int(row[14] or 0),
+        "markdown_truncated": bool(row[15]),
+        "total_chunks": total_chunks,
+        "limit": chunk_limit,
+        "offset": chunk_offset,
+        "has_more": chunk_offset + len(chunks) < total_chunks,
+        "chunks": chunks,
+    }
+
+
 __all__ = [
     "ParsedDocumentRows",
     "StoredParsedDocument",
     "build_parsed_document_rows",
+    "load_document_reader",
     "list_document_repositories",
     "persist_parsed_upload_document",
 ]

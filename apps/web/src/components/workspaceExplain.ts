@@ -121,6 +121,8 @@ function humanizeRerankDecision(reason: string): string {
       return '여러 책이 비슷한 점수로 경쟁해 추가 판별이 필요했기 때문이다.';
     case 'default_model_rerank':
       return '상위 후보의 의미 차이를 한 번 더 정리하기 위해서다.';
+    case 'bge_hybrid_scores_with_rules':
+      return 'BGE 의미 검색 점수와 제품 규칙을 함께 사용했기 때문이다.';
     case 'no_hits':
       return '재정렬할 검색 후보가 없었기 때문이다.';
     default:
@@ -334,14 +336,14 @@ function deriveDecisionBody(retrievalTrace: Record<string, unknown>): string {
 
   const rerankBody = (() => {
     if (!rerankEnabled) {
-      return 'rerank는 비활성 상태라 적용되지 않았다.';
+      return 'BGE 검색 후처리는 비활성 상태라 적용되지 않았다.';
     }
     if (!rerankApplied) {
-      return `rerank는 미적용됐다. ${humanizeRerankDecision(rerankReason)}`;
+      return `BGE 검색 후처리는 순서 변경 없이 끝났다. ${humanizeRerankDecision(rerankReason)}`;
     }
     const base = rerankMode === 'model'
-      ? `rerank는 semantic model을 적용했다. ${humanizeRerankDecision(rerankReason)}`
-      : `rerank는 모델 대신 규칙 재정렬만 적용했다. ${humanizeRerankDecision(rerankReason)}`;
+      ? `BGE 검색 후처리는 의미 점수 기반 정렬을 적용했다. ${humanizeRerankDecision(rerankReason)}`
+      : `BGE 검색 후처리는 제품 규칙 재정렬을 적용했다. ${humanizeRerankDecision(rerankReason)}`;
     const topBody = rerankTopChanged
       ? '상위 1개 후보는 이 단계에서 다시 정렬됐다.'
       : '상위 1개 후보는 유지됐다.';

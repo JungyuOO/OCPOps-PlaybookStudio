@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from play_book_studio.config.settings import Settings
 
@@ -22,17 +21,6 @@ from .models import RetrievalResult, SessionContext
 from .scoring import fuse_ranked_hits
 from .vector import VectorRetriever
 from .retriever_pipeline import execute_retrieval_pipeline
-
-if TYPE_CHECKING:
-    from .reranker import CrossEncoderReranker
-
-
-def _build_reranker(settings: Settings, *, enabled: bool) -> "CrossEncoderReranker | None":
-    if not enabled:
-        return None
-    from .reranker import CrossEncoderReranker
-
-    return CrossEncoderReranker(settings)
 
 
 def _load_bm25_index(settings: Settings) -> BM25Index:
@@ -53,13 +41,11 @@ class ChatRetriever:
         bm25_index: BM25Index,
         *,
         vector_retriever: VectorRetriever | None = None,
-        reranker: CrossEncoderReranker | None = None,
         graph_runtime: RetrievalGraphRuntime | None = None,
     ) -> None:
         self.settings = settings
         self.bm25_index = bm25_index
         self.vector_retriever = vector_retriever
-        self.reranker = reranker
         self.graph_runtime = graph_runtime or RetrievalGraphRuntime(settings)
         self._customer_pack_overlay_fingerprint: tuple[tuple[str, int], ...] = ()
         self._customer_pack_overlay_index: BM25Index | None = None
@@ -70,17 +56,13 @@ class ChatRetriever:
         settings: Settings,
         *,
         enable_vector: bool = True,
-        enable_reranker: bool | None = None,
     ) -> "ChatRetriever":
         bm25_index = _load_bm25_index(settings)
         vector_retriever = VectorRetriever(settings) if enable_vector else None
-        reranker_enabled = settings.reranker_enabled if enable_reranker is None else enable_reranker
-        reranker = _build_reranker(settings, enabled=reranker_enabled)
         return cls(
             settings,
             bm25_index,
             vector_retriever=vector_retriever,
-            reranker=reranker,
             graph_runtime=RetrievalGraphRuntime(settings),
         )
 

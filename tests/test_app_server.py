@@ -14,16 +14,6 @@ from play_book_studio.http import server
 from play_book_studio.config.settings import load_settings
 
 
-class _FakeReranker:
-    def __init__(self) -> None:
-        self.model_name = "fake-reranker"
-        self.warmup_calls = 0
-
-    def warmup(self) -> bool:
-        self.warmup_calls += 1
-        return True
-
-
 class _FakeThread:
     def __init__(self, *, target, args, name, daemon) -> None:
         self.target = target
@@ -51,7 +41,7 @@ class _FakeAnswerer:
     def __init__(self, root: Path) -> None:
         self.settings = load_settings(root)
         self.llm_client = _FakeLlmClient()
-        self.retriever = SimpleNamespace(reranker=None)
+        self.retriever = SimpleNamespace()
 
 
 def _write_frontend_shell(root: Path) -> None:
@@ -79,8 +69,8 @@ def _test_server(root: Path):
         thread.join(timeout=5)
 
 
-def test_start_runtime_warmup_starts_daemon_thread_when_reranker_missing() -> None:
-    answerer = SimpleNamespace(retriever=SimpleNamespace(reranker=None))
+def test_start_runtime_warmup_starts_daemon_thread() -> None:
+    answerer = SimpleNamespace(retriever=SimpleNamespace())
     root_dir = Path("fake-root")
     created_threads: list[_FakeThread] = []
 
@@ -100,25 +90,30 @@ def test_start_runtime_warmup_starts_daemon_thread_when_reranker_missing() -> No
     assert thread.start_calls == 1
 
 
-def test_start_runtime_warmup_starts_daemon_thread_when_reranker_present() -> None:
-    answerer = SimpleNamespace(retriever=SimpleNamespace(reranker=_FakeReranker()))
-    root_dir = Path("fake-root")
-    created_threads: list[_FakeThread] = []
+def test_data_control_room_endpoint_uses_fingerprint_cache_not_outer_ttl() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        versions: list[int] = []
 
-    def _build_thread(*, target, args, name, daemon):
-        thread = _FakeThread(target=target, args=args, name=name, daemon=daemon)
-        created_threads.append(thread)
-        return thread
+        def _fake_data_control_room(handler, query, *, root_dir):  # noqa: ANN001
+            del query, root_dir
+            version = len(versions) + 1
+            versions.append(version)
+            payload = {"version": version}
+            handler._send_json(payload)
+            return payload
 
-    with patch("play_book_studio.http.server.threading.Thread", side_effect=_build_thread):
-        thread = server._start_runtime_warmup(answerer, root_dir)
+        with patch(
+            "play_book_studio.http.server_handler_factory._handle_data_control_room_request",
+            side_effect=_fake_data_control_room,
+        ):
+            with _test_server(root) as base_url:
+                first = requests.get(f"{base_url}/api/data-control-room", timeout=10)
+                second = requests.get(f"{base_url}/api/data-control-room", timeout=10)
 
-    assert thread is created_threads[0]
-    assert thread.target is server._warmup_runtime_components
-    assert thread.args == (answerer, root_dir)
-    assert thread.name == "pbs-runtime-warmup"
-    assert thread.daemon is True
-    assert thread.start_calls == 1
+        assert first.json() == {"version": 1}
+        assert second.json() == {"version": 2}
+        assert versions == [1, 2]
 
 
 def test_spa_deep_links_return_index_html_for_pbs_surfaces() -> None:

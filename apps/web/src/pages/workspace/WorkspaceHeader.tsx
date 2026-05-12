@@ -1,5 +1,6 @@
-import { Sparkles, Moon, Sun } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import ThemeToggleButton from '../../components/ThemeToggleButton';
 import { buildSharedLandingHref } from '../../routing/routes';
 
 type WorkspaceHeaderProps = {
@@ -26,13 +27,15 @@ export default function WorkspaceHeader({
         <span className="logo-text">Playbook Studio</span>
       </div>
       <div className="nav-right">
-        <div className="header-theme-controls">
-          <button className="header-action-btn" onClick={onToggleGlobalTheme} title="Toggle Dark/Light Mode">
-            {globalTheme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
-        </div>
         <button className="nav-btn" onClick={onOpenDashboard} type="button">Dashboard</button>
         <button className="nav-btn" onClick={onOpenLibrary} type="button">Playbook Library</button>
+        <div className="header-theme-controls">
+          <ThemeToggleButton
+            className="header-action-btn"
+            globalTheme={globalTheme}
+            onToggleGlobalTheme={onToggleGlobalTheme}
+          />
+        </div>
       </div>
     </header>
   );

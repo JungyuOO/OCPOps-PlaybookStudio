@@ -449,6 +449,11 @@ def _language_gate_block_reason(language_gate: dict[str, Any]) -> str:
 
 
 _LANGUAGE_EVIDENCE_KEYS = (
+    "grade",
+    "source_url",
+    "source_candidate_path",
+    "source_lane",
+    "source_type",
     "body_language_guess",
     "language_quality",
     "content_status",
@@ -496,6 +501,8 @@ def _gold_recovery_group(reason: str) -> str:
         return "materialization"
     if normalized in {"non_ko_content", "mixed_ko_content", "language_quality_failed"}:
         return "language_quality"
+    if normalized in {"language_gate_missing", "missing_source_provenance", "missing_source_lane"}:
+        return "certification_evidence"
     if normalized.startswith("viewer_") or normalized in {"viewer_slug_mismatch", "unknown_viewer_route"}:
         return "viewer"
     return "runtime_gate"
@@ -519,6 +526,12 @@ def _gold_recovery_action(reason: str) -> str:
         return "한글화/검수 재실행 후 approved_ko 승급 필요"
     if normalized == "mixed_ko_content":
         return "혼합 언어 구간 검수 후 한국어 품질 재판정 필요"
+    if normalized == "language_gate_missing":
+        return "한국어 품질 gate evidence 생성 후 재검증 필요"
+    if normalized == "missing_source_provenance":
+        return "공식 source URL 또는 source artifact provenance 연결 필요"
+    if normalized == "missing_source_lane":
+        return "source lane/source type 메타데이터 복구 필요"
     return "Gold 계약 blocker 해소 후 재검증 필요"
 
 
@@ -530,6 +543,9 @@ def _gold_contract_payload(
     viewer_path: str,
     language_gate: dict[str, Any],
     viewer_smoke: dict[str, Any],
+    source_url: str = "",
+    source_lane: str = "",
+    source_type: str = "",
     hidden_reason: str = "",
 ) -> dict[str, Any]:
     viewer_smoke_status = str(viewer_smoke.get("viewer_smoke_status") or "").strip().lower()
@@ -544,10 +560,16 @@ def _gold_contract_payload(
         blockers.append("zero_chunks")
     if not str(viewer_path or "").strip():
         blockers.append("missing_viewer_path")
+    if not str(source_url or "").strip():
+        blockers.append("missing_source_provenance")
+    if not str(source_lane or source_type or "").strip():
+        blockers.append("missing_source_lane")
     if language_gate_status == "fail":
         blockers.append(str(language_gate.get("language_gate_reason") or "language_quality_failed"))
     elif language_gate_status == "warning":
-        warnings.append(str(language_gate.get("language_gate_reason") or "language_quality_warning"))
+        blockers.append(str(language_gate.get("language_gate_reason") or "language_quality_warning"))
+    elif language_gate_status != "pass":
+        blockers.append("language_gate_missing")
     if viewer_smoke_status == "fail":
         blockers.append(str(viewer_smoke.get("viewer_smoke_reason") or "viewer_smoke_failed"))
     elif viewer_smoke_status == "skipped" and hidden_reason:
@@ -574,7 +596,9 @@ def _gold_contract_payload(
             "has_sections": section_count > 0,
             "has_chunks": chunk_count > 0,
             "has_viewer_path": bool(str(viewer_path or "").strip()),
-            "language_gate_passed": language_gate_status in {"pass", "warning"},
+            "has_source_provenance": bool(str(source_url or "").strip()),
+            "has_source_lane": bool(str(source_lane or source_type or "").strip()),
+            "language_gate_passed": language_gate_status == "pass",
             "viewer_smoke_passed": viewer_smoke_status == "pass",
         },
     }
@@ -599,6 +623,9 @@ def _gold_recovery_book_payload(
         section_count=section_count,
         chunk_count=chunk_count,
         viewer_path=viewer_path,
+        source_url=str(entry.get("source_url") or entry.get("source_candidate_path") or "").strip(),
+        source_lane=str(entry.get("source_lane") or entry.get("source_type") or "").strip(),
+        source_type=str(entry.get("source_type") or "").strip(),
         language_gate=language_payload,
         viewer_smoke=smoke_payload,
         hidden_reason=hidden_reason,
@@ -665,11 +692,15 @@ def _build_approved_wiki_runtime_book_bucket(
         runtime_path = Path(runtime_path_value).resolve() if runtime_path_value else None
         if slug in blocked_slugs:
             hidden_books.append(
-                {
-                    "book_slug": slug,
-                    "title": title,
-                    "hidden_reason": "translated_ko_draft_runtime_ineligible",
-                }
+                _gold_recovery_book_payload(
+                    entry,
+                    title=title,
+                    grade=grade,
+                    section_count=_safe_int(entry.get("section_count")),
+                    chunk_count=_safe_int(entry.get("chunk_count")),
+                    viewer_path=str(entry.get("viewer_path") or entry.get("docs_viewer_path") or "").strip(),
+                    hidden_reason="translated_ko_draft_runtime_ineligible",
+                )
             )
             continue
         if grade != "Gold":
@@ -754,9 +785,27 @@ def _build_approved_wiki_runtime_book_bucket(
             section_count=section_count,
             chunk_count=chunk_count,
             viewer_path=viewer_path,
+            source_url=str(entry.get("source_url") or entry.get("source_candidate_path") or "").strip(),
+            source_lane=str(entry.get("source_lane") or entry.get("source_type") or "").strip(),
+            source_type=str(entry.get("source_type") or "").strip(),
             language_gate=language_gate,
             viewer_smoke=viewer_smoke,
         )
+        if not bool(gold_contract.get("certified_gold")):
+            hidden_books.append(
+                _gold_recovery_book_payload(
+                    entry,
+                    title=title,
+                    grade=grade,
+                    section_count=section_count,
+                    chunk_count=chunk_count,
+                    viewer_path=viewer_path,
+                    hidden_reason=str((gold_contract.get("gold_contract_blockers") or ["gold_contract_failed"])[0]),
+                    language_gate=language_gate,
+                    viewer_smoke=viewer_smoke,
+                )
+            )
+            continue
         truth = official_runtime_truth_payload(settings=settings, manifest_entry=entry)
         source_payload = _official_docs_source_payload(root, slug=slug, entry=entry, settings=settings)
         books.append(
@@ -867,9 +916,27 @@ def _build_approved_wiki_runtime_book_bucket(
             section_count=section_count,
             chunk_count=chunk_count,
             viewer_path=viewer_path,
+            source_url=str(entry.get("source_url") or entry.get("source_candidate_path") or "").strip(),
+            source_lane=str(entry.get("source_lane") or entry.get("source_type") or "").strip(),
+            source_type=str(entry.get("source_type") or "").strip(),
             language_gate=language_gate,
             viewer_smoke=viewer_smoke,
         )
+        if not bool(gold_contract.get("certified_gold")):
+            hidden_books.append(
+                _gold_recovery_book_payload(
+                    entry,
+                    title=title,
+                    grade=grade,
+                    section_count=section_count,
+                    chunk_count=chunk_count,
+                    viewer_path=viewer_path,
+                    hidden_reason=str((gold_contract.get("gold_contract_blockers") or ["gold_contract_failed"])[0]),
+                    language_gate=language_gate,
+                    viewer_smoke=viewer_smoke,
+                )
+            )
+            continue
         truth = official_runtime_truth_payload(settings=settings, manifest_entry=entry)
         source_payload = _official_docs_source_payload(root, slug=slug, entry=entry, settings=settings)
         books.append(

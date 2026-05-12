@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import play_book_studio.http.data_control_room as data_control_room
 import play_book_studio.http.data_control_room_buckets as buckets
+from play_book_studio.http.data_control_room_helpers import _summarize_eval
 
 
 def _settings(root):
@@ -93,6 +94,10 @@ def test_approved_wiki_runtime_bucket_hides_unreadable_gold_books(monkeypatch, t
                 "book_slug": "good_book",
                 "title": "Good Book",
                 "content_status": "approved_ko",
+                "grade": "Gold",
+                "source_url": "https://docs.example.test/good_book",
+                "source_lane": "official_ko",
+                "hangul_chunk_ratio": 1.0,
                 "section_count": 3,
                 "chunk_count": 3,
                 "viewer_path": "/docs/ocp/4.20/ko/good_book/index.html",
@@ -101,6 +106,9 @@ def test_approved_wiki_runtime_bucket_hides_unreadable_gold_books(monkeypatch, t
                 "book_slug": "empty_book",
                 "title": "Empty Book",
                 "content_status": "approved_ko",
+                "grade": "Gold",
+                "source_url": "https://docs.example.test/empty_book",
+                "source_lane": "official_ko",
                 "section_count": 0,
                 "viewer_path": "/docs/ocp/4.20/ko/empty_book/index.html",
             },
@@ -108,6 +116,9 @@ def test_approved_wiki_runtime_bucket_hides_unreadable_gold_books(monkeypatch, t
                 "book_slug": "missing_viewer_book",
                 "title": "Missing Viewer Book",
                 "content_status": "approved_ko",
+                "grade": "Gold",
+                "source_url": "https://docs.example.test/missing_viewer_book",
+                "source_lane": "official_ko",
                 "section_count": 2,
                 "chunk_count": 2,
             },
@@ -115,6 +126,9 @@ def test_approved_wiki_runtime_bucket_hides_unreadable_gold_books(monkeypatch, t
                 "book_slug": "missing_artifact_book",
                 "title": "Missing Artifact Book",
                 "content_status": "approved_ko",
+                "grade": "Gold",
+                "source_url": "https://docs.example.test/missing_artifact_book",
+                "source_lane": "official_ko",
                 "section_count": 2,
                 "chunk_count": 2,
                 "viewer_path": "/docs/ocp/4.20/ko/missing_artifact_book/index.html",
@@ -123,6 +137,9 @@ def test_approved_wiki_runtime_bucket_hides_unreadable_gold_books(monkeypatch, t
                 "book_slug": "misrouted_book",
                 "title": "Misrouted Book",
                 "content_status": "approved_ko",
+                "grade": "Gold",
+                "source_url": "https://docs.example.test/misrouted_book",
+                "source_lane": "official_ko",
                 "section_count": 2,
                 "chunk_count": 2,
                 "viewer_path": "/docs/ocp/4.20/ko/other_book/index.html",
@@ -131,6 +148,9 @@ def test_approved_wiki_runtime_bucket_hides_unreadable_gold_books(monkeypatch, t
                 "book_slug": "unknown_route_book",
                 "title": "Unknown Route Book",
                 "content_status": "approved_ko",
+                "grade": "Gold",
+                "source_url": "https://docs.example.test/unknown_route_book",
+                "source_lane": "official_ko",
                 "section_count": 2,
                 "chunk_count": 2,
                 "viewer_path": "/broken/unknown_route_book/index.html",
@@ -174,6 +194,9 @@ def test_approved_wiki_runtime_bucket_keeps_db_gold_grade(monkeypatch, tmp_path)
                 "grade": "Gold",
                 "section_count": 3,
                 "chunk_count": 9,
+                "source_url": "https://docs.example.test/db_gold",
+                "source_lane": "official_ko",
+                "hangul_chunk_ratio": 1.0,
                 "viewer_path": "/docs/ocp/4.20/ko/db_gold/index.html",
             }
         ],
@@ -208,6 +231,8 @@ def test_approved_wiki_runtime_bucket_hides_non_korean_db_gold(monkeypatch, tmp_
                 "grade": "Gold",
                 "section_count": 3,
                 "chunk_count": 20,
+                "source_url": "https://docs.example.test/english_gold",
+                "source_lane": "official_ko",
                 "hangul_chunk_count": 0,
                 "hangul_chunk_ratio": 0.0,
                 "body_language_guess": "en_only",
@@ -234,6 +259,8 @@ def test_runtime_book_uses_manifest_language_evidence(monkeypatch, tmp_path) -> 
                 "book_slug": "runtime_english",
                 "title": "Runtime English",
                 "content_status": "approved_ko",
+                "source_url": "https://docs.example.test/runtime_english",
+                "source_lane": "official_ko",
                 "section_count": 3,
                 "viewer_path": "/docs/ocp/4.20/ko/runtime_english/index.html",
             }
@@ -251,6 +278,8 @@ def test_runtime_book_uses_manifest_language_evidence(monkeypatch, tmp_path) -> 
                 "grade": "Gold",
                 "section_count": 3,
                 "chunk_count": 20,
+                "source_url": "https://docs.example.test/runtime_english",
+                "source_lane": "official_ko",
                 "hangul_chunk_ratio": 0.0,
                 "body_language_guess": "en_only",
                 "viewer_path": "/docs/ocp/4.20/ko/runtime_english/index.html",
@@ -279,6 +308,8 @@ def test_approved_wiki_runtime_bucket_marks_mixed_korean_gold_for_review(monkeyp
                 "grade": "Gold",
                 "section_count": 3,
                 "chunk_count": 20,
+                "source_url": "https://docs.example.test/mixed_gold",
+                "source_lane": "official_ko",
                 "hangul_chunk_count": 12,
                 "hangul_chunk_ratio": 0.6,
                 "body_language_guess": "mixed",
@@ -287,11 +318,12 @@ def test_approved_wiki_runtime_bucket_marks_mixed_korean_gold_for_review(monkeyp
         ],
     )
 
-    assert [book["book_slug"] for book in payload["books"]] == ["mixed_gold"]
-    assert payload["books"][0]["language_gate_status"] == "warning"
-    assert payload["books"][0]["language_gate_reason"] == "mixed_ko_content"
-    assert payload["books"][0]["hangul_chunk_ratio"] == 0.6
-    assert payload["hidden_books"] == []
+    assert payload["books"] == []
+    assert [book["book_slug"] for book in payload["hidden_books"]] == ["mixed_gold"]
+    assert payload["hidden_books"][0]["language_gate_status"] == "warning"
+    assert payload["hidden_books"][0]["language_gate_reason"] == "mixed_ko_content"
+    assert payload["hidden_books"][0]["gold_contract_status"] == "gold_recovery"
+    assert payload["hidden_books"][0]["hangul_chunk_ratio"] == 0.6
 
 
 def test_approved_wiki_runtime_bucket_hides_viewer_smoke_failures(monkeypatch, tmp_path) -> None:
@@ -305,6 +337,10 @@ def test_approved_wiki_runtime_bucket_hides_viewer_smoke_failures(monkeypatch, t
                 "book_slug": "smoke_ok",
                 "title": "Smoke OK",
                 "content_status": "approved_ko",
+                "grade": "Gold",
+                "source_url": "https://docs.example.test/smoke_ok",
+                "source_lane": "official_ko",
+                "hangul_chunk_ratio": 1.0,
                 "section_count": 2,
                 "chunk_count": 2,
                 "viewer_path": "/docs/ocp/4.20/ko/smoke_ok/index.html",
@@ -313,6 +349,10 @@ def test_approved_wiki_runtime_bucket_hides_viewer_smoke_failures(monkeypatch, t
                 "book_slug": "smoke_bad",
                 "title": "Smoke Bad",
                 "content_status": "approved_ko",
+                "grade": "Gold",
+                "source_url": "https://docs.example.test/smoke_bad",
+                "source_lane": "official_ko",
+                "hangul_chunk_ratio": 1.0,
                 "section_count": 2,
                 "chunk_count": 2,
                 "viewer_path": "/docs/ocp/4.20/ko/smoke_bad/index.html",
@@ -354,6 +394,9 @@ def test_runtime_hidden_slug_is_not_reintroduced_from_manifest(monkeypatch, tmp_
                 "book_slug": "same_slug",
                 "title": "Runtime Broken",
                 "content_status": "approved_ko",
+                "grade": "Gold",
+                "source_url": "https://docs.example.test/same_slug",
+                "source_lane": "official_ko",
                 "section_count": 2,
                 "chunk_count": 2,
                 "viewer_path": "/docs/ocp/4.20/ko/same_slug/index.html",
@@ -383,6 +426,9 @@ def test_runtime_hidden_slug_is_not_reintroduced_from_manifest(monkeypatch, tmp_
                 "grade": "Gold",
                 "section_count": 3,
                 "chunk_count": 3,
+                "source_url": "https://docs.example.test/same_slug",
+                "source_lane": "official_ko",
+                "hangul_chunk_ratio": 1.0,
                 "viewer_path": "/docs/ocp/4.20/ko/same_slug/index.html",
             }
         ],
@@ -430,6 +476,8 @@ def test_data_control_room_top_level_gold_books_use_gated_runtime_bucket(monkeyp
         "book_slug": "source_only_gold",
         "title": "Source Only Gold",
         "content_status": "approved_ko",
+        "source_url": "https://docs.example.test/source_only_gold",
+        "source_lane": "official_ko",
         "approval_status": "approved",
         "section_count": 1,
         "viewer_path": "/docs/ocp/4.20/ko/source_only_gold/index.html",
@@ -496,3 +544,43 @@ def test_data_control_room_cache_fingerprint_watches_runtime_surface_inputs(monk
     ]
     for marker in expected_markers:
         assert any(marker in path for path in paths), marker
+
+
+def test_eval_summary_accepts_expected_hit_aliases_and_ragas_summary() -> None:
+    retrieval_summary = _summarize_eval({"overall": {"case_count": 20, "expected_hit_at_1": 0.8, "expected_hit_at_3": 0.9}})
+    ragas_summary = _summarize_eval({"summary": {"case_count": 20, "faithfulness": 0.82, "answer_relevancy": 0.91}})
+
+    assert retrieval_summary["book_hit_at_1"] == 0.8
+    assert retrieval_summary["book_hit_at_3"] == 0.9
+    assert ragas_summary["faithfulness"] == 0.82
+    assert ragas_summary["answer_relevancy"] == 0.91
+
+
+def test_certification_contract_blocks_low_quality_reports() -> None:
+    snapshots = {
+        "morning_gate": {"exists": True, "path": "gate.json"},
+        "source_approval": {"exists": True, "path": "source.json"},
+        "retrieval_eval": {"exists": True, "path": "retrieval.json"},
+        "answer_eval": {"exists": True, "path": "answer.json"},
+        "ragas_eval": {"exists": True, "path": "ragas.json"},
+        "runtime_report": {"exists": True, "path": "runtime.json"},
+    }
+
+    contract = data_control_room._build_certification_contract(
+        report_snapshots=snapshots,
+        approved_wiki_runtime_books={"books": [{"certified_gold": True}], "hidden_books": []},
+        canonical_grade_source={"exists": True},
+        runtime_report={"runtime": {"db_corpus": {"qdrant_index_parity": True}}},
+        retrieval_report={"overall": {"case_count": 18, "expected_hit_at_3": 0.83}},
+        answer_report={"overall": {"case_count": 18, "pass_rate": 0.83, "avg_citation_precision": 0.44}},
+        ragas_report={"summary": {"case_count": 4, "faithfulness": 0.7}},
+    )
+
+    assert contract["status"] == "not_certifiable"
+    assert "retrieval_eval_case_count_below_minimum" in contract["blockers"]
+    assert "retrieval_hit_at_3_below_threshold" in contract["blockers"]
+    assert "answer_eval_case_count_below_minimum" in contract["blockers"]
+    assert "answer_pass_rate_below_threshold" in contract["blockers"]
+    assert "citation_precision_below_threshold" in contract["blockers"]
+    assert "ragas_eval_case_count_below_minimum" in contract["blockers"]
+    assert "ragas_faithfulness_below_threshold" in contract["blockers"]

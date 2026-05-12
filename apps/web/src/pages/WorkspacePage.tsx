@@ -77,6 +77,7 @@ import {
   normalizeViewerPath,
   normalizeCustomerPackDraft,
   removeWikiOverlay,
+  saveRepositorySourceRequest,
   saveWikiOverlay,
   sendChatStream,
   toRuntimeUrl,
@@ -97,6 +98,7 @@ import {
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../routing/routes';
 import { sendCourseChatStream } from '../lib/courseApi';
+import { useGlobalTheme } from '../lib/globalTheme';
 import { loadStoredVisionMode, type VisionMode } from '../lib/wikiVision';
 import { resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';
 import WorkspaceTracePanel from '../components/WorkspaceTracePanel';
@@ -700,7 +702,7 @@ function NoAnswerAcquisitionCard({
   onConfirm,
 }: {
   acquisition: NonNullable<Message['acquisition']>;
-  onConfirm: () => void;
+  onConfirm: (acquisition: NonNullable<Message['acquisition']>) => void;
 }) {
   const [checked, setChecked] = useState(true);
 
@@ -720,7 +722,7 @@ function NoAnswerAcquisitionCard({
         type="button"
         className="suggested-query-chip acquisition-confirm-btn"
         disabled={!checked}
-        onClick={() => onConfirm()}
+        onClick={() => onConfirm(acquisition)}
       >
         {acquisition.confirm_label}
       </button>
@@ -1229,10 +1231,7 @@ export default function WorkspacePage() {
   const [viewerActiveSection, setViewerActiveSection] = useState<ViewerActiveSection | null>(null);
   const [signalsFavoriteFilter, setSignalsFavoriteFilter] = useState<SignalsFavoriteFilter>('favorites');
 
-  const [globalTheme, setGlobalTheme] = useState<'dark' | 'light'>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    return (window.localStorage.getItem('pbs.globalTheme') as 'dark' | 'light') || 'dark';
-  });
+  const { globalTheme, toggleGlobalTheme } = useGlobalTheme();
   const [opsWorkspaceId, setOpsWorkspaceId] = useState(() => {
     if (typeof window === 'undefined') {
       return 'ws_default';
@@ -2022,6 +2021,9 @@ export default function WorkspacePage() {
         setDocumentRepositories(repositoryPayload.repositories ?? []);
       } catch (error) {
         console.error(error);
+        if (!cancelled) {
+          setManualBooks([]);
+        }
       } finally {
         if (!cancelled) {
           setIsBootstrapLoading(false);
@@ -2409,16 +2411,6 @@ export default function WorkspacePage() {
   useEffect(() => {
     setQuickNavOpen(false);
   }, [currentViewerPath, viewerPageMode]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    document.documentElement.setAttribute('data-theme', globalTheme);
-    window.localStorage.setItem('pbs.globalTheme', globalTheme);
-  }, [globalTheme]);
-
-  const handleToggleGlobalTheme = useCallback(() => {
-    setGlobalTheme((current) => (current === 'dark' ? 'light' : 'dark'));
-  }, []);
 
   useEffect(() => {
     if (!quickNavOpen) {
@@ -3209,8 +3201,28 @@ export default function WorkspacePage() {
     }
   }
 
-  function handleAcquisitionConfirm(): void {
-    navigate('/playbook-library?view=repository');
+  async function handleAcquisitionConfirm(
+    acquisition: NonNullable<Message['acquisition']>,
+    message?: Message,
+  ): Promise<void> {
+    const repositoryQuery = acquisition.repository_query.trim();
+    if (!repositoryQuery) {
+      navigate('/playbook-library?scope=customer&lane=customer');
+      return;
+    }
+    try {
+      await saveRepositorySourceRequest({
+        query: repositoryQuery,
+        responseKind: message?.responseKind ?? 'no_answer',
+        failureReason: 'chat_answer_needs_source_enrichment',
+        sourceRequestOrigin: 'workspace_chat_acquisition',
+        warnings: ['사용자가 채팅 답변에서 자료 보강 요청을 눌렀습니다.'],
+        sessionId,
+      });
+    } catch (error) {
+      console.warn('[source-request] save failed:', error);
+    }
+    navigate(`/playbook-library?scope=customer&lane=customer&q=${encodeURIComponent(repositoryQuery)}`);
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
@@ -3532,7 +3544,7 @@ export default function WorkspacePage() {
         globalTheme={globalTheme}
         onOpenDashboard={() => setDashboardOpen(true)}
         onOpenLibrary={() => navigate('/playbook-library')}
-        onToggleGlobalTheme={handleToggleGlobalTheme}
+        onToggleGlobalTheme={toggleGlobalTheme}
       />
 
       <main className="workspace-content">
@@ -4327,7 +4339,7 @@ export default function WorkspacePage() {
                       {message.role === 'assistant' && message.acquisition && (
                         <NoAnswerAcquisitionCard
                           acquisition={message.acquisition}
-                          onConfirm={handleAcquisitionConfirm}
+                          onConfirm={(acquisition) => { void handleAcquisitionConfirm(acquisition, message); }}
                         />
                       )}
                     </div>

@@ -22,6 +22,28 @@ function AliasRedirect({ to }: { to: string }) {
   );
 }
 
+function LibraryCompatRedirect({ scope }: { scope: 'official' | 'customer' }) {
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  if (!searchParams.has('scope')) {
+    searchParams.set('scope', scope);
+  }
+  if (scope === 'customer' && !searchParams.has('lane')) {
+    searchParams.set('lane', 'customer');
+  }
+
+  return (
+    <Navigate
+      replace
+      to={{
+        pathname: ROUTES.pbsPlaybookLibrary,
+        search: `?${searchParams.toString()}`,
+        hash: location.hash || '',
+      }}
+    />
+  );
+}
+
 export default function AppRoutes() {
   return (
     <Routes>
@@ -32,8 +54,8 @@ export default function AppRoutes() {
       <Route path={ROUTES.pbsWikiBookAlias} element={<AliasRedirect to={ROUTES.pbsWikiBook} />} />
       <Route path={ROUTES.pbsWorkspaceAlias} element={<AliasRedirect to={ROUTES.pbsStudio} />} />
       <Route path={ROUTES.pbsPlaybookLibrary} element={<PlaybookLibraryPage />} />
-      <Route path={ROUTES.pbsControlTower} element={<PlaybookLibraryPage />} />
-      <Route path={ROUTES.pbsRepository} element={<PlaybookLibraryPage />} />
+      <Route path={ROUTES.pbsControlTower} element={<LibraryCompatRedirect scope="official" />} />
+      <Route path={ROUTES.pbsRepository} element={<LibraryCompatRedirect scope="customer" />} />
       <Route path={ROUTES.courseHome} element={<CourseTimelinePage />} />
       <Route path="/course/stages/:stageId" element={<CourseStagePage />} />
       <Route path="/course/chunks/:chunkId" element={<CourseChunkPage />} />

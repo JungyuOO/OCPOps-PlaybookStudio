@@ -9,7 +9,7 @@ from pathlib import Path
 from .intake_overlay import has_active_customer_pack_selection
 from .models import RetrievalHit, RetrievalResult, SessionContext
 from .retriever_plan import build_retrieval_plan
-from .retriever_rerank import maybe_rerank_hits
+from .retriever_rerank import apply_retrieval_postprocess
 from .retriever_search import search_bm25_candidates, search_vector_candidates
 from .ranking import summarize_hit_list as _summarize_hit_list
 from .query import (
@@ -350,12 +350,8 @@ def execute_retrieval_pipeline(
         status="running",
     )
     fusion_started_at = time.perf_counter()
-    reranker_top_n = (
-        max(top_k, retriever.reranker.top_n)
-        if retriever.reranker is not None
-        else top_k
-    )
-    fusion_output_k = max(top_k, min(effective_candidate_k, reranker_top_n))
+    postprocess_candidate_window = max(top_k, min(effective_candidate_k, 12))
+    fusion_output_k = postprocess_candidate_window
     hybrid_hits = fuse_ranked_hits(
         plan.rewritten_query,
         {
@@ -451,7 +447,7 @@ def execute_retrieval_pipeline(
         context=context,
     )
     graph_enriched_hits = _filter_latest_only_hits(retriever, graph_enriched_hits)
-    hits, reranker_trace = maybe_rerank_hits(
+    hits, reranker_trace = apply_retrieval_postprocess(
         retriever,
         query=plan.rewritten_query,
         hybrid_hits=graph_enriched_hits,

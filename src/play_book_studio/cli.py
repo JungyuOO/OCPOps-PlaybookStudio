@@ -23,6 +23,7 @@ from play_book_studio.config.corpus_paths import (
     OPS_LEARNING_CHUNKS_PATH,
     OPS_LEARNING_GUIDES_PATH,
     RAGAS_EVAL_CASES_PATH,
+    RETRIEVAL_EVAL_CASES_PATH,
 )
 from play_book_studio.config.settings import load_effective_env, load_settings
 
@@ -58,11 +59,6 @@ def build_parser() -> argparse.ArgumentParser:
     ui_parser.add_argument("--host", default="127.0.0.1")
     ui_parser.add_argument("--port", type=int, default=8765)
     ui_parser.add_argument("--no-browser", action="store_true")
-    ui_parser.add_argument(
-        "--warmup-reranker",
-        action="store_true",
-        help="Warm the reranker model before serve. Disabled by default to keep shared serve startup fast.",
-    )
 
     ask_parser = subparsers.add_parser("ask", help="Run a single grounded answer query")
     ask_parser.add_argument("--query", required=True)
@@ -83,6 +79,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=ANSWER_EVAL_CASES_PATH,
     )
     _add_runtime_args(eval_parser)
+
+    retrieval_eval_parser = subparsers.add_parser(
+        "retrieval-eval",
+        help="Run retrieval evaluation cases and write retrieval_eval_report.json",
+    )
+    retrieval_eval_parser.add_argument(
+        "--cases",
+        type=Path,
+        default=RETRIEVAL_EVAL_CASES_PATH,
+    )
+    retrieval_eval_parser.add_argument("--no-vector", action="store_true")
+    _add_runtime_args(retrieval_eval_parser)
 
     ragas_parser = subparsers.add_parser("ragas", help="Run RAGAS evaluation")
     ragas_parser.add_argument(
@@ -403,25 +411,10 @@ def _build_answerer() -> ChatAnswerer:
     return ChatAnswerer.from_settings(settings)
 
 
-def _warmup_ui_runtime(answerer: ChatAnswerer) -> None:
-    reranker = getattr(answerer.retriever, "reranker", None)
-    if reranker is None:
-        return
-    try:
-        warmed = reranker.warmup()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[ui] reranker warmup failed: {exc}")
-        return
-    if warmed:
-        print(f"[ui] reranker warmed: {reranker.model_name}")
-
-
 def _run_ui(args: argparse.Namespace) -> int:
     from play_book_studio.http.server import serve
 
     answerer = _build_answerer()
-    if getattr(args, "warmup_reranker", False):
-        _warmup_ui_runtime(answerer)
     serve(
         answerer=answerer,
         root_dir=ROOT,
@@ -487,6 +480,39 @@ def _run_eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_retrieval_eval(args: argparse.Namespace) -> int:
+    from play_book_studio.evals.sanity import evaluate_case, summarize_results
+
+    answerer = _build_answerer()
+    cases = _read_jsonl(args.cases)
+    details: list[dict] = []
+    for case in cases:
+        details.append(
+            evaluate_case(
+                answerer.retriever,
+                case,
+                top_k=args.top_k,
+                candidate_k=args.candidate_k,
+                use_vector=not bool(args.no_vector),
+            )
+        )
+
+    settings = answerer.settings
+    report = {
+        "cases_file": str(args.cases),
+        "top_k": args.top_k,
+        "candidate_k": args.candidate_k,
+        "use_vector": not bool(args.no_vector),
+        **summarize_results(details),
+    }
+    output_path = settings.retrieval_eval_report_path
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"wrote retrieval eval report: {output_path}")
+    print(json.dumps({k: v for k, v in report.items() if k != "details"}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _run_ragas(args: argparse.Namespace) -> int:
     from play_book_studio.evals.ragas_eval import (
         build_ragas_case_row,
@@ -513,6 +539,7 @@ def _run_ragas(args: argparse.Namespace) -> int:
             row, metadata = build_ragas_case_row(case, generated_result=generated_result)
             rows.append({**metadata, **row})
         output_path = settings.ragas_dataset_preview_path
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"wrote ragas dataset preview: {output_path}")
         print(
@@ -534,16 +561,22 @@ def _run_ragas(args: argparse.Namespace) -> int:
     judge_config.judge_model = args.judge_model or judge_config.judge_model
     judge_config.embedding_model = args.embedding_model or judge_config.embedding_model
 
-    report = evaluate_cases_with_ragas(
-        answerer,
-        cases,
-        judge_config=judge_config,
-        top_k=args.top_k,
-        candidate_k=args.candidate_k,
-        max_context_chunks=args.max_context_chunks,
-        batch_size=args.batch_size,
-    )
+    try:
+        report = evaluate_cases_with_ragas(
+            answerer,
+            cases,
+            judge_config=judge_config,
+            top_k=args.top_k,
+            candidate_k=args.candidate_k,
+            max_context_chunks=args.max_context_chunks,
+            batch_size=args.batch_size,
+        )
+    except RuntimeError as exc:
+        print(f"ragas runtime error: {exc}")
+        print("hint: install RAGAS eval dependencies, or run with --dry-run to verify dataset generation")
+        return 1
     output_path = settings.ragas_eval_report_path
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"wrote ragas eval report: {output_path}")
     print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
@@ -1248,6 +1281,8 @@ def main() -> int:
         return _run_ask(args)
     if args.command == "eval":
         return _run_eval(args)
+    if args.command == "retrieval-eval":
+        return _run_retrieval_eval(args)
     if args.command == "ragas":
         return _run_ragas(args)
     if args.command == "runtime":
