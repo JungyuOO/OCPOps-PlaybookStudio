@@ -82,6 +82,14 @@ def _chunk_row():
         "source_anchor": "1-architecture",
         "toc_path": ["1 Architecture"],
         "asset_ids": ["asset-1"],
+        "chunk_role": "parent",
+        "parent_chunk_id": "",
+        "child_chunk_ids": ["eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"],
+        "navigation_only": False,
+        "beginner_narrative": "초보자는 Route와 Service 관계를 먼저 확인합니다.",
+        "starter_question_candidates": ["앱을 브라우저로 접속하려면 무엇을 확인해야 해?"],
+        "followup_question_candidates": ["Service가 Route와 연결됐는지 확인하는 명령어가 뭐야?"],
+        "question_candidates_version": 1,
         "repository_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
         "owner_user_id": "admin",
         "visibility": "private_user",
@@ -123,6 +131,12 @@ def test_qdrant_payload_from_row_matches_vector_retriever_contract():
     assert payload["owner_user_id"] == "admin"
     assert payload["source_scope"] == "user_upload"
     assert payload["asset_ids"] == ["asset-1"]
+    assert payload["chunk_role"] == "parent"
+    assert payload["child_chunk_ids"] == ["eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"]
+    assert payload["navigation_only"] is False
+    assert payload["beginner_narrative"] == "초보자는 Route와 Service 관계를 먼저 확인합니다."
+    assert payload["starter_question_candidates"] == ["앱을 브라우저로 접속하려면 무엇을 확인해야 해?"]
+    assert payload["question_candidates_version"] == 1
 
 
 def test_qdrant_payload_from_row_preserves_official_gold_metadata():

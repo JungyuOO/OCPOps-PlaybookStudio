@@ -12,8 +12,8 @@ def test_chunk_profile_for_section_keeps_command_chunks_smaller_than_default() -
         default_chunk_overlap=32,
     )
 
-    assert chunk_size == 128
-    assert overlap == 16
+    assert chunk_size == 256
+    assert overlap == 32
 
 
 def test_chunk_profile_for_section_preserves_concept_context() -> None:
@@ -24,5 +24,5 @@ def test_chunk_profile_for_section_preserves_concept_context() -> None:
         default_chunk_overlap=32,
     )
 
-    assert chunk_size == 192
+    assert chunk_size == 320
     assert overlap == 32

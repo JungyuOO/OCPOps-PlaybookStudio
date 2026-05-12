@@ -26,6 +26,7 @@ from play_book_studio.ingestion.learning_metadata import (
     infer_category_key,
 )
 from play_book_studio.ingestion.internal_markup import render_internal_markup_for_retrieval
+from play_book_studio.ingestion.chunk_question_candidates import build_chunk_question_candidates
 
 _SECTION_NUMBER_RE = re.compile(r"^\s*((?:\d+\.)+\d+|\d+)(?:[.)]|\.?)\s+(.+?)\s*$")
 
@@ -356,6 +357,14 @@ def _chunk_metadata(row: dict[str, Any]) -> dict[str, Any]:
         "translation_status",
         "approval_state",
         "publication_state",
+        "chunk_role",
+        "parent_chunk_id",
+        "child_chunk_ids",
+        "navigation_only",
+        "beginner_narrative",
+        "starter_question_candidates",
+        "followup_question_candidates",
+        "question_candidates_version",
     )
     return {key: row[key] for key in keep_keys if key in row}
 
@@ -380,6 +389,10 @@ def _official_chunk_metadata(
         heading=heading_title,
         text="\n".join([chunk_text, " ".join(str(item) for item in row.get("cli_commands", []) if str(item).strip())]),
     )
+    candidates = build_chunk_question_candidates({**row, "text": chunk_text})
+    metadata.setdefault("starter_question_candidates", candidates["starter_question_candidates"])
+    metadata.setdefault("followup_question_candidates", candidates["followup_question_candidates"])
+    metadata.setdefault("question_candidates_version", 1 if candidates["starter_question_candidates"] else 0)
     return metadata
 
 
@@ -566,7 +579,9 @@ def _upsert_official_document_chunk(
             id, parsed_document_id, chunk_key, ordinal, chunk_type, markdown,
             embedding_text, token_count, page_start, page_end, section_path,
             section_number, heading_title, source_anchor, toc_path,
-            asset_ids, metadata, repository_id, owner_user_id, visibility, source_scope
+            asset_ids, metadata, repository_id, owner_user_id, visibility, source_scope,
+            chunk_role, parent_chunk_id, child_chunk_ids, navigation_only, beginner_narrative,
+            starter_question_candidates, followup_question_candidates, question_candidates_version
         )
         VALUES (
             %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s::jsonb,
@@ -577,7 +592,9 @@ def _upsert_official_document_chunk(
                 JOIN document_sources ds ON ds.id = pd.document_source_id
                 WHERE pd.id = %s
             ),
-            '', 'global_shared', 'official_docs'
+            '', 'global_shared', 'official_docs',
+            %s, NULLIF(%s, '')::uuid, %s::jsonb, %s, %s,
+            %s::jsonb, %s::jsonb, %s
         )
         ON CONFLICT (id) DO UPDATE SET
             parsed_document_id = EXCLUDED.parsed_document_id,
@@ -595,7 +612,15 @@ def _upsert_official_document_chunk(
             metadata = EXCLUDED.metadata,
             repository_id = EXCLUDED.repository_id,
             visibility = EXCLUDED.visibility,
-            source_scope = EXCLUDED.source_scope
+            source_scope = EXCLUDED.source_scope,
+            chunk_role = EXCLUDED.chunk_role,
+            parent_chunk_id = EXCLUDED.parent_chunk_id,
+            child_chunk_ids = EXCLUDED.child_chunk_ids,
+            navigation_only = EXCLUDED.navigation_only,
+            beginner_narrative = EXCLUDED.beginner_narrative,
+            starter_question_candidates = EXCLUDED.starter_question_candidates,
+            followup_question_candidates = EXCLUDED.followup_question_candidates,
+            question_candidates_version = EXCLUDED.question_candidates_version
         RETURNING id
         """,
         (
@@ -614,6 +639,14 @@ def _upsert_official_document_chunk(
             _json(toc_path),
             _json(metadata),
             parsed_document_id,
+            str(row.get("chunk_role") or metadata.get("chunk_role") or "leaf"),
+            str(row.get("parent_chunk_id") or metadata.get("parent_chunk_id") or ""),
+            _json(row.get("child_chunk_ids") or metadata.get("child_chunk_ids") or []),
+            bool(row.get("navigation_only") or metadata.get("navigation_only") or False),
+            str(row.get("beginner_narrative") or metadata.get("beginner_narrative") or ""),
+            _json(row.get("starter_question_candidates") or metadata.get("starter_question_candidates") or []),
+            _json(row.get("followup_question_candidates") or metadata.get("followup_question_candidates") or []),
+            int(row.get("question_candidates_version") or metadata.get("question_candidates_version") or 0),
         ),
     )
     return _fetch_id(cursor)

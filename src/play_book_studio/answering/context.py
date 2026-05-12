@@ -102,6 +102,8 @@ NAVIGATION_ONLY_LABELS = (
 
 
 def _is_navigation_only_hit(hit: RetrievalHit) -> bool:
+    if hit.navigation_only:
+        return True
     if hit.cli_commands or _commands_from_excerpt(hit.text):
         return False
     text = strip_internal_markup(hit.text)
@@ -1745,8 +1747,8 @@ def assemble_context(
     query: str = "",
     session_context: SessionContext | None = None,
     root_dir: Path | None = None,
-    max_chunks: int = 6,
-    max_chars_per_chunk: int = 900,
+    max_chunks: int = 8,
+    max_chars_per_chunk: int = 2000,
 ) -> ContextBundle:
     citations: list[Citation] = []
     seen_chunk_ids: set[str] = set()
@@ -1835,7 +1837,8 @@ def assemble_context(
         seen_signatures.add(signature)
         if section_core and anchor_root:
             seen_mirror_sections.setdefault(mirror_signature, hit.book_slug)
-        citation_excerpt = excerpt[:max_chars_per_chunk].strip()
+        excerpt_limit = 1800 if hit.chunk_role == "parent" else max_chars_per_chunk
+        citation_excerpt = excerpt[:excerpt_limit].strip()
         citations.append(
             Citation(
                 index=len(citations) + 1,
