@@ -104,6 +104,25 @@ def build_parser() -> argparse.ArgumentParser:
     ragas_parser.add_argument("--dry-run", action="store_true")
     _add_runtime_args(ragas_parser)
 
+    source_approval_parser = subparsers.add_parser(
+        "source-approval-report",
+        help="Build source approval, translation lane, and corpus gap reports for certification",
+    )
+    source_approval_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    source_approval_parser.add_argument("--output", type=Path, default=None)
+    source_approval_parser.add_argument("--translation-output", type=Path, default=None)
+    source_approval_parser.add_argument("--gap-output", type=Path, default=None)
+    source_approval_parser.add_argument("--skip-translation", action="store_true")
+    source_approval_parser.add_argument("--skip-gap", action="store_true")
+
+    foundry_run_parser = subparsers.add_parser(
+        "foundry-run",
+        help="Run a configured gold foundry profile such as morning_gate",
+    )
+    foundry_run_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    foundry_run_parser.add_argument("--profile", default="morning_gate")
+    foundry_run_parser.add_argument("--retry", action="store_true")
+
     runtime_parser = subparsers.add_parser("runtime", help="Write a runtime readiness report")
     runtime_parser.add_argument("--output", type=Path, default=None)
     runtime_parser.add_argument("--ui-base-url", default=DEFAULT_PLAYBOOK_UI_BASE_URL)
@@ -580,6 +599,79 @@ def _run_ragas(args: argparse.Namespace) -> int:
     output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"wrote ragas eval report: {output_path}")
     print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
+    return 0
+
+
+def _resolve_cli_output(root_dir: Path, path: Path | None, default_path: Path) -> Path:
+    target = path or default_path
+    return (root_dir / target).resolve() if not target.is_absolute() else target.resolve()
+
+
+def _write_json_report(path: Path, payload: dict | list) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _run_source_approval_report(args: argparse.Namespace) -> int:
+    from play_book_studio.ingestion.approval_report import (
+        build_corpus_gap_report,
+        build_source_approval_report,
+        build_translation_lane_report,
+    )
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    try:
+        approval_report = build_source_approval_report(settings)
+        translation_report = None if args.skip_translation else build_translation_lane_report(settings)
+        gap_report = None if args.skip_gap else build_corpus_gap_report(settings)
+    except FileNotFoundError as exc:
+        print(f"source approval input missing: {exc}")
+        print("hint: restore normalized docs / source manifest inputs before certification can pass")
+        return 1
+
+    output_path = _resolve_cli_output(root_dir, args.output, settings.source_approval_report_path)
+    _write_json_report(output_path, approval_report)
+    written = {"source_approval_report": str(output_path)}
+    if translation_report is not None:
+        translation_output_path = _resolve_cli_output(
+            root_dir,
+            args.translation_output,
+            settings.translation_lane_report_path,
+        )
+        _write_json_report(translation_output_path, translation_report)
+        written["translation_lane_report"] = str(translation_output_path)
+    if gap_report is not None:
+        gap_output_path = _resolve_cli_output(root_dir, args.gap_output, settings.corpus_gap_report_path)
+        _write_json_report(gap_output_path, gap_report)
+        written["corpus_gap_report"] = str(gap_output_path)
+
+    print(json.dumps({"written": written, "summary": approval_report.get("summary", {})}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_foundry_profile_cli(args: argparse.Namespace) -> int:
+    from play_book_studio.ingestion.foundry_orchestrator import (
+        run_foundry_profile,
+        run_foundry_profile_with_retry,
+    )
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    try:
+        report = (
+            run_foundry_profile_with_retry(settings, args.profile)
+            if args.retry
+            else run_foundry_profile(settings, args.profile)
+        )
+    except FileNotFoundError as exc:
+        print(f"foundry profile configuration missing: {exc}")
+        print("hint: restore pipelines/foundry_routines.json before running certification gates")
+        return 1
+    except KeyError as exc:
+        print(f"foundry profile unavailable: {exc}")
+        return 1
+    print(json.dumps({key: value for key, value in report.items() if key != "job_results"}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -1285,6 +1377,10 @@ def main() -> int:
         return _run_retrieval_eval(args)
     if args.command == "ragas":
         return _run_ragas(args)
+    if args.command == "source-approval-report":
+        return _run_source_approval_report(args)
+    if args.command == "foundry-run":
+        return _run_foundry_profile_cli(args)
     if args.command == "runtime":
         return _run_runtime(args)
     if args.command == "maintenance-smoke":

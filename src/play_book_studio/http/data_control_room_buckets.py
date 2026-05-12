@@ -535,6 +535,42 @@ def _gold_recovery_action(reason: str) -> str:
     return "Gold 계약 blocker 해소 후 재검증 필요"
 
 
+def _gold_recovery_blocking_check(reason: str) -> str:
+    normalized = str(reason or "").replace("runtime_not_readable::", "").strip()
+    if normalized in {"zero_sections", "zero_chunks"}:
+        return "section_count > 0, chunk_count > 0, viewer_smoke_status=pass"
+    if normalized in {"missing_viewer_path", "missing_runtime_artifact", "viewer_slug_mismatch", "unknown_viewer_route"}:
+        return "viewer_path exists, runtime artifact exists, reader smoke opens the document"
+    if normalized == "non_ko_content":
+        return "language_gate_status=pass and body_language_guess=ko"
+    if normalized == "mixed_ko_content":
+        return "mixed chunks reviewed, Korean ratio accepted, language_gate_status=pass"
+    if normalized == "language_gate_missing":
+        return "language gate evidence exists for the book"
+    if normalized == "missing_source_provenance":
+        return "source_url or source_candidate_path is present"
+    if normalized == "missing_source_lane":
+        return "source_lane or source_type is present"
+    if normalized == "not_gold_source_grade":
+        return "source_grade=Gold after materialization and approval evidence passes"
+    if normalized.startswith("viewer_"):
+        return "viewer_smoke_status=pass"
+    return "all gold_contract_checks are true"
+
+
+def _gold_recovery_rerun_command(reason: str) -> str:
+    normalized = str(reason or "").replace("runtime_not_readable::", "").strip()
+    if normalized in {"zero_sections", "zero_chunks", "missing_runtime_artifact"}:
+        return "python -m play_book_studio.cli source-approval-report && python -m play_book_studio.cli runtime"
+    if normalized in {"non_ko_content", "mixed_ko_content", "language_gate_missing"}:
+        return "python -m play_book_studio.cli source-approval-report && python -m play_book_studio.cli runtime"
+    if normalized.startswith("viewer_") or normalized in {"missing_viewer_path", "viewer_slug_mismatch", "unknown_viewer_route"}:
+        return "python -m play_book_studio.cli runtime --ui-base-url http://127.0.0.1:8765"
+    if normalized in {"missing_source_provenance", "missing_source_lane", "not_gold_source_grade"}:
+        return "python -m play_book_studio.cli source-approval-report"
+    return "python -m play_book_studio.cli runtime && python -m play_book_studio.cli eval"
+
+
 GOLD_RECOVERY_BLOCKER_PRIORITY = {
     "zero_sections": 10,
     "zero_chunks": 11,
@@ -621,6 +657,8 @@ def _gold_contract_payload(
         "gold_contract_warnings": deduped_warnings,
         "gold_recovery_group": _gold_recovery_group(deduped_blockers[0]) if deduped_blockers else "",
         "gold_recovery_action": _gold_recovery_action(deduped_blockers[0]) if deduped_blockers else "",
+        "gold_recovery_blocking_check": _gold_recovery_blocking_check(deduped_blockers[0]) if deduped_blockers else "",
+        "gold_recovery_rerun_command": _gold_recovery_rerun_command(deduped_blockers[0]) if deduped_blockers else "",
         "effective_grade": "Gold" if status == "gold_certified" else "Gold Recovery",
         "gold_contract_checks": {
             "source_grade_gold": str(grade or "").strip() == "Gold",

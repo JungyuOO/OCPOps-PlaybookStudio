@@ -395,6 +395,80 @@
   color: #a7f3d0;
 }
 
+.certification-worklist {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(248, 113, 113, 0.22);
+  background: rgba(127, 29, 29, 0.12);
+}
+
+.certification-worklist-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #fecaca;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.certification-worklist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.certification-worklist-card {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.certification-worklist-card-head {
+  display: grid;
+  gap: 3px;
+}
+
+.certification-worklist-card-head span {
+  color: #fca5a5;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.certification-worklist-card-head strong {
+  color: var(--pbs-text-main);
+  font-size: 0.9rem;
+}
+
+.certification-worklist-card p {
+  margin: 0;
+  color: var(--pbs-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.certification-worklist-card code,
+.gold-recovery-check code {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: rgba(0, 0, 0, 0.28);
+  color: #dff8ff;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
 .library-data-toolbar {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) repeat(3, minmax(150px, 190px));
@@ -1651,6 +1725,19 @@
   color: rgba(254, 226, 226, 0.82);
   font-size: 0.82rem;
   line-height: 1.5;
+}
+
+.gold-recovery-check {
+  display: grid;
+  gap: 5px;
+}
+
+.gold-recovery-check span {
+  color: #fca5a5;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .operational-library-grid {

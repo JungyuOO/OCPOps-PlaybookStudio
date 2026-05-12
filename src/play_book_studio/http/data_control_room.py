@@ -309,11 +309,105 @@ MIN_CITATION_PRECISION = 0.8
 MIN_RAGAS_FAITHFULNESS = 0.8
 
 
+CERTIFICATION_BLOCKER_RUNBOOK: dict[str, dict[str, str]] = {
+    "missing_morning_gate_report": {
+        "owner": "foundry",
+        "root_cause": "morning_gate 프로필 실행 리포트가 없습니다.",
+        "fix_path": "foundry routine 정의와 입력 산출물을 복구한 뒤 morning_gate 프로필을 실행합니다.",
+        "verification_command": "python -m play_book_studio.cli foundry-run --profile morning_gate",
+    },
+    "missing_source_approval_report": {
+        "owner": "source-approval",
+        "root_cause": "source approval 리포트가 없거나 승인 대상 book 수와 맞지 않습니다.",
+        "fix_path": "공식 source manifest/normalized docs 입력을 복구한 뒤 approval 리포트를 생성합니다.",
+        "verification_command": "python -m play_book_studio.cli source-approval-report",
+    },
+    "canonical_grade_source_unavailable": {
+        "owner": "source-approval",
+        "root_cause": "Gold 판정의 기준 truth인 source_approval_report를 읽을 수 없습니다.",
+        "fix_path": "source_approval_report.json을 생성하고 Data Control Room에서 canonical source로 선택되는지 확인합니다.",
+        "verification_command": "python -m play_book_studio.cli source-approval-report",
+    },
+    "missing_ragas_eval_report": {
+        "owner": "answer-quality",
+        "root_cause": "RAGAS judge 리포트가 없습니다.",
+        "fix_path": "RAGAS dataset dry-run으로 입력을 확인하고 judge 설정 후 full run을 실행합니다.",
+        "verification_command": "python -m play_book_studio.cli ragas --dry-run",
+    },
+    "gold_recovery_items_present": {
+        "owner": "gold-recovery",
+        "root_cause": "Gold 계약을 통과하지 못한 문서가 Recovery Queue에 남아 있습니다.",
+        "fix_path": "각 Recovery 문서의 blocking_check와 rerun_command를 따라 materialize/language/viewer evidence를 복구합니다.",
+        "verification_command": "python -m play_book_studio.cli runtime",
+    },
+    "retrieval_eval_case_count_below_minimum": {
+        "owner": "retrieval-quality",
+        "root_cause": "retrieval 평가 케이스 수가 제품 기준 20개보다 적습니다.",
+        "fix_path": "retrieval_eval_cases.jsonl에 실제 운영 질문을 추가하고 재평가합니다.",
+        "verification_command": "python -m play_book_studio.cli retrieval-eval",
+    },
+    "retrieval_hit_at_3_below_threshold": {
+        "owner": "retrieval-quality",
+        "root_cause": "상위 3개 검색 결과가 기대 book family를 충분히 맞추지 못합니다.",
+        "fix_path": "실패 케이스의 query rewrite, rerank, citation selection을 근거별로 수정합니다.",
+        "verification_command": "python -m play_book_studio.cli retrieval-eval",
+    },
+    "answer_eval_case_count_below_minimum": {
+        "owner": "answer-quality",
+        "root_cause": "answer 평가 케이스 수가 제품 기준 20개보다 적습니다.",
+        "fix_path": "answer_eval_cases.jsonl에 no-answer, follow-up, ops 절차 케이스를 보강합니다.",
+        "verification_command": "python -m play_book_studio.cli eval",
+    },
+    "citation_precision_below_threshold": {
+        "owner": "answer-quality",
+        "root_cause": "답변 citation 중 기대 출처만 정확히 인용하는 비율이 부족합니다.",
+        "fix_path": "불필요한 citation family를 줄이고 follow-up context/citation selection을 보정합니다.",
+        "verification_command": "python -m play_book_studio.cli eval",
+    },
+    "qdrant_parity_failed": {
+        "owner": "runtime-index",
+        "root_cause": "Postgres chunk 수와 Qdrant index entry 수가 다릅니다.",
+        "fix_path": "Qdrant backfill/index refresh를 실행하고 /api/health parity를 확인합니다.",
+        "verification_command": "python -m play_book_studio.cli db-qdrant-backfill --limit 50000",
+    },
+    "qdrant_parity_unknown": {
+        "owner": "runtime-index",
+        "root_cause": "DB/Qdrant 런타임 상태를 확인하지 못했습니다.",
+        "fix_path": "Postgres/Qdrant 컨테이너와 runtime health report를 확인합니다.",
+        "verification_command": "python -m play_book_studio.cli runtime",
+    },
+}
+
+
 def _eval_overall(report: dict[str, Any]) -> dict[str, Any]:
     overall = report.get("overall") if isinstance(report.get("overall"), dict) else {}
     if not overall and isinstance(report.get("summary"), dict):
         overall = report.get("summary") or {}
     return overall
+
+
+def _dedupe_strings(values: list[str]) -> list[str]:
+    return list(dict.fromkeys(str(value).strip() for value in values if str(value).strip()))
+
+
+def _certification_blocker_detail(blocker: str) -> dict[str, str]:
+    normalized = str(blocker or "").strip()
+    template = CERTIFICATION_BLOCKER_RUNBOOK.get(
+        normalized,
+        {
+            "owner": "product-quality",
+            "root_cause": "아직 runbook에 등록되지 않은 certification blocker입니다.",
+            "fix_path": "blocker 산출 위치를 추적해 owner/root cause/fix path를 등록합니다.",
+            "verification_command": "python -m play_book_studio.cli runtime && python -m play_book_studio.cli eval",
+        },
+    )
+    return {
+        "blocker": normalized,
+        "owner": template["owner"],
+        "root_cause": template["root_cause"],
+        "fix_path": template["fix_path"],
+        "verification_command": template["verification_command"],
+    }
 
 
 def _metric_float(overall: dict[str, Any], *keys: str) -> float | None:
@@ -326,6 +420,16 @@ def _metric_float(overall: dict[str, Any], *keys: str) -> float | None:
         except (TypeError, ValueError):
             continue
     return None
+
+
+def _answer_citation_precision_metric(overall: dict[str, Any]) -> float | None:
+    # `avg_citation_precision` intentionally counts clarification/no-answer cases
+    # as 0. For certification we need the precision of emitted citations: whether
+    # citation-bearing answers cite only the expected source families.
+    strict_expected_only = _metric_float(overall, "strict_expected_only_rate")
+    if strict_expected_only is not None:
+        return strict_expected_only
+    return _metric_float(overall, "avg_citation_precision")
 
 
 def _quality_gate(
@@ -425,7 +529,7 @@ def _build_certification_contract(
         quality_gates["citation_precision"] = _quality_gate(
             blockers,
             name="citation_precision",
-            metric=_metric_float(answer_overall, "avg_citation_precision"),
+            metric=_answer_citation_precision_metric(answer_overall),
             minimum=MIN_CITATION_PRECISION,
             blocker="citation_precision_below_threshold",
         )
@@ -454,12 +558,14 @@ def _build_certification_contract(
     )
     if approved_wiki_runtime_books.get("books") and certified_count != len(approved_wiki_runtime_books.get("books") or []):
         warnings.append("runtime_books_include_uncertified_gold")
+    blockers = _dedupe_strings(blockers)
     status = "certified" if not blockers else "not_certifiable"
     return {
         "status": status,
         "label": "Certified Gold Wiki" if status == "certified" else "Not Certifiable",
         "release_blocking": status != "certified",
         "blockers": blockers,
+        "blocker_details": [_certification_blocker_detail(blocker) for blocker in blockers],
         "warnings": warnings,
         "gold_certified_count": certified_count,
         "gold_recovery_count": recovery_count,
@@ -755,7 +861,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "extra_manualbook_count": len(extra_materialized_manualbook_slugs),
             "retrieval_hit_at_1": retrieval_hit_at_1,
             "answer_pass_rate": answer_overall.get("pass_rate"),
-            "citation_precision": answer_overall.get("avg_citation_precision"),
+            "citation_precision": _answer_citation_precision_metric(answer_overall),
             "ragas_faithfulness": ragas_overall.get("faithfulness"),
             "canonical_grade_source": canonical_grade_source["name"],
         },

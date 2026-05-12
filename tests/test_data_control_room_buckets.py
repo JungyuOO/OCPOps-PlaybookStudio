@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import play_book_studio.http.data_control_room as data_control_room
 import play_book_studio.http.data_control_room_buckets as buckets
 from play_book_studio.http.data_control_room_helpers import _summarize_eval
+from play_book_studio.http.runtime_truth import official_runtime_grade
 
 
 def _settings(root):
@@ -281,8 +282,25 @@ def test_non_gold_zero_section_recovery_prioritizes_materialization(monkeypatch,
     assert recovery["hidden_reason"] == "zero_sections"
     assert recovery["gold_recovery_group"] == "materialization"
     assert recovery["gold_recovery_action"] == "문서 파싱/section materialize 재실행 필요"
+    assert recovery["gold_recovery_blocking_check"] == "section_count > 0, chunk_count > 0, viewer_smoke_status=pass"
+    assert "source-approval-report" in recovery["gold_recovery_rerun_command"]
     assert recovery["gold_contract_blockers"][:3] == ["zero_sections", "zero_chunks", "language_gate_missing"]
     assert "not_gold_source_grade" in recovery["gold_contract_blockers"]
+
+
+def test_runtime_truth_grades_approved_ko_approved_as_gold() -> None:
+    assert official_runtime_grade(
+        {
+            "content_status": "approved_ko",
+            "approval_status": "approved",
+        }
+    ) == "Gold"
+    assert official_runtime_grade(
+        {
+            "content_status": "approved_ko",
+            "approval_status": "needs_review",
+        }
+    ) == "Silver"
 
 
 def test_runtime_book_uses_manifest_language_evidence(monkeypatch, tmp_path) -> None:
@@ -646,3 +664,37 @@ def test_certification_contract_blocks_low_quality_reports() -> None:
     assert "citation_precision_below_threshold" in contract["blockers"]
     assert "ragas_eval_case_count_below_minimum" in contract["blockers"]
     assert "ragas_faithfulness_below_threshold" in contract["blockers"]
+    details_by_blocker = {item["blocker"]: item for item in contract["blocker_details"]}
+    assert details_by_blocker["citation_precision_below_threshold"]["owner"] == "answer-quality"
+    assert "play_book_studio.cli eval" in details_by_blocker["answer_eval_case_count_below_minimum"]["verification_command"]
+
+
+def test_certification_uses_emitted_citation_precision_when_available() -> None:
+    snapshots = {
+        "morning_gate": {"exists": True, "path": "gate.json"},
+        "source_approval": {"exists": True, "path": "source.json"},
+        "retrieval_eval": {"exists": True, "path": "retrieval.json"},
+        "answer_eval": {"exists": True, "path": "answer.json"},
+        "ragas_eval": {"exists": True, "path": "ragas.json"},
+        "runtime_report": {"exists": True, "path": "runtime.json"},
+    }
+
+    contract = data_control_room._build_certification_contract(
+        report_snapshots=snapshots,
+        approved_wiki_runtime_books={"books": [{"certified_gold": True}], "hidden_books": []},
+        canonical_grade_source={"exists": True},
+        runtime_report={"runtime": {"db_corpus": {"qdrant_index_parity": True}}},
+        retrieval_report={"overall": {"case_count": 20, "expected_hit_at_3": 0.95}},
+        answer_report={
+            "overall": {
+                "case_count": 20,
+                "pass_rate": 1.0,
+                "avg_citation_precision": 0.65,
+                "strict_expected_only_rate": 1.0,
+            }
+        },
+        ragas_report={"summary": {"case_count": 20, "faithfulness": 0.82}},
+    )
+
+    assert "citation_precision_below_threshold" not in contract["blockers"]
+    assert contract["quality_gates"]["citation_precision"]["metric"] == 1.0

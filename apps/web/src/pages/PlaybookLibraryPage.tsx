@@ -2687,6 +2687,7 @@ const PlaybookLibraryPage: React.FC = () => {
     : '';
   const certification = controlRoom?.certification;
   const certificationBlockers = certification?.blockers ?? [];
+  const certificationBlockerDetails = certification?.blocker_details ?? [];
   const certificationStatus = certification?.status ?? controlRoom?.summary?.certification_status ?? '';
   const isNotCertifiable = Boolean(certificationStatus && certificationStatus !== 'certified');
   const runtimeAlerts = [
@@ -3081,6 +3082,27 @@ const PlaybookLibraryPage: React.FC = () => {
                   <span>Postgres 문서/chunk와 Qdrant 기준 수량이 현재 런타임에서 일치합니다.</span>
                 </div>
               )}
+              {certificationBlockerDetails.length > 0 && (
+                <div className="certification-worklist">
+                  <div className="certification-worklist-head">
+                    <span>Certification Worklist</span>
+                    <strong>{certificationBlockerDetails.length.toLocaleString()} blockers</strong>
+                  </div>
+                  <div className="certification-worklist-grid">
+                    {certificationBlockerDetails.map((detail) => (
+                      <article key={detail.blocker} className="certification-worklist-card">
+                        <div className="certification-worklist-card-head">
+                          <span>{detail.owner}</span>
+                          <strong>{certificationBlockerLabel(detail.blocker)}</strong>
+                        </div>
+                        <p>{detail.root_cause}</p>
+                        <p>{detail.fix_path}</p>
+                        <code>{detail.verification_command}</code>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
 
             <section className="library-data-toolbar" aria-label="Book Library filters">
@@ -3291,6 +3313,18 @@ const PlaybookLibraryPage: React.FC = () => {
                         </div>
                       )}
                       <p>{goldRecoveryAction(book)}</p>
+                      {book.gold_recovery_blocking_check && (
+                        <div className="gold-recovery-check">
+                          <span>Blocking check</span>
+                          <code>{book.gold_recovery_blocking_check}</code>
+                        </div>
+                      )}
+                      {book.gold_recovery_rerun_command && (
+                        <div className="gold-recovery-check">
+                          <span>Rerun</span>
+                          <code>{book.gold_recovery_rerun_command}</code>
+                        </div>
+                      )}
                     </article>
                   ))}
                 </div>

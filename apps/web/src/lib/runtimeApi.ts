@@ -51,6 +51,8 @@ export interface LibraryBook {
   gold_contract_warnings?: string[];
   gold_recovery_group?: string;
   gold_recovery_action?: string;
+  gold_recovery_blocking_check?: string;
+  gold_recovery_rerun_command?: string;
   effective_grade?: string;
   gold_contract_checks?: Record<string, boolean>;
   language_gate_status?: 'pass' | 'warning' | 'fail' | 'unknown' | string;
@@ -401,6 +403,13 @@ export interface DataControlRoomCertification {
   label: string;
   release_blocking: boolean;
   blockers: string[];
+  blocker_details?: Array<{
+    blocker: string;
+    owner: string;
+    root_cause: string;
+    fix_path: string;
+    verification_command: string;
+  }>;
   warnings: string[];
   gold_certified_count: number;
   gold_recovery_count: number;

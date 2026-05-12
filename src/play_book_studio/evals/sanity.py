@@ -114,7 +114,13 @@ def summarize_results(details: list[dict[str, Any]]) -> dict[str, Any]:
                 "warning_free_rate": 0.0,
             }
 
-        expected_cases = [item for item in bucket if item.get("expected_book_slugs")]
+        expected_cases = [
+            item
+            for item in bucket
+            if item.get("expected_book_slugs")
+            and not item.get("must_clarify", False)
+            and not item.get("must_refuse", False)
+        ]
         expected_total = len(expected_cases)
         warning_free = sum(1 for item in bucket if not item.get("trace", {}).get("warnings"))
 
@@ -158,7 +164,15 @@ def summarize_results(details: list[dict[str, Any]]) -> dict[str, Any]:
             "warnings": item["trace"]["warnings"],
         }
         for item in details
-        if (item.get("expected_book_slugs") and not item["expected_hit_at_5"]) or item["forbidden_hit_at_3"]
+        if (
+            item["forbidden_hit_at_3"]
+            or (
+                item.get("expected_book_slugs")
+                and not item.get("must_clarify", False)
+                and not item.get("must_refuse", False)
+                and not item["expected_hit_at_5"]
+            )
+        )
     ]
 
     return {
