@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import gsap from 'gsap';
 import './PlaybookLibraryPage.css';
+import ThemeToggleButton from '../components/ThemeToggleButton';
 import ViewerDocumentStage, { type ViewerDocumentPayload } from '../components/ViewerDocumentStage';
 import {
   DOCUMENT_INGEST_UPLOAD_ACCEPT,
@@ -35,6 +36,8 @@ import {
   type CorpusChunkViewerResponse,
   type BuyerPacket,
   type DataControlRoomResponse,
+  type HiddenLibraryBook,
+  type LibraryBucket,
   type LibraryBook,
   type LibraryBookSourceOption,
   type OfficialSourceCandidate,
@@ -42,9 +45,16 @@ import {
   type RepositoryCategory,
   type RepositoryFavorite,
   type RepositorySearchResult,
+  type SourceDiscoveryLaneResult,
+  type SourceDiscoverySearchResponse,
+  type SourceDiscoveryJudgeNextAction,
+  type SourceDiscoveryJudgeReport,
+  type SourceDiscoveryVerificationRecord,
   type RepositoryUnansweredItem,
   type DocumentRepository,
   type DocumentRepositoryDocument,
+  type DocumentReaderDocument,
+  type RuntimeHealthResponse,
   type UploadIngestResponse,
   uploadDocumentIngestion,
   loadDataControlRoom,
@@ -55,19 +65,27 @@ import {
   loadRepositoryFavorites,
   loadRepositoryUnanswered,
   loadDocumentRepositories,
+  loadDocumentReader,
+  loadRuntimeHealth,
   loadOfficialSourceCatalog,
+  loadSourceDiscoveryVerificationQueue,
+  loadSourceDiscoveryJudgeReports,
   materializeOfficialSourceCandidate,
   removeRepositoryFavorite,
-  searchRepositories,
+  runSourceDiscoveryJudgeReplay,
+  searchSourceDiscovery,
+  saveSourceDiscoveryVerificationCandidate,
   loadCustomerPackCapturedPreview,
   loadViewerDocument,
   toRuntimeUrl,
   formatBytes,
 } from '../lib/runtimeApi';
+import { useGlobalTheme } from '../lib/globalTheme';
 import { ROUTES } from '../routing/routes';
 
 type PipelineStage = 'idle' | 'uploading' | 'capturing' | 'normalizing' | 'done' | 'error';
 type FactoryLane = 'tools' | 'user';
+type ActiveWikiScope = 'official' | 'customer' | 'uploads';
 type FactoryRunMode = 'auto' | 'manual';
 type OfficialSourceBasisKey = 'official_repo' | 'official_homepage';
 const WORKSPACE_INGESTION_STATUS_STORAGE_KEY = 'workspace.ingestionStatus';
@@ -114,6 +132,8 @@ interface MetricPopoverState {
   title: string;
   mode: MetricPopoverMode;
   rows: LibraryBook[];
+  emptyMessage?: string;
+  noticeMessage?: string;
 }
 
 interface ChunkViewerState {
@@ -121,6 +141,42 @@ interface ChunkViewerState {
   payload: CorpusChunkViewerResponse | null;
   loading: boolean;
   error: string;
+}
+
+interface DocumentReaderState {
+  repository: DocumentRepository;
+  source: DocumentRepositoryDocument;
+  payload: DocumentReaderDocument | null;
+  loading: boolean;
+  loadingMore: boolean;
+  error: string;
+}
+
+type LibraryScopeFilter = 'all' | 'official_docs' | 'study_docs' | 'user_upload';
+type LibraryQualityFilter = 'all' | 'approved_ko' | 'needs_review' | 'original' | 'gold';
+type LibraryIndexFilter = 'all' | 'ready' | 'needs_index' | 'zero_chunks';
+
+function activeWikiScopeFromRoute(pathname: string, searchParams: URLSearchParams): ActiveWikiScope {
+  const requestedScope = (searchParams.get('scope') || '').trim().toLowerCase();
+  const requestedLane = (searchParams.get('lane') || '').trim().toLowerCase();
+  if (requestedScope === 'uploads' || requestedScope === 'user' || requestedLane === 'uploads') {
+    return 'uploads';
+  }
+  if (requestedScope === 'customer' || requestedScope === 'study' || pathname.endsWith('/repository')) {
+    return 'customer';
+  }
+  return 'official';
+}
+
+function libraryFilterForWikiScope(scope: ActiveWikiScope): LibraryScopeFilter {
+  switch (scope) {
+    case 'customer':
+      return 'study_docs';
+    case 'uploads':
+      return 'user_upload';
+    default:
+      return 'official_docs';
+  }
 }
 
 function summaryNumber(summary: Record<string, unknown>, key: string): number | null {
@@ -133,6 +189,241 @@ function summaryNumber(summary: Record<string, unknown>, key: string): number | 
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function isRepositoryDocumentOperationallyReady(document: DocumentRepositoryDocument): boolean {
+  const parseStatus = String(document.parse_status || '').trim().toLowerCase();
+  const parseReady = ['succeeded', 'completed', 'complete', 'done', 'parsed', 'normalized'].includes(parseStatus);
+  const chunkCount = Number(document.chunk_count || 0);
+  return parseReady && Number.isFinite(chunkCount) && chunkCount > 0;
+}
+
+function isDocumentReadable(document: DocumentRepositoryDocument): boolean {
+  return isRepositoryDocumentOperationallyReady(document) && Boolean(String(document.parsed_document_id || '').trim());
+}
+
+function documentReadBlockReason(document: DocumentRepositoryDocument): string {
+  if (isDocumentReadable(document)) {
+    return '';
+  }
+  const parseStatus = String(document.parse_status || '').trim();
+  const chunkCount = Number(document.chunk_count || 0);
+  if (!String(document.parsed_document_id || '').trim()) {
+    return 'parsed_document_id 없음';
+  }
+  if (!Number.isFinite(chunkCount) || chunkCount <= 0) {
+    return 'chunk 없음';
+  }
+  return parseStatus ? `parse_status=${parseStatus}` : 'parse_status 확인 필요';
+}
+
+function isOperationalWikiRuntimeBook(book: LibraryBook): boolean {
+  return book.runtime_readable === true && Boolean(String(book.viewer_path || '').trim());
+}
+
+function operationalWikiHiddenCount(bucket: LibraryBucket | undefined): number {
+  const raw = bucket?.hidden_count;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return raw;
+  }
+  return bucket?.hidden_books?.length ?? 0;
+}
+
+function runtimeGateReasonLabel(reason: string): string {
+  switch (reason) {
+    case 'runtime_not_readable::zero_sections':
+      return '섹션 0개';
+    case 'runtime_not_readable::zero_chunks':
+      return '청크 0개';
+    case 'runtime_not_readable::missing_viewer_path':
+      return '뷰어 경로 없음';
+    case 'runtime_not_readable::missing_runtime_artifact':
+      return '런타임 산출물 없음';
+    case 'runtime_not_readable::viewer_slug_mismatch':
+      return '뷰어 slug 불일치';
+    case 'runtime_not_readable::unknown_viewer_route':
+      return '알 수 없는 뷰어 경로';
+    case 'runtime_not_readable::viewer_404':
+      return '뷰어 404';
+    case 'runtime_not_readable::viewer_empty_body':
+      return '뷰어 본문 없음';
+    case 'runtime_not_readable::viewer_no_sections':
+      return '뷰어 섹션 없음';
+    case 'runtime_not_readable::viewer_exception':
+      return '뷰어 검증 오류';
+    case 'runtime_not_readable::non_ko_content':
+    case 'non_ko_content':
+      return '한글화 미완료';
+    case 'mixed_ko_content':
+      return '한글화 검토';
+    default:
+      return reason || 'runtime gate';
+  }
+}
+
+function languageGateReasonLabel(reason: string): string {
+  switch (reason) {
+    case 'non_ko_content':
+      return '한글화 미완료';
+    case 'mixed_ko_content':
+      return '한글화 검토';
+    default:
+      return reason || 'language gate';
+  }
+}
+
+function formatPercentRatio(value: unknown): string {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) {
+    return '';
+  }
+  return `${Math.round(numeric * 1000) / 10}%`;
+}
+
+function languageGateBadgeLabel(book: LibraryBook): string {
+  const status = String(book.language_gate_status || '').trim().toLowerCase();
+  if (!status || status === 'pass' || status === 'unknown') {
+    return '';
+  }
+  const reasonLabel = languageGateReasonLabel(String(book.language_gate_reason || status));
+  const hangulRatio = formatPercentRatio(book.hangul_chunk_ratio);
+  return hangulRatio ? `${reasonLabel} · 한글 ${hangulRatio}` : reasonLabel;
+}
+
+function languageGateChips(book: LibraryBook): string[] {
+  const status = String(book.language_gate_status || '').trim().toLowerCase();
+  if (!status || status === 'pass' || status === 'unknown') {
+    return [];
+  }
+  return [
+    languageGateReasonLabel(String(book.language_gate_reason || status)),
+    formatPercentRatio(book.hangul_chunk_ratio) ? `한글 ${formatPercentRatio(book.hangul_chunk_ratio)}` : '',
+  ].filter(Boolean);
+}
+
+function viewerSmokeReasonLabel(reason: string): string {
+  switch (reason) {
+    case 'missing_viewer_path':
+      return '뷰어 경로 없음';
+    case 'viewer_404':
+      return '뷰어 404';
+    case 'viewer_empty_body':
+      return '본문 없음';
+    case 'viewer_no_sections':
+      return '섹션 없음';
+    case 'viewer_exception':
+      return '검증 오류';
+    case 'viewer_title_not_matched':
+      return '제목 경고';
+    default:
+      return reason || 'viewer smoke';
+  }
+}
+
+function hasViewerSmokeEvidence(book: LibraryBook): boolean {
+  return Boolean(String(book.viewer_smoke_status || '').trim());
+}
+
+function viewerSmokeTone(book: LibraryBook): 'pass' | 'fail' | 'warning' | 'skipped' {
+  const status = String(book.viewer_smoke_status || '').trim().toLowerCase();
+  if (status === 'fail') return 'fail';
+  if (status === 'skipped') return 'skipped';
+  if (status === 'pass') return book.viewer_smoke_warning ? 'warning' : 'pass';
+  return 'skipped';
+}
+
+function viewerSmokeBadgeLabel(book: LibraryBook): string {
+  const status = String(book.viewer_smoke_status || '').trim().toLowerCase();
+  const headingCount = Number(book.viewer_smoke_heading_count ?? 0);
+  if (status === 'fail') {
+    return `Viewer Fail · ${viewerSmokeReasonLabel(String(book.viewer_smoke_reason || ''))}`;
+  }
+  if (status === 'skipped') {
+    return `Viewer Skip · ${viewerSmokeReasonLabel(String(book.viewer_smoke_reason || ''))}`;
+  }
+  if (status !== 'pass') {
+    return 'Viewer Smoke 없음';
+  }
+  const suffix = headingCount > 0 ? ` · h${headingCount}` : '';
+  const warning = book.viewer_smoke_warning ? ` · ${viewerSmokeReasonLabel(book.viewer_smoke_warning)}` : '';
+  return `Viewer OK${suffix}${warning}`;
+}
+
+function viewerSmokeChips(book: LibraryBook): string[] {
+  const status = String(book.viewer_smoke_status || '').trim().toLowerCase();
+  const headingCount = Number(book.viewer_smoke_heading_count ?? 0);
+  if (!status) {
+    return [];
+  }
+  if (status === 'fail') {
+    return ['Viewer Fail', viewerSmokeReasonLabel(String(book.viewer_smoke_reason || ''))];
+  }
+  if (status === 'skipped') {
+    return ['Viewer Skip', viewerSmokeReasonLabel(String(book.viewer_smoke_reason || ''))];
+  }
+  if (status !== 'pass') {
+    return ['Viewer Smoke', viewerSmokeReasonLabel(status)];
+  }
+  return [
+    'Viewer OK',
+    headingCount > 0 ? `${headingCount} headings` : '',
+    book.viewer_smoke_warning ? viewerSmokeReasonLabel(book.viewer_smoke_warning) : '',
+  ].filter(Boolean);
+}
+
+function operationalWikiHiddenMessage(hiddenRows: HiddenLibraryBook[] = [], hiddenCount = hiddenRows.length): string {
+  if (hiddenCount <= 0) {
+    return '등록된 북이 없습니다.';
+  }
+  const reasonCounts = hiddenRows.reduce<Record<string, number>>((acc, book) => {
+    const reason = String(book.hidden_reason || book.runtime_readiness || book.runtime_gate || 'runtime gate').trim();
+    acc[reason] = (acc[reason] || 0) + 1;
+    return acc;
+  }, {});
+  const summary = Object.entries(reasonCounts)
+    .slice(0, 2)
+    .map(([reason, count]) => `${runtimeGateReasonLabel(reason)} ${count}`)
+    .join(' · ');
+  const detail = summary || '상세 사유는 recovery_books payload를 확인해야 합니다.';
+  return `Gold Recovery Queue ${hiddenCount}권 · ${detail}`;
+}
+
+function goldRecoveryRows(bucket: LibraryBucket | undefined): HiddenLibraryBook[] {
+  return [...(bucket?.recovery_books ?? bucket?.hidden_books ?? [])];
+}
+
+function goldRecoveryAction(book: HiddenLibraryBook): string {
+  return String(book.gold_recovery_action || '').trim() || 'Gold 계약 blocker 해소 후 재검증 필요';
+}
+
+function goldRecoveryBlockerText(book: HiddenLibraryBook): string {
+  const blockers = book.gold_contract_blockers ?? [];
+  if (blockers.length > 0) {
+    return blockers.map(runtimeGateReasonLabel).join(' · ');
+  }
+  return runtimeGateReasonLabel(String(book.hidden_reason || book.runtime_readiness || 'runtime gate'));
+}
+
+function certificationBlockerLabel(blocker: string): string {
+  switch (blocker) {
+    case 'missing_morning_gate_report':
+      return 'Morning gate report 없음';
+    case 'missing_source_approval_report':
+    case 'canonical_grade_source_unavailable':
+      return 'Source approval report 없음';
+    case 'missing_retrieval_eval_report':
+      return 'Retrieval eval 없음';
+    case 'missing_answer_eval_report':
+      return 'Answer eval 없음';
+    case 'missing_ragas_eval_report':
+      return 'RAGAS eval 없음';
+    case 'missing_runtime_report':
+      return 'Runtime report 없음';
+    case 'gold_recovery_items_present':
+      return 'Gold Recovery 남아 있음';
+    default:
+      return blocker || '검증 blocker';
+  }
 }
 
 function buildFactoryManualChecklist(
@@ -313,6 +604,7 @@ function documentSearchText(document: DocumentRepositoryDocument, repository?: D
     document.filename,
     document.source_kind,
     document.source_scope,
+    document.parse_status,
     repository?.slug,
     repository?.title,
     repository?.repository_kind,
@@ -360,6 +652,128 @@ function inferWikiCategory(document: DocumentRepositoryDocument, repository?: Do
   const text = documentSearchText(document, repository);
   const matched = WIKI_CATEGORIES.find((category) => category.terms.some((term) => text.includes(term)));
   return matched?.key ?? 'operations';
+}
+
+function repositoryDocumentScope(row: RepositoryDocumentRow): {
+  sourceKind: string;
+  scope: string;
+  visibility: string;
+  repositoryKind: string;
+} {
+  const metadata = row.document.metadata ?? {};
+  const repositoryMetadata = row.repository.metadata ?? {};
+  return {
+    sourceKind: String(row.document.source_kind || '').toLowerCase(),
+    scope: String(row.document.source_scope || metadata.source_scope || repositoryMetadata.source_scope || '').toLowerCase(),
+    visibility: String(row.document.visibility || row.repository.visibility || '').toLowerCase(),
+    repositoryKind: String(row.repository.repository_kind || '').toLowerCase(),
+  };
+}
+
+function isOfficialRepositoryDocument(row: RepositoryDocumentRow): boolean {
+  const { sourceKind, scope, repositoryKind } = repositoryDocumentScope(row);
+  return scope.includes('official') || sourceKind.includes('official') || repositoryKind === 'official';
+}
+
+function isMyUploadRepositoryDocument(row: RepositoryDocumentRow): boolean {
+  const { scope, visibility, repositoryKind } = repositoryDocumentScope(row);
+  return scope === 'user_upload' || visibility === 'private_user' || repositoryKind === 'personal';
+}
+
+function isCustomerRepositoryDocument(row: RepositoryDocumentRow): boolean {
+  if (isOfficialRepositoryDocument(row) || isMyUploadRepositoryDocument(row)) {
+    return false;
+  }
+  const { sourceKind, scope, visibility, repositoryKind } = repositoryDocumentScope(row);
+  return (
+    scope.includes('study')
+    || scope.includes('customer')
+    || sourceKind.includes('kmsc')
+    || sourceKind.includes('course')
+    || repositoryKind === 'study'
+    || repositoryKind === 'customer'
+    || repositoryKind === 'enterprise'
+    || visibility === 'workspace_shared'
+  );
+}
+
+function documentQualityChips(row: RepositoryDocumentRow): string[] {
+  const { document } = row;
+  const metadata = document.metadata ?? {};
+  const parseStatus = String(document.parse_status || '').trim();
+  const readBlockReason = documentReadBlockReason(document);
+  const chips = [
+    document.source_scope,
+    parseStatus ? `parse_${parseStatus}` : '',
+    readBlockReason ? 'read_blocked' : 'readable',
+    document.source_kind?.includes('gold') ? 'gold' : '',
+    metadataString(metadata, 'approval_state'),
+    metadataString(metadata, 'review_status'),
+    metadataString(metadata, 'translation_status'),
+    metadataString(metadata, 'source_lane'),
+    metadataString(metadata, 'document_format'),
+  ].map((item) => String(item || '').trim()).filter(Boolean);
+  return Array.from(new Set(chips)).slice(0, 8);
+}
+
+function documentIndexStatus(row: RepositoryDocumentRow): LibraryIndexFilter {
+  const chunkCount = Number(row.document.chunk_count || 0);
+  const indexedCount = Number(row.document.indexed_chunk_count || 0);
+  if (!Number.isFinite(chunkCount) || chunkCount <= 0) {
+    return 'zero_chunks';
+  }
+  if (!Number.isFinite(indexedCount) || indexedCount < chunkCount) {
+    return 'needs_index';
+  }
+  return 'ready';
+}
+
+function matchesLibraryFilters(
+  row: RepositoryDocumentRow,
+  filters: {
+    query: string;
+    scope: LibraryScopeFilter;
+    quality: LibraryQualityFilter;
+    index: LibraryIndexFilter;
+  },
+): boolean {
+  const query = filters.query.trim().toLowerCase();
+  if (query && !documentSearchText(row.document, row.repository).includes(query)) {
+    return false;
+  }
+  if (filters.scope !== 'all') {
+    const scopeMatches = filters.scope === 'official_docs'
+      ? isOfficialRepositoryDocument(row)
+      : filters.scope === 'study_docs'
+        ? isCustomerRepositoryDocument(row)
+        : isMyUploadRepositoryDocument(row);
+    if (!scopeMatches) {
+      return false;
+    }
+  }
+  if (filters.index !== 'all' && documentIndexStatus(row) !== filters.index) {
+    return false;
+  }
+  if (filters.quality !== 'all') {
+    const chips = documentQualityChips(row).map((item) => item.toLowerCase());
+    if (!chips.includes(filters.quality)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function indexStatusLabel(status: LibraryIndexFilter): string {
+  switch (status) {
+    case 'ready':
+      return 'indexed';
+    case 'needs_index':
+      return 'index check';
+    case 'zero_chunks':
+      return 'no chunks';
+    default:
+      return 'all';
+  }
 }
 
 const FACTORY_PIPELINE_STEPS: Record<FactoryLane, Array<{ badge: string; title: string; description: string }>> = {
@@ -559,6 +973,268 @@ function sourceOptionsForRecord(record?: SourceOptionRecord | null): LibraryBook
   return Array.isArray(record?.source_options) ? record.source_options : [];
 }
 
+function sourceDiscoveryValue(item: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = item[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return '';
+}
+
+function sourceDiscoveryItemTitle(item: Record<string, unknown>): string {
+  return sourceDiscoveryValue(item, ['title', 'full_name', 'book_slug', 'name', 'html_url']) || 'Source candidate';
+}
+
+function sourceDiscoveryItemHref(item: Record<string, unknown>): string {
+  const directHref = sourceDiscoveryValue(item, ['html_url']);
+  if (directHref) {
+    return directHref;
+  }
+  const viewerPath = sourceDiscoveryValue(item, ['viewer_path']);
+  if (viewerPath) {
+    return toRuntimeUrl(viewerPath);
+  }
+  const sourceOptions = item.source_options;
+  if (Array.isArray(sourceOptions)) {
+    const firstOption = sourceOptions.find((option): option is LibraryBookSourceOption => {
+      if (!option || typeof option !== 'object') {
+        return false;
+      }
+      const record = option as Partial<LibraryBookSourceOption>;
+      return Boolean(String(record.href || '').trim());
+    });
+    if (firstOption) {
+      return firstOption.href;
+    }
+  }
+  return '';
+}
+
+function sourceDiscoveryItemMeta(item: Record<string, unknown>): string {
+  const parts = [
+    sourceDiscoveryValue(item, ['repository_full_name', 'owner_login']),
+    sourceDiscoveryValue(item, ['kind', 'status_label', 'suggested_category', 'source_relative_path']),
+    sourceDiscoveryValue(item, ['updated_at']),
+  ].filter(Boolean);
+  return parts.slice(0, 3).join(' · ');
+}
+
+function sourceDiscoveryLaneKoreanName(lane: SourceDiscoveryLaneResult['lane'] | string, fallback = ''): string {
+  switch (lane) {
+    case 'official_manual':
+      return '공식 매뉴얼';
+    case 'official_source_repo':
+      return '공식 소스 레포';
+    case 'official_issue_pr':
+      return '공식 Issue/PR';
+    case 'community_troubleshooting':
+      return '커뮤니티 트러블슈팅';
+    case 'vendor_kb':
+      return '벤더 KB';
+    case 'unsafe_unverified':
+      return '검증 불가';
+    default:
+      return fallback || lane;
+  }
+}
+
+function sourceDiscoveryLaneKoreanLabel(lane: SourceDiscoveryLaneResult): string {
+  return sourceDiscoveryLaneKoreanName(lane.lane, lane.label);
+}
+
+function sourceDiscoveryLaneStatusLabel(lane: SourceDiscoveryLaneResult): string {
+  if (lane.status === 'ok') {
+    return `${lane.count}개`;
+  }
+  if (lane.status === 'not_configured') {
+    return 'provider 미연결';
+  }
+  if (lane.status === 'blocked') {
+    return '자동 차단';
+  }
+  if (lane.status === 'error') {
+    return '오류';
+  }
+  return lane.status || 'unknown';
+}
+
+function sourceDiscoveryPlannerMeta(payload: SourceDiscoverySearchResponse | null): {
+  rewrittenQuery: string;
+  authMode: 'token' | 'public';
+  plannerMode: string;
+  llmPlannerEnabled: boolean;
+  riskLevel: string;
+  goldPolicy: string;
+  requiresHumanReview: boolean;
+  reason: string;
+} {
+  return {
+    rewrittenQuery: payload?.plan?.question ?? '',
+    authMode: payload?.auth_mode ?? 'public',
+    plannerMode: payload?.planner_mode ?? '',
+    llmPlannerEnabled: Boolean(payload?.llm_planner_enabled),
+    riskLevel: String(payload?.plan?.risk_level ?? ''),
+    goldPolicy: String(payload?.plan?.gold_policy ?? ''),
+    requiresHumanReview: Boolean(payload?.plan?.requires_human_review),
+    reason: String(payload?.plan?.reason ?? ''),
+  };
+}
+
+function sourceDiscoveryLaneNeedsVerification(lane: SourceDiscoveryLaneResult): boolean {
+  if (['official_manual', 'official_source_repo'].includes(String(lane.lane))) {
+    return false;
+  }
+  return Boolean(lane.requires_human_review) || [
+    'official_issue_pr',
+    'community_troubleshooting',
+    'vendor_kb',
+    'unsafe_unverified',
+  ].includes(String(lane.lane));
+}
+
+function sourceDiscoveryCandidateKey(lane: SourceDiscoveryLaneResult, item?: Record<string, unknown>): string {
+  const title = item ? sourceDiscoveryItemTitle(item) : `${sourceDiscoveryLaneKoreanLabel(lane)} 후보 조사 필요`;
+  const href = item ? sourceDiscoveryItemHref(item) : '';
+  return [lane.lane, lane.provider, lane.query, href, title].join('|');
+}
+
+function sourceDiscoveryQueueCandidate(lane: SourceDiscoveryLaneResult, item?: Record<string, unknown>): Record<string, unknown> {
+  if (item) {
+    return item;
+  }
+  return {
+    title: `${sourceDiscoveryLaneKoreanLabel(lane)} 후보 조사 필요`,
+    kind: lane.status,
+    message: lane.message || lane.error,
+  };
+}
+
+function sourceDiscoveryRecordKey(record: SourceDiscoveryVerificationRecord): string {
+  return [
+    record.lane,
+    record.provider,
+    record.query,
+    record.source_url,
+    record.title,
+  ].join('|');
+}
+
+function sourceJudgeVerdictLabel(verdict?: string): string {
+  switch (verdict) {
+    case 'pass':
+      return 'PASS';
+    case 'needs_review':
+      return 'REVIEW';
+    case 'needs_replay':
+      return 'REPLAY';
+    case 'fail':
+      return 'FAIL';
+    default:
+      return String(verdict || 'PENDING').toUpperCase();
+  }
+}
+
+function sourceJudgeVerdictClass(verdict?: string): string {
+  switch (verdict) {
+    case 'pass':
+      return 'pass';
+    case 'needs_review':
+      return 'needs-review';
+    case 'needs_replay':
+      return 'needs-replay';
+    case 'fail':
+      return 'fail';
+    default:
+      return 'pending';
+  }
+}
+
+function sourceJudgeActionClass(severity?: string): string {
+  switch (severity) {
+    case 'critical':
+      return 'critical';
+    case 'warning':
+      return 'warning';
+    default:
+      return 'info';
+  }
+}
+
+function sourceJudgeActionButtonLabel(action: SourceDiscoveryJudgeNextAction): string {
+  switch (action.action_id) {
+    case 'record_answerable_case':
+      return '';
+    case 'rerun_rag_replay':
+      return '다시 실행';
+    case 'verify_bronze_queue':
+      return '큐 확인';
+    case 'replace_non_eligible_citations':
+    case 'remove_unsafe_citation':
+      return '대체 공식 근거 찾기';
+    default:
+      return '원천소스 찾기';
+  }
+}
+
+function sourceJudgeCitationTitle(item: Record<string, unknown>): string {
+  return sourceDiscoveryItemTitle(item);
+}
+
+function sourceJudgeCitationHref(item: Record<string, unknown>): string {
+  return sourceDiscoveryValue(item, ['source_url', 'href', 'html_url']) || sourceDiscoveryItemHref(item);
+}
+
+function sourceJudgeCitationLane(item: Record<string, unknown>): string {
+  return sourceDiscoveryValue(item, ['lane', 'source_lane', 'source_collection', 'boundary_truth']) || 'source';
+}
+
+function sourceDiscoveryJudgeCandidates(lanes: SourceDiscoveryLaneResult[]): Record<string, unknown>[] {
+  return lanes.flatMap((lane) => {
+    if (lane.items.length === 0 && !sourceDiscoveryLaneNeedsVerification(lane)) {
+      return [];
+    }
+    const laneItems = lane.items.length > 0
+      ? lane.items.slice(0, 5)
+      : [sourceDiscoveryQueueCandidate(lane)];
+    return laneItems.map((item) => ({
+      ...item,
+      title: sourceDiscoveryItemTitle(item),
+      source_url: sourceDiscoveryItemHref(item),
+      lane: lane.lane,
+      provider: lane.provider,
+      query: lane.query,
+      trust_level: lane.trust_level,
+      gold_policy: lane.gold_policy,
+      requires_human_review: lane.requires_human_review,
+      citation_eligible: !sourceDiscoveryLaneNeedsVerification(lane),
+    }));
+  });
+}
+
+function officialCandidateToJudgeSource(candidate: OfficialSourceCandidate): Record<string, unknown> {
+  const firstSourceOption = sourceOptionsForRecord(candidate).find((option) => option.availability === 'available' && option.href);
+  return {
+    title: candidate.title,
+    book_slug: candidate.book_slug,
+    viewer_path: candidate.viewer_path,
+    source_url: firstSourceOption?.href ?? '',
+    source_label: candidate.current_source_label ?? firstSourceOption?.label ?? 'official source',
+    source_relative_path: candidate.source_relative_path,
+    source_repo: candidate.source_repo,
+    lane: 'official_manual',
+    provider: 'official_catalog',
+    trust_level: 'authoritative',
+    gold_policy: 'eligible',
+    citation_eligible: true,
+    can_promote_to_gold: true,
+  };
+}
+
 function OfficialSourcePopover({
   record,
   onMaterializeOption,
@@ -687,6 +1363,7 @@ const PlaybookLibraryPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const { globalTheme, toggleGlobalTheme } = useGlobalTheme();
   const [factoryLane, setFactoryLane] = useState<FactoryLane>('tools');
   const [pipelineStage, setPipelineStage] = useState<PipelineStage>('idle');
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -700,9 +1377,11 @@ const PlaybookLibraryPage: React.FC = () => {
   const [metricPopover, setMetricPopover] = useState<MetricPopoverState | null>(null);
   const [buyerPacketPopover, setBuyerPacketPopover] = useState<{ title: string; packets: BuyerPacket[] } | null>(null);
   const [chunkViewer, setChunkViewer] = useState<ChunkViewerState | null>(null);
+  const [documentReader, setDocumentReader] = useState<DocumentReaderState | null>(null);
   const [bookViewer, setBookViewer] = useState<LibraryBook | null>(null);
   const [bookViewerDocument, setBookViewerDocument] = useState<ViewerDocumentPayload | null>(null);
   const [bookViewerLoading, setBookViewerLoading] = useState(false);
+  const [bookViewerError, setBookViewerError] = useState('');
   const [previewCapturedUrl, setPreviewCapturedUrl] = useState('');
   const [previewCapturedType, setPreviewCapturedType] = useState('');
   const [previewViewerDocument, setPreviewViewerDocument] = useState<ViewerDocumentPayload | null>(null);
@@ -710,6 +1389,7 @@ const PlaybookLibraryPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [repositoryResults, setRepositoryResults] = useState<RepositorySearchResult[]>([]);
   const [officialSourceCandidates, setOfficialSourceCandidates] = useState<OfficialSourceCandidate[]>([]);
+  const [sourceDiscoveryLaneResults, setSourceDiscoveryLaneResults] = useState<SourceDiscoveryLaneResult[]>([]);
   const [materializingOptionKey, setMaterializingOptionKey] = useState<string | null>(null);
   const [factoryRunMode, setFactoryRunMode] = useState<FactoryRunMode>('auto');
   const [factoryManualFocusId, setFactoryManualFocusId] = useState<string | null>(null);
@@ -730,23 +1410,52 @@ const PlaybookLibraryPage: React.FC = () => {
   const [openCatalogRowSlug, setOpenCatalogRowSlug] = useState<string | null>(null);
   const [repositoryFavorites, setRepositoryFavorites] = useState<RepositoryFavorite[]>([]);
   const [repositoryUnanswered, setRepositoryUnanswered] = useState<RepositoryUnansweredItem[]>([]);
+  const [sourceVerificationQueue, setSourceVerificationQueue] = useState<SourceDiscoveryVerificationRecord[]>([]);
+  const [sourceJudgeReports, setSourceJudgeReports] = useState<SourceDiscoveryJudgeReport[]>([]);
+  const [sourceJudgeRunning, setSourceJudgeRunning] = useState(false);
+  const [sourceJudgeError, setSourceJudgeError] = useState('');
+  const [savingVerificationKey, setSavingVerificationKey] = useState<string | null>(null);
   const [documentRepositories, setDocumentRepositories] = useState<DocumentRepository[]>([]);
+  const [documentRepositoryError, setDocumentRepositoryError] = useState('');
+  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthResponse | null>(null);
+  const [runtimeHealthError, setRuntimeHealthError] = useState('');
+  const [librarySearchQuery, setLibrarySearchQuery] = useState('');
+  const [libraryScopeFilter, setLibraryScopeFilter] = useState<LibraryScopeFilter>('official_docs');
+  const [libraryQualityFilter, setLibraryQualityFilter] = useState<LibraryQualityFilter>('all');
+  const [libraryIndexFilter, setLibraryIndexFilter] = useState<LibraryIndexFilter>('all');
   const [repositoryStage, setRepositoryStage] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [repositoryError, setRepositoryError] = useState('');
-  const [activeWikiCategory, setActiveWikiCategory] = useState<WikiCategoryKey>('install');
-  const [repositoryMeta, setRepositoryMeta] = useState<{ rewrittenQuery: string; authMode: 'token' | 'public' }>({
+  const [repositoryMeta, setRepositoryMeta] = useState<{
+    rewrittenQuery: string;
+    authMode: 'token' | 'public';
+    plannerMode: string;
+    llmPlannerEnabled: boolean;
+    riskLevel: string;
+    goldPolicy: string;
+    requiresHumanReview: boolean;
+    reason: string;
+  }>({
     rewrittenQuery: '',
     authMode: 'public',
+    plannerMode: '',
+    llmPlannerEnabled: false,
+    riskLevel: '',
+    goldPolicy: '',
+    requiresHumanReview: false,
+    reason: '',
   });
   const [removingFavoriteName, setRemovingFavoriteName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pipelineRef = useRef<HTMLDivElement>(null);
   const repositorySearchInputRef = useRef<HTMLInputElement>(null);
+  const sourceVerificationQueueRef = useRef<HTMLElement>(null);
   const repositoryAutoloadKeyRef = useRef('');
   const toolsRunHeartbeatRef = useRef<number | null>(null);
-  const viewMode: 'monitoring' | 'repository' = location.pathname.endsWith('/repository')
-    ? 'repository'
-    : 'monitoring';
+  const documentReaderRequestRef = useRef(0);
+  const activeWikiScope = useMemo(
+    () => activeWikiScopeFromRoute(location.pathname, searchParams),
+    [location.pathname, searchParams],
+  );
 
   const addLog = (tag: LogEntry['tag'], msg: string) => {
     setLogs((prev) => [{ time: nowTime(), tag, msg }, ...prev].slice(0, 10));
@@ -771,10 +1480,40 @@ const PlaybookLibraryPage: React.FC = () => {
       .catch(() => setRepositoryUnanswered([]));
   }, []);
 
+  const refreshSourceVerificationQueue = useCallback(() => {
+    loadSourceDiscoveryVerificationQueue(50)
+      .then((payload) => setSourceVerificationQueue(payload.items ?? []))
+      .catch(() => setSourceVerificationQueue([]));
+  }, []);
+
+  const refreshSourceJudgeReports = useCallback(() => {
+    loadSourceDiscoveryJudgeReports(10)
+      .then((payload) => setSourceJudgeReports(payload.items ?? []))
+      .catch(() => setSourceJudgeReports([]));
+  }, []);
+
   const refreshDocumentRepositories = useCallback(() => {
     loadDocumentRepositories()
-      .then((payload) => setDocumentRepositories(payload.repositories ?? []))
-      .catch(() => setDocumentRepositories([]));
+      .then((payload) => {
+        setDocumentRepositories(payload.repositories ?? []);
+        setDocumentRepositoryError('');
+      })
+      .catch((error: unknown) => {
+        setDocumentRepositories([]);
+        setDocumentRepositoryError(error instanceof Error ? error.message : 'document repositories load failed');
+      });
+  }, []);
+
+  const refreshRuntimeHealth = useCallback(() => {
+    loadRuntimeHealth()
+      .then((payload) => {
+        setRuntimeHealth(payload);
+        setRuntimeHealthError('');
+      })
+      .catch((error: unknown) => {
+        setRuntimeHealth(null);
+        setRuntimeHealthError(error instanceof Error ? error.message : 'runtime health load failed');
+      });
   }, []);
 
   const refreshOfficialCatalog = useCallback(() => {
@@ -796,9 +1535,12 @@ const PlaybookLibraryPage: React.FC = () => {
     listCustomerPackDrafts().then((res) => setDrafts(res.drafts)).catch(() => { });
     refreshRepositoryFavorites();
     refreshRepositoryUnanswered();
+    refreshSourceVerificationQueue();
+    refreshSourceJudgeReports();
     refreshOfficialCatalog();
     refreshDocumentRepositories();
-  }, [refreshDocumentRepositories, refreshOfficialCatalog, refreshRepositoryFavorites, refreshRepositoryUnanswered]);
+    refreshRuntimeHealth();
+  }, [refreshDocumentRepositories, refreshOfficialCatalog, refreshRepositoryFavorites, refreshRepositoryUnanswered, refreshRuntimeHealth, refreshSourceJudgeReports, refreshSourceVerificationQueue]);
 
   const openRepositoryInChat = useCallback((repository: DocumentRepository) => {
     if (typeof window !== 'undefined') {
@@ -832,6 +1574,124 @@ const PlaybookLibraryPage: React.FC = () => {
     navigate(ROUTES.pbsStudio);
   }, [navigate]);
 
+  const openDocumentReader = useCallback(async (
+    repository: DocumentRepository,
+    document: DocumentRepositoryDocument,
+  ) => {
+    const requestId = documentReaderRequestRef.current + 1;
+    documentReaderRequestRef.current = requestId;
+    const readBlockReason = documentReadBlockReason(document);
+    if (readBlockReason) {
+      setDocumentReader({
+        repository,
+        source: document,
+        payload: null,
+        loading: false,
+        loadingMore: false,
+        error: `이 문서는 아직 reader로 열 수 없습니다: ${readBlockReason}`,
+      });
+      addLog('warn', `${document.title || document.filename} 문서 reader 차단: ${readBlockReason}`);
+      return;
+    }
+    setDocumentReader({
+      repository,
+      source: document,
+      payload: null,
+      loading: true,
+      loadingMore: false,
+      error: '',
+    });
+    try {
+      const response = await loadDocumentReader({
+        documentSourceId: document.document_source_id,
+        parsedDocumentId: document.parsed_document_id,
+        limit: 80,
+        offset: 0,
+      });
+      if (documentReaderRequestRef.current !== requestId) {
+        return;
+      }
+      setDocumentReader({
+        repository,
+        source: document,
+        payload: response.document,
+        loading: false,
+        loadingMore: false,
+        error: response.document ? '' : '문서 본문을 찾지 못했습니다.',
+      });
+    } catch (error: unknown) {
+      if (documentReaderRequestRef.current !== requestId) {
+        return;
+      }
+      setDocumentReader({
+        repository,
+        source: document,
+        payload: null,
+        loading: false,
+        loadingMore: false,
+        error: errorMessage(error, '문서 본문을 불러오지 못했습니다.'),
+      });
+    }
+  }, []);
+
+  const loadMoreDocumentReader = useCallback(async () => {
+    const current = documentReader;
+    if (!current?.payload || current.loadingMore || !current.payload.has_more) {
+      return;
+    }
+    const requestId = documentReaderRequestRef.current;
+    const nextOffset = current.payload.offset + current.payload.chunks.length;
+    setDocumentReader({ ...current, loadingMore: true, error: '' });
+    try {
+      const response = await loadDocumentReader({
+        documentSourceId: current.source.document_source_id,
+        parsedDocumentId: current.source.parsed_document_id,
+        limit: current.payload.limit || 80,
+        offset: nextOffset,
+      });
+      if (documentReaderRequestRef.current !== requestId) {
+        return;
+      }
+      if (!response.document) {
+        setDocumentReader((prev) => (
+          prev?.source.document_source_id === current.source.document_source_id
+            ? { ...prev, loadingMore: false, error: '추가 chunk를 찾지 못했습니다.' }
+            : prev
+        ));
+        return;
+      }
+      setDocumentReader((prev) => {
+        if (!prev?.payload || prev.source.document_source_id !== current.source.document_source_id) {
+          return prev;
+        }
+        return {
+          ...prev,
+          payload: {
+            ...response.document!,
+            chunks: [...prev.payload.chunks, ...response.document!.chunks],
+            offset: prev.payload.offset,
+          },
+          loadingMore: false,
+          error: '',
+        };
+      });
+    } catch (error: unknown) {
+      if (documentReaderRequestRef.current !== requestId) {
+        return;
+      }
+      setDocumentReader((prev) => (
+        prev?.source.document_source_id === current.source.document_source_id
+          ? { ...prev, loadingMore: false, error: errorMessage(error, '추가 chunk를 불러오지 못했습니다.') }
+          : prev
+      ));
+    }
+  }, [documentReader]);
+
+  const closeDocumentReader = useCallback(() => {
+    documentReaderRequestRef.current += 1;
+    setDocumentReader(null);
+  }, []);
+
   useEffect(() => {
     refreshData();
   }, [refreshData]);
@@ -844,27 +1704,32 @@ const PlaybookLibraryPage: React.FC = () => {
     if (!bookViewer?.viewer_path) {
       setBookViewerDocument(null);
       setBookViewerLoading(false);
+      setBookViewerError('문서 뷰어 경로가 아직 생성되지 않았습니다.');
       return;
     }
 
     let cancelled = false;
     setBookViewerLoading(true);
     setBookViewerDocument(null);
+    setBookViewerError('');
 
     loadViewerDocument(bookViewer.viewer_path)
       .then((viewerDocument) => {
         if (cancelled) {
           return;
         }
+        setBookViewerError('');
         setBookViewerDocument({
           html: viewerDocument.html,
           inlineStyles: viewerDocument.inline_styles,
           bodyClassName: viewerDocument.body_class_name,
         });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!cancelled) {
           setBookViewerDocument(null);
+          const message = error instanceof Error ? error.message : '';
+          setBookViewerError(message ? `문서 본문을 열 수 없습니다: ${message}` : '문서 본문을 열 수 없습니다.');
         }
       })
       .finally(() => {
@@ -889,35 +1754,40 @@ const PlaybookLibraryPage: React.FC = () => {
   useEffect(() => {
     const requestedView = (searchParams.get('view') || '').trim();
     const requestedQuery = (searchParams.get('q') || '').trim();
-    if (location.pathname === '/playbook-library') {
-      const nextPath = requestedView === 'repository'
-        ? '/playbook-library/repository'
-        : '/playbook-library/control-tower';
-      navigate(`${nextPath}${requestedQuery ? `?q=${encodeURIComponent(requestedQuery)}` : ''}`, { replace: true });
-      return;
-    }
+    const requestedLane = activeWikiScope === 'uploads' ? 'uploads' : 'customer';
+    setLibraryScopeFilter(libraryFilterForWikiScope(activeWikiScope));
+    setFactoryLane(activeWikiScope === 'uploads' ? 'user' : 'tools');
     if (!requestedQuery) {
       repositoryAutoloadKeyRef.current = '';
       return;
     }
-    const autoloadKey = `${requestedView}|${requestedQuery}`;
+    const autoloadKey = `${requestedView}|${activeWikiScope}|${requestedLane}|${requestedQuery}`;
     if (repositoryAutoloadKeyRef.current === autoloadKey) {
       return;
     }
     repositoryAutoloadKeyRef.current = autoloadKey;
     setSearchQuery(requestedQuery);
+    setFactoryAssistantQuery(requestedQuery);
+    setSourceRequestsExpanded(true);
     setRepositoryStage('loading');
     setRepositoryError('');
-    searchRepositories(requestedQuery, 12)
+    searchSourceDiscovery(requestedQuery, 8)
       .then((payload) => {
-        setRepositoryResults(payload.results);
-        setOfficialSourceCandidates(payload.official_candidates ?? []);
-        setRepositoryMeta({
-          rewrittenQuery: payload.rewritten_query,
-          authMode: payload.auth_mode,
-        });
+        setRepositoryResults(payload.github_repository_results ?? []);
+        const officialCandidates = payload.official_candidates ?? [];
+        setOfficialSourceCandidates(officialCandidates);
+        setSourceDiscoveryLaneResults(payload.lane_results ?? []);
+        setRepositoryMeta(sourceDiscoveryPlannerMeta(payload));
+        refreshRepositoryUnanswered();
+        if (officialCandidates.length > 0) {
+          setGeneratedCatalogPrompt(requestedQuery);
+          setOfficialCatalogExpanded(true);
+        } else {
+          setGeneratedCatalogPrompt('');
+          setOfficialCatalogExpanded(false);
+        }
         setRepositoryStage('done');
-        addLog('info', `Repository search '${requestedQuery}' → ${payload.count} matches`);
+        addLog('info', `Source discovery '${requestedQuery}' → ${payload.totals.lane_count} lanes`);
       })
       .catch((error: unknown) => {
         const msg = errorMessage(error, 'Repository search failed');
@@ -925,9 +1795,10 @@ const PlaybookLibraryPage: React.FC = () => {
         setRepositoryError(msg);
         setRepositoryResults([]);
         setOfficialSourceCandidates([]);
+        setSourceDiscoveryLaneResults([]);
         addLog('error', `Repository search failed: ${msg}`);
       });
-  }, [location.pathname, navigate, searchParams]);
+  }, [activeWikiScope, refreshRepositoryUnanswered, searchParams]);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -1081,20 +1952,22 @@ const PlaybookLibraryPage: React.FC = () => {
       setRepositoryError('');
       setRepositoryResults([]);
       setOfficialSourceCandidates([]);
+      setSourceDiscoveryLaneResults([]);
+      setRepositoryMeta(sourceDiscoveryPlannerMeta(null));
       return null;
     }
     setRepositoryStage('loading');
     setRepositoryError('');
+    setSourceRequestsExpanded(true);
     try {
-      const payload = await searchRepositories(normalizedQuery, 12);
-      setRepositoryResults(payload.results);
+      const payload = await searchSourceDiscovery(normalizedQuery, 8);
+      setRepositoryResults(payload.github_repository_results ?? []);
       setOfficialSourceCandidates(payload.official_candidates ?? []);
-      setRepositoryMeta({
-        rewrittenQuery: payload.rewritten_query,
-        authMode: payload.auth_mode,
-      });
+      setSourceDiscoveryLaneResults(payload.lane_results ?? []);
+      setRepositoryMeta(sourceDiscoveryPlannerMeta(payload));
+      refreshRepositoryUnanswered();
       setRepositoryStage('done');
-      addLog('info', `Repository search '${normalizedQuery}' → ${payload.count} matches`);
+      addLog('info', `Source discovery '${normalizedQuery}' → ${payload.totals.lane_count} lanes`);
       return payload;
     } catch (error: unknown) {
       const msg = errorMessage(error, 'Repository search failed');
@@ -1102,6 +1975,7 @@ const PlaybookLibraryPage: React.FC = () => {
       setRepositoryError(msg);
       setRepositoryResults([]);
       setOfficialSourceCandidates([]);
+      setSourceDiscoveryLaneResults([]);
       addLog('error', `Repository search failed: ${msg}`);
       return null;
     }
@@ -1129,6 +2003,79 @@ const PlaybookLibraryPage: React.FC = () => {
     }
   };
 
+  const handleSaveSourceVerificationCandidate = async (
+    lane: SourceDiscoveryLaneResult,
+    item?: Record<string, unknown>,
+  ) => {
+    if (!sourceDiscoveryLaneNeedsVerification(lane)) {
+      return;
+    }
+    const key = sourceDiscoveryCandidateKey(lane, item);
+    setSavingVerificationKey(key);
+    try {
+      const payload = await saveSourceDiscoveryVerificationCandidate({
+        lane: lane.lane,
+        provider: lane.provider,
+        query: lane.query,
+        sourceRequestQuery: factoryAssistantQuery.trim() || searchQuery.trim(),
+        candidate: sourceDiscoveryQueueCandidate(lane, item),
+      });
+      setSourceVerificationQueue(payload.items ?? []);
+      addLog(
+        payload.saved ? 'success' : 'info',
+        payload.saved
+          ? `Bronze 검증 큐에 저장: ${payload.item.title}`
+          : `이미 Bronze 검증 큐에 있음: ${payload.item.title}`,
+      );
+    } catch (error: unknown) {
+      const msg = errorMessage(error, 'Verification queue save failed');
+      setFactoryAssistantError(msg);
+      addLog('error', `Verification queue save failed: ${msg}`);
+    } finally {
+      setSavingVerificationKey(null);
+    }
+  };
+
+  const handleRunSourceJudge = async (questionOverride?: string) => {
+    const question = (String(questionOverride || '').trim() || factoryAssistantQuery.trim() || searchQuery.trim()).trim();
+    if (!question) {
+      setSourceJudgeError('Judge를 실행하려면 실패 질문이나 검색 질문이 필요합니다.');
+      return;
+    }
+    setFactoryAssistantQuery(question);
+    setSearchQuery(question);
+    setSourceJudgeRunning(true);
+    setSourceJudgeError('');
+    try {
+      const sourceCandidates = [
+        ...sourceDiscoveryJudgeCandidates(sourceDiscoveryLaneResults),
+        ...officialSourceCandidates.slice(0, 12).map(officialCandidateToJudgeSource),
+      ];
+      const replay = await runSourceDiscoveryJudgeReplay({
+        question,
+        beforeAnswer: '챗봇이 근거 부족 또는 답변 실패 상태로 Source Discovery가 요청됨',
+        sourceCandidates,
+        verificationRecords: sourceVerificationQueue,
+        includeVerificationQueue: true,
+      });
+      const report = replay.judge_report;
+      setSourceJudgeReports((prev) => [
+        report,
+        ...prev.filter((item) => item.judge_id !== report.judge_id),
+      ].slice(0, 10));
+      addLog(
+        report.overall_verdict === 'pass' ? 'success' : report.overall_verdict === 'fail' ? 'error' : 'warn',
+        `[Judge] RAG 재답변 검증 ${sourceJudgeVerdictLabel(report.overall_verdict)} · citations ${replay.replay.citations.length} · ${replay.replay.response_kind ?? 'unknown'} · gap ${report.remaining_gap.length}`,
+      );
+    } catch (error: unknown) {
+      const msg = errorMessage(error, 'Judge 실행에 실패했습니다.');
+      setSourceJudgeError(msg);
+      addLog('error', `Judge failed: ${msg}`);
+    } finally {
+      setSourceJudgeRunning(false);
+    }
+  };
+
   const handleFactoryAssistantSubmit = async (query?: string) => {
     const nextQuery = String(query ?? factoryAssistantQuery).trim();
     if (!nextQuery) {
@@ -1138,7 +2085,7 @@ const PlaybookLibraryPage: React.FC = () => {
     setFactoryAssistantError('');
     setFactoryAssistantQuery(nextQuery);
     setSearchQuery(nextQuery);
-    addLog('info', `Book Factory assistant lookup: ${nextQuery}`);
+    addLog('info', `Source Factory assistant lookup: ${nextQuery}`);
     const payload = await runRepositorySearch(nextQuery);
     if (!payload) {
       setGeneratedCatalogPrompt('');
@@ -1154,6 +2101,28 @@ const PlaybookLibraryPage: React.FC = () => {
       setOfficialCatalogExpanded(false);
     }
     return true;
+  };
+
+  const handleJudgeNextAction = async (action: SourceDiscoveryJudgeNextAction) => {
+    const query = String(action.query || latestSourceJudgeReport?.question || factoryAssistantQuery || searchQuery).trim();
+    switch (action.action_id) {
+      case 'record_answerable_case':
+        addLog('success', 'Judge 통과 케이스입니다. 같은 질문 유형을 Gold/운영 위키 개선 후보로 보면 됩니다.');
+        return;
+      case 'rerun_rag_replay':
+        await handleRunSourceJudge(query);
+        return;
+      case 'verify_bronze_queue':
+        sourceVerificationQueueRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        addLog('info', `${action.lane ? sourceDiscoveryLaneKoreanName(action.lane, action.lane) : 'Bronze'} 후보를 공식 근거와 대조하세요.`);
+        return;
+      default:
+        if (!query) {
+          setFactoryAssistantError('다음 행동을 실행할 질문이 없습니다.');
+          return;
+        }
+        await handleFactoryAssistantSubmit(query);
+    }
   };
 
   const handleQueueOfficialSource = (record: OfficialSourceCandidate, option: LibraryBookSourceOption, requestQuery: string) => {
@@ -1291,7 +2260,11 @@ const PlaybookLibraryPage: React.FC = () => {
       setFactoryAssistantQuery(query);
     }
     setFactoryLane('tools');
-    navigate(`/playbook-library/repository${nextQuery.trim() ? `?q=${encodeURIComponent(nextQuery.trim())}` : ''}`);
+    const params = new URLSearchParams({ scope: 'customer', panel: 'factory', lane: 'customer' });
+    if (nextQuery.trim()) {
+      params.set('q', nextQuery.trim());
+    }
+    navigate(`/playbook-library/repository?${params.toString()}`);
     requestAnimationFrame(() => repositorySearchInputRef.current?.focus());
     if (nextQuery.trim()) {
       await runRepositorySearch(nextQuery);
@@ -1300,7 +2273,7 @@ const PlaybookLibraryPage: React.FC = () => {
 
   const openUserDocsUpload = (openPicker = false) => {
     setFactoryLane('user');
-    navigate('/playbook-library/repository');
+    navigate('/playbook-library/repository?scope=uploads&panel=factory&lane=uploads');
     if (openPicker) {
       requestAnimationFrame(() => fileInputRef.current?.click());
     }
@@ -1468,14 +2441,26 @@ const PlaybookLibraryPage: React.FC = () => {
     let mode: MetricPopoverMode = 'playbook';
     let books: LibraryBook[] = [];
     let packets: BuyerPacket[] = [];
+    let emptyMessage: string | undefined;
+    let noticeMessage: string | undefined;
+    const gatedRuntimeBooks = [...(cr.approved_wiki_runtime_books?.books ?? [])].filter(isOperationalWikiRuntimeBook);
+    const hiddenRuntimeBooks = goldRecoveryRows(cr.approved_wiki_runtime_books);
+    const hiddenRuntimeCount = operationalWikiHiddenCount(cr.approved_wiki_runtime_books);
+    const runtimeGateNotice = hiddenRuntimeCount > 0
+      ? operationalWikiHiddenMessage(hiddenRuntimeBooks, hiddenRuntimeCount)
+      : undefined;
     switch (kind) {
       case 'approved':
         title = 'Gold PlayBooks';
-        books = [...(cr.gold_books ?? [])];
+        books = gatedRuntimeBooks.filter((book) => normalizePlaybookGrade(book.grade) === 'Gold');
+        emptyMessage = runtimeGateNotice ?? operationalWikiHiddenMessage();
+        noticeMessage = runtimeGateNotice;
         break;
       case 'latestNonGold':
         title = 'Silver · Bronze PlayBooks';
-        books = [...(cr.approved_wiki_runtime_books?.books ?? [])].filter((book) => normalizePlaybookGrade(book.grade) !== 'Gold');
+        books = gatedRuntimeBooks.filter((book) => normalizePlaybookGrade(book.grade) !== 'Gold');
+        emptyMessage = runtimeGateNotice ?? operationalWikiHiddenMessage();
+        noticeMessage = runtimeGateNotice;
         break;
       case 'customerPack':
         title = 'User PlayBooks';
@@ -1483,7 +2468,9 @@ const PlaybookLibraryPage: React.FC = () => {
         break;
       case 'wikiRuntime':
         title = 'Latest Pipeline PlayBooks';
-        books = [...(cr.approved_wiki_runtime_books?.books ?? [])];
+        books = gatedRuntimeBooks;
+        emptyMessage = runtimeGateNotice ?? operationalWikiHiddenMessage();
+        noticeMessage = runtimeGateNotice;
         break;
       case 'corpus':
         title = 'Corpus Files';
@@ -1520,7 +2507,7 @@ const PlaybookLibraryPage: React.FC = () => {
       setBuyerPacketPopover({ title, packets });
       return;
     }
-    setMetricPopover({ title, mode, rows: books });
+    setMetricPopover({ title, mode, rows: books, emptyMessage, noticeMessage });
   };
 
   const openBuyerPacket = (packet: BuyerPacket) => {
@@ -1616,26 +2603,83 @@ const PlaybookLibraryPage: React.FC = () => {
     [documentRepositories],
   );
   const officialDocumentRows = useMemo(
-    () => repositoryDocumentRows.filter(({ document, repository }) => {
-      const scope = String(document.source_scope || repository.metadata?.source_scope || '').toLowerCase();
-      const visibility = String(document.visibility || repository.visibility || '').toLowerCase();
-      return scope.includes('official') || visibility === 'global_shared' || repository.repository_kind === 'official';
-    }),
+    () => repositoryDocumentRows.filter(isOfficialRepositoryDocument),
+    [repositoryDocumentRows],
+  );
+  const customerDocumentRows = useMemo(
+    () => repositoryDocumentRows.filter(isCustomerRepositoryDocument),
     [repositoryDocumentRows],
   );
   const userUploadDocumentRows = useMemo(
-    () => repositoryDocumentRows.filter(({ document, repository }) => {
-      const scope = String(document.source_scope || repository.metadata?.source_scope || '').toLowerCase();
-      const visibility = String(document.visibility || repository.visibility || '').toLowerCase();
-      return scope.includes('user') || visibility === 'private_user';
-    }),
+    () => repositoryDocumentRows.filter(isMyUploadRepositoryDocument),
     [repositoryDocumentRows],
   );
-  const activeWikiDocumentRows = useMemo(
-    () => officialDocumentRows.filter((row) => row.categoryKey === activeWikiCategory),
-    [activeWikiCategory, officialDocumentRows],
+  const activeLibraryFilters = useMemo(
+    () => ({
+      query: librarySearchQuery,
+      scope: libraryScopeFilter,
+      quality: libraryQualityFilter,
+      index: libraryIndexFilter,
+    }),
+    [libraryIndexFilter, libraryQualityFilter, libraryScopeFilter, librarySearchQuery],
   );
-  const approvedRuntimeBooks = summary?.approved_runtime_count ?? summary?.gold_book_count ?? controlRoom?.gold_books?.length ?? 0;
+  const activeWikiDocumentRows = useMemo(
+    () => officialDocumentRows.filter((row) => matchesLibraryFilters(row, activeLibraryFilters)),
+    [activeLibraryFilters, officialDocumentRows],
+  );
+  const filteredCustomerDocumentRows = useMemo(
+    () => customerDocumentRows.filter((row) => matchesLibraryFilters(row, activeLibraryFilters)),
+    [activeLibraryFilters, customerDocumentRows],
+  );
+  const filteredUserUploadDocumentRows = useMemo(
+    () => userUploadDocumentRows.filter((row) => matchesLibraryFilters(row, activeLibraryFilters)),
+    [activeLibraryFilters, userUploadDocumentRows],
+  );
+  const runtimeDbCorpus = runtimeHealth?.runtime?.db_corpus;
+  const runtimeQdrant = runtimeHealth?.runtime?.qdrant_live;
+  const totalRepositoryChunks = repositoryDocumentRows.reduce((total, row) => total + Number(row.document.chunk_count || 0), 0);
+  const totalIndexedRepositoryChunks = repositoryDocumentRows.reduce((total, row) => total + Number(row.document.indexed_chunk_count || 0), 0);
+  const dbCorpusChunks = runtimeDbCorpus?.total_chunks ?? totalRepositoryChunks;
+  const qdrantPoints = runtimeQdrant?.points_count ?? null;
+  const qdrantIndexedVectors = runtimeQdrant?.indexed_vectors_count ?? null;
+  const qdrantEntryCount = runtimeDbCorpus?.qdrant_index_entries ?? totalIndexedRepositoryChunks;
+  const allOperationalWikiBooks = [...(controlRoom?.approved_wiki_runtime_books?.books ?? [])].filter(isOperationalWikiRuntimeBook);
+  const operationalWikiRecoveryRows = goldRecoveryRows(controlRoom?.approved_wiki_runtime_books);
+  const operationalWikiRecoveryBooks = operationalWikiHiddenCount(controlRoom?.approved_wiki_runtime_books);
+  const operationalWikiGateNotice = operationalWikiRecoveryBooks > 0
+    ? operationalWikiHiddenMessage(operationalWikiRecoveryRows, operationalWikiRecoveryBooks)
+    : '';
+  const certification = controlRoom?.certification;
+  const certificationBlockers = certification?.blockers ?? [];
+  const certificationStatus = certification?.status ?? controlRoom?.summary?.certification_status ?? '';
+  const isNotCertifiable = Boolean(certificationStatus && certificationStatus !== 'certified');
+  const runtimeAlerts = [
+    !runtimeHealth && !runtimeHealthError ? 'Runtime health 확인 중입니다.' : '',
+    documentRepositoryError ? `Document repository 확인 실패: ${documentRepositoryError}` : '',
+    runtimeHealthError ? `Runtime health 확인 실패: ${runtimeHealthError}` : '',
+    isNotCertifiable
+      ? `검증 불가 · ${certificationBlockers.slice(0, 4).map(certificationBlockerLabel).join(' · ') || 'certification blockers 확인 필요'}`
+      : '',
+    operationalWikiGateNotice,
+    runtimeHealth && !runtimeQdrant ? 'Qdrant live 상태가 health payload에 없습니다.' : '',
+    runtimeQdrant && runtimeQdrant.ready === false
+      ? `Qdrant live check 실패: ${runtimeQdrant.status || 'unknown'}${runtimeQdrant.error ? ` (${runtimeQdrant.error})` : ''}`
+      : '',
+    runtimeQdrant && typeof qdrantPoints !== 'number'
+      ? 'Qdrant points_count 확인 불가'
+      : '',
+    typeof dbCorpusChunks === 'number' && typeof qdrantPoints === 'number' && dbCorpusChunks !== qdrantPoints
+      ? `Postgres chunks ${dbCorpusChunks.toLocaleString()} / Qdrant points ${qdrantPoints.toLocaleString()} 불일치`
+      : '',
+    typeof qdrantPoints === 'number' && typeof qdrantIndexedVectors === 'number' && qdrantPoints !== qdrantIndexedVectors
+      ? `Qdrant indexed vectors ${qdrantIndexedVectors.toLocaleString()} / points ${qdrantPoints.toLocaleString()} 확인 필요`
+      : '',
+    runtimeDbCorpus?.qdrant_index_parity === false
+      ? 'Postgres qdrant_index_entries parity 확인 필요'
+      : '',
+  ].filter(Boolean);
+  const goldOperationalWikiBooks = allOperationalWikiBooks.filter((book) => normalizePlaybookGrade(book.grade) === 'Gold' && book.certified_gold !== false);
+  const latestNonGoldOperationalWikiBooks = allOperationalWikiBooks.filter((book) => normalizePlaybookGrade(book.grade) !== 'Gold');
   const userLibraryBooks = [...(userLibraryBucket?.books ?? [])];
   const userLibraryBookCount = summary?.customer_pack_runtime_book_count
     ?? summary?.user_library_book_count
@@ -1644,14 +2688,9 @@ const PlaybookLibraryPage: React.FC = () => {
   const officialCorpusBookCount = summary?.corpus_book_count ?? officialCorpusBooks.length;
   const officialPlaybookFileCount = summary?.manualbook_count ?? officialPlaybookBooks.length;
   const userCorpusBookCount = summary?.user_library_corpus_book_count ?? userCorpusBooks.length;
-  const approvedWikiRuntimeBooks = summary?.approved_wiki_runtime_book_count ?? controlRoom?.approved_wiki_runtime_books?.books?.length ?? 0;
-  const allOperationalWikiBooks = [...(controlRoom?.approved_wiki_runtime_books?.books ?? [])];
-  const goldOperationalWikiBooks = allOperationalWikiBooks.filter((book) => normalizePlaybookGrade(book.grade) === 'Gold');
-  const latestNonGoldOperationalWikiBooks = allOperationalWikiBooks.filter((book) => normalizePlaybookGrade(book.grade) !== 'Gold');
-  const goldPlaybookCount = allOperationalWikiBooks.length ? goldOperationalWikiBooks.length : approvedRuntimeBooks;
-  const latestNonGoldPlaybookCount = allOperationalWikiBooks.length
-    ? latestNonGoldOperationalWikiBooks.length
-    : Math.max(approvedWikiRuntimeBooks - approvedRuntimeBooks, 0);
+  const approvedWikiRuntimeBooks = allOperationalWikiBooks.length;
+  const goldPlaybookCount = goldOperationalWikiBooks.length;
+  const latestNonGoldPlaybookCount = latestNonGoldOperationalWikiBooks.length;
   const operationalWikiBooks = allOperationalWikiBooks.slice(0, 8);
   const wikiNavigationBacklog = summary?.wiki_navigation_backlog_count ?? controlRoom?.wiki_navigation_backlog?.books?.length ?? 0;
   const wikiUsageSignals = summary?.wiki_usage_signal_count ?? controlRoom?.wiki_usage_signals?.books?.length ?? 0;
@@ -1692,6 +2731,11 @@ const PlaybookLibraryPage: React.FC = () => {
     category,
     items: repositoryFavorites.filter((item) => item.favorite_category === category),
   })).filter((group) => group.items.length > 0);
+  const sourceVerificationSavedKeys = useMemo(
+    () => new Set(sourceVerificationQueue.map((record) => sourceDiscoveryRecordKey(record))),
+    [sourceVerificationQueue],
+  );
+  const latestSourceJudgeReport = sourceJudgeReports[0] ?? null;
   const toolsRunActive = Boolean(materializingOptionKey) || factoryDownloadList.some((item) => item.status === 'producing');
   const factoryManualFocusItem = useMemo(
     () => factoryDownloadList.find((item) => item.id === factoryManualFocusId) ?? factoryDownloadList[0] ?? null,
@@ -1729,7 +2773,7 @@ const PlaybookLibraryPage: React.FC = () => {
   const bookFactoryStatusLabel = factoryLane === 'user'
     ? stageLabel(pipelineStage)
     : toolsRunActive
-      ? 'Book Factory Running...'
+      ? 'Source Factory Running...'
       : repositoryStage === 'loading'
         ? 'Finding Source Candidates...'
         : repositoryUnanswered.length > 0
@@ -1753,6 +2797,45 @@ const PlaybookLibraryPage: React.FC = () => {
   const bookFactoryModeSummary = factoryLane === 'user'
     ? `${userLibraryBookCount} user books · ${latestUploadIngest?.chunk_count ?? userCorpusBookCount} chunks`
     : `${repositoryUnanswered.length} requests · ${repositoryFavorites.length} saved sources`;
+  const repositoryPaneRows = activeWikiScope === 'official'
+    ? activeWikiDocumentRows
+    : activeWikiScope === 'uploads'
+      ? filteredUserUploadDocumentRows
+      : filteredCustomerDocumentRows;
+  const repositoryPaneTotal = activeWikiScope === 'official'
+    ? officialDocumentRows.length
+    : activeWikiScope === 'uploads'
+      ? userUploadDocumentRows.length
+      : customerDocumentRows.length;
+  const repositoryPaneTitle = activeWikiScope === 'official'
+    ? 'OCP Official'
+    : activeWikiScope === 'uploads'
+      ? 'My Uploads'
+      : 'Customer Docs';
+  const repositoryPaneDescription = activeWikiScope === 'official'
+    ? '공식 OpenShift 문서가 실제 RAG와 운영 위키에서 믿고 쓰이는 상태인지 검수합니다.'
+    : activeWikiScope === 'uploads'
+      ? '내가 업로드한 문서와 생산된 User Library 책을 확인합니다.'
+      : '고객사/현장 원천 문서와 질문 보강용 source request를 확인합니다.';
+  const repositoryPaneEmptyMessage = activeWikiScope === 'official'
+    ? '조회 가능한 공식 문서가 없습니다.'
+    : activeWikiScope === 'uploads'
+      ? '아직 조회 가능한 내 업로드 문서가 없습니다.'
+      : '아직 조회 가능한 고객/현장 문서가 없습니다.';
+  const handleLibraryScopeFilterChange = (value: LibraryScopeFilter) => {
+    setLibraryScopeFilter(value);
+    if (value === 'official_docs') {
+      navigate('/playbook-library/control-tower?scope=official');
+      return;
+    }
+    if (value === 'study_docs') {
+      navigate('/playbook-library/repository?scope=customer&lane=customer');
+      return;
+    }
+    if (value === 'user_upload') {
+      openUserDocsUpload(false);
+    }
+  };
   const toggleFactoryManualChecklist = (checkId: string) => {
     if (!factoryManualSubjectKey) return;
     setFactoryManualChecklistState((prev) => {
@@ -1835,7 +2918,7 @@ const PlaybookLibraryPage: React.FC = () => {
             <div className="header-text">
               <h1>Playbook Library</h1>
               <p className="text-muted">
-                Repository 기반 공식 문서와 업로드 문서를 한 곳에서 관리합니다.
+                WIKI 데이터, 검수 상태, 원천 보강 루프를 한 화면에서 관리합니다.
               </p>
             </div>
           </div>
@@ -1844,6 +2927,11 @@ const PlaybookLibraryPage: React.FC = () => {
             <button className="library-dashboard-link" type="button" onClick={() => navigate('/')}>
               Playbook Studio
             </button>
+            <ThemeToggleButton
+              className="library-theme-toggle-btn"
+              globalTheme={globalTheme}
+              onToggleGlobalTheme={toggleGlobalTheme}
+            />
           </div>
         </div>
       </header>
@@ -1852,53 +2940,148 @@ const PlaybookLibraryPage: React.FC = () => {
         <div className="library-shell">
           <aside className="library-sidebar" aria-label="Playbook Library categories">
             <section>
-              <h2>Wiki</h2>
+              <h2>WIKI</h2>
               <button
                 type="button"
-                className={`library-sidebar-item ${viewMode === 'monitoring' ? 'active' : ''}`}
-                onClick={() => navigate('/playbook-library/control-tower')}
+                className={`library-sidebar-item ${activeWikiScope === 'official' ? 'active' : ''}`}
+                onClick={() => {
+                  setLibraryScopeFilter('official_docs');
+                  navigate('/playbook-library/control-tower?scope=official');
+                }}
               >
                 <Activity size={15} />
-                <span>Operational Wiki</span>
+                <span>OCP Official</span>
+                <strong>{officialDocumentRows.length.toLocaleString()}</strong>
               </button>
-              {WIKI_CATEGORIES.map((category) => (
-                <button
-                  key={category.key}
-                  type="button"
-                  className={`library-sidebar-item ${activeWikiCategory === category.key && viewMode === 'monitoring' ? 'active' : 'muted'}`}
-                  onClick={() => {
-                    setActiveWikiCategory(category.key);
-                    navigate('/playbook-library/control-tower');
-                  }}
-                >
-                  <BookOpen size={15} />
-                  <span>{category.label}</span>
-                </button>
-              ))}
-            </section>
-            <section>
-              <h2>Repository</h2>
               <button
                 type="button"
-                className={`library-sidebar-item ${viewMode === 'repository' ? 'active' : ''}`}
-                onClick={() => navigate('/playbook-library/repository')}
+                className={`library-sidebar-item ${activeWikiScope === 'customer' ? 'active' : ''}`}
+                onClick={() => {
+                  setLibraryScopeFilter('study_docs');
+                  navigate('/playbook-library/repository?scope=customer&lane=customer');
+                }}
+              >
+                <Database size={15} />
+                <span>Customer Docs</span>
+                <strong>{customerDocumentRows.length.toLocaleString()}</strong>
+              </button>
+              <button
+                type="button"
+                className={`library-sidebar-item ${activeWikiScope === 'uploads' ? 'active' : ''}`}
+                onClick={() => {
+                  setLibraryScopeFilter('user_upload');
+                  openUserDocsUpload(false);
+                }}
               >
                 <UploadCloud size={15} />
                 <span>My Uploads</span>
+                <strong>{userUploadDocumentRows.length.toLocaleString()}</strong>
               </button>
             </section>
           </aside>
           <div className="library-content-panel">
-        {viewMode === 'monitoring' ? (
+            <section className="library-runtime-board">
+              <div className="library-runtime-board-head">
+                <div>
+                  <span className="factory-hub-eyebrow">System Data Board</span>
+                  <h2>현재 시스템이 쓰는 데이터</h2>
+                  <p>Book Library는 Postgres 문서, chunk, Qdrant 검색 인덱스가 서로 맞는지 확인하는 검수 화면입니다.</p>
+                </div>
+                <button type="button" className="library-runtime-refresh" onClick={() => { refreshDocumentRepositories(); refreshRuntimeHealth(); }}>
+                  Refresh
+                </button>
+              </div>
+              <div className="library-runtime-grid">
+                <div className="library-runtime-card">
+                  <span>Official Docs</span>
+                  <strong>{officialDocumentRows.length.toLocaleString()}</strong>
+                </div>
+                <div className="library-runtime-card">
+                  <span>Customer Docs</span>
+                  <strong>{customerDocumentRows.length.toLocaleString()}</strong>
+                </div>
+                <div className="library-runtime-card">
+                  <span>My Uploads</span>
+                  <strong>{userUploadDocumentRows.length.toLocaleString()}</strong>
+                </div>
+                <div className="library-runtime-card">
+                  <span>Total Docs</span>
+                  <strong>{repositoryDocumentRows.length.toLocaleString()}</strong>
+                </div>
+                <div className="library-runtime-card">
+                  <span>Chunks</span>
+                  <strong>{Number(dbCorpusChunks || 0).toLocaleString()}</strong>
+                  <em>{qdrantEntryCount.toLocaleString()} qdrant entries</em>
+                </div>
+                <div className={`library-runtime-card ${runtimeAlerts.length > 0 ? 'warning' : 'ok'}`}>
+                  <span>Qdrant Points</span>
+                  <strong>{typeof qdrantPoints === 'number' ? qdrantPoints.toLocaleString() : '-'}</strong>
+                  <em>{typeof qdrantIndexedVectors === 'number' ? `${qdrantIndexedVectors.toLocaleString()} indexed` : runtimeQdrant?.status ?? 'unknown'}</em>
+                </div>
+                <div className={`library-runtime-card ${isNotCertifiable ? 'danger' : 'ok'}`}>
+                  <span>Certification</span>
+                  <strong>{isNotCertifiable ? 'Not Certifiable' : 'Certified'}</strong>
+                  <em>
+                    {isNotCertifiable
+                      ? `${certificationBlockers.length.toLocaleString()} blockers`
+                      : `${goldPlaybookCount.toLocaleString()} Gold passed`}
+                  </em>
+                </div>
+              </div>
+              {runtimeAlerts.length > 0 ? (
+                <div className="library-runtime-alerts">
+                  <AlertCircle size={16} />
+                  <span>{runtimeAlerts.join(' · ')}</span>
+                </div>
+              ) : (
+                <div className="library-runtime-ok">
+                  <CheckCircle2 size={16} />
+                  <span>Postgres 문서/chunk와 Qdrant 기준 수량이 현재 런타임에서 일치합니다.</span>
+                </div>
+              )}
+            </section>
+
+            <section className="library-data-toolbar" aria-label="Book Library filters">
+              <label className="library-filter-search">
+                <Search size={16} />
+                <input
+                  type="search"
+                  value={librarySearchQuery}
+                  onChange={(event) => setLibrarySearchQuery(event.target.value)}
+                  placeholder="문서 제목, source, 상태 검색"
+                />
+              </label>
+              <select value={libraryScopeFilter} onChange={(event) => handleLibraryScopeFilterChange(event.target.value as LibraryScopeFilter)}>
+                <option value="official_docs">OCP Official</option>
+                <option value="study_docs">Customer Docs</option>
+                <option value="user_upload">My Uploads</option>
+              </select>
+              <select value={libraryQualityFilter} onChange={(event) => setLibraryQualityFilter(event.target.value as LibraryQualityFilter)}>
+                <option value="all">All quality</option>
+                <option value="approved_ko">approved_ko</option>
+                <option value="needs_review">needs_review</option>
+                <option value="original">original</option>
+                <option value="gold">gold</option>
+              </select>
+              <select value={libraryIndexFilter} onChange={(event) => setLibraryIndexFilter(event.target.value as LibraryIndexFilter)}>
+                <option value="all">All index states</option>
+                <option value="ready">Indexed</option>
+                <option value="needs_index">Index check</option>
+                <option value="zero_chunks">No chunks</option>
+              </select>
+            </section>
+        {activeWikiScope === 'official' && (
           <div className="monitoring-view">
             <section className="operational-shelf box-container">
               <div className="operational-shelf-header">
                 <div>
                   <span className="operational-shelf-eyebrow">Official Documents</span>
-                  <h2>{WIKI_CATEGORIES.find((category) => category.key === activeWikiCategory)?.label ?? 'Wiki'} documents</h2>
-                  <p>PostgreSQL document_sources 기준으로 분류된 공식 문서입니다. 문서별 채팅은 해당 document_source_id로 RAG 범위를 고정합니다.</p>
+                  <h2>OCP Official documents</h2>
+                  <p>PostgreSQL document_sources 기준으로 분류된 공식 OpenShift 문서입니다. 문서별 채팅은 해당 document_source_id로 RAG 범위를 고정합니다.</p>
                 </div>
-                <span className="operational-library-count">{activeWikiDocumentRows.length.toLocaleString()} docs</span>
+                <span className="operational-library-count">
+                  {activeWikiDocumentRows.length.toLocaleString()} / {officialDocumentRows.length.toLocaleString()} docs
+                </span>
               </div>
               {activeWikiDocumentRows.length === 0 ? (
                 <div className="repo-empty">
@@ -1918,8 +3101,25 @@ const PlaybookLibraryPage: React.FC = () => {
                         <span className="operational-card-open-subtitle">
                           {document.chunk_count.toLocaleString()} chunks / {document.indexed_chunk_count.toLocaleString()} indexed
                         </span>
+                        <div className="library-document-chip-row">
+                          {documentQualityChips({ repository, document, categoryKey }).map((chip) => (
+                            <span key={chip} className="library-document-chip">{chip}</span>
+                          ))}
+                          <span className={`library-document-chip library-document-chip--${documentIndexStatus({ repository, document, categoryKey })}`}>
+                            {indexStatusLabel(documentIndexStatus({ repository, document, categoryKey }))}
+                          </span>
+                        </div>
                       </div>
                       <div className="library-document-actions">
+                        <button
+                          type="button"
+                          className={`library-document-chat-btn ${isDocumentReadable(document) ? '' : 'library-document-chat-btn--blocked'}`}
+                          title={documentReadBlockReason(document) || 'Read document'}
+                          onClick={() => { void openDocumentReader(repository, document); }}
+                        >
+                          <BookOpen size={14} />
+                          <span>Read</span>
+                        </button>
                         <button
                           type="button"
                           className="library-document-chat-btn"
@@ -1943,13 +3143,25 @@ const PlaybookLibraryPage: React.FC = () => {
                     <h2>바로 읽을 수 있는 운영 위키</h2>
                     <p>지금 제품 표면에서 바로 여는 핵심 운영 문서 묶음입니다.</p>
                   </div>
-                  <button
-                    type="button"
-                    className="operational-shelf-link"
-                    onClick={() => openMetricPopover('wikiRuntime')}
-                  >
-                    전체 {approvedWikiRuntimeBooks.toLocaleString()}권 보기
-                  </button>
+                  <div className="operational-shelf-actions">
+                    {operationalWikiGateNotice && (
+                      <button
+                        type="button"
+                        className="operational-gate-notice"
+                        onClick={() => openMetricPopover('wikiRuntime')}
+                      >
+                        <ShieldAlert size={14} />
+                        <span>{operationalWikiGateNotice}</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="operational-shelf-link"
+                      onClick={() => openMetricPopover('wikiRuntime')}
+                    >
+                      전체 {approvedWikiRuntimeBooks.toLocaleString()}권 보기
+                    </button>
+                  </div>
                 </div>
                 {(
                   <div className="operational-shelf-grid">
@@ -1966,12 +3178,60 @@ const PlaybookLibraryPage: React.FC = () => {
                           <span className="operational-book-badge">{normalizePlaybookGrade(book.grade)}</span>
                           <strong>{book.title}</strong>
                           <span className="operational-card-open-subtitle">{book.book_slug.replace(/_/g, ' ')}</span>
+                          {languageGateBadgeLabel(book) ? (
+                            <span className="operational-viewer-smoke operational-viewer-smoke--warning">
+                              {languageGateBadgeLabel(book)}
+                            </span>
+                          ) : null}
+                          {hasViewerSmokeEvidence(book) ? (
+                            <span className={`operational-viewer-smoke operational-viewer-smoke--${viewerSmokeTone(book)}`}>
+                              {viewerSmokeBadgeLabel(book)}
+                            </span>
+                          ) : null}
                         </button>
                         <OfficialSourcePopover record={book} />
                       </article>
                     ))}
                   </div>
                 )}
+              </section>
+            )}
+
+            {operationalWikiRecoveryRows.length > 0 && (
+              <section className="gold-recovery-panel box-container">
+                <div className="operational-shelf-header">
+                  <div>
+                    <span className="operational-shelf-eyebrow">Gold Recovery Queue</span>
+                    <h2>Gold에서 탈락한 복구 대상 {operationalWikiRecoveryRows.length.toLocaleString()}권</h2>
+                    <p>이 문서들은 Gold 라벨을 달 수 없습니다. blocker를 해소하고 다시 검증해야 운영 위키에 합류합니다.</p>
+                  </div>
+                  <span className="gold-recovery-status">Not Gold</span>
+                </div>
+                <div className="gold-recovery-grid">
+                  {operationalWikiRecoveryRows.map((book) => (
+                    <article key={`recovery-${book.book_slug}`} className="gold-recovery-card">
+                      <div className="gold-recovery-card-head">
+                        <span>{book.source_grade || 'Gold'} → Gold Recovery</span>
+                        <strong>{book.title}</strong>
+                      </div>
+                      <div className="gold-recovery-card-meta">
+                        <span>{book.book_slug.replace(/_/g, ' ')}</span>
+                        <span>{Number(book.section_count || 0).toLocaleString()} sections</span>
+                        <span>{Number(book.chunk_count || 0).toLocaleString()} chunks</span>
+                      </div>
+                      <div className="gold-recovery-blocker">
+                        <AlertCircle size={14} />
+                        <span>{goldRecoveryBlockerText(book)}</span>
+                      </div>
+                      {formatPercentRatio(book.hangul_chunk_ratio) && (
+                        <div className="gold-recovery-language">
+                          한글 비율 {formatPercentRatio(book.hangul_chunk_ratio)}
+                        </div>
+                      )}
+                      <p>{goldRecoveryAction(book)}</p>
+                    </article>
+                  ))}
+                </div>
               </section>
             )}
 
@@ -1982,7 +3242,14 @@ const PlaybookLibraryPage: React.FC = () => {
                     <span className="operational-library-eyebrow">Operational Library</span>
                     <h2>운영 위키 {approvedWikiRuntimeBooks.toLocaleString()}권</h2>
                   </div>
-                  <span className="operational-library-count">{approvedWikiRuntimeBooks.toLocaleString()} books</span>
+                  <div className="operational-library-header-meta">
+                    {operationalWikiRecoveryBooks > 0 && (
+                      <span className="operational-library-gate-count">
+                        Recovery {operationalWikiRecoveryBooks.toLocaleString()}권
+                      </span>
+                    )}
+                    <span className="operational-library-count">{approvedWikiRuntimeBooks.toLocaleString()} books</span>
+                  </div>
                 </div>
                 <div className="operational-library-grid">
                   {allOperationalWikiBooks.map((book) => (
@@ -1998,6 +3265,16 @@ const PlaybookLibraryPage: React.FC = () => {
                         <span className="operational-library-card-badge">{normalizePlaybookGrade(book.grade)}</span>
                         <strong>{book.title}</strong>
                         <span className="operational-card-open-subtitle">{book.book_slug.replace(/_/g, ' ')}</span>
+                        {languageGateBadgeLabel(book) ? (
+                          <span className="operational-viewer-smoke operational-viewer-smoke--warning">
+                            {languageGateBadgeLabel(book)}
+                          </span>
+                        ) : null}
+                        {hasViewerSmokeEvidence(book) ? (
+                          <span className={`operational-viewer-smoke operational-viewer-smoke--${viewerSmokeTone(book)}`}>
+                            {viewerSmokeBadgeLabel(book)}
+                          </span>
+                        ) : null}
                       </button>
                       <OfficialSourcePopover record={book} />
                     </article>
@@ -2175,7 +3452,7 @@ const PlaybookLibraryPage: React.FC = () => {
               </section>
             )}
           </div>
-        ) : (
+        )}
           <div className="repository-view">
             <input
               ref={fileInputRef}
@@ -2185,31 +3462,51 @@ const PlaybookLibraryPage: React.FC = () => {
               onChange={handleUpload}
             />
 
+            {activeWikiScope !== 'official' && (
             <section className="library-repository-strip box-container">
               <div className="section-header">
                 <div>
-                  <h2>Repository Documents</h2>
-                  <p className="text-muted">PostgreSQL repository 기준으로 업로드/공유 문서를 선택해 Chat 범위를 고정합니다.</p>
+                  <h2>{repositoryPaneTitle}</h2>
+                  <p className="text-muted">{repositoryPaneDescription}</p>
                 </div>
+                <span className="operational-library-count">
+                  {repositoryPaneRows.length.toLocaleString()} / {repositoryPaneTotal.toLocaleString()} docs
+                </span>
                 <button type="button" className="library-dashboard-link" onClick={refreshDocumentRepositories}>
                   Refresh
                 </button>
               </div>
-              {userUploadDocumentRows.length === 0 ? (
+              {repositoryPaneRows.length === 0 ? (
                 <div className="repo-empty">
                   <Database size={36} />
-                  <p>아직 조회 가능한 repository 문서가 없습니다.</p>
+                  <p>{repositoryPaneEmptyMessage}</p>
                 </div>
               ) : (
                 <div className="library-repository-grid">
-                  {userUploadDocumentRows.map(({ repository, document, categoryKey }) => (
+                  {repositoryPaneRows.map(({ repository, document, categoryKey }) => (
                     <article className="library-repository-card" key={document.document_source_id}>
                       <div>
                         <span className="library-repository-scope">{document.source_scope || repository.visibility || repository.repository_kind}</span>
                         <h3>{document.title || document.filename}</h3>
-                        <p>{repository.visibility} · {repository.document_count} docs</p>
+                        <p>{document.chunk_count.toLocaleString()} chunks · {document.indexed_chunk_count.toLocaleString()} indexed</p>
+                        <div className="library-document-chip-row">
+                          {documentQualityChips({ repository, document, categoryKey }).map((chip) => (
+                            <span key={chip} className="library-document-chip">{chip}</span>
+                          ))}
+                          <span className={`library-document-chip library-document-chip--${documentIndexStatus({ repository, document, categoryKey })}`}>
+                            {indexStatusLabel(documentIndexStatus({ repository, document, categoryKey }))}
+                          </span>
+                        </div>
                       </div>
                       <div className="library-document-actions">
+                        <button
+                          type="button"
+                          className={isDocumentReadable(document) ? '' : 'library-document-chat-btn--blocked'}
+                          title={documentReadBlockReason(document) || 'Read document'}
+                          onClick={() => { void openDocumentReader(repository, document); }}
+                        >
+                          Read
+                        </button>
                         <button type="button" onClick={() => openDocumentInChat(repository, document, categoryKey)}>
                           Ask this document
                         </button>
@@ -2222,15 +3519,16 @@ const PlaybookLibraryPage: React.FC = () => {
                 </div>
               )}
             </section>
+            )}
 
-            <section className="pipeline-section box-container factory-workbench-section">
+            <section className="pipeline-section box-container factory-workbench-section factory-workbench-section--secondary">
               <div className="factory-workbench-top">
                 <div className="factory-workbench-headline">
-                  <span className="factory-hub-eyebrow">Production Surface</span>
+                  <span className="factory-hub-eyebrow">WIKI Growth Loop</span>
                   <div className="factory-workbench-title-row">
-                    <h2>Book Factory</h2>
+                    <h2>Source Factory</h2>
                     <span className="factory-workbench-title-tag">
-                      {factoryLane === 'tools' ? 'Book Factory Pipeline' : 'User Docs Upload'}
+                      {factoryLane === 'tools' ? 'Tools Docs Upload' : 'User Docs Upload'}
                     </span>
                   </div>
                   <p className="text-muted">
@@ -2250,7 +3548,7 @@ const PlaybookLibraryPage: React.FC = () => {
                       <span>{isProcessing ? 'Processing...' : 'Upload File'}</span>
                     </button>
                   )}
-                  <div className="factory-mode-toggle" role="tablist" aria-label="Book Factory mode">
+                  <div className="factory-mode-toggle" role="tablist" aria-label="Source Factory mode">
                     <button
                       type="button"
                       className={`factory-mode-btn ${factoryRunMode === 'auto' ? 'active' : ''}`}
@@ -2307,7 +3605,7 @@ const PlaybookLibraryPage: React.FC = () => {
                   <span>
                     {factoryLane === 'tools'
                       ? '공식 레포와 공식 홈페이지 후보를 받아 생산 대기열로 연결합니다.'
-                      : '현재 업로드 lane을 Book Factory 안으로 합쳐 same-surface production으로 보여줍니다.'}
+                      : '현재 업로드 lane을 Source Factory 안으로 합쳐 same-surface production으로 보여줍니다.'}
                   </span>
                 </div>
               </div>
@@ -2659,7 +3957,7 @@ const PlaybookLibraryPage: React.FC = () => {
 
               <div className="pipeline-details">
                 <div className="log-container">
-                  <div className="log-header">{factoryLane === 'tools' ? 'Book Factory Processing Logs' : 'Recent Processing Logs'}</div>
+                  <div className="log-header">{factoryLane === 'tools' ? 'Source Factory Processing Logs' : 'Recent Processing Logs'}</div>
                   {logs.length === 0 && (
                     <div className="log-empty">
                       {factoryLane === 'tools' ? '생산을 시작하면 단계별 로그가 여기에 표시됩니다.' : 'No activity yet.'}
@@ -2719,7 +4017,7 @@ const PlaybookLibraryPage: React.FC = () => {
                                     onClick={() => { void handleFactoryAssistantSubmit(item.query); }}
                                   >
                                     <MessageSquare size={14} />
-                                    <span>문의하기</span>
+                                    <span>원천소스 찾기</span>
                                   </button>
                                 </div>
                               ))}
@@ -2971,6 +4269,10 @@ const PlaybookLibraryPage: React.FC = () => {
                           <Database size={14} />
                           <span>{repositoryMeta.authMode === 'token' ? 'Authenticated Search' : 'Public Search'}</span>
                         </div>
+                        <div className={`repo-panel-badge repo-panel-badge--planner ${repositoryMeta.llmPlannerEnabled ? 'is-llm' : 'is-deterministic'}`}>
+                          <ShieldCheck size={14} />
+                          <span>{repositoryMeta.llmPlannerEnabled ? 'LLM planner on' : 'deterministic planner · LLM planner off'}</span>
+                        </div>
                       </div>
 
                       <form
@@ -3003,19 +4305,133 @@ const PlaybookLibraryPage: React.FC = () => {
                       {(assistantHint || factoryAssistantError || repositoryMeta.rewrittenQuery) && (
                         <div className="repo-meta-strip">
                           {assistantHint ? <span>질문: <code>{assistantHint}</code></span> : null}
-                          <span>repo matches: <code>{repositoryResults.length}</code></span>
-                          {repositoryMeta.rewrittenQuery ? <span>rewritten: <code>{repositoryMeta.rewrittenQuery}</code></span> : null}
+                          <span>공식 후보: <code>{officialSourceCandidates.length}</code></span>
+                          <span>GitHub repo matches: <code>{repositoryResults.length}</code></span>
+                          <span>lanes: <code>{sourceDiscoveryLaneResults.length}</code></span>
+                          <span>Bronze 검증 큐: <code>{sourceVerificationQueue.length}</code></span>
+                          {repositoryMeta.plannerMode ? <span>planner: <code>{repositoryMeta.plannerMode}</code></span> : null}
+                          {repositoryMeta.riskLevel ? <span>risk: <code>{repositoryMeta.riskLevel}</code></span> : null}
+                          {repositoryMeta.goldPolicy ? <span>Gold: <code>{repositoryMeta.goldPolicy}</code></span> : null}
+                          {repositoryMeta.requiresHumanReview ? <span className="repo-warning-text">human review required</span> : null}
                           {factoryAssistantError ? <span className="repo-error-text">{factoryAssistantError}</span> : null}
                           {repositoryError ? <span className="repo-error-text">{repositoryError}</span> : null}
+                          {repositoryMeta.reason ? <span className="repo-meta-reason">{repositoryMeta.reason}</span> : null}
                         </div>
                       )}
 
-                      {officialSourceCandidates.length === 0 ? (
-                        <div className="repo-empty">
-                          <MessageSquare size={40} />
-                          <p>문의하기를 누르거나 질문을 직접 넣으면 공식 원천소스 두 종류와 다운로드 계획표를 준비합니다.</p>
+                      {sourceDiscoveryLaneResults.length > 0 ? (
+                        <div className="source-discovery-lane-grid">
+                          {sourceDiscoveryLaneResults.map((lane) => (
+                            <section
+                              className={`source-discovery-lane-card source-discovery-lane-card--${String(lane.lane).replace(/_/g, '-')}`}
+                              key={`${lane.lane}:${lane.provider}`}
+                            >
+                              <div className="source-discovery-lane-head">
+                                <div>
+                                  <span className="source-discovery-lane-eyebrow">{lane.lane}</span>
+                                  <h3>{sourceDiscoveryLaneKoreanLabel(lane)}</h3>
+                                  <span className="source-discovery-lane-provider">{lane.provider}</span>
+                                </div>
+                                <span className={`source-discovery-lane-status source-discovery-lane-status--${lane.status}`}>
+                                  {sourceDiscoveryLaneStatusLabel(lane)}
+                                </span>
+                              </div>
+                              <div className="source-discovery-lane-policy">
+                                <span>{lane.trust_level}</span>
+                                <span>{lane.gold_policy}</span>
+                                {lane.requires_human_review ? <span>human review</span> : null}
+                                {lane.filtered_count ? <span>filtered {lane.filtered_count}</span> : null}
+                              </div>
+                              {(lane.message || lane.trust_note) ? (
+                                <p className="source-discovery-lane-note">
+                                  {[lane.message, lane.trust_note].filter(Boolean).join(' · ')}
+                                </p>
+                              ) : null}
+                              {lane.items.length > 0 ? (
+                                <div className="source-discovery-lane-items">
+                                  {lane.items.slice(0, 4).map((item, index) => {
+                                    const href = sourceDiscoveryItemHref(item);
+                                    const title = sourceDiscoveryItemTitle(item);
+                                    const meta = sourceDiscoveryItemMeta(item);
+                                    const verificationKey = sourceDiscoveryCandidateKey(lane, item);
+                                    const canSaveForVerification = sourceDiscoveryLaneNeedsVerification(lane);
+                                    const savedForVerification = sourceVerificationSavedKeys.has(verificationKey);
+                                    const savingForVerification = savingVerificationKey === verificationKey;
+                                    return (
+                                      <div className="source-discovery-lane-item" key={`${lane.lane}:${title}:${index}`}>
+                                        <div className="source-discovery-lane-item-copy">
+                                          <strong>{title}</strong>
+                                          {meta ? <span>{meta}</span> : null}
+                                          <div className="source-discovery-lane-item-badges">
+                                            <span>source {lane.provider}</span>
+                                            <span>trust {lane.trust_level}</span>
+                                            <span>Gold {lane.gold_policy}</span>
+                                            <span>{lane.requires_human_review ? 'human review required' : 'human review not required'}</span>
+                                          </div>
+                                        </div>
+                                        <div className="source-discovery-lane-actions">
+                                          {canSaveForVerification ? (
+                                            <button
+                                              type="button"
+                                              className="source-discovery-verification-btn"
+                                              onClick={() => handleSaveSourceVerificationCandidate(lane, item)}
+                                              disabled={savedForVerification || savingForVerification}
+                                            >
+                                              {savingForVerification ? (
+                                                <Loader2 size={13} className="spin-icon" />
+                                              ) : savedForVerification ? (
+                                                <CheckCircle2 size={13} />
+                                              ) : (
+                                                <BookmarkPlus size={13} />
+                                              )}
+                                              <span>{savedForVerification ? 'Bronze 큐' : '검증 큐'}</span>
+                                            </button>
+                                          ) : null}
+                                          {href ? (
+                                            <a className="source-discovery-lane-link" href={href} target="_blank" rel="noreferrer">
+                                              <ExternalLink size={13} />
+                                            </a>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="source-discovery-lane-empty-block">
+                                  <p className="source-discovery-lane-empty">
+                                    {lane.error || lane.message || '이 lane에는 아직 후보가 없습니다.'}
+                                  </p>
+                                  {sourceDiscoveryLaneNeedsVerification(lane) ? (() => {
+                                    const verificationKey = sourceDiscoveryCandidateKey(lane);
+                                    const savedForVerification = sourceVerificationSavedKeys.has(verificationKey);
+                                    const savingForVerification = savingVerificationKey === verificationKey;
+                                    return (
+                                      <button
+                                        type="button"
+                                        className="source-discovery-verification-btn"
+                                        onClick={() => handleSaveSourceVerificationCandidate(lane)}
+                                        disabled={savedForVerification || savingForVerification}
+                                      >
+                                        {savingForVerification ? (
+                                          <Loader2 size={13} className="spin-icon" />
+                                        ) : savedForVerification ? (
+                                          <CheckCircle2 size={13} />
+                                        ) : (
+                                          <BookmarkPlus size={13} />
+                                        )}
+                                        <span>{savedForVerification ? 'Bronze 큐' : 'lane 검증 큐'}</span>
+                                      </button>
+                                    );
+                                  })() : null}
+                                </div>
+                              )}
+                            </section>
+                          ))}
                         </div>
-                      ) : (
+                      ) : null}
+
+                      {officialSourceCandidates.length > 0 ? (
                         <div className="factory-assistant-results">
                           {officialSourceCandidates.map((candidate) => (
                             <article className="repo-card repo-card--official glass-panel" key={candidate.book_slug}>
@@ -3109,9 +4525,175 @@ const PlaybookLibraryPage: React.FC = () => {
                             </article>
                           ))}
                         </div>
-                      )}
+                      ) : sourceDiscoveryLaneResults.length === 0 ? (
+                        <div className="repo-empty">
+                          <MessageSquare size={40} />
+                          <p>원천소스 찾기를 누르거나 질문을 직접 넣으면 공식 원천소스 두 종류와 다운로드 계획표를 준비합니다.</p>
+                        </div>
+                      ) : null}
                     </section>
                   </div>
+                </section>
+
+                <section className="repo-favorites-section box-container" ref={sourceVerificationQueueRef}>
+                  <div className="section-header">
+                    <div>
+                      <h2>Bronze Verification Queue</h2>
+                      <p className="text-muted">커뮤니티, 벤더 KB, Issue/PR 후보는 공식 교차검증 전까지 인용과 Gold 승격을 막습니다.</p>
+                    </div>
+                    <div className="source-verification-header-actions">
+                      <span className="status-pill" data-status={sourceVerificationQueue.length > 0 ? 'processing' : 'ready'}>
+                        {sourceVerificationQueue.length} pending
+                      </span>
+                      <button
+                        type="button"
+                        className="source-judge-run-btn"
+                        onClick={() => void handleRunSourceJudge()}
+                        disabled={sourceJudgeRunning || !(factoryAssistantQuery.trim() || searchQuery.trim())}
+                      >
+                        {sourceJudgeRunning ? <Loader2 size={14} className="spin-icon" /> : <ShieldCheck size={14} />}
+                        <span>Run Judge</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {sourceVerificationQueue.length === 0 ? (
+                    <div className="repo-empty repo-favorites-empty">
+                      <ShieldCheck size={40} />
+                      <p>검증 대기 중인 비공식 source candidate가 없습니다.</p>
+                    </div>
+                  ) : (
+                    <div className="source-verification-list">
+                      {sourceVerificationQueue.slice(0, 8).map((record) => (
+                        <article className="source-verification-item" key={record.candidate_id}>
+                          <div className="source-verification-copy">
+                            <div className="source-verification-title-row">
+                              <span className="source-verification-grade">{record.grade}</span>
+                              <strong>{record.title}</strong>
+                            </div>
+                            <p>{sourceDiscoveryLaneKoreanName(record.lane, record.lane)}</p>
+                            <div className="source-verification-tags">
+                              <span>{record.verification_status}</span>
+                              <span>{record.gold_policy}</span>
+                              <span>{record.citation_eligible ? 'citation allowed' : 'citation blocked'}</span>
+                              {record.required_checks.slice(0, 2).map((check) => (
+                                <span key={check.id || check.label}>{check.label || check.id}</span>
+                              ))}
+                              {record.promotion_blockers.slice(0, 2).map((blocker) => (
+                                <span key={blocker}>{blocker}</span>
+                              ))}
+                            </div>
+                          </div>
+                          {record.source_url ? (
+                            <a className="source-discovery-lane-link" href={record.source_url} target="_blank" rel="noreferrer">
+                              <ExternalLink size={13} />
+                            </a>
+                          ) : null}
+                        </article>
+                      ))}
+                    </div>
+                  )}
+
+                  {sourceJudgeError ? (
+                    <p className="repo-error-text">{sourceJudgeError}</p>
+                  ) : null}
+
+                  {latestSourceJudgeReport ? (
+                    <div className={`source-judge-report source-judge-report--${sourceJudgeVerdictClass(latestSourceJudgeReport.overall_verdict)}`}>
+                      <div className="source-judge-report-head">
+                        <div>
+                          <span className="source-judge-eyebrow">Source Discovery Judge</span>
+                          <strong>{sourceJudgeVerdictLabel(latestSourceJudgeReport.overall_verdict)}</strong>
+                        </div>
+                        <span>{latestSourceJudgeReport.pass_fail}</span>
+                      </div>
+                      <p>{latestSourceJudgeReport.question}</p>
+                      <div className="source-judge-metrics">
+                        <span>공식 교차검증 <strong>{latestSourceJudgeReport.source_trust.official_cross_check ? 'OK' : 'MISSING'}</strong></span>
+                        <span>공식 인용 <strong>{latestSourceJudgeReport.citation_coverage.official_citation_count}</strong></span>
+                        <span>검증 대기 <strong>{latestSourceJudgeReport.source_trust.needs_verification_count}</strong></span>
+                        <span>Gap <strong>{latestSourceJudgeReport.remaining_gap.length}</strong></span>
+                      </div>
+                      {latestSourceJudgeReport.remaining_gap.length > 0 ? (
+                        <div className="source-judge-chip-row">
+                          {latestSourceJudgeReport.remaining_gap.slice(0, 5).map((gap) => (
+                            <span key={gap}>{gap}</span>
+                          ))}
+                        </div>
+                      ) : null}
+                      {latestSourceJudgeReport.after_answer ? (
+                        <div className="source-judge-answer">
+                          <span>RAG replay answer</span>
+                          <p>{latestSourceJudgeReport.after_answer}</p>
+                        </div>
+                      ) : null}
+                      {latestSourceJudgeReport.evidence.citations.length > 0 ? (
+                        <div className="source-judge-citations">
+                          <span>Replay citations</span>
+                          {latestSourceJudgeReport.evidence.citations.slice(0, 4).map((citation, index) => {
+                            const href = sourceJudgeCitationHref(citation);
+                            const title = sourceJudgeCitationTitle(citation);
+                            const lane = sourceJudgeCitationLane(citation);
+                            const body = (
+                              <>
+                                <strong>{index + 1}. {title}</strong>
+                                <em>{sourceDiscoveryLaneKoreanName(lane, lane)}</em>
+                              </>
+                            );
+                            return href ? (
+                              <a key={`${href}:${title}`} href={href} target="_blank" rel="noreferrer">
+                                {body}
+                              </a>
+                            ) : (
+                              <div key={`${lane}:${title}:${index}`}>
+                                {body}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                      {(latestSourceJudgeReport.next_actions ?? []).length > 0 ? (
+                        <div className="source-judge-actions">
+                          <span>Next actions</span>
+                          {(latestSourceJudgeReport.next_actions ?? []).slice(0, 4).map((action) => {
+                            const buttonLabel = sourceJudgeActionButtonLabel(action);
+                            return (
+                              <div
+                                className={`source-judge-action source-judge-action--${sourceJudgeActionClass(action.severity)}`}
+                                key={`${action.action_id}:${action.lane ?? ''}:${action.query}`}
+                              >
+                                <div>
+                                  <strong>{action.label}</strong>
+                                  <p>{action.description}</p>
+                                  {action.lane ? <em>{sourceDiscoveryLaneKoreanName(action.lane, action.lane)}</em> : null}
+                                </div>
+                                {buttonLabel ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleJudgeNextAction(action)}
+                                    disabled={sourceJudgeRunning}
+                                  >
+                                    {action.action_id === 'rerun_rag_replay' && sourceJudgeRunning ? (
+                                      <Loader2 size={13} className="spin-icon" />
+                                    ) : action.action_id === 'rerun_rag_replay' ? (
+                                      <ShieldCheck size={13} />
+                                    ) : (
+                                      <Search size={13} />
+                                    )}
+                                    <span>{buttonLabel}</span>
+                                  </button>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="source-judge-empty">
+                      Judge를 실행하면 원 질문을 실제 RAG로 다시 답변하고, 인용 커버리지와 공식 교차검증, 남은 gap을 여기 기록합니다.
+                    </div>
+                  )}
                 </section>
 
                 <section className="repo-favorites-section box-container">
@@ -3179,21 +4761,26 @@ const PlaybookLibraryPage: React.FC = () => {
             {factoryLane === 'user' && (
               <>
 
-                {userLibraryBooks.length > 0 && (
-                  <section className="draft-management user-library-section box-container">
-                    <div className="section-header">
-                      <div>
-                        <h2>User Library ({userLibraryBookCount})</h2>
-                        <p className="text-muted">Normalized uploads that are ready to open from the private library.</p>
-                      </div>
-                      <button
-                        type="button"
-                        className="operational-shelf-link"
-                        onClick={() => openMetricPopover('customerPack')}
-                      >
-                        Open All
-                      </button>
+                <section className="draft-management user-library-section box-container">
+                  <div className="section-header">
+                    <div>
+                      <h2>User Library ({userLibraryBookCount})</h2>
+                      <p className="text-muted">Normalized uploads that are ready to open from the private library.</p>
                     </div>
+                    <button
+                      type="button"
+                      className="operational-shelf-link"
+                      onClick={() => openMetricPopover('customerPack')}
+                    >
+                      Open All
+                    </button>
+                  </div>
+                  {userLibraryBooks.length === 0 ? (
+                    <div className="repo-empty">
+                      <FileText size={24} />
+                      <p>현재 저장된 User Library 문서가 없습니다.</p>
+                    </div>
+                  ) : (
                     <div className="draft-grid">
                       {userLibraryBooks.map((book) => (
                         <button
@@ -3224,14 +4811,19 @@ const PlaybookLibraryPage: React.FC = () => {
                         </button>
                       ))}
                     </div>
-                  </section>
-                )}
+                  )}
+                </section>
 
-                {drafts.length > 0 && (
-                  <section className="draft-management box-container">
-                    <div className="section-header">
-                      <h2>Uploaded Drafts ({drafts.length})</h2>
+                <section className="draft-management box-container">
+                  <div className="section-header">
+                    <h2>Uploaded Drafts ({drafts.length})</h2>
+                  </div>
+                  {drafts.length === 0 ? (
+                    <div className="repo-empty">
+                      <FileText size={24} />
+                      <p>현재 저장된 업로드 초안이 없습니다.</p>
                     </div>
+                  ) : (
                     <div className="draft-grid">
                       {drafts.map((draft) => (
                         <div className="draft-card" key={draft.draft_id} onClick={() => openPreview(draft)} style={{ cursor: 'pointer' }}>
@@ -3274,12 +4866,11 @@ const PlaybookLibraryPage: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                  </section>
-                )}
+                  )}
+                </section>
               </>
             )}
           </div>
-        )}
           </div>
         </div>
       </main>
@@ -3355,9 +4946,15 @@ const PlaybookLibraryPage: React.FC = () => {
               </div>
               <button className="preview-close-btn" onClick={() => setMetricPopover(null)}><X size={18} /></button>
             </div>
+            {metricPopover.noticeMessage && (
+              <div className="metric-popover-notice">
+                <ShieldAlert size={14} />
+                <span>{metricPopover.noticeMessage}</span>
+              </div>
+            )}
             <div className="metric-popover-body">
               {metricPopover.rows.length === 0 ? (
-                <div className="preview-no-sections">등록된 북이 없습니다.</div>
+                <div className="preview-no-sections">{metricPopover.emptyMessage || '등록된 북이 없습니다.'}</div>
               ) : (
                 <div className="metric-book-list">
                   {metricPopover.rows.map((book) => {
@@ -3368,6 +4965,8 @@ const PlaybookLibraryPage: React.FC = () => {
                     const canOpenViewer = Boolean(book.viewer_path);
                     const canInspectChunks = chunkCount > 0;
                     const canDelete = Boolean(book.delete_target_id);
+                    const operationalSmokeChips = isCorpusMode || !hasViewerSmokeEvidence(book) ? [] : viewerSmokeChips(book);
+                    const operationalLanguageChips = isCorpusMode ? [] : languageGateChips(book);
                     const rowChips = isCorpusMode
                       ? [
                         book.command_chunk_count ? `commands ${book.command_chunk_count}` : '',
@@ -3376,7 +4975,7 @@ const PlaybookLibraryPage: React.FC = () => {
                           .slice(0, 3)
                           .map(([kind, count]) => `${kind} ${count}`),
                       ].filter(Boolean)
-                      : customerPackBookEvidenceBits(book);
+                      : [...customerPackBookEvidenceBits(book), ...operationalLanguageChips, ...operationalSmokeChips];
                     return (
                       <div className="metric-book-row metric-book-row-shell" key={`${book.book_slug}:${metricPopover.mode}`}>
                         <div className="metric-book-row-main">
@@ -3560,6 +5159,111 @@ const PlaybookLibraryPage: React.FC = () => {
         </div>
       )}
 
+      {documentReader && (
+        <div className="preview-overlay document-reader-overlay" onClick={closeDocumentReader}>
+          <div className="preview-popover preview-popover-chunk document-reader-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="preview-header">
+              <div className="preview-header-left">
+                <span className="document-reader-eyebrow">Document Reader</span>
+                <h3>{documentReader.payload?.title || documentReader.source.title || documentReader.source.filename}</h3>
+                <div className="preview-header-meta">
+                  <span>{documentReader.source.source_scope || documentReader.repository.repository_kind}</span>
+                  <span>{documentReader.repository.title}</span>
+                  <span>
+                    {(documentReader.payload?.chunks.length ?? 0).toLocaleString()}
+                    /
+                    {(documentReader.payload?.total_chunks ?? documentReader.source.chunk_count).toLocaleString()} chunks
+                  </span>
+                  <span>
+                    {(documentReader.source.indexed_chunk_count || 0).toLocaleString()} indexed
+                  </span>
+                </div>
+                <div className="library-document-chip-row">
+                  {documentQualityChips({
+                    repository: documentReader.repository,
+                    document: documentReader.source,
+                    categoryKey: inferWikiCategory(documentReader.source, documentReader.repository),
+                  }).map((chip) => (
+                    <span key={chip} className="library-document-chip">{chip}</span>
+                  ))}
+                  {documentReader.payload?.markdown_total_chars ? (
+                    <span className="library-document-chip">
+                      {documentReader.payload.markdown_total_chars.toLocaleString()} parsed chars
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="preview-header-actions">
+                <button
+                  type="button"
+                  className="preview-open-full-btn"
+                  onClick={() => openDocumentInChat(documentReader.repository, documentReader.source)}
+                >
+                  <MessageSquare size={14} />
+                  <span>Ask</span>
+                </button>
+                <button className="preview-close-btn" onClick={closeDocumentReader}><X size={18} /></button>
+              </div>
+            </div>
+            <div className="metric-popover-body chunk-viewer-body document-reader-body">
+              {documentReader.loading ? (
+                <div className="preview-loading"><Loader2 size={20} className="spin-icon" /> Loading document...</div>
+              ) : documentReader.error && !documentReader.payload ? (
+                <div className="preview-no-sections">{documentReader.error}</div>
+              ) : documentReader.payload ? (
+                <>
+                  {documentReader.payload.markdown ? (
+                    <section className="document-reader-summary">
+                      <h4>
+                        Parsed document
+                        {documentReader.payload.markdown_truncated ? <span>preview truncated</span> : null}
+                      </h4>
+                      <pre>{documentReader.payload.markdown.slice(0, 6000)}</pre>
+                    </section>
+                  ) : null}
+                  <div className="chunk-card-list">
+                    {documentReader.payload.chunks.map((chunk, index) => (
+                      <article className="chunk-card" key={chunk.chunk_id || `${chunk.chunk_key}-${index}`}>
+                        <div className="chunk-card-header">
+                          <div className="chunk-card-meta">
+                            <span className="chunk-card-type">{chunk.chunk_type || 'document'}</span>
+                            <span>#{chunk.ordinal || index + 1}</span>
+                            {chunk.section_number ? <span>{chunk.section_number}</span> : null}
+                            <span>{chunk.token_count.toLocaleString()} tokens</span>
+                          </div>
+                        </div>
+                        <strong className="chunk-card-title">
+                          {chunk.heading_title || chunk.section_path.at(-1) || chunk.source_anchor || 'Untitled section'}
+                        </strong>
+                        {chunk.section_path.length > 0 ? (
+                          <div className="chunk-card-path">{chunk.section_path.join(' › ')}</div>
+                        ) : null}
+                        <pre className="chunk-card-text">{chunk.markdown || chunk.text}</pre>
+                      </article>
+                    ))}
+                  </div>
+                  {documentReader.payload.has_more ? (
+                    <button
+                      type="button"
+                      className="document-reader-load-more"
+                      disabled={documentReader.loadingMore}
+                      onClick={() => { void loadMoreDocumentReader(); }}
+                    >
+                      {documentReader.loadingMore ? 'Loading...' : 'Load more chunks'}
+                    </button>
+                  ) : (
+                    <div className="document-reader-end">모든 chunk를 불러왔습니다.</div>
+                  )}
+                  {documentReader.error ? <div className="preview-no-sections">{documentReader.error}</div> : null}
+                </>
+              ) : (
+                <div className="preview-no-sections">표시할 문서 본문이 없습니다.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {buyerPacketPopover && (
         <div className="preview-overlay" onClick={() => setBuyerPacketPopover(null)}>
           <div className="preview-popover" onClick={(e) => e.stopPropagation()}>
@@ -3663,7 +5367,7 @@ const PlaybookLibraryPage: React.FC = () => {
                     className="preview-viewer-document"
                   />
                 ) : (
-                  <div className="preview-no-sections">뷰어 경로가 없는 북입니다.</div>
+                  <div className="preview-no-sections">{bookViewerError || '문서 본문을 불러올 수 없습니다.'}</div>
                 )}
               </div>
             </div>

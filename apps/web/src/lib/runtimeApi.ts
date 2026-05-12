@@ -41,6 +41,36 @@ export interface LibraryBook {
   command_chunk_count?: number;
   error_chunk_count?: number;
   materialized?: boolean;
+  runtime_readable?: boolean;
+  runtime_gate?: string;
+  runtime_readiness?: string;
+  source_grade?: string;
+  certified_gold?: boolean;
+  gold_contract_status?: 'gold_certified' | 'gold_recovery' | string;
+  gold_contract_blockers?: string[];
+  gold_contract_warnings?: string[];
+  gold_recovery_group?: string;
+  gold_recovery_action?: string;
+  effective_grade?: string;
+  gold_contract_checks?: Record<string, boolean>;
+  language_gate_status?: 'pass' | 'warning' | 'fail' | 'unknown' | string;
+  language_gate_reason?: string;
+  language_quality?: string;
+  body_language_guess?: string;
+  content_status?: string;
+  hangul_chunk_ratio?: number;
+  latin_only_chunk_ratio?: number;
+  hangul_chunk_count?: number;
+  latin_chunk_count?: number;
+  latin_only_chunk_count?: number;
+  viewer_smoke_status?: 'pass' | 'fail' | 'skipped' | string;
+  viewer_smoke_reason?: string;
+  viewer_smoke_warning?: string;
+  viewer_smoke_error?: string;
+  viewer_smoke_path?: string;
+  viewer_smoke_body_length?: number;
+  viewer_smoke_heading_count?: number;
+  viewer_smoke_title_present?: boolean;
   chunk_scope?: 'runtime' | 'customer_pack' | string;
   delete_target_kind?: string;
   delete_target_id?: string;
@@ -53,10 +83,20 @@ export interface LibraryBook {
   chunk_type_breakdown?: Record<string, number>;
 }
 
+export interface HiddenLibraryBook extends LibraryBook {
+  hidden_reason: string;
+}
+
 export interface LibraryBucket {
   selected_dir?: string;
   selected_path?: string;
   books: LibraryBook[];
+  hidden_books?: HiddenLibraryBook[];
+  hidden_count?: number;
+  recovery_books?: HiddenLibraryBook[];
+  recovery_count?: number;
+  manifest_path?: string;
+  surface_policy?: string;
 }
 
 export interface CorpusChunkRow {
@@ -180,6 +220,92 @@ export interface DocumentRepositoriesResponse {
   repositories: DocumentRepository[];
 }
 
+export interface DocumentReaderChunk {
+  chunk_id: string;
+  chunk_key: string;
+  ordinal: number;
+  chunk_type: string;
+  markdown: string;
+  text: string;
+  token_count: number;
+  page_start?: number | null;
+  page_end?: number | null;
+  section_path: string[];
+  section_number: string;
+  heading_title: string;
+  source_anchor: string;
+  toc_path: string[];
+  asset_ids: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface DocumentReaderDocument {
+  document_source_id: string;
+  parsed_document_id: string;
+  title: string;
+  filename: string;
+  source_kind: string;
+  mime_type: string;
+  source_scope: string;
+  visibility: string;
+  metadata: Record<string, unknown>;
+  markdown: string;
+  markdown_total_chars?: number;
+  markdown_truncated?: boolean;
+  parsed_metadata: Record<string, unknown>;
+  outline: unknown[];
+  created_at: string;
+  updated_at: string;
+  total_chunks: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  chunks: DocumentReaderChunk[];
+}
+
+export interface DocumentReaderResponse {
+  database: 'postgres' | 'disabled' | string;
+  document: DocumentReaderDocument | null;
+}
+
+export interface RuntimeDbCorpusStatus {
+  database?: string;
+  collection?: string;
+  source_counts?: Record<string, number>;
+  chunk_counts?: Record<string, number>;
+  total_sources?: number;
+  total_chunks?: number;
+  qdrant_index_entries?: number;
+  missing_qdrant_index_entries?: number;
+  qdrant_index_parity?: boolean;
+  ready?: boolean;
+}
+
+export interface RuntimeQdrantLiveStatus {
+  url?: string;
+  collection?: string;
+  status?: string;
+  points_count?: number | null;
+  indexed_vectors_count?: number | null;
+  segments_count?: number | null;
+  optimizer_status?: string | null;
+  ready?: boolean;
+  error?: string;
+}
+
+export interface RuntimeHealthResponse {
+  ok: boolean;
+  runtime?: {
+    config_fingerprint?: string;
+    ocp_version?: string;
+    docs_language?: string;
+    qdrant_collection?: string;
+    database_runtime?: boolean;
+    db_corpus?: RuntimeDbCorpusStatus;
+    qdrant_live?: RuntimeQdrantLiveStatus;
+  } & Record<string, unknown>;
+}
+
 export interface BuyerPacket {
   book_slug: string;
   title: string;
@@ -250,6 +376,30 @@ export interface DataControlRoomSummary {
   derived_playbook_count: number;
   playable_asset_count: number;
   answer_pass_rate: number;
+  gate_status?: string;
+  certification_status?: string;
+  certification_blocker_count?: number;
+  gold_recovery_count?: number;
+  release_blocking?: boolean;
+  retrieval_hit_at_1?: number | null;
+  citation_precision?: number | null;
+  ragas_faithfulness?: number | null;
+  canonical_grade_source?: string;
+}
+
+export interface DataControlRoomCertification {
+  status: string;
+  label: string;
+  release_blocking: boolean;
+  blockers: string[];
+  warnings: string[];
+  gold_certified_count: number;
+  gold_recovery_count: number;
+  required_reports?: Record<string, { exists: boolean; path: string }>;
+  gold_contract?: {
+    rule?: string;
+    qdrant_parity_source?: string;
+  };
 }
 
 export interface DataControlRoomResponse {
@@ -278,6 +428,16 @@ export interface DataControlRoomResponse {
     critical_scenario_pass_rate: number | null;
     blockers: string[];
   };
+  certification?: DataControlRoomCertification;
+  canonical_grade_source?: {
+    name: string;
+    path: string;
+    exists: boolean;
+    rule: string;
+    summary?: Record<string, unknown>;
+  };
+  recent_report_paths?: Record<string, { path: string; exists: boolean; mtime?: string; size_bytes?: number }>;
+  reports?: Record<string, unknown>;
   known_books: LibraryBook[];
   gold_books: LibraryBook[];
   corpus: LibraryBucket;
@@ -777,6 +937,198 @@ export interface RepositorySearchResponse {
   official_candidates?: OfficialSourceCandidate[];
 }
 
+export type SourceDiscoveryLane =
+  | 'official_manual'
+  | 'official_source_repo'
+  | 'official_issue_pr'
+  | 'community_troubleshooting'
+  | 'vendor_kb'
+  | 'unsafe_unverified'
+  | string;
+
+export interface SourceDiscoverySearchQuery {
+  query: string;
+  lane: SourceDiscoveryLane;
+  purpose: string;
+  expected_evidence: string;
+}
+
+export interface SourceDiscoveryPlan {
+  schema: string;
+  source_request_id: string;
+  question: string;
+  failed_answer: string;
+  response_kind: string;
+  need_type: string;
+  reason: string;
+  allowed_lanes: SourceDiscoveryLane[];
+  search_queries: SourceDiscoverySearchQuery[];
+  risk_level: 'low' | 'medium' | 'high' | string;
+  gold_policy: string;
+  requires_human_review: boolean;
+  evidence: string[];
+  lane_policies?: Array<Record<string, unknown>>;
+}
+
+export interface GithubIssuePrResult {
+  id: number;
+  number: number;
+  title: string;
+  html_url: string;
+  state: string;
+  repository_full_name: string;
+  user_login: string;
+  labels: string[];
+  comments: number;
+  updated_at: string;
+  created_at: string;
+  score: number;
+  is_pull_request: boolean;
+  kind: 'issue' | 'pull_request' | string;
+}
+
+export interface SourceDiscoveryLaneResult {
+  lane: SourceDiscoveryLane;
+  label: string;
+  provider: string;
+  query: string;
+  status: 'ok' | 'error' | 'not_configured' | 'blocked' | string;
+  count: number;
+  items: Record<string, unknown>[];
+  message: string;
+  error: string;
+  trust_level: string;
+  gold_policy: string;
+  requires_human_review: boolean;
+  filtered_count?: number;
+  trust_note?: string;
+}
+
+export interface SourceDiscoverySearchResponse {
+  success: boolean;
+  planner_mode: string;
+  llm_planner_enabled: boolean;
+  plan: SourceDiscoveryPlan;
+  lane_results: SourceDiscoveryLaneResult[];
+  totals: {
+    lane_count: number;
+    official_candidates: number;
+    github_repositories: number;
+    github_issues_prs: number;
+  };
+  auth_mode: 'token' | 'public';
+  official_candidates: OfficialSourceCandidate[];
+  github_repository_results: RepositorySearchResult[];
+  github_issue_pr_results: GithubIssuePrResult[];
+}
+
+export interface SourceDiscoveryVerificationRecord {
+  schema: string;
+  candidate_id: string;
+  lane: SourceDiscoveryLane;
+  provider: string;
+  title: string;
+  source_url: string;
+  source_ref: string;
+  query: string;
+  source_request_query: string;
+  candidate_kind: string;
+  trust_level: string;
+  grade: 'bronze' | string;
+  verification_status: 'needs_verification' | string;
+  gold_policy: string;
+  citation_eligible: boolean;
+  can_promote_to_gold: boolean;
+  requires_human_review: boolean;
+  required_checks: Array<{ id: string; label: string; description: string }>;
+  promotion_blockers: string[];
+  created_at: string;
+  updated_at: string;
+  raw_candidate: Record<string, unknown>;
+}
+
+export interface SourceDiscoveryVerificationQueueResponse {
+  schema: string;
+  count: number;
+  items: SourceDiscoveryVerificationRecord[];
+  path: string;
+}
+
+export interface SourceDiscoveryVerificationSaveResponse extends SourceDiscoveryVerificationQueueResponse {
+  saved: boolean;
+  deduplicated: boolean;
+  item: SourceDiscoveryVerificationRecord;
+}
+
+export interface SourceDiscoveryJudgeNextAction {
+  action_id: string;
+  label: string;
+  description: string;
+  severity: 'info' | 'warning' | 'critical' | string;
+  query: string;
+  lane?: string;
+}
+
+export interface SourceDiscoveryJudgeReport {
+  schema: string;
+  judge_id: string;
+  created_at: string;
+  question: string;
+  before_answer: string;
+  after_answer: string;
+  overall_verdict: 'pass' | 'needs_review' | 'needs_replay' | 'fail' | string;
+  pass_fail: 'pass' | 'pending' | 'fail' | string;
+  answer_delta: {
+    before_answer_present: boolean;
+    after_answer_present: boolean;
+    before_length: number;
+    after_length: number;
+    after_has_citation_marker: boolean;
+    improvement_signal: boolean;
+    verdict: string;
+  };
+  citation_coverage: {
+    verdict: string;
+    citation_count: number;
+    official_citation_count: number;
+    citation_eligible_count: number;
+    non_eligible_citation_count: number;
+    has_citation_markers: boolean;
+  };
+  source_trust: {
+    verdict: string;
+    official_cross_check: boolean;
+    claimed_official_cross_check?: boolean;
+    community_only_risk: boolean;
+    needs_verification_count: number;
+    blocked_candidate_count: number;
+    unsafe_citation_count: number;
+    review_required_lanes: string[];
+  };
+  remaining_gap: string[];
+  next_actions?: SourceDiscoveryJudgeNextAction[];
+  evidence: {
+    citations: Record<string, unknown>[];
+    source_candidates: Record<string, unknown>[];
+    verification_records: SourceDiscoveryVerificationRecord[];
+  };
+  path?: string;
+}
+
+export interface SourceDiscoveryJudgeReportsResponse {
+  schema: string;
+  count: number;
+  items: SourceDiscoveryJudgeReport[];
+  path: string;
+}
+
+export interface SourceDiscoveryJudgeReplayResponse {
+  schema: string;
+  question: string;
+  replay: ChatResponse;
+  judge_report: SourceDiscoveryJudgeReport;
+}
+
 export interface RepositoryFavorite extends Omit<RepositorySearchResult, 'is_favorite' | 'favorite_category' | 'archived' | 'ranking_score'> {
   favorite_category: RepositoryCategory;
   saved_at: string;
@@ -838,12 +1190,20 @@ export interface RepositoryUnansweredItem {
   rewritten_query: string;
   timestamp: string;
   response_kind: string;
+  failure_reason?: string;
+  source_request_origin?: string;
+  status?: string;
   warnings: string[];
 }
 
 export interface RepositoryUnansweredResponse {
   count: number;
   items: RepositoryUnansweredItem[];
+}
+
+export interface RepositorySourceRequestResponse extends RepositoryUnansweredResponse {
+  success: boolean;
+  item: RepositoryUnansweredItem;
 }
 
 export interface SourceMetaResponse {
@@ -1082,6 +1442,93 @@ export async function searchRepositories(query: string, limit = 12): Promise<Rep
   return requestJson<RepositorySearchResponse>(`/api/repositories/search?${params.toString()}`);
 }
 
+export async function searchSourceDiscovery(query: string, limit = 8): Promise<SourceDiscoverySearchResponse> {
+  return requestJson<SourceDiscoverySearchResponse>('/api/repositories/source-discovery/search', {
+    method: 'POST',
+    body: JSON.stringify({
+      query,
+      limit,
+      include_community: true,
+      response_kind: 'source_discovery',
+    }),
+  });
+}
+
+export async function loadSourceDiscoveryVerificationQueue(limit = 50): Promise<SourceDiscoveryVerificationQueueResponse> {
+  return requestJson<SourceDiscoveryVerificationQueueResponse>(
+    `/api/repositories/source-discovery/verification-queue?limit=${encodeURIComponent(String(limit))}`,
+  );
+}
+
+export async function saveSourceDiscoveryVerificationCandidate(payload: {
+  lane: SourceDiscoveryLane;
+  provider: string;
+  query: string;
+  sourceRequestQuery?: string;
+  candidate?: Record<string, unknown>;
+}): Promise<SourceDiscoveryVerificationSaveResponse> {
+  return requestJson<SourceDiscoveryVerificationSaveResponse>('/api/repositories/source-discovery/verification-queue', {
+    method: 'POST',
+    body: JSON.stringify({
+      lane: payload.lane,
+      provider: payload.provider,
+      query: payload.query,
+      source_request_query: payload.sourceRequestQuery ?? '',
+      candidate: payload.candidate ?? {},
+    }),
+  });
+}
+
+export async function loadSourceDiscoveryJudgeReports(limit = 20): Promise<SourceDiscoveryJudgeReportsResponse> {
+  return requestJson<SourceDiscoveryJudgeReportsResponse>(
+    `/api/repositories/source-discovery/judge?limit=${encodeURIComponent(String(limit))}`,
+  );
+}
+
+export async function runSourceDiscoveryJudge(payload: {
+  question: string;
+  beforeAnswer?: string;
+  afterAnswer?: string;
+  citations?: Record<string, unknown>[];
+  sourceCandidates?: Record<string, unknown>[];
+  verificationRecords?: SourceDiscoveryVerificationRecord[];
+  includeVerificationQueue?: boolean;
+  officialCrossCheck?: boolean;
+}): Promise<SourceDiscoveryJudgeReport> {
+  return requestJson<SourceDiscoveryJudgeReport>('/api/repositories/source-discovery/judge', {
+    method: 'POST',
+    body: JSON.stringify({
+      question: payload.question,
+      before_answer: payload.beforeAnswer ?? '',
+      after_answer: payload.afterAnswer ?? '',
+      citations: payload.citations ?? [],
+      source_candidates: payload.sourceCandidates ?? [],
+      verification_records: payload.verificationRecords ?? [],
+      include_verification_queue: payload.includeVerificationQueue ?? true,
+      official_cross_check: payload.officialCrossCheck ?? false,
+    }),
+  });
+}
+
+export async function runSourceDiscoveryJudgeReplay(payload: {
+  question: string;
+  beforeAnswer?: string;
+  sourceCandidates?: Record<string, unknown>[];
+  verificationRecords?: SourceDiscoveryVerificationRecord[];
+  includeVerificationQueue?: boolean;
+}): Promise<SourceDiscoveryJudgeReplayResponse> {
+  return requestJson<SourceDiscoveryJudgeReplayResponse>('/api/repositories/source-discovery/judge/replay', {
+    method: 'POST',
+    body: JSON.stringify({
+      question: payload.question,
+      before_answer: payload.beforeAnswer ?? '',
+      source_candidates: payload.sourceCandidates ?? [],
+      verification_records: payload.verificationRecords ?? [],
+      include_verification_queue: payload.includeVerificationQueue ?? true,
+    }),
+  });
+}
+
 export async function loadOfficialSourceCatalog(): Promise<OfficialSourceCatalogResponse> {
   return requestJson<OfficialSourceCatalogResponse>('/api/repositories/official-catalog');
 }
@@ -1105,6 +1552,29 @@ export async function loadRepositoryFavorites(): Promise<RepositoryFavoritesResp
 
 export async function loadRepositoryUnanswered(limit = 20): Promise<RepositoryUnansweredResponse> {
   return requestJson<RepositoryUnansweredResponse>(`/api/repositories/unanswered?limit=${encodeURIComponent(String(limit))}`);
+}
+
+export async function saveRepositorySourceRequest(payload: {
+  query: string;
+  rewrittenQuery?: string;
+  responseKind?: string;
+  failureReason?: string;
+  sourceRequestOrigin?: string;
+  warnings?: string[];
+  sessionId?: string;
+}): Promise<RepositorySourceRequestResponse> {
+  return requestJson<RepositorySourceRequestResponse>('/api/repositories/source-request', {
+    method: 'POST',
+    body: JSON.stringify({
+      query: payload.query,
+      rewritten_query: payload.rewrittenQuery ?? '',
+      response_kind: payload.responseKind ?? 'manual_source_request',
+      failure_reason: payload.failureReason ?? 'user_requested_source_enrichment',
+      source_request_origin: payload.sourceRequestOrigin ?? 'chat_acquisition',
+      warnings: payload.warnings ?? [],
+      session_id: payload.sessionId ?? '',
+    }),
+  });
 }
 
 export async function saveRepositoryFavorites(
@@ -1365,6 +1835,24 @@ export async function uploadDocumentIngestion(
 
 export async function loadDocumentRepositories(): Promise<DocumentRepositoriesResponse> {
   return requestJson<DocumentRepositoriesResponse>('/api/repositories/documents');
+}
+
+export async function loadDocumentReader(params: {
+  documentSourceId?: string;
+  parsedDocumentId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<DocumentReaderResponse> {
+  const query = new URLSearchParams();
+  if (params.documentSourceId) query.set('document_source_id', params.documentSourceId);
+  if (params.parsedDocumentId) query.set('parsed_document_id', params.parsedDocumentId);
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.offset) query.set('offset', String(params.offset));
+  return requestJson<DocumentReaderResponse>(`/api/repositories/document-reader?${query.toString()}`);
+}
+
+export async function loadRuntimeHealth(): Promise<RuntimeHealthResponse> {
+  return requestJson<RuntimeHealthResponse>('/api/health');
 }
 
 export async function loadDocumentIngestStatus(params: {

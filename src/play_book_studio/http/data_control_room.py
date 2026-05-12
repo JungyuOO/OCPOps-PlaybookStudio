@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections import Counter
 from functools import lru_cache
+import hashlib
 from pathlib import Path
+from typing import Any
 
 from play_book_studio.http.data_control_room_buckets import (
     _build_approved_wiki_runtime_book_bucket,
@@ -68,7 +70,133 @@ def _path_fingerprint(path: Path | None) -> tuple[str, bool, int, int]:
         stat = target.stat()
     except FileNotFoundError:
         return (str(target), False, 0, 0)
+    if target.is_dir():
+        return _directory_tree_fingerprint(target)
     return (str(target), True, int(stat.st_mtime_ns), int(stat.st_size))
+
+
+def _directory_tree_fingerprint(target: Path) -> tuple[str, bool, int, int]:
+    latest_mtime_ns = 0
+    file_count = 0
+    digest = hashlib.sha256()
+    try:
+        children = sorted(target.rglob("*"))
+    except OSError:
+        return (str(target), False, 0, 0)
+    for child in children:
+        if not child.is_file():
+            continue
+        try:
+            stat = child.stat()
+        except OSError:
+            continue
+        file_count += 1
+        latest_mtime_ns = max(latest_mtime_ns, int(stat.st_mtime_ns))
+        rel_path = child.relative_to(target).as_posix()
+        digest.update(rel_path.encode("utf-8", errors="ignore"))
+        digest.update(b"\0")
+        digest.update(str(int(stat.st_mtime_ns)).encode("ascii"))
+        digest.update(b":")
+        digest.update(str(int(stat.st_size)).encode("ascii"))
+        digest.update(b"\n")
+    root_stat = target.stat()
+    latest_mtime_ns = max(latest_mtime_ns, int(root_stat.st_mtime_ns))
+    return (f"{target}#{digest.hexdigest()[:16]}", True, latest_mtime_ns, file_count)
+
+
+def _database_official_docs_fingerprint(database_url: str) -> tuple[tuple[str, bool, int, int], ...]:
+    normalized_url = str(database_url or "").strip()
+    if not normalized_url:
+        return ()
+    try:
+        import psycopg
+
+        with psycopg.connect(normalized_url, connect_timeout=2) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    WITH latest_parsed AS (
+                        SELECT DISTINCT ON (document_source_id)
+                            id,
+                            document_source_id,
+                            title,
+                            metadata,
+                            created_at
+                        FROM parsed_documents
+                        ORDER BY document_source_id, created_at DESC, id DESC
+                    ),
+                    official_rows AS (
+                        SELECT
+                            ds.id::text AS source_id,
+                            NULLIF(ds.metadata ->> 'book_slug', '') AS book_slug,
+                            COALESCE(ds.filename, '') AS filename,
+                            COALESCE(ds.source_kind, '') AS source_kind,
+                            COALESCE(ds.source_scope, '') AS source_scope,
+                            COALESCE(ds.visibility, '') AS visibility,
+                            COALESCE(ds.metadata::text, '') AS source_metadata,
+                            COALESCE(pd.id::text, '') AS parsed_id,
+                            COALESCE(pd.title, '') AS parsed_title,
+                            COALESCE(pd.metadata::text, '') AS parsed_metadata,
+                            count(dc.id)::bigint AS chunk_count,
+                            count(DISTINCT NULLIF(dc.source_anchor, ''))::bigint AS section_count,
+                            COALESCE((EXTRACT(EPOCH FROM max(dc.created_at)) * 1000000000)::bigint, 0) AS chunk_max_ns,
+                            md5(COALESCE(string_agg(
+                                COALESCE(dc.ordinal::text, '') || '|' ||
+                                COALESCE(dc.chunk_key, '') || '|' ||
+                                COALESCE(dc.source_anchor, '') || '|' ||
+                                COALESCE(dc.heading_title, ''),
+                                E'\\n'
+                                ORDER BY dc.ordinal, dc.id::text
+                            ), '')) AS chunk_shape_hash
+                        FROM document_sources ds
+                        LEFT JOIN latest_parsed pd ON pd.document_source_id = ds.id
+                        LEFT JOIN document_chunks dc ON dc.parsed_document_id = pd.id
+                        WHERE ds.source_scope = 'official_docs'
+                          AND COALESCE(ds.metadata ->> 'book_slug', '') <> ''
+                        GROUP BY ds.id, pd.id, pd.title, pd.metadata
+                    )
+                    SELECT
+                        count(*)::bigint AS source_count,
+                        count(NULLIF(parsed_id, ''))::bigint AS parsed_count,
+                        COALESCE(sum(chunk_count), 0)::bigint AS chunk_count,
+                        COALESCE((EXTRACT(EPOCH FROM max(ds.created_at)) * 1000000000)::bigint, 0) AS source_max_ns,
+                        COALESCE((EXTRACT(EPOCH FROM max(pd.created_at)) * 1000000000)::bigint, 0) AS parsed_max_ns,
+                        COALESCE(max(row_shape.chunk_max_ns), 0)::bigint AS chunk_max_ns,
+                        md5(COALESCE(string_agg(
+                            source_id || '|' ||
+                            COALESCE(book_slug, '') || '|' ||
+                            filename || '|' ||
+                            source_kind || '|' ||
+                            source_scope || '|' ||
+                            visibility || '|' ||
+                            source_metadata || '|' ||
+                            parsed_id || '|' ||
+                            parsed_title || '|' ||
+                            parsed_metadata || '|' ||
+                            chunk_count::text || '|' ||
+                            section_count::text || '|' ||
+                            chunk_shape_hash,
+                            E'\\n'
+                            ORDER BY COALESCE(book_slug, ''), source_id
+                        ), '')) AS content_hash
+                    FROM official_rows row_shape
+                    JOIN document_sources ds ON ds.id::text = row_shape.source_id
+                    LEFT JOIN parsed_documents pd ON pd.id::text = row_shape.parsed_id
+                    """
+                )
+                row = cursor.fetchone()
+    except Exception:  # noqa: BLE001
+        return (("postgres:official_docs:fingerprint_unavailable", False, 0, 0),)
+    if not row:
+        return (("postgres:official_docs:empty", True, 0, 0),)
+    source_count, parsed_count, chunk_count, source_max_ns, parsed_max_ns, chunk_max_ns, content_hash = row
+    content_digest = str(content_hash or "").strip() or "empty"
+    return (
+        ("postgres:official_docs:sources", True, int(source_max_ns or 0), int(source_count or 0)),
+        ("postgres:official_docs:parsed", True, int(parsed_max_ns or 0), int(parsed_count or 0)),
+        ("postgres:official_docs:chunks", True, int(chunk_max_ns or 0), int(chunk_count or 0)),
+        (f"postgres:official_docs:shape:{content_digest}", True, int(chunk_max_ns or 0), int(chunk_count or 0)),
+    )
 
 
 def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, int, int], ...]:
@@ -85,11 +213,27 @@ def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, i
         settings.chunks_path,
         settings.customer_pack_books_dir,
         settings.customer_pack_corpus_dir,
+        root / "data" / "wiki_runtime_books",
+        root / "data" / "wiki_relations",
+        root / "data" / "gold_candidate_books" / "full_rebuild_manifest.json",
+        root / "PRODUCT_GATE_SCORECARD.yaml",
+        root / "reports" / "build_logs" / "product_rehearsal_report.json",
+        root / "reports" / "build_logs" / "buyer_packet_bundle_index.json",
+        root / "reports" / "build_logs" / "release_candidate_freeze_packet.json",
+        settings.runtime_dir / "served_viewers",
+        settings.runtime_dir / "wiki_overlays",
+        *settings.normalized_docs_candidates,
+        *settings.retrieval_normalized_docs_candidates,
         *settings.playbook_book_dirs,
     ]
-    if not str(settings.database_url or "").strip():
+    database_url = str(settings.database_url or "").strip()
+    if not database_url:
         watched_paths.insert(1, settings.source_manifest_path)
-    return tuple(_path_fingerprint(path) for path in watched_paths)
+        return tuple(_path_fingerprint(path) for path in watched_paths)
+    return (
+        *(_path_fingerprint(path) for path in watched_paths),
+        *_database_official_docs_fingerprint(database_url),
+    )
 
 
 @lru_cache(maxsize=8)
@@ -105,6 +249,72 @@ def build_data_control_room_payload(root_dir: str | Path) -> dict[str, object]:
     root = Path(root_dir).resolve()
     fingerprint = _data_control_room_cache_fingerprint(root)
     return _build_data_control_room_payload_cached(str(root), fingerprint)
+
+
+def _snapshot_exists(snapshot: dict[str, Any]) -> bool:
+    return bool(snapshot.get("exists"))
+
+
+def _build_certification_contract(
+    *,
+    report_snapshots: dict[str, dict[str, Any]],
+    approved_wiki_runtime_books: dict[str, Any],
+    canonical_grade_source: dict[str, Any],
+) -> dict[str, Any]:
+    blockers: list[str] = []
+    warnings: list[str] = []
+    required_reports = {
+        "morning_gate": "missing_morning_gate_report",
+        "source_approval": "missing_source_approval_report",
+        "retrieval_eval": "missing_retrieval_eval_report",
+        "answer_eval": "missing_answer_eval_report",
+        "ragas_eval": "missing_ragas_eval_report",
+        "runtime_report": "missing_runtime_report",
+    }
+    for key, blocker in required_reports.items():
+        if not _snapshot_exists(report_snapshots.get(key, {})):
+            blockers.append(blocker)
+    if not bool(canonical_grade_source.get("exists")):
+        blocker = "canonical_grade_source_unavailable"
+        if blocker not in blockers:
+            blockers.append(blocker)
+    recovery_count = int(
+        approved_wiki_runtime_books.get("recovery_count")
+        or approved_wiki_runtime_books.get("hidden_count")
+        or len(approved_wiki_runtime_books.get("hidden_books") or [])
+    )
+    if recovery_count > 0:
+        blockers.append("gold_recovery_items_present")
+    certified_count = len(
+        [
+            book
+            for book in approved_wiki_runtime_books.get("books", [])
+            if isinstance(book, dict) and bool(book.get("certified_gold", True))
+        ]
+    )
+    if approved_wiki_runtime_books.get("books") and certified_count != len(approved_wiki_runtime_books.get("books") or []):
+        warnings.append("runtime_books_include_uncertified_gold")
+    status = "certified" if not blockers else "not_certifiable"
+    return {
+        "status": status,
+        "label": "Certified Gold Wiki" if status == "certified" else "Not Certifiable",
+        "release_blocking": status != "certified",
+        "blockers": blockers,
+        "warnings": warnings,
+        "gold_certified_count": certified_count,
+        "gold_recovery_count": recovery_count,
+        "required_reports": {
+            key: {
+                "exists": _snapshot_exists(report_snapshots.get(key, {})),
+                "path": str((report_snapshots.get(key, {}) or {}).get("path") or ""),
+            }
+            for key in required_reports
+        },
+        "gold_contract": {
+            "rule": "Gold is certified only when the book is readable in the viewer, has sections and chunks, passes Korean language gates, carries source provenance, and passes reader smoke. Failed candidates are Gold Recovery, not Gold.",
+            "qdrant_parity_source": "runtime_health.db_corpus.qdrant_index_parity and runtime_health.qdrant_live points/indexed vectors",
+        },
+    }
 
 
 def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str, object]:
@@ -212,13 +422,23 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     manual_book_library = _build_manual_book_library(core_manualbooks, extra_manualbooks)
     playbook_library = _build_playbook_library(derived_playbook_family_statuses)
     gold_candidate_books = _build_gold_candidate_book_bucket(root)
-    approved_wiki_runtime_books = _build_approved_wiki_runtime_book_bucket(root, translation_lane_report=translation_lane_report)
+    approved_wiki_runtime_books = _build_approved_wiki_runtime_book_bucket(
+        root,
+        translation_lane_report=translation_lane_report,
+        approved_manifest_entries=manifest_entries,
+    )
     navigation_backlog = _build_navigation_backlog_bucket(root)
     wiki_usage_signals = _build_wiki_usage_signal_bucket(root)
     product_gate = _build_product_gate_bucket(root)
     product_rehearsal = _build_product_rehearsal_summary(root)
     buyer_packet_bundle = _build_buyer_packet_bundle_bucket(root)
     release_candidate_freeze = _build_release_candidate_freeze_summary(root)
+    source_approved_gold_books = gold_books
+    gold_books = [
+        _simplify_book(book)
+        for book in approved_wiki_runtime_books.get("books", [])
+        if isinstance(book, dict) and str(book.get("runtime_readable") or "").lower() in {"true", "1"}
+    ]
     chunk_candidate_counts = {candidate["row_count"] for candidate in chunk_candidates if candidate.get("exists")}
     playbook_candidate_counts = {candidate["file_count"] for candidate in playbook_candidates if candidate.get("exists")}
     canonical_grade_source = {
@@ -263,6 +483,19 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "ragas_eval": _path_snapshot(settings.ragas_eval_report_path),
         "runtime_report": _path_snapshot(settings.runtime_report_path),
     }
+    certification = _build_certification_contract(
+        report_snapshots=report_snapshots,
+        approved_wiki_runtime_books=approved_wiki_runtime_books,
+        canonical_grade_source=canonical_grade_source,
+    )
+    effective_release_blocking = bool(verdict.get("release_blocking")) or bool(certification.get("release_blocking"))
+    effective_gate_status = str(verdict.get("status") or "").strip() or "unknown"
+    if effective_gate_status == "unknown" and certification.get("status") != "certified":
+        effective_gate_status = "not_certifiable"
+    effective_gate_reasons = [
+        *[str(reason) for reason in list(verdict.get("reasons") or []) if str(reason).strip()],
+        *[str(reason) for reason in list(certification.get("blockers") or []) if str(reason).strip()],
+    ]
     return {
         "generated_at": _iso_now(),
         "active_pack": {
@@ -275,8 +508,11 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "viewer_path_prefix": settings.viewer_path_prefix,
         },
         "summary": {
-            "gate_status": str(verdict.get("status") or "unknown"),
-            "release_blocking": bool(verdict.get("release_blocking")),
+            "gate_status": effective_gate_status,
+            "certification_status": str(certification.get("status") or "unknown"),
+            "certification_blocker_count": len(certification.get("blockers") or []),
+            "gold_recovery_count": int(certification.get("gold_recovery_count") or 0),
+            "release_blocking": effective_release_blocking,
             "approved_runtime_count": selected_approved_runtime_count,
             "known_book_count": int(source_approval_report.get("summary", {}).get("book_count") or len(source_books)),
             "gold_book_count": len(gold_books),
@@ -321,9 +557,9 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "gate": {
             "path": str(gate_path),
             "run_at": str(gate_report.get("run_at") or ""),
-            "status": str(verdict.get("status") or "unknown"),
-            "release_blocking": bool(verdict.get("release_blocking")),
-            "reasons": list(verdict.get("reasons") or []),
+            "status": effective_gate_status,
+            "release_blocking": effective_release_blocking,
+            "reasons": effective_gate_reasons,
             "summary": {
                 "approved_runtime_count": int(verdict_summary.get("approved_runtime_count") or len(manifest_by_slug)),
                 "translation_ready_count": int(verdict_summary.get("translation_ready_count") or 0),
@@ -338,6 +574,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "summary": source_approval_report.get("summary") if isinstance(source_approval_report.get("summary"), dict) else {},
             "grade_breakdown": [{"grade": grade, "count": count} for grade, count in sorted(grade_breakdown_counter.items(), key=lambda item: (-item[1], item[0]))],
             "gold_books": gold_books,
+            "source_approved_gold_books": source_approved_gold_books,
             "queue_books": active_queue_rows,
         },
         "evaluations": {
@@ -353,6 +590,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "playbooks": {"selected_dir": str(selected_playbook_dir) if selected_playbook_dir else "", "candidates": playbook_candidates, "drift_detected": len(playbook_candidate_counts) > 1},
         },
         "canonical_grade_source": canonical_grade_source,
+        "certification": certification,
         "source_of_truth_drift": source_of_truth_drift,
         "corpus": {"selected_path": str(selected_chunks_path) if selected_chunks_path else "", "books": core_corpus_books},
         "manualbooks": {"selected_dir": str(selected_playbook_dir) if selected_playbook_dir else "", "books": core_manualbooks},
@@ -428,7 +666,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "synthesized_playbook_status": synthesized_playbooks,
         "recent_report_paths": report_snapshots,
         "reports": {
-            "gate": {"status": str(verdict.get("status") or "unknown"), "summary": verdict_summary},
+            "gate": {"status": effective_gate_status, "summary": verdict_summary},
             "source_approval": {"path": str(source_approval_report_path or ""), "summary": source_approval_report.get("summary") if isinstance(source_approval_report.get("summary"), dict) else {}},
             "translation_lane": {"path": str(translation_lane_path or ""), "summary": translation_lane_report.get("summary") if isinstance(translation_lane_report.get("summary"), dict) else {}},
             "retrieval": _summarize_eval(retrieval_report),

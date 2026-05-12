@@ -315,10 +315,11 @@ def _build_source_of_truth_drift(
 def _simplify_book(book: dict[str, Any]) -> dict[str, Any]:
     translation_lane = book.get("translation_lane") if isinstance(book.get("translation_lane"), dict) else {}
     reader_grade = book.get("manualbook_reader_grade") if isinstance(book.get("manualbook_reader_grade"), dict) else {}
+    explicit_grade = str(book.get("grade") or "").strip()
     return {
         "book_slug": str(book.get("book_slug") or ""),
         "title": str(book.get("title") or book.get("vendor_title") or ""),
-        "grade": _grade_label(book),
+        "grade": explicit_grade or _grade_label(book),
         "content_status": str(book.get("content_status") or ""),
         "approval_status": str(book.get("approval_status") or ""),
         "review_status": str(book.get("review_status") or ""),
@@ -343,6 +344,27 @@ def _simplify_book(book: dict[str, Any]) -> dict[str, Any]:
         "boundary_truth": str(book.get("boundary_truth") or ""),
         "runtime_truth_label": str(book.get("runtime_truth_label") or ""),
         "boundary_badge": str(book.get("boundary_badge") or ""),
+        "runtime_readable": bool(book.get("runtime_readable")),
+        "runtime_gate": str(book.get("runtime_gate") or ""),
+        "runtime_readiness": str(book.get("runtime_readiness") or ""),
+        "source_grade": str(book.get("source_grade") or ""),
+        "certified_gold": bool(book.get("certified_gold")),
+        "gold_contract_status": str(book.get("gold_contract_status") or ""),
+        "gold_contract_blockers": list(book.get("gold_contract_blockers") or []),
+        "gold_contract_warnings": list(book.get("gold_contract_warnings") or []),
+        "gold_recovery_group": str(book.get("gold_recovery_group") or ""),
+        "gold_recovery_action": str(book.get("gold_recovery_action") or ""),
+        "effective_grade": str(book.get("effective_grade") or ""),
+        "viewer_smoke_status": str(book.get("viewer_smoke_status") or ""),
+        "viewer_smoke_reason": str(book.get("viewer_smoke_reason") or ""),
+        "viewer_smoke_warning": str(book.get("viewer_smoke_warning") or ""),
+        "viewer_smoke_body_length": int(book.get("viewer_smoke_body_length") or 0),
+        "viewer_smoke_heading_count": int(book.get("viewer_smoke_heading_count") or 0),
+        "language_gate_status": str(book.get("language_gate_status") or ""),
+        "language_gate_reason": str(book.get("language_gate_reason") or ""),
+        "language_quality": str(book.get("language_quality") or ""),
+        "body_language_guess": str(book.get("body_language_guess") or ""),
+        "hangul_chunk_ratio": book.get("hangul_chunk_ratio"),
     }
 
 
