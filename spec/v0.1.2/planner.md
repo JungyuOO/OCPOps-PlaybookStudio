@@ -20,6 +20,11 @@
   - DB corpus readiness: official_docs 33,722개, study_docs 1,225개, qdrant_index_parity true
   - `reports/v012_chunk_quality_after.json` 생성: row_count 34,263, mojibake_suspect_count 0
   - GitHub 100MB 제한 때문에 보강된 official JSONL 자체는 커밋하지 않고, seed 시 `official-gold-import --enrich-runtime-metadata`로 컨테이너 안에서 재생성하도록 변경
+- [x] Phase C Step 13 통과: v012 beginner answer eval 6/6 pass, `reports/v012_answer_eval_after.json` 동결
+  - answer format: `답변:`뿐 아니라 초보자용 `요약:`도 정상 포맷으로 인정하도록 eval 기준 보정
+  - `Service`/`Endpoint`/`Route`, namespace 생성, Deployment YAML, Pod 리소스 확인 질문은 의도 기반 shaping으로 보강
+  - Pod 리소스 명령은 공식 CLI 문서 기준 `oc adm top pod` 단수 명령으로 정정
+  - 관찰 사항: Service 장애 케이스는 pass 상태지만 provenance noise가 1건 남음(`ingress_and_load_balancing` + 보조 citation). 다음 품질 패스에서 citation 압축/정밀도 개선 대상으로 유지
 
 ## 목표
 

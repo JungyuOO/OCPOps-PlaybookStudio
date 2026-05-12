@@ -43,7 +43,7 @@ from .answer_text_commands import (
     shape_etcd_backup_answer,
     strip_ungrounded_code_blocks,
 )
-from .answer_text_formatting import summarize_session_context
+from .answer_text_formatting import shape_beginner_grounded_answer, summarize_session_context
 from .citations import (
     finalize_citations,
     inject_citation_indices,
@@ -1182,6 +1182,16 @@ class ChatAnswerer:
                 grounded_command_answer,
                 context_bundle.citations,
             )
+            beginner_shaped_answer_text = shape_beginner_grounded_answer(
+                answer_text,
+                query=query,
+                citations=final_citations or context_bundle.citations,
+            )
+            if beginner_shaped_answer_text != answer_text:
+                answer_text, final_citations, cited_indices = finalize_citations(
+                    beginner_shaped_answer_text,
+                    final_citations or context_bundle.citations,
+                )
             pipeline_timings_ms["total"] = round(
                 (time.perf_counter() - answer_started_at) * 1000,
                 1,
@@ -1484,6 +1494,17 @@ class ChatAnswerer:
         )
         if guarded_answer_text != answer_text:
             answer_text = guarded_answer_text
+            answer_text, final_citations, cited_indices = finalize_citations(
+                answer_text,
+                final_citations or context_bundle.citations,
+            )
+        beginner_shaped_answer_text = shape_beginner_grounded_answer(
+            answer_text,
+            query=query,
+            citations=final_citations or context_bundle.citations,
+        )
+        if beginner_shaped_answer_text != answer_text:
+            answer_text = beginner_shaped_answer_text
             answer_text, final_citations, cited_indices = finalize_citations(
                 answer_text,
                 final_citations or context_bundle.citations,

@@ -1,0 +1,4098 @@
+{
+  "cases_file": "corpus\\manifests\\eval\\pbs_chat_quality_v012_beginner_cases.jsonl",
+  "top_k": 8,
+  "candidate_k": 24,
+  "max_context_chunks": 8,
+  "case_count": 6,
+  "overall": {
+    "case_count": 6,
+    "answer_present_rate": 1.0,
+    "korean_answer_rate": 1.0,
+    "answer_format_rate": 1.0,
+    "inline_citation_rate": 1.0,
+    "citation_valid_rate": 1.0,
+    "expected_citation_rate": 1.0,
+    "unexpected_citation_rate": 0.1667,
+    "strict_expected_only_rate": 0.8333,
+    "pass_with_provenance_noise_rate": 0.1667,
+    "avg_citation_precision": 0.8889,
+    "clarification_needed_but_answered_rate": 0.0,
+    "no_evidence_but_asserted_rate": 0.0,
+    "must_include_rate": 1.0,
+    "must_exclude_rate": 1.0,
+    "citation_terms_rate": 1.0,
+    "citation_forbidden_terms_rate": 1.0,
+    "primary_expected_book_rate": 1.0,
+    "warning_free_rate": 1.0,
+    "pass_rate": 1.0
+  },
+  "by_query_type": {
+    "beginner_authoring": {
+      "case_count": 1,
+      "answer_present_rate": 1.0,
+      "korean_answer_rate": 1.0,
+      "answer_format_rate": 1.0,
+      "inline_citation_rate": 1.0,
+      "citation_valid_rate": 1.0,
+      "expected_citation_rate": 1.0,
+      "unexpected_citation_rate": 0.0,
+      "strict_expected_only_rate": 1.0,
+      "pass_with_provenance_noise_rate": 0.0,
+      "avg_citation_precision": 1.0,
+      "clarification_needed_but_answered_rate": 0.0,
+      "no_evidence_but_asserted_rate": 0.0,
+      "must_include_rate": 1.0,
+      "must_exclude_rate": 1.0,
+      "citation_terms_rate": 1.0,
+      "citation_forbidden_terms_rate": 1.0,
+      "primary_expected_book_rate": 1.0,
+      "warning_free_rate": 1.0,
+      "pass_rate": 1.0
+    },
+    "beginner_command": {
+      "case_count": 3,
+      "answer_present_rate": 1.0,
+      "korean_answer_rate": 1.0,
+      "answer_format_rate": 1.0,
+      "inline_citation_rate": 1.0,
+      "citation_valid_rate": 1.0,
+      "expected_citation_rate": 1.0,
+      "unexpected_citation_rate": 0.0,
+      "strict_expected_only_rate": 1.0,
+      "pass_with_provenance_noise_rate": 0.0,
+      "avg_citation_precision": 1.0,
+      "clarification_needed_but_answered_rate": 0.0,
+      "no_evidence_but_asserted_rate": 0.0,
+      "must_include_rate": 1.0,
+      "must_exclude_rate": 1.0,
+      "citation_terms_rate": 1.0,
+      "citation_forbidden_terms_rate": 1.0,
+      "primary_expected_book_rate": 1.0,
+      "warning_free_rate": 1.0,
+      "pass_rate": 1.0
+    },
+    "beginner_install_overview": {
+      "case_count": 1,
+      "answer_present_rate": 1.0,
+      "korean_answer_rate": 1.0,
+      "answer_format_rate": 1.0,
+      "inline_citation_rate": 1.0,
+      "citation_valid_rate": 1.0,
+      "expected_citation_rate": 1.0,
+      "unexpected_citation_rate": 0.0,
+      "strict_expected_only_rate": 1.0,
+      "pass_with_provenance_noise_rate": 0.0,
+      "avg_citation_precision": 1.0,
+      "clarification_needed_but_answered_rate": 0.0,
+      "no_evidence_but_asserted_rate": 0.0,
+      "must_include_rate": 1.0,
+      "must_exclude_rate": 1.0,
+      "citation_terms_rate": 1.0,
+      "citation_forbidden_terms_rate": 1.0,
+      "primary_expected_book_rate": 1.0,
+      "warning_free_rate": 1.0,
+      "pass_rate": 1.0
+    },
+    "beginner_troubleshooting": {
+      "case_count": 1,
+      "answer_present_rate": 1.0,
+      "korean_answer_rate": 1.0,
+      "answer_format_rate": 1.0,
+      "inline_citation_rate": 1.0,
+      "citation_valid_rate": 1.0,
+      "expected_citation_rate": 1.0,
+      "unexpected_citation_rate": 1.0,
+      "strict_expected_only_rate": 0.0,
+      "pass_with_provenance_noise_rate": 1.0,
+      "avg_citation_precision": 0.3333,
+      "clarification_needed_but_answered_rate": 0.0,
+      "no_evidence_but_asserted_rate": 0.0,
+      "must_include_rate": 1.0,
+      "must_exclude_rate": 1.0,
+      "citation_terms_rate": 1.0,
+      "citation_forbidden_terms_rate": 1.0,
+      "primary_expected_book_rate": 1.0,
+      "warning_free_rate": 1.0,
+      "pass_rate": 1.0
+    }
+  },
+  "by_mode": {
+    "beginner": {
+      "case_count": 6,
+      "answer_present_rate": 1.0,
+      "korean_answer_rate": 1.0,
+      "answer_format_rate": 1.0,
+      "inline_citation_rate": 1.0,
+      "citation_valid_rate": 1.0,
+      "expected_citation_rate": 1.0,
+      "unexpected_citation_rate": 0.1667,
+      "strict_expected_only_rate": 0.8333,
+      "pass_with_provenance_noise_rate": 0.1667,
+      "avg_citation_precision": 0.8889,
+      "clarification_needed_but_answered_rate": 0.0,
+      "no_evidence_but_asserted_rate": 0.0,
+      "must_include_rate": 1.0,
+      "must_exclude_rate": 1.0,
+      "citation_terms_rate": 1.0,
+      "citation_forbidden_terms_rate": 1.0,
+      "primary_expected_book_rate": 1.0,
+      "warning_free_rate": 1.0,
+      "pass_rate": 1.0
+    }
+  },
+  "failures": [],
+  "realworld_assessment": {
+    "status": "sufficient_with_provenance_noise",
+    "reason": "answer contract passes, but some passing cases still cite extra provenance",
+    "failed_case_count": 0,
+    "root_cause_counts": {},
+    "provenance_noise_case_ids": [
+      "v012-beginner-002"
+    ]
+  },
+  "details": [
+    {
+      "id": "v012-beginner-001",
+      "mode": "beginner",
+      "query_type": "beginner_install_overview",
+      "failure_bucket_hint": "",
+      "question": "OCP 설치는 어떻게 해?",
+      "query": "OCP 설치는 어떻게 해?",
+      "expected_book_slugs": [
+        "installation_overview",
+        "installing_on_any_platform"
+      ],
+      "expected_primary_book_slugs": [
+        "installation_overview",
+        "installing_on_any_platform"
+      ],
+      "forbidden_book_slugs": [],
+      "must_include_terms": [
+        "Assisted Installer",
+        "Single Node OpenShift",
+        "openshift-install"
+      ],
+      "must_not_include_terms": [],
+      "expected_citation_terms": [
+        "installation"
+      ],
+      "forbidden_citation_terms": [],
+      "clarification_expected": false,
+      "no_answer_expected": false,
+      "rewritten_query": "OCP 설치는 어떻게 해? OpenShift Container Platform Assisted Installer Agent-based Single Node 설치 개요 클러스터 정보 프로그램 SNO IPI UPI openshift-install",
+      "retrieved_books": [
+        "validation_and_troubleshooting",
+        "overview",
+        "installation_overview",
+        "support",
+        "architecture",
+        "postinstallation_configuration"
+      ],
+      "has_answer": true,
+      "has_korean": true,
+      "answer_format_valid": true,
+      "has_inline_citations": true,
+      "citation_indices_valid": true,
+      "clarification_detected": false,
+      "no_answer_detected": false,
+      "clarification_needed_but_answered": false,
+      "no_evidence_but_asserted": false,
+      "must_include_pass": true,
+      "must_exclude_pass": true,
+      "missing_required_terms": [],
+      "forbidden_answer_terms": [],
+      "citation_terms_pass": true,
+      "citation_forbidden_terms_pass": true,
+      "missing_citation_terms": [],
+      "forbidden_citation_term_hits": [],
+      "primary_expected_book": true,
+      "primary_cited_book": "installation_overview",
+      "cited_expected_book": true,
+      "unexpected_cited_books": [],
+      "forbidden_cited_books": [],
+      "has_unexpected_citation": false,
+      "strict_expected_only": true,
+      "citation_precision": 1.0,
+      "warning_free": true,
+      "pass": true,
+      "cited_indices": [
+        1
+      ],
+      "cited_books": [
+        "installation_overview"
+      ],
+      "warnings": [],
+      "answer": "요약: OCP 설치는 먼저 설치 방식과 대상 환경을 정한 뒤, 사전 준비물과 설치 완료 확인 명령을 순서대로 확인하는 작업입니다. [1]\n\n1. 설치 방식을 먼저 고릅니다.\n- Assisted Installer: 웹 UI와 사전 검증을 이용해 온프레미스/베어메탈 설치를 쉽게 진행할 때 먼저 검토합니다. [1]\n- Agent-based Installer: ISO 기반으로 자동화하거나 제한망/폐쇄망 흐름을 맞춰야 할 때 검토합니다. [1]\n- Single Node OpenShift(SNO): 서버 1대에서 control plane과 worker 역할을 함께 두는 실습/PoC 구성을 검토할 때 봅니다. [1]\n- IPI/UPI: 클라우드나 가상화 인프라를 설치 프로그램이 만들지, 사용자가 직접 준비할지에 따라 나뉩니다.\n\n2. 설치 전에 준비할 항목을 확인합니다.\n- pull secret, SSH key, DNS(api, api-int, *.apps), 네트워크, 설치 대상 서버/VM, 필요 시 로드밸런서를 먼저 맞춥니다.\n- 설치 방식에 따라 install-config.yaml, Ignition 파일, Discovery ISO 같은 설치 자산을 준비합니다.\n\n3. 설치 진행 상태는 CLI로 확인합니다.\n```bash\nopenshift-install --dir <installation_directory> wait-for bootstrap-complete --log-level=info\nopenshift-install --dir <installation_directory> wait-for install-complete --log-level=info\nexport KUBECONFIG=<installation_directory>/auth/kubeconfig\noc whoami\n```\n초보자 기준으로는 먼저 Assisted Installer + SNO 흐름으로 전체 그림을 잡고, 자동화나 제한망 요구가 생기면 Agent-based/UPI 흐름을 비교하는 편이 이해하기 쉽습니다. [1]",
+      "answer_text": "요약: OCP 설치는 먼저 설치 방식과 대상 환경을 정한 뒤, 사전 준비물과 설치 완료 확인 명령을 순서대로 확인하는 작업입니다. [1]\n\n1. 설치 방식을 먼저 고릅니다.\n- Assisted Installer: 웹 UI와 사전 검증을 이용해 온프레미스/베어메탈 설치를 쉽게 진행할 때 먼저 검토합니다. [1]\n- Agent-based Installer: ISO 기반으로 자동화하거나 제한망/폐쇄망 흐름을 맞춰야 할 때 검토합니다. [1]\n- Single Node OpenShift(SNO): 서버 1대에서 control plane과 worker 역할을 함께 두는 실습/PoC 구성을 검토할 때 봅니다. [1]\n- IPI/UPI: 클라우드나 가상화 인프라를 설치 프로그램이 만들지, 사용자가 직접 준비할지에 따라 나뉩니다.\n\n2. 설치 전에 준비할 항목을 확인합니다.\n- pull secret, SSH key, DNS(api, api-int, *.apps), 네트워크, 설치 대상 서버/VM, 필요 시 로드밸런서를 먼저 맞춥니다.\n- 설치 방식에 따라 install-config.yaml, Ignition 파일, Discovery ISO 같은 설치 자산을 준비합니다.\n\n3. 설치 진행 상태는 CLI로 확인합니다.\n```bash\nopenshift-install --dir <installation_directory> wait-for bootstrap-complete --log-level=info\nopenshift-install --dir <installation_directory> wait-for install-complete --log-level=info\nexport KUBECONFIG=<installation_directory>/auth/kubeconfig\noc whoami\n```\n초보자 기준으로는 먼저 Assisted Installer + SNO 흐름으로 전체 그림을 잡고, 자동화나 제한망 요구가 생기면 Agent-based/UPI 흐름을 비교하는 편이 이해하기 쉽습니다. [1]",
+      "final_citations": [
+        {
+          "index": 1,
+          "chunk_id": "6462a786-dc66-530b-9482-be12c78bd369",
+          "book_slug": "installation_overview",
+          "section": "공용 OpenShift 미러를 사용하여 FIPS 지원 설치 프로그램 가져오기",
+          "anchor": "installation-obtaining-fips-installer-mirror_installing-fips",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installation_overview/index",
+          "viewer_path": "/docs/ocp/4.20/ko/installation_overview/index.html#installation-obtaining-fips-installer-mirror_installing-fips",
+          "excerpt": "OpenShift Container Platform에서는 FIPS 모드에서 클러스터를 설치하려면 FIPS 지원 설치 바이너리를 사용해야 합니다. 공용 OpenShift 미러에서 이 바이너리를 다운로드하여 가져올 수 있습니다. 바이너리를 가져온 후 클러스터 설치를 진행하여 `openshift-install` 바이너리의 모든 인스턴스를 `openshift-install-fips` 로 바꿉니다. 사전 요구 사항 인터넷에 액세스할 수 있습니다. 프로세스 https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest-4.18/openshift-install-rhel9-amd64.tar.gz 에서 설치 프로그램을 다운로드합니다. 설치 프로그램 파일의 압축을 풉니다. 예를 들어 Linux 운영 체제를 사용하는 컴퓨터에서 다음 명령을 실행합니다. $ tar -xvf openshift-install-rhel9-amd64.tar.gz `openshift-install` 명령의 모든 인스턴스를 `openshift-install-fips` 로 교체하여 클러스터 설치를 진행합니다.",
+          "section_path": [
+            "4장. FIPS 암호화 지원",
+            "공용 OpenShift 미러를 사용하여 FIPS 지원 설치 프로그램 가져오기"
+          ],
+          "section_path_label": "4장. FIPS 암호화 지원 > 공용 OpenShift 미러를 사용하여 FIPS 지원 설치 프로그램 가져오기",
+          "section_number": "4.2",
+          "heading_title": "공용 OpenShift 미러를 사용하여 FIPS 지원 설치 프로그램 가져오기",
+          "source_anchor": "installation-obtaining-fips-installer-mirror_installing-fips",
+          "toc_path": [
+            "4장. FIPS 암호화 지원",
+            "4.2 공용 OpenShift 미러를 사용하여 FIPS 지원 설치 프로그램 가져오기"
+          ],
+          "chunk_type": "procedure",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "procedure"
+          ],
+          "cli_commands": [],
+          "error_strings": [],
+          "k8s_objects": [],
+          "operator_names": [],
+          "verification_hints": [],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "install-010",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 20010,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-019",
+                  "book_slug": "postinstallation_configuration",
+                  "category_key": "install"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-029",
+                  "book_slug": "overview",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "install-010",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 20010,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-019",
+                  "book_slug": "postinstallation_configuration",
+                  "category_key": "install"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-029",
+                  "book_slug": "overview",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "install-010",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                }
+              ],
+              "user_goal": "공용 OpenShift 미러를 사용하여 FIPS 지원 설치 프로그램 가져오기",
+              "step_order": 4,
+              "stage_order": 20010,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-019",
+                  "book_slug": "postinstallation_configuration",
+                  "category_key": "install"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": []
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-029",
+                  "book_slug": "overview",
+                  "category_key": "wiki"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-019",
+                  "book_slug": "postinstallation_configuration",
+                  "category_key": "install"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "citations": [
+        {
+          "index": 1,
+          "chunk_id": "6462a786-dc66-530b-9482-be12c78bd369",
+          "book_slug": "installation_overview",
+          "section": "공용 OpenShift 미러를 사용하여 FIPS 지원 설치 프로그램 가져오기",
+          "anchor": "installation-obtaining-fips-installer-mirror_installing-fips",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/installation_overview/index",
+          "viewer_path": "/docs/ocp/4.20/ko/installation_overview/index.html#installation-obtaining-fips-installer-mirror_installing-fips",
+          "excerpt": "OpenShift Container Platform에서는 FIPS 모드에서 클러스터를 설치하려면 FIPS 지원 설치 바이너리를 사용해야 합니다. 공용 OpenShift 미러에서 이 바이너리를 다운로드하여 가져올 수 있습니다. 바이너리를 가져온 후 클러스터 설치를 진행하여 `openshift-install` 바이너리의 모든 인스턴스를 `openshift-install-fips` 로 바꿉니다. 사전 요구 사항 인터넷에 액세스할 수 있습니다. 프로세스 https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest-4.18/openshift-install-rhel9-amd64.tar.gz 에서 설치 프로그램을 다운로드합니다. 설치 프로그램 파일의 압축을 풉니다. 예를 들어 Linux 운영 체제를 사용하는 컴퓨터에서 다음 명령을 실행합니다. $ tar -xvf openshift-install-rhel9-amd64.tar.gz `openshift-install` 명령의 모든 인스턴스를 `openshift-install-fips` 로 교체하여 클러스터 설치를 진행합니다.",
+          "section_path": [
+            "4장. FIPS 암호화 지원",
+            "공용 OpenShift 미러를 사용하여 FIPS 지원 설치 프로그램 가져오기"
+          ],
+          "section_path_label": "4장. FIPS 암호화 지원 > 공용 OpenShift 미러를 사용하여 FIPS 지원 설치 프로그램 가져오기",
+          "section_number": "4.2",
+          "heading_title": "공용 OpenShift 미러를 사용하여 FIPS 지원 설치 프로그램 가져오기",
+          "source_anchor": "installation-obtaining-fips-installer-mirror_installing-fips",
+          "toc_path": [
+            "4장. FIPS 암호화 지원",
+            "4.2 공용 OpenShift 미러를 사용하여 FIPS 지원 설치 프로그램 가져오기"
+          ],
+          "chunk_type": "procedure",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "procedure"
+          ],
+          "cli_commands": [],
+          "error_strings": [],
+          "k8s_objects": [],
+          "operator_names": [],
+          "verification_hints": [],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "install-010",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 20010,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-019",
+                  "book_slug": "postinstallation_configuration",
+                  "category_key": "install"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-029",
+                  "book_slug": "overview",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "install-010",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 20010,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-019",
+                  "book_slug": "postinstallation_configuration",
+                  "category_key": "install"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-029",
+                  "book_slug": "overview",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "install-010",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                }
+              ],
+              "user_goal": "공용 OpenShift 미러를 사용하여 FIPS 지원 설치 프로그램 가져오기",
+              "step_order": 4,
+              "stage_order": 20010,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-019",
+                  "book_slug": "postinstallation_configuration",
+                  "category_key": "install"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": []
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-029",
+                  "book_slug": "overview",
+                  "category_key": "wiki"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-011",
+                  "book_slug": "installing_on_any_platform",
+                  "category_key": "install"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "install-019",
+                  "book_slug": "postinstallation_configuration",
+                  "category_key": "install"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "quality_flags": []
+    },
+    {
+      "id": "v012-beginner-002",
+      "mode": "beginner",
+      "query_type": "beginner_troubleshooting",
+      "failure_bucket_hint": "",
+      "question": "Service쪽에서 계속 장애나는데 뭐가 원인일까?",
+      "query": "Service쪽에서 계속 장애나는데 뭐가 원인일까?",
+      "expected_book_slugs": [
+        "networking_overview",
+        "ingress_and_load_balancing",
+        "cli_tools"
+      ],
+      "expected_primary_book_slugs": [],
+      "forbidden_book_slugs": [],
+      "must_include_terms": [
+        "Service",
+        "Endpoint",
+        "Route"
+      ],
+      "must_not_include_terms": [],
+      "expected_citation_terms": [
+        "Service"
+      ],
+      "forbidden_citation_terms": [],
+      "clarification_expected": false,
+      "no_answer_expected": false,
+      "rewritten_query": "Service쪽에서 계속 장애나는데 뭐가 원인일까? oc describe service get endpoints route / 서비스 troubleshooting events condition 원인 조치 Endpoint EndpointSlice selector targetPort",
+      "retrieved_books": [
+        "kmsc-operations",
+        "study_docs",
+        "backup_and_restore",
+        "authentication_and_authorization",
+        "cli_tools",
+        "support",
+        "operators",
+        "ingress_and_load_balancing",
+        "architecture"
+      ],
+      "has_answer": true,
+      "has_korean": true,
+      "answer_format_valid": true,
+      "has_inline_citations": true,
+      "citation_indices_valid": true,
+      "clarification_detected": true,
+      "no_answer_detected": false,
+      "clarification_needed_but_answered": false,
+      "no_evidence_but_asserted": false,
+      "must_include_pass": true,
+      "must_exclude_pass": true,
+      "missing_required_terms": [],
+      "forbidden_answer_terms": [],
+      "citation_terms_pass": true,
+      "citation_forbidden_terms_pass": true,
+      "missing_citation_terms": [],
+      "forbidden_citation_term_hits": [],
+      "primary_expected_book": true,
+      "primary_cited_book": "ingress_and_load_balancing",
+      "cited_expected_book": true,
+      "unexpected_cited_books": [
+        "kmsc-operations",
+        "operators"
+      ],
+      "forbidden_cited_books": [],
+      "has_unexpected_citation": true,
+      "strict_expected_only": false,
+      "citation_precision": 0.3333,
+      "warning_free": true,
+      "pass": true,
+      "cited_indices": [
+        1,
+        2,
+        3
+      ],
+      "cited_books": [
+        "ingress_and_load_balancing",
+        "kmsc-operations",
+        "operators"
+      ],
+      "warnings": [],
+      "answer": "답변: 장애가 발생하는 서비스의 종류(예: Ingress, Logging, Operator 등)에 따라 확인 방법이 다르므로, 먼저 어떤 서비스에서 문제가 발생하는지 파악해야 합니다.\n\n현재 발생 중인 장애가 어떤 영역인지에 따라 아래의 확인 절차를 따라가십시오.\n\n**1. Ingress(게이트웨이) 관련 장애인 경우**\nIngress Operator가 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하되었는지 확인하십시오. `Degraded` 상태와 함께 `GatewayAPIOSSMConflict` 사유가 있는지 점검해야 합니다. [1]\n\n* **상태 확인 명령**\n\n```bash\noc get clusteroperator ingress -o yaml\n```\n\n* **확인 포인트:** 출력 내용 중 `status: \"True\"` 및 `reason: GatewayAPIOSSMConflict`를 포함한 `Degraded` 조건이 있는지 확인하십시오. [1]\n\n**2. Logging(Loki) 서비스 관련 장애인 경우**\nLokiStack의 구성 요소(Pod, Service, Endpoint, Route)가 정상적으로 동작하는지 확인하십시오 [4, 5].\n\n* **구성 요소 확인 명령**\n\n```bash\noc -n openshift-logging get lokistack\noc -n openshift-logging get pods -l app.kubernetes.io/name=lokistack\noc -n openshift-logging get svc | egrep 'loki|gateway|query'\noc -n openshift-logging get endpoints | egrep 'loki|gateway|query'\noc -n openshift-logging get route | egrep -i 'loki|gateway|query' || true\n```\n\n* **확인 포인트:** 모든 Pod이 `Running` 상태인지, 엔드포인트에 누락된 항목은 없는지, 라우트의 도메인과 서비스 이름이 올바르게 설정되었는지 확인하십시오. [2]\n\n**3. Operator 카탈로그 소스 관련 장애인 경우**\n카탈로그 소스의 연결 문제로 인해 서비스 설치나 관리에 문제가 생길 수 있습니다. `TRANSIENT_FAILURE` 상태가 나타난다면 연결 설정에 문제가 있는 것입니다 [2, 3].\n\n* **상태 확인 명령**\n\n* **확인 포인트:** 카탈로그 소스가 생성된 네임스페이스의 Pod 상태와 `describe` 명령을 통한 상세 상태를 확인하십시오. [3]\n\n장애가 발생하는 구체적인 서비스 명칭이나 나타나는 에러 메시지를 알려주시면 더 정확한 가이드를 드릴 수 있습니다. 어떤 서비스에서 장애가 발생하고 있습니까?",
+      "answer_text": "답변: 장애가 발생하는 서비스의 종류(예: Ingress, Logging, Operator 등)에 따라 확인 방법이 다르므로, 먼저 어떤 서비스에서 문제가 발생하는지 파악해야 합니다.\n\n현재 발생 중인 장애가 어떤 영역인지에 따라 아래의 확인 절차를 따라가십시오.\n\n**1. Ingress(게이트웨이) 관련 장애인 경우**\nIngress Operator가 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하되었는지 확인하십시오. `Degraded` 상태와 함께 `GatewayAPIOSSMConflict` 사유가 있는지 점검해야 합니다. [1]\n\n* **상태 확인 명령**\n\n```bash\noc get clusteroperator ingress -o yaml\n```\n\n* **확인 포인트:** 출력 내용 중 `status: \"True\"` 및 `reason: GatewayAPIOSSMConflict`를 포함한 `Degraded` 조건이 있는지 확인하십시오. [1]\n\n**2. Logging(Loki) 서비스 관련 장애인 경우**\nLokiStack의 구성 요소(Pod, Service, Endpoint, Route)가 정상적으로 동작하는지 확인하십시오 [4, 5].\n\n* **구성 요소 확인 명령**\n\n```bash\noc -n openshift-logging get lokistack\noc -n openshift-logging get pods -l app.kubernetes.io/name=lokistack\noc -n openshift-logging get svc | egrep 'loki|gateway|query'\noc -n openshift-logging get endpoints | egrep 'loki|gateway|query'\noc -n openshift-logging get route | egrep -i 'loki|gateway|query' || true\n```\n\n* **확인 포인트:** 모든 Pod이 `Running` 상태인지, 엔드포인트에 누락된 항목은 없는지, 라우트의 도메인과 서비스 이름이 올바르게 설정되었는지 확인하십시오. [2]\n\n**3. Operator 카탈로그 소스 관련 장애인 경우**\n카탈로그 소스의 연결 문제로 인해 서비스 설치나 관리에 문제가 생길 수 있습니다. `TRANSIENT_FAILURE` 상태가 나타난다면 연결 설정에 문제가 있는 것입니다 [2, 3].\n\n* **상태 확인 명령**\n\n* **확인 포인트:** 카탈로그 소스가 생성된 네임스페이스의 Pod 상태와 `describe` 명령을 통한 상세 상태를 확인하십시오. [3]\n\n장애가 발생하는 구체적인 서비스 명칭이나 나타나는 에러 메시지를 알려주시면 더 정확한 가이드를 드릴 수 있습니다. 어떤 서비스에서 장애가 발생하고 있습니까?",
+      "final_citations": [
+        {
+          "index": 1,
+          "chunk_id": "c27743c7-e943-5887-9644-581e6c138b2c",
+          "book_slug": "ingress_and_load_balancing",
+          "section": "Ingress Operator는 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하됨",
+          "anchor": "nw-ingress-gateway-api-troubleshooting-degraded_ingress-gateway-api",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/ingress_and_load_balancing/index",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-gateway-api-troubleshooting-degraded_ingress-gateway-api",
+          "excerpt": "Cluster Operator는 `GatewayAPIOSSMConflict` 이유와 함께 `True` 상태 및 `Degraded` 유형을 보고합니다. 다음 명령을 실행하여 확인합니다. $ oc get clusteroperator ingress -o yaml 출력의 상태 섹션에서 `status: \"True\" 및 reason: GatewayAPIOSSMConflict` 를 사용하여 `Degraded` 조건을 찾습니다.",
+          "section_path": [
+            "2장. 수신 클러스터 트래픽 구성",
+            "OpenShift Container Platform 네트워킹을 사용한 게이트웨이 API",
+            "Ingress Operator는 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하됨"
+          ],
+          "section_path_label": "2장. 수신 클러스터 트래픽 구성 > OpenShift Container Platform 네트워킹을 사용한 게이트웨이 API > Ingress Operator는 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하됨",
+          "section_number": "2.13.5",
+          "heading_title": "Ingress Operator는 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하됨",
+          "source_anchor": "nw-ingress-gateway-api-troubleshooting-degraded_ingress-gateway-api",
+          "toc_path": [
+            "2장. 수신 클러스터 트래픽 구성",
+            "2.13 OpenShift Container Platform 네트워킹을 사용한 게이트웨이 API",
+            "2.13.5 Ingress Operator는 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하됨"
+          ],
+          "chunk_type": "command",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "command"
+          ],
+          "cli_commands": [
+            "oc get clusteroperator ingress -o yaml",
+            "oc delete gatewayclass <gatewayclass-name>",
+            "oc -n openshift-operators delete subscription <OSSM v2.x subscription name>"
+          ],
+          "error_strings": [],
+          "k8s_objects": [
+            "Service",
+            "Ingress"
+          ],
+          "operator_names": [
+            "Cluster Operator"
+          ],
+          "verification_hints": [
+            "oc get clusteroperator ingress -o yaml"
+          ],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "networking-009",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 40009,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "networking-009",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 40009,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "networking-009",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "user_goal": "Ingress Operator는 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하됨",
+              "step_order": 3,
+              "stage_order": 40009,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": [
+                "shell\n$ oc get clusteroperator ingress -o yaml",
+                "oc get clusteroperator ingress -o yaml",
+                "oc get clusteroperator ingress -o yaml oc delete gatewayclass",
+                "oc -n openshift-operators delete subscription"
+              ]
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "index": 2,
+          "chunk_id": "fb8700fe-fbd1-5fdf-bc64-21e635584ae8",
+          "book_slug": "kmsc-operations",
+          "section": "구성 및 컴포넌트 기능 확인",
+          "anchor": "slide:28",
+          "source_url": "C:/dev/Company/Task/OCPOps-PlaybookStudio/corpus/sources/kmsc/parsed-preview/course_pbs#source=study-docs/02.테스트계획및결과/단위테스트/04-08 단위 테스트 계획서(OCP)/KMSC-COCP-RECR-005_OCP 단위테스트계획_20251107.pptx",
+          "viewer_path": "/uploads/documents/d9c9de11-222d-5ede-9ea3-e0186c10e39f/chunks/fb8700fe-fbd1-5fdf-bc64-21e635584ae8",
+          "excerpt": "이 청크는 단위 검증 관점에서 1. 구성 및 컴포넌트 기능 확인을 확인하는 자료입니다. 처음 보는 사용자는 먼저 OCP, Pod, Service, Route 같은 핵심 단어를 찾고, 화면이나 표가 어떤 상태를 증명하는지 보면 됩니다. 본문에서 중요한 단서는 openshift-logging 네임스페이스의 loki 스택 상태 확인을 위한 터미널 화면 캡처로, lokistack, pods, services, endpoints, route 정보를 조회하여 모든 pod이 Running 상태임을 보여줍니다. TEST-UN-OCP-08-06 1. 구성 및 컴포넌트 기능 확인. unit_test 단계의 test_case_summary 청크. Logging 서비스 Loki 서비스 확인 TEST-입니다. 그 다음 정상 상태, 실패 징후, 확인 명령 또는 화면 경로를 분리해서 질문하면 더 정확한 답변을 받을 수 있습니다. TEST-UN-OCP-08-06 1. 구성 및 컴포넌트 기능 확인. unit_test 단계의 test_case_summary 청크. Logging 서비스 Loki 서비스 확인 TEST-UN-OCP-08-06 LokiStack의 파드가 Running LokiStack서비스 확인 LokiStack 엔드포인트 확인 LokiStack 라우트 확인(도메인/연결된 서비스이름) LokiStack CR/Pod/Service/Endpoint/Route 확인 # oc -n openshift-logging get lokistack # oc -n openshift-logging get pods -l app.kubernetes.io/name=lokistack # oc -n openshift-logging get svc | egrep 'loki|gateway|query' # oc -n openshift-logging get endpoints | egrep 'loki|gateway|query' #... 주요 기술: Logging, Loki. Logging 서비스 Loki 서비스 확인 TEST-UN-OCP-08-06 LokiStack의 파드가 Running LokiStack서비스 확인 LokiStack 엔드포인트 확인 LokiStack 라우트 확인(도메인/연결된 서비스이름) LokiStack CR/Pod/Service/Endpoint/Route 확인 # oc -n openshift-logging get lokistack # oc -n openshift-logging get pods -l app.kubernetes.io/name=lokistack # oc -n openshift-logging get svc | egrep 'loki|gateway|query' # oc -n openshift-logging get endpoints | egrep 'loki|gateway|query' # oc -n openshift-logging get route | egrep -i 'loki|gateway|query' || true ClusterOperator에서 Available가 True이면 POD상태도 정상 서비스는 연결된 포트만 확인 엔드포인트는 누락된게 없는지만 확인 라우트는 설정된 도메인 / 서비스이름 확인. openshift-logging 네임스페이스의 loki 스택 상태 확인을 위한 터미널 화면 캡처로, lokistack, pods, services, endpoints, route 정보를 조회하여 모든 pod이 Running 상태임을 보여줍니다.",
+          "section_path": [
+            "unit_test",
+            "1. 구성 및 컴포넌트 기능 확인"
+          ],
+          "section_path_label": "unit_test > 구성 및 컴포넌트 기능 확인",
+          "section_number": "",
+          "heading_title": "1. 구성 및 컴포넌트 기능 확인",
+          "source_anchor": "slide:28",
+          "toc_path": [
+            "unit_test",
+            "1. 구성 및 컴포넌트 기능 확인"
+          ],
+          "chunk_type": "test_case_summary",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "test_case_summary"
+          ],
+          "cli_commands": [
+            "oc -n openshift-logging get lokistack # oc -n openshift-logging get pods -l app.kubernetes.io/name=lokistack # oc -n openshift-logging get svc | egrep 'loki|gateway|query' # oc -n openshift-logging get endpoints | egrep 'loki|gateway|query'"
+          ],
+          "error_strings": [],
+          "k8s_objects": [],
+          "operator_names": [],
+          "verification_hints": [],
+          "asset_ids": [
+            "unit-test--TEST-UN-OCP-08-06--plan--none--test-case-summary--summary--2dfada56::slide:028::att_20"
+          ],
+          "learning": {
+            "document": {},
+            "parsed_document": {},
+            "chunk": {}
+          },
+          "asset_id": "unit-test--TEST-UN-OCP-08-06--plan--none--test-case-summary--summary--2dfada56::slide:028::att_20"
+        },
+        {
+          "index": 3,
+          "chunk_id": "1129ca46-ebfc-5c5e-8feb-fa81041b94df",
+          "book_slug": "operators",
+          "section": "CLI를 사용하여 Operator 카탈로그 소스 상태 보기",
+          "anchor": "olm-cs-status-cli_olm-troubleshooting-operator-issues",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/operators/index",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-cs-status-cli_olm-troubleshooting-operator-issues",
+          "excerpt": "d At: 2021-09-09T17:05:45Z Port: 50051 Protocol: grpc Service Name: example-catalog Service Namespace: openshift-marketplace #... 앞의 예제 출력에서 마지막으로 관찰된 상태는 `TRANSIENT_FAILURE` 입니다. 이 상태는 카탈로그 소스에 대한 연결을 설정하는 데 문제가 있음을 나타냅니다. 카탈로그 소스가 생성된 네임스페이스의 Pod를 나열합니다. $ oc get pods -n openshift-marketplace",
+          "section_path": [
+            "4장. 관리자 작업",
+            "Operator 문제 해결",
+            "CLI를 사용하여 Operator 카탈로그 소스 상태 보기"
+          ],
+          "section_path_label": "4장. 관리자 작업 > Operator 문제 해결 > CLI를 사용하여 Operator 카탈로그 소스 상태 보기",
+          "section_number": "4.12.3",
+          "heading_title": "CLI를 사용하여 Operator 카탈로그 소스 상태 보기",
+          "source_anchor": "olm-cs-status-cli_olm-troubleshooting-operator-issues",
+          "toc_path": [
+            "4장. 관리자 작업",
+            "4.12 Operator 문제 해결",
+            "4.12.3 CLI를 사용하여 Operator 카탈로그 소스 상태 보기"
+          ],
+          "chunk_type": "troubleshooting",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "troubleshooting"
+          ],
+          "cli_commands": [
+            "oc get pods -n openshift-marketplace",
+            "oc",
+            "oc get catalogsources -n openshift-marketplace",
+            "oc describe",
+            "oc describe catalogsource example-catalog -n openshift-marketplace",
+            "oc describe pod example-catalog-bwt8z -n openshift-marketplace"
+          ],
+          "error_strings": [
+            "ImagePullBackOff",
+            "ErrImagePull"
+          ],
+          "k8s_objects": [
+            "Namespace",
+            "Service",
+            "Node"
+          ],
+          "operator_names": [
+            "Operator Lifecycle Manager"
+          ],
+          "verification_hints": [
+            "oc get catalogsources -n openshift-marketplace",
+            "oc describe catalogsource example-catalog -n openshift-marketplace",
+            "oc get pods -n openshift-marketplace",
+            "oc describe pod example-catalog-bwt8z -n openshift-marketplace"
+          ],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "operations-018",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 30018,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "operations-018",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 30018,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "operations-018",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ],
+              "user_goal": "CLI를 사용하여 Operator 카탈로그 소스 상태 보기",
+              "step_order": 6,
+              "stage_order": 30018,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": [
+                "shell\n$ oc get pods -n openshift-marketplace",
+                "oc get pods -n openshift-marketplace",
+                "oc get catalogsources -n openshift-marketplace oc describe oc describe catalogsource example-catalog -n openshift-marketplace oc get pods -n openshift-marketplace oc describe pod example-catalog-bwt8z -n openshift-marketplace"
+              ]
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "citations": [
+        {
+          "index": 1,
+          "chunk_id": "c27743c7-e943-5887-9644-581e6c138b2c",
+          "book_slug": "ingress_and_load_balancing",
+          "section": "Ingress Operator는 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하됨",
+          "anchor": "nw-ingress-gateway-api-troubleshooting-degraded_ingress-gateway-api",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/ingress_and_load_balancing/index",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-gateway-api-troubleshooting-degraded_ingress-gateway-api",
+          "excerpt": "Cluster Operator는 `GatewayAPIOSSMConflict` 이유와 함께 `True` 상태 및 `Degraded` 유형을 보고합니다. 다음 명령을 실행하여 확인합니다. $ oc get clusteroperator ingress -o yaml 출력의 상태 섹션에서 `status: \"True\" 및 reason: GatewayAPIOSSMConflict` 를 사용하여 `Degraded` 조건을 찾습니다.",
+          "section_path": [
+            "2장. 수신 클러스터 트래픽 구성",
+            "OpenShift Container Platform 네트워킹을 사용한 게이트웨이 API",
+            "Ingress Operator는 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하됨"
+          ],
+          "section_path_label": "2장. 수신 클러스터 트래픽 구성 > OpenShift Container Platform 네트워킹을 사용한 게이트웨이 API > Ingress Operator는 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하됨",
+          "section_number": "2.13.5",
+          "heading_title": "Ingress Operator는 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하됨",
+          "source_anchor": "nw-ingress-gateway-api-troubleshooting-degraded_ingress-gateway-api",
+          "toc_path": [
+            "2장. 수신 클러스터 트래픽 구성",
+            "2.13 OpenShift Container Platform 네트워킹을 사용한 게이트웨이 API",
+            "2.13.5 Ingress Operator는 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하됨"
+          ],
+          "chunk_type": "command",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "command"
+          ],
+          "cli_commands": [
+            "oc get clusteroperator ingress -o yaml",
+            "oc delete gatewayclass <gatewayclass-name>",
+            "oc -n openshift-operators delete subscription <OSSM v2.x subscription name>"
+          ],
+          "error_strings": [],
+          "k8s_objects": [
+            "Service",
+            "Ingress"
+          ],
+          "operator_names": [
+            "Cluster Operator"
+          ],
+          "verification_hints": [
+            "oc get clusteroperator ingress -o yaml"
+          ],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "networking-009",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 40009,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "networking-009",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 40009,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "networking-009",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "user_goal": "Ingress Operator는 게이트웨이 API 및 OSSM 충돌로 인해 성능이 저하됨",
+              "step_order": 3,
+              "stage_order": 40009,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": [
+                "shell\n$ oc get clusteroperator ingress -o yaml",
+                "oc get clusteroperator ingress -o yaml",
+                "oc get clusteroperator ingress -o yaml oc delete gatewayclass",
+                "oc -n openshift-operators delete subscription"
+              ]
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "networking-016",
+                  "book_slug": "networking_overview",
+                  "category_key": "networking"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "index": 2,
+          "chunk_id": "fb8700fe-fbd1-5fdf-bc64-21e635584ae8",
+          "book_slug": "kmsc-operations",
+          "section": "구성 및 컴포넌트 기능 확인",
+          "anchor": "slide:28",
+          "source_url": "C:/dev/Company/Task/OCPOps-PlaybookStudio/corpus/sources/kmsc/parsed-preview/course_pbs#source=study-docs/02.테스트계획및결과/단위테스트/04-08 단위 테스트 계획서(OCP)/KMSC-COCP-RECR-005_OCP 단위테스트계획_20251107.pptx",
+          "viewer_path": "/uploads/documents/d9c9de11-222d-5ede-9ea3-e0186c10e39f/chunks/fb8700fe-fbd1-5fdf-bc64-21e635584ae8",
+          "excerpt": "이 청크는 단위 검증 관점에서 1. 구성 및 컴포넌트 기능 확인을 확인하는 자료입니다. 처음 보는 사용자는 먼저 OCP, Pod, Service, Route 같은 핵심 단어를 찾고, 화면이나 표가 어떤 상태를 증명하는지 보면 됩니다. 본문에서 중요한 단서는 openshift-logging 네임스페이스의 loki 스택 상태 확인을 위한 터미널 화면 캡처로, lokistack, pods, services, endpoints, route 정보를 조회하여 모든 pod이 Running 상태임을 보여줍니다. TEST-UN-OCP-08-06 1. 구성 및 컴포넌트 기능 확인. unit_test 단계의 test_case_summary 청크. Logging 서비스 Loki 서비스 확인 TEST-입니다. 그 다음 정상 상태, 실패 징후, 확인 명령 또는 화면 경로를 분리해서 질문하면 더 정확한 답변을 받을 수 있습니다. TEST-UN-OCP-08-06 1. 구성 및 컴포넌트 기능 확인. unit_test 단계의 test_case_summary 청크. Logging 서비스 Loki 서비스 확인 TEST-UN-OCP-08-06 LokiStack의 파드가 Running LokiStack서비스 확인 LokiStack 엔드포인트 확인 LokiStack 라우트 확인(도메인/연결된 서비스이름) LokiStack CR/Pod/Service/Endpoint/Route 확인 # oc -n openshift-logging get lokistack # oc -n openshift-logging get pods -l app.kubernetes.io/name=lokistack # oc -n openshift-logging get svc | egrep 'loki|gateway|query' # oc -n openshift-logging get endpoints | egrep 'loki|gateway|query' #... 주요 기술: Logging, Loki. Logging 서비스 Loki 서비스 확인 TEST-UN-OCP-08-06 LokiStack의 파드가 Running LokiStack서비스 확인 LokiStack 엔드포인트 확인 LokiStack 라우트 확인(도메인/연결된 서비스이름) LokiStack CR/Pod/Service/Endpoint/Route 확인 # oc -n openshift-logging get lokistack # oc -n openshift-logging get pods -l app.kubernetes.io/name=lokistack # oc -n openshift-logging get svc | egrep 'loki|gateway|query' # oc -n openshift-logging get endpoints | egrep 'loki|gateway|query' # oc -n openshift-logging get route | egrep -i 'loki|gateway|query' || true ClusterOperator에서 Available가 True이면 POD상태도 정상 서비스는 연결된 포트만 확인 엔드포인트는 누락된게 없는지만 확인 라우트는 설정된 도메인 / 서비스이름 확인. openshift-logging 네임스페이스의 loki 스택 상태 확인을 위한 터미널 화면 캡처로, lokistack, pods, services, endpoints, route 정보를 조회하여 모든 pod이 Running 상태임을 보여줍니다.",
+          "section_path": [
+            "unit_test",
+            "1. 구성 및 컴포넌트 기능 확인"
+          ],
+          "section_path_label": "unit_test > 구성 및 컴포넌트 기능 확인",
+          "section_number": "",
+          "heading_title": "1. 구성 및 컴포넌트 기능 확인",
+          "source_anchor": "slide:28",
+          "toc_path": [
+            "unit_test",
+            "1. 구성 및 컴포넌트 기능 확인"
+          ],
+          "chunk_type": "test_case_summary",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "test_case_summary"
+          ],
+          "cli_commands": [
+            "oc -n openshift-logging get lokistack # oc -n openshift-logging get pods -l app.kubernetes.io/name=lokistack # oc -n openshift-logging get svc | egrep 'loki|gateway|query' # oc -n openshift-logging get endpoints | egrep 'loki|gateway|query'"
+          ],
+          "error_strings": [],
+          "k8s_objects": [],
+          "operator_names": [],
+          "verification_hints": [],
+          "asset_ids": [
+            "unit-test--TEST-UN-OCP-08-06--plan--none--test-case-summary--summary--2dfada56::slide:028::att_20"
+          ],
+          "learning": {
+            "document": {},
+            "parsed_document": {},
+            "chunk": {}
+          },
+          "asset_id": "unit-test--TEST-UN-OCP-08-06--plan--none--test-case-summary--summary--2dfada56::slide:028::att_20"
+        },
+        {
+          "index": 3,
+          "chunk_id": "1129ca46-ebfc-5c5e-8feb-fa81041b94df",
+          "book_slug": "operators",
+          "section": "CLI를 사용하여 Operator 카탈로그 소스 상태 보기",
+          "anchor": "olm-cs-status-cli_olm-troubleshooting-operator-issues",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/operators/index",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-cs-status-cli_olm-troubleshooting-operator-issues",
+          "excerpt": "d At: 2021-09-09T17:05:45Z Port: 50051 Protocol: grpc Service Name: example-catalog Service Namespace: openshift-marketplace #... 앞의 예제 출력에서 마지막으로 관찰된 상태는 `TRANSIENT_FAILURE` 입니다. 이 상태는 카탈로그 소스에 대한 연결을 설정하는 데 문제가 있음을 나타냅니다. 카탈로그 소스가 생성된 네임스페이스의 Pod를 나열합니다. $ oc get pods -n openshift-marketplace",
+          "section_path": [
+            "4장. 관리자 작업",
+            "Operator 문제 해결",
+            "CLI를 사용하여 Operator 카탈로그 소스 상태 보기"
+          ],
+          "section_path_label": "4장. 관리자 작업 > Operator 문제 해결 > CLI를 사용하여 Operator 카탈로그 소스 상태 보기",
+          "section_number": "4.12.3",
+          "heading_title": "CLI를 사용하여 Operator 카탈로그 소스 상태 보기",
+          "source_anchor": "olm-cs-status-cli_olm-troubleshooting-operator-issues",
+          "toc_path": [
+            "4장. 관리자 작업",
+            "4.12 Operator 문제 해결",
+            "4.12.3 CLI를 사용하여 Operator 카탈로그 소스 상태 보기"
+          ],
+          "chunk_type": "troubleshooting",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "troubleshooting"
+          ],
+          "cli_commands": [
+            "oc get pods -n openshift-marketplace",
+            "oc",
+            "oc get catalogsources -n openshift-marketplace",
+            "oc describe",
+            "oc describe catalogsource example-catalog -n openshift-marketplace",
+            "oc describe pod example-catalog-bwt8z -n openshift-marketplace"
+          ],
+          "error_strings": [
+            "ImagePullBackOff",
+            "ErrImagePull"
+          ],
+          "k8s_objects": [
+            "Namespace",
+            "Service",
+            "Node"
+          ],
+          "operator_names": [
+            "Operator Lifecycle Manager"
+          ],
+          "verification_hints": [
+            "oc get catalogsources -n openshift-marketplace",
+            "oc describe catalogsource example-catalog -n openshift-marketplace",
+            "oc get pods -n openshift-marketplace",
+            "oc describe pod example-catalog-bwt8z -n openshift-marketplace"
+          ],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "operations-018",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 30018,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "operations-018",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 30018,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "operations-018",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ],
+              "user_goal": "CLI를 사용하여 Operator 카탈로그 소스 상태 보기",
+              "step_order": 6,
+              "stage_order": 30018,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": [
+                "shell\n$ oc get pods -n openshift-marketplace",
+                "oc get pods -n openshift-marketplace",
+                "oc get catalogsources -n openshift-marketplace oc describe oc describe catalogsource example-catalog -n openshift-marketplace oc get pods -n openshift-marketplace oc describe pod example-catalog-bwt8z -n openshift-marketplace"
+              ]
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "networking-001",
+                  "book_slug": "advanced_networking",
+                  "category_key": "networking"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "operations-017",
+                  "book_slug": "nodes",
+                  "category_key": "operations"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "quality_flags": [
+        "provenance_noise"
+      ]
+    },
+    {
+      "id": "v012-beginner-003",
+      "mode": "beginner",
+      "query_type": "beginner_command",
+      "failure_bucket_hint": "",
+      "question": "특정 namespace를 만드는 명령어가 뭐야?",
+      "query": "특정 namespace를 만드는 명령어가 뭐야?",
+      "expected_book_slugs": [
+        "cli_tools",
+        "building_applications",
+        "applications"
+      ],
+      "expected_primary_book_slugs": [],
+      "forbidden_book_slugs": [],
+      "must_include_terms": [
+        "oc create namespace",
+        "oc new-project"
+      ],
+      "must_not_include_terms": [],
+      "expected_citation_terms": [
+        "namespace"
+      ],
+      "forbidden_citation_terms": [],
+      "clarification_expected": false,
+      "no_answer_expected": false,
+      "rewritten_query": "특정 namespace를 만드는 명령어가 뭐야? oc create namespace new-project get namespaces projects project config view 상태 확인 판단 기준 kind: / 네임스페이스 현재 프로젝트 보기 CLI 프로필 명령어 개요 current-context",
+      "retrieved_books": [
+        "kmsc-operations",
+        "study_docs",
+        "cli_tools",
+        "operators"
+      ],
+      "has_answer": true,
+      "has_korean": true,
+      "answer_format_valid": true,
+      "has_inline_citations": true,
+      "citation_indices_valid": true,
+      "clarification_detected": false,
+      "no_answer_detected": false,
+      "clarification_needed_but_answered": false,
+      "no_evidence_but_asserted": false,
+      "must_include_pass": true,
+      "must_exclude_pass": true,
+      "missing_required_terms": [],
+      "forbidden_answer_terms": [],
+      "citation_terms_pass": true,
+      "citation_forbidden_terms_pass": true,
+      "missing_citation_terms": [],
+      "forbidden_citation_term_hits": [],
+      "primary_expected_book": true,
+      "primary_cited_book": "cli_tools",
+      "cited_expected_book": true,
+      "unexpected_cited_books": [],
+      "forbidden_cited_books": [],
+      "has_unexpected_citation": false,
+      "strict_expected_only": true,
+      "citation_precision": 1.0,
+      "warning_free": true,
+      "pass": true,
+      "cited_indices": [
+        1
+      ],
+      "cited_books": [
+        "cli_tools"
+      ],
+      "warnings": [],
+      "answer": "요약: OpenShift에서는 Kubernetes Namespace와 OpenShift Project를 함께 이해하면 됩니다. 새 작업 공간을 만들 때는 보통 `oc new-project`를 먼저 씁니다. [1]\n\n```bash\noc new-project <project-name>\noc create namespace <namespace-name>\noc get namespaces\noc project <project-name>\n```\n\n판단 기준:\n- 애플리케이션 작업 공간을 만들고 바로 그 프로젝트로 전환하려면 `oc new-project <project-name>`를 씁니다.\n- 순수 Kubernetes Namespace만 만들려면 `oc create namespace <namespace-name>`를 씁니다.\n- 만든 뒤에는 `oc get namespaces`와 `oc project`로 현재 선택된 프로젝트를 확인합니다.",
+      "answer_text": "요약: OpenShift에서는 Kubernetes Namespace와 OpenShift Project를 함께 이해하면 됩니다. 새 작업 공간을 만들 때는 보통 `oc new-project`를 먼저 씁니다. [1]\n\n```bash\noc new-project <project-name>\noc create namespace <namespace-name>\noc get namespaces\noc project <project-name>\n```\n\n판단 기준:\n- 애플리케이션 작업 공간을 만들고 바로 그 프로젝트로 전환하려면 `oc new-project <project-name>`를 씁니다.\n- 순수 Kubernetes Namespace만 만들려면 `oc create namespace <namespace-name>`를 씁니다.\n- 만든 뒤에는 `oc get namespaces`와 `oc project`로 현재 선택된 프로젝트를 확인합니다.",
+      "final_citations": [
+        {
+          "index": 1,
+          "chunk_id": "9662ed69-4067-58d6-8f33-2f8eb0c36b07",
+          "book_slug": "cli_tools",
+          "section": "CLI 프로필 수동 구성",
+          "anchor": "manual-configuration-of-cli-profiles_managing-cli-profiles",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/cli_tools/index",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#manual-configuration-of-cli-profiles_managing-cli-profiles",
+          "excerpt": ".com user: token: ns7yVhuRNpDM9cgzfhhxQ7bM5s7N2ZVrkZepSRf4LC0 사용자가 원하는 네임스페이스에 로그인하도록 현재 컨텍스트를 업데이트합니다. $ oc config set-context `oc config current-context` --namespace=<project_name> 현재 컨텍스트를 검사하여 변경 사항이 구현되었는지 확인합니다. $ oc whoami -c",
+          "section_path": [
+            "2장. OpenShift CLI(oc)",
+            "CLI 프로필 관리",
+            "CLI 프로필 수동 구성"
+          ],
+          "section_path_label": "2장. OpenShift CLI(oc) > CLI 프로필 관리 > CLI 프로필 수동 구성",
+          "section_number": "2.4.2",
+          "heading_title": "CLI 프로필 수동 구성",
+          "source_anchor": "manual-configuration-of-cli-profiles_managing-cli-profiles",
+          "toc_path": [
+            "2장. OpenShift CLI(oc)",
+            "2.4 CLI 프로필 관리",
+            "2.4.2 CLI 프로필 수동 구성"
+          ],
+          "chunk_type": "command",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "command"
+          ],
+          "cli_commands": [
+            "oc config set-context",
+            "oc config current-context",
+            "oc whoami -c",
+            "oc login",
+            "oc project",
+            "oc config",
+            "oc login https://openshift1.example.com --token=ns7yVhuRNpDM9cgzfhhxQ7bM5s7N2ZVrkZepSRf4LC0",
+            "oc config view",
+            "oc config set-context `oc config current-context` --namespace=<project_name>"
+          ],
+          "error_strings": [],
+          "k8s_objects": [],
+          "operator_names": [],
+          "verification_hints": [],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "user_goal": "CLI 프로필 수동 구성",
+              "step_order": 12,
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": [
+                "shell\n$ oc config set-context",
+                "shell\n$ oc whoami -c",
+                "oc login oc project oc config oc login https://openshift1.example.com --token=ns7yVhuRNpDM9cgzfhhxQ7bM5s7N2ZVrkZepSRf4LC0 oc config view oc config set-context",
+                "oc config set-context",
+                "oc config current-context"
+              ]
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "citations": [
+        {
+          "index": 1,
+          "chunk_id": "9662ed69-4067-58d6-8f33-2f8eb0c36b07",
+          "book_slug": "cli_tools",
+          "section": "CLI 프로필 수동 구성",
+          "anchor": "manual-configuration-of-cli-profiles_managing-cli-profiles",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/cli_tools/index",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#manual-configuration-of-cli-profiles_managing-cli-profiles",
+          "excerpt": ".com user: token: ns7yVhuRNpDM9cgzfhhxQ7bM5s7N2ZVrkZepSRf4LC0 사용자가 원하는 네임스페이스에 로그인하도록 현재 컨텍스트를 업데이트합니다. $ oc config set-context `oc config current-context` --namespace=<project_name> 현재 컨텍스트를 검사하여 변경 사항이 구현되었는지 확인합니다. $ oc whoami -c",
+          "section_path": [
+            "2장. OpenShift CLI(oc)",
+            "CLI 프로필 관리",
+            "CLI 프로필 수동 구성"
+          ],
+          "section_path_label": "2장. OpenShift CLI(oc) > CLI 프로필 관리 > CLI 프로필 수동 구성",
+          "section_number": "2.4.2",
+          "heading_title": "CLI 프로필 수동 구성",
+          "source_anchor": "manual-configuration-of-cli-profiles_managing-cli-profiles",
+          "toc_path": [
+            "2장. OpenShift CLI(oc)",
+            "2.4 CLI 프로필 관리",
+            "2.4.2 CLI 프로필 수동 구성"
+          ],
+          "chunk_type": "command",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "command"
+          ],
+          "cli_commands": [
+            "oc config set-context",
+            "oc config current-context",
+            "oc whoami -c",
+            "oc login",
+            "oc project",
+            "oc config",
+            "oc login https://openshift1.example.com --token=ns7yVhuRNpDM9cgzfhhxQ7bM5s7N2ZVrkZepSRf4LC0",
+            "oc config view",
+            "oc config set-context `oc config current-context` --namespace=<project_name>"
+          ],
+          "error_strings": [],
+          "k8s_objects": [],
+          "operator_names": [],
+          "verification_hints": [],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "user_goal": "CLI 프로필 수동 구성",
+              "step_order": 12,
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": [
+                "shell\n$ oc config set-context",
+                "shell\n$ oc whoami -c",
+                "oc login oc project oc config oc login https://openshift1.example.com --token=ns7yVhuRNpDM9cgzfhhxQ7bM5s7N2ZVrkZepSRf4LC0 oc config view oc config set-context",
+                "oc config set-context",
+                "oc config current-context"
+              ]
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "quality_flags": []
+    },
+    {
+      "id": "v012-beginner-004",
+      "mode": "beginner",
+      "query_type": "beginner_command",
+      "failure_bucket_hint": "",
+      "question": "ocp에서 배포를 하고 싶으면 무슨 명령어로 해야되더라?",
+      "query": "ocp에서 배포를 하고 싶으면 무슨 명령어로 해야되더라?",
+      "expected_book_slugs": [
+        "cli_tools",
+        "building_applications"
+      ],
+      "expected_primary_book_slugs": [],
+      "forbidden_book_slugs": [],
+      "must_include_terms": [
+        "oc apply -f",
+        "Deployment"
+      ],
+      "must_not_include_terms": [],
+      "expected_citation_terms": [
+        "oc"
+      ],
+      "forbidden_citation_terms": [],
+      "clarification_expected": false,
+      "no_answer_expected": false,
+      "rewritten_query": "ocp에서 배포를 하고 싶으면 무슨 명령어로 해야되더라? oc apply -f create deployment rollout status OpenShift Container Platform 상태 확인 판단 기준 kind: manifest Pod template / 배포 OCP CLI 명령어 YAML ReplicaSet",
+      "retrieved_books": [
+        "kmsc-operations",
+        "study_docs",
+        "overview",
+        "machine_management",
+        "cli_tools",
+        "disconnected_environments",
+        "support"
+      ],
+      "has_answer": true,
+      "has_korean": true,
+      "answer_format_valid": true,
+      "has_inline_citations": true,
+      "citation_indices_valid": true,
+      "clarification_detected": false,
+      "no_answer_detected": false,
+      "clarification_needed_but_answered": false,
+      "no_evidence_but_asserted": false,
+      "must_include_pass": true,
+      "must_exclude_pass": true,
+      "missing_required_terms": [],
+      "forbidden_answer_terms": [],
+      "citation_terms_pass": true,
+      "citation_forbidden_terms_pass": true,
+      "missing_citation_terms": [],
+      "forbidden_citation_term_hits": [],
+      "primary_expected_book": true,
+      "primary_cited_book": "cli_tools",
+      "cited_expected_book": true,
+      "unexpected_cited_books": [],
+      "forbidden_cited_books": [],
+      "has_unexpected_citation": false,
+      "strict_expected_only": true,
+      "citation_precision": 1.0,
+      "warning_free": true,
+      "pass": true,
+      "cited_indices": [
+        1
+      ],
+      "cited_books": [
+        "cli_tools"
+      ],
+      "warnings": [],
+      "answer": "요약: OpenShift에서 앱을 배포할 때는 Deployment YAML을 만들고 `oc apply -f`로 적용한 뒤 rollout 상태를 확인하는 흐름이 기본입니다. [1]\n\n```yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: example-app\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: example-app\n  template:\n    metadata:\n      labels:\n        app: example-app\n    spec:\n      containers:\n      - name: example-app\n        image: quay.io/example/app:latest\n        ports:\n        - containerPort: 8080\n```\n\n```bash\noc apply -f deployment.yaml\noc rollout status deployment/example-app -n <namespace>\noc get pods -n <namespace>\n```\n\n초보자 기준 확인 순서:\n- `kind: Deployment`인지 확인합니다.\n- `metadata.name`, `selector.matchLabels`, `template.metadata.labels`가 서로 맞는지 봅니다.\n- 적용 후 Pod가 뜨지 않으면 `oc describe pod`와 이벤트를 먼저 확인합니다.",
+      "answer_text": "요약: OpenShift에서 앱을 배포할 때는 Deployment YAML을 만들고 `oc apply -f`로 적용한 뒤 rollout 상태를 확인하는 흐름이 기본입니다. [1]\n\n```yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: example-app\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: example-app\n  template:\n    metadata:\n      labels:\n        app: example-app\n    spec:\n      containers:\n      - name: example-app\n        image: quay.io/example/app:latest\n        ports:\n        - containerPort: 8080\n```\n\n```bash\noc apply -f deployment.yaml\noc rollout status deployment/example-app -n <namespace>\noc get pods -n <namespace>\n```\n\n초보자 기준 확인 순서:\n- `kind: Deployment`인지 확인합니다.\n- `metadata.name`, `selector.matchLabels`, `template.metadata.labels`가 서로 맞는지 봅니다.\n- 적용 후 Pod가 뜨지 않으면 `oc describe pod`와 이벤트를 먼저 확인합니다.",
+      "final_citations": [
+        {
+          "index": 1,
+          "chunk_id": "b6da3a15-47a5-5d23-a608-61513ebd141b",
+          "book_slug": "cli_tools",
+          "section": "oc create deployment",
+          "anchor": "oc-create-deployment",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/cli_tools/index",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-create-deployment",
+          "excerpt": "지정된 이름으로 배포 생성",
+          "section_path": [
+            "2장. OpenShift CLI(oc)",
+            "OpenShift CLI 개발자 명령 참조",
+            "OpenShift CLI (oc) 개발자 명령",
+            "oc create deployment"
+          ],
+          "section_path_label": "2장. OpenShift CLI(oc) > OpenShift CLI 개발자 명령 참조 > OpenShift CLI (oc) 개발자 명령 > oc create deployment",
+          "section_number": "2.6.1.43",
+          "heading_title": "oc create deployment",
+          "source_anchor": "oc-create-deployment",
+          "toc_path": [
+            "2장. OpenShift CLI(oc)",
+            "2.6 OpenShift CLI 개발자 명령 참조",
+            "2.6.1 OpenShift CLI (oc) 개발자 명령",
+            "2.6.1.43 oc create deployment"
+          ],
+          "chunk_type": "command",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "command"
+          ],
+          "cli_commands": [
+            "oc create deployment my-dep --image=busybox",
+            "oc create deployment my-dep --image=busybox -- date",
+            "oc create deployment my-dep --image=nginx --replicas=3",
+            "oc create deployment my-dep --image=busybox --port=5701",
+            "oc create deployment my-dep --image=busybox:latest --image=ubuntu:latest --image=nginx"
+          ],
+          "error_strings": [],
+          "k8s_objects": [],
+          "operator_names": [],
+          "verification_hints": [],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "user_goal": "oc create deployment",
+              "step_order": 1,
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": [
+                "oc create deployment my-dep --image=busybox oc create deployment my-dep --image=busybox -- date oc create deployment my-dep --image=nginx --replicas=3 oc create deployment my-dep --image=busybox --port=5701 oc create deployment my-dep --image=busybox:latest --image=ubuntu:latest --image=nginx"
+              ]
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "citations": [
+        {
+          "index": 1,
+          "chunk_id": "b6da3a15-47a5-5d23-a608-61513ebd141b",
+          "book_slug": "cli_tools",
+          "section": "oc create deployment",
+          "anchor": "oc-create-deployment",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/cli_tools/index",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-create-deployment",
+          "excerpt": "지정된 이름으로 배포 생성",
+          "section_path": [
+            "2장. OpenShift CLI(oc)",
+            "OpenShift CLI 개발자 명령 참조",
+            "OpenShift CLI (oc) 개발자 명령",
+            "oc create deployment"
+          ],
+          "section_path_label": "2장. OpenShift CLI(oc) > OpenShift CLI 개발자 명령 참조 > OpenShift CLI (oc) 개발자 명령 > oc create deployment",
+          "section_number": "2.6.1.43",
+          "heading_title": "oc create deployment",
+          "source_anchor": "oc-create-deployment",
+          "toc_path": [
+            "2장. OpenShift CLI(oc)",
+            "2.6 OpenShift CLI 개발자 명령 참조",
+            "2.6.1 OpenShift CLI (oc) 개발자 명령",
+            "2.6.1.43 oc create deployment"
+          ],
+          "chunk_type": "command",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "command"
+          ],
+          "cli_commands": [
+            "oc create deployment my-dep --image=busybox",
+            "oc create deployment my-dep --image=busybox -- date",
+            "oc create deployment my-dep --image=nginx --replicas=3",
+            "oc create deployment my-dep --image=busybox --port=5701",
+            "oc create deployment my-dep --image=busybox:latest --image=ubuntu:latest --image=nginx"
+          ],
+          "error_strings": [],
+          "k8s_objects": [],
+          "operator_names": [],
+          "verification_hints": [],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "user_goal": "oc create deployment",
+              "step_order": 1,
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": [
+                "oc create deployment my-dep --image=busybox oc create deployment my-dep --image=busybox -- date oc create deployment my-dep --image=nginx --replicas=3 oc create deployment my-dep --image=busybox --port=5701 oc create deployment my-dep --image=busybox:latest --image=ubuntu:latest --image=nginx"
+              ]
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "quality_flags": []
+    },
+    {
+      "id": "v012-beginner-005",
+      "mode": "beginner",
+      "query_type": "beginner_authoring",
+      "failure_bucket_hint": "",
+      "question": "보통 배포 yaml파일은 어케 작성하지?",
+      "query": "보통 배포 yaml파일은 어케 작성하지?",
+      "expected_book_slugs": [
+        "building_applications",
+        "cli_tools"
+      ],
+      "expected_primary_book_slugs": [],
+      "forbidden_book_slugs": [],
+      "must_include_terms": [
+        "kind: Deployment",
+        "YAML",
+        "oc apply -f"
+      ],
+      "must_not_include_terms": [],
+      "expected_citation_terms": [
+        "Deployment"
+      ],
+      "forbidden_citation_terms": [],
+      "clarification_expected": false,
+      "no_answer_expected": false,
+      "rewritten_query": "보통 배포 yaml파일은 어케 작성하지? oc apply -f create deployment rollout status kind: manifest Pod template / YAML ReplicaSet",
+      "retrieved_books": [
+        "security_and_compliance",
+        "cli_tools",
+        "nodes",
+        "backup_and_restore",
+        "kmsc-operations",
+        "study_docs",
+        "overview",
+        "updating_clusters"
+      ],
+      "has_answer": true,
+      "has_korean": true,
+      "answer_format_valid": true,
+      "has_inline_citations": true,
+      "citation_indices_valid": true,
+      "clarification_detected": false,
+      "no_answer_detected": false,
+      "clarification_needed_but_answered": false,
+      "no_evidence_but_asserted": false,
+      "must_include_pass": true,
+      "must_exclude_pass": true,
+      "missing_required_terms": [],
+      "forbidden_answer_terms": [],
+      "citation_terms_pass": true,
+      "citation_forbidden_terms_pass": true,
+      "missing_citation_terms": [],
+      "forbidden_citation_term_hits": [],
+      "primary_expected_book": true,
+      "primary_cited_book": "cli_tools",
+      "cited_expected_book": true,
+      "unexpected_cited_books": [],
+      "forbidden_cited_books": [],
+      "has_unexpected_citation": false,
+      "strict_expected_only": true,
+      "citation_precision": 1.0,
+      "warning_free": true,
+      "pass": true,
+      "cited_indices": [
+        1
+      ],
+      "cited_books": [
+        "cli_tools"
+      ],
+      "warnings": [],
+      "answer": "요약: OpenShift에서 앱을 배포할 때는 Deployment YAML을 만들고 `oc apply -f`로 적용한 뒤 rollout 상태를 확인하는 흐름이 기본입니다. [1]\n\n```yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: example-app\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: example-app\n  template:\n    metadata:\n      labels:\n        app: example-app\n    spec:\n      containers:\n      - name: example-app\n        image: quay.io/example/app:latest\n        ports:\n        - containerPort: 8080\n```\n\n```bash\noc apply -f deployment.yaml\noc rollout status deployment/example-app -n <namespace>\noc get pods -n <namespace>\n```\n\n초보자 기준 확인 순서:\n- `kind: Deployment`인지 확인합니다.\n- `metadata.name`, `selector.matchLabels`, `template.metadata.labels`가 서로 맞는지 봅니다.\n- 적용 후 Pod가 뜨지 않으면 `oc describe pod`와 이벤트를 먼저 확인합니다.",
+      "answer_text": "요약: OpenShift에서 앱을 배포할 때는 Deployment YAML을 만들고 `oc apply -f`로 적용한 뒤 rollout 상태를 확인하는 흐름이 기본입니다. [1]\n\n```yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: example-app\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: example-app\n  template:\n    metadata:\n      labels:\n        app: example-app\n    spec:\n      containers:\n      - name: example-app\n        image: quay.io/example/app:latest\n        ports:\n        - containerPort: 8080\n```\n\n```bash\noc apply -f deployment.yaml\noc rollout status deployment/example-app -n <namespace>\noc get pods -n <namespace>\n```\n\n초보자 기준 확인 순서:\n- `kind: Deployment`인지 확인합니다.\n- `metadata.name`, `selector.matchLabels`, `template.metadata.labels`가 서로 맞는지 봅니다.\n- 적용 후 Pod가 뜨지 않으면 `oc describe pod`와 이벤트를 먼저 확인합니다.",
+      "final_citations": [
+        {
+          "index": 1,
+          "chunk_id": "575e942c-9df9-5403-8523-e81acc87bb7d",
+          "book_slug": "cli_tools",
+          "section": "oc rollout status",
+          "anchor": "oc-rollout-status",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/cli_tools/index",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-rollout-status",
+          "excerpt": "롤아웃 상태를 표시 사용 예 # Watch the rollout status of a deployment oc rollout status deployment/nginx",
+          "section_path": [
+            "2장. OpenShift CLI(oc)",
+            "OpenShift CLI 개발자 명령 참조",
+            "OpenShift CLI (oc) 개발자 명령",
+            "oc rollout status"
+          ],
+          "section_path_label": "2장. OpenShift CLI(oc) > OpenShift CLI 개발자 명령 참조 > OpenShift CLI (oc) 개발자 명령 > oc rollout status",
+          "section_number": "2.6.1.119",
+          "heading_title": "oc rollout status",
+          "source_anchor": "oc-rollout-status",
+          "toc_path": [
+            "2장. OpenShift CLI(oc)",
+            "2.6 OpenShift CLI 개발자 명령 참조",
+            "2.6.1 OpenShift CLI (oc) 개발자 명령",
+            "2.6.1.119 oc rollout status"
+          ],
+          "chunk_type": "command",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "command"
+          ],
+          "cli_commands": [
+            "oc rollout status deployment/nginx"
+          ],
+          "error_strings": [],
+          "k8s_objects": [],
+          "operator_names": [],
+          "verification_hints": [],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "user_goal": "oc rollout status",
+              "step_order": 1,
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": [
+                "bash\n# Watch the rollout status of a deployment\n  oc rollout status deployment/nginx",
+                "oc rollout status deployment/nginx"
+              ]
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "citations": [
+        {
+          "index": 1,
+          "chunk_id": "575e942c-9df9-5403-8523-e81acc87bb7d",
+          "book_slug": "cli_tools",
+          "section": "oc rollout status",
+          "anchor": "oc-rollout-status",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/cli_tools/index",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-rollout-status",
+          "excerpt": "롤아웃 상태를 표시 사용 예 # Watch the rollout status of a deployment oc rollout status deployment/nginx",
+          "section_path": [
+            "2장. OpenShift CLI(oc)",
+            "OpenShift CLI 개발자 명령 참조",
+            "OpenShift CLI (oc) 개발자 명령",
+            "oc rollout status"
+          ],
+          "section_path_label": "2장. OpenShift CLI(oc) > OpenShift CLI 개발자 명령 참조 > OpenShift CLI (oc) 개발자 명령 > oc rollout status",
+          "section_number": "2.6.1.119",
+          "heading_title": "oc rollout status",
+          "source_anchor": "oc-rollout-status",
+          "toc_path": [
+            "2장. OpenShift CLI(oc)",
+            "2.6 OpenShift CLI 개발자 명령 참조",
+            "2.6.1 OpenShift CLI (oc) 개발자 명령",
+            "2.6.1.119 oc rollout status"
+          ],
+          "chunk_type": "command",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "command"
+          ],
+          "cli_commands": [
+            "oc rollout status deployment/nginx"
+          ],
+          "error_strings": [],
+          "k8s_objects": [],
+          "operator_names": [],
+          "verification_hints": [],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "user_goal": "oc rollout status",
+              "step_order": 1,
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": [
+                "bash\n# Watch the rollout status of a deployment\n  oc rollout status deployment/nginx",
+                "oc rollout status deployment/nginx"
+              ]
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "quality_flags": []
+    },
+    {
+      "id": "v012-beginner-006",
+      "mode": "beginner",
+      "query_type": "beginner_command",
+      "failure_bucket_hint": "",
+      "question": "특정 Pod의 리소스가 얼마나 잡아먹고 있는지 확인하는 법",
+      "query": "특정 Pod의 리소스가 얼마나 잡아먹고 있는지 확인하는 법",
+      "expected_book_slugs": [
+        "support",
+        "nodes",
+        "cli_tools"
+      ],
+      "expected_primary_book_slugs": [],
+      "forbidden_book_slugs": [],
+      "must_include_terms": [
+        "oc adm top pod",
+        "CPU",
+        "memory"
+      ],
+      "must_not_include_terms": [],
+      "expected_citation_terms": [
+        "top pod"
+      ],
+      "forbidden_citation_terms": [],
+      "clarification_expected": false,
+      "no_answer_expected": false,
+      "rewritten_query": "특정 Pod의 리소스가 얼마나 잡아먹고 있는지 확인하는 법 oc adm top pods pod 상태 확인 판단 기준 resource usage / 파드 CLI 명령어 CPU memory requests limits metrics restartCount CrashLoopBackOff",
+      "retrieved_books": [
+        "cli_tools",
+        "security_and_compliance",
+        "kmsc-operations",
+        "nodes"
+      ],
+      "has_answer": true,
+      "has_korean": true,
+      "answer_format_valid": true,
+      "has_inline_citations": true,
+      "citation_indices_valid": true,
+      "clarification_detected": false,
+      "no_answer_detected": false,
+      "clarification_needed_but_answered": false,
+      "no_evidence_but_asserted": false,
+      "must_include_pass": true,
+      "must_exclude_pass": true,
+      "missing_required_terms": [],
+      "forbidden_answer_terms": [],
+      "citation_terms_pass": true,
+      "citation_forbidden_terms_pass": true,
+      "missing_citation_terms": [],
+      "forbidden_citation_term_hits": [],
+      "primary_expected_book": true,
+      "primary_cited_book": "cli_tools",
+      "cited_expected_book": true,
+      "unexpected_cited_books": [],
+      "forbidden_cited_books": [],
+      "has_unexpected_citation": false,
+      "strict_expected_only": true,
+      "citation_precision": 1.0,
+      "warning_free": true,
+      "pass": true,
+      "cited_indices": [
+        1
+      ],
+      "cited_books": [
+        "cli_tools"
+      ],
+      "warnings": [],
+      "answer": "요약: Pod가 CPU와 memory를 얼마나 쓰는지는 metrics가 수집되는 상태에서 `oc adm top pod`로 먼저 확인합니다. [1]\n\n```bash\noc adm top pod --namespace=<namespace>\noc adm top pod <pod-name> --namespace=<namespace>\noc describe pod <pod-name> -n <namespace>\n```\n\n판단 기준:\n- `oc adm top pod` 출력의 CPU, memory 값을 먼저 봅니다.\n- 사용량이 높은 Pod는 `oc describe pod`에서 requests/limits, 이벤트, 재시작 횟수를 같이 봅니다.\n- top 명령이 안 나오면 metrics 수집 구성이 준비되어 있는지도 확인해야 합니다.",
+      "answer_text": "요약: Pod가 CPU와 memory를 얼마나 쓰는지는 metrics가 수집되는 상태에서 `oc adm top pod`로 먼저 확인합니다. [1]\n\n```bash\noc adm top pod --namespace=<namespace>\noc adm top pod <pod-name> --namespace=<namespace>\noc describe pod <pod-name> -n <namespace>\n```\n\n판단 기준:\n- `oc adm top pod` 출력의 CPU, memory 값을 먼저 봅니다.\n- 사용량이 높은 Pod는 `oc describe pod`에서 requests/limits, 이벤트, 재시작 횟수를 같이 봅니다.\n- top 명령이 안 나오면 metrics 수집 구성이 준비되어 있는지도 확인해야 합니다.",
+      "final_citations": [
+        {
+          "index": 1,
+          "chunk_id": "38276e4f-db78-5571-84b2-c0c491166508",
+          "book_slug": "cli_tools",
+          "section": "oc adm top pod",
+          "anchor": "oc-adm-top-pod",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/cli_tools/index",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-adm-top-pod",
+          "excerpt": "Pod의 리소스(CPU/메모리) 사용 표시 사용 예 # Show metrics for all pods in the default namespace oc adm top pod # Show metrics for all pods in the given namespace oc adm top pod --namespace=NAMESPACE # Show metrics for a given pod and its containers oc adm top pod POD_NAME --containers # Show metrics for the pods defined by label name=myLabel oc adm top pod -l name=myLabel",
+          "section_path": [
+            "2장. OpenShift CLI(oc)",
+            "OpenShift CLI 관리자 명령 참조",
+            "OpenShift CLI (oc) 관리자 명령",
+            "oc adm top pod"
+          ],
+          "section_path_label": "2장. OpenShift CLI(oc) > OpenShift CLI 관리자 명령 참조 > OpenShift CLI (oc) 관리자 명령 > oc adm top pod",
+          "section_number": "2.7.1.57",
+          "heading_title": "oc adm top pod",
+          "source_anchor": "oc-adm-top-pod",
+          "toc_path": [
+            "2장. OpenShift CLI(oc)",
+            "2.7 OpenShift CLI 관리자 명령 참조",
+            "2.7.1 OpenShift CLI (oc) 관리자 명령",
+            "2.7.1.57 oc adm top pod"
+          ],
+          "chunk_type": "reference",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "reference"
+          ],
+          "cli_commands": [
+            "oc adm top pod # Show metrics for all pods in the given namespace oc adm top pod --namespace=NAMESPACE # Show metrics for a given pod and its containers oc adm top pod POD_NAME --containers # Show metrics for the pods defined by label name=",
+            "oc adm top pod",
+            "oc adm top pod --namespace=NAMESPACE",
+            "oc adm top pod POD_NAME --containers",
+            "oc adm top pod -l name=myLabel"
+          ],
+          "error_strings": [],
+          "k8s_objects": [],
+          "operator_names": [],
+          "verification_hints": [
+            "oc adm top pod",
+            "oc adm top pod --namespace=NAMESPACE",
+            "oc adm top pod POD_NAME --containers",
+            "oc adm top pod -l name=myLabel"
+          ],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "user_goal": "oc adm top pod",
+              "step_order": 2,
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": [
+                "bash\n# Show metrics for all pods in the default namespace\n  oc adm top pod\n\n# Show metrics for all pods in the given namespace\n  oc adm top pod --namespace=NAMESPACE\n\n# Show metrics for a given pod and its containers\n  oc adm top pod POD_NAME --containers\n\n# Show metrics for the pods defined by label name=myLabel\n  oc adm top pod -l name=myLabel",
+                "oc adm top pod",
+                "oc adm top pod --namespace=NAMESPACE",
+                "oc adm top pod POD_NAME --containers",
+                "oc adm top pod -l name=myLabel"
+              ]
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "citations": [
+        {
+          "index": 1,
+          "chunk_id": "38276e4f-db78-5571-84b2-c0c491166508",
+          "book_slug": "cli_tools",
+          "section": "oc adm top pod",
+          "anchor": "oc-adm-top-pod",
+          "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/cli_tools/index",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-adm-top-pod",
+          "excerpt": "Pod의 리소스(CPU/메모리) 사용 표시 사용 예 # Show metrics for all pods in the default namespace oc adm top pod # Show metrics for all pods in the given namespace oc adm top pod --namespace=NAMESPACE # Show metrics for a given pod and its containers oc adm top pod POD_NAME --containers # Show metrics for the pods defined by label name=myLabel oc adm top pod -l name=myLabel",
+          "section_path": [
+            "2장. OpenShift CLI(oc)",
+            "OpenShift CLI 관리자 명령 참조",
+            "OpenShift CLI (oc) 관리자 명령",
+            "oc adm top pod"
+          ],
+          "section_path_label": "2장. OpenShift CLI(oc) > OpenShift CLI 관리자 명령 참조 > OpenShift CLI (oc) 관리자 명령 > oc adm top pod",
+          "section_number": "2.7.1.57",
+          "heading_title": "oc adm top pod",
+          "source_anchor": "oc-adm-top-pod",
+          "toc_path": [
+            "2장. OpenShift CLI(oc)",
+            "2.7 OpenShift CLI 관리자 명령 참조",
+            "2.7.1 OpenShift CLI (oc) 관리자 명령",
+            "2.7.1.57 oc adm top pod"
+          ],
+          "chunk_type": "reference",
+          "semantic_role": "uploaded_document",
+          "source_collection": "core",
+          "block_kinds": [
+            "reference"
+          ],
+          "cli_commands": [
+            "oc adm top pod # Show metrics for all pods in the given namespace oc adm top pod --namespace=NAMESPACE # Show metrics for a given pod and its containers oc adm top pod POD_NAME --containers # Show metrics for the pods defined by label name=",
+            "oc adm top pod",
+            "oc adm top pod --namespace=NAMESPACE",
+            "oc adm top pod POD_NAME --containers",
+            "oc adm top pod -l name=myLabel"
+          ],
+          "error_strings": [],
+          "k8s_objects": [],
+          "operator_names": [],
+          "verification_hints": [
+            "oc adm top pod",
+            "oc adm top pod --namespace=NAMESPACE",
+            "oc adm top pod POD_NAME --containers",
+            "oc adm top pod -l name=myLabel"
+          ],
+          "asset_ids": [],
+          "learning": {
+            "document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "parsed_document": {
+              "track": "ocp-foundation",
+              "persona": [
+                "beginner",
+                "platform-admin"
+              ],
+              "lab_refs": [],
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "difficulty": "beginner",
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "estimated_minutes": 15,
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ]
+            },
+            "chunk": {
+              "track": "ocp-foundation",
+              "stage_id": "wiki-005",
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "user_goal": "oc adm top pod",
+              "step_order": 2,
+              "stage_order": 10005,
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "section_role": "step",
+              "command_hints": [
+                "bash\n# Show metrics for all pods in the default namespace\n  oc adm top pod\n\n# Show metrics for all pods in the given namespace\n  oc adm top pod --namespace=NAMESPACE\n\n# Show metrics for a given pod and its containers\n  oc adm top pod POD_NAME --containers\n\n# Show metrics for the pods defined by label name=myLabel\n  oc adm top pod -l name=myLabel",
+                "oc adm top pod",
+                "oc adm top pod --namespace=NAMESPACE",
+                "oc adm top pod POD_NAME --containers",
+                "oc adm top pod -l name=myLabel"
+              ]
+            },
+            "refs": {
+              "prerequisite_refs": [
+                {
+                  "reason": "이전 학습 단계",
+                  "ref_type": "document",
+                  "relation": "prerequisite",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                }
+              ],
+              "next_refs": [
+                {
+                  "reason": "다음 학습 단계",
+                  "ref_type": "document",
+                  "relation": "next",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ],
+              "related_refs": [
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-002",
+                  "book_slug": "architecture",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-004",
+                  "book_slug": "backup_and_restore",
+                  "category_key": "wiki"
+                },
+                {
+                  "reason": "같은 학습 카테고리의 보조 문서",
+                  "ref_type": "document",
+                  "relation": "related",
+                  "stage_id": "wiki-006",
+                  "book_slug": "disconnected_environments",
+                  "category_key": "wiki"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "quality_flags": []
+    }
+  ]
+}

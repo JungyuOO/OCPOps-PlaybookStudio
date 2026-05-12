@@ -74,6 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Answer mode for the query.",
     )
     ask_parser.add_argument("--skip-log", action="store_true")
+    ask_parser.add_argument("--database-url", default="")
     _add_runtime_args(ask_parser)
 
     eval_parser = subparsers.add_parser("eval", help="Run answer evaluation cases")
@@ -82,6 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=ANSWER_EVAL_CASES_PATH,
     )
+    eval_parser.add_argument("--database-url", default="")
     _add_runtime_args(eval_parser)
 
     ragas_parser = subparsers.add_parser("ragas", help="Run RAGAS evaluation")
@@ -398,10 +400,14 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _build_answerer() -> ChatAnswerer:
+def _build_answerer(*, database_url: str = "") -> ChatAnswerer:
     from play_book_studio.answering.answerer import ChatAnswerer
 
     settings = load_settings(ROOT)
+    if database_url.strip():
+        from dataclasses import replace
+
+        settings = replace(settings, database_url=database_url.strip())
     return ChatAnswerer.from_settings(settings)
 
 
@@ -437,7 +443,7 @@ def _run_ui(args: argparse.Namespace) -> int:
 def _run_ask(args: argparse.Namespace) -> int:
     from play_book_studio.retrieval.models import SessionContext
 
-    answerer = _build_answerer()
+    answerer = _build_answerer(database_url=args.database_url)
     context = SessionContext.from_dict(
         json.loads(args.context_json) if args.context_json else None
     )
@@ -458,7 +464,7 @@ def _run_ask(args: argparse.Namespace) -> int:
 def _run_eval(args: argparse.Namespace) -> int:
     from play_book_studio.evals.answer_eval import evaluate_case, summarize_case_results
 
-    answerer = _build_answerer()
+    answerer = _build_answerer(database_url=args.database_url)
     cases = _read_jsonl(args.cases)
     details: list[dict] = []
     for case in cases:

@@ -34,6 +34,7 @@ from play_book_studio.retrieval.query import (
     has_rbac_intent,
     is_generic_intro_query,
 )
+from play_book_studio.retrieval.query_understanding import understand_query
 
 from .doc_locator_intent import is_cross_document_follow_query
 from .models import Citation, ContextBundle
@@ -320,7 +321,77 @@ def _command_lookup_priority(hit: RetrievalHit, query: str) -> tuple[int, int, i
     if namespace_query and any(token in haystack for token in ("delete pods", "서비스가 중단", "remove all")):
         score += 18
 
-    return (score, 0 if hit.book_slug == "cli_tools" else 1, _procedure_chunk_priority(hit))
+    return (
+        score + _generic_official_source_penalty(hit, query),
+        0 if hit.book_slug == "cli_tools" else 1,
+        _procedure_chunk_priority(hit),
+    )
+
+
+def _generic_official_source_penalty(hit: RetrievalHit, query: str) -> int:
+    lowered_query = (query or "").lower()
+    if any(token in lowered_query for token in ("kmsc", "internal course", "internal ops", "study doc", "실운영", "운영 문서")):
+        return 0
+    source_scope = str(hit.source_scope or "").strip()
+    source_collection = str(hit.source_collection or "").strip()
+    source_type = str(hit.source_type or "").strip()
+    if source_scope == "official_docs" or source_type == "official_doc":
+        return 0
+    if source_scope == "study_docs" or source_collection not in {"", "core"}:
+        return 28
+    if hit.book_slug.startswith("kmsc") or "kmsc" in str(hit.source or "").lower():
+        return 28
+    return 0
+
+
+def _beginner_operational_priority(hit: RetrievalHit, query: str) -> tuple[int, int, int]:
+    understanding = understand_query(query)
+    lowered_section = (hit.section or "").lower()
+    lowered_text = (hit.text or "").lower()
+    commands = tuple(command.lower() for command in _all_hit_commands(hit))
+    haystack = " ".join((lowered_section, lowered_text, " ".join(commands)))
+
+    score = 50 + _generic_official_source_penalty(hit, query)
+    if commands:
+        score -= 8
+    score += _procedure_chunk_priority(hit) * 2
+
+    if understanding.has_intent("namespace_create"):
+        if any(token in haystack for token in ("oc new-project", "oc create namespace", "kind: namespace")):
+            score -= 24
+        if any(token in haystack for token in ("namespace", "project")):
+            score -= 8
+    if understanding.has_intent("deployment_yaml_authoring"):
+        if any(token in haystack for token in ("kind: deployment", "oc apply -f", "deployment manifest")):
+            score -= 24
+        if any(token in haystack for token in ("deployment", "replicaset", "pod template", "yaml")):
+            score -= 8
+    if understanding.has_intent("pod_resource_inspection"):
+        if any(token in haystack for token in ("oc adm top pods", "top pods", "resource usage")):
+            score -= 24
+        if any(token in haystack for token in ("cpu", "memory", "metrics", "requests", "limits")):
+            score -= 8
+    if understanding.has_intent("service_failure_diagnosis"):
+        if hit.book_slug in {"networking_overview", "ingress_and_load_balancing", "cli_tools"}:
+            score -= 18
+        elif hit.book_slug in {"authentication_and_authorization", "operators", "backup_and_restore", "support"}:
+            score += 18
+        if any(token in haystack for token in ("service", "endpoint", "endpointslice", "route", "selector", "targetport")):
+            score -= 18
+        if any(token in haystack for token in ("oc describe service", "oc get endpoints", "oc describe route")):
+            score -= 12
+
+    preferred_books = {
+        "cli_tools": 0,
+        "networking_overview": 1,
+        "ingress_and_load_balancing": 2,
+        "networking": 3,
+        "nodes": 4,
+        "applications": 5,
+        "building_applications": 6,
+        "web_console": 7,
+    }
+    return (score, preferred_books.get(hit.book_slug, 9), _procedure_chunk_priority(hit))
 
 
 def _install_guidance_priority(hit: RetrievalHit) -> tuple[int, int, int]:
@@ -906,6 +977,7 @@ def _select_hits(
         return []
 
     normalized = query or ""
+    query_understanding = understand_query(normalized)
     allow_uploaded_hits = (
         _is_customer_pack_explicit_query(normalized)
         or has_active_customer_pack_selection(session_context)
@@ -943,6 +1015,10 @@ def _select_hits(
             has_cluster_node_usage_intent(normalized),
             has_deployment_scaling_intent(normalized),
             has_registry_storage_ops_intent(normalized),
+            query_understanding.has_intent("namespace_create"),
+            query_understanding.has_intent("deployment_yaml_authoring"),
+            query_understanding.has_intent("pod_resource_inspection"),
+            query_understanding.has_intent("service_failure_diagnosis"),
         ]
     )
 
@@ -998,6 +1074,27 @@ def _select_hits(
             ranked_hits,
             key=lambda hit: (
                 *_install_guidance_priority(hit),
+                -_hit_score(hit),
+                hit.book_slug,
+                hit.chunk_id,
+            ),
+        )
+        support_window = ranked_hits[: max(max_chunks * 2, 8)]
+        top_score = _hit_score(support_window[0])
+        top_book = support_window[0].book_slug
+    elif any(
+        query_understanding.has_intent(intent)
+        for intent in (
+            "namespace_create",
+            "deployment_yaml_authoring",
+            "pod_resource_inspection",
+            "service_failure_diagnosis",
+        )
+    ):
+        ranked_hits = sorted(
+            ranked_hits,
+            key=lambda hit: (
+                *_beginner_operational_priority(hit, normalized),
                 -_hit_score(hit),
                 hit.book_slug,
                 hit.chunk_id,
