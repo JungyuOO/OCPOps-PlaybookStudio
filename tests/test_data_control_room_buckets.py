@@ -33,6 +33,7 @@ def _control_room_settings(root):
         active_pack_id="unit-pack",
         active_pack_label="Unit Pack",
         database_url="",
+        qdrant_collection="openshift_docs",
         source_manifest_path=root / "corpus" / "manifest.json",
         source_approval_report_path=root / "reports" / "source_approval.json",
         translation_lane_report_path=root / "reports" / "translation_lane.json",
@@ -247,6 +248,41 @@ def test_approved_wiki_runtime_bucket_hides_non_korean_db_gold(monkeypatch, tmp_
     assert payload["hidden_books"][0]["language_gate_status"] == "fail"
     assert payload["hidden_books"][0]["hangul_chunk_ratio"] == 0.0
     assert payload["hidden_books"][0]["viewer_smoke_status"] == "skipped"
+
+
+def test_non_gold_zero_section_recovery_prioritizes_materialization(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(buckets, "load_settings", _db_settings)
+    monkeypatch.setattr(
+        buckets,
+        "official_runtime_books",
+        lambda _root: [
+            {
+                "book_slug": "zero_runtime",
+                "title": "Zero Runtime",
+                "grade": "Silver",
+                "section_count": 0,
+                "chunk_count": 0,
+                "source_url": "https://docs.example.test/zero_runtime",
+                "source_lane": "official_ko",
+                "viewer_path": "/docs/ocp/4.20/ko/zero_runtime/index.html",
+            }
+        ],
+    )
+    monkeypatch.setattr(buckets, "_viewer_document_smoke", _viewer_smoke_pass)
+
+    payload = buckets._build_approved_wiki_runtime_book_bucket(
+        tmp_path,
+        translation_lane_report={},
+        approved_manifest_entries=[],
+    )
+
+    recovery = payload["hidden_books"][0]
+
+    assert recovery["hidden_reason"] == "zero_sections"
+    assert recovery["gold_recovery_group"] == "materialization"
+    assert recovery["gold_recovery_action"] == "문서 파싱/section materialize 재실행 필요"
+    assert recovery["gold_contract_blockers"][:3] == ["zero_sections", "zero_chunks", "language_gate_missing"]
+    assert "not_gold_source_grade" in recovery["gold_contract_blockers"]
 
 
 def test_runtime_book_uses_manifest_language_evidence(monkeypatch, tmp_path) -> None:
@@ -503,6 +539,23 @@ def test_data_control_room_top_level_gold_books_use_gated_runtime_bucket(monkeyp
     monkeypatch.setattr(data_control_room, "CustomerPackDraftStore", _EmptyDraftStore)
     monkeypatch.setattr(data_control_room, "_approved_manifest_entries", lambda _settings: [source_only_gold])
     monkeypatch.setattr(data_control_room, "_build_approved_wiki_runtime_book_bucket", lambda *_args, **_kwargs: {"books": [gated_gold], "hidden_books": []})
+    monkeypatch.setattr(
+        data_control_room,
+        "build_corpus_status",
+        lambda **_kwargs: {
+            "database": "postgres",
+            "collection": "openshift_docs",
+            "source_counts": {"official_docs": 29, "study_docs": 9},
+            "chunk_counts": {"official_docs": 27907, "study_docs": 523},
+            "total_sources": 38,
+            "total_chunks": 28430,
+            "qdrant_index_entries": 28430,
+            "missing_qdrant_index_entries": 0,
+            "qdrant_index_parity": True,
+            "ready_scopes": ["official_docs", "study_docs"],
+            "ready": True,
+        },
+    )
 
     def select_report(_candidate_path, settings_path, *, summary_key, rows_key, expected_count):
         del summary_key, expected_count
@@ -523,6 +576,15 @@ def test_data_control_room_top_level_gold_books_use_gated_runtime_bucket(monkeyp
     assert payload["summary"]["certification_status"] == "not_certifiable"
     assert payload["summary"]["release_blocking"] is True
     assert "missing_morning_gate_report" in payload["certification"]["blockers"]
+    assert payload["summary"]["db_total_document_count"] == 38
+    assert payload["summary"]["db_official_document_count"] == 29
+    assert payload["summary"]["db_customer_document_count"] == 9
+    assert payload["summary"]["official_corpus_chunk_count"] == 27907
+    assert payload["summary"]["customer_corpus_chunk_count"] == 523
+    assert payload["summary"]["total_repository_chunk_count"] == 28430
+    assert payload["summary"]["qdrant_index_entry_count"] == 28430
+    assert payload["summary"]["qdrant_index_parity"] is True
+    assert payload["runtime_db_corpus"]["ready_scopes"] == ["official_docs", "study_docs"]
 
 
 def test_data_control_room_cache_fingerprint_watches_runtime_surface_inputs(monkeypatch, tmp_path) -> None:

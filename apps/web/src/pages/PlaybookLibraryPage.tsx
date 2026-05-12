@@ -2665,10 +2665,16 @@ const PlaybookLibraryPage: React.FC = () => {
   const runtimeQdrant = runtimeHealth?.runtime?.qdrant_live;
   const totalRepositoryChunks = repositoryDocumentRows.reduce((total, row) => total + Number(row.document.chunk_count || 0), 0);
   const totalIndexedRepositoryChunks = repositoryDocumentRows.reduce((total, row) => total + Number(row.document.indexed_chunk_count || 0), 0);
-  const dbCorpusChunks = runtimeDbCorpus?.total_chunks ?? totalRepositoryChunks;
+  const officialDbChunks = runtimeDbCorpus?.chunk_counts?.official_docs
+    ?? summary?.official_corpus_chunk_count
+    ?? officialDocumentRows.reduce((total, row) => total + Number(row.document.chunk_count || 0), 0);
+  const customerDbChunks = runtimeDbCorpus?.chunk_counts?.study_docs
+    ?? summary?.customer_corpus_chunk_count
+    ?? customerDocumentRows.reduce((total, row) => total + Number(row.document.chunk_count || 0), 0);
+  const dbCorpusChunks = runtimeDbCorpus?.total_chunks ?? summary?.total_repository_chunk_count ?? totalRepositoryChunks;
   const qdrantPoints = runtimeQdrant?.points_count ?? null;
   const qdrantIndexedVectors = runtimeQdrant?.indexed_vectors_count ?? null;
-  const qdrantEntryCount = runtimeDbCorpus?.qdrant_index_entries ?? totalIndexedRepositoryChunks;
+  const qdrantEntryCount = runtimeDbCorpus?.qdrant_index_entries ?? summary?.qdrant_index_entry_count ?? totalIndexedRepositoryChunks;
   const allOperationalWikiBooks = [...(controlRoom?.approved_wiki_runtime_books?.books ?? [])].filter(isOperationalWikiRuntimeBook);
   const operationalWikiRecoveryRows = goldRecoveryRows(controlRoom?.approved_wiki_runtime_books);
   const operationalWikiBookBySlug = useMemo(() => {
@@ -2706,6 +2712,9 @@ const PlaybookLibraryPage: React.FC = () => {
       : '',
     runtimeDbCorpus?.qdrant_index_parity === false
       ? 'Postgres qdrant_index_entries parity 확인 필요'
+      : '',
+    summary?.missing_qdrant_index_entry_count
+      ? `Qdrant index entry 누락 ${Number(summary.missing_qdrant_index_entry_count).toLocaleString()}건`
       : '',
   ].filter(Boolean);
   const goldOperationalWikiBooks = allOperationalWikiBooks.filter((book) => normalizePlaybookGrade(book.grade) === 'Gold' && book.certified_gold !== false);
@@ -3041,6 +3050,9 @@ const PlaybookLibraryPage: React.FC = () => {
                 <div className="library-runtime-card">
                   <span>Chunks</span>
                   <strong>{Number(dbCorpusChunks || 0).toLocaleString()}</strong>
+                  <em>
+                    official {Number(officialDbChunks || 0).toLocaleString()} · customer {Number(customerDbChunks || 0).toLocaleString()}
+                  </em>
                   <em>{qdrantEntryCount.toLocaleString()} qdrant entries</em>
                 </div>
                 <div className={`library-runtime-card ${runtimeAlerts.length > 0 ? 'warning' : 'ok'}`}>

@@ -535,6 +535,37 @@ def _gold_recovery_action(reason: str) -> str:
     return "Gold 계약 blocker 해소 후 재검증 필요"
 
 
+GOLD_RECOVERY_BLOCKER_PRIORITY = {
+    "zero_sections": 10,
+    "zero_chunks": 11,
+    "missing_runtime_artifact": 12,
+    "missing_viewer_path": 13,
+    "viewer_slug_mismatch": 14,
+    "unknown_viewer_route": 15,
+    "non_ko_content": 20,
+    "mixed_ko_content": 21,
+    "language_quality_failed": 22,
+    "language_gate_missing": 23,
+    "missing_source_provenance": 30,
+    "missing_source_lane": 31,
+    "not_gold_source_grade": 90,
+}
+
+
+def _gold_recovery_blocker_priority(reason: str) -> tuple[int, str]:
+    normalized = str(reason or "").replace("runtime_not_readable::", "").strip()
+    if normalized.startswith("viewer_"):
+        return (16, normalized)
+    if normalized.startswith("non_gold_runtime::"):
+        return (91, normalized)
+    return (GOLD_RECOVERY_BLOCKER_PRIORITY.get(normalized, 80), normalized)
+
+
+def _prioritize_gold_blockers(blockers: list[str]) -> list[str]:
+    deduped = list(dict.fromkeys(blocker for blocker in blockers if blocker))
+    return sorted(deduped, key=_gold_recovery_blocker_priority)
+
+
 def _gold_contract_payload(
     *,
     grade: str,
@@ -580,7 +611,7 @@ def _gold_contract_payload(
         reason = str(hidden_reason).replace("runtime_not_readable::", "") or hidden_reason
         if reason not in blockers:
             blockers.append(reason)
-    deduped_blockers = list(dict.fromkeys(blocker for blocker in blockers if blocker))
+    deduped_blockers = _prioritize_gold_blockers(blockers)
     deduped_warnings = list(dict.fromkeys(warning for warning in warnings if warning))
     status = "gold_certified" if not deduped_blockers else "gold_recovery"
     return {
@@ -704,15 +735,23 @@ def _build_approved_wiki_runtime_book_bucket(
             )
             continue
         if grade != "Gold":
+            section_count = _safe_int(entry.get("section_count"))
+            chunk_count = _safe_int(entry.get("chunk_count"))
+            if section_count <= 0:
+                hidden_reason = "zero_sections"
+            elif chunk_count <= 0:
+                hidden_reason = "zero_chunks"
+            else:
+                hidden_reason = f"non_gold_runtime::{grade.lower()}"
             hidden_books.append(
                 _gold_recovery_book_payload(
                     entry,
                     title=title,
                     grade=grade,
-                    section_count=_safe_int(entry.get("section_count")),
-                    chunk_count=_safe_int(entry.get("chunk_count")),
+                    section_count=section_count,
+                    chunk_count=chunk_count,
                     viewer_path=str(entry.get("viewer_path") or entry.get("docs_viewer_path") or "").strip(),
-                    hidden_reason=f"non_gold_runtime::{grade.lower()}",
+                    hidden_reason=hidden_reason,
                 )
             )
             continue

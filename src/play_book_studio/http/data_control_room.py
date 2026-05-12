@@ -22,6 +22,7 @@ from play_book_studio.http.data_control_room_buckets import (
     _safe_read_json,
 )
 from play_book_studio.config.settings import load_settings
+from play_book_studio.db.corpus_status import build_corpus_status
 from play_book_studio.db.official_documents import load_official_manifest_entries
 from play_book_studio.intake import CustomerPackDraftStore
 
@@ -275,6 +276,30 @@ def _runtime_qdrant_parity_status(runtime_report: dict[str, Any]) -> str:
     if any(candidate.get("qdrant_index_parity") is True for candidate in candidates):
         return "pass"
     return "unknown"
+
+
+def _runtime_db_corpus_status(settings: Any, runtime_report: dict[str, Any]) -> dict[str, Any]:
+    """Return the live DB corpus status, falling back to the latest runtime report.
+
+    Data Control Room is a trust cockpit. Its summary must not silently show only
+    official-doc chunks when customer/study documents are present in the shared
+    Postgres/Qdrant corpus.
+    """
+
+    try:
+        live_status = build_corpus_status(
+            database_url=str(getattr(settings, "database_url", "") or ""),
+            collection=str(getattr(settings, "qdrant_collection", "") or ""),
+        )
+    except Exception:  # noqa: BLE001 - the payload below is diagnostic, not fatal.
+        live_status = {}
+    if isinstance(live_status, dict) and live_status.get("database") not in {"disabled", "error"}:
+        return live_status
+    runtime = runtime_report.get("runtime") if isinstance(runtime_report.get("runtime"), dict) else {}
+    report_status = runtime.get("db_corpus") if isinstance(runtime.get("db_corpus"), dict) else {}
+    if isinstance(report_status, dict) and report_status:
+        return report_status
+    return live_status if isinstance(live_status, dict) else {}
 
 
 MIN_EVAL_CASE_COUNT = 20
@@ -617,6 +642,21 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     runtime_app = runtime_report.get("app") if isinstance(runtime_report.get("app"), dict) else {}
     runtime_runtime = runtime_report.get("runtime") if isinstance(runtime_report.get("runtime"), dict) else {}
     runtime_probes = runtime_report.get("probes") if isinstance(runtime_report.get("probes"), dict) else {}
+    runtime_db_corpus = _runtime_db_corpus_status(settings, runtime_report)
+    runtime_source_counts = (
+        runtime_db_corpus.get("source_counts") if isinstance(runtime_db_corpus.get("source_counts"), dict) else {}
+    )
+    runtime_chunk_counts = (
+        runtime_db_corpus.get("chunk_counts") if isinstance(runtime_db_corpus.get("chunk_counts"), dict) else {}
+    )
+    official_db_source_count = int(runtime_source_counts.get("official_docs") or 0)
+    customer_db_source_count = int(runtime_source_counts.get("study_docs") or 0)
+    official_db_chunk_count = int(runtime_chunk_counts.get("official_docs") or 0)
+    customer_db_chunk_count = int(runtime_chunk_counts.get("study_docs") or 0)
+    total_db_source_count = int(runtime_db_corpus.get("total_sources") or (official_db_source_count + customer_db_source_count))
+    total_db_chunk_count = int(runtime_db_corpus.get("total_chunks") or (official_db_chunk_count + customer_db_chunk_count))
+    qdrant_index_entry_count = int(runtime_db_corpus.get("qdrant_index_entries") or 0)
+    missing_qdrant_index_entry_count = int(runtime_db_corpus.get("missing_qdrant_index_entries") or 0)
     report_paths = {
         "gate": str(gate_path),
         "source_approval": str(source_approval_report_path or ""),
@@ -679,6 +719,12 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "blocked_count": int(source_approval_report.get("summary", {}).get("blocked_count") or 0),
             "raw_manual_count": raw_manual_count,
             "chunk_count": len(chunk_rows),
+            "official_corpus_chunk_count": official_db_chunk_count or len(chunk_rows),
+            "customer_corpus_chunk_count": customer_db_chunk_count,
+            "total_repository_chunk_count": total_db_chunk_count or (len(chunk_rows) + user_library_corpus_chunk_count),
+            "qdrant_index_entry_count": qdrant_index_entry_count,
+            "missing_qdrant_index_entry_count": missing_qdrant_index_entry_count,
+            "qdrant_index_parity": bool(runtime_db_corpus.get("qdrant_index_parity")),
             "corpus_book_count": len(materialized_core_corpus_slugs),
             "core_corpus_book_count": len(materialized_core_corpus_slugs),
             "manualbook_count": len(materialized_core_manualbook_slugs),
@@ -687,6 +733,9 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "user_library_book_count": len(user_library_books),
             "user_library_corpus_book_count": len(user_library_corpus_books),
             "user_library_corpus_chunk_count": user_library_corpus_chunk_count,
+            "db_official_document_count": official_db_source_count,
+            "db_customer_document_count": customer_db_source_count,
+            "db_total_document_count": total_db_source_count,
             "gold_candidate_book_count": len(gold_candidate_books.get("books") or []),
             "approved_wiki_runtime_book_count": len(approved_wiki_runtime_books.get("books") or []),
             "wiki_navigation_backlog_count": len(navigation_backlog.get("books") or []),
@@ -739,6 +788,7 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "ragas": {**_summarize_eval(ragas_report), "path": str(settings.ragas_eval_report_path)},
             "runtime": {"path": str(settings.runtime_report_path), "app": runtime_app, "runtime": runtime_runtime, "probes": runtime_probes, "latest_smoke": runtime_smoke_payload},
         },
+        "runtime_db_corpus": runtime_db_corpus,
         "source_of_truth": {
             "artifacts_dir": str(settings.artifacts_dir),
             "manifest": _path_snapshot(settings.source_manifest_path),

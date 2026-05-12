@@ -364,6 +364,15 @@ export interface DataControlRoomSummary {
   user_library_book_count?: number;
   user_library_corpus_book_count?: number;
   user_library_corpus_chunk_count?: number;
+  official_corpus_chunk_count?: number;
+  customer_corpus_chunk_count?: number;
+  total_repository_chunk_count?: number;
+  qdrant_index_entry_count?: number;
+  missing_qdrant_index_entry_count?: number;
+  qdrant_index_parity?: boolean;
+  db_official_document_count?: number;
+  db_customer_document_count?: number;
+  db_total_document_count?: number;
   gold_candidate_book_count?: number;
   approved_wiki_runtime_book_count?: number;
   wiki_navigation_backlog_count?: number;
