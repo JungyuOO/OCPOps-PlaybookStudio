@@ -1,11 +1,14 @@
 from play_book_studio.answering.answerer import (
+    _confidence_tokens,
     _is_low_confidence_retrieval,
+    _low_confidence_query_input,
     _low_confidence_clarification_answer,
 )
 from play_book_studio.answering.models import Citation
 from play_book_studio.http.session_flow import suggest_follow_up_questions
 from play_book_studio.http.sessions import ChatSession
 from play_book_studio.answering.models import AnswerResult
+from play_book_studio.retrieval.models import SessionContext
 
 
 def _citation(**overrides) -> Citation:
@@ -99,6 +102,73 @@ def test_low_confidence_guard_allows_ocp_install_overview_grounding() -> None:
                 "book_slug": "installation_overview",
                 "fused_score": -4.0,
                 "pre_rerank_fused_score": 0.01,
+            }
+        ],
+    )
+
+
+def test_confidence_tokens_strip_latin_korean_josa_for_product_terms() -> None:
+    tokens = _confidence_tokens("observability와 monitoring은 어떻게 달라?")
+
+    assert "observability" in tokens
+    assert "monitoring" in tokens
+    assert "observability와" not in tokens
+    assert "monitoring은" not in tokens
+
+
+def test_low_confidence_guard_allows_observability_monitoring_comparison() -> None:
+    assert not _is_low_confidence_retrieval(
+        query="observability와 monitoring은 어떻게 달라?",
+        citations=[
+            _citation(
+                book_slug="observability_overview",
+                section="Observability 정보",
+                excerpt="Observability는 monitoring, logging, telemetry 신호를 함께 사용해 클러스터 상태를 이해합니다.",
+            )
+        ],
+        selected_hits=[
+            {
+                "section": "Observability 정보",
+                "book_slug": "observability_overview",
+                "fused_score": 0.03,
+                "pre_rerank_fused_score": 0.02,
+                "vector_score": 0.02,
+            }
+        ],
+    )
+
+
+def test_follow_up_low_confidence_uses_session_rewritten_query_context() -> None:
+    query = "아까 말한 이미지 저장소는?"
+    rewritten_query = "OCP 4.20 | 주제 외부 이미지 레지스트리 구성 | 엔터티 registry, image registry | 아까 말한 이미지 저장소는?"
+    confidence_query = _low_confidence_query_input(
+        query=query,
+        rewritten_query=rewritten_query,
+        context=SessionContext(
+            mode="ops",
+            current_topic="외부 이미지 레지스트리 구성",
+            open_entities=["registry", "image registry"],
+            ocp_version="4.20",
+        ),
+    )
+
+    assert "registry" in confidence_query
+    assert not _is_low_confidence_retrieval(
+        query=confidence_query,
+        citations=[
+            _citation(
+                book_slug="registry",
+                section="OpenShift Container Registry",
+                excerpt="OpenShift Container Registry는 클러스터 내부 이미지 저장소로 registry 및 image registry 구성을 다룹니다.",
+            )
+        ],
+        selected_hits=[
+            {
+                "section": "OpenShift Container Registry",
+                "book_slug": "registry",
+                "fused_score": 0.03,
+                "pre_rerank_fused_score": 0.02,
+                "vector_score": 0.02,
             }
         ],
     )

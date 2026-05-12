@@ -16,6 +16,8 @@ function makeBook(book_slug: string, overrides: Partial<LibraryBook> = {}): Libr
     source_url: overrides.source_url ?? `https://example.com/${book_slug}`,
     updated_at: overrides.updated_at ?? '2026-04-17T04:00:00+09:00',
     runtime_readable: overrides.runtime_readable ?? true,
+    certified_gold: overrides.certified_gold ?? true,
+    gold_contract_status: overrides.gold_contract_status ?? 'gold_certified',
   };
 }
 
@@ -28,7 +30,7 @@ function makeRoom(overrides: Partial<WorkspaceSourceRoom> = {}): WorkspaceSource
 }
 
 describe('resolveWorkspaceSourceBooks', () => {
-  it('prefers latest pipeline playbooks over the broader source catalog', () => {
+  it('returns only certified runtime playbooks from the gate bucket', () => {
     const room = makeRoom({
       approved_wiki_runtime_books: {
         selected_dir: '',
@@ -82,13 +84,17 @@ describe('resolveWorkspaceSourceBooks', () => {
     expect(resolveWorkspaceSourceBooks(room)).toEqual([]);
   });
 
-  it('filters non-readable rows from the approved runtime bucket', () => {
+  it('filters non-readable and uncertified rows from the approved runtime bucket', () => {
     const room = makeRoom({
       approved_wiki_runtime_books: {
         selected_dir: '',
         books: [
           makeBook('readable_doc'),
           makeBook('broken_doc', { runtime_readable: false }),
+          makeBook('recovery_doc', {
+            certified_gold: false,
+            gold_contract_status: 'gold_recovery',
+          }),
         ],
       },
     });

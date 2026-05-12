@@ -33,6 +33,7 @@ from play_book_studio.retrieval.query import (
     has_project_terminating_intent,
     has_rbac_intent,
     is_generic_intro_query,
+    has_route_ingress_compare_intent,
 )
 
 from .doc_locator_intent import is_cross_document_follow_query
@@ -846,6 +847,7 @@ def _should_force_clarification(
         [
             has_doc_locator_intent(normalized),
             has_openshift_kubernetes_compare_intent(normalized),
+            has_route_ingress_compare_intent(normalized),
             is_generic_intro_query(normalized),
             has_operator_concept_intent(normalized),
             has_mco_concept_intent(normalized),
@@ -919,6 +921,7 @@ def _select_hits(
     is_concept_query = any(
         [
             has_openshift_kubernetes_compare_intent(normalized),
+            has_route_ingress_compare_intent(normalized),
             is_generic_intro_query(normalized),
             _is_intro_recommendation_query(normalized),
             has_operator_concept_intent(normalized),
