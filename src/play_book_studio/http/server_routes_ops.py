@@ -65,6 +65,7 @@ from play_book_studio.ingestion.translation_gold_promotion import promote_transl
 from play_book_studio.retrieval.book_adjustments import query_book_adjustments
 from play_book_studio.retrieval.models import SessionContext
 from play_book_studio.retrieval.query_terms import normalize_query
+from play_book_studio.wiki_gold_builder import build_official_materialize_gold_run
 from play_book_studio.source_discovery import (
     SOURCE_LANE_COMMUNITY_TROUBLESHOOTING,
     SOURCE_LANE_OFFICIAL_ISSUE_PR,
@@ -605,6 +606,7 @@ def _materialize_official_source(root_dir: Path, *, slug: str, source_basis: str
         "gold_summary": promotion_report.get("summary", {}),
         "smoke": smoke,
     }
+    report["gold_build_run"] = build_official_materialize_gold_run(report)
     report_path = _official_materialize_report_path(root_dir, slug=slug, source_basis=source_basis)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -621,7 +623,7 @@ def _list_unanswered_questions(root_dir: Path, *, limit: int = 20) -> dict[str, 
     row_by_query: dict[str, dict[str, Any]] = {}
 
     def merge_unanswered_row(existing: dict[str, Any], older: dict[str, Any]) -> None:
-        for key in ("rewritten_query", "failure_reason", "source_request_origin", "status"):
+        for key in ("source_request_id", "rewritten_query", "failure_reason", "source_request_origin", "status", "gold_build_status", "gold_build_next_action", "gold_build_pipeline"):
             if not str(existing.get(key) or "").strip() and str(older.get(key) or "").strip():
                 existing[key] = older[key]
         existing_warnings = [str(item) for item in (existing.get("warnings") or []) if str(item).strip()]
@@ -644,6 +646,7 @@ def _list_unanswered_questions(root_dir: Path, *, limit: int = 20) -> dict[str, 
         if not query:
             continue
         row = {
+            "source_request_id": str(payload.get("source_request_id") or uuid.uuid5(uuid.NAMESPACE_URL, query).hex),
             "query": query,
             "rewritten_query": str(payload.get("rewritten_query") or "").strip(),
             "timestamp": str(payload.get("timestamp") or "").strip(),
@@ -651,6 +654,9 @@ def _list_unanswered_questions(root_dir: Path, *, limit: int = 20) -> dict[str, 
             "failure_reason": str(payload.get("failure_reason") or "").strip(),
             "source_request_origin": str(payload.get("source_request_origin") or "").strip(),
             "status": str(payload.get("status") or "queued").strip() or "queued",
+            "gold_build_status": str(payload.get("gold_build_status") or "queued_for_source_discovery").strip(),
+            "gold_build_next_action": str(payload.get("gold_build_next_action") or "원천소스 찾기 후 공식 후보를 Gold Build로 materialize").strip(),
+            "gold_build_pipeline": str(payload.get("gold_build_pipeline") or "source_request -> source_discovery -> source_materialize -> gold_build").strip(),
             "warnings": [str(item) for item in (payload.get("warnings") or []) if str(item).strip()],
         }
         existing = row_by_query.get(query)
@@ -670,9 +676,12 @@ def _save_repository_source_request(root_dir: Path, payload: dict[str, Any]) -> 
         raise ValueError("query가 필요합니다.")
     warnings = payload.get("warnings")
     warning_rows = [str(item) for item in warnings if str(item).strip()] if isinstance(warnings, list) else []
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    source_request_id = str(payload.get("source_request_id") or uuid.uuid5(uuid.NAMESPACE_URL, f"{query}:{timestamp}").hex)
     record = {
         "record_kind": "unanswered_question",
-        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "source_request_id": source_request_id,
+        "timestamp": timestamp,
         "session_id": str(payload.get("session_id") or "").strip(),
         "query": query,
         "rewritten_query": str(payload.get("rewritten_query") or query).strip(),
@@ -680,6 +689,9 @@ def _save_repository_source_request(root_dir: Path, payload: dict[str, Any]) -> 
         "failure_reason": str(payload.get("failure_reason") or "user_requested_source_enrichment").strip(),
         "source_request_origin": str(payload.get("source_request_origin") or "chat_acquisition").strip(),
         "status": str(payload.get("status") or "queued").strip() or "queued",
+        "gold_build_status": "queued_for_source_discovery",
+        "gold_build_next_action": "원천소스 찾기 후 공식 후보를 Gold Build로 materialize",
+        "gold_build_pipeline": "source_request -> source_discovery -> source_materialize -> gold_build",
         "warnings": warning_rows,
     }
     settings = load_settings(root_dir)

@@ -13,6 +13,7 @@ import yaml
 from play_book_studio.config.settings import load_settings
 from play_book_studio.db.official_documents import load_official_manifest_entries
 from play_book_studio.runtime_catalog_registry import official_runtime_books
+from play_book_studio.wiki_gold_builder import gold_build_contract_from_blockers
 
 from .runtime_truth import official_runtime_grade, official_runtime_truth_payload
 from .wiki_user_overlay import build_wiki_overlay_signal_payload
@@ -650,6 +651,18 @@ def _gold_contract_payload(
     deduped_blockers = _prioritize_gold_blockers(blockers)
     deduped_warnings = list(dict.fromkeys(warning for warning in warnings if warning))
     status = "gold_certified" if not deduped_blockers else "gold_recovery"
+    gold_build_run = gold_build_contract_from_blockers(
+        deduped_blockers,
+        title=str(viewer_path or source_url or source_lane or "runtime book"),
+        source_kind="approved_wiki_runtime",
+        source_scope="official_docs",
+        metrics={
+            "section_count": section_count,
+            "chunk_count": chunk_count,
+            "viewer_smoke_status": viewer_smoke_status,
+            "language_gate_status": language_gate_status,
+        },
+    )
     return {
         "certified_gold": status == "gold_certified",
         "gold_contract_status": status,
@@ -660,6 +673,12 @@ def _gold_contract_payload(
         "gold_recovery_blocking_check": _gold_recovery_blocking_check(deduped_blockers[0]) if deduped_blockers else "",
         "gold_recovery_rerun_command": _gold_recovery_rerun_command(deduped_blockers[0]) if deduped_blockers else "",
         "effective_grade": "Gold" if status == "gold_certified" else "Gold Recovery",
+        "gold_build_run": gold_build_run,
+        "gold_build_status": str(gold_build_run.get("status") or ""),
+        "gold_build_stage": str(gold_build_run.get("current_stage") or ""),
+        "repair_loop_status": "passed" if status == "gold_certified" else "manual_repair_needed",
+        "repair_actions": list(gold_build_run.get("repair_actions") or []),
+        "gold_evidence": list(gold_build_run.get("gold_evidence") or []),
         "gold_contract_checks": {
             "source_grade_gold": str(grade or "").strip() == "Gold",
             "has_sections": section_count > 0,
@@ -1059,7 +1078,7 @@ def _build_approved_wiki_runtime_book_bucket(
         "hidden_count": len(hidden_books),
         "recovery_books": hidden_books,
         "recovery_count": len(hidden_books),
-        "surface_policy": "Only gold_certified books are published. Failed Gold candidates remain visible as Gold Recovery items with blockers and next actions.",
+        "surface_policy": "Gold Build promotes only repaired, verified books. Repair-limited candidates stay visible as Gold Build Repair Queue items with blockers, repair actions, and next actions.",
     }
 
 

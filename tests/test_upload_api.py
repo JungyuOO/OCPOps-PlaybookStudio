@@ -51,6 +51,8 @@ def test_build_upload_ingest_response_dry_run_stores_file_and_chunks(monkeypatch
     assert result["chunk_count"] == 1
     assert result["owner_user_id"] == "owner-1"
     assert result["repository_id"] == "11111111-1111-1111-1111-111111111111"
+    assert result["gold_build_run"]["status"] == "auto_candidate"
+    assert result["gold_build_run"]["policy"].startswith("Gold Gate is a repair diagnostic")
     assert (storage_dir / result["storage_key"]).is_file()
 
 
@@ -85,3 +87,4 @@ def test_upload_ingest_response_is_json_serializable(monkeypatch):
     )
 
     assert json.loads(json.dumps(result, ensure_ascii=False))["filename"] == "serializable.md"
+    assert json.loads(json.dumps(result, ensure_ascii=False))["gold_build_run"]["schema"].endswith(".v1")

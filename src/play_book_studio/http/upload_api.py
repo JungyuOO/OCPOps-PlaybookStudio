@@ -8,10 +8,14 @@ from pathlib import Path
 from typing import Any
 
 from play_book_studio.config.settings import load_settings
-from play_book_studio.db.document_repository import persist_parsed_upload_document
+from play_book_studio.db.document_repository import (
+    persist_parsed_upload_document,
+    update_document_source_gold_build_run,
+)
 from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
 from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
 from play_book_studio.ingestion.vision import build_qwen_image_describer
+from play_book_studio.wiki_gold_builder import prepare_upload_gold_build_candidate, with_index_verification
 
 
 def _bool_payload(value: Any, *, default: bool = False) -> bool:
@@ -83,6 +87,14 @@ def build_upload_ingest_response(
     created_by = str(payload.get("created_by") or "").strip()
     visibility = str(payload.get("visibility") or "").strip()
     source_scope = str(payload.get("source_scope") or "user_upload").strip() or "user_upload"
+    gold_candidate = prepare_upload_gold_build_candidate(
+        parsed,
+        chunks,
+        source_scope=source_scope,
+        dry_run=dry_run,
+    )
+    parsed = gold_candidate.parsed
+    chunks = gold_candidate.chunks
     result: dict[str, Any] = {
         "dry_run": dry_run,
         "filename": parsed.filename,
@@ -100,6 +112,7 @@ def build_upload_ingest_response(
         "source_scope": source_scope,
         "warnings": list(parsed.warnings),
         "sections": [list(chunk.section_path) for chunk in chunks if chunk.section_path],
+        "gold_build_run": gold_candidate.run,
     }
     if dry_run:
         return result
@@ -127,6 +140,7 @@ def build_upload_ingest_response(
             repository_kind=str(payload.get("repository_kind") or ""),
             visibility=visibility,
             source_scope=source_scope,
+            gold_build_run=result["gold_build_run"],
         )
         result["repository_id"] = persisted.repository_id
         result["persisted"] = {
@@ -145,6 +159,15 @@ def build_upload_ingest_response(
                 connection,
                 collection=str(payload.get("collection") or "").strip() or None,
                 limit=_int_payload(payload.get("index_limit"), default=max(100, len(chunks))),
+            )
+            result["gold_build_run"] = with_index_verification(
+                result["gold_build_run"],
+                index_result=result["index"],
+            )
+            update_document_source_gold_build_run(
+                connection,
+                document_source_id=persisted.document_source_id,
+                gold_build_run=result["gold_build_run"],
             )
     return result
 

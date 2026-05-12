@@ -11,6 +11,50 @@ export interface LibraryBookSourceOption {
   is_current?: boolean;
 }
 
+export interface GoldBuildDiagnostic {
+  code: string;
+  severity: 'blocking' | 'warning' | string;
+  summary: string;
+  evidence?: string[];
+}
+
+export interface GoldBuildRepairAction {
+  id: string;
+  diagnostic: string;
+  status: 'applied' | 'queued' | 'provider_required' | 'manual_required' | 'verified' | 'not_needed' | string;
+  title: string;
+  summary: string;
+  evidence?: string[];
+  next_action?: string;
+}
+
+export interface GoldBuildStageResult {
+  stage: string;
+  status: 'pass' | 'pending' | 'fail' | string;
+  detail: string;
+}
+
+export interface GoldBuildRun {
+  schema: string;
+  run_id: string;
+  status: 'auto_candidate' | 'building_gold' | 'repairing' | 'needs_manual_repair' | 'gold' | string;
+  final_grade: string;
+  source_kind: string;
+  source_scope: string;
+  title: string;
+  policy: string;
+  diagnostics: GoldBuildDiagnostic[];
+  repair_attempts: number;
+  repair_actions: GoldBuildRepairAction[];
+  stage_results: GoldBuildStageResult[];
+  current_stage: string;
+  metrics: Record<string, unknown>;
+  gold_evidence: string[];
+  manual_repair_needed: boolean;
+  reader_path?: string;
+  qdrant_index?: Record<string, unknown>;
+}
+
 export interface LibraryBook {
   book_slug: string;
   title: string;
@@ -54,6 +98,12 @@ export interface LibraryBook {
   gold_recovery_blocking_check?: string;
   gold_recovery_rerun_command?: string;
   effective_grade?: string;
+  gold_build_run?: GoldBuildRun;
+  gold_build_status?: string;
+  gold_build_stage?: string;
+  repair_loop_status?: string;
+  repair_actions?: GoldBuildRepairAction[];
+  gold_evidence?: string[];
   gold_contract_checks?: Record<string, boolean>;
   language_gate_status?: 'pass' | 'warning' | 'fail' | 'unknown' | string;
   language_gate_reason?: string;
@@ -176,6 +226,7 @@ export interface UploadIngestResponse {
   sections: string[][];
   persisted?: UploadIngestPersistedSummary;
   index?: UploadIngestIndexSummary;
+  gold_build_run?: GoldBuildRun;
   repository_id?: string;
   owner_user_id?: string;
   visibility?: string;
@@ -192,6 +243,7 @@ export interface DocumentRepositoryDocument {
   source_scope: string;
   visibility: string;
   metadata: Record<string, unknown>;
+  gold_build_run?: GoldBuildRun;
   parse_status: string;
   chunk_count: number;
   indexed_chunk_count: number;
@@ -934,6 +986,7 @@ export interface OfficialSourceMaterializeResponse {
     source_meta_ready: boolean;
     viewer_path: string;
   };
+  gold_build_run?: GoldBuildRun;
   report_path: string;
 }
 
@@ -1204,6 +1257,7 @@ export interface DocumentIngestStatusResponse {
 }
 
 export interface RepositoryUnansweredItem {
+  source_request_id?: string;
   query: string;
   rewritten_query: string;
   timestamp: string;
@@ -1211,6 +1265,9 @@ export interface RepositoryUnansweredItem {
   failure_reason?: string;
   source_request_origin?: string;
   status?: string;
+  gold_build_status?: string;
+  gold_build_next_action?: string;
+  gold_build_pipeline?: string;
   warnings: string[];
 }
 

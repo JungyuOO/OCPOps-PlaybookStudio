@@ -45,6 +45,7 @@ def build_parsed_document_rows(
     repository_id: str = "",
     visibility: str = "",
     source_scope: str = "user_upload",
+    gold_build_run: dict[str, Any] | None = None,
 ) -> ParsedDocumentRows:
     document_chunks = chunks if chunks is not None else build_document_chunks(parsed)
     block_id_by_asset_id = _block_id_by_asset_id(parsed)
@@ -64,6 +65,7 @@ def build_parsed_document_rows(
         "metadata": {
             "document_id": parsed.document_id,
             "document_format": parsed.document_format,
+            **({"gold_build_run": gold_build_run} if gold_build_run else {}),
             **dict(parsed.metadata),
         },
         "created_by": created_by,
@@ -178,6 +180,7 @@ def persist_parsed_upload_document(
     repository_kind: str = "",
     visibility: str = "",
     source_scope: str = "user_upload",
+    gold_build_run: dict[str, Any] | None = None,
 ) -> StoredParsedDocument:
     rows = build_parsed_document_rows(
         parsed,
@@ -187,6 +190,7 @@ def persist_parsed_upload_document(
         repository_id=repository_id,
         visibility=visibility,
         source_scope=source_scope,
+        gold_build_run=gold_build_run,
     )
     with connection.transaction():
         with connection.cursor() as cursor:
@@ -257,6 +261,24 @@ def persist_parsed_upload_document(
         asset_ids=asset_ids,
         chunk_ids=chunk_ids,
     )
+
+
+def update_document_source_gold_build_run(
+    connection,
+    *,
+    document_source_id: str,
+    gold_build_run: dict[str, Any],
+) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE document_sources
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb,
+                updated_at = now()
+            WHERE id = %s::uuid
+            """,
+            (_json({"gold_build_run": gold_build_run}), document_source_id),
+        )
 
 
 def _block_id_by_asset_id(parsed: ParsedUploadDocument) -> dict[str, str]:
@@ -745,6 +767,7 @@ def list_document_repositories(
             )
             for doc_row in cursor.fetchall():
                 repository_id = str(doc_row[0])
+                source_metadata = dict(doc_row[9] or {})
                 documents_by_repository.setdefault(repository_id, []).append(
                     {
                         "document_source_id": str(doc_row[1]),
@@ -755,7 +778,8 @@ def list_document_repositories(
                         "mime_type": str(doc_row[6] or ""),
                         "source_scope": str(doc_row[7] or ""),
                         "visibility": str(doc_row[8] or ""),
-                        "metadata": dict(doc_row[9] or {}),
+                        "metadata": source_metadata,
+                        "gold_build_run": source_metadata.get("gold_build_run") if isinstance(source_metadata.get("gold_build_run"), dict) else {},
                         "parse_status": str(doc_row[10] or ""),
                         "chunk_count": int(doc_row[11] or 0),
                         "indexed_chunk_count": int(doc_row[12] or 0),
@@ -969,4 +993,5 @@ __all__ = [
     "load_document_reader",
     "list_document_repositories",
     "persist_parsed_upload_document",
+    "update_document_source_gold_build_run",
 ]

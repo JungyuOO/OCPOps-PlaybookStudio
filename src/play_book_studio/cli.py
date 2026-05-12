@@ -798,7 +798,7 @@ def _run_db_migrate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _upload_ingest_summary(parsed, chunks, *, persisted=None) -> dict:
+def _upload_ingest_summary(parsed, chunks, *, persisted=None, gold_build_run=None) -> dict:
     return {
         "filename": parsed.filename,
         "document_format": parsed.document_format,
@@ -815,6 +815,7 @@ def _upload_ingest_summary(parsed, chunks, *, persisted=None) -> dict:
             for chunk in chunks
             if chunk.section_path
         ],
+        "gold_build_run": gold_build_run or {},
         "persisted": None if persisted is None else {
             "document_source_id": persisted.document_source_id,
             "document_version_id": persisted.document_version_id,
@@ -832,6 +833,7 @@ def _run_upload_ingest(args: argparse.Namespace) -> int:
     from play_book_studio.db.document_repository import persist_parsed_upload_document
     from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
     from play_book_studio.ingestion.vision import build_qwen_image_describer
+    from play_book_studio.wiki_gold_builder import prepare_upload_gold_build_candidate
 
     root_dir = args.root_dir.resolve()
     source_path = args.path
@@ -849,8 +851,16 @@ def _run_upload_ingest(args: argparse.Namespace) -> int:
         max_chars=args.chunk_max_chars,
         overlap_blocks=args.chunk_overlap_blocks,
     )
+    gold_candidate = prepare_upload_gold_build_candidate(
+        parsed,
+        chunks,
+        source_scope=args.source_scope,
+        dry_run=bool(args.dry_run),
+    )
+    parsed = gold_candidate.parsed
+    chunks = gold_candidate.chunks
     if args.dry_run:
-        print(json.dumps(_upload_ingest_summary(parsed, chunks), ensure_ascii=False, indent=2))
+        print(json.dumps(_upload_ingest_summary(parsed, chunks, gold_build_run=gold_candidate.run), ensure_ascii=False, indent=2))
         return 0
 
     database_url = (args.database_url or settings.database_url).strip()
@@ -877,8 +887,9 @@ def _run_upload_ingest(args: argparse.Namespace) -> int:
             repository_kind=args.repository_kind,
             visibility=args.visibility,
             source_scope=args.source_scope,
+            gold_build_run=gold_candidate.run,
         )
-    print(json.dumps(_upload_ingest_summary(parsed, chunks, persisted=persisted), ensure_ascii=False, indent=2))
+    print(json.dumps(_upload_ingest_summary(parsed, chunks, persisted=persisted, gold_build_run=gold_candidate.run), ensure_ascii=False, indent=2))
     return 0
 
 

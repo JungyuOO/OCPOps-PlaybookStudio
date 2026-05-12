@@ -586,7 +586,7 @@ def _build_certification_contract(
             for key in required_reports
         },
         "gold_contract": {
-            "rule": "Gold is certified only when the book is readable in the viewer, has sections and chunks, passes Korean language gates, carries source provenance, and passes reader smoke. Failed candidates are Gold Recovery, not Gold.",
+            "rule": "Gold is a build result, not a rejection badge: diagnose blockers, repair structure/Korean/readability/citation, rebuild and reindex, verify reader smoke, then promote. Repair-limited candidates remain in Gold Build Repair Queue with next actions.",
             "qdrant_parity_source": "runtime_health.db_corpus.qdrant_index_parity and runtime_health.qdrant_live points/indexed vectors",
         },
     }

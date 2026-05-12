@@ -37,6 +37,7 @@ import {
   type BuyerPacket,
   type DataControlRoomResponse,
   type HiddenLibraryBook,
+  type GoldBuildRun,
   type LibraryBucket,
   type LibraryBook,
   type LibraryBookSourceOption,
@@ -718,6 +719,7 @@ function documentBookSlug(row: RepositoryDocumentRow): string {
 function documentQualityChips(row: RepositoryDocumentRow, runtimeBook?: LibraryBook): string[] {
   const { document } = row;
   const metadata = document.metadata ?? {};
+  const goldBuild = documentGoldBuildRun(document);
   const parseStatus = String(document.parse_status || '').trim();
   const readBlockReason = documentReadBlockReason(document);
   const certifiedGold = runtimeBook?.certified_gold === true && runtimeBook?.gold_contract_status === 'gold_certified';
@@ -729,6 +731,7 @@ function documentQualityChips(row: RepositoryDocumentRow, runtimeBook?: LibraryB
     document.source_kind?.includes('gold') ? 'source_gold' : '',
     certifiedGold ? 'certified_gold' : '',
     recoveryGold ? 'gold_recovery' : '',
+    goldBuild?.status ? `gold_build_${goldBuild.status}` : '',
     recoveryGold && runtimeBook?.gold_recovery_group ? runtimeBook.gold_recovery_group : '',
     metadataString(metadata, 'approval_state'),
     metadataString(metadata, 'review_status'),
@@ -737,6 +740,76 @@ function documentQualityChips(row: RepositoryDocumentRow, runtimeBook?: LibraryB
     metadataString(metadata, 'document_format'),
   ].map((item) => String(item || '').trim()).filter(Boolean);
   return Array.from(new Set(chips)).slice(0, 8);
+}
+
+function coerceGoldBuildRun(value: unknown): GoldBuildRun | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const payload = value as Partial<GoldBuildRun>;
+  const status = String(payload.status || '').trim();
+  if (!status) {
+    return null;
+  }
+  return payload as GoldBuildRun;
+}
+
+function documentGoldBuildRun(document: DocumentRepositoryDocument): GoldBuildRun | null {
+  return coerceGoldBuildRun(document.gold_build_run) || coerceGoldBuildRun(document.metadata?.gold_build_run);
+}
+
+function goldBuildStatusLabel(run?: GoldBuildRun | null): string {
+  switch (String(run?.status || '').trim()) {
+    case 'gold':
+      return 'Gold';
+    case 'needs_manual_repair':
+      return 'Manual Repair Needed';
+    case 'repairing':
+      return 'Repairing';
+    case 'building_gold':
+      return 'Building Gold';
+    case 'auto_candidate':
+      return 'Auto Candidate';
+    default:
+      return 'Gold Build Pending';
+  }
+}
+
+function goldBuildTone(run?: GoldBuildRun | null): 'gold' | 'repairing' | 'manual' | 'candidate' | 'pending' {
+  switch (String(run?.status || '').trim()) {
+    case 'gold':
+      return 'gold';
+    case 'repairing':
+    case 'building_gold':
+      return 'repairing';
+    case 'needs_manual_repair':
+      return 'manual';
+    case 'auto_candidate':
+      return 'candidate';
+    default:
+      return 'pending';
+  }
+}
+
+function goldBuildSummary(run?: GoldBuildRun | null): string {
+  if (!run) {
+    return 'Gold Build run 기록 없음';
+  }
+  const metrics = run.metrics || {};
+  const sectionCount = Number(metrics.section_count ?? 0);
+  const chunkCount = Number(metrics.chunk_count ?? 0);
+  const actionCount = Array.isArray(run.repair_actions) ? run.repair_actions.length : 0;
+  return [
+    run.current_stage ? `stage ${run.current_stage}` : '',
+    Number.isFinite(sectionCount) ? `${sectionCount} sections` : '',
+    Number.isFinite(chunkCount) ? `${chunkCount} chunks` : '',
+    actionCount ? `${actionCount} repair actions` : '',
+  ].filter(Boolean).join(' · ') || run.policy || '';
+}
+
+function goldBuildPrimaryAction(run?: GoldBuildRun | null): string {
+  const action = run?.repair_actions?.find((item) => String(item.status || '') !== 'applied');
+  return action?.next_action || action?.summary || run?.gold_evidence?.[0] || '';
 }
 
 function documentIndexStatus(row: RepositoryDocumentRow): LibraryIndexFilter {
@@ -1902,9 +1975,20 @@ const PlaybookLibraryPage: React.FC = () => {
       const ingest = await uploadDocumentIngestion(file, { index: true });
       const indexedCount = ingest.index?.indexed_count ?? 0;
       const indexLine = ingest.index ? `, ${indexedCount}/${ingest.index.candidate_count} indexed` : '';
+      const goldRun = ingest.gold_build_run ?? null;
       setLatestUploadIngest(ingest);
 
       addLog('success', `Ingested '${ingest.filename}': ${ingest.block_count} blocks, ${ingest.chunk_count} chunks${indexLine}.`);
+      if (goldRun) {
+        addLog(
+          goldRun.status === 'gold' ? 'success' : goldRun.status === 'needs_manual_repair' ? 'warn' : 'info',
+          `[Gold Build] ${goldBuildStatusLabel(goldRun)} · ${goldBuildSummary(goldRun)}`,
+        );
+        const nextRepair = goldBuildPrimaryAction(goldRun);
+        if (nextRepair) {
+          addLog(goldRun.status === 'gold' ? 'success' : 'warn', `[Repair Log] ${nextRepair}`);
+        }
+      }
       if (ingest.warnings.length > 0) {
         addLog('warn', ingest.warnings.slice(0, 2).join(' / '));
       }
@@ -1918,7 +2002,12 @@ const PlaybookLibraryPage: React.FC = () => {
         documentSourceId: ingest.persisted?.document_source_id || '',
         updatedAt: new Date().toISOString(),
       }));
-      addLog('success', `'${ingest.filename}' is now available to the RAG corpus.`);
+      addLog(
+        goldRun?.status === 'gold' ? 'success' : 'warn',
+        goldRun?.status === 'gold'
+          ? `'${ingest.filename}' is now available as Gold Wiki evidence.`
+          : `'${ingest.filename}' is indexed, but Gold Build still has repair work.`,
+      );
       refreshData();
       setTimeout(() => { setPipelineStage('idle'); setCurrentFile(''); }, 6000);
     } catch (error: unknown) {
@@ -2353,6 +2442,12 @@ const PlaybookLibraryPage: React.FC = () => {
         result.smoke.viewer_ready && result.smoke.source_meta_ready ? 'success' : 'warn',
         `[Judge] 라이브러리 합류 검증 ${result.smoke.viewer_ready && result.smoke.source_meta_ready ? '완료' : '점검 필요'} · viewer ${result.smoke.viewer_ready ? 'ok' : 'missing'} · source meta ${result.smoke.source_meta_ready ? 'ok' : 'missing'} · library ${result.smoke.approved_manifest_count}권`,
       );
+      if (result.gold_build_run) {
+        addLog(
+          result.gold_build_run.status === 'gold' ? 'success' : 'warn',
+          `[Gold Build] ${goldBuildStatusLabel(result.gold_build_run)} · ${goldBuildSummary(result.gold_build_run)}`,
+        );
+      }
       addLog('success', `${result.title} · ${result.source_label}로 Library에 반영됨`);
       refreshData();
       const nextQuery = searchQuery.trim() || record.title || record.book_slug.replace(/_/g, ' ');
@@ -3154,7 +3249,9 @@ const PlaybookLibraryPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="operational-library-grid">
-                  {activeWikiDocumentRows.map(({ repository, document, categoryKey }) => (
+                  {activeWikiDocumentRows.map(({ repository, document, categoryKey }) => {
+                    const goldBuild = documentGoldBuildRun(document);
+                    return (
                     <article
                       key={document.document_source_id}
                       className="operational-library-card operational-library-card--document"
@@ -3181,6 +3278,12 @@ const PlaybookLibraryPage: React.FC = () => {
                             <AlertCircle size={13} />
                             {documentReadBlockReason(document)}
                           </span>
+                        )}
+                        {goldBuild && (
+                          <div className={`gold-build-mini gold-build-mini--${goldBuildTone(goldBuild)}`}>
+                            <span>{goldBuildStatusLabel(goldBuild)}</span>
+                            <p>{goldBuildSummary(goldBuild)}</p>
+                          </div>
                         )}
                       </div>
                       <div className="library-document-actions">
@@ -3214,7 +3317,8 @@ const PlaybookLibraryPage: React.FC = () => {
                         </button>
                       </div>
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </section>
@@ -3285,17 +3389,17 @@ const PlaybookLibraryPage: React.FC = () => {
               <section className="gold-recovery-panel box-container">
                 <div className="operational-shelf-header">
                   <div>
-                    <span className="operational-shelf-eyebrow">Gold Recovery Queue</span>
-                    <h2>Gold에서 탈락한 복구 대상 {operationalWikiRecoveryRows.length.toLocaleString()}권</h2>
-                    <p>이 문서들은 Gold 라벨을 달 수 없습니다. blocker를 해소하고 다시 검증해야 운영 위키에 합류합니다.</p>
+                    <span className="operational-shelf-eyebrow">Gold Build Repair Queue</span>
+                    <h2>Gold로 만들기 위한 수리 대상 {operationalWikiRecoveryRows.length.toLocaleString()}권</h2>
+                    <p>이 목록은 탈락장이 아니라 수리 지시서입니다. blocker를 고치고 재빌드하면 운영 위키 Gold로 승급됩니다.</p>
                   </div>
-                  <span className="gold-recovery-status">Not Gold</span>
+                  <span className="gold-recovery-status">Repair Loop</span>
                 </div>
                 <div className="gold-recovery-grid">
                   {operationalWikiRecoveryRows.map((book) => (
                     <article key={`recovery-${book.book_slug}`} className="gold-recovery-card">
                       <div className="gold-recovery-card-head">
-                        <span>{book.source_grade || 'Gold'} → Gold Recovery</span>
+                        <span>{book.source_grade || 'Gold'} → Gold Build Repair</span>
                         <strong>{book.title}</strong>
                       </div>
                       <div className="gold-recovery-card-meta">
@@ -3313,6 +3417,18 @@ const PlaybookLibraryPage: React.FC = () => {
                         </div>
                       )}
                       <p>{goldRecoveryAction(book)}</p>
+                      {book.repair_actions && book.repair_actions.length > 0 && (
+                        <div className="gold-build-repair-list gold-build-repair-list--compact">
+                          {book.repair_actions.slice(0, 3).map((action) => (
+                            <article key={`${book.book_slug}-${action.id}-${action.diagnostic}`}>
+                              <strong>{action.title}</strong>
+                              <span>{action.status}</span>
+                              <p>{action.summary}</p>
+                              {action.next_action && <em>{action.next_action}</em>}
+                            </article>
+                          ))}
+                        </div>
+                      )}
                       {book.gold_recovery_blocking_check && (
                         <div className="gold-recovery-check">
                           <span>Blocking check</span>
@@ -3579,7 +3695,9 @@ const PlaybookLibraryPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="library-repository-grid">
-                  {repositoryPaneRows.map(({ repository, document, categoryKey }) => (
+                  {repositoryPaneRows.map(({ repository, document, categoryKey }) => {
+                    const goldBuild = documentGoldBuildRun(document);
+                    return (
                     <article className="library-repository-card" key={document.document_source_id}>
                       <div>
                         <span className="library-repository-scope">{document.source_scope || repository.visibility || repository.repository_kind}</span>
@@ -3601,6 +3719,12 @@ const PlaybookLibraryPage: React.FC = () => {
                             <AlertCircle size={13} />
                             {documentReadBlockReason(document)}
                           </span>
+                        )}
+                        {goldBuild && (
+                          <div className={`gold-build-mini gold-build-mini--${goldBuildTone(goldBuild)}`}>
+                            <span>{goldBuildStatusLabel(goldBuild)}</span>
+                            <p>{goldBuildPrimaryAction(goldBuild) || goldBuildSummary(goldBuild)}</p>
+                          </div>
                         )}
                       </div>
                       <div className="library-document-actions">
@@ -3635,7 +3759,8 @@ const PlaybookLibraryPage: React.FC = () => {
                         </button>
                       </div>
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </section>
@@ -3836,6 +3961,38 @@ const PlaybookLibraryPage: React.FC = () => {
                       <p>정상 저장 · 재오픈 가능</p>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {factoryLane === 'user' && latestUploadIngest?.gold_build_run && (
+                <div className={`gold-build-run-panel gold-build-run-panel--${goldBuildTone(latestUploadIngest.gold_build_run)}`}>
+                  <div className="gold-build-run-head">
+                    <div>
+                      <span className="factory-hub-eyebrow">Gold Build</span>
+                      <h3>{goldBuildStatusLabel(latestUploadIngest.gold_build_run)}</h3>
+                      <p>{goldBuildSummary(latestUploadIngest.gold_build_run)}</p>
+                    </div>
+                    <span>{latestUploadIngest.gold_build_run.final_grade}</span>
+                  </div>
+                  {latestUploadIngest.gold_build_run.repair_actions.length > 0 && (
+                    <div className="gold-build-repair-list">
+                      {latestUploadIngest.gold_build_run.repair_actions.slice(0, 4).map((action) => (
+                        <article key={`${action.id}-${action.diagnostic}`}>
+                          <strong>{action.title}</strong>
+                          <span>{action.status}</span>
+                          <p>{action.summary}</p>
+                          {action.next_action && <em>{action.next_action}</em>}
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                  {latestUploadIngest.gold_build_run.gold_evidence.length > 0 && (
+                    <div className="gold-build-evidence">
+                      {latestUploadIngest.gold_build_run.gold_evidence.slice(0, 6).map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -4128,8 +4285,13 @@ const PlaybookLibraryPage: React.FC = () => {
                                     <div className="repo-unanswered-query">{item.query}</div>
                                     <div className="repo-unanswered-meta">
                                       <span>{new Date(item.timestamp).toLocaleString()}</span>
+                                      {item.source_request_id ? <span>request {item.source_request_id.slice(0, 8)}</span> : null}
+                                      {item.gold_build_status ? <span>{item.gold_build_status}</span> : null}
                                       {item.warnings.length > 0 ? <span>{item.warnings[0]}</span> : null}
                                     </div>
+                                    {item.gold_build_next_action && (
+                                      <div className="repo-unanswered-next-action">{item.gold_build_next_action}</div>
+                                    )}
                                   </div>
                                   <button
                                     type="button"

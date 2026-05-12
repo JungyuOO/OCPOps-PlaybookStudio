@@ -173,12 +173,15 @@ def test_approved_wiki_runtime_bucket_hides_unreadable_gold_books(monkeypatch, t
     assert hidden_by_slug["empty_book"]["hidden_reason"] == "runtime_not_readable::zero_sections"
     assert hidden_by_slug["empty_book"]["grade"] == "Gold Recovery"
     assert hidden_by_slug["empty_book"]["gold_contract_status"] == "gold_recovery"
+    assert hidden_by_slug["empty_book"]["gold_build_status"] == "needs_manual_repair"
+    assert hidden_by_slug["empty_book"]["repair_actions"][0]["id"] == "semantic_section_rebuild"
     assert hidden_by_slug["missing_viewer_book"]["hidden_reason"] == "runtime_not_readable::missing_viewer_path"
     assert hidden_by_slug["missing_artifact_book"]["hidden_reason"] == "runtime_not_readable::missing_runtime_artifact"
     assert hidden_by_slug["misrouted_book"]["hidden_reason"] == "runtime_not_readable::viewer_slug_mismatch"
     assert hidden_by_slug["unknown_route_book"]["hidden_reason"] == "runtime_not_readable::unknown_viewer_route"
     assert payload["recovery_count"] == payload["hidden_count"]
     assert payload["recovery_books"] == payload["hidden_books"]
+    assert "Gold Build Repair Queue" in payload["surface_policy"]
 
 
 def test_approved_wiki_runtime_bucket_keeps_db_gold_grade(monkeypatch, tmp_path) -> None:

@@ -61,3 +61,4 @@ def test_upload_ingest_dry_run_outputs_parse_and_chunk_summary(capsys):
     assert payload["chunk_count"] == 2
     assert payload["persisted"] is None
     assert ["Operations", "Verify"] in payload["sections"]
+    assert payload["gold_build_run"]["status"] == "auto_candidate"
