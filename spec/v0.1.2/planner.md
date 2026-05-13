@@ -4,11 +4,12 @@
 
 - [x] Phase C 보강: reranker를 로컬 mini cross-encoder에서 사내 BGE remote reranker로 전환
   - 기존 `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` 로컬 로딩 경로를 사용하지 않도록 `RemoteBgeReranker`로 교체
-  - `RERANKER_BASE_URL` 기본값은 `EMBEDDING_BASE_URL`을 따르며, 기본 endpoint는 `http://tei.cywell.co.kr/v1/rerank`
-  - OpenAI/Cohere 스타일 `documents` payload를 먼저 시도하고, 400/404/415/422 응답이면 TEI 스타일 `texts` payload로 재시도
+  - `RERANKER_BASE_URL` 기본값은 `EMBEDDING_BASE_URL`을 따르며, `EMBEDDING_BASE_URL`이 `/v1`로 끝나면 rerank endpoint는 TEI 구조에 맞춰 `http://tei.cywell.co.kr/rerank`로 계산
+  - TEI 스타일 `texts` payload를 먼저 시도하고, 400/404/415/422 응답이면 OpenAI/Cohere 스타일 `documents` payload로 재시도
   - rerank 문서 입력에 book/chapter/section/path/heading/commands/k8s objects/error strings metadata를 포함해, Route timeout처럼 토큰만 겹치는 잘못된 책 선택을 규칙 매핑이 아니라 의미 점수로 줄이는 방향 적용
   - OCP ConfigMap과 production env 예시에 `RERANKER_BASE_URL`, `RERANKER_MODEL=BAAI/bge-reranker-v2-m3`, `RERANKER_TIMEOUT_SECONDS` 추가
   - 검증: compileall 통과, `tests/test_reranker.py tests/test_chat_grounding_quality.py tests/test_answer_eval_quality.py` 46개 통과
+  - 실호출 확인: `http://tei.cywell.co.kr/v1/rerank`는 404, `http://tei.cywell.co.kr/rerank`는 endpoint가 존재하지만 현재 `texts` payload에 424 Failed Dependency를 반환. 즉 코드 endpoint 계산은 TEI 구조에 맞췄고, 서버 쪽 reranker 모델/backend 준비 여부는 별도 확인 필요
 
 - [x] Phase C 보강: PDB/HPA/finalizer 계열 운영 질문을 intent profile과 intent-profile rerank rescue로 보강
   - 질문-답변 고정 매핑은 추가하지 않고, `PodDisruptionBudget`, `HorizontalPodAutoscaler`, namespace `finalizers`를 일반 intent profile의 target/evidence/primary command로 등록

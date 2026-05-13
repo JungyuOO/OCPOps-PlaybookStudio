@@ -79,9 +79,9 @@ def test_remote_bge_reranker_uses_embedding_base_url_and_reorders(monkeypatch):
     reranked = reranker.rerank("Route timeout 어디서 확인해?", hits, top_k=2)
 
     assert [hit.chunk_id for hit in reranked] == ["right", "wrong"]
-    assert calls[0]["url"] == "http://tei.internal/v1/rerank"
+    assert calls[0]["url"] == "http://tei.internal/rerank"
     assert calls[0]["json"]["model"] == "BAAI/bge-reranker-v2-m3"
-    assert calls[0]["json"]["documents"]
+    assert calls[0]["json"]["texts"]
     assert reranked[0].component_scores["pre_rerank_fused_score"] == 0.4
     assert reranked[0].component_scores["reranker_score"] == 0.91
 
@@ -92,7 +92,7 @@ def test_remote_bge_reranker_falls_back_to_tei_texts_payload(monkeypatch):
     def fake_post(url: str, **kwargs: Any) -> _Response:
         del url
         payload_keys.append(set(kwargs["json"]))
-        if "documents" in kwargs["json"]:
+        if "texts" in kwargs["json"]:
             return _Response({"error": "unsupported schema"}, status_code=422)
         return _Response([{"index": 0, "score": 0.3}, {"index": 1, "score": 0.8}])
 
@@ -101,8 +101,8 @@ def test_remote_bge_reranker_falls_back_to_tei_texts_payload(monkeypatch):
 
     reranked = reranker.rerank("배포 확인", [_hit("a", score=0.1), _hit("b", score=0.2)], top_k=2)
 
-    assert {"documents", "query", "top_n", "return_documents", "model"} <= payload_keys[0]
-    assert {"texts", "query", "raw_scores", "return_text", "truncate", "model"} <= payload_keys[1]
+    assert {"texts", "query", "raw_scores", "return_text", "truncate", "model"} <= payload_keys[0]
+    assert {"documents", "query", "top_n", "return_documents", "model"} <= payload_keys[1]
     assert [hit.chunk_id for hit in reranked] == ["b", "a"]
 
 
@@ -120,4 +120,3 @@ def test_parse_scores_accepts_score_arrays_and_missing_indices():
     scores = _parse_scores({"scores": [0.4, 0.9]}, expected_count=2)
 
     assert scores == [0.4, 0.9]
-

@@ -45,6 +45,8 @@ def _rerank_endpoint(base_url: str) -> str:
         return ""
     if base.endswith("/rerank"):
         return base
+    if base.endswith("/v1"):
+        base = base.removesuffix("/v1")
     return f"{base}/rerank"
 
 
@@ -145,7 +147,7 @@ class RemoteBgeReranker:
         if self.model_name:
             openai_style["model"] = self.model_name
             tei_style["model"] = self.model_name
-        return [openai_style, tei_style]
+        return [tei_style, openai_style]
 
     def _request_scores(self, query: str, documents: list[str]) -> list[float]:
         if not self.endpoint:
