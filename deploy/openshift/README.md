@@ -73,7 +73,6 @@ The cleanup script stops containers but preserves Docker volumes.
 ```bash
 oc get pods -n pbs-ocpops
 oc get route -n pbs-ocpops
-oc logs deployment/bge-reranker -n pbs-ocpops --tail=80
 oc logs job/official-corpus-seed -n pbs-ocpops --tail=80
 oc logs job/kmsc-corpus-seed -n pbs-ocpops --tail=80
 oc logs job/learning-seed -n pbs-ocpops --tail=80
@@ -83,9 +82,37 @@ Open the `playbookstudio` Route host in a browser.
 
 ## Verify BGE Reranker
 
-The reranker runs inside the namespace as Service `bge-reranker`. Its model
-cache is persisted in PVC `bge-reranker-cache`, so the model is not downloaded
-again on every pod restart.
+The reranker runs on the Ubuntu host as Docker container `bge-reranker` and is
+published to OpenShift through Service `bge-reranker` plus EndpointSlice
+`bge-reranker-external`. This keeps the large model out of the single-node
+OpenShift resource pool.
+
+Host-side container:
+
+```bash
+docker run -d \
+  --name bge-reranker \
+  --restart no \
+  --memory=6g \
+  --memory-swap=8g \
+  --cpus=2 \
+  -p 8082:80 \
+  -v ~/bge-reranker-cache:/data \
+  ghcr.io/huggingface/text-embeddings-inference:cpu-latest \
+  --model-id BAAI/bge-reranker-v2-m3 \
+  --max-client-batch-size 4 \
+  --max-batch-tokens 4096
+```
+
+Check host health before applying the OpenShift app:
+
+```bash
+curl -v --max-time 5 http://127.0.0.1:8082/health
+docker inspect bge-reranker --format 'Memory={{.HostConfig.Memory}} MemorySwap={{.HostConfig.MemorySwap}} Restart={{.HostConfig.RestartPolicy.Name}}'
+docker stats --no-stream bge-reranker
+```
+
+Then verify from inside the namespace:
 
 ```bash
 oc -n pbs-ocpops run reranker-smoke --rm -it --restart=Never \
@@ -94,10 +121,6 @@ oc -n pbs-ocpops run reranker-smoke --rm -it --restart=Never \
     -H 'Content-Type: application/json' \
     --data '{"query":"Route timeout 어디서 확인해?","texts":["OpenShift Route timeout is configured on HAProxy router annotations.","HSTS policy configures strict transport security for routes."],"raw_scores":true,"return_text":false,"truncate":true}'
 ```
-
-If the pod cannot download `BAAI/bge-reranker-v2-m3`, preload the model into
-the `bge-reranker-cache` PVC or mirror the model through an internal artifact
-source before rolling out the app.
 
 ## Local RAG Quality Eval Through OCP Reranker
 
