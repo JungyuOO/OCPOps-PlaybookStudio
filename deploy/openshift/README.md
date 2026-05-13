@@ -98,3 +98,38 @@ oc -n pbs-ocpops run reranker-smoke --rm -it --restart=Never \
 If the pod cannot download `BAAI/bge-reranker-v2-m3`, preload the model into
 the `bge-reranker-cache` PVC or mirror the model through an internal artifact
 source before rolling out the app.
+
+## Local RAG Quality Eval Through OCP Reranker
+
+Local CLI eval can use the in-cluster reranker after the service is deployed.
+Keep one terminal on the OCP-connected Ubuntu server:
+
+```bash
+oc -n pbs-ocpops port-forward svc/bge-reranker 8081:80 --address 127.0.0.1
+```
+
+From Windows, open an SSH tunnel to that server-side port:
+
+```powershell
+ssh -L 8081:127.0.0.1:8081 cywell@192.168.119.23
+```
+
+Then run the local smoke and answer-quality eval:
+
+```powershell
+.\deploy\local-reranker-quality-eval.ps1
+```
+
+Use a wider case set when the quick v0.1.2 beginner set is clean:
+
+```powershell
+.\deploy\local-reranker-quality-eval.ps1 `
+  -Cases corpus/manifests/eval/pbs_chat_quality_extended_cases.jsonl `
+  -TopK 5 `
+  -CandidateK 24 `
+  -MaxContextChunks 8
+```
+
+This verifies local RAG quality with the same `/rerank` API shape. It does not
+replace in-cluster performance testing because local eval still uses the local
+runtime, local database/Qdrant settings, and SSH/port-forward networking.
