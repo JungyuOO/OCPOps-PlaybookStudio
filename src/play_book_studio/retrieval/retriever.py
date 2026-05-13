@@ -24,15 +24,15 @@ from .vector import VectorRetriever
 from .retriever_pipeline import execute_retrieval_pipeline
 
 if TYPE_CHECKING:
-    from .reranker import CrossEncoderReranker
+    from .reranker import RemoteBgeReranker
 
 
-def _build_reranker(settings: Settings, *, enabled: bool) -> "CrossEncoderReranker | None":
+def _build_reranker(settings: Settings, *, enabled: bool) -> "RemoteBgeReranker | None":
     if not enabled:
         return None
-    from .reranker import CrossEncoderReranker
+    from .reranker import RemoteBgeReranker
 
-    return CrossEncoderReranker(settings)
+    return RemoteBgeReranker(settings)
 
 
 def _load_bm25_index(settings: Settings) -> BM25Index:
@@ -53,7 +53,7 @@ class ChatRetriever:
         bm25_index: BM25Index,
         *,
         vector_retriever: VectorRetriever | None = None,
-        reranker: CrossEncoderReranker | None = None,
+        reranker: RemoteBgeReranker | None = None,
         graph_runtime: RetrievalGraphRuntime | None = None,
     ) -> None:
         self.settings = settings

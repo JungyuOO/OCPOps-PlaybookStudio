@@ -2,6 +2,14 @@
 
 ## 진행 메모 (2026-05-13)
 
+- [x] Phase C 보강: reranker를 로컬 mini cross-encoder에서 사내 BGE remote reranker로 전환
+  - 기존 `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` 로컬 로딩 경로를 사용하지 않도록 `RemoteBgeReranker`로 교체
+  - `RERANKER_BASE_URL` 기본값은 `EMBEDDING_BASE_URL`을 따르며, 기본 endpoint는 `http://tei.cywell.co.kr/v1/rerank`
+  - OpenAI/Cohere 스타일 `documents` payload를 먼저 시도하고, 400/404/415/422 응답이면 TEI 스타일 `texts` payload로 재시도
+  - rerank 문서 입력에 book/chapter/section/path/heading/commands/k8s objects/error strings metadata를 포함해, Route timeout처럼 토큰만 겹치는 잘못된 책 선택을 규칙 매핑이 아니라 의미 점수로 줄이는 방향 적용
+  - OCP ConfigMap과 production env 예시에 `RERANKER_BASE_URL`, `RERANKER_MODEL=BAAI/bge-reranker-v2-m3`, `RERANKER_TIMEOUT_SECONDS` 추가
+  - 검증: compileall 통과, `tests/test_reranker.py tests/test_chat_grounding_quality.py tests/test_answer_eval_quality.py` 46개 통과
+
 - [x] Phase C 보강: PDB/HPA/finalizer 계열 운영 질문을 intent profile과 intent-profile rerank rescue로 보강
   - 질문-답변 고정 매핑은 추가하지 않고, `PodDisruptionBudget`, `HorizontalPodAutoscaler`, namespace `finalizers`를 일반 intent profile의 target/evidence/primary command로 등록
   - reranker가 좋은 hybrid 후보를 잘라낸 경우에도 intent evidence 또는 선호 book slug가 있는 후보를 최종 후보로 구제하는 일반 rescue 경로를 추가
