@@ -17,6 +17,11 @@
   - apply script가 `deployment/bge-reranker` rollout을 기다리도록 수정
   - README에 reranker 로그 확인 및 `/rerank` smoke 명령 추가
   - 검증: `kubectl kustomize deploy/openshift` 렌더링 통과, `bash -n deploy/openshift/apply-playbookstudio.sh` 통과
+- [x] Phase D 로컬 검증 보강: OCP 내부 reranker를 port-forward/SSH tunnel로 로컬 품질 eval에 연결하는 helper 추가
+  - `deploy/local-reranker-quality-eval.ps1` 추가
+  - 기본 동작: `RERANKER_BASE_URL=http://127.0.0.1:8081` 설정, `/rerank` smoke, `pbs_chat_quality_v012_beginner_cases.jsonl` answer eval 실행
+  - README에 Ubuntu 서버 `oc port-forward`, Windows SSH tunnel, v0.1.2 beginner/extended eval 실행 명령 추가
+  - 검증: PowerShell scriptblock parse 통과
 
 - [x] Phase C 보강: PDB/HPA/finalizer 계열 운영 질문을 intent profile과 intent-profile rerank rescue로 보강
   - 질문-답변 고정 매핑은 추가하지 않고, `PodDisruptionBudget`, `HorizontalPodAutoscaler`, namespace `finalizers`를 일반 intent profile의 target/evidence/primary command로 등록
