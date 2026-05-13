@@ -1501,12 +1501,47 @@ def maybe_rerank_hits(
         )
     except Exception as exc:  # noqa: BLE001
         reranker_trace["error"] = str(exc)
+        reranked_hits = _prime_hits_for_rebalance(hybrid_hits)
+        try:
+            reranked_hits, rebalance_reasons = _apply_rebalance_rules(
+                retriever,
+                query=query,
+                hybrid_hits=hybrid_hits,
+                reranked_hits=reranked_hits,
+                context=context,
+            )
+        except Exception as fallback_exc:  # noqa: BLE001
+            rebalance_reasons = []
+            reranker_trace["fallback_error"] = str(fallback_exc)
+        hits = reranked_hits[:top_k]
+        reranker_trace.update(
+            {
+                "applied": bool(rebalance_reasons),
+                "mode": "error_fallback",
+                "top1_after_model": reranker_trace["top1_before"],
+                "top1_after": _top_book_slug(hits),
+                "top1_changed": reranker_trace["top1_before"] != _top_book_slug(hits),
+                "candidate_count": len(hybrid_hits),
+                "reranked_count": len(hybrid_hits),
+                "rebalance_reasons": rebalance_reasons,
+            }
+        )
         _emit_trace_event(
             trace_callback,
             step="rerank",
-            label="리랭킹 실패",
-            status="error",
+            label="rerank fallback",
+            status="done",
             detail=str(exc),
+            meta={
+                "summary": _summarize_hit_list(hits, score_key="fused_score"),
+                "top1_before": reranker_trace["top1_before"],
+                "top1_after": reranker_trace["top1_after"],
+                "top1_changed": reranker_trace["top1_changed"],
+                "rebalance_reasons": reranker_trace["rebalance_reasons"],
+                "mode": reranker_trace["mode"],
+                "decision_reason": reranker_trace["decision_reason"],
+                "candidate_budget": reranker_trace["candidate_budget"],
+                "error": reranker_trace["error"],
+            },
         )
-        raise RuntimeError(f"reranker failed: {exc}") from exc
     return hits, reranker_trace
