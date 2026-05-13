@@ -10,6 +10,13 @@
   - OCP ConfigMap과 production env 예시에 `RERANKER_BASE_URL`, `RERANKER_MODEL=BAAI/bge-reranker-v2-m3`, `RERANKER_TIMEOUT_SECONDS` 추가
   - 검증: compileall 통과, `tests/test_reranker.py tests/test_chat_grounding_quality.py tests/test_answer_eval_quality.py` 46개 통과
   - 실호출 확인: `http://tei.cywell.co.kr/v1/rerank`는 404, `http://tei.cywell.co.kr/rerank`는 endpoint가 존재하지만 현재 `texts` payload에 424 Failed Dependency를 반환. 즉 코드 endpoint 계산은 TEI 구조에 맞췄고, 서버 쪽 reranker 모델/backend 준비 여부는 별도 확인 필요
+- [x] Phase D 배포 보강: 사내 TEI reranker 권한이 없을 때를 위해 OCP namespace 내부에 BGE reranker inference service를 추가
+  - `bge-reranker-cache` PVC, `bge-reranker` Deployment/Service 추가
+  - `ghcr.io/huggingface/text-embeddings-inference:cpu-latest` + `BAAI/bge-reranker-v2-m3`로 시작하며 모델 캐시는 PVC `/data`에 유지
+  - PlayBookStudio `RERANKER_BASE_URL`을 `http://bge-reranker:80`로 변경해 app이 namespace 내부 service를 호출하도록 구성
+  - apply script가 `deployment/bge-reranker` rollout을 기다리도록 수정
+  - README에 reranker 로그 확인 및 `/rerank` smoke 명령 추가
+  - 검증: `kubectl kustomize deploy/openshift` 렌더링 통과, `bash -n deploy/openshift/apply-playbookstudio.sh` 통과
 
 - [x] Phase C 보강: PDB/HPA/finalizer 계열 운영 질문을 intent profile과 intent-profile rerank rescue로 보강
   - 질문-답변 고정 매핑은 추가하지 않고, `PodDisruptionBudget`, `HorizontalPodAutoscaler`, namespace `finalizers`를 일반 intent profile의 target/evidence/primary command로 등록
