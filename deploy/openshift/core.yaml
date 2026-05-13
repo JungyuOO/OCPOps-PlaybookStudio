@@ -98,6 +98,32 @@ spec:
       storage: 10Gi
 ---
 apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pbs-ocpops-bge-reranker-cache
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  claimRef:
+    namespace: pbs-ocpops
+    name: bge-reranker-cache
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - 52-54-00-47-49-49
+  hostPath:
+    path: /var/lib/playbookstudio-ocp/bge-reranker-cache
+    type: DirectoryOrCreate
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: bge-reranker-cache
