@@ -213,6 +213,79 @@ def test_namespace_list_command_query_expands_toward_namespace_list_docs() -> No
     assert "projects" in normalized
 
 
+def test_korean_node_status_query_expands_to_node_status_commands() -> None:
+    query = "노드 상태는 처음에 어디서 확인하면 돼?"
+
+    profile = build_intent_profile(query)
+    normalized = normalize_query(query)
+
+    assert profile.target_object == "node"
+    assert profile.task == "status"
+    assert profile.primary_commands == ("oc get nodes", "oc describe node <node-name>")
+    assert "oc get nodes" in normalized
+    assert "describe node" in normalized
+
+
+def test_korean_node_status_query_prefers_nodes_over_mcp_status() -> None:
+    query = "노드 상태는 처음에 어디서 확인하면 돼?"
+    mcp_hit = _hit(
+        "mcp-status",
+        text="Check MachineConfigPool status with oc describe mcp worker.",
+        cli_commands=("oc describe mcp worker", "oc get mcp"),
+        chunk_type="command",
+        book_slug="machine_configuration",
+        section="Checking machine config pool status",
+        raw_score=0.34,
+    )
+    node_hit = _hit(
+        "node-status",
+        text="Review cluster node status. STATUS should be Ready before you continue.",
+        cli_commands=("oc get nodes", "oc describe node <node-name>"),
+        chunk_type="command",
+        book_slug="nodes",
+        section="Reviewing node status",
+        raw_score=0.24,
+    )
+
+    hits = fuse_ranked_hits(
+        query,
+        {"bm25": [mcp_hit, node_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "node-status"
+    assert "intent_profile_primary_command_boost" in hits[0].component_scores
+    assert "intent_profile_command_mismatch_penalty" in hits[1].component_scores
+
+
+def test_korean_node_status_rebalance_recovers_node_hit_after_reranker() -> None:
+    query = "노드 상태는 처음에 어디서 확인하면 돼?"
+    mcp_hit = _hit(
+        "mcp-status",
+        text="MachineConfigPool status and MCO rollout status.",
+        cli_commands=("oc describe mcp worker",),
+        book_slug="machine_configuration",
+        raw_score=0.9,
+    )
+    node_hit = _hit(
+        "node-status",
+        text="Node status is checked with oc get nodes; NotReady nodes need describe.",
+        cli_commands=("oc get nodes", "oc describe node <node-name>"),
+        book_slug="nodes",
+        raw_score=0.35,
+    )
+
+    rebalanced = _rebalance_intent_profile_hits(
+        query,
+        hybrid_hits=[mcp_hit, node_hit],
+        reranked_hits=[mcp_hit],
+    )
+
+    assert rebalanced[0].chunk_id == "node-status"
+    assert rebalanced[0].source == "hybrid_intent_profile_rescued"
+
+
 def test_install_guidance_context_selects_bootstrap_wait_command() -> None:
     query = "bootstrap \uae30\ub2e4\ub9ac\ub294 \ub2e8\uacc4\uc5d0\uc11c \ubb58 \ud655\uc778\ud574\uc57c \ud574?"
     overview_hit = _hit(

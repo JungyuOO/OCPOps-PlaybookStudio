@@ -614,6 +614,7 @@ _INTENT_PROFILE_BOOK_PRIORITY: dict[str, dict[str, int]] = {
     "storage": {"storage": 0, "backup_and_restore": 1, "support": 2},
     "monitoring": {"monitoring": 0, "observability_overview": 1, "logging": 2, "support": 3},
     "pod-metrics": {"nodes": 0, "cli_tools": 1, "support": 2},
+    "node": {"nodes": 0, "support": 1, "cli_tools": 2, "machine_configuration": 4},
 }
 
 

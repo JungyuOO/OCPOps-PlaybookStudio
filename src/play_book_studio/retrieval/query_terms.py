@@ -36,6 +36,9 @@ _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
     "oc create namespace",
     "oc new-project",
     "oc get clusteroperators",
+    "oc get nodes",
+    "oc describe node",
+    "oc describe node <node-name>",
     "oc get mcp",
     "oc debug node",
     "admin",
@@ -179,6 +182,9 @@ def _prioritize_phrase_terms(terms: list[str]) -> list[str]:
         "oc create deployment": 4,
         "oc describe service": 5,
         "oc get endpoints": 6,
+        "oc get nodes": 7,
+        "oc describe node": 8,
+        "oc describe node <node-name>": 9,
     }
     command_terms = sorted(command_terms, key=lambda term: command_priority.get(term.lower(), 50))
     return [*command_terms, *technical_phrases, *rest]
