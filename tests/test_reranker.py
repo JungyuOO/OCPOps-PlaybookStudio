@@ -10,6 +10,7 @@ from play_book_studio.retrieval.reranker import (
     _build_rerank_document,
     _parse_scores,
 )
+from play_book_studio.retrieval.retriever_rerank import maybe_rerank_hits
 
 
 class _Response:
@@ -155,6 +156,42 @@ def test_remote_bge_reranker_can_disable_parallel_batches(monkeypatch):
         _build_rerank_document(hits[2]),
     ]
     assert [hit.chunk_id for hit in reranked[:3]] == ["2", "1", "0"]
+
+
+def test_maybe_rerank_hits_falls_back_to_hybrid_on_reranker_error():
+    class FailingReranker:
+        model_name = "failing-reranker"
+        top_n = 4
+
+        def rerank(self, query: str, hits: list[RetrievalHit], **kwargs: Any) -> list[RetrievalHit]:
+            del query, hits, kwargs
+            raise TimeoutError("remote reranker timed out")
+
+    class Retriever:
+        reranker = FailingReranker()
+
+    trace_events: list[dict[str, Any]] = []
+    timings_ms: dict[str, float] = {}
+    hybrid_hits = [
+        _hit("node-status", score=0.4, book_slug="nodes"),
+        _hit("route-timeout", score=0.3, book_slug="networking"),
+    ]
+
+    hits, trace = maybe_rerank_hits(
+        Retriever(),
+        query="노드 상태는 처음에 어디서 확인하면 돼?",
+        hybrid_hits=hybrid_hits,
+        context=None,
+        top_k=2,
+        trace_callback=trace_events.append,
+        timings_ms=timings_ms,
+    )
+
+    assert [hit.chunk_id for hit in hits] == ["node-status", "route-timeout"]
+    assert trace["mode"] == "error_fallback"
+    assert "remote reranker timed out" in trace["error"]
+    assert trace_events[-1]["status"] == "done"
+    assert trace_events[-1]["step"] == "rerank"
 
 
 def test_rerank_document_includes_metadata_context():
