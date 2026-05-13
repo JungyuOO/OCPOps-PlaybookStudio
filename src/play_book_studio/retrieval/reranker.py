@@ -149,11 +149,11 @@ class RemoteBgeReranker:
             tei_style["model"] = self.model_name
         return [tei_style, openai_style]
 
-    def _request_scores(self, query: str, documents: list[str]) -> list[float]:
+    def _request_score_batch(self, query: str, documents: list[str]) -> list[float]:
         if not self.endpoint:
             raise RuntimeError("RERANKER_BASE_URL or EMBEDDING_BASE_URL must be set")
 
-        last_error = ""
+        errors: list[str] = []
         for payload in self._payloads(query, documents):
             response = requests.post(
                 self.endpoint,
@@ -163,10 +163,16 @@ class RemoteBgeReranker:
             )
             if response.ok:
                 return _parse_scores(response.json(), expected_count=len(documents))
-            last_error = f"{response.status_code} {response.text[:500]}"
+            errors.append(f"{response.status_code} {response.text[:500]}")
             if response.status_code not in {400, 404, 415, 422}:
                 break
-        raise RuntimeError(f"BGE reranker request failed: {last_error}")
+        raise RuntimeError(f"BGE reranker request failed: {'; '.join(errors)}")
+
+    def _request_scores(self, query: str, documents: list[str]) -> list[float]:
+        scores: list[float] = []
+        for start in range(0, len(documents), self.batch_size):
+            scores.extend(self._request_score_batch(query, documents[start:start + self.batch_size]))
+        return scores
 
     def rerank(
         self,
