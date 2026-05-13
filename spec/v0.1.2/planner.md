@@ -1,5 +1,16 @@
 # v0.1.2 청크 품질 재구축과 초보자 답변 깊이 개선
 
+## 진행 메모 (2026-05-13)
+
+- [x] Phase C 보강: PDB/HPA/finalizer 계열 운영 질문을 intent profile과 intent-profile rerank rescue로 보강
+  - 질문-답변 고정 매핑은 추가하지 않고, `PodDisruptionBudget`, `HorizontalPodAutoscaler`, namespace `finalizers`를 일반 intent profile의 target/evidence/primary command로 등록
+  - reranker가 좋은 hybrid 후보를 잘라낸 경우에도 intent evidence 또는 선호 book slug가 있는 후보를 최종 후보로 구제하는 일반 rescue 경로를 추가
+  - `ClusterOperator` 상태 답변은 `oc get clusteroperators`만 근거에 있어도 `oc describe clusteroperator <operator-name>` 후속 확인을 함께 안내하도록 보강
+  - PVC 질문에 `events` 단어가 포함될 때 일반 이벤트 답변이 PVC 전용 답변을 가로채지 않도록 status answer 우선순위를 조정
+  - 검증: compileall 통과, `tests/test_chat_grounding_quality.py tests/test_starter_questions.py tests/test_answer_eval_quality.py tests/test_query_understanding.py tests/test_answer_text_commands.py` 74개 통과
+  - extended eval: `reports/v012_answer_eval_extended_after.json` 갱신, pass_rate 0.5333 -> 0.5556, warning_free_rate 0.9778, citation_terms_rate 0.6667
+  - 남은 병목: Route timeout은 HSTS route chunk가 timeout 질문을 오염시키고, PDB는 좋은 nodes chunk를 잡아도 일반 troubleshooting formatter가 PDB 전용 status answer를 타지 못함. DNS/NetworkPolicy/monitoring/namespace-list/previous-logs/SCC 등은 citation term과 book 선택 정밀도 보강 필요
+
 
 ## 진행 메모 (2026-05-12)
 

@@ -601,13 +601,16 @@ def _rebalance_registry_follow_up_hits(
 
 
 _INTENT_PROFILE_BOOK_PRIORITY: dict[str, dict[str, int]] = {
-    "dns": {"dns_operator": 0, "networking_operators": 1, "networking_overview": 2},
+    "dns": {"dns_operator": 0, "networking_operators": 1, "networking_overview": 2, "operators": 3},
     "networkpolicy": {"network_security": 0, "networking_overview": 1, "advanced_networking": 2},
     "egress-network": {"network_security": 0, "networking_overview": 1, "advanced_networking": 2},
     "route": {"ingress_and_load_balancing": 0, "networking_overview": 1},
     "image-config": {"images": 0, "registry": 1, "postinstallation_configuration": 2},
     "clusterversion": {"updating_clusters": 0, "support": 1, "validation_and_troubleshooting": 2},
     "cluster-health": {"updating_clusters": 0, "support": 1, "nodes": 2, "validation_and_troubleshooting": 3},
+    "project-finalizer": {"support": 0, "nodes": 1, "applications": 2},
+    "poddisruptionbudget": {"nodes": 0, "applications": 1},
+    "horizontalpodautoscaler": {"nodes": 0, "scalability_and_performance": 1, "applications": 2},
     "storage": {"storage": 0, "backup_and_restore": 1, "support": 2},
     "monitoring": {"monitoring": 0, "observability_overview": 1, "logging": 2, "support": 3},
     "pod-metrics": {"nodes": 0, "cli_tools": 1, "support": 2},
@@ -631,11 +634,30 @@ def _rebalance_intent_profile_hits(
         return reranked_hits
 
     evidence_terms = tuple(term for term in (*profile.evidence_terms, *profile.primary_commands) if term)
-    if not any(hit.book_slug in preferred_books or _hit_contains_any(hit, evidence_terms) for hit in reranked_hits):
+    if not any(
+        hit.book_slug in preferred_books or _hit_contains_any(hit, evidence_terms)
+        for hit in (*reranked_hits, *hybrid_hits[:12])
+    ):
         return reranked_hits
 
     hybrid_rank = {hit.chunk_id: index for index, hit in enumerate(hybrid_hits)}
     reordered = list(reranked_hits)
+    existing_ids = {hit.chunk_id for hit in reordered}
+    for hit in hybrid_hits[:12]:
+        if hit.chunk_id in existing_ids:
+            continue
+        if hit.book_slug not in preferred_books and not _hit_contains_any(hit, evidence_terms):
+            continue
+        rescued_hit = copy.deepcopy(hit)
+        rescued_hit.source = "hybrid_intent_profile_rescued"
+        rescued_hit.component_scores = dict(rescued_hit.component_scores)
+        rescued_hit.component_scores.setdefault("pre_rerank_fused_score", float(rescued_hit.fused_score))
+        rescued_hit.component_scores.setdefault(
+            "reranker_score",
+            float(rescued_hit.component_scores["pre_rerank_fused_score"]),
+        )
+        reordered.append(rescued_hit)
+        existing_ids.add(rescued_hit.chunk_id)
 
     def _priority(hit: RetrievalHit) -> tuple[int, int]:
         book_priority = preferred_books.get(hit.book_slug, 9)

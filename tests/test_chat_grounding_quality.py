@@ -15,6 +15,7 @@ from play_book_studio.retrieval.intent_profile import build_intent_profile
 from play_book_studio.retrieval.intent_detectors import has_command_request
 from play_book_studio.retrieval.models import RetrievalHit, SessionContext
 from play_book_studio.retrieval.query_terms import normalize_query
+from play_book_studio.retrieval.retriever_rerank import _rebalance_intent_profile_hits
 from play_book_studio.retrieval.scoring import fuse_ranked_hits
 
 
@@ -351,6 +352,9 @@ def test_operational_intent_profiles_cover_network_storage_and_monitoring() -> N
     monitoring = build_intent_profile("Prometheus has many firing alerts. How should I check Alertmanager?")
     update = build_intent_profile("Before an upgrade, how should I check ClusterOperator and node status?")
     egress = build_intent_profile("External API egress traffic is blocked. Which setting should I check?")
+    pdb = build_intent_profile("PDB blocks node drain. What should I check first?")
+    hpa = build_intent_profile("HPA does not scale out. Which metrics should I check?")
+    finalizer = build_intent_profile("namespace is stuck Terminating because of finalizers")
 
     assert route_timeout.target_object == "route"
     assert "haproxy.router.openshift.io/timeout" in route_timeout.evidence_terms
@@ -362,6 +366,40 @@ def test_operational_intent_profiles_cover_network_storage_and_monitoring() -> N
     assert "oc get clusteroperators" in update.primary_commands
     assert egress.target_object == "egress-network"
     assert "NetworkPolicy" in egress.evidence_terms
+    assert pdb.target_object == "poddisruptionbudget"
+    assert "Allowed disruptions" in pdb.evidence_terms
+    assert hpa.target_object == "horizontalpodautoscaler"
+    assert "HorizontalPodAutoscaler" in hpa.evidence_terms
+    assert finalizer.target_object == "project-finalizer"
+    assert "finalizers" in finalizer.evidence_terms
+
+
+def test_intent_profile_rebalance_rescues_evidence_hit_dropped_by_reranker() -> None:
+    generic_hit = _hit(
+        "generic-node",
+        text="Node operations and troubleshooting overview.",
+        book_slug="nodes",
+        raw_score=0.90,
+    )
+    pdb_hit = _hit(
+        "pdb-specific",
+        text=(
+            "A PodDisruptionBudget protects availability during voluntary disruptions. "
+            "Check Allowed disruptions before draining a node."
+        ),
+        cli_commands=("oc get pdb -n <namespace>",),
+        book_slug="nodes",
+        raw_score=0.35,
+    )
+
+    rebalanced = _rebalance_intent_profile_hits(
+        "PDB blocks node drain. What should I check first?",
+        hybrid_hits=[generic_hit, pdb_hit],
+        reranked_hits=[generic_hit],
+    )
+
+    assert rebalanced[0].chunk_id == "pdb-specific"
+    assert rebalanced[0].source == "hybrid_intent_profile_rescued"
 
 
 def test_context_assembly_recovers_intent_evidence_outside_command_book_lock() -> None:

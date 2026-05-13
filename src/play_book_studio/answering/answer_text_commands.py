@@ -1080,6 +1080,8 @@ def _clusteroperator_status_answer(query: str, citations) -> str | None:
         return None
     ref = citation_marker(citations, citation_index)
     commands = _commands_containing(citations, ("oc get clusteroperators", "oc describe clusteroperator"), limit=2)
+    if commands and not any("describe clusteroperator" in command.lower() for command in commands):
+        commands.append("oc describe clusteroperator <operator-name>")
     if commands:
         command_text = "```bash\n" + "\n".join(commands[:2]) + "\n```\n\n"
     else:
@@ -1589,6 +1591,7 @@ def build_grounded_status_answer(
         or _auth_can_i_answer(query, citations)
         or _previous_logs_answer(query, citations)
         or _update_precheck_answer(query, citations)
+        or _pvc_pending_answer(query, citations)
         or _events_answer(query, citations)
         or _finalizer_answer(query, citations)
         or _node_status_answer(query, citations)
@@ -1603,7 +1606,6 @@ def build_grounded_status_answer(
         or _pdb_answer(query, citations)
         or _hpa_answer(query, citations)
         or _quota_limit_answer(query, citations)
-        or _pvc_pending_answer(query, citations)
         or _route_tls_answer(query, citations)
         or _route_timeout_answer(query, citations)
         or _service_route_answer(query, citations)

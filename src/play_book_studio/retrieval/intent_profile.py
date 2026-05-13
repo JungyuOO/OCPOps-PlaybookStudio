@@ -307,6 +307,32 @@ def build_intent_profile(query: str) -> IntentProfile:
             reasons=("security context constraints troubleshooting",),
         )
 
+    if _contains_any(text, ("poddisruptionbudget", "pod disruption budget", "pdb")):
+        return _profile(
+            intent="troubleshooting",
+            target_object="poddisruptionbudget",
+            task="drain-or-availability-blocked",
+            needs_command=True,
+            primary_commands=("oc get pdb -n <namespace>", "oc describe pdb <pdb-name> -n <namespace>"),
+            evidence_terms=("PodDisruptionBudget", "PDB", "Allowed disruptions", "minAvailable", "maxUnavailable"),
+            query_terms=("pod disruption budget", "node drain blocked", "application availability during disruption"),
+            confidence=0.84,
+            reasons=("pod disruption budget availability troubleshooting",),
+        )
+
+    if _contains_any(text, ("horizontalpodautoscaler", "horizontal pod autoscaler", "hpa")):
+        return _profile(
+            intent="troubleshooting",
+            target_object="horizontalpodautoscaler",
+            task="scale-out-not-working",
+            needs_command=True,
+            primary_commands=("oc get hpa -n <namespace>", "oc describe hpa <hpa-name> -n <namespace>"),
+            evidence_terms=("HorizontalPodAutoscaler", "HPA", "TARGETS", "metrics", "scale target"),
+            query_terms=("horizontal pod autoscaler metrics", "autoscaling target", "scale out not working"),
+            confidence=0.84,
+            reasons=("horizontal pod autoscaler troubleshooting",),
+        )
+
     if _has_resource_policy_intent(text, "imagepullbackoff", "errimagepull", "pull secret"):
         return _profile(
             intent="troubleshooting",
@@ -637,7 +663,7 @@ def build_intent_profile(query: str) -> IntentProfile:
     ):
         return _profile(
             intent="troubleshooting",
-            target_object="project",
+            target_object="project-finalizer",
             task="terminating",
             needs_command=True,
             primary_commands=("oc get project", "oc get namespace <namespace> -o yaml", "oc get namespaces"),
