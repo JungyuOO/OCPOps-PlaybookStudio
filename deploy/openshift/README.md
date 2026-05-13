@@ -100,7 +100,7 @@ docker run -d \
   -v ~/bge-reranker-cache:/data \
   ghcr.io/huggingface/text-embeddings-inference:cpu-latest \
   --model-id BAAI/bge-reranker-v2-m3 \
-  --max-client-batch-size 4 \
+  --max-client-batch-size 1 \
   --max-batch-tokens 4096
 ```
 
