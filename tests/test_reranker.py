@@ -31,6 +31,7 @@ def _settings(**overrides: Any) -> Settings:
         "reranker_base_url": "",
         "reranker_model": "BAAI/bge-reranker-v2-m3",
         "reranker_timeout_seconds": 3,
+        "reranker_max_parallel_requests": 4,
     }
     defaults.update(overrides)
     return Settings(**defaults)
@@ -125,6 +126,35 @@ def test_remote_bge_reranker_respects_batch_size(monkeypatch):
 
     assert [len(batch) for batch in batches] == [2, 2, 1]
     assert [hit.chunk_id for hit in reranked[:3]] == ["1", "3", "0"]
+
+
+def test_remote_bge_reranker_can_disable_parallel_batches(monkeypatch):
+    batches: list[list[str]] = []
+
+    def fake_post(url: str, **kwargs: Any) -> _Response:
+        del url
+        texts = kwargs["json"]["texts"]
+        batches.append(texts)
+        return _Response([{"index": 0, "score": float(len(batches))}])
+
+    monkeypatch.setattr("play_book_studio.retrieval.reranker.requests.post", fake_post)
+    reranker = RemoteBgeReranker(
+        _settings(
+            reranker_base_url="http://tei.internal",
+            reranker_batch_size=1,
+            reranker_max_parallel_requests=1,
+        )
+    )
+
+    hits = [_hit(str(index), score=0.1) for index in range(3)]
+    reranked = reranker.rerank("sequential fallback", hits, top_k=2, top_n_override=3)
+
+    assert [batch[0] for batch in batches] == [
+        _build_rerank_document(hits[0]),
+        _build_rerank_document(hits[1]),
+        _build_rerank_document(hits[2]),
+    ]
+    assert [hit.chunk_id for hit in reranked[:3]] == ["2", "1", "0"]
 
 
 def test_rerank_document_includes_metadata_context():

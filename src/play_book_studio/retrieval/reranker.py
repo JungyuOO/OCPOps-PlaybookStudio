@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import requests
@@ -111,6 +112,7 @@ class RemoteBgeReranker:
         self.model_name = settings.reranker_model or DEFAULT_RERANKER_MODEL
         self.top_n = max(2, settings.reranker_top_n)
         self.batch_size = max(1, settings.reranker_batch_size)
+        self.max_parallel_requests = max(1, settings.reranker_max_parallel_requests)
         self.timeout_seconds = max(1.0, settings.reranker_timeout_seconds)
         self.api_key = settings.reranker_api_key or settings.embedding_api_key
 
@@ -169,10 +171,20 @@ class RemoteBgeReranker:
         raise RuntimeError(f"BGE reranker request failed: {'; '.join(errors)}")
 
     def _request_scores(self, query: str, documents: list[str]) -> list[float]:
-        scores: list[float] = []
-        for start in range(0, len(documents), self.batch_size):
-            scores.extend(self._request_score_batch(query, documents[start:start + self.batch_size]))
-        return scores
+        batches = [
+            documents[start:start + self.batch_size]
+            for start in range(0, len(documents), self.batch_size)
+        ]
+        if len(batches) == 1 or self.max_parallel_requests == 1:
+            scores: list[float] = []
+            for batch in batches:
+                scores.extend(self._request_score_batch(query, batch))
+            return scores
+
+        max_workers = min(self.max_parallel_requests, len(batches))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            batch_scores = executor.map(lambda batch: self._request_score_batch(query, batch), batches)
+        return [score for scores in batch_scores for score in scores]
 
     def rerank(
         self,
