@@ -271,6 +271,48 @@ def build_intent_profile(query: str) -> IntentProfile:
             reasons=("image pull pod troubleshooting",),
         )
 
+    if _contains_any(text, ("must-gather", "must gather", "머스트게더")):
+        return _profile(
+            intent="command_lookup",
+            target_object="must-gather",
+            task="support-data-collection",
+            needs_command=True,
+            primary_commands=("oc adm must-gather",),
+            evidence_terms=("must-gather", "oc adm must-gather", "support data", "diagnostic data"),
+            query_terms=("collect troubleshooting data", "support logs", "diagnostic collection"),
+            confidence=0.84,
+            reasons=("must-gather support collection command request",),
+        )
+
+    if _contains_any(text, ("oc adm inspect", "inspect")):
+        return _profile(
+            intent="command_lookup",
+            target_object="inspect",
+            task="namespace-resource-snapshot",
+            needs_command=True,
+            primary_commands=("oc adm inspect ns/<namespace>", "oc adm inspect namespace/<namespace>"),
+            evidence_terms=("oc adm inspect", "inspect", "namespace", "resource status"),
+            query_terms=("collect namespace resources", "support inspection", "resource snapshot"),
+            confidence=0.84,
+            reasons=("oc adm inspect namespace support handoff",),
+        )
+
+    if _contains_any(
+        text,
+        ("top pods", "top pod", "oc adm top", "cpu", "memory", "resource usage", "리소스", "메모리", "사용량", "잡아먹"),
+    ) and _contains_any(text, ("pod", "pods", "파드", "namespace", "네임스페이스")):
+        return _profile(
+            intent="command_lookup",
+            target_object="pod-metrics",
+            task="top-pods",
+            needs_command=True,
+            primary_commands=("oc adm top pod --namespace=<namespace>", "oc adm top pod"),
+            evidence_terms=("oc adm top pod", "top pod", "top pods", "CPU", "memory", "metrics"),
+            query_terms=("pod resource usage", "pod cpu memory", "metrics top pods"),
+            confidence=0.84,
+            reasons=("pod metrics command request",),
+        )
+
     if _contains_any(text, ("oc debug", "debug", "디버그")) and _contains_any(
         text, ("node", "노드", "host", "호스트", "chroot")
     ):

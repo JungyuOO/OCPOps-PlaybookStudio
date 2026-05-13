@@ -329,6 +329,13 @@ def _is_low_confidence_retrieval(
         ("machineconfigpool", ("machine config", "machineconfigpool", "mco")),
         ("cluster version", ("clusterversion", "cluster version", "cvo")),
         ("clusterversion", ("clusterversion", "cluster version", "cvo")),
+        ("must-gather", ("must-gather", "must gather", "support", "diagnostic")),
+        ("oc adm inspect", ("oc adm inspect", "inspect", "namespace", "resource")),
+        ("finalizer", ("finalizer", "finalizers", "terminating", "namespace")),
+        ("observability", ("observability", "monitoring", "logging")),
+        ("리소스", ("oc adm top pod", "top pod", "metrics", "cpu", "memory")),
+        ("사용량", ("oc adm top pod", "top pod", "metrics", "cpu", "memory")),
+        ("잡아먹", ("oc adm top pod", "top pod", "metrics", "cpu", "memory")),
     )
     if any(
         query_token in normalized_query and any(citation_token in citation_haystack for citation_token in citation_tokens)

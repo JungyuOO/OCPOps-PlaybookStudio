@@ -10,6 +10,12 @@
   - `ImagePullBackOff`는 Pod 이벤트, pull secret, registry 접근 순서로 확인하도록 citation 명령 기반 응답을 추가
   - 검증: compileall 통과, `tests/test_chat_grounding_quality.py tests/test_starter_questions.py tests/test_answer_eval_quality.py tests/test_query_understanding.py` 47개 통과, v012 beginner answer eval 6/6 통과(pass_rate 1.0, warning_free_rate 1.0)
   - 참고: full `studio_live_smoke` 재실행은 로컬 app 컨테이너가 Docker health는 healthy이나 `/api/health`와 starter API가 30초 이상 응답하지 않아 보류. 배포/라이브 smoke는 Phase D에서 별도 진행
+- [x] Phase C 보강: must-gather, `oc adm inspect`, Pod CPU/memory 사용량, ClusterOperator 기본 운영 명령의 intent/profile과 status answer를 추가 보강
+  - `must-gather`/`inspect`는 citation 명령이 없을 때도 code block 대신 inline fallback으로 안내하여 ungrounded code block을 만들지 않도록 처리
+  - `특정 Pod의 리소스가 얼마나 잡아먹고 있는지` 같은 초보자 표현을 pod metrics intent로 연결하고 `oc adm top pod(s)` 문서 근거를 회수하도록 보강
+  - balanced quote가 있는 selector 명령(`oc adm top pod --selector='<pod_name>'`)은 유지하고, OCR 설명에서 붙은 trailing quote만 제거하도록 sanitize 수정
+  - 검증: compileall 통과, focused tests 통과, `tests/test_chat_grounding_quality.py tests/test_starter_questions.py tests/test_answer_eval_quality.py tests/test_query_understanding.py` 51개 통과, v012 beginner answer eval 6/6 통과(pass_rate 1.0)
+  - 참고: `pbs_chat_quality_extended_cases.jsonl`은 45건 중 pass_rate 0.4667로 아직 낮음. 이번 보강으로 Pod metrics beginner 회귀는 회복됐으나 Route timeout, registry, DNS, NetworkPolicy, CVO/ODF/monitoring 등은 다음 보강 대상
 - [x] 사전 작업 Step 2: `reports/v012_chunk_quality_before.json`, `reports/v012_chunk_quality_before.md`, `reports/v012_studio_live_smoke_before.json` baseline 동결
 - [x] Phase C Step 13 일부: `reports/v012_retrieval_eval_after.json` 생성
   - retrieval eval: 18건, hit@1 0.8889, hit@3 0.9444, hit@5 0.9444, warning_free_rate 1.0

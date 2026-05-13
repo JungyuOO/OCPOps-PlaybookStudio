@@ -141,6 +141,13 @@ _PROMETHEUS_ALERT_QUERY_RE = re.compile(
     r"(prometheus|alertmanager|firing alert|alert|경고)",
     re.IGNORECASE,
 )
+_MUST_GATHER_QUERY_RE = re.compile(r"(must-gather|must gather|머스트게더)", re.IGNORECASE)
+_INSPECT_QUERY_RE = re.compile(r"(oc\s+adm\s+inspect|\binspect\b)", re.IGNORECASE)
+_TOP_PODS_QUERY_RE = re.compile(
+    r"(oc\s+adm\s+top|top\s+pods?|cpu|memory|resource\s+usage|리소스|메모리|사용량|잡아먹).*(pod|pods|파드|namespace|네임스페이스)"
+    r"|(?:pod|pods|파드|namespace|네임스페이스).*(oc\s+adm\s+top|top\s+pods?|cpu|memory|resource\s+usage|리소스|메모리|사용량|잡아먹)",
+    re.IGNORECASE,
+)
 _VIEW_ROLE_QUERY_RE = re.compile(
     r"(view|조회).*(권한|role|rolebinding|프로젝트|project|namespace)|(?:권한|role|rolebinding).*(view|조회)",
     re.IGNORECASE,
@@ -248,6 +255,18 @@ def _has_networkpolicy_query(query: str) -> bool:
 
 def _has_prometheus_alert_query(query: str) -> bool:
     return bool(_PROMETHEUS_ALERT_QUERY_RE.search(query or ""))
+
+
+def _has_must_gather_query(query: str) -> bool:
+    return bool(_MUST_GATHER_QUERY_RE.search(query or ""))
+
+
+def _has_inspect_query(query: str) -> bool:
+    return bool(_INSPECT_QUERY_RE.search(query or ""))
+
+
+def _has_top_pods_query(query: str) -> bool:
+    return bool(_TOP_PODS_QUERY_RE.search(query or ""))
 
 
 def _has_view_role_query(query: str) -> bool:
@@ -494,7 +513,12 @@ def _clean_shell_command_candidate(value: str) -> str:
         flags=re.IGNORECASE,
     )[0].strip()
     cleaned = re.sub(r"\s+oc$", "", cleaned, flags=re.IGNORECASE).strip()
-    return cleaned.rstrip(" .;'\"")
+    cleaned = cleaned.rstrip(" .;")
+    if cleaned.endswith("'") and cleaned.count("'") % 2 == 1:
+        cleaned = cleaned[:-1].rstrip()
+    if cleaned.endswith('"') and cleaned.count('"') % 2 == 1:
+        cleaned = cleaned[:-1].rstrip()
+    return cleaned
 
 
 def _iter_shell_command_candidates(value: str) -> list[str]:
@@ -719,6 +743,58 @@ def _image_pull_answer(query: str, citations) -> str | None:
     )
 
 
+def _top_pods_answer(query: str, citations) -> str | None:
+    if not _has_top_pods_query(query):
+        return None
+    citation_index = _first_signal_citation_index(citations, ("oc adm top pod", "top pod", "top pods", "metrics", "cpu", "memory"))
+    if citation_index is None:
+        return None
+    commands = _commands_containing(citations, ("oc adm top pod",), limit=2)
+    if not commands:
+        return None
+    ref = citation_marker(citations, citation_index)
+    command_block = "\n".join(commands[:2])
+    return (
+        f"답변: namespace 안에서 CPU나 memory를 많이 쓰는 Pod를 찾을 때는 `oc adm top pods` 계열 명령을 먼저 봅니다 {ref}.\n\n"
+        f"```bash\n{command_block}\n```\n\n"
+        f"공식 CLI 예시는 `oc adm top pod --namespace=<namespace>`처럼 단수 `pod` 하위 명령을 사용하며, 결과에서 CPU/Memory가 높은 Pod를 골라 describe/log로 이어가면 됩니다 {ref}."
+    )
+
+
+def _must_gather_answer(query: str, citations) -> str | None:
+    if not _has_must_gather_query(query):
+        return None
+    citation_index = _first_signal_citation_index(citations, ("must-gather", "must gather", "diagnostic", "support"))
+    if citation_index is None:
+        return None
+    commands = _commands_containing(citations, ("oc adm must-gather", "must-gather"), limit=2)
+    ref = citation_marker(citations, citation_index)
+    command_text = "`oc adm must-gather`"
+    if commands:
+        command_text = ", ".join(f"`{command}`" for command in commands[:2])
+    return (
+        f"답변: 장애 원인을 지원팀이나 운영팀에 전달해야 할 때는 관련 로그를 하나씩 복사하기보다 must-gather로 진단 데이터를 수집합니다 {ref}.\n\n"
+        f"먼저 {command_text}로 클러스터 상태, 이벤트, Operator 정보를 묶어서 수집하고, 특정 Operator 문제가 있으면 해당 Operator 전용 must-gather 이미지나 namespace 범위를 이어서 좁히세요 {ref}."
+    )
+
+
+def _inspect_answer(query: str, citations) -> str | None:
+    if not _has_inspect_query(query):
+        return None
+    citation_index = _first_signal_citation_index(citations, ("oc adm inspect", "inspect", "namespace", "resource"))
+    if citation_index is None:
+        return None
+    commands = _commands_containing(citations, ("oc adm inspect",), limit=2)
+    ref = citation_marker(citations, citation_index)
+    command_text = "`oc adm inspect ns/<namespace>`"
+    if commands:
+        command_text = ", ".join(f"`{command}`" for command in commands[:2])
+    return (
+        f"답변: 특정 namespace의 리소스 상태를 지원팀에 전달해야 하면 oc adm inspect를 쓰는 흐름이 맞습니다 {ref}.\n\n"
+        f"먼저 {command_text}로 namespace 안의 주요 리소스 상태를 묶어 수집하고, Pod 이벤트나 로그가 필요하면 must-gather 또는 개별 `oc describe`/`oc logs` 결과를 함께 전달하세요 {ref}."
+    )
+
+
 def _operator_status_answer(query: str, citations) -> str | None:
     if not _has_operator_status_query(query):
         return None
@@ -877,14 +953,19 @@ def _clusteroperator_status_answer(query: str, citations) -> str | None:
         return None
     citation_index = _first_signal_citation_index(
         citations,
-        ("clusteroperator", "cluster operator", "clusteroperators"),
+        ("clusteroperator", "cluster operator", "clusteroperators", "클러스터 operator", "클러스터 오퍼레이터", "operator 상태"),
     )
     if citation_index is None:
         return None
     ref = citation_marker(citations, citation_index)
+    commands = _commands_containing(citations, ("oc get clusteroperators", "oc describe clusteroperator"), limit=2)
+    if commands:
+        command_text = "```bash\n" + "\n".join(commands[:2]) + "\n```\n\n"
+    else:
+        command_text = "`oc get clusteroperators`로 전체 상태를 보고, 문제가 있는 항목은 `oc describe clusteroperator <operator-name>`로 좁힙니다.\n\n"
     return (
         f"답변: ClusterOperator 전체 상태는 먼저 한 번에 보고, Degraded 항목만 describe로 좁힙니다 {ref}.\n\n"
-        "```bash\noc get clusteroperators\noc describe clusteroperator <operator-name>\n```\n\n"
+        f"{command_text}"
         f"`Available`, `Progressing`, `Degraded` 컬럼을 먼저 보고, `Degraded=True`인 Operator의 Conditions 메시지를 확인하면 "
         f"업데이트 차단인지 구성 오류인지 빠르게 분리할 수 있습니다 {ref}."
     )
@@ -1357,8 +1438,11 @@ def build_grounded_status_answer(
         or _auth_can_i_answer(query, citations)
         or _previous_logs_answer(query, citations)
         or _node_status_answer(query, citations)
-        or _namespace_status_answer(query, citations)
         or _image_pull_answer(query, citations)
+        or _top_pods_answer(query, citations)
+        or _must_gather_answer(query, citations)
+        or _inspect_answer(query, citations)
+        or _namespace_status_answer(query, citations)
         or _clusteroperator_status_answer(query, citations)
         or _pdb_answer(query, citations)
         or _hpa_answer(query, citations)

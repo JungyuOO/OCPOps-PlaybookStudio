@@ -306,6 +306,10 @@ def test_beginner_ops_profiles_do_not_collapse_to_namespace_lookup() -> None:
     mco = build_intent_profile("Machine Config Operator 상태를 먼저 확인하는 명령을 알려줘")
     cvo = build_intent_profile("Cluster Version Operator가 업데이트를 못 하고 있으면 어디부터 확인해?")
     registry = build_intent_profile("허용된 registry만 쓰도록 제한하는 설정은 어디서 확인해?")
+    must_gather = build_intent_profile("장애 분석용 must-gather는 언제 어떤 명령으로 수집해?")
+    inspect = build_intent_profile("특정 namespace 리소스 상태를 지원팀에 전달하려면 oc adm inspect를 써야 해?")
+    top_pods = build_intent_profile("namespace 안에서 CPU를 많이 쓰는 Pod를 찾는 명령은 뭐야?")
+    pod_usage = build_intent_profile("특정 Pod의 리소스가 얼마나 잡아먹고 있는지 확인하는 법")
 
     assert rbac.target_object == "rbac"
     assert rbac.primary_commands[0] == "oc auth can-i delete pods -n <namespace>"
@@ -331,6 +335,14 @@ def test_beginner_ops_profiles_do_not_collapse_to_namespace_lookup() -> None:
     assert "Cluster Version Operator" in cvo.evidence_terms
     assert registry.target_object == "image-config"
     assert "allowedRegistries" in registry.evidence_terms
+    assert must_gather.target_object == "must-gather"
+    assert must_gather.primary_commands[0] == "oc adm must-gather"
+    assert inspect.target_object == "inspect"
+    assert inspect.primary_commands[0].startswith("oc adm inspect")
+    assert top_pods.target_object == "pod-metrics"
+    assert top_pods.primary_commands[0].startswith("oc adm top pod")
+    assert pod_usage.target_object == "pod-metrics"
+    assert "CPU" in pod_usage.evidence_terms
 
 
 def test_context_assembly_recovers_intent_evidence_outside_command_book_lock() -> None:
@@ -524,6 +536,80 @@ def test_status_answer_handles_image_pull_without_clarification_shape() -> None:
     assert "oc secrets link" in answer
 
 
+def test_status_answer_handles_support_collection_commands_without_ungrounded_code_blocks() -> None:
+    must_gather = _citation(
+        excerpt="must-gather collects diagnostic data for support and troubleshooting.",
+        cli_commands=(),
+    )
+    inspect = _citation(
+        excerpt="oc adm inspect can gather resource status for a namespace before support handoff.",
+        cli_commands=(),
+    )
+
+    must_answer = build_grounded_status_answer(
+        query="장애 분석용 must-gather는 언제 어떤 명령으로 수집해?",
+        citations=[must_gather],
+    )
+    inspect_answer = build_grounded_status_answer(
+        query="특정 namespace 리소스 상태를 지원팀에 전달하려면 oc adm inspect를 써야 해?",
+        citations=[inspect],
+    )
+
+    assert must_answer is not None
+    assert "must-gather" in must_answer
+    assert "```" not in must_answer
+    assert inspect_answer is not None
+    assert "oc adm inspect" in inspect_answer
+    assert "```" not in inspect_answer
+
+
+def test_status_answer_handles_top_pods_plural_query_from_singular_cli_docs() -> None:
+    citation = _citation(
+        excerpt="Show metrics for all pods in the given namespace with oc adm top pod --namespace=NAMESPACE.",
+        cli_commands=("oc adm top pod --namespace=NAMESPACE",),
+    )
+
+    answer = build_grounded_status_answer(
+        query="namespace 안에서 CPU를 많이 쓰는 Pod를 찾는 명령은 뭐야?",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "oc adm top pods" in answer
+    assert "oc adm top pod --namespace=NAMESPACE" in answer
+
+
+def test_command_sanitize_preserves_balanced_selector_quotes() -> None:
+    citation = _citation(
+        excerpt="Pod usage metrics can be filtered by selector.",
+        cli_commands=("oc adm top pod --selector='<pod_name>'",),
+    )
+
+    answer = build_grounded_status_answer(
+        query="특정 Pod의 리소스가 얼마나 잡아먹고 있는지 확인하는 법",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "oc adm top pod --selector='<pod_name>'" in answer
+
+
+def test_clusteroperator_answer_uses_inline_fallback_when_citation_has_no_command() -> None:
+    citation = _citation(
+        excerpt="클러스터 Operator 상태에는 Available, Progressing, Degraded 조건이 있습니다.",
+        cli_commands=(),
+    )
+
+    answer = build_grounded_status_answer(
+        query="ClusterOperator가 Degraded일 때 전체 상태를 한 번에 보는 명령은?",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "oc get clusteroperators" in answer
+    assert "```" not in answer
+
+
 def test_low_confidence_guard_allows_operational_intent_overlap() -> None:
     citation = _citation(
         excerpt="ImagePullBackOff 상태에서는 pull secret과 registry 접근 오류를 확인합니다.",
@@ -533,6 +619,26 @@ def test_low_confidence_guard_allows_operational_intent_overlap() -> None:
     assert not _is_low_confidence_retrieval(
         query="ImagePullBackOff가 뜰 때 pull secret과 registry 쪽을 어떤 순서로 확인해?",
         citations=[citation],
+        selected_hits=[{"fused_score": 0.0, "pre_rerank_fused_score": 0.0, "vector_score": 0.0}],
+    )
+    finalizer = _citation(
+        excerpt="A namespace stuck in Terminating can have remaining finalizers on resources.",
+        cli_commands=("oc get namespace <namespace> -o yaml",),
+    )
+
+    assert not _is_low_confidence_retrieval(
+        query="namespace가 Terminating에서 안 없어질 때 finalizer와 남은 리소스를 어떻게 확인해?",
+        citations=[finalizer],
+        selected_hits=[{"fused_score": 0.0, "pre_rerank_fused_score": 0.0, "vector_score": 0.0}],
+    )
+    pod_usage = _citation(
+        excerpt="Show metrics for all pods in the given namespace with oc adm top pod --namespace=NAMESPACE.",
+        cli_commands=("oc adm top pod --namespace=NAMESPACE",),
+    )
+
+    assert not _is_low_confidence_retrieval(
+        query="특정 Pod의 리소스가 얼마나 잡아먹고 있는지 확인하는 법",
+        citations=[pod_usage],
         selected_hits=[{"fused_score": 0.0, "pre_rerank_fused_score": 0.0, "vector_score": 0.0}],
     )
 
