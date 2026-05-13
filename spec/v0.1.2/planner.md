@@ -3,6 +3,13 @@
 
 ## 진행 메모 (2026-05-12)
 
+- [x] Phase C 보강: Node/Namespace/ImagePullBackOff 기본 운영 질의가 generic formatter나 low-confidence clarification으로 새지 않도록 citation 기반 status answer 경로를 추가
+  - 질문-답변 고정 매핑이 아니라, 선택 citation의 실제 signal/cli_commands를 재사용하는 answer shaping 보강으로 처리
+  - `Node 확인하려면 어떤 명령어부터 쓰면 돼?`는 `oc get nodes`/`oc describe node` 중심으로 응답
+  - `네임스페이스 확인`은 현재 context 확인(`oc project`, `oc config view`)과 전체 목록 조회(`oc get namespaces`, `oc get projects`)를 분리
+  - `ImagePullBackOff`는 Pod 이벤트, pull secret, registry 접근 순서로 확인하도록 citation 명령 기반 응답을 추가
+  - 검증: compileall 통과, `tests/test_chat_grounding_quality.py tests/test_starter_questions.py tests/test_answer_eval_quality.py tests/test_query_understanding.py` 47개 통과, v012 beginner answer eval 6/6 통과(pass_rate 1.0, warning_free_rate 1.0)
+  - 참고: full `studio_live_smoke` 재실행은 로컬 app 컨테이너가 Docker health는 healthy이나 `/api/health`와 starter API가 30초 이상 응답하지 않아 보류. 배포/라이브 smoke는 Phase D에서 별도 진행
 - [x] 사전 작업 Step 2: `reports/v012_chunk_quality_before.json`, `reports/v012_chunk_quality_before.md`, `reports/v012_studio_live_smoke_before.json` baseline 동결
 - [x] Phase C Step 13 일부: `reports/v012_retrieval_eval_after.json` 생성
   - retrieval eval: 18건, hit@1 0.8889, hit@3 0.9444, hit@5 0.9444, warning_free_rate 1.0

@@ -321,6 +321,20 @@ def _is_low_confidence_retrieval(
         )
     ):
         return False
+    operational_token_pairs = (
+        ("imagepullbackoff", ("imagepullbackoff", "errimagepull", "pull secret", "registry")),
+        ("errimagepull", ("imagepullbackoff", "errimagepull", "pull secret", "registry")),
+        ("networkpolicy", ("networkpolicy", "network policy", "ingress", "egress")),
+        ("machine config", ("machine config", "machineconfigpool", "mco")),
+        ("machineconfigpool", ("machine config", "machineconfigpool", "mco")),
+        ("cluster version", ("clusterversion", "cluster version", "cvo")),
+        ("clusterversion", ("clusterversion", "cluster version", "cvo")),
+    )
+    if any(
+        query_token in normalized_query and any(citation_token in citation_haystack for citation_token in citation_tokens)
+        for query_token, citation_tokens in operational_token_pairs
+    ):
+        return False
     coverage = _citation_token_coverage(query, citations)
     max_fused = _selected_hit_score(selected_hits, "fused_score")
     max_pre_rerank = _selected_hit_score(selected_hits, "pre_rerank_fused_score")

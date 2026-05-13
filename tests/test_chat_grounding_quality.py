@@ -3,6 +3,7 @@ from __future__ import annotations
 from play_book_studio.answering.context import assemble_context
 from play_book_studio.answering.answerer import _is_low_confidence_retrieval
 from play_book_studio.answering.answer_text_commands import build_grounded_command_guide_answer
+from play_book_studio.answering.answer_text_commands import build_grounded_status_answer
 from play_book_studio.answering.answer_text_commands import strip_ungrounded_code_blocks
 from play_book_studio.answering.answer_text_formatting import shape_beginner_grounded_answer
 from play_book_studio.answering.models import AnswerResult, Citation
@@ -459,6 +460,83 @@ def test_beginner_command_lookup_sanitizes_embedded_cli_text() -> None:
     assert "명령어 실행 결과" not in answer
 
 
+def test_status_answer_handles_basic_node_command_lookup() -> None:
+    citation = _citation(
+        excerpt="Node 목록에서 Ready 상태를 확인하고 문제가 있으면 describe로 Conditions와 Events를 봅니다.",
+        cli_commands=("oc get nodes", "oc describe node <node-name>"),
+    )
+
+    answer = build_grounded_status_answer(
+        query="Node 확인하려면 어떤 명령어부터 쓰면 돼?",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "oc get nodes" in answer
+    assert "oc describe node" in answer
+    assert "Ready" in answer
+
+
+def test_status_answer_distinguishes_namespace_current_context_from_list() -> None:
+    current = _citation(
+        excerpt="현재 프로젝트와 namespace context는 oc project 또는 oc config view로 확인합니다.",
+        cli_commands=("oc project", "oc config view --minify"),
+    )
+    listing = _citation(
+        excerpt="전체 namespace 목록은 oc get namespaces 또는 oc get projects로 조회합니다.",
+        cli_commands=("oc get namespaces", "oc get projects"),
+    )
+
+    current_answer = build_grounded_status_answer(
+        query="네임스페이스 확인하는 명령어가 뭐야?",
+        citations=[current, listing],
+    )
+    list_answer = build_grounded_status_answer(
+        query="네임스페이스 목록 확인하려면 무슨 명령어를 쳐야 해?",
+        citations=[listing, current],
+    )
+
+    assert current_answer is not None
+    assert "oc project" in current_answer
+    assert "oc get namespaces" not in current_answer
+    assert list_answer is not None
+    assert "oc get namespaces" in list_answer
+
+
+def test_status_answer_handles_image_pull_without_clarification_shape() -> None:
+    citation = _citation(
+        excerpt="ImagePullBackOff는 Pod 이벤트와 pull secret, registry 접근을 확인합니다.",
+        cli_commands=(
+            "oc describe pod <pod-name> -n <namespace>",
+            "oc get secret -n <namespace>",
+            "oc secrets link default <pull-secret> --for=pull -n <namespace>",
+        ),
+    )
+
+    answer = build_grounded_status_answer(
+        query="ImagePullBackOff가 뜰 때 pull secret과 registry 쪽을 어떤 순서로 확인해?",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "ImagePullBackOff" in answer
+    assert "oc describe pod" in answer
+    assert "oc secrets link" in answer
+
+
+def test_low_confidence_guard_allows_operational_intent_overlap() -> None:
+    citation = _citation(
+        excerpt="ImagePullBackOff 상태에서는 pull secret과 registry 접근 오류를 확인합니다.",
+        cli_commands=("oc describe pod <pod-name> -n <namespace>",),
+    )
+
+    assert not _is_low_confidence_retrieval(
+        query="ImagePullBackOff가 뜰 때 pull secret과 registry 쪽을 어떤 순서로 확인해?",
+        citations=[citation],
+        selected_hits=[{"fused_score": 0.0, "pre_rerank_fused_score": 0.0, "vector_score": 0.0}],
+    )
+
+
 def test_low_confidence_guard_allows_bootstrap_wait_grounding() -> None:
     citation = _citation(
         excerpt="Use openshift-install wait-for bootstrap-complete to monitor bootstrap.",
@@ -493,8 +571,8 @@ def test_namespace_command_answer_is_built_from_citation_commands() -> None:
     )
 
     assert answer is not None
-    assert "oc get namespaces" in answer
     assert "oc project -q" in answer
+    assert "oc get namespaces" not in answer
 
 
 def test_follow_up_questions_are_grounded_in_citation_commands() -> None:

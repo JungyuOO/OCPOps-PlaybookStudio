@@ -605,6 +605,120 @@ def _first_signal_citation_index(citations, tokens: tuple[str, ...]) -> int | No
     return None
 
 
+def _commands_containing(citations, tokens: tuple[str, ...], *, limit: int = 3) -> list[str]:
+    normalized_tokens = tuple(token.lower() for token in tokens if token)
+    commands: list[str] = []
+    for command in _collect_ordered_grounded_commands(citations, limit=12):
+        lowered = command.lower()
+        if normalized_tokens and not any(token in lowered for token in normalized_tokens):
+            continue
+        commands.append(command)
+        if len(commands) >= limit:
+            break
+    return commands
+
+
+def _has_node_status_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return ("node" in lowered or "노드" in (query or "")) and bool(
+        has_command_request(query)
+        or any(token in lowered for token in ("ready", "notready", "status", "state", "check"))
+        or any(token in (query or "") for token in ("상태", "확인", "명령"))
+    )
+
+
+def _has_namespace_status_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return any(token in lowered for token in ("namespace", "project", "namespaces", "projects")) or any(
+        token in (query or "") for token in ("네임스페이스", "프로젝트")
+    )
+
+
+def _namespace_query_wants_list(query: str) -> bool:
+    lowered = (query or "").lower()
+    return any(token in lowered for token in ("list", "all", "namespaces", "projects")) or any(
+        token in (query or "") for token in ("목록", "전체", "조회")
+    )
+
+
+def _has_image_pull_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return any(token in lowered for token in ("imagepullbackoff", "errimagepull", "pull secret", "pull-secret"))
+
+
+def _node_status_answer(query: str, citations) -> str | None:
+    if not _has_node_status_query(query):
+        return None
+    citation_index = _first_signal_citation_index(citations, ("node", "nodes", "노드", "ready", "notready"))
+    if citation_index is None:
+        return None
+    commands = _commands_containing(citations, ("oc get node", "oc get nodes", "oc describe node"), limit=2)
+    if not commands:
+        return None
+    if not any("describe node" in command.lower() for command in commands):
+        commands.append("oc describe node <node-name>")
+    ref = citation_marker(citations, citation_index)
+    command_block = "\n".join(commands[:2])
+    return (
+        f"답변: Node 상태는 먼저 전체 목록에서 `Ready`/`NotReady`를 보고, 문제가 있는 노드만 describe로 좁힙니다 {ref}.\n\n"
+        f"```bash\n{command_block}\n```\n\n"
+        f"`Ready`가 아니거나 role/label이 예상과 다르면 해당 노드의 Conditions, Events, kubelet 관련 메시지를 이어서 확인하세요 {ref}."
+    )
+
+
+def _namespace_status_answer(query: str, citations) -> str | None:
+    if not _has_namespace_status_query(query):
+        return None
+    citation_index = _first_signal_citation_index(
+        citations,
+        ("namespace", "namespaces", "project", "projects", "네임스페이스", "프로젝트"),
+    )
+    if citation_index is None:
+        return None
+    if _namespace_query_wants_list(query):
+        commands = _commands_containing(citations, ("oc get namespaces", "oc get projects"), limit=2)
+        intro = "namespace 목록은 cluster에 어떤 작업 공간이 있는지 먼저 보는 용도입니다"
+        fallback = ("oc get namespaces", "oc get projects")
+    else:
+        commands = _commands_containing(citations, ("oc project", "oc config view"), limit=2)
+        intro = "현재 터미널이 바라보는 namespace/project는 먼저 현재 context에서 확인합니다"
+        fallback = ("oc project", "oc config view --minify")
+    if not commands:
+        commands = list(fallback)
+    ref = citation_marker(citations, citation_index)
+    command_block = "\n".join(commands[:2])
+    return (
+        f"답변: {intro} {ref}.\n\n"
+        f"```bash\n{command_block}\n```\n\n"
+        f"현재 namespace가 다르면 이후 `oc get pods`, `oc apply -f` 같은 명령도 다른 공간에 적용될 수 있으니 먼저 context를 맞추세요 {ref}."
+    )
+
+
+def _image_pull_answer(query: str, citations) -> str | None:
+    if not _has_image_pull_query(query):
+        return None
+    citation_index = _first_signal_citation_index(
+        citations,
+        ("imagepullbackoff", "errimagepull", "pull secret", "pull-secret", "registry", "image registry", "secret"),
+    )
+    if citation_index is None:
+        return None
+    commands = _commands_containing(
+        citations,
+        ("oc describe pod", "oc get secret", "oc secrets link", "oc get events"),
+        limit=3,
+    )
+    if not commands:
+        return None
+    ref = citation_marker(citations, citation_index)
+    command_block = "\n".join(commands[:3])
+    return (
+        f"답변: ImagePullBackOff는 먼저 Pod 이벤트에서 실제 실패 원인을 보고, imagePullSecret과 registry 접근 설정을 이어서 확인합니다 {ref}.\n\n"
+        f"```bash\n{command_block}\n```\n\n"
+        f"이벤트에 `unauthorized`, `not found`, `x509`, `timeout` 중 무엇이 나오는지에 따라 secret, 이미지 경로, 인증서, 네트워크 문제로 나눠 보면 됩니다 {ref}."
+    )
+
+
 def _operator_status_answer(query: str, citations) -> str | None:
     if not _has_operator_status_query(query):
         return None
@@ -1242,6 +1356,9 @@ def build_grounded_status_answer(
         or _serviceaccount_answer(query, citations)
         or _auth_can_i_answer(query, citations)
         or _previous_logs_answer(query, citations)
+        or _node_status_answer(query, citations)
+        or _namespace_status_answer(query, citations)
+        or _image_pull_answer(query, citations)
         or _clusteroperator_status_answer(query, citations)
         or _pdb_answer(query, citations)
         or _hpa_answer(query, citations)
