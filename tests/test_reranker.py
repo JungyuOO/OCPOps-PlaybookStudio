@@ -106,6 +106,27 @@ def test_remote_bge_reranker_falls_back_to_tei_texts_payload(monkeypatch):
     assert [hit.chunk_id for hit in reranked] == ["b", "a"]
 
 
+def test_remote_bge_reranker_respects_batch_size(monkeypatch):
+    batches: list[list[str]] = []
+
+    def fake_post(url: str, **kwargs: Any) -> _Response:
+        del url
+        texts = kwargs["json"]["texts"]
+        batches.append(texts)
+        return _Response([{"index": index, "score": float(index)} for index, _ in enumerate(texts)])
+
+    monkeypatch.setattr("play_book_studio.retrieval.reranker.requests.post", fake_post)
+    reranker = RemoteBgeReranker(
+        _settings(reranker_base_url="http://tei.internal", reranker_batch_size=2)
+    )
+
+    hits = [_hit(str(index), score=0.1) for index in range(5)]
+    reranked = reranker.rerank("batch safely", hits, top_k=2, top_n_override=5)
+
+    assert [len(batch) for batch in batches] == [2, 2, 1]
+    assert [hit.chunk_id for hit in reranked[:3]] == ["1", "3", "0"]
+
+
 def test_rerank_document_includes_metadata_context():
     document = _build_rerank_document(_hit("route-timeout", score=0.5))
 
