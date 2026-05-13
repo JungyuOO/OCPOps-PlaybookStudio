@@ -129,6 +129,7 @@ class Settings(SettingsPathMixin):
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     reranker_top_n: int = 12
     reranker_batch_size: int = 8
+    reranker_max_parallel_requests: int = 4
     reranker_device: str = "auto"
     reranker_timeout_seconds: float = 10.0
     graph_runtime_mode: str = "auto"
@@ -352,6 +353,7 @@ def load_settings(root_dir: str | Path) -> Settings:
         reranker_model=effective_env.get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3").strip(),
         reranker_top_n=int(effective_env.get("RERANKER_TOP_N", "12")),
         reranker_batch_size=int(effective_env.get("RERANKER_BATCH_SIZE", "8")),
+        reranker_max_parallel_requests=int(effective_env.get("RERANKER_MAX_PARALLEL_REQUESTS", "4")),
         reranker_device=effective_env.get("RERANKER_DEVICE", "auto").strip(),
         reranker_timeout_seconds=float(effective_env.get("RERANKER_TIMEOUT_SECONDS", "10")),
         graph_runtime_mode=effective_env.get("GRAPH_RUNTIME_MODE", "auto").strip().lower() or "auto",
