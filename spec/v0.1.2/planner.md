@@ -1013,3 +1013,14 @@ oc rollout status deployment/web -n pbs-ocpops
 - 2026-05-12: 운영 intent profile 보강. Node status, MCO, CVO, DNS, NetworkPolicy, allowed registry, internal image registry, SCC를 별도 profile로 분리하고 context recovery가 `query_terms`까지 evidence 후보로 쓰도록 확장했다. `oc debug node` 질문은 node status보다 host-debug가 먼저 매칭되도록 우선순위를 조정했다.
 - 2026-05-12: CLI command sanitize 보강. OCR/문장형 citation에 `oc get node ... 명령어 실행 결과`, `oc edit ... oc new-project ... oc get networkpolicy ...`처럼 여러 명령과 설명이 한 줄에 섞인 경우 `#`, 반복 `oc`, 한국어 설명 marker를 기준으로 후보 명령을 분리한다. 검증: `tests/test_chat_grounding_quality.py::test_embedded_cli_text_is_split_before_answering`, `test_beginner_command_lookup_sanitizes_embedded_cli_text` 추가 및 통과. 전체 focused suite는 43개 통과.
 - 2026-05-12: 최신 상태. v012 beginner answer eval은 재실행 후에도 6/6 통과, pass_rate 1.0 유지. 단, 실제 API focused check에서 MCO와 ResourceQuota는 개선 확인됐지만 Node/namespace/NetworkPolicy/ImagePullBackOff는 아직 완전하지 않다. 특히 Node/NetworkPolicy는 citation command sanitize가 일부 적용됐지만 final answer 경로에서 여전히 generic formatter가 개입하므로 다음 작업은 status-answer 우선순위와 citation command parity를 더 좁혀야 한다.
+## 진행 메모 (2026-05-13)
+
+- [x] Phase C 보강: DNS, Route timeout, NetworkPolicy/egress, Cluster Version Operator, 업데이트 사전 점검, ODF, Prometheus/Alertmanager 계열 운영 intent profile과 검색어 확장을 추가했다.
+  - 질문-답변 고정 매핑이 아니라 `IntentProfile.query_terms`, evidence term, citation 기반 status answer dispatch를 보강했다.
+  - generic command formatter가 잘못된 근거를 코드블록으로 끌고 오지 않도록 DNS/Route timeout/NetworkPolicy/egress/registry/CVO/update precheck/ODF/monitoring의 command grounding 조건을 추가했다.
+  - `ClusterOperator + node update precheck`, `events namespace 기준`, `finalizer/Terminating`처럼 더 구체적인 운영 intent가 Node/Namespace generic 답변보다 먼저 선택되도록 dispatch 순서를 조정했다.
+  - `pod-metrics` intent에서 nodes CLI 근거를 우선할 수 있도록 intent-profile 기반 book priority rerank를 확장했다.
+  - 검증: compileall 통과, `tests/test_chat_grounding_quality.py tests/test_answer_eval_quality.py` 41개 통과, `tests/test_chat_grounding_quality.py tests/test_starter_questions.py tests/test_answer_eval_quality.py tests/test_query_understanding.py` 53개 통과.
+  - v012 beginner eval: 6/6 통과, pass_rate 1.0, 결과 `reports/v012_answer_eval_after.json` 갱신.
+  - extended eval: pass_rate 0.4667 → 0.5111 → 0.5333으로 개선, 결과 `reports/v012_answer_eval_extended_after.json` 갱신.
+  - 남은 주요 실패군: Route timeout citation이 HSTS route chunk로 빠짐, DNS가 generic Operator 문서로 인용됨, NetworkPolicy가 Day-2 overview로 빠짐, `oc adm inspect` citation 미확보, finalizer/PDB/HPA/SCC/namespace/previous logs 등은 citation term synonym 또는 검색 후보 품질 보강 필요.

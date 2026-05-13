@@ -141,6 +141,17 @@ _PROMETHEUS_ALERT_QUERY_RE = re.compile(
     r"(prometheus|alertmanager|firing alert|alert|경고)",
     re.IGNORECASE,
 )
+_DNS_QUERY_RE = re.compile(r"(dns|openshift-dns|coredns|dns\.operator)", re.IGNORECASE)
+_CVO_QUERY_RE = re.compile(
+    r"(cluster version operator|cluster\s*version|clusterversion|\bcvo\b)",
+    re.IGNORECASE,
+)
+_UPDATE_PRECHECK_QUERY_RE = re.compile(
+    r"(update|upgrade|precheck|사전|전에|이전).*(clusteroperator|cluster operator|clusteroperators|node|nodes)"
+    r"|(?:clusteroperator|cluster operator|clusteroperators).*(update|upgrade|precheck|사전|전에|이전)",
+    re.IGNORECASE,
+)
+_ODF_QUERY_RE = re.compile(r"(odf|openshift data foundation|openshift-storage|ceph|rook)", re.IGNORECASE)
 _MUST_GATHER_QUERY_RE = re.compile(r"(must-gather|must gather|머스트게더)", re.IGNORECASE)
 _INSPECT_QUERY_RE = re.compile(r"(oc\s+adm\s+inspect|\binspect\b)", re.IGNORECASE)
 _TOP_PODS_QUERY_RE = re.compile(
@@ -157,7 +168,7 @@ _ROUTE_TIMEOUT_QUERY_RE = re.compile(
     re.IGNORECASE,
 )
 _REGISTRY_POLICY_QUERY_RE = re.compile(
-    r"(allowedregistries|allowed registries|허용.*registry|허용.*레지스트리|registry.*허용|레지스트리.*허용)",
+    r"(allowedregistries|allowed registries|allowed.*registry|registry.*allowed|허용.*registry|허용.*레지스트리|registry.*허용|레지스트리.*허용|제한.*registry|registry.*제한)",
     re.IGNORECASE,
 )
 _SERVICE_ROUTE_QUERY_RE = re.compile(
@@ -255,6 +266,22 @@ def _has_networkpolicy_query(query: str) -> bool:
 
 def _has_prometheus_alert_query(query: str) -> bool:
     return bool(_PROMETHEUS_ALERT_QUERY_RE.search(query or ""))
+
+
+def _has_dns_query(query: str) -> bool:
+    return bool(_DNS_QUERY_RE.search(query or ""))
+
+
+def _has_cvo_query(query: str) -> bool:
+    return bool(_CVO_QUERY_RE.search(query or ""))
+
+
+def _has_update_precheck_query(query: str) -> bool:
+    return bool(_UPDATE_PRECHECK_QUERY_RE.search(query or ""))
+
+
+def _has_odf_query(query: str) -> bool:
+    return bool(_ODF_QUERY_RE.search(query or ""))
 
 
 def _has_must_gather_query(query: str) -> bool:
@@ -375,6 +402,33 @@ def has_sufficient_command_grounding(*, query: str, citations) -> bool:
 
     if _has_events_query(query):
         return any(token in joined for token in ("events", "event", "lasttimestamp", "describe"))
+
+    if _has_dns_query(query):
+        return any(token in joined for token in ("dns", "openshift-dns", "dns.operator", "coredns"))
+
+    if _has_route_timeout_query(query):
+        return any(token in joined for token in ("route", "timeout", "haproxy.router.openshift.io/timeout"))
+
+    if _has_networkpolicy_query(query):
+        return any(token in joined for token in ("networkpolicy", "network policy", "podselector", "egress", "ingress"))
+
+    if _has_egress_query(query):
+        return any(token in joined for token in ("egress", "networkpolicy", "network policy", "egressip"))
+
+    if _has_registry_policy_query(query):
+        return any(token in joined for token in ("registry", "allowedregistries", "blockedregistries", "image.config"))
+
+    if _has_cvo_query(query):
+        return any(token in joined for token in ("cluster version operator", "clusterversion", "cvo"))
+
+    if _has_update_precheck_query(query):
+        return any(token in joined for token in ("clusteroperator", "cluster operator", "clusteroperators", "node", "clusterversion"))
+
+    if _has_odf_query(query):
+        return any(token in joined for token in ("odf", "openshift data foundation", "openshift-storage", "ceph", "storage"))
+
+    if _has_prometheus_alert_query(query):
+        return any(token in joined for token in ("prometheus", "alertmanager", "firing", "alert"))
 
     if _has_clusteroperator_status_query(query):
         return any(token in joined for token in ("clusteroperator", "cluster operator", "clusteroperators"))
@@ -948,6 +1002,73 @@ def _events_answer(query: str, citations) -> str | None:
     )
 
 
+def _dns_answer(query: str, citations) -> str | None:
+    if not _has_dns_query(query):
+        return None
+    citation_index = _first_signal_citation_index(citations, ("dns", "openshift-dns", "dns.operator", "coredns"))
+    if citation_index is None:
+        return None
+    ref = citation_marker(citations, citation_index)
+    commands = _commands_containing(citations, ("oc get dns", "oc get pods -n openshift-dns", "oc describe"), limit=3)
+    command_text = ""
+    if commands:
+        command_text = "```bash\n" + "\n".join(commands[:3]) + "\n```\n\n"
+    else:
+        command_text = "`oc get dns.operator/default -o yaml` and `oc get pods -n openshift-dns` are the first DNS checks.\n\n"
+    return (
+        f"답변: 클러스터 DNS 문제는 DNS Operator 상태와 `openshift-dns` Pod 상태를 먼저 분리해서 확인합니다 {ref}.\n\n"
+        f"{command_text}"
+        f"DNS Operator 조건에서 Degraded/Progressing 상태를 보고, DNS Pod 재시작이나 CoreDNS 오류가 있으면 같은 namespace의 이벤트와 로그로 좁히면 됩니다 {ref}."
+    )
+
+
+def _cvo_answer(query: str, citations) -> str | None:
+    if not _has_cvo_query(query):
+        return None
+    citation_index = _first_signal_citation_index(citations, ("cluster version operator", "clusterversion", "cvo", "cluster version"))
+    if citation_index is None:
+        return None
+    ref = citation_marker(citations, citation_index)
+    commands = _commands_containing(citations, ("oc get clusterversion", "oc describe clusterversion", "oc adm upgrade"), limit=3)
+    command_text = ""
+    if commands:
+        command_text = "```bash\n" + "\n".join(commands[:3]) + "\n```\n\n"
+    else:
+        command_text = "`oc get clusterversion` and `oc describe clusterversion version` are the first CVO checks.\n\n"
+    return (
+        f"답변: Cluster Version Operator(CVO)가 업데이트를 진행하지 못하면 ClusterVersion 조건과 업그레이드 상태를 먼저 확인합니다 {ref}.\n\n"
+        f"{command_text}"
+        f"`Available`, `Progressing`, `Failing` 조건과 메시지를 보면 업데이트 차단 원인이 이미지, Operator 상태, 노드 상태 중 어디에 가까운지 분리할 수 있습니다 {ref}."
+    )
+
+
+def _update_precheck_answer(query: str, citations) -> str | None:
+    if not _has_update_precheck_query(query):
+        return None
+    citation_index = _first_signal_citation_index(
+        citations,
+        ("clusteroperator", "cluster operator", "clusteroperators", "node", "clusterversion", "cluster version operator"),
+    )
+    if citation_index is None:
+        return None
+    ref = citation_marker(citations, citation_index)
+    commands = _commands_containing(
+        citations,
+        ("oc get clusteroperators", "oc get co", "oc get nodes", "oc adm upgrade", "oc get clusterversion"),
+        limit=4,
+    )
+    command_text = ""
+    if commands:
+        command_text = "```bash\n" + "\n".join(commands[:4]) + "\n```\n\n"
+    else:
+        command_text = "`oc get clusteroperators`, `oc get nodes`, `oc get clusterversion`, `oc adm upgrade status` are the first update prechecks.\n\n"
+    return (
+        f"답변: 업데이트 전에는 ClusterOperator 상태, 노드 Ready 상태, Cluster Version Operator 상태를 같은 흐름으로 확인합니다 {ref}.\n\n"
+        f"{command_text}"
+        f"Degraded=True인 Operator나 NotReady 노드가 있으면 업데이트를 진행하기 전에 해당 항목의 describe 조건과 이벤트부터 정리하는 것이 안전합니다 {ref}."
+    )
+
+
 def _clusteroperator_status_answer(query: str, citations) -> str | None:
     if not _has_clusteroperator_status_query(query):
         return None
@@ -974,7 +1095,10 @@ def _clusteroperator_status_answer(query: str, citations) -> str | None:
 def _pdb_answer(query: str, citations) -> str | None:
     if not _has_pdb_query(query):
         return None
-    citation_index = _first_signal_citation_index(citations, ("poddisruptionbudget", "pdb", "disruption"))
+    citation_index = _first_signal_citation_index(
+        citations,
+        ("poddisruptionbudget", "pod disruption budget", "pdb", "disruption budget", "disruption"),
+    )
     if citation_index is None:
         return None
     ref = citation_marker(citations, citation_index)
@@ -1160,6 +1284,33 @@ def _finalizer_answer(query: str, citations) -> str | None:
         f"답변: Namespace가 Terminating에서 멈추면 먼저 남은 리소스와 finalizer를 확인합니다 {ref}.\n\n"
         "```bash\noc get namespace <namespace> -o yaml\noc api-resources --verbs=list --namespaced -o name\n```\n\n"
         f"`metadata.finalizers`가 남아 있거나 삭제되지 않는 namespaced resource가 있으면 해당 리소스의 owner/finalizer를 먼저 정리해야 합니다 {ref}."
+    )
+
+
+def _odf_storage_answer(query: str, citations) -> str | None:
+    if not _has_odf_query(query):
+        return None
+    citation_index = _first_signal_citation_index(
+        citations,
+        ("odf", "openshift data foundation", "openshift-storage", "ceph", "storage"),
+    )
+    if citation_index is None:
+        return None
+    ref = citation_marker(citations, citation_index)
+    commands = _commands_containing(
+        citations,
+        ("oc get pods -n openshift-storage", "oc get cephcluster", "oc get csv", "oc get co storage"),
+        limit=4,
+    )
+    command_text = ""
+    if commands:
+        command_text = "```bash\n" + "\n".join(commands[:4]) + "\n```\n\n"
+    else:
+        command_text = "`oc get pods -n openshift-storage` and ODF/Ceph operator status checks are the first storage checks.\n\n"
+    return (
+        f"답변: ODF 스토리지 상태가 이상하면 먼저 `openshift-storage` namespace의 operator와 Ceph/스토리지 Pod 상태를 봅니다 {ref}.\n\n"
+        f"{command_text}"
+        f"스토리지 문제는 PVC 증상만 보지 말고 ODF operator, CephCluster, 관련 Pod 재시작/이벤트를 함께 봐야 원인을 좁힐 수 있습니다 {ref}."
     )
 
 
@@ -1437,18 +1588,22 @@ def build_grounded_status_answer(
         or _serviceaccount_answer(query, citations)
         or _auth_can_i_answer(query, citations)
         or _previous_logs_answer(query, citations)
+        or _update_precheck_answer(query, citations)
+        or _events_answer(query, citations)
+        or _finalizer_answer(query, citations)
         or _node_status_answer(query, citations)
         or _image_pull_answer(query, citations)
         or _top_pods_answer(query, citations)
         or _must_gather_answer(query, citations)
         or _inspect_answer(query, citations)
+        or _dns_answer(query, citations)
+        or _cvo_answer(query, citations)
         or _namespace_status_answer(query, citations)
         or _clusteroperator_status_answer(query, citations)
         or _pdb_answer(query, citations)
         or _hpa_answer(query, citations)
         or _quota_limit_answer(query, citations)
         or _pvc_pending_answer(query, citations)
-        or _events_answer(query, citations)
         or _route_tls_answer(query, citations)
         or _route_timeout_answer(query, citations)
         or _service_route_answer(query, citations)
@@ -1456,7 +1611,7 @@ def build_grounded_status_answer(
         or _egress_answer(query, citations)
         or _registry_policy_answer(query, citations)
         or _audit_answer(query, citations)
-        or _finalizer_answer(query, citations)
+        or _odf_storage_answer(query, citations)
         or _prometheus_alert_answer(query, citations)
         or _operator_status_answer(query, citations)
         or _mco_status_answer(query, citations)

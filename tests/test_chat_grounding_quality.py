@@ -345,6 +345,25 @@ def test_beginner_ops_profiles_do_not_collapse_to_namespace_lookup() -> None:
     assert "CPU" in pod_usage.evidence_terms
 
 
+def test_operational_intent_profiles_cover_network_storage_and_monitoring() -> None:
+    route_timeout = build_intent_profile("Route timeout is suspected. What setting should I check first?")
+    odf = build_intent_profile("ODF storage looks unhealthy. Which operator or pod should I check first?")
+    monitoring = build_intent_profile("Prometheus has many firing alerts. How should I check Alertmanager?")
+    update = build_intent_profile("Before an upgrade, how should I check ClusterOperator and node status?")
+    egress = build_intent_profile("External API egress traffic is blocked. Which setting should I check?")
+
+    assert route_timeout.target_object == "route"
+    assert "haproxy.router.openshift.io/timeout" in route_timeout.evidence_terms
+    assert odf.target_object == "storage"
+    assert "openshift-storage" in odf.query_terms
+    assert monitoring.target_object == "monitoring"
+    assert "Alertmanager" in monitoring.evidence_terms
+    assert update.target_object == "cluster-health"
+    assert "oc get clusteroperators" in update.primary_commands
+    assert egress.target_object == "egress-network"
+    assert "NetworkPolicy" in egress.evidence_terms
+
+
 def test_context_assembly_recovers_intent_evidence_outside_command_book_lock() -> None:
     quota_hit = _hit(
         "resourcequota-kmsc",
@@ -608,6 +627,55 @@ def test_clusteroperator_answer_uses_inline_fallback_when_citation_has_no_comman
     assert answer is not None
     assert "oc get clusteroperators" in answer
     assert "```" not in answer
+
+
+def test_status_answer_handles_dns_cvo_odf_and_monitoring_profiles() -> None:
+    dns = _citation(
+        excerpt="The DNS Operator manages cluster DNS and openshift-dns pods run CoreDNS.",
+        cli_commands=("oc get dns.operator/default -o yaml", "oc get pods -n openshift-dns"),
+    )
+    cvo = _citation(
+        excerpt="The Cluster Version Operator monitors ClusterVersion and update conditions.",
+        cli_commands=("oc get clusterversion", "oc describe clusterversion version"),
+    )
+    odf = _citation(
+        excerpt="OpenShift Data Foundation storage runs operator and Ceph pods in openshift-storage.",
+        cli_commands=("oc get pods -n openshift-storage", "oc get cephcluster -n openshift-storage"),
+    )
+    monitoring = _citation(
+        excerpt="Prometheus and Alertmanager show firing alert status for cluster monitoring.",
+        cli_commands=("oc -n openshift-monitoring get route alertmanager-main",),
+    )
+
+    dns_answer = build_grounded_status_answer(
+        query="Cluster DNS is failing. What resource status should I check first?",
+        citations=[dns],
+    )
+    cvo_answer = build_grounded_status_answer(
+        query="Cluster Version Operator cannot update. Where should I check first?",
+        citations=[cvo],
+    )
+    odf_answer = build_grounded_status_answer(
+        query="ODF storage status is unhealthy. Which operator or pod should I check?",
+        citations=[odf],
+    )
+    monitoring_answer = build_grounded_status_answer(
+        query="Prometheus has many firing alerts. How do I check Alertmanager?",
+        citations=[monitoring],
+    )
+
+    assert dns_answer is not None
+    assert "DNS Operator" in dns_answer
+    assert "oc get pods -n openshift-dns" in dns_answer
+    assert cvo_answer is not None
+    assert "Cluster Version Operator" in cvo_answer
+    assert "oc get clusterversion" in cvo_answer
+    assert odf_answer is not None
+    assert "ODF" in odf_answer
+    assert "openshift-storage" in odf_answer
+    assert monitoring_answer is not None
+    assert "Alertmanager" in monitoring_answer
+    assert "firing alert" in monitoring_answer
 
 
 def test_low_confidence_guard_allows_operational_intent_overlap() -> None:

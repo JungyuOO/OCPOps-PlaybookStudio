@@ -191,6 +191,22 @@ def build_intent_profile(query: str) -> IntentProfile:
             reasons=("cluster version operator update troubleshooting",),
         )
 
+    if _contains_any(text, ("clusteroperator", "cluster operator", "clusteroperators")) and _contains_any(
+        text,
+        ("update", "upgrade", "precheck", "before", "status", "degraded", "node", "nodes"),
+    ):
+        return _profile(
+            intent="troubleshooting",
+            target_object="cluster-health",
+            task="update-precheck",
+            needs_command=True,
+            primary_commands=("oc get clusteroperators", "oc get nodes", "oc adm upgrade status"),
+            evidence_terms=("ClusterOperator", "clusteroperators", "Cluster Version Operator", "node", "update"),
+            query_terms=("cluster update precheck", "operator status before upgrade", "node status before update"),
+            confidence=0.84,
+            reasons=("cluster update precheck status request",),
+        )
+
     if _contains_any(text, ("networkpolicy", "network policy")):
         return _profile(
             intent="troubleshooting",
@@ -204,6 +220,19 @@ def build_intent_profile(query: str) -> IntentProfile:
             reasons=("network policy connectivity troubleshooting",),
         )
 
+    if _contains_any(text, ("egress", "external api", "outbound", "external traffic")):
+        return _profile(
+            intent="troubleshooting",
+            target_object="egress-network",
+            task="outbound-connectivity",
+            needs_command=True,
+            primary_commands=("oc get networkpolicy -n <namespace>", "oc describe networkpolicy <policy-name> -n <namespace>"),
+            evidence_terms=("egress", "NetworkPolicy", "EgressIP", "external traffic"),
+            query_terms=("egress network policy", "outbound traffic blocked", "external API connectivity"),
+            confidence=0.82,
+            reasons=("egress connectivity troubleshooting",),
+        )
+
     if _contains_any(text, ("dns", "openshift-dns", "cluster dns")):
         return _profile(
             intent="troubleshooting",
@@ -212,9 +241,29 @@ def build_intent_profile(query: str) -> IntentProfile:
             needs_command=True,
             primary_commands=("oc get dns.operator/default -o yaml", "oc get pods -n openshift-dns"),
             evidence_terms=("DNS", "openshift-dns", "dns.operator", "CoreDNS"),
-            query_terms=("cluster DNS operator", "name resolution troubleshooting"),
+            query_terms=(
+                "DNS Operator",
+                "DNS Operator in OpenShift Container Platform",
+                "dns.operator.openshift.io",
+                "cluster DNS operator",
+                "name resolution troubleshooting",
+                "openshift-dns pods",
+            ),
             confidence=0.84,
             reasons=("cluster dns troubleshooting",),
+        )
+
+    if _contains_any(text, ("route timeout", "timeout")) and _contains_any(text, ("route", "router", "haproxy")):
+        return _profile(
+            intent="troubleshooting",
+            target_object="route",
+            task="timeout",
+            needs_command=True,
+            primary_commands=("oc get route <route-name> -n <namespace> -o yaml", "oc describe route <route-name> -n <namespace>"),
+            evidence_terms=("Route", "timeout", "haproxy.router.openshift.io/timeout", "IngressController"),
+            query_terms=("route timeout", "haproxy router timeout annotation", "ingress route timeout"),
+            confidence=0.82,
+            reasons=("route timeout troubleshooting",),
         )
 
     if _contains_any(text, ("allowedregistries", "allowed registries")) or (
@@ -269,6 +318,32 @@ def build_intent_profile(query: str) -> IntentProfile:
             query_terms=("image pull", "image registry", "pod events"),
             confidence=0.82,
             reasons=("image pull pod troubleshooting",),
+        )
+
+    if _contains_any(text, ("odf", "openshift data foundation", "ceph", "rook")):
+        return _profile(
+            intent="troubleshooting",
+            target_object="storage",
+            task="odf-status",
+            needs_command=True,
+            primary_commands=("oc get pods -n openshift-storage", "oc get cephcluster -n openshift-storage"),
+            evidence_terms=("ODF", "OpenShift Data Foundation", "storage", "openshift-storage", "CephCluster"),
+            query_terms=("ODF storage operator status", "OpenShift Data Foundation troubleshooting", "openshift-storage pods"),
+            confidence=0.82,
+            reasons=("odf storage status troubleshooting",),
+        )
+
+    if _contains_any(text, ("prometheus", "alertmanager", "firing alert", "alerts", "alert")):
+        return _profile(
+            intent="troubleshooting",
+            target_object="monitoring",
+            task="firing-alerts",
+            needs_command=True,
+            primary_commands=("oc -n openshift-monitoring get pods", "oc -n openshift-monitoring get route alertmanager-main"),
+            evidence_terms=("Prometheus", "Alertmanager", "firing alerts", "openshift-monitoring"),
+            query_terms=("Prometheus alerts", "Alertmanager firing alerts", "openshift-monitoring troubleshooting"),
+            confidence=0.82,
+            reasons=("monitoring alert troubleshooting",),
         )
 
     if _contains_any(text, ("must-gather", "must gather", "머스트게더")):

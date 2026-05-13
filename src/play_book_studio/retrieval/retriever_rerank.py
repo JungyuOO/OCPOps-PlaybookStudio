@@ -8,6 +8,7 @@ from play_book_studio.http.wiki_user_overlay import build_wiki_overlay_signal_pa
 
 from .followups import has_follow_up_reference
 from .intake_overlay import has_active_customer_pack_selection
+from .intent_profile import build_intent_profile
 from .models import RetrievalHit, SessionContext
 from .query import (
     has_backup_restore_intent,
@@ -591,6 +592,61 @@ def _rebalance_registry_follow_up_hits(
             0 if hit.book_slug in preferred_books else 1,
             1 if hit.book_slug == "installation_overview" else 0,
             hybrid_rank.get(hit.chunk_id, 999),
+            -hit.component_scores.get("reranker_score", hit.fused_score),
+            hit.book_slug,
+            hit.chunk_id,
+        )
+    )
+    return reordered
+
+
+_INTENT_PROFILE_BOOK_PRIORITY: dict[str, dict[str, int]] = {
+    "dns": {"dns_operator": 0, "networking_operators": 1, "networking_overview": 2},
+    "networkpolicy": {"network_security": 0, "networking_overview": 1, "advanced_networking": 2},
+    "egress-network": {"network_security": 0, "networking_overview": 1, "advanced_networking": 2},
+    "route": {"ingress_and_load_balancing": 0, "networking_overview": 1},
+    "image-config": {"images": 0, "registry": 1, "postinstallation_configuration": 2},
+    "clusterversion": {"updating_clusters": 0, "support": 1, "validation_and_troubleshooting": 2},
+    "cluster-health": {"updating_clusters": 0, "support": 1, "nodes": 2, "validation_and_troubleshooting": 3},
+    "storage": {"storage": 0, "backup_and_restore": 1, "support": 2},
+    "monitoring": {"monitoring": 0, "observability_overview": 1, "logging": 2, "support": 3},
+    "pod-metrics": {"nodes": 0, "cli_tools": 1, "support": 2},
+}
+
+
+def _hit_contains_any(hit: RetrievalHit, terms: tuple[str, ...]) -> bool:
+    haystack = f"{hit.book_slug}\n{hit.section or ''}\n{hit.anchor or ''}\n{hit.text or ''}".lower()
+    return any(term.lower() in haystack for term in terms if term)
+
+
+def _rebalance_intent_profile_hits(
+    query: str,
+    *,
+    hybrid_hits: list[RetrievalHit],
+    reranked_hits: list[RetrievalHit],
+) -> list[RetrievalHit]:
+    profile = build_intent_profile(query)
+    preferred_books = _INTENT_PROFILE_BOOK_PRIORITY.get(profile.target_object)
+    if not preferred_books or not reranked_hits:
+        return reranked_hits
+
+    evidence_terms = tuple(term for term in (*profile.evidence_terms, *profile.primary_commands) if term)
+    if not any(hit.book_slug in preferred_books or _hit_contains_any(hit, evidence_terms) for hit in reranked_hits):
+        return reranked_hits
+
+    hybrid_rank = {hit.chunk_id: index for index, hit in enumerate(hybrid_hits)}
+    reordered = list(reranked_hits)
+
+    def _priority(hit: RetrievalHit) -> tuple[int, int]:
+        book_priority = preferred_books.get(hit.book_slug, 9)
+        evidence_priority = 0 if _hit_contains_any(hit, evidence_terms) else 1
+        return book_priority, evidence_priority
+
+    reordered.sort(
+        key=lambda hit: (
+            *_priority(hit),
+            hybrid_rank.get(hit.chunk_id, 999),
+            -hit.component_scores.get("pre_rerank_fused_score", 0.0),
             -hit.component_scores.get("reranker_score", hit.fused_score),
             hit.book_slug,
             hit.chunk_id,
@@ -1233,6 +1289,14 @@ def _apply_rebalance_rules(
         hybrid_hits=hybrid_hits,
         reranked_hits=reranked_hits,
         rule_fn=_rebalance_registry_follow_up_hits,
+        rebalance_reasons=rebalance_reasons,
+    )
+    reranked_hits = _apply_rebalance_rule(
+        rule_name="intent_profile_book_priority",
+        query=query,
+        hybrid_hits=hybrid_hits,
+        reranked_hits=reranked_hits,
+        rule_fn=_rebalance_intent_profile_hits,
         rebalance_reasons=rebalance_reasons,
     )
     reranked_hits = _apply_rebalance_rule(
