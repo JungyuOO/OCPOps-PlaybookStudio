@@ -124,10 +124,13 @@ class Settings(SettingsPathMixin):
     llm_temperature: float = 0.2
     llm_max_tokens: int = 1100
     reranker_enabled: bool = False
-    reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+    reranker_base_url: str = ""
+    reranker_api_key: str = ""
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
     reranker_top_n: int = 12
     reranker_batch_size: int = 8
     reranker_device: str = "auto"
+    reranker_timeout_seconds: float = 10.0
     graph_runtime_mode: str = "auto"
     graph_endpoint: str = ""
     graph_api_key: str = ""
@@ -338,13 +341,19 @@ def load_settings(root_dir: str | Path) -> Settings:
         llm_max_tokens=int(effective_env.get("LLM_MAX_TOKENS", "1100")),
         reranker_enabled=effective_env.get("RERANKER_ENABLED", "false").lower()
         in {"1", "true", "yes", "on"},
-        reranker_model=effective_env.get(
-            "RERANKER_MODEL",
-            "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+        reranker_base_url=effective_env.get(
+            "RERANKER_BASE_URL",
+            effective_env.get("EMBEDDING_BASE_URL", ""),
+        ).strip().rstrip("/"),
+        reranker_api_key=effective_env.get(
+            "RERANKER_API_KEY",
+            effective_env.get("EMBEDDING_API_KEY", ""),
         ).strip(),
+        reranker_model=effective_env.get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3").strip(),
         reranker_top_n=int(effective_env.get("RERANKER_TOP_N", "12")),
         reranker_batch_size=int(effective_env.get("RERANKER_BATCH_SIZE", "8")),
         reranker_device=effective_env.get("RERANKER_DEVICE", "auto").strip(),
+        reranker_timeout_seconds=float(effective_env.get("RERANKER_TIMEOUT_SECONDS", "10")),
         graph_runtime_mode=effective_env.get("GRAPH_RUNTIME_MODE", "auto").strip().lower() or "auto",
         graph_endpoint=effective_env.get("GRAPH_ENDPOINT", "").strip().rstrip("/"),
         graph_api_key=effective_env.get("GRAPH_API_KEY", "").strip(),

@@ -49,6 +49,18 @@ def hit_from_payload(payload: dict[str, Any], *, source: str, score: float) -> R
             str(item) for item in (payload.get("verification_hints") or []) if str(item).strip()
         ),
         asset_ids=tuple(str(item) for item in (payload.get("asset_ids") or []) if str(item).strip()),
+        chunk_role=str(payload.get("chunk_role", "leaf") or "leaf"),
+        parent_chunk_id=str(payload.get("parent_chunk_id", "")),
+        child_chunk_ids=tuple(str(item) for item in (payload.get("child_chunk_ids") or []) if str(item).strip()),
+        navigation_only=bool(payload.get("navigation_only") or False),
+        beginner_narrative=str(payload.get("beginner_narrative", "")),
+        starter_question_candidates=tuple(
+            str(item) for item in (payload.get("starter_question_candidates") or []) if str(item).strip()
+        ),
+        followup_question_candidates=tuple(
+            str(item) for item in (payload.get("followup_question_candidates") or []) if str(item).strip()
+        ),
+        question_candidates_version=int(payload.get("question_candidates_version") or 0),
         repository_id=str(payload.get("repository_id", "")),
         document_source_id=str(payload.get("document_source_id", "") or payload.get("source_id", "")),
         owner_user_id=str(payload.get("owner_user_id", "")),

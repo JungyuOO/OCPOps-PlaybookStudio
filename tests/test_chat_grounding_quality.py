@@ -3,7 +3,9 @@ from __future__ import annotations
 from play_book_studio.answering.context import assemble_context
 from play_book_studio.answering.answerer import _is_low_confidence_retrieval
 from play_book_studio.answering.answer_text_commands import build_grounded_command_guide_answer
+from play_book_studio.answering.answer_text_commands import build_grounded_status_answer
 from play_book_studio.answering.answer_text_commands import strip_ungrounded_code_blocks
+from play_book_studio.answering.answer_text_formatting import shape_beginner_grounded_answer
 from play_book_studio.answering.models import AnswerResult, Citation
 from play_book_studio.http.presenters import _citation_display_payload
 from play_book_studio.http.session_flow import dedupe_suggestions, suggest_follow_up_questions
@@ -13,6 +15,7 @@ from play_book_studio.retrieval.intent_profile import build_intent_profile
 from play_book_studio.retrieval.intent_detectors import has_command_request
 from play_book_studio.retrieval.models import RetrievalHit, SessionContext
 from play_book_studio.retrieval.query_terms import normalize_query
+from play_book_studio.retrieval.retriever_rerank import _rebalance_intent_profile_hits
 from play_book_studio.retrieval.scoring import fuse_ranked_hits
 
 
@@ -291,6 +294,461 @@ def test_command_learning_profiles_cover_access_pvc_logs_routes_and_etcd() -> No
     assert "cluster-backup.sh" in etcd.primary_commands
 
 
+def test_beginner_ops_profiles_do_not_collapse_to_namespace_lookup() -> None:
+    rbac = build_intent_profile("현재 사용자가 특정 namespace에서 pods를 delete 할 수 있는지 확인하는 명령은?")
+    login = build_intent_profile("oc login이 실패할 때 토큰이나 서버 URL 문제를 먼저 어떻게 확인해?")
+    quota = build_intent_profile("ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?")
+    limit = build_intent_profile("LimitRange 때문에 컨테이너 리소스 요청이 거절될 수 있는지 확인하려면?")
+    image_pull = build_intent_profile("ImagePullBackOff가 뜰 때 pull secret과 registry 쪽을 어떤 순서로 확인해?")
+    node = build_intent_profile("Node 확인하려면 어떤 명령어부터 쓰면 돼?")
+    namespace = build_intent_profile("네임스페이스 확인하는 명령어가 뭐야?")
+    network = build_intent_profile("NetworkPolicy 때문에 Pod 통신이 막힌 건지 확인하려면 뭘 봐야 해?")
+    dns = build_intent_profile("클러스터 DNS 문제가 의심되면 어떤 리소스 상태부터 확인해야 해?")
+    mco = build_intent_profile("Machine Config Operator 상태를 먼저 확인하는 명령을 알려줘")
+    cvo = build_intent_profile("Cluster Version Operator가 업데이트를 못 하고 있으면 어디부터 확인해?")
+    registry = build_intent_profile("허용된 registry만 쓰도록 제한하는 설정은 어디서 확인해?")
+    must_gather = build_intent_profile("장애 분석용 must-gather는 언제 어떤 명령으로 수집해?")
+    inspect = build_intent_profile("특정 namespace 리소스 상태를 지원팀에 전달하려면 oc adm inspect를 써야 해?")
+    top_pods = build_intent_profile("namespace 안에서 CPU를 많이 쓰는 Pod를 찾는 명령은 뭐야?")
+    pod_usage = build_intent_profile("특정 Pod의 리소스가 얼마나 잡아먹고 있는지 확인하는 법")
+
+    assert rbac.target_object == "rbac"
+    assert rbac.primary_commands[0] == "oc auth can-i delete pods -n <namespace>"
+    assert login.target_object == "oc-login"
+    assert login.primary_commands[0] == "oc login --token=<token> --server=<api-url>"
+    assert quota.target_object == "resourcequota"
+    assert "ResourceQuota" in quota.evidence_terms
+    assert limit.target_object == "limitrange"
+    assert "LimitRange" in limit.evidence_terms
+    assert image_pull.task == "image-pull"
+    assert "ImagePullBackOff" in image_pull.evidence_terms
+    assert node.target_object == "node"
+    assert node.primary_commands[0] == "oc get nodes"
+    assert namespace.target_object == "namespace"
+    assert namespace.primary_commands[0] == "oc project"
+    assert network.target_object == "networkpolicy"
+    assert "NetworkPolicy" in network.evidence_terms
+    assert dns.target_object == "dns"
+    assert "openshift-dns" in dns.evidence_terms
+    assert mco.target_object == "machineconfigpool"
+    assert "Machine Config Operator" in mco.evidence_terms
+    assert cvo.target_object == "clusterversion"
+    assert "Cluster Version Operator" in cvo.evidence_terms
+    assert registry.target_object == "image-config"
+    assert "allowedRegistries" in registry.evidence_terms
+    assert must_gather.target_object == "must-gather"
+    assert must_gather.primary_commands[0] == "oc adm must-gather"
+    assert inspect.target_object == "inspect"
+    assert inspect.primary_commands[0].startswith("oc adm inspect")
+    assert top_pods.target_object == "pod-metrics"
+    assert top_pods.primary_commands[0].startswith("oc adm top pod")
+    assert pod_usage.target_object == "pod-metrics"
+    assert "CPU" in pod_usage.evidence_terms
+
+
+def test_operational_intent_profiles_cover_network_storage_and_monitoring() -> None:
+    route_timeout = build_intent_profile("Route timeout is suspected. What setting should I check first?")
+    odf = build_intent_profile("ODF storage looks unhealthy. Which operator or pod should I check first?")
+    monitoring = build_intent_profile("Prometheus has many firing alerts. How should I check Alertmanager?")
+    update = build_intent_profile("Before an upgrade, how should I check ClusterOperator and node status?")
+    egress = build_intent_profile("External API egress traffic is blocked. Which setting should I check?")
+    pdb = build_intent_profile("PDB blocks node drain. What should I check first?")
+    hpa = build_intent_profile("HPA does not scale out. Which metrics should I check?")
+    finalizer = build_intent_profile("namespace is stuck Terminating because of finalizers")
+
+    assert route_timeout.target_object == "route"
+    assert "haproxy.router.openshift.io/timeout" in route_timeout.evidence_terms
+    assert odf.target_object == "storage"
+    assert "openshift-storage" in odf.query_terms
+    assert monitoring.target_object == "monitoring"
+    assert "Alertmanager" in monitoring.evidence_terms
+    assert update.target_object == "cluster-health"
+    assert "oc get clusteroperators" in update.primary_commands
+    assert egress.target_object == "egress-network"
+    assert "NetworkPolicy" in egress.evidence_terms
+    assert pdb.target_object == "poddisruptionbudget"
+    assert "Allowed disruptions" in pdb.evidence_terms
+    assert hpa.target_object == "horizontalpodautoscaler"
+    assert "HorizontalPodAutoscaler" in hpa.evidence_terms
+    assert finalizer.target_object == "project-finalizer"
+    assert "finalizers" in finalizer.evidence_terms
+
+
+def test_intent_profile_rebalance_rescues_evidence_hit_dropped_by_reranker() -> None:
+    generic_hit = _hit(
+        "generic-node",
+        text="Node operations and troubleshooting overview.",
+        book_slug="nodes",
+        raw_score=0.90,
+    )
+    pdb_hit = _hit(
+        "pdb-specific",
+        text=(
+            "A PodDisruptionBudget protects availability during voluntary disruptions. "
+            "Check Allowed disruptions before draining a node."
+        ),
+        cli_commands=("oc get pdb -n <namespace>",),
+        book_slug="nodes",
+        raw_score=0.35,
+    )
+
+    rebalanced = _rebalance_intent_profile_hits(
+        "PDB blocks node drain. What should I check first?",
+        hybrid_hits=[generic_hit, pdb_hit],
+        reranked_hits=[generic_hit],
+    )
+
+    assert rebalanced[0].chunk_id == "pdb-specific"
+    assert rebalanced[0].source == "hybrid_intent_profile_rescued"
+
+
+def test_context_assembly_recovers_intent_evidence_outside_command_book_lock() -> None:
+    quota_hit = _hit(
+        "resourcequota-kmsc",
+        text=(
+            "ResourceQuota 생성 후 확인. kind: ResourceQuota. "
+            "hard pods requests.cpu requests.memory. oc get resourcequotas -n chak-test"
+        ),
+        book_slug="kmsc-operations",
+        section="OCP 프로젝트 관리 테스트",
+        raw_score=0.9,
+    )
+    unrelated_cli_hit = _hit(
+        "pod-top",
+        text="Pod CPU memory metrics. oc adm top pod --namespace=NAMESPACE",
+        cli_commands=("oc adm top pod --namespace=NAMESPACE",),
+        book_slug="cli_tools",
+        section="oc adm top pod",
+        raw_score=0.7,
+    )
+
+    bundle = assemble_context(
+        [quota_hit, unrelated_cli_hit],
+        query="ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?",
+        max_chunks=4,
+    )
+
+    assert bundle.citations
+    assert bundle.citations[0].chunk_id == "resourcequota-kmsc"
+
+
+def test_command_signal_matching_is_case_insensitive() -> None:
+    citation = _citation(
+        excerpt="ResourceQuota hard/used 값을 보고 quota 초과 여부를 판단합니다.",
+        cli_commands=("oc get resourcequota -n <namespace>",),
+    )
+
+    answer = build_grounded_command_guide_answer(
+        query="ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "ResourceQuota" in answer
+    assert "oc get resourcequota" in answer
+
+
+def test_resourcequota_answer_prefers_read_only_grounded_command() -> None:
+    citation = _citation(
+        excerpt="ResourceQuota hard/used 값을 보고 quota 초과 여부를 판단합니다.",
+        cli_commands=(
+            "oc patch resourcequotas test-compute -n chak-test --type=merge --patch "
+            '\'{"spec":{"hard":{"pods":"2"}}}\' # oc get resourcequotas -n chak-test CLI 또는 Web Console 에서 확인',
+        ),
+    )
+
+    answer = build_grounded_command_guide_answer(
+        query="ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "oc get resourcequotas -n chak-test" in answer
+    assert "oc patch resourcequotas" not in answer
+
+
+def test_beginner_shape_preserves_specific_resourcequota_answer() -> None:
+    citation = _citation(
+        excerpt="ResourceQuota hard/used 값을 보고 quota 초과 여부를 판단합니다.",
+        cli_commands=("oc get resourcequotas -n chak-test",),
+    )
+    answer = build_grounded_command_guide_answer(
+        query="ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?",
+        citations=[citation],
+    )
+
+    shaped = shape_beginner_grounded_answer(
+        answer or "",
+        query="ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?",
+        citations=[citation],
+    )
+
+    assert "ResourceQuota 때문에 Pod 생성이 막혔는지는" in shaped
+    assert "명령어 확인 요청" not in shaped
+
+
+def test_embedded_cli_text_is_split_before_answering() -> None:
+    network = _citation(
+        excerpt="NetworkPolicy가 Pod 통신을 제한할 수 있습니다.",
+        cli_commands=("oc edit template <project_template> -n openshift-config oc new-project <project> oc get networkpolicy oc",),
+    )
+    node = _citation(
+        excerpt="노드 목록에서 Ready 상태를 확인합니다.",
+        cli_commands=("oc get node show-labels' 명령어 실행 결과인 노드 목록이 표시되어 있습니다.",),
+    )
+
+    network_answer = build_grounded_command_guide_answer(
+        query="NetworkPolicy 때문에 Pod 통신이 막힌 건지 확인하려면 뭘 봐야 해?",
+        citations=[network],
+    )
+    node_answer = build_grounded_command_guide_answer(
+        query="Node 확인하려면 어떤 명령어부터 쓰면 돼?",
+        citations=[node],
+    )
+
+    assert network_answer is not None
+    assert "oc get networkpolicy" in network_answer
+    assert "oc edit template" not in network_answer
+    assert node_answer is not None
+    assert "명령어 실행 결과" not in node_answer
+
+
+def test_beginner_command_lookup_sanitizes_embedded_cli_text() -> None:
+    citation = _citation(
+        excerpt="노드 목록에서 Ready 상태를 확인합니다.",
+        cli_commands=("oc get node show-labels' 명령어 실행 결과인 노드 목록이 표시되어 있습니다.",),
+    )
+
+    answer = shape_beginner_grounded_answer(
+        "확인하면 됩니다.",
+        query="Node 확인하려면 어떤 명령어부터 쓰면 돼?",
+        citations=[citation],
+    )
+
+    assert "oc get node show-labels" in answer
+    assert "명령어 실행 결과" not in answer
+
+
+def test_status_answer_handles_basic_node_command_lookup() -> None:
+    citation = _citation(
+        excerpt="Node 목록에서 Ready 상태를 확인하고 문제가 있으면 describe로 Conditions와 Events를 봅니다.",
+        cli_commands=("oc get nodes", "oc describe node <node-name>"),
+    )
+
+    answer = build_grounded_status_answer(
+        query="Node 확인하려면 어떤 명령어부터 쓰면 돼?",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "oc get nodes" in answer
+    assert "oc describe node" in answer
+    assert "Ready" in answer
+
+
+def test_status_answer_distinguishes_namespace_current_context_from_list() -> None:
+    current = _citation(
+        excerpt="현재 프로젝트와 namespace context는 oc project 또는 oc config view로 확인합니다.",
+        cli_commands=("oc project", "oc config view --minify"),
+    )
+    listing = _citation(
+        excerpt="전체 namespace 목록은 oc get namespaces 또는 oc get projects로 조회합니다.",
+        cli_commands=("oc get namespaces", "oc get projects"),
+    )
+
+    current_answer = build_grounded_status_answer(
+        query="네임스페이스 확인하는 명령어가 뭐야?",
+        citations=[current, listing],
+    )
+    list_answer = build_grounded_status_answer(
+        query="네임스페이스 목록 확인하려면 무슨 명령어를 쳐야 해?",
+        citations=[listing, current],
+    )
+
+    assert current_answer is not None
+    assert "oc project" in current_answer
+    assert "oc get namespaces" not in current_answer
+    assert list_answer is not None
+    assert "oc get namespaces" in list_answer
+
+
+def test_status_answer_handles_image_pull_without_clarification_shape() -> None:
+    citation = _citation(
+        excerpt="ImagePullBackOff는 Pod 이벤트와 pull secret, registry 접근을 확인합니다.",
+        cli_commands=(
+            "oc describe pod <pod-name> -n <namespace>",
+            "oc get secret -n <namespace>",
+            "oc secrets link default <pull-secret> --for=pull -n <namespace>",
+        ),
+    )
+
+    answer = build_grounded_status_answer(
+        query="ImagePullBackOff가 뜰 때 pull secret과 registry 쪽을 어떤 순서로 확인해?",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "ImagePullBackOff" in answer
+    assert "oc describe pod" in answer
+    assert "oc secrets link" in answer
+
+
+def test_status_answer_handles_support_collection_commands_without_ungrounded_code_blocks() -> None:
+    must_gather = _citation(
+        excerpt="must-gather collects diagnostic data for support and troubleshooting.",
+        cli_commands=(),
+    )
+    inspect = _citation(
+        excerpt="oc adm inspect can gather resource status for a namespace before support handoff.",
+        cli_commands=(),
+    )
+
+    must_answer = build_grounded_status_answer(
+        query="장애 분석용 must-gather는 언제 어떤 명령으로 수집해?",
+        citations=[must_gather],
+    )
+    inspect_answer = build_grounded_status_answer(
+        query="특정 namespace 리소스 상태를 지원팀에 전달하려면 oc adm inspect를 써야 해?",
+        citations=[inspect],
+    )
+
+    assert must_answer is not None
+    assert "must-gather" in must_answer
+    assert "```" not in must_answer
+    assert inspect_answer is not None
+    assert "oc adm inspect" in inspect_answer
+    assert "```" not in inspect_answer
+
+
+def test_status_answer_handles_top_pods_plural_query_from_singular_cli_docs() -> None:
+    citation = _citation(
+        excerpt="Show metrics for all pods in the given namespace with oc adm top pod --namespace=NAMESPACE.",
+        cli_commands=("oc adm top pod --namespace=NAMESPACE",),
+    )
+
+    answer = build_grounded_status_answer(
+        query="namespace 안에서 CPU를 많이 쓰는 Pod를 찾는 명령은 뭐야?",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "oc adm top pods" in answer
+    assert "oc adm top pod --namespace=NAMESPACE" in answer
+
+
+def test_command_sanitize_preserves_balanced_selector_quotes() -> None:
+    citation = _citation(
+        excerpt="Pod usage metrics can be filtered by selector.",
+        cli_commands=("oc adm top pod --selector='<pod_name>'",),
+    )
+
+    answer = build_grounded_status_answer(
+        query="특정 Pod의 리소스가 얼마나 잡아먹고 있는지 확인하는 법",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "oc adm top pod --selector='<pod_name>'" in answer
+
+
+def test_clusteroperator_answer_uses_inline_fallback_when_citation_has_no_command() -> None:
+    citation = _citation(
+        excerpt="클러스터 Operator 상태에는 Available, Progressing, Degraded 조건이 있습니다.",
+        cli_commands=(),
+    )
+
+    answer = build_grounded_status_answer(
+        query="ClusterOperator가 Degraded일 때 전체 상태를 한 번에 보는 명령은?",
+        citations=[citation],
+    )
+
+    assert answer is not None
+    assert "oc get clusteroperators" in answer
+    assert "```" not in answer
+
+
+def test_status_answer_handles_dns_cvo_odf_and_monitoring_profiles() -> None:
+    dns = _citation(
+        excerpt="The DNS Operator manages cluster DNS and openshift-dns pods run CoreDNS.",
+        cli_commands=("oc get dns.operator/default -o yaml", "oc get pods -n openshift-dns"),
+    )
+    cvo = _citation(
+        excerpt="The Cluster Version Operator monitors ClusterVersion and update conditions.",
+        cli_commands=("oc get clusterversion", "oc describe clusterversion version"),
+    )
+    odf = _citation(
+        excerpt="OpenShift Data Foundation storage runs operator and Ceph pods in openshift-storage.",
+        cli_commands=("oc get pods -n openshift-storage", "oc get cephcluster -n openshift-storage"),
+    )
+    monitoring = _citation(
+        excerpt="Prometheus and Alertmanager show firing alert status for cluster monitoring.",
+        cli_commands=("oc -n openshift-monitoring get route alertmanager-main",),
+    )
+
+    dns_answer = build_grounded_status_answer(
+        query="Cluster DNS is failing. What resource status should I check first?",
+        citations=[dns],
+    )
+    cvo_answer = build_grounded_status_answer(
+        query="Cluster Version Operator cannot update. Where should I check first?",
+        citations=[cvo],
+    )
+    odf_answer = build_grounded_status_answer(
+        query="ODF storage status is unhealthy. Which operator or pod should I check?",
+        citations=[odf],
+    )
+    monitoring_answer = build_grounded_status_answer(
+        query="Prometheus has many firing alerts. How do I check Alertmanager?",
+        citations=[monitoring],
+    )
+
+    assert dns_answer is not None
+    assert "DNS Operator" in dns_answer
+    assert "oc get pods -n openshift-dns" in dns_answer
+    assert cvo_answer is not None
+    assert "Cluster Version Operator" in cvo_answer
+    assert "oc get clusterversion" in cvo_answer
+    assert odf_answer is not None
+    assert "ODF" in odf_answer
+    assert "openshift-storage" in odf_answer
+    assert monitoring_answer is not None
+    assert "Alertmanager" in monitoring_answer
+    assert "firing alert" in monitoring_answer
+
+
+def test_low_confidence_guard_allows_operational_intent_overlap() -> None:
+    citation = _citation(
+        excerpt="ImagePullBackOff 상태에서는 pull secret과 registry 접근 오류를 확인합니다.",
+        cli_commands=("oc describe pod <pod-name> -n <namespace>",),
+    )
+
+    assert not _is_low_confidence_retrieval(
+        query="ImagePullBackOff가 뜰 때 pull secret과 registry 쪽을 어떤 순서로 확인해?",
+        citations=[citation],
+        selected_hits=[{"fused_score": 0.0, "pre_rerank_fused_score": 0.0, "vector_score": 0.0}],
+    )
+    finalizer = _citation(
+        excerpt="A namespace stuck in Terminating can have remaining finalizers on resources.",
+        cli_commands=("oc get namespace <namespace> -o yaml",),
+    )
+
+    assert not _is_low_confidence_retrieval(
+        query="namespace가 Terminating에서 안 없어질 때 finalizer와 남은 리소스를 어떻게 확인해?",
+        citations=[finalizer],
+        selected_hits=[{"fused_score": 0.0, "pre_rerank_fused_score": 0.0, "vector_score": 0.0}],
+    )
+    pod_usage = _citation(
+        excerpt="Show metrics for all pods in the given namespace with oc adm top pod --namespace=NAMESPACE.",
+        cli_commands=("oc adm top pod --namespace=NAMESPACE",),
+    )
+
+    assert not _is_low_confidence_retrieval(
+        query="특정 Pod의 리소스가 얼마나 잡아먹고 있는지 확인하는 법",
+        citations=[pod_usage],
+        selected_hits=[{"fused_score": 0.0, "pre_rerank_fused_score": 0.0, "vector_score": 0.0}],
+    )
+
+
 def test_low_confidence_guard_allows_bootstrap_wait_grounding() -> None:
     citation = _citation(
         excerpt="Use openshift-install wait-for bootstrap-complete to monitor bootstrap.",
@@ -325,8 +783,8 @@ def test_namespace_command_answer_is_built_from_citation_commands() -> None:
     )
 
     assert answer is not None
-    assert "oc get namespaces" in answer
     assert "oc project -q" in answer
+    assert "oc get namespaces" not in answer
 
 
 def test_follow_up_questions_are_grounded_in_citation_commands() -> None:

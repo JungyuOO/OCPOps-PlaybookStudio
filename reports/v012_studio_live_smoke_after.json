@@ -1,0 +1,4061 @@
+{
+  "schema": "studio_live_smoke_v1",
+  "base_url": "http://127.0.0.1:8080",
+  "case_count": 80,
+  "pass_count": 49,
+  "fail_count": 31,
+  "pass_rate": 0.6125,
+  "failure_counts": {
+    "answer_code_not_visible_in_citations": 4,
+    "command_query_missing_grounded_command": 4,
+    "low_confidence_for_seeded_question": 3,
+    "missing_citation_term:Alertmanager": 1,
+    "missing_citation_term:Cluster Version": 1,
+    "missing_citation_term:DNS": 1,
+    "missing_citation_term:FailedScheduling": 1,
+    "missing_citation_term:HorizontalPodAutoscaler": 1,
+    "missing_citation_term:Machine Config": 1,
+    "missing_citation_term:NetworkPolicy": 1,
+    "missing_citation_term:PodDisruptionBudget": 1,
+    "missing_citation_term:SecurityContextConstraints": 1,
+    "missing_citation_term:cluster": 1,
+    "missing_citation_term:clusteroperators": 1,
+    "missing_citation_term:finalizer": 1,
+    "missing_citation_term:inspect": 1,
+    "missing_citation_term:monitoring": 1,
+    "missing_citation_term:must-gather": 1,
+    "missing_citation_term:namespace": 1,
+    "missing_citation_term:paused": 1,
+    "missing_citation_term:previous": 1,
+    "missing_citation_term:pull": 1,
+    "missing_citation_term:registry": 2,
+    "missing_citation_term:storage": 1,
+    "missing_citation_term:timeout": 1,
+    "missing_citation_term:top pods": 1,
+    "missing_citation_term:복원": 1,
+    "missing_required_term:Cluster Version Operator": 1,
+    "missing_required_term:DNS": 1,
+    "missing_required_term:ImagePullBackOff": 1,
+    "missing_required_term:Machine Config Operator": 1,
+    "missing_required_term:NetworkPolicy": 1,
+    "missing_required_term:SCC": 1,
+    "missing_required_term:finalizer": 1,
+    "missing_required_term:inspect": 1,
+    "missing_required_term:must-gather": 1,
+    "missing_required_term:oc adm top pods": 1,
+    "missing_required_term:oc get clusteroperators": 1,
+    "missing_required_term:registry": 2,
+    "missing_required_term:복원": 1,
+    "missing_required_term:스토리지": 1,
+    "unexpected_clarification": 3
+  },
+  "duration_sec": 520.523,
+  "details": [
+    {
+      "case_id": "starter:faq:0",
+      "parent_id": "",
+      "query": "콘솔 기능 처음에는 무엇부터 확인하면 돼?",
+      "source": "postgres.document_chunks",
+      "query_type": "",
+      "route_kind": "official",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 400,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: `구성 및 컴포넌트 기능 확인` 절차 기준으로 가장 먼저 아래 명령으로 시작하면 됩니다. [1]\n\n```bash\noc get' 명령어로 Ingress Controller 도메인 주소를 확인하고, 해당 TEST-UN-OCP-02-03 1. 구성 및 컴포넌트 기능 확인. unit_test 단계의 test_case_summary 청크. lopyadm-api Ingresscotroller 구성 lopyadm-api IngressController 확인(도메인 포",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "kmsc-operations",
+          "section": "구성 및 컴포넌트 기능 확인",
+          "viewer_path": "/uploads/documents/d9c9de11-222d-5ede-9ea3-e0186c10e39f/chunks/54555304-e9ae-51ad-803a-a54588c209ad",
+          "cli_commands": [
+            "oc get' 명령어로 Ingress Controller 도메인 주소를 확인하고, 해당 TEST-UN-OCP-02-03 1. 구성 및 컴포넌트 기능 확인. unit_test 단계의 test_case_summary 청크. lopyadm-api Ingresscotroller 구성 lopyadm-api IngressController 확인(도메인 포함) TEST-UN-OCP-02입니다. 그 다음 정상 상태, 실패 징후, 확인 명령"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "구성 및 컴포넌트 기능 확인 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc get' 명령어로 Ingress Controller 도메인 주소를 확인하고, 해당 TEST-UN-OCP-02-03 1. 구성 및 컴포...` 명령은 언제 쓰면 돼?",
+        "`oc get' 명령어로 Ingress Controller 도메인 주소를 확인하고, 해당 TEST-UN-OCP-02-03 1. 구성 및 컴포...` 결과에서 무엇을 확인해야 해?"
+      ]
+    },
+    {
+      "case_id": "starter:faq:1",
+      "parent_id": "",
+      "query": "클러스터가 사용되는 구성 요소에서 FIPS 지원 처음에는 무엇부터 확인하면 돼?",
+      "source": "postgres.document_chunks",
+      "query_type": "",
+      "route_kind": "official",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 442,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: `oc adm extract를 사용하여 FIPS 지원 설치 프로그램 가져오기` 절차 기준으로 가장 먼저 아래 명령으로 시작하면 됩니다. [1]\n\n```bash\noc adm release extract --registry-config \"${pullsecret_file}\" --command=openshift-install-fips --to \"${extract_dir}\" ${RELEASE_IMAGE}\n```\n\n질문이 첫 단계 확인형이므로 뒤 단계 명령보다 이 ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "installation_overview",
+          "section": "oc adm extract를 사용하여 FIPS 지원 설치 프로그램 가져오기",
+          "viewer_path": "/docs/ocp/4.20/ko/installation_overview/index.html#installation-obtaining-fips-installer-oc_installing-fips",
+          "cli_commands": [
+            "oc",
+            "oc adm release extract --registry-config \"${pullsecret_file}\" --command=openshift-install-fips --to \"${extract_dir}\" ${RELEASE_IMAGE}"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc adm release extract --registry-config \"${pullsecret_file}\" --command=opens...`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "oc adm extract를 사용하여 FIPS 지원 설치 프로그램 가져오기 기준으로 다음 확인 단계는 뭐야?",
+        "oc adm extract를 사용하여 FIPS 지원 설치 프로그램 가져오기 절차에서 흔한 실패 지점은 뭐야?"
+      ]
+    },
+    {
+      "case_id": "starter:learning:0",
+      "parent_id": "",
+      "query": "OCP 설치는 어떤 순서로 시작하면 돼?",
+      "source": "ocp420_repo_wide_source_manifest",
+      "query_type": "",
+      "route_kind": "learning",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 1004,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "answer_code_not_visible_in_citations"
+      ],
+      "pass": false,
+      "answer_preview": "요약: OCP 설치는 먼저 설치 방식과 대상 환경을 정한 뒤, 사전 준비물과 설치 완료 확인 명령을 순서대로 확인하는 작업입니다. [1]\n\n1. 설치 방식을 먼저 고릅니다.\n- Assisted Installer: 웹 UI와 사전 검증을 이용해 온프레미스/베어메탈 설치를 쉽게 진행할 때 먼저 검토합니다. [1]\n- Agent-based Installer: ISO 기반으로 자동화하거나 제한망/폐쇄망 흐름을 맞춰야 할 때 검토합니다. [1]\n- Single Node ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "installation_overview",
+          "section": "oc adm extract를 사용하여 FIPS 지원 설치 프로그램 가져오기",
+          "viewer_path": "/docs/ocp/4.20/ko/installation_overview/index.html#installation-obtaining-fips-installer-oc_installing-fips",
+          "cli_commands": [
+            "oc adm release extract --registry-config \"${pullsecret_file}\" --command=openshift-install-fips --to \"${extract_dir}\" ${RELEASE_IMAGE}",
+            "oc"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "oc adm extract를 사용하여 FIPS 지원 설치 프로그램 가져오기 절차에서 흔한 실패 지점은 뭐야?",
+        "oc adm extract를 사용하여 FIPS 지원 설치 프로그램 가져오기 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc adm release extract --registry-config \"${pullsecret_file}\" --command=opens...` 명령은 언제 쓰면 돼?"
+      ]
+    },
+    {
+      "case_id": "starter:learning:1",
+      "parent_id": "",
+      "query": "로그와 이벤트는 뭔지부터 알고 싶은데 어디서 확인하면 돼?",
+      "source": "ocp420_repo_wide_source_manifest",
+      "query_type": "",
+      "route_kind": "learning",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 242,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: Prometheus 경고가 많을 때는 Alertmanager의 firing alert를 먼저 보고, 같은 라벨로 묶이는 반복 경고를 찾습니다. [1]\n\nAlertmanager에서 `severity`, `namespace`, `pod`, `deployment` 라벨을 기준으로 묶어 보면 한 장애가 여러 alert로 확산된 것인지 구분할 수 있습니다. [1]\n\n제공된 근거에는 실행 명령이나 예시 코드가 명시되어 있지 않습니다.",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "observability_overview",
+          "section": "모니터링",
+          "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#monitoring-overview-index_observability-overview",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "모니터링 기준으로 다음 확인 단계는 뭐야?",
+        "모니터링 절차에서 흔한 실패 지점은 뭐야?",
+        "모니터링 내용을 초보자용 3단계로 다시 정리해줘"
+      ]
+    },
+    {
+      "case_id": "starter:operations:0",
+      "parent_id": "",
+      "query": "Node 확인하려면 어떤 명령어부터 쓰면 돼?",
+      "source": "postgres.study_docs_chunks",
+      "query_type": "",
+      "route_kind": "course",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "stage"
+      ],
+      "answer_len": 742,
+      "citation_count": 1,
+      "cited_indices": [],
+      "warning_count": 1,
+      "suggestion_count": 0,
+      "failures": [
+        "command_query_missing_grounded_command"
+      ],
+      "pass": false,
+      "answer_preview": "Node의 상태와 부하 분산 현황을 확인하기 위해서는 먼저 Node의 부하 분산 상태와 Pod의 자원 설정 현황을 검토해야 합니다 [1].\n\n효율적인 운영을 위해 다음과 같은 순서로 점검하는 것이 좋습니다.\n\n* **Node 부하 분산 및 Pod 자원 설정 검토**: Node에 부하가 특정 지점에 쏠려 있지 않은지, 그리고 각 Pod가 적절한 자원을 할당받아 동작하고 있는지 확인합니다 [1].\n* **Java Heap Size 및 JVM 메모리 설정 확인**: ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "perf_test",
+          "section": "perf_test",
+          "viewer_path": "/course/chunks/perf-test--5--default--none--perf-section-summary--summary--9cc052ae",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": []
+    },
+    {
+      "case_id": "starter:operations:1",
+      "parent_id": "",
+      "query": "이 절차 처음에는 무엇부터 확인하면 돼?",
+      "source": "postgres.study_docs_chunks",
+      "query_type": "",
+      "route_kind": "course",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "stage"
+      ],
+      "answer_len": 639,
+      "citation_count": 1,
+      "cited_indices": [],
+      "warning_count": 0,
+      "suggestion_count": 0,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "먼저 스토리지와 모니터링의 연결 구조를 파악해야 합니다. 구체적으로는 PVC, Prometheus, AlertManager가 각각 어떤 운영 근거로 사용되는지 확인하는 것부터 시작합니다 [1].\n\n확인 절차와 판단 기준은 다음과 같습니다.\n\n*   **저장 영역의 구분**: 서비스 데이터가 저장되는 영역과 모니터링 데이터가 저장되는 영역을 명확히 구분하여 살펴봅니다 [1]. 이를 통해 각 영역의 용도와 관리 범위를 파악할 수 있습니다.\n*   **PVC 할당 용",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "architecture",
+          "section": "architecture",
+          "viewer_path": "/course/chunks/architecture--DSGN-005-030--default--none--design-summary--summary--7c8d4892",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": []
+    },
+    {
+      "case_id": "learning-sequence:0",
+      "parent_id": "",
+      "query": "OCP 설치는 어떤 순서로 시작하면 돼?",
+      "source": "ocp420_repo_wide_source_manifest",
+      "query_type": "",
+      "route_kind": "learning",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 1004,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "answer_code_not_visible_in_citations"
+      ],
+      "pass": false,
+      "answer_preview": "요약: OCP 설치는 먼저 설치 방식과 대상 환경을 정한 뒤, 사전 준비물과 설치 완료 확인 명령을 순서대로 확인하는 작업입니다. [1]\n\n1. 설치 방식을 먼저 고릅니다.\n- Assisted Installer: 웹 UI와 사전 검증을 이용해 온프레미스/베어메탈 설치를 쉽게 진행할 때 먼저 검토합니다. [1]\n- Agent-based Installer: ISO 기반으로 자동화하거나 제한망/폐쇄망 흐름을 맞춰야 할 때 검토합니다. [1]\n- Single Node ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "installation_overview",
+          "section": "oc adm extract를 사용하여 FIPS 지원 설치 프로그램 가져오기",
+          "viewer_path": "/docs/ocp/4.20/ko/installation_overview/index.html#installation-obtaining-fips-installer-oc_installing-fips",
+          "cli_commands": [
+            "oc adm release extract --registry-config \"${pullsecret_file}\" --command=openshift-install-fips --to \"${extract_dir}\" ${RELEASE_IMAGE}",
+            "oc"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "oc adm extract를 사용하여 FIPS 지원 설치 프로그램 가져오기 절차에서 흔한 실패 지점은 뭐야?",
+        "oc adm extract를 사용하여 FIPS 지원 설치 프로그램 가져오기 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc adm release extract --registry-config \"${pullsecret_file}\" --command=opens...` 명령은 언제 쓰면 돼?"
+      ]
+    },
+    {
+      "case_id": "learning-sequence:1",
+      "parent_id": "",
+      "query": "설치 후 작업은 무엇부터 이어서 진행하면 돼?",
+      "source": "ocp420_repo_wide_source_manifest",
+      "query_type": "",
+      "route_kind": "learning",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 1156,
+      "citation_count": 3,
+      "cited_indices": [
+        1,
+        2,
+        3
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 설치 후 구성 작업을 시작하려면 가장 먼저 기본 레지스트리 설정을 확인해야 합니다. 현재 레지스트리 구성 상태를 확인하기 위해 다음 명령을 실행하십시오.\n\n기본 레지스트리 구성 확인\n\n```bash\noc get configs.imageregistry.operator.openshift.io/cluster -o yaml\n```\n\n이 명령을 통해 현재 레지스트리의 설정 값을 확인한 후, 필요에 따라 설정을 수정하거나 관련 Pod의 상태를 점검하는 단계로 진행하",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "postinstallation_configuration",
+          "section": "기본 레지스트리 이동",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#infrastructure-moving-registry_post-install-cluster-tasks",
+          "cli_commands": [
+            "oc get configs.imageregistry.operator.openshift.io/cluster -o yaml",
+            "oc edit configs.imageregistry.operator.openshift.io/cluster",
+            "oc get pods -o wide -n openshift-image-registry",
+            "oc describe node <node_name>"
+          ]
+        },
+        {
+          "index": 2,
+          "book_slug": "postinstallation_configuration",
+          "section": "컴퓨팅 머신 세트 수동 스케일링",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#machineset-manually-scaling_post-install-cluster-tasks",
+          "cli_commands": [
+            "oc annotate machines.machine.openshift.io/<machine_name> -n openshift-machine-api machine.openshift.io/delete-machine=\"true\"",
+            "oc scale --replicas=2 machinesets.machine.openshift.io <machineset> -n openshift-machine-api",
+            "oc",
+            "oc get machinesets.machine.openshift.io -n openshift-machine-api",
+            "oc get machines.machine.openshift.io -n openshift-machine-api",
+            "oc edit machinesets.machine.openshift.io <machineset> -n openshift-machine-api",
+            "oc get machines.machine.openshift.io"
+          ]
+        },
+        {
+          "index": 3,
+          "book_slug": "postinstallation_configuration",
+          "section": "etcd 데이터 백업",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#backing-up-etcd-data_post-install-cluster-tasks",
+          "cli_commands": [
+            "etcdctl snapshot save",
+            "/usr/local/bin/cluster-backup.sh /home/core/assets/backup",
+            "oc get proxy cluster -o yaml",
+            "oc debug --as-root node/<node_name>"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc scale --replicas=2 machinesets.machine.openshift.io <machineset> -n opensh...` 결과에서 무엇을 확인해야 해?",
+        "`oc scale --replicas=2 machinesets.machine.openshift.io <machineset> -n opensh...`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "컴퓨팅 머신 세트 수동 스케일링 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "learning-sequence:2",
+      "parent_id": "",
+      "query": "노드 상태는 뭔지부터 알고 싶은데 어디서 확인하면 돼?",
+      "source": "ocp420_repo_wide_source_manifest",
+      "query_type": "",
+      "route_kind": "learning",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 312,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 노드 Ready 문제나 머신컨피그 적용 지연은 먼저 MCO/MCP 상태와 실제 노드 상태를 같이 맞춰 봐야 합니다. [1]\n\n1. Machine Config Operator 자체가 `Available/Progressing/Degraded` 중 어디에 있는지 봅니다. [1]\n\n2. 어떤 MachineConfigPool이 업데이트 중이거나 degraded인지 확인합니다. [1]\n\n3. MCP가 특정 노드에서 멈춘다면 해당 노드 상태와 이벤트를 같이 확인해서 ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "machine_configuration",
+          "section": "Configuring journald settings",
+          "viewer_path": "/docs/ocp/4.20/ko/machine_configuration/index.html#machineconfig-modify-journald_machine-configs-configure",
+          "cli_commands": [
+            "oc get node | grep worker",
+            "oc debug node/ip-10-0-0-1.us-east-2.compute.internal",
+            "oc apply -f 40-worker-custom-journald.yaml",
+            "oc get machineconfigpool"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "Configuring journald settings 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc get node | grep worker` 명령은 언제 쓰면 돼?",
+        "`oc get node | grep worker` 결과에서 무엇을 확인해야 해?"
+      ]
+    },
+    {
+      "case_id": "learning-sequence:3",
+      "parent_id": "",
+      "query": "PVC와 볼륨은 뭔지부터 알고 싶은데 어디서 확인하면 돼?",
+      "source": "ocp420_repo_wide_source_manifest",
+      "query_type": "",
+      "route_kind": "learning",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 553,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 이 질문은 명령어 확인 요청이므로, 먼저 실행할 명령은 아래입니다. [1]\n\n```bash\noc patch etcd/cluster --type=merge -p '{\"spec\": {\"unsupportedConfigOverrides\": {\"useUnsupportedUnsafeNonHANonProductionUnstableEtcd\": true}}}'\noc adm wait-for-stable-cluster\noc patch etcd/cluster --type=me",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "backup_and_restore",
+          "section": "Restoring to a previous cluster state for more than one node",
+          "viewer_path": "/docs/ocp/4.20/ko/backup_and_restore/index.html#dr-scenario-2-restoring-cluster-state_dr-restoring-cluster-state",
+          "cli_commands": [
+            "oc patch etcd/cluster --type=merge -p '{\"spec\": {\"unsupportedConfigOverrides\": {\"useUnsupportedUnsafeNonHANonProductionUnstableEtcd\": true}}}'",
+            "oc adm wait-for-stable-cluster",
+            "oc patch etcd/cluster --type=merge -p '{\"spec\": {\"unsupportedConfigOverrides\": null}}'",
+            "oc patch etcd cluster -p='{\"spec\": {\"forceRedeploymentReason\": \"recovery-'\"$(date --rfc-3339=ns )\"'\"}}' --type=merge"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc adm wait-for-stable-cluster` 결과에서 무엇을 확인해야 해?",
+        "`oc adm wait-for-stable-cluster`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "Restoring to a previous cluster state for more than one node 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "learning-sequence:4",
+      "parent_id": "",
+      "query": "로그와 이벤트는 뭔지부터 알고 싶은데 어디서 확인하면 돼?",
+      "source": "ocp420_repo_wide_source_manifest",
+      "query_type": "",
+      "route_kind": "learning",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 242,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: Prometheus 경고가 많을 때는 Alertmanager의 firing alert를 먼저 보고, 같은 라벨로 묶이는 반복 경고를 찾습니다. [1]\n\nAlertmanager에서 `severity`, `namespace`, `pod`, `deployment` 라벨을 기준으로 묶어 보면 한 장애가 여러 alert로 확산된 것인지 구분할 수 있습니다. [1]\n\n제공된 근거에는 실행 명령이나 예시 코드가 명시되어 있지 않습니다.",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "observability_overview",
+          "section": "모니터링",
+          "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#monitoring-overview-index_observability-overview",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "모니터링 기준으로 다음 확인 단계는 뭐야?",
+        "모니터링 절차에서 흔한 실패 지점은 뭐야?",
+        "모니터링 내용을 초보자용 3단계로 다시 정리해줘"
+      ]
+    },
+    {
+      "case_id": "learning-sequence:5",
+      "parent_id": "",
+      "query": "권한 문제는 뭔지부터 알고 싶은데 어디서 확인하면 돼?",
+      "source": "ocp420_repo_wide_source_manifest",
+      "query_type": "",
+      "route_kind": "learning",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 331,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 현재 사용자의 namespace 권한은 `oc auth can-i`로 먼저 확인하면 됩니다. [1]\n\n```bash\noc auth can-i\n```\n\nPod 삭제 권한을 확인할 때는 이 명령의 verb/resource 자리에 `delete pods`를, namespace 범위에는 `-n <namespace>`를 적용해서 판단하면 됩니다. [1]\n\n`yes`면 현재 사용자에게 해당 namespace의 Pod 삭제 권한이 있고, `no`면 RoleBindin",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "cli_tools",
+          "section": "oc auth can-i",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-auth-can-i",
+          "cli_commands": [
+            "oc auth can-i create pods --all-namespaces # Check to see if I can list deployments in my current namespace oc auth can-i list deployments.apps # Check to see if service account \"foo\" of namespace \"dev\" can list pods in the namespace \"prod\"",
+            "oc auth can-i create pods --all-namespaces",
+            "oc auth can-i list deployments.apps",
+            "oc auth can-i list pods --as=system:serviceaccount:dev:foo -n prod",
+            "oc auth can-i '*' '*'",
+            "oc auth can-i list jobs.batch/bar -n foo",
+            "oc auth can-i get pods --subresource=log",
+            "oc auth can-i get /logs/",
+            "oc auth can-i approve certificates.k8s.io",
+            "oc auth can-i --list --namespace=foo"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc auth can-i create pods --all-namespaces # Check to see if I can list deplo...` 결과에서 무엇을 확인해야 해?",
+        "`oc auth can-i create pods --all-namespaces # Check to see if I can list deplo...`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "`oc auth can-i create pods --all-namespaces` 명령은 언제 쓰면 돼?"
+      ]
+    },
+    {
+      "case_id": "learning-sequence:6",
+      "parent_id": "",
+      "query": "Service와 Route 연결은 뭔지부터 알고 싶은데 어디서 확인하면 돼?",
+      "source": "ocp420_repo_wide_source_manifest",
+      "query_type": "",
+      "route_kind": "learning",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 416,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 이 질문은 명령어 확인 요청이므로, 먼저 실행할 명령은 아래입니다. [1]\n\n```bash\noc get service -n openshift-ingress example-gateway-openshift-default\noc create -f openshift-default.yaml\noc get deployment -n openshift-ingress\noc -n openshift-ingress create secret tls gwapi-wildcard --c",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "ingress_and_load_balancing",
+          "section": "Ingress Operator의 Gateway API 시작하기",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-gateway-api-enable_ingress-gateway-api",
+          "cli_commands": [
+            "oc get service -n openshift-ingress example-gateway-openshift-default",
+            "oc create -f openshift-default.yaml",
+            "oc get deployment -n openshift-ingress",
+            "oc -n openshift-ingress create secret tls gwapi-wildcard --cert=wildcard.crt --key=wildcard.key",
+            "oc apply -f example-gateway.yaml",
+            "oc get deployment -n openshift-ingress example-gateway-openshift-default",
+            "oc -n openshift-ingress get dnsrecord -l gateway.networking.k8s.io/gateway-name=example-gateway -o yaml",
+            "oc apply -f example-route.yaml",
+            "oc wait -n openshift-ingress --for=condition=Programmed gateways.gateway.networking.k8s.io example-gateway"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "Service endpoint가 비어 있으면 다음에 무엇을 봐야 해?",
+        "Route TLS와 timeout 설정은 어디서 확인해?",
+        "`oc create -f openshift-default.yaml` 결과에서 Route와 Service 연결을 어떻게 확인해?"
+      ]
+    },
+    {
+      "case_id": "learning-sequence:7",
+      "parent_id": "",
+      "query": "문제 해결이 안 될 때 어디부터 확인하면 돼?",
+      "source": "ocp420_repo_wide_source_manifest",
+      "query_type": "",
+      "route_kind": "learning",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 664,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 가장 먼저 배포 구성을 수정하여 잘못된 이미지 참조를 바로잡아야 합니다. 수정 후에는 Pod의 상태 변화를 실시간으로 관찰하고, 이벤트 로그를 통해 구체적인 실패 원인을 파악해야 합니다. [1]\n\n문제 해결을 위한 단계별 절차는 다음과 같습니다:\n\n1. 배포 구성 수정\n배포 구성에서 기본 이미지 참조가 올바르지 않은 경우, 아래 명령어로 배포 구성을 업데이트합니다.\n\n```bash\noc edit deployment/my-deployment\n```\n\n배포 ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "support",
+          "section": "Pod 상태 검토",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#reviewing-pod-status_investigating-pod-issues",
+          "cli_commands": [
+            "oc edit deployment/my-deployment",
+            "oc get pods -w",
+            "oc get events",
+            "oc",
+            "oc project <project_name>",
+            "oc get pods",
+            "oc status"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc get pods -w` 결과에서 무엇을 확인해야 해?",
+        "`oc get pods -w`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "Pod 상태 검토 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-cert-monitor-001",
+      "parent_id": "",
+      "query": "인증서 만료가 의심될 때 현재 상태를 확인하는 명령을 알려줘",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc adm ocp-certificates monitor-certificates"
+      ],
+      "expected_citation_terms": [
+        "oc adm ocp-certificates monitor-certificates"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 220,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 이 질문은 명령어 확인 요청이므로, 먼저 실행할 명령은 아래입니다. [1]\n\n```bash\noc adm ocp-certificates monitor-certificates\n```\n\n확인 기준:\n- 명령 출력에서 현재 namespace, 대상 리소스 이름, 상태 컬럼을 먼저 봅니다. [1]\n- 오류가 나오면 같은 리소스에 대해 `oc describe...`와 이벤트를 이어서 확인합니다.",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "cli_tools",
+          "section": "oc adm ocp-certificates monitor-certificates",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-adm-ocp-certificates-monitor-certificates",
+          "cli_commands": [
+            "oc adm ocp-certificates monitor-certificates"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc adm ocp-certificates monitor-certificates` 결과에서 무엇을 확인해야 해?",
+        "`oc adm ocp-certificates monitor-certificates`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "oc adm ocp-certificates monitor-certificates 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-rbac-admin-001",
+      "parent_id": "",
+      "query": "특정 namespace에 admin 권한을 주려면 어떤 명령을 써야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "admin",
+        "-n"
+      ],
+      "expected_citation_terms": [
+        "admin"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 206,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 특정 프로젝트 또는 namespace에만 `admin` 권한을 주려면 먼저 아래 명령으로 로컬 역할 바인딩을 추가합니다. [1]\n\n예를 들어 `joe` 프로젝트의 `alice` 사용자에게 `admin` 역할을 주려면 아래처럼 실행하면 됩니다. [1]\n\n```bash\noc adm policy add-role-to-user admin alice -n joe\n```",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "authentication_and_authorization",
+          "section": "사용자 역할 추가",
+          "viewer_path": "/docs/ocp/4.20/ko/authentication_and_authorization/index.html#adding-roles_using-rbac",
+          "cli_commands": [
+            "oc adm",
+            "oc adm policy",
+            "oc adm policy add-role-to-user <role> <user> -n <project>",
+            "oc adm policy add-role-to-user admin alice -n joe",
+            "oc describe rolebinding.rbac -n <project>",
+            "oc describe rolebinding.rbac -n joe"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc adm`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "`oc adm policy` 명령은 언제 쓰면 돼?",
+        "`oc adm policy` 결과에서 무엇을 확인해야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-top-nodes-001",
+      "parent_id": "",
+      "query": "클러스터 전체 노드 CPU와 메모리 사용량을 한 번에 확인하는 명령은 뭐야?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc adm top nodes"
+      ],
+      "expected_citation_terms": [
+        "oc adm top nodes"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 230,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: `oc adm top nodes`는 클러스터 전체 노드의 CPU와 메모리 사용량을 빠르게 훑어볼 때 먼저 쓰는 명령입니다. [1]\n\n노드 과부하, 리소스 불균형, 드레인이나 점검 전에 현재 사용량을 확인해야 할 때 유용합니다. [1] 특정 노드만 보고 싶으면 `oc adm top node <node-name>` 형태로 좁혀서 확인하면 됩니다. [1]\n\n```bash\noc adm top nodes\n```",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "support",
+          "section": "노드 상태, 리소스 사용량 및 구성 확인",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#reviewing-node-status-use-and-configuration_verifying-node-health",
+          "cli_commands": [
+            "oc get nodes",
+            "oc adm top nodes",
+            "oc adm top node my-node",
+            "oc"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc adm top nodes` 결과에서 무엇을 확인해야 해?",
+        "`oc adm top nodes`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "노드 상태, 리소스 사용량 및 구성 확인 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-node-drain-001",
+      "parent_id": "",
+      "query": "작업자 노드 점검 전에 비우는 drain 명령 예시와 주의점을 알려줘",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_procedure",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc adm drain"
+      ],
+      "expected_citation_terms": [
+        "oc adm drain"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 174,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 점검 전에는 아래 명령으로 해당 노드를 안전하게 drain 하면 됩니다. [1]\n\n```bash\noc adm drain\n```\n\n`--ignore-daemonsets` 사용 여부와 `--delete-emptydir-data`로 인한 로컬 데이터 삭제 영향을 먼저 확인한 뒤 drain 해야 합니다. [1]",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "nodes",
+          "section": "노드를 정상적으로 재부팅",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-nodes-rebooting-gracefully_nodes-nodes-rebooting",
+          "cli_commands": [
+            "oc adm drain <node1> --ignore-daemonsets --delete-emptydir-data --force --disable-eviction",
+            "oc debug node/<node1>",
+            "oc login",
+            "oc adm",
+            "oc adm cordon <node1>",
+            "oc adm drain <node1> --ignore-daemonsets --delete-emptydir-data --force",
+            "oc",
+            "oc adm uncordon <node1>",
+            "oc get node <node1>"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "노드를 정상적으로 재부팅 기준으로 다음 확인 단계는 뭐야?",
+        "노드를 정상적으로 재부팅 절차에서 흔한 실패 지점은 뭐야?",
+        "노드를 정상적으로 재부팅 내용을 초보자용 3단계로 다시 정리해줘"
+      ]
+    },
+    {
+      "case_id": "pbs-etcd-backup-001",
+      "parent_id": "",
+      "query": "etcd 백업은 실제로 어떤 절차로 해야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_procedure",
+      "route_kind": "official",
+      "must_include_terms": [
+        "cluster-backup.sh"
+      ],
+      "expected_citation_terms": [
+        "cluster-backup.sh"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 264,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: etcd 백업은 컨트롤 플레인 노드에서 아래 순서로 진행하면 됩니다. [1]\n\n1. 디버그 세션을 시작합니다.\n\n```bash\noc debug --as-root node/<node_name>\n```\n\n2. 호스트 루트로 전환합니다.\n\n3. 백업 스크립트를 실행합니다.\n\n```bash\n/usr/local/bin/cluster-backup.sh /home/core/assets/backup\n```\n\n백업 파일은 단일 컨트롤 플레인 호스트에서만 저장해야 합니다.",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "postinstallation_configuration",
+          "section": "etcd 데이터 백업",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#backing-up-etcd-data_post-install-cluster-tasks",
+          "cli_commands": [
+            "etcdctl snapshot save",
+            "/usr/local/bin/cluster-backup.sh /home/core/assets/backup",
+            "oc get proxy cluster -o yaml",
+            "oc debug --as-root node/<node_name>"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`etcdctl snapshot save`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "`/usr/local/bin/cluster-backup.sh /home/core/assets/backup` 명령은 언제 쓰면 돼?",
+        "`/usr/local/bin/cluster-backup.sh /home/core/assets/backup` 결과에서 무엇을 확인해야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-etcd-restore-followup-001",
+      "parent_id": "",
+      "query": "그 복구는 어떻게 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "follow_up",
+      "route_kind": "official",
+      "must_include_terms": [
+        "복원"
+      ],
+      "expected_citation_terms": [
+        "복원"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 836,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:복원",
+        "missing_required_term:복원"
+      ],
+      "pass": false,
+      "answer_preview": "답변: etcd quorum 손실로 인해 클러스터가 오프라인 상태라면 `quorum-restore.sh` 스크립트를 사용하여 복구를 진행하십시오. 복구 후에는 OpenShift Container Platform API가 다시 읽기/쓰기(read/write) 모드로 전환됩니다. [1]\n\n복구를 시작하기 전, 현재 etcd 상태를 확인하기 위해 다음 순서로 명령을 실행하십시오.\n\n1. 실행 중인 etcd 포드 확인\n\n```bash\noc get pods -n open",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "backup_and_restore",
+          "section": "Restoring etcd quorum for high availability clusters",
+          "viewer_path": "/docs/ocp/4.20/ko/backup_and_restore/index.html#dr-restoring-etcd-quorum-ha_dr-quorum-restoration",
+          "cli_commands": [
+            "oc get pods -n openshift-etcd -l app=etcd --field-selector=\"status.phase==Running\"",
+            "oc exec -n openshift-etcd <etcd-pod> -c etcdctl -- etcdctl endpoint status -w table",
+            "oc get nodes -o jsonpath='{range .items[*]}[{.metadata.name},{.status.addresses[?(@.type==\"InternalIP\")].address}]{end}'",
+            "oc get machines -n openshift-machine-api -o wide",
+            "oc delete machine -n openshift-machine-api clustername-8qw5l-master-0",
+            "oc adm wait-for-stable-cluster",
+            "oc patch etcd cluster -p='{\"spec\": {\"forceRedeploymentReason\": \"recovery-'\"$(date --rfc-3339=ns )\"'\"}}' --type=merge"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc exec -n openshift-etcd <etcd-pod> -c etcdctl -- etcdctl endpoint status -w...` 결과에서 무엇을 확인해야 해?",
+        "`oc exec -n openshift-etcd <etcd-pod> -c etcdctl -- etcdctl endpoint status -w...`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "Restoring etcd quorum for high availability clusters 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-route-ingress-001",
+      "parent_id": "",
+      "query": "Route와 Ingress 연결 문제를 점검할 때 먼저 확인할 절차를 알려줘",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_explain",
+      "route_kind": "official",
+      "must_include_terms": [
+        "Route"
+      ],
+      "expected_citation_terms": [
+        "Route"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 691,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: Ingress 컨트롤러의 엔드포인트 게시 전략을 수정하는 명령을 가장 먼저 실행하십시오. 명령 실행 후에는 Ingress 컨트롤러의 설정 상태가 의도한 대로 반영되었는지 YAML 출력을 통해 확인해야 합니다. [1]\n\n**점검 및 설정 절차**\n\n1. Ingress 컨트롤러의 게시 전략을 LoadBalancerService 및 Internal 범위로 패치합니다.\n\n```bash\noc -n openshift-ingress-operator patch ingr",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "ingress_and_load_balancing",
+          "section": "Ingress 컨트롤러 끝점에서 내부로 게시 범위 구성",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingresscontroller-change-internal_nw-configuring-ingress-controller-endpoint-publishing-strategy",
+          "cli_commands": [
+            "oc -n openshift-ingress-operator patch ingresscontrollers/default --type=merge --patch='{\"spec\":{\"endpointPublishingStrategy\":{\"type\":\"LoadBalancerService\",\"loadBalancer\":{\"scope\":\"Internal\"}}}}'",
+            "oc -n openshift-ingress-operator get ingresscontrollers/default -o yaml",
+            "oc",
+            "oc -n openshift-ingress delete services/router-default"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc -n openshift-ingress-operator patch ingresscontrollers/default --type=merg...` 결과에서 Route와 Service 연결을 어떻게 확인해?",
+        "Service endpoint가 비어 있으면 다음에 무엇을 봐야 해?",
+        "Route TLS와 timeout 설정은 어디서 확인해?"
+      ]
+    },
+    {
+      "case_id": "pbs-operator-degraded-001",
+      "parent_id": "",
+      "query": "Operator가 Degraded일 때 CSV와 Subscription 상태를 어떻게 확인해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "Operator"
+      ],
+      "expected_citation_terms": [
+        "Subscription"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 288,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: Operator가 `Degraded`이면 설치 카탈로그를 다시 훑기보다, 같은 네임스페이스의 OLM 상태 객체를 먼저 확인합니다. [1]\n\n1. Subscription이 어떤 CSV를 요구하고 있는지 확인합니다. [1]\n\n2. 실제 설치 단위인 CSV와 InstallPlan이 실패했는지 이어서 봅니다. [1]\n\n3. 특정 CSV가 보이면 describe로 `Conditions`, `Message`, `Reason`을 확인해서 권한, 의존성, 이미지 pul",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "postinstallation_configuration",
+          "section": "CLI를 사용하여 소프트웨어 카탈로그에서 설치",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#olm-installing-operator-from-software-catalog-using-cli_post-install-preparing-for-users",
+          "cli_commands": [
+            "oc describe subscription <subscription_name> -n <namespace>",
+            "oc",
+            "oc get packagemanifests -n openshift-marketplace",
+            "oc describe packagemanifests <operator_name> -n openshift-marketplace",
+            "oc get packagemanifests <operator_name> -n <catalog_namespace> -o yaml",
+            "oc get packagemanifest \\",
+            "oc get packagemanifest",
+            "oc describe packagemanifest",
+            "oc apply -f operatorgroup.yaml",
+            "oc apply -f subscription.yaml",
+            "oc describe operatorgroup <operatorgroup_name> -n <namespace>"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc` 결과에서 무엇을 확인해야 해?",
+        "`oc`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "CLI를 사용하여 소프트웨어 카탈로그에서 설치 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-mco-state-001",
+      "parent_id": "",
+      "query": "Machine Config Operator 상태를 먼저 확인하는 명령을 알려줘",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "Machine Config Operator"
+      ],
+      "expected_citation_terms": [
+        "Machine Config"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 337,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:Machine Config",
+        "missing_required_term:Machine Config Operator"
+      ],
+      "pass": false,
+      "answer_preview": "답변: `CLI를 사용하여 Operator 서브스크립션 상태 보기` 절차 기준으로 가장 먼저 아래 명령으로 시작하면 됩니다. [1]\n\n```bash\noc get subs -n <operator_namespace>\n```\n\n질문이 첫 단계 확인형이므로 뒤 단계 명령보다 이 명령을 먼저 확인하면 됩니다. [1]\n\n첫 단계가 끝나면 같은 절차의 다음 명령으로 이어가면 됩니다. [1]\n\n실행 후에는 oc get subs -n <operator_namespace>; oc",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "operators",
+          "section": "CLI를 사용하여 Operator 서브스크립션 상태 보기",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-status-viewing-cli_olm-troubleshooting-operator-issues",
+          "cli_commands": [
+            "oc get subs -n <operator_namespace>",
+            "oc describe",
+            "oc describe sub <subscription_name> -n <operator_namespace>",
+            "oc"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc get subs -n <operator_namespace>` 명령은 언제 쓰면 돼?",
+        "`oc get subs -n <operator_namespace>` 결과에서 무엇을 확인해야 해?",
+        "`oc get subs -n <operator_namespace>`가 실패하면 다음에 어떤 근거를 봐야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-node-ready-mco-001",
+      "parent_id": "",
+      "query": "노드가 Ready가 아니거나 머신컨피그 적용이 늦을 때 어디부터 봐야 하나?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "노드"
+      ],
+      "expected_citation_terms": [
+        "node"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 312,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 노드 Ready 문제나 머신컨피그 적용 지연은 먼저 MCO/MCP 상태와 실제 노드 상태를 같이 맞춰 봐야 합니다. [1]\n\n1. Machine Config Operator 자체가 `Available/Progressing/Degraded` 중 어디에 있는지 봅니다. [1]\n\n2. 어떤 MachineConfigPool이 업데이트 중이거나 degraded인지 확인합니다. [1]\n\n3. MCP가 특정 노드에서 멈춘다면 해당 노드 상태와 이벤트를 같이 확인해서 ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "machine_configuration",
+          "section": "Checking machine config pool status",
+          "viewer_path": "/docs/ocp/4.20/ko/machine_configuration/index.html#checking-mco-status_machine-config-overview",
+          "cli_commands": [
+            "oc describe mcp worker",
+            "oc",
+            "oc get machineconfigpool",
+            "oc get mcp",
+            "oc get machineconfigs",
+            "oc describe machineconfigs 01-master-kubelet",
+            "oc create -f./myconfig.yaml",
+            "oc delete -f ./myconfig.yaml"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc` 명령은 언제 쓰면 돼?",
+        "`oc` 결과에서 무엇을 확인해야 해?",
+        "`oc`가 실패하면 다음에 어떤 근거를 봐야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-pod-pending-001",
+      "parent_id": "",
+      "query": "Pod가 Pending 상태일 때 원인을 어떤 순서로 좁혀야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "Pending"
+      ],
+      "expected_citation_terms": [
+        "FailedScheduling"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 345,
+      "citation_count": 2,
+      "cited_indices": [
+        1,
+        2
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:FailedScheduling"
+      ],
+      "pass": false,
+      "answer_preview": "답변: Pod가 `Pending`이면 가장 먼저 해당 Pod의 `Events`에서 `FailedScheduling` 같은 예약 실패 이유를 확인하면 됩니다. [1][2]\n\n1. `oc describe pod <pod-name> -n <pod-namespace>`로 `Events`를 보고 어떤 이유가 반복되는지 먼저 봅니다. [1]\n2. `작업자 노드 설치 문제 조사`처럼 node affinity, selector, taint/toleration 같은 스케줄링 제",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "support",
+          "section": "etcd 설치 문제 조사",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#investigating-etcd-installation-issues_troubleshooting-installations",
+          "cli_commands": [
+            "oc get pods -n openshift-etcd-operator",
+            "oc describe pod/<pod_name> -n <namespace>",
+            "oc logs pod/<pod_name> -n <namespace>",
+            "oc",
+            "oc get pods -n openshift-etcd",
+            "oc logs pod/<pod_name> -c <container_name> -n <namespace>",
+            "oc adm must gather"
+          ]
+        },
+        {
+          "index": 2,
+          "book_slug": "support",
+          "section": "작업자 노드 설치 문제 조사",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#investigating-worker-node-installation-issues_troubleshooting-installations",
+          "cli_commands": [
+            "oc get pods -n openshift-machine-api",
+            "oc describe pod/<machine_api_operator_pod_name> -n openshift-machine-api",
+            "oc",
+            "oc get nodes",
+            "oc describe node <worker_node>",
+            "oc logs pod/<machine_api_operator_pod_name> -n openshift-machine-api -c machine-api-operator",
+            "oc logs pod/<machine_api_operator_pod_name> -n openshift-machine-api -c kube-rbac-proxy",
+            "oc adm node-logs --role=worker -u kubelet",
+            "oc adm must gather",
+            "oc adm node-logs --role=worker -u crio",
+            "oc adm node-logs --role=worker --path=sssd",
+            "oc adm node-logs --role=worker --path=sssd/sssd.log"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "etcd 설치 문제 조사 기준으로 다음 확인 단계는 뭐야?",
+        "etcd 설치 문제 조사 절차에서 흔한 실패 지점은 뭐야?",
+        "etcd 설치 문제 조사 내용을 초보자용 3단계로 다시 정리해줘"
+      ]
+    },
+    {
+      "case_id": "pbs-crashloop-001",
+      "parent_id": "",
+      "query": "CrashLoopBackOff Pod는 무엇부터 확인해야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "CrashLoopBackOff"
+      ],
+      "expected_citation_terms": [
+        "oc logs"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 464,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: `CrashLoopBackOff`는 먼저 현재 Pod 상태와 이벤트를 확인한 뒤, 컨테이너 로그와 이전 종료 원인을 보는 순서로 좁히면 됩니다. [1]\n\n1. 이벤트와 최근 종료 이유를 먼저 확인합니다. [1]\n```bash\noc describe pod/my-app-1-akdlg\n```\n\n2. 애플리케이션 로그를 확인해 시작 실패, 설정 오류, 프로브 실패, 이미지 문제 중 어디에 가까운지 봅니다. [1]\n```bash\noc logs -f pod/my-a",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "support",
+          "section": "애플리케이션 오류 조사를 위한 애플리케이션 진단 데이터 수집",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#gathering-application-diagnostic-data_troubleshooting-s2i",
+          "cli_commands": [
+            "oc",
+            "oc describe pod/my-app-1-akdlg",
+            "oc logs -f pod/my-app-1-akdlg",
+            "oc exec my-app-1-akdlg -- cat /var/log/my-application.log",
+            "oc debug dc/my-deployment-configuration --as-root -- cat /var/log/my-application.log",
+            "oc debug dc/<deployment_configuration> --as-root",
+            "oc exec -it my-app-1-akdlg /bin/bash",
+            "oc debug node/my-cluster-node"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc describe pod/my-app-1-akdlg`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "애플리케이션 오류 조사를 위한 애플리케이션 진단 데이터 수집 기준으로 다음 확인 단계는 뭐야?",
+        "애플리케이션 오류 조사를 위한 애플리케이션 진단 데이터 수집 절차에서 흔한 실패 지점은 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-disconnected-registry-001",
+      "parent_id": "",
+      "query": "연결이 끊긴 환경에서 미러 레지스트리 설정을 어떻게 점검해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_procedure",
+      "route_kind": "official",
+      "must_include_terms": [
+        "미러"
+      ],
+      "expected_citation_terms": [
+        "mirror"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 199,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 문서 근거 기준으로 먼저 핵심만 정리하면 다음과 같습니다. [1]\n\n- oc-mirror OpenShift CLI 플러그인을 설치하여 연결이 끊긴 환경에서 이미지 세트를 관리합니다. [1]\n\n초보자 기준으로는 이 개념이 어떤 리소스를 다루는지, 어떤 명령으로 상태를 확인하는지, 문제가 났을 때 어떤 이벤트/조건을 봐야 하는지 순서로 읽으면 됩니다.",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "disconnected_environments",
+          "section": "oc-mirror OpenShift CLI 플러그인 설치",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#installation-oc-mirror-installing-plugin_installing-mirroring-disconnected",
+          "cli_commands": [
+            "oc",
+            "oc mirror help"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc mirror help` 결과에서 무엇을 확인해야 해?",
+        "`oc mirror help`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "`oc` 명령은 언제 쓰면 돼?"
+      ]
+    },
+    {
+      "case_id": "pbs-network-mtu-001",
+      "parent_id": "",
+      "query": "클러스터 네트워크 MTU 변경 전후에는 어떤 검증을 해야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "ops_procedure",
+      "route_kind": "official",
+      "must_include_terms": [
+        "MTU"
+      ],
+      "expected_citation_terms": [
+        "MTU"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 725,
+      "citation_count": 2,
+      "cited_indices": [
+        1,
+        2
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: MTU 변경 작업 중에는 머신 구성 풀(MachineConfigPool)의 상태를 확인하여 모든 노드가 성공적으로 업데이트되었는지 검증해야 합니다. 각 머신 구성 풀의 노드가 하나씩 재부팅되며 업데이트를 진행하므로, 모든 노드가 완료될 때까지 기다린 후 다음 단계를 수행하십시오. [1]\n\n**1. 머신 구성 풀 상태 확인**\n모든 노드가 업데이트를 완료했는지 확인하기 위해 머신 구성 풀의 상태를 조회합니다.\n\n```bash\noc get machinecon",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "advanced_networking",
+          "section": "MTU 마이그레이션 완료",
+          "viewer_path": "/docs/ocp/4.20/ko/advanced_networking/index.html#nw-cluster-mtu-finalizing-migration_changing-cluster-network-mtu",
+          "cli_commands": [
+            "oc get machineconfigpools",
+            "oc patch Network.operator.openshift.io cluster --type=merge --patch \\",
+            "oc describe network.config cluster",
+            "oc get nodes",
+            "oc adm node-logs <node> -u ovs-configuration | grep configure-ovs.sh | grep mtu | grep <interface> | head -1"
+          ]
+        },
+        {
+          "index": 2,
+          "book_slug": "advanced_networking",
+          "section": "클러스터 네트워크 MTU 변경",
+          "viewer_path": "/docs/ocp/4.20/ko/advanced_networking/index.html#nw-cluster-mtu-change_changing-cluster-network-mtu",
+          "cli_commands": [
+            "oc"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc patch Network.operator.openshift.io cluster --type=merge --patch \\` 결과에서 무엇을 확인해야 해?",
+        "`oc patch Network.operator.openshift.io cluster --type=merge --patch \\`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "MTU 마이그레이션 완료 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-learn-openshift-k8s-001",
+      "parent_id": "",
+      "query": "OpenShift와 Kubernetes 차이를 신입한테 설명하듯 알려줘",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "learn",
+      "route_kind": "official",
+      "must_include_terms": [
+        "OpenShift",
+        "Kubernetes"
+      ],
+      "expected_citation_terms": [
+        "OpenShift"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 652,
+      "citation_count": 2,
+      "cited_indices": [
+        1,
+        2
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "answer_code_not_visible_in_citations"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 오픈시프트(OpenShift) Container Platform은 Kubernetes를 기초로 하는 클라우드 기반 컨테이너 플랫폼입니다. [1] 두 기술의 핵심 차이는 다음과 같습니다.\n\n* **공통 기반**: OpenShift의 API는 100% Kubernetes이며, 두 플랫폼 간에 실행되는 컨테이너나 애플리케이션은 변경 없이 동일하게 동작합니다. [2] * **추가 기능**: Kubernetes는 애플리케이션 관리에 뛰어나지만 플랫폼 수준의 요구사",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "architecture",
+          "section": "아키텍처 개요",
+          "viewer_path": "/docs/ocp/4.20/ko/architecture/index.html#architecture-overview",
+          "cli_commands": []
+        },
+        {
+          "index": 2,
+          "book_slug": "overview",
+          "section": "Kubernetes 개념 가이드라인",
+          "viewer_path": "/docs/ocp/4.20/ko/overview/index.html#kubernetes-conceptual-guidelines_kubernetes-overview",
+          "cli_commands": [
+            "oc",
+            "kubectl"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc` 결과에서 무엇을 확인해야 해?",
+        "`oc`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "`kubectl` 명령은 언제 쓰면 돼?"
+      ]
+    },
+    {
+      "case_id": "pbs-learn-operator-001",
+      "parent_id": "",
+      "query": "Operator가 왜 필요한지 예시까지 설명해줘",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "learn",
+      "route_kind": "official",
+      "must_include_terms": [
+        "Operator"
+      ],
+      "expected_citation_terms": [
+        "Operator"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 590,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "command_query_missing_grounded_command"
+      ],
+      "pass": false,
+      "answer_preview": "답변: Operator는 클러스터 내의 소프트웨어를 설치, 업데이트 및 관리하는 자동화된 운영 도구입니다.\n\nOperator는 특정 애플리케이션이나 서비스의 복잡한 운영 지식을 코드로 구현하여, 사람이 직접 수행해야 하는 관리 작업을 자동화하는 데 사용됩니다. 운영자는 Operator를 통해 애플리케이션의 생명주기를 관리하며, 이는 클러스터의 안정적인 유지보수를 의미합니다. [1]\n\n실제 운영 맥락에서의 차이는 다음과 같습니다:\n\n* **기본 클러스터 관리**:",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "support",
+          "section": "Operator 서브스크립션 상태 유형",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#olm-status-conditions_troubleshooting-operator-issues",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "Operator 서브스크립션 상태 유형 내용을 초보자용 3단계로 다시 정리해줘",
+        "Operator 서브스크립션 상태 유형 기준으로 다음 확인 단계는 뭐야?",
+        "Operator 서브스크립션 상태 유형 절차에서 흔한 실패 지점은 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-learn-mco-001",
+      "parent_id": "",
+      "query": "Machine Config Operator가 뭐고 건드리면 뭐가 바뀌는지 설명해줘",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_cases.jsonl",
+      "query_type": "learn",
+      "route_kind": "official",
+      "must_include_terms": [
+        "Machine Config Operator",
+        "노드"
+      ],
+      "expected_citation_terms": [
+        "Machine Config"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 964,
+      "citation_count": 2,
+      "cited_indices": [
+        1,
+        2
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: Machine Config Operator(MCO)는 OpenShift 노드의 운영체제(OS)와 클러스터 설정을 통합하여 관리하는 구성 요소입니다. [1][2]\n\n**개념 및 운영상 의미**\n* **정의:** MCO는 systemd, CRI-O, Kubelet, 커널, Network Manager 등 시스템 기능의 업데이트를 관리하며, `MachineConfig` CRD를 통해 호스트에 설정 파일을 작성합니다. [1]\n* **실제 사용 맥락:** 클러스터",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "machine_configuration",
+          "section": "Machine config overview",
+          "viewer_path": "/docs/ocp/4.20/ko/machine_configuration/index.html#machine-config-overview_machine-config-overview",
+          "cli_commands": []
+        },
+        {
+          "index": 2,
+          "book_slug": "machine_configuration",
+          "section": "About the Machine Config Operator",
+          "viewer_path": "/docs/ocp/4.20/ko/machine_configuration/index.html#about-machine-config-operator_machine-config-overview",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "About the Machine Config Operator 절차에서 흔한 실패 지점은 뭐야?",
+        "About the Machine Config Operator 내용을 초보자용 3단계로 다시 정리해줘",
+        "Machine config overview 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-auth-login-001",
+      "parent_id": "",
+      "query": "oc login이 실패할 때 토큰이나 서버 URL 문제를 먼저 어떻게 확인해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc login"
+      ],
+      "expected_citation_terms": [
+        "oc login"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 244,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 이 질문은 명령어 확인 요청이므로, 먼저 실행할 명령은 아래입니다. [1]\n\n```bash\noc login\noc login --token=<token>\noc apply -f </path/to/CR>\noc apply\n```\n\n확인 기준:\n- 명령 출력에서 현재 namespace, 대상 리소스 이름, 상태 컬럼을 먼저 봅니다. [1]\n- 오류가 나오면 같은 리소스에 대해 `oc describe...`와 이벤트를 이어서 확인합니다.",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "authentication_and_authorization",
+          "section": "클러스터에 ID 공급자 추가",
+          "viewer_path": "/docs/ocp/4.20/ko/authentication_and_authorization/index.html#add-identity-provider_configuring-oidc-identity-provider",
+          "cli_commands": [
+            "oc login",
+            "oc login --token=<token>",
+            "oc apply -f </path/to/CR>",
+            "oc apply",
+            "oc login -u <identity_provider_username> --server=<api_server_url_and_port>",
+            "oc whoami"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "클러스터에 ID 공급자 추가 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc login` 명령은 언제 쓰면 돼?",
+        "`oc login` 결과에서 무엇을 확인해야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-rbac-can-i-001",
+      "parent_id": "",
+      "query": "현재 사용자가 특정 namespace에서 pods를 delete 할 수 있는지 확인하는 명령은?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "can-i",
+        "delete",
+        "pods"
+      ],
+      "expected_citation_terms": [
+        "can-i"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 331,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 현재 사용자의 namespace 권한은 `oc auth can-i`로 먼저 확인하면 됩니다. [1]\n\n```bash\noc auth can-i\n```\n\nPod 삭제 권한을 확인할 때는 이 명령의 verb/resource 자리에 `delete pods`를, namespace 범위에는 `-n <namespace>`를 적용해서 판단하면 됩니다. [1]\n\n`yes`면 현재 사용자에게 해당 namespace의 Pod 삭제 권한이 있고, `no`면 RoleBindin",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "cli_tools",
+          "section": "oc auth can-i",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-auth-can-i",
+          "cli_commands": [
+            "oc auth can-i create pods --all-namespaces # Check to see if I can list deployments in my current namespace oc auth can-i list deployments.apps # Check to see if service account \"foo\" of namespace \"dev\" can list pods in the namespace \"prod\"",
+            "oc auth can-i create pods --all-namespaces",
+            "oc auth can-i list deployments.apps",
+            "oc auth can-i list pods --as=system:serviceaccount:dev:foo -n prod",
+            "oc auth can-i '*' '*'",
+            "oc auth can-i list jobs.batch/bar -n foo",
+            "oc auth can-i get pods --subresource=log",
+            "oc auth can-i get /logs/",
+            "oc auth can-i approve certificates.k8s.io",
+            "oc auth can-i --list --namespace=foo"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc auth can-i create pods --all-namespaces` 명령은 언제 쓰면 돼?",
+        "`oc auth can-i create pods --all-namespaces` 결과에서 무엇을 확인해야 해?",
+        "`oc auth can-i create pods --all-namespaces`가 실패하면 다음에 어떤 근거를 봐야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-rbac-bind-view-001",
+      "parent_id": "",
+      "query": "개발자에게 특정 프로젝트 view 권한만 주려면 어떤 식으로 줘?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "view",
+        "-n"
+      ],
+      "expected_citation_terms": [
+        "view"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 260,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 특정 프로젝트에만 `view` 권한을 주려면 namespace 범위 RoleBinding으로 묶어야 합니다. [1]\n\n`<role>` 자리에 `view`, `<project>` 자리에 대상 프로젝트 namespace를 넣어 프로젝트 범위로 제한합니다. [1]\n\n확인할 때는 같은 namespace의 RoleBinding을 봅니다. [1]\n\n클러스터 전체 권한을 주지 말고, 프로젝트 단위 `-n <namespace>` 범위를 유지하는 것이 핵심입니다. [1]",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "authentication_and_authorization",
+          "section": "로컬 역할 생성",
+          "viewer_path": "/docs/ocp/4.20/ko/authentication_and_authorization/index.html#creating-local-role_using-rbac",
+          "cli_commands": [
+            "oc create role podview --verb=get --resource=pod -n blue",
+            "oc adm policy add-role-to-user podview user2 --role-namespace=blue -n blue",
+            "oc create role <name> --verb=<verb> --resource=<resource> -n <project>"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc adm policy add-role-to-user podview user2 --role-namespace=blue -n blue` 결과에서 무엇을 확인해야 해?",
+        "`oc adm policy add-role-to-user podview user2 --role-namespace=blue -n blue`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "로컬 역할 생성 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-route-timeout-001",
+      "parent_id": "",
+      "query": "Route timeout이 의심될 때 어느 설정을 먼저 봐야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "Route"
+      ],
+      "expected_citation_terms": [
+        "timeout"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 307,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:timeout"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 문서 근거 기준으로 먼저 핵심만 정리하면 다음과 같습니다. [1]\n\n- oc expose service $ oc expose service nodejs-ex 출력 예 route.route.openshift.io/nodejs-ex exposed 서비스가 노출되었는지 확인하려면 다음 명령과 같은 툴을 사용하여 클러스터 외부에서 서비스에 액세스할 수 있는지 확인할 수 있습니다. [1]\n\n초보자 기준으로는 이 개념이 어떤 리소스를 다루는지, 어떤 명령으로 상태를",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "ingress_and_load_balancing",
+          "section": "경로를 생성하여 서비스 노출",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-exposing-service_configuring-ingress-cluster-traffic-ingress-controller",
+          "cli_commands": [
+            "oc expose service",
+            "oc expose service nodejs-ex",
+            "oc expose",
+            "oc project <project_name>",
+            "oc get route"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc expose service nodejs-ex` 결과에서 Route와 Service 연결을 어떻게 확인해?",
+        "경로를 생성하여 서비스 노출 기준으로 다음 확인 단계는 뭐야?",
+        "경로를 생성하여 서비스 노출 절차에서 흔한 실패 지점은 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-route-tls-001",
+      "parent_id": "",
+      "query": "Route TLS 인증서가 맞는지 확인할 때 어디부터 봐야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "TLS"
+      ],
+      "expected_citation_terms": [
+        "TLS"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 409,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 이 질문은 명령어 확인 요청이므로, 먼저 실행할 명령은 아래입니다. [1]\n\n```bash\noc create route\noc create route reencrypt --service=frontend --cert=tls.crt --key=tls.key --dest-ca-cert=destca.crt --ca-cert=ca.crt --hostname=www.example.com\noc create route reencrypt --help\noc create ro",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "ingress_and_load_balancing",
+          "section": "사용자 정의 인증서를 사용하여 재암호화 경로 생성",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-creating-a-reencrypt-route-with-a-custom-certificate_creating-advanced-routes",
+          "cli_commands": [
+            "oc create route",
+            "oc create route reencrypt --service=frontend --cert=tls.crt --key=tls.key --dest-ca-cert=destca.crt --ca-cert=ca.crt --hostname=www.example.com",
+            "oc create route reencrypt --help"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "Service endpoint가 비어 있으면 다음에 무엇을 봐야 해?",
+        "Route TLS와 timeout 설정은 어디서 확인해?",
+        "`oc create route reencrypt --service=frontend --cert=tls.crt --key=tls.key --d...` 결과에서 Route와 Service 연결을 어떻게 확인해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-service-route-001",
+      "parent_id": "",
+      "query": "서비스는 있는데 Route 접속이 안 될 때 service endpoint부터 어떻게 확인해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "Service"
+      ],
+      "expected_citation_terms": [
+        "Service"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 242,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 이 질문은 명령어 확인 요청이므로, 먼저 실행할 명령은 아래입니다. [1]\n\n```bash\noc get route\noc expose\noc project <project_name>\noc expose service\n```\n\n확인 기준:\n- 명령 출력에서 현재 namespace, 대상 리소스 이름, 상태 컬럼을 먼저 봅니다. [1]\n- 오류가 나오면 같은 리소스에 대해 `oc describe...`와 이벤트를 이어서 확인합니다.",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "ingress_and_load_balancing",
+          "section": "경로를 생성하여 서비스 노출",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-exposing-service_configuring-ingress-cluster-traffic-ingress-controller",
+          "cli_commands": [
+            "oc get route",
+            "oc expose",
+            "oc project <project_name>",
+            "oc expose service",
+            "oc expose service nodejs-ex"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc expose` 결과에서 Route와 Service 연결을 어떻게 확인해?",
+        "경로를 생성하여 서비스 노출 기준으로 다음 확인 단계는 뭐야?",
+        "경로를 생성하여 서비스 노출 절차에서 흔한 실패 지점은 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-dns-001",
+      "parent_id": "",
+      "query": "클러스터 DNS 문제가 의심되면 어떤 리소스 상태부터 확인해야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "DNS"
+      ],
+      "expected_citation_terms": [
+        "DNS"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 205,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:DNS",
+        "missing_required_term:DNS"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 아래 명령으로 진행하면 됩니다. [1]\n\nCLI를 사용하여 클러스터 노드의 상태 쿼리 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다. [1]\n\n```bash\noc get nodes\n```\n\n```bash\noc adm top nodes\n```\n\n실행 후에는 oc get nodes; oc adm top nodes 기준으로 결과를 확인하세요. [1]",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "validation_and_troubleshooting",
+          "section": "CLI를 사용하여 클러스터 노드의 상태 쿼리",
+          "viewer_path": "/docs/ocp/4.20/ko/validation_and_troubleshooting/index.html#querying-the-status-of-cluster-nodes-using-the-cli_validating-an-installation",
+          "cli_commands": [
+            "oc get nodes",
+            "oc",
+            "oc adm top nodes"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc` 결과에서 무엇을 확인해야 해?",
+        "`oc`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "CLI를 사용하여 클러스터 노드의 상태 쿼리 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-networkpolicy-001",
+      "parent_id": "",
+      "query": "NetworkPolicy 때문에 Pod 통신이 막힌 건지 확인하려면 뭘 봐야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_explain",
+      "route_kind": "official",
+      "must_include_terms": [
+        "NetworkPolicy"
+      ],
+      "expected_citation_terms": [
+        "NetworkPolicy"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 255,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:NetworkPolicy",
+        "missing_required_term:NetworkPolicy"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 이 질문은 명령어 확인 요청이므로, 먼저 실행할 명령은 아래입니다. [1]\n\n```bash\noc get Pods\noc get Pods 다음 표에는 Pod 오류 상태 및 설명이 기재되어 있습니다. Expand Pod 오류 상태 | 설명\n```\n\n확인 기준:\n- 명령 출력에서 현재 namespace, 대상 리소스 이름, 상태 컬럼을 먼저 봅니다. [1]\n- 오류가 나오면 같은 리소스에 대해 `oc describe...`와 이벤트를 이어서 확인합니다.",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "support",
+          "section": "Pod 오류 상태 이해",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#understanding-pod-error-states_investigating-pod-issues",
+          "cli_commands": [
+            "oc get Pods"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc get Pods` 명령은 언제 쓰면 돼?",
+        "`oc get Pods` 결과에서 무엇을 확인해야 해?",
+        "`oc get Pods`가 실패하면 다음에 어떤 근거를 봐야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-egress-001",
+      "parent_id": "",
+      "query": "외부 API로 나가는 egress 통신이 막힐 때 어떤 설정을 봐야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "egress"
+      ],
+      "expected_citation_terms": [
+        "egress"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 498,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 문서 근거 기준으로 먼저 핵심만 정리하면 다음과 같습니다. [1]\n\n- apiVersion: operator.openshift.io/v1alpha1 kind: ExternalSecretsConfig metadata: name: cluster spec: controllerConfig: networkPolicies: - componentName: ExternalSecretsCoreController egress: # Allow egress to Kuberne",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "security_and_compliance",
+          "section": "특정 공급자로의 송신을 허용하는 사용자 정의 네트워크 정책 추가",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#external-secrets-operator-egress-specific-provider_external-secrets-operator-uninstall",
+          "cli_commands": [
+            "oc edit externalsecretsconfigs.operator.openshift.io cluster"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc edit externalsecretsconfigs.operator.openshift.io cluster`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "특정 공급자로의 송신을 허용하는 사용자 정의 네트워크 정책 추가 기준으로 다음 확인 단계는 뭐야?",
+        "특정 공급자로의 송신을 허용하는 사용자 정의 네트워크 정책 추가 절차에서 흔한 실패 지점은 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-imagepull-001",
+      "parent_id": "",
+      "query": "ImagePullBackOff가 뜰 때 pull secret과 registry 쪽을 어떤 순서로 확인해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "ImagePullBackOff"
+      ],
+      "expected_citation_terms": [
+        "pull"
+      ],
+      "response_kind": "clarification",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 208,
+      "citation_count": 0,
+      "cited_indices": [],
+      "warning_count": 1,
+      "suggestion_count": 3,
+      "failures": [
+        "low_confidence_for_seeded_question",
+        "missing_citation_term:pull",
+        "missing_required_term:ImagePullBackOff",
+        "unexpected_clarification"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 지금 질문은 현재 공식 문서 근거와 정확히 맞물리는 점수가 낮습니다.\n엉뚱한 절차를 단정하지 않도록, 대상 리소스나 증상, 하고 싶은 작업을 한 단계만 더 좁혀 주세요.\n\n이런 식으로 물어보면 더 정확히 안내할 수 있습니다.\n- oc secrets link 기준으로 먼저 확인할 절차를 알려줘\n- oc secrets link에서 상태 확인 명령과 판단 기준을 알려줘",
+      "citation_preview": [],
+      "suggested_queries": [
+        "워크로드에 풀 시크릿 사용 기준으로 설명해줘",
+        "Pod 오류 상태 이해 기준으로 설명해줘",
+        "CLI를 사용하여 Operator 카탈로그 소스 상태 보기 기준으로 설명해줘"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-allowed-registries-001",
+      "parent_id": "",
+      "query": "허용된 registry만 쓰도록 제한하는 설정은 어디서 확인해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_procedure",
+      "route_kind": "official",
+      "must_include_terms": [
+        "registry"
+      ],
+      "expected_citation_terms": [
+        "registry"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 342,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:registry",
+        "missing_required_term:registry"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 아래 명령으로 진행하면 됩니다. [1]\n\nCLI를 사용하여 Operator 카탈로그 소스 상태 보기 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다. [1]\n\n```bash\noc describe\n```\n\n```bash\noc describe pod example-catalog-bwt8z -n openshift-marketplace\n```\n\n실행 후에는 oc get catalogsources -n openshift-marketplace; oc d",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "operators",
+          "section": "CLI를 사용하여 Operator 카탈로그 소스 상태 보기",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-cs-status-cli_olm-status",
+          "cli_commands": [
+            "oc describe",
+            "oc describe pod example-catalog-bwt8z -n openshift-marketplace",
+            "oc",
+            "oc get catalogsources -n openshift-marketplace",
+            "oc describe catalogsource example-catalog -n openshift-marketplace",
+            "oc get pods -n openshift-marketplace"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "CLI를 사용하여 Operator 카탈로그 소스 상태 보기 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc describe` 명령은 언제 쓰면 돼?",
+        "`oc describe` 결과에서 무엇을 확인해야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-internal-registry-001",
+      "parent_id": "",
+      "query": "내부 image registry가 정상인지 확인할 때 operator와 storage 중 어디부터 봐?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_procedure",
+      "route_kind": "official",
+      "must_include_terms": [
+        "registry"
+      ],
+      "expected_citation_terms": [
+        "registry"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 367,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:registry",
+        "missing_required_term:registry"
+      ],
+      "pass": false,
+      "answer_preview": "답변: `CLI를 사용하여 Operator 카탈로그 소스 상태 보기` 절차 기준으로 가장 먼저 아래 명령으로 시작하면 됩니다. [1]\n\n```bash\noc get catalogsources -n openshift-marketplace\n```\n\n질문이 첫 단계 확인형이므로 뒤 단계 명령보다 이 명령을 먼저 확인하면 됩니다. [1]\n\n첫 단계가 끝나면 같은 절차의 다음 명령으로 이어가면 됩니다. [1]\n\n실행 후에는 oc get catalogsources -n op",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "operators",
+          "section": "CLI를 사용하여 Operator 카탈로그 소스 상태 보기",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-cs-status-cli_olm-troubleshooting-operator-issues",
+          "cli_commands": [
+            "oc get catalogsources -n openshift-marketplace",
+            "oc describe",
+            "oc describe catalogsource example-catalog -n openshift-marketplace",
+            "oc get pods -n openshift-marketplace",
+            "oc",
+            "oc describe pod example-catalog-bwt8z -n openshift-marketplace"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc get catalogsources -n openshift-marketplace` 명령은 언제 쓰면 돼?",
+        "`oc get catalogsources -n openshift-marketplace` 결과에서 무엇을 확인해야 해?",
+        "`oc get catalogsources -n openshift-marketplace`가 실패하면 다음에 어떤 근거를 봐야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-update-precheck-001",
+      "parent_id": "",
+      "query": "클러스터 업데이트 전에 ClusterOperator와 노드 상태를 어떤 순서로 점검해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_procedure",
+      "route_kind": "official",
+      "must_include_terms": [
+        "ClusterOperator"
+      ],
+      "expected_citation_terms": [
+        "ClusterOperator"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 208,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: ClusterOperator 전체 상태는 먼저 한 번에 보고, Degraded 항목만 describe로 좁힙니다. [1]\n\n`Available`, `Progressing`, `Degraded` 컬럼을 먼저 보고, `Degraded=True`인 Operator의 Conditions 메시지를 확인하면 업데이트 차단인지 구성 오류인지 빠르게 분리할 수 있습니다. [1]",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "registry",
+          "section": "Nutanix의 레지스트리 스토리지 구성",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#configuring-registry-storage-nutanix_configuring-registry-storage-nutanix",
+          "cli_commands": [
+            "oc get clusteroperator image-registry",
+            "oc get pod -n openshift-image-registry -l docker-registry=default",
+            "oc edit configs.imageregistry.operator.openshift.io"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "Nutanix의 레지스트리 스토리지 구성 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc get clusteroperator image-registry` 명령은 언제 쓰면 돼?",
+        "`oc get clusteroperator image-registry` 결과에서 무엇을 확인해야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-update-paused-mcp-001",
+      "parent_id": "",
+      "query": "MachineConfigPool이 paused 상태면 업데이트 전에 뭘 확인해야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "MachineConfigPool"
+      ],
+      "expected_citation_terms": [
+        "paused"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 312,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:paused"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 노드 Ready 문제나 머신컨피그 적용 지연은 먼저 MCO/MCP 상태와 실제 노드 상태를 같이 맞춰 봐야 합니다. [1]\n\n1. Machine Config Operator 자체가 `Available/Progressing/Degraded` 중 어디에 있는지 봅니다. [1]\n\n2. 어떤 MachineConfigPool이 업데이트 중이거나 degraded인지 확인합니다. [1]\n\n3. MCP가 특정 노드에서 멈춘다면 해당 노드 상태와 이벤트를 같이 확인해서 ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "machine_configuration",
+          "section": "Checking machine config pool status",
+          "viewer_path": "/docs/ocp/4.20/ko/machine_configuration/index.html#checking-mco-status_machine-config-overview",
+          "cli_commands": [
+            "oc get machineconfigpool",
+            "oc",
+            "oc get mcp",
+            "oc describe mcp worker",
+            "oc get machineconfigs",
+            "oc describe machineconfigs 01-master-kubelet",
+            "oc create -f./myconfig.yaml",
+            "oc delete -f ./myconfig.yaml"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "Checking machine config pool status 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc get machineconfigpool` 명령은 언제 쓰면 돼?",
+        "`oc get machineconfigpool` 결과에서 무엇을 확인해야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-cvo-001",
+      "parent_id": "",
+      "query": "Cluster Version Operator가 업데이트를 못 하고 있으면 어디부터 확인해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "Cluster Version Operator"
+      ],
+      "expected_citation_terms": [
+        "Cluster Version"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 327,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:Cluster Version",
+        "missing_required_term:Cluster Version Operator"
+      ],
+      "pass": false,
+      "answer_preview": "답변: Operator가 `Degraded`이면 설치 카탈로그를 다시 훑기보다, 같은 네임스페이스의 OLM 상태 객체를 먼저 확인합니다. [1]\n\n1. Subscription이 어떤 CSV를 요구하고 있는지 확인합니다. [1]\n\n2. 실제 설치 단위인 CSV와 InstallPlan이 실패했는지 이어서 봅니다. [1]\n\n3. 특정 CSV가 보이면 describe로 `Conditions`, `Message`, `Reason`을 확인해서 권한, 의존성, 이미지 pul",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "operators",
+          "section": "Catalog Operator",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-arch-catalog-operator_operator-reference",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "Catalog Operator 절차에서 흔한 실패 지점은 뭐야?",
+        "Catalog Operator 내용을 초보자용 3단계로 다시 정리해줘",
+        "Catalog Operator 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-pvc-pending-001",
+      "parent_id": "",
+      "query": "PVC가 Pending이면 StorageClass와 이벤트 중 무엇부터 봐야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "PVC"
+      ],
+      "expected_citation_terms": [
+        "StorageClass"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 810,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 지금 질문은 문제 원인을 좁히는 흐름으로 봐야 합니다. 검색된 근거에서 먼저 확인할 단서는 다음입니다. [1]\n\n- 근거 요약: 생성된 PVC는 해당 PVC를 사용하는 Pod를 배포할 때까지 `Pending` 상태로 유지됩니다. [1]\n\n1. 현재 상태와 이벤트를 먼저 봅니다.\n```bash\noc get pvc -n <namespace>\noc\noc create -f <file_name> -n <application_namespace>\noc get pvc ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "storage",
+          "section": "스토리지 프로비저닝",
+          "viewer_path": "/docs/ocp/4.20/ko/storage/index.html#lvms-provisioning-storage-using-lvms_logical-volume-manager-storage",
+          "cli_commands": [
+            "oc get pvc -n <namespace>",
+            "oc",
+            "oc create -f <file_name> -n <application_namespace>"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "스토리지 프로비저닝 기준으로 다음 확인 단계는 뭐야?",
+        "스토리지 프로비저닝 절차에서 흔한 실패 지점은 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-pv-reclaim-001",
+      "parent_id": "",
+      "query": "PV reclaim policy가 뭔지 운영자가 이해할 수 있게 설명해줘",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "learn",
+      "route_kind": "official",
+      "must_include_terms": [
+        "reclaim"
+      ],
+      "expected_citation_terms": [
+        "reclaim"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 610,
+      "citation_count": 2,
+      "cited_indices": [
+        1,
+        2
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: PV reclaim policy(회수 정책)는 PVC가 삭제되었을 때 연결된 PV와 그 안의 데이터를 어떻게 처리할지 결정하는 설정입니다.\n\n운영 환경에서는 PVC를 삭제하더라도 PV를 유지할지, 혹은 자동으로 삭제할지를 제어하는 데 사용됩니다. 예를 들어 `Retain` 정책이 설정된 경우, PVC를 삭제해도 PV는 자동으로 삭제되지 않고 `Available` 상태로 남게 되어 데이터를 보존할 수 있습니다. [1]\n\n운영 시 주의해야 할 사항은 다음과 ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "storage",
+          "section": "로컬 볼륨 또는 로컬 볼륨 세트 제거",
+          "viewer_path": "/docs/ocp/4.20/ko/storage/index.html#local-removing-device_persistent-storage-local",
+          "cli_commands": [
+            "oc get pv",
+            "oc get pv --selector storage.openshift.com/owner-name=<LV_LVS_name>",
+            "oc delete pvc <name>",
+            "oc delete lv <name>",
+            "oc delete lvs <name>",
+            "oc delete pv <name>"
+          ]
+        },
+        {
+          "index": 2,
+          "book_slug": "storage",
+          "section": "볼륨을 분리할 때 실패에서 복구",
+          "viewer_path": "/docs/ocp/4.20/ko/storage/index.html#expanding-recovering-from-failure_expanding-persistent-volumes",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "볼륨을 분리할 때 실패에서 복구 절차에서 흔한 실패 지점은 뭐야?",
+        "볼륨을 분리할 때 실패에서 복구 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc get pv` 명령은 언제 쓰면 돼?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-odf-001",
+      "parent_id": "",
+      "query": "ODF 스토리지 상태가 이상할 때 어떤 operator나 pod를 먼저 봐야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "스토리지"
+      ],
+      "expected_citation_terms": [
+        "storage"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 300,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:storage",
+        "missing_required_term:스토리지"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 아래 명령으로 진행하면 됩니다. [1]\n\nOperator로그 수집 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다. [1]\n\n```bash\noc get pods -n <operator_namespace>\n```\n\n```bash\noc logs pod/<pod_name> -n <operator_namespace>\n```\n\n실행 후에는 oc get pods -n <operator_namespace>; oc logs pod/<pod_name> -n ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "support",
+          "section": "Operator 로그 수집",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#gathering-operator-logs_troubleshooting-operator-issues",
+          "cli_commands": [
+            "oc get pods -n <operator_namespace>",
+            "oc logs pod/<pod_name> -n <operator_namespace>",
+            "oc logs pod/<operator_pod_name> -c <container_name> -n <operator_namespace>",
+            "oc adm must gather",
+            "oc"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc get pods -n <operator_namespace>` 결과에서 무엇을 확인해야 해?",
+        "`oc get pods -n <operator_namespace>`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "`oc logs pod/<pod_name> -n <operator_namespace>`에서 이전 컨테이너 로그까지 보려면 어떤 옵션을 써?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-monitoring-alerts-001",
+      "parent_id": "",
+      "query": "Prometheus 경고가 많이 뜰 때 Alertmanager와 firing alert를 어떻게 확인해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "Prometheus"
+      ],
+      "expected_citation_terms": [
+        "Alertmanager"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 455,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:Alertmanager"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 이 질문은 명령어 확인 요청이므로, 먼저 실행할 명령은 아래입니다. [1]\n\n```bash\noc debug <prometheus_k8s_pod_name> -n openshift-monitoring \\ --image=$(oc get po -n openshift-monitoring <prometheus_k8s_pod_name> \\ -o jsonpath='{.spec.containers\noc\noc debug <prometheus_k8s_pod_name> -n ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "support",
+          "section": "Prometheus에 대해 KubePersistentVolumeFillingUp 경고가 실행됨",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#resolving-the-kubepersistentvolumefillingup-alert-firing-for-prometheus_investigating-monitoring-issues",
+          "cli_commands": [
+            "oc debug <prometheus_k8s_pod_name> -n openshift-monitoring \\ --image=$(oc get po -n openshift-monitoring <prometheus_k8s_pod_name> \\ -o jsonpath='{.spec.containers",
+            "oc",
+            "oc debug <prometheus_k8s_pod_name> -n openshift-monitoring \\",
+            "oc debug prometheus-k8s-0 -n openshift-monitoring \\"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc debug <prometheus_k8s_pod_name> -n openshift-monitoring \\ --image=$(oc get...` 결과에서 무엇을 확인해야 해?",
+        "`oc debug <prometheus_k8s_pod_name> -n openshift-monitoring \\ --image=$(oc get...`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "`oc` 명령은 언제 쓰면 돼?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-metrics-top-pods-001",
+      "parent_id": "",
+      "query": "namespace 안에서 CPU를 많이 쓰는 Pod를 찾는 명령은 뭐야?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc adm top pods"
+      ],
+      "expected_citation_terms": [
+        "top pods"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 403,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "answer_code_not_visible_in_citations",
+        "missing_citation_term:top pods",
+        "missing_required_term:oc adm top pods"
+      ],
+      "pass": false,
+      "answer_preview": "요약: Pod가 CPU와 memory를 얼마나 쓰는지는 metrics가 수집되는 상태에서 `oc adm top pod`로 먼저 확인합니다. [1]\n\n```bash\noc adm top pod --namespace=<namespace>\noc adm top pod <pod-name> --namespace=<namespace>\noc describe pod <pod-name> -n <namespace>\n```\n\n판단 기준:\n- `oc adm top pod` 출력의 CPU",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "cli_tools",
+          "section": "oc adm top pod",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-adm-top-pod",
+          "cli_commands": [
+            "oc adm top pod # Show metrics for all pods in the given namespace oc adm top pod --namespace=NAMESPACE # Show metrics for a given pod and its containers oc adm top pod POD_NAME --containers # Show metrics for the pods defined by label name=",
+            "oc adm top pod",
+            "oc adm top pod --namespace=NAMESPACE",
+            "oc adm top pod POD_NAME --containers",
+            "oc adm top pod -l name=myLabel"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "oc adm top pod 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc adm top pod # Show metrics for all pods in the given namespace oc adm top...` 명령은 언제 쓰면 돼?",
+        "`oc adm top pod # Show metrics for all pods in the given namespace oc adm top...` 결과에서 무엇을 확인해야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-namespace-list-001",
+      "parent_id": "",
+      "query": "네임스페이스 확인하는 명령어가 뭐야?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc get"
+      ],
+      "expected_citation_terms": [
+        "namespace"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 165,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:namespace"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 실행 예시는 아래 명령을 기준으로 보면 됩니다. [1]\n\n현재 프로젝트 보기 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다. [1]\n\n```bash\noc project\n```\n\n실행 후에는 oc get pods; oc get pods -w 기준으로 결과를 확인하세요. [1]",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "cli_tools",
+          "section": "현재 프로젝트 보기",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#viewing-the-current-project",
+          "cli_commands": [
+            "oc project"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "현재 kubeconfig context까지 같이 확인하려면 뭘 보면 돼?",
+        "현재 프로젝트 보기 기준으로 다음 확인 단계는 뭐야?",
+        "현재 프로젝트 보기 절차에서 흔한 실패 지점은 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-current-project-001",
+      "parent_id": "",
+      "query": "현재 터미널이 어느 프로젝트나 namespace를 보고 있는지 확인하는 명령은?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc project"
+      ],
+      "expected_citation_terms": [
+        "project"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 530,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 이 질문은 명령어 확인 요청이므로, 먼저 실행할 명령은 아래입니다. [1]\n\n```bash\noc login\noc status\noc project\noc status In project Joe's Project (joe-project) service database (172.30.43.12:5434 -> 3306) database deploys docker.io/openshift/mysql-55-centos7:latest #1 deployed 25 minut",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "cli_tools",
+          "section": "CLI 프로필 간 전환 정보",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#about-switches-between-cli-profiles_managing-cli-profiles",
+          "cli_commands": [
+            "oc login",
+            "oc status",
+            "oc project",
+            "oc status In project Joe's Project (joe-project) service database (172.30.43.12:5434 -> 3306) database deploys docker.io/openshift/mysql-55-centos7:latest #1 deployed 25 minutes ago - 1 pod service frontend (172.30.159.137:5432 -> 8080) fro",
+            "oc",
+            "oc project alice-project",
+            "oc config view",
+            "oc login -u system:admin -n default"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc login`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "`oc status` 명령은 언제 쓰면 돼?",
+        "`oc status` 결과에서 무엇을 확인해야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-install-bootstrap-wait-001",
+      "parent_id": "",
+      "query": "bootstrap 기다리는 단계에서 뭘 확인해야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_procedure",
+      "route_kind": "official",
+      "must_include_terms": [
+        "bootstrap"
+      ],
+      "expected_citation_terms": [
+        "bootstrap"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 220,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 아래 명령으로 진행하면 됩니다. [1]\n\nWaiting for the bootstrap process to complete 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다. [1]\n\n```bash\nopenshift-install --dir <installation_directory> wait-for bootstrap-complete \\ --log-level=info\n```",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "installing_on_any_platform",
+          "section": "Waiting for the bootstrap process to complete",
+          "viewer_path": "/docs/ocp/4.20/ko/installing_on_any_platform/index.html#installation-installing-bare-metal_installing-platform-agnostic",
+          "cli_commands": [
+            "openshift-install --dir <installation_directory> wait-for bootstrap-complete \\ --log-level=info"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "Waiting for the bootstrap process to complete 기준으로 다음 확인 단계는 뭐야?",
+        "Waiting for the bootstrap process to complete 절차에서 흔한 실패 지점은 뭐야?",
+        "Waiting for the bootstrap process to complete 내용을 초보자용 3단계로 다시 정리해줘"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-logs-app-001",
+      "parent_id": "",
+      "query": "애플리케이션 Pod 로그를 바로 확인하는 기본 명령을 알려줘",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc logs"
+      ],
+      "expected_citation_terms": [
+        "oc logs"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 295,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 실행 예시는 아래 명령을 기준으로 보면 됩니다. [1]\n\nSource-to-Image 진단 데이터 수집 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다. [1]\n\n```bash\noc get pods -w\n```\n\n```bash\noc logs -f pod/<application_name>-<build_number>-build\n```\n\n실행 후에는 oc get pods -w; oc logs -f pod/<application_name>-<buil",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "support",
+          "section": "Source-to-Image 진단 데이터 수집",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#gathering-s2i-diagnostic-data_troubleshooting-s2i",
+          "cli_commands": [
+            "oc get pods -w",
+            "oc logs -f pod/<application_name>-<build_number>-build",
+            "oc logs -f bc/<application_name>",
+            "oc logs -f pod/<application_name>-<build_number>-deploy",
+            "oc",
+            "oc logs -f dc/<application_name>",
+            "oc logs -f pod/<application_name>-<build_number>-<random_string>"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "로그 다음에는 이벤트와 describe 중 무엇을 먼저 봐야 해?",
+        "CrashLoopBackOff이면 어떤 로그를 추가로 확인해야 해?",
+        "Source-to-Image 진단 데이터 수집 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-logs-previous-001",
+      "parent_id": "",
+      "query": "재시작한 컨테이너의 이전 로그를 봐야 하면 어떤 옵션을 써?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "previous"
+      ],
+      "expected_citation_terms": [
+        "previous"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 152,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:previous"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 재시작한 컨테이너의 이전 로그는 `oc logs --previous`로 확인합니다. [1]\n\n멀티 컨테이너 Pod이면 `-c <container-name>`을 꼭 붙이고, 현재 로그와 이전 로그를 나눠 비교하면 재시작 직전 오류를 더 빨리 찾을 수 있습니다. [1]",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "support",
+          "section": "Operator 로그 수집",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#gathering-operator-logs_troubleshooting-operator-issues",
+          "cli_commands": [
+            "oc get pods -n <operator_namespace>",
+            "oc logs pod/<pod_name> -n <operator_namespace>",
+            "oc logs pod/<operator_pod_name> -c <container_name> -n <operator_namespace>",
+            "oc adm must gather",
+            "oc"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "CrashLoopBackOff이면 어떤 로그를 추가로 확인해야 해?",
+        "Operator 로그 수집 기준으로 다음 확인 단계는 뭐야?",
+        "Operator 로그 수집 절차에서 흔한 실패 지점은 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-events-001",
+      "parent_id": "",
+      "query": "최근 이벤트를 namespace 기준으로 확인하려면 어떤 명령을 써?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "events"
+      ],
+      "expected_citation_terms": [
+        "events"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 432,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 이 질문은 명령어 확인 요청이므로, 먼저 실행할 명령은 아래입니다. [1]\n\n```bash\noc get events\noc get events -n openshift-config\noc get events [-n <project>]\noc get events [-n <project>] 1. 프로젝트 이름입니다. 예를 들면 다음과 같습니다. $ oc get events -n openshift-config\n```\n\n확인 기준:\n- 명령 출력에서 현재 namespa",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "nodes",
+          "section": "CLI를 사용하여 이벤트 보기",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-containers-events-viewing-cli_nodes-containers-events",
+          "cli_commands": [
+            "oc get events",
+            "oc get events -n openshift-config",
+            "oc get events [-n <project>]"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "CLI를 사용하여 이벤트 보기 절차에서 흔한 실패 지점은 뭐야?",
+        "CLI를 사용하여 이벤트 보기 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc get events` 결과에서 Warning 이벤트를 어떻게 좁혀?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-scc-001",
+      "parent_id": "",
+      "query": "Pod가 권한 문제로 안 뜰 때 SCC 문제인지 어떻게 확인해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "SCC"
+      ],
+      "expected_citation_terms": [
+        "SecurityContextConstraints"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 223,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:SecurityContextConstraints",
+        "missing_required_term:SCC"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 아래 명령으로 진행하면 됩니다. [1]\n\n사용자 역할 추가 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다. [1]\n\n```bash\noc adm\n```\n\n```bash\noc adm policy\n```\n\n실행 후에는 oc adm policy; oc adm policy add-role-to-user <role> <user> -n <project> 기준으로 결과를 확인하세요. [1]",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "authentication_and_authorization",
+          "section": "사용자 역할 추가",
+          "viewer_path": "/docs/ocp/4.20/ko/authentication_and_authorization/index.html#adding-roles_using-rbac",
+          "cli_commands": [
+            "oc adm",
+            "oc adm policy",
+            "oc adm policy add-role-to-user <role> <user> -n <project>",
+            "oc adm policy add-role-to-user admin alice -n joe",
+            "oc describe rolebinding.rbac -n <project>",
+            "oc describe rolebinding.rbac -n joe"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc adm policy` 명령은 언제 쓰면 돼?",
+        "`oc adm policy` 결과에서 무엇을 확인해야 해?",
+        "`oc adm policy`가 실패하면 다음에 어떤 근거를 봐야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-serviceaccount-001",
+      "parent_id": "",
+      "query": "ServiceAccount 권한 문제를 RoleBinding 기준으로 어떻게 좁혀?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_explain",
+      "route_kind": "official",
+      "must_include_terms": [
+        "ServiceAccount"
+      ],
+      "expected_citation_terms": [
+        "RoleBinding"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 900,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 지금 질문은 문제 원인을 좁히는 흐름으로 봐야 합니다. 검색된 근거에서 먼저 확인할 단서는 다음입니다. [1]\n\n- 근거 요약: $ oc policy add-role-to-user view system:serviceaccount:top-secret:robot 작은 정보 다음 YAML을 적용하여 역할을 추가할 수도 있습니다. [1]\n\n1. 현재 상태와 이벤트를 먼저 봅니다.\n```bash\noc policy add-role-to-user view system",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "authentication_and_authorization",
+          "section": "서비스 계정에 역할 부여",
+          "viewer_path": "/docs/ocp/4.20/ko/authentication_and_authorization/index.html#service-accounts-granting-roles_understanding-service-accounts",
+          "cli_commands": [
+            "oc policy add-role-to-user view system:serviceaccount:top-secret:robot",
+            "oc policy add-role-to-user <role_name> -z <service_account_name>",
+            "oc policy add-role-to-group view system:serviceaccounts -n my-project",
+            "oc policy add-role-to-group edit system:serviceaccounts:managers -n my-project"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "서비스 계정에 역할 부여 기준으로 다음 확인 단계는 뭐야?",
+        "서비스 계정에 역할 부여 절차에서 흔한 실패 지점은 뭐야?",
+        "서비스 계정에 역할 부여 내용을 초보자용 3단계로 다시 정리해줘"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-audit-logs-001",
+      "parent_id": "",
+      "query": "누가 리소스를 삭제했는지 audit log에서 추적하려면 어떤 문서를 봐야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "audit"
+      ],
+      "expected_citation_terms": [
+        "audit"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 182,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 누가 리소스를 삭제했는지 추적하려면 audit log에서 verb, user, resource, namespace를 기준으로 좁힙니다. [1]\n\naudit log에서 `delete`, 대상 resource/name, 사용자 `user.username`을 함께 검색하면 실제 삭제 요청 주체를 확인할 수 있습니다. [1]",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "security_and_compliance",
+          "section": "Compliance Operator 프로필",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#compliance_profiles_understanding-compliance",
+          "cli_commands": [
+            "oc get",
+            "oc get profile.compliance -n openshift-compliance",
+            "oc get -n openshift-compliance -oyaml profiles.compliance rhcos4-e8",
+            "oc get -n openshift-compliance -oyaml rules rhcos4-audit-rules-login-events"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "Compliance Operator 프로필 절차에서 흔한 실패 지점은 뭐야?",
+        "Compliance Operator 프로필 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc get` 명령은 언제 쓰면 돼?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-quota-001",
+      "parent_id": "",
+      "query": "ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "ResourceQuota"
+      ],
+      "expected_citation_terms": [
+        "ResourceQuota"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 209,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: ResourceQuota 때문에 Pod 생성이 막혔는지는 quota 사용량과 이벤트를 같이 봅니다. [1]\n\n```bash\noc get resourcequotas -n chak-test\n```\n\nhard/used 값이 한도에 닿았거나 이벤트에 quota 초과 메시지가 있으면 CPU, memory, object count 중 어느 항목이 막는지 좁히면 됩니다. [1]",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "kmsc-operations",
+          "section": "OCP 프로젝트 관리 테스트",
+          "viewer_path": "/uploads/documents/d9c9de11-222d-5ede-9ea3-e0186c10e39f/chunks/6c02f5da-9443-5abc-83cb-103d48798595",
+          "cli_commands": [
+            "oc patch resourcequotas test-compute -n chak-test --type=merge --patch '{\"spec\":{\"hard\": {\"pods\": \"2\"}}}' # oc get resourcequotas -n chak-test CLI 또는 Web Console 에서 확인 CLI # Administration -> ResourceQuotas # test-compute 클릭 후 pod 갯수를 2로 수정"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc patch resourcequotas test-compute -n chak-test --type=merge --patch '{\"spe...` 결과에서 무엇을 확인해야 해?",
+        "`oc patch resourcequotas test-compute -n chak-test --type=merge --patch '{\"spe...`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "OCP 프로젝트 관리 테스트 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-limitrange-001",
+      "parent_id": "",
+      "query": "LimitRange 때문에 컨테이너 리소스 요청이 거절될 수 있는지 확인하려면?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "LimitRange"
+      ],
+      "expected_citation_terms": [
+        "LimitRange"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 216,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: LimitRange 때문에 컨테이너 리소스 요청이 거절되는지 먼저 namespace 정책을 확인합니다. [1]\n\nPod이벤트의 거절 메시지와 LimitRange의 min/max/default/defaultRequest 값을 맞춰 보면 어떤 request/limit이 정책을 넘었는지 확인할 수 있습니다. [1]\n\n제공된 근거에는 실행 명령이나 예시 코드가 명시되어 있지 않습니다.",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "nodes",
+          "section": "컨테이너 제한",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-cluster-limit-container-limits",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "컨테이너 제한 절차에서 흔한 실패 지점은 뭐야?",
+        "컨테이너 제한 내용을 초보자용 3단계로 다시 정리해줘",
+        "컨테이너 제한 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-hpa-001",
+      "parent_id": "",
+      "query": "HPA가 scale out을 안 할 때 metrics와 target 설정을 어떻게 봐?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "HPA"
+      ],
+      "expected_citation_terms": [
+        "HorizontalPodAutoscaler"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 225,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:HorizontalPodAutoscaler"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 문서 근거 기준으로 먼저 핵심만 정리하면 다음과 같습니다. [1]\n\n- 일련의 상태 조건을 사용하여 HPA(수평 Pod 자동 스케일러)에서 스케일링할 수 있는지 그리고 HPA가 현재 제한되어 있는지의 여부를 결정할 수 있습니다. [1]\n\n초보자 기준으로는 이 개념이 어떤 리소스를 다루는지, 어떤 명령으로 상태를 확인하는지, 문제가 났을 때 어떤 이벤트/조건을 봐야 하는지 순서로 읽으면 됩니다.",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "nodes",
+          "section": "CLI를 사용하여 수평 Pod 자동 스케일러 상태 조건 이해",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-pods-autoscaling-status-about_nodes-pods-autoscaling",
+          "cli_commands": [
+            "oc describe hpa cm-test"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc describe hpa cm-test` 결과에서 무엇을 확인해야 해?",
+        "`oc describe hpa cm-test`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "CLI를 사용하여 수평 Pod 자동 스케일러 상태 조건 이해 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-pdb-001",
+      "parent_id": "",
+      "query": "노드 drain이 막힐 때 PDB가 원인인지 어떻게 판단해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_explain",
+      "route_kind": "official",
+      "must_include_terms": [
+        "PDB"
+      ],
+      "expected_citation_terms": [
+        "PodDisruptionBudget"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 799,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:PodDisruptionBudget"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 지금 질문은 문제 원인을 좁히는 흐름으로 봐야 합니다. 검색된 근거에서 먼저 확인할 단서는 다음입니다. [1]\n\n- 근거 요약: 오류 예 error when evicting pods/\"rails-postgresql-example-1-72v2w\" -n \"rails\" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget. [1]\n\n1. 현재 상태와 이벤트를",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "nodes",
+          "section": "노드를 정상적으로 재부팅",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-nodes-rebooting-gracefully_nodes-nodes-rebooting",
+          "cli_commands": [
+            "oc adm drain <node1> --ignore-daemonsets --delete-emptydir-data --force --disable-eviction",
+            "oc login",
+            "oc adm",
+            "oc adm cordon <node1>",
+            "oc adm drain <node1> --ignore-daemonsets --delete-emptydir-data --force",
+            "oc debug node/<node1>",
+            "oc",
+            "oc adm uncordon <node1>",
+            "oc get node <node1>"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc login` 명령은 언제 쓰면 돼?",
+        "`oc login` 결과에서 무엇을 확인해야 해?",
+        "`oc login`가 실패하면 다음에 어떤 근거를 봐야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-daemonset-drain-001",
+      "parent_id": "",
+      "query": "DaemonSet Pod 때문에 drain이 안 될 때 어떤 옵션과 주의점이 있어?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "DaemonSet"
+      ],
+      "expected_citation_terms": [
+        "daemonsets"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 719,
+      "citation_count": 2,
+      "cited_indices": [
+        1,
+        2
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: `--ignore-daemonsets` 옵션을 사용하여 DaemonSet Pod를 무시하고 드레이닝을 진행하십시오. 명령 실행 후에는 노드가 정상적으로 드레이닝되는지 확인해야 합니다. [1]\n\n**드레이닝 실행 단계**\n\n1. DaemonSet을 무시하고 강제로 드레이닝을 수행합니다.\n\n```bash\noc adm drain <node1> --ignore-daemonsets --delete-emptydir-data --force\n```\n\n**주의사항 및 확",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "nodes",
+          "section": "노드를 정상적으로 재부팅",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-nodes-rebooting-gracefully_nodes-nodes-rebooting",
+          "cli_commands": [
+            "oc adm drain <node1> --ignore-daemonsets --delete-emptydir-data --force",
+            "oc login",
+            "oc adm",
+            "oc adm cordon <node1>",
+            "oc adm drain <node1> --ignore-daemonsets --delete-emptydir-data --force --disable-eviction",
+            "oc debug node/<node1>",
+            "oc",
+            "oc adm uncordon <node1>",
+            "oc get node <node1>"
+          ]
+        },
+        {
+          "index": 2,
+          "book_slug": "nodes",
+          "section": "애플리케이션 Pod를 드레이닝하지 않고 노드가 재부팅될 때 단일 노드 OpenShift 클러스터에서 오류 처리",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#sno-clusters-reboot-without-drain_nodes-nodes-working",
+          "cli_commands": [
+            "oc delete pods --field-selector status.phase=Failed -n <POD_NAMESPACE>"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "노드를 정상적으로 재부팅 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc delete pods --field-selector status.phase=Failed -n <POD_NAMESPACE>` 명령은 언제 쓰면 돼?",
+        "`oc delete pods --field-selector status.phase=Failed -n <POD_NAMESPACE>` 결과에서 무엇을 확인해야 해?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-must-gather-001",
+      "parent_id": "",
+      "query": "장애 분석용 must-gather는 언제 어떤 명령으로 수집해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "must-gather"
+      ],
+      "expected_citation_terms": [
+        "must-gather"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 222,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:must-gather",
+        "missing_required_term:must-gather"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 실행 예시는 아래 명령을 기준으로 보면 됩니다. [1]\n\n지원 로그 수집 인스턴스 구성 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다. [1]\n\n```bash\noc create -f support-log-gather.yaml\n```\n\n```bash\noc get mustgather\n```\n\n실행 후에는 검증; oc get mustgather 기준으로 결과를 확인하세요. [1]",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "support",
+          "section": "지원 로그 수집 인스턴스 구성",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#support-log-gather-config-cli_gathering-cluster-data",
+          "cli_commands": [
+            "oc create -f support-log-gather.yaml",
+            "oc get mustgather",
+            "oc get pods",
+            "oc logs -f pod/example-mg-gk8m8 -c upload",
+            "oc"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc get mustgather` 결과에서 무엇을 확인해야 해?",
+        "`oc get mustgather`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "지원 로그 수집 인스턴스 구성 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-inspect-001",
+      "parent_id": "",
+      "query": "특정 namespace 리소스 상태를 지원팀에 전달하려면 oc adm inspect를 써야 해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_command",
+      "route_kind": "official",
+      "must_include_terms": [
+        "inspect"
+      ],
+      "expected_citation_terms": [
+        "inspect"
+      ],
+      "response_kind": "no_answer",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 51,
+      "citation_count": 0,
+      "cited_indices": [],
+      "warning_count": 1,
+      "suggestion_count": 3,
+      "failures": [
+        "command_query_missing_grounded_command",
+        "missing_citation_term:inspect",
+        "missing_required_term:inspect"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 현재 Playbook Library에 해당 자료가 없습니다. 자료 추가가 필요합니다.",
+      "citation_preview": [],
+      "suggested_queries": [
+        "현재 프로젝트의 상태 보기 기준으로 설명해줘",
+        "CLI 프로필 수동 구성 기준으로 설명해줘",
+        "Pod 상태 검토 기준으로 설명해줘"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-project-terminating-001",
+      "parent_id": "",
+      "query": "namespace가 Terminating에서 안 없어질 때 finalizer와 남은 리소스를 어떻게 확인해?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "finalizer"
+      ],
+      "expected_citation_terms": [
+        "finalizer"
+      ],
+      "response_kind": "clarification",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 224,
+      "citation_count": 0,
+      "cited_indices": [],
+      "warning_count": 1,
+      "suggestion_count": 3,
+      "failures": [
+        "low_confidence_for_seeded_question",
+        "missing_citation_term:finalizer",
+        "missing_required_term:finalizer",
+        "unexpected_clarification"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 지금 질문은 현재 공식 문서 근거와 정확히 맞물리는 점수가 낮습니다.\n엉뚱한 절차를 단정하지 않도록, 대상 리소스나 증상, 하고 싶은 작업을 한 단계만 더 좁혀 주세요.\n\n이런 식으로 물어보면 더 정확히 안내할 수 있습니다.\n- 실패한 제거 후 Operator 다시 설치 기준으로 먼저 확인할 절차를 알려줘\n- 실패한 제거 후 Operator 다시 설치에서 상태 확인 명령과 판단 기준을 알려줘",
+      "citation_preview": [],
+      "suggested_queries": [
+        "실패한 제거 후 Operator 다시 설치 기준으로 설명해줘",
+        "사용자 정의 리소스 검사 기준으로 설명해줘",
+        "OCP 프로젝트 관리 테스트 기준으로 설명해줘"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-clusteroperator-degraded-001",
+      "parent_id": "",
+      "query": "ClusterOperator가 Degraded일 때 전체 상태를 한 번에 보는 명령은?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc get clusteroperators"
+      ],
+      "expected_citation_terms": [
+        "clusteroperators"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 568,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "command_query_missing_grounded_command",
+        "missing_citation_term:clusteroperators",
+        "missing_required_term:oc get clusteroperators"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 지금 질문은 문제 원인을 좁히는 흐름으로 봐야 합니다. 검색된 근거에서 먼저 확인할 단서는 다음입니다. [1]\n\n- 근거 요약: 클러스터 Operator 상태에는 Operator의 상태를 나타내는 상태 유형이 포함됩니다. [1]\n\n1. 현재 상태와 이벤트를 먼저 봅니다.\n- 대상 Pod/리소스의 상태, 이벤트, 로그를 같은 namespace 기준으로 확인합니다. [1]\n\n2. 정상/비정상 기준을 나눠서 봅니다.\n-이벤트에 `Failed`, `Error`,",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "updating_clusters",
+          "section": "클러스터 Operator 상태 유형 이해",
+          "viewer_path": "/docs/ocp/4.20/ko/updating_clusters/index.html#understanding_clusteroperator_conditiontypes_understanding-openshift-updates",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "클러스터 Operator 상태 유형 이해 내용을 초보자용 3단계로 다시 정리해줘",
+        "클러스터 Operator 상태 유형 이해 기준으로 다음 확인 단계는 뭐야?",
+        "클러스터 Operator 상태 유형 이해 절차에서 흔한 실패 지점은 뭐야?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-certs-api-001",
+      "parent_id": "",
+      "query": "API 서버 인증서 만료가 의심되면 ocp-certificates 외에 어떤 상태를 같이 봐?",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "ops_troubleshooting",
+      "route_kind": "official",
+      "must_include_terms": [
+        "인증서"
+      ],
+      "expected_citation_terms": [
+        "certificate"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 571,
+      "citation_count": 2,
+      "cited_indices": [
+        1,
+        2
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: `openshift-config` 네임스페이스에 있는 Certificate 리소스의 `Ready` 상태를 가장 먼저 확인하십시오. 인증서가 `Ready` 상태여야 클러스터의 API 서버가 해당 인증서를 사용할 준비가 된 것입니다. [1]\n\n인증서 상태를 확인하기 위해 다음 명령을 실행하십시오.\n\n**인증서 준비 상태 확인**\n\n```bash\noc get certificate -w -n openshift-config\n```\n\n위 명령을 통해 인증서의 상태가",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "security_and_compliance",
+          "section": "API 서버에 대한 인증서 생성",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#cert-manager-certificate-api-server_cert-manager-creating-certificate",
+          "cli_commands": [
+            "oc login",
+            "oc get certificate -w -n openshift-config",
+            "oc create -f certificate.yaml"
+          ]
+        },
+        {
+          "index": 2,
+          "book_slug": "cli_tools",
+          "section": "oc adm ocp-certificates recreate-top-level",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-adm-ocp-certificates-regenerate-top-level",
+          "cli_commands": [
+            "oc adm ocp-certificates regenerate-top-level -n openshift-kube-apiserver-operator secret/loadbalancer-serving-signer-key"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "oc adm ocp-certificates recreate-top-level 절차에서 흔한 실패 지점은 뭐야?",
+        "oc adm ocp-certificates recreate-top-level 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc login` 명령은 언제 쓰면 돼?"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-learn-day2-001",
+      "parent_id": "",
+      "query": "Day-2 운영에서 설치 문서보다 운영 문서를 먼저 봐야 하는 이유를 설명해줘",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "learn",
+      "route_kind": "official",
+      "must_include_terms": [
+        "운영"
+      ],
+      "expected_citation_terms": [
+        "cluster"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 571,
+      "citation_count": 2,
+      "cited_indices": [
+        1,
+        2
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:cluster"
+      ],
+      "pass": false,
+      "answer_preview": "답변: Day-2 운영은 설치 완료 후 클러스터의 상태를 유지하고 기능을 확장하는 활동을 의미합니다. [1] 따라서 설치 문서보다는 설치 후 활동에 대한 지침을 담은 운영 문서를 먼저 확인하여 클러스터의 지속적인 관리를 준비해야 합니다. [1]\n\n운영 문서를 먼저 확인해야 하는 이유는 다음과 같습니다.\n\n* **정의**: Day-2 운영은 OpenShift Container Platform 설치 후 수행해야 하는 각종 지침과 활동을 포함합니다. [1]\n* **실",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "postinstallation_configuration",
+          "section": "OpenShift Container Platform의 Day 2 운영",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#openshift-container-platform의-day-2-운영",
+          "cli_commands": []
+        },
+        {
+          "index": 2,
+          "book_slug": "postinstallation_configuration",
+          "section": "이미지 스트림 및 이미지 레지스트리 구성",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#post-install-image-config",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "OpenShift Container Platform의 Day 2 운영 기준으로 다음 확인 단계는 뭐야?",
+        "OpenShift Container Platform의 Day 2 운영 절차에서 흔한 실패 지점은 뭐야?",
+        "OpenShift Container Platform의 Day 2 운영 내용을 초보자용 3단계로 다시 정리해줘"
+      ]
+    },
+    {
+      "case_id": "pbs-ext-learn-observability-001",
+      "parent_id": "",
+      "query": "Monitoring, Logging, Observability를 운영 관점에서 구분해서 설명해줘",
+      "source": "corpus\\manifests\\eval\\pbs_chat_quality_extended_cases.jsonl",
+      "query_type": "learn",
+      "route_kind": "official",
+      "must_include_terms": [
+        "Monitoring",
+        "Logging"
+      ],
+      "expected_citation_terms": [
+        "monitoring"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 552,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:monitoring"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 운영 관점에서 각 요소의 정의와 역할을 다음과 같이 구분하여 이해하십시오.\n\n* **모니터링 (Monitoring)**: 시스템의 상태를 실시간으로 관찰하는 기능입니다. 운영 시에는 시스템 지표를 통해 현재 상태를 파악하고 이상 징후를 감지하는 용도로 사용됩니다 [1],. [1]\n* **로깅 (Logging)**: 시스템에서 발생하는 로그 데이터를 수집하고 관리하는 기능입니다. 문제가 발생했을 때 구체적인 발생 기록을 확인하여 원인을 파악하는 맥락에서 활",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "observability_overview",
+          "section": "Observability 정보",
+          "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#observability-overview",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "장. Observability 정보 기준으로 다음 확인 단계는 뭐야?",
+        "장. Observability 정보 절차에서 흔한 실패 지점은 뭐야?",
+        "장. Observability 정보 내용을 초보자용 3단계로 다시 정리해줘"
+      ]
+    },
+    {
+      "case_id": "learn-answer-001",
+      "parent_id": "",
+      "query": "OpenShift 아키텍처를 처음 설명해줘",
+      "source": "corpus\\manifests\\eval\\answer_eval_cases.jsonl",
+      "query_type": "learn",
+      "route_kind": "official",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 368,
+      "citation_count": 3,
+      "cited_indices": [
+        1,
+        2,
+        3
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 오픈시프트(OpenShift) Container Platform은 컨테이너화된 애플리케이션을 관리하고 배포하기 위한 플랫폼입니다. [1] 이 플랫폼은 다음과 같은 핵심 아키텍처 요소를 포함합니다: * **플랫폼 및 애플리케이션 아키텍처**: 플랫폼 자체의 구조와 그 위에서 구동되는 애플리케이션의 구조를 정의합니다. [2]\n\n* **Operator Lifecycle Manager (OLM)**: 플랫폼 구성 요소와 애플리케이션의 생명주기를 관리하는 아키텍처",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "overview",
+          "section": "OpenShift Container Platform 소개",
+          "viewer_path": "/docs/ocp/4.20/ko/overview/index.html#openshift-container-platform-소개",
+          "cli_commands": []
+        },
+        {
+          "index": 2,
+          "book_slug": "architecture",
+          "section": "OpenShift Container Platform의 아키텍처 개요",
+          "viewer_path": "/docs/ocp/4.20/ko/architecture/index.html#openshift-container-platform의-아키텍처-개요",
+          "cli_commands": []
+        },
+        {
+          "index": 3,
+          "book_slug": "operators",
+          "section": "Operator Lifecycle Manager 아키텍처",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-arch",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "OpenShift Container Platform 소개 절차에서 흔한 실패 지점은 뭐야?",
+        "OpenShift Container Platform 소개 내용을 초보자용 3단계로 다시 정리해줘",
+        "OpenShift Container Platform의 아키텍처 개요 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "learn-answer-002",
+      "parent_id": "",
+      "query": "Operator가 뭐고 왜 필요한가?",
+      "source": "corpus\\manifests\\eval\\answer_eval_cases.jsonl",
+      "query_type": "learn",
+      "route_kind": "official",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 620,
+      "citation_count": 2,
+      "cited_indices": [
+        1,
+        2
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: Operator는 클러스터 내에서 애플리케이션의 메타데이터, 설치, 업그레이드 등을 관리하고 자동화하는 구성 요소입니다. [1]\n\n운영 맥락에서 Operator는 다음과 같은 역할을 수행합니다:\n* **애플리케이션 생명주기 관리**: `ClusterServiceVersion(CSV)`에 정의된 메타데이터를 바탕으로 애플리케이션의 이름, 버전, 필수 리소스 등을 관리하며 설치 및 업그레이드를 수행합니다. [1][2]\n* **리소스 자동화 및 구성**: `I",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "operators",
+          "section": "구성 요소의 역할",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-architecture_olm-arch",
+          "cli_commands": []
+        },
+        {
+          "index": 2,
+          "book_slug": "operators",
+          "section": "OLM의 Operator 설치 및 업그레이드 워크플로",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-upgrades_olm-workflow",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "구성 요소의 역할 기준으로 다음 확인 단계는 뭐야?",
+        "구성 요소의 역할 절차에서 흔한 실패 지점은 뭐야?",
+        "구성 요소의 역할 내용을 초보자용 3단계로 다시 정리해줘"
+      ]
+    },
+    {
+      "case_id": "learn-answer-003",
+      "parent_id": "",
+      "query": "observability와 monitoring은 어떻게 달라?",
+      "source": "corpus\\manifests\\eval\\answer_eval_cases.jsonl",
+      "query_type": "learn",
+      "route_kind": "official",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "clarification",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 216,
+      "citation_count": 0,
+      "cited_indices": [],
+      "warning_count": 1,
+      "suggestion_count": 2,
+      "failures": [
+        "low_confidence_for_seeded_question",
+        "unexpected_clarification"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 지금 질문은 현재 공식 문서 근거와 정확히 맞물리는 점수가 낮습니다.\n엉뚱한 절차를 단정하지 않도록, 대상 리소스나 증상, 하고 싶은 작업을 한 단계만 더 좁혀 주세요.\n\n이런 식으로 물어보면 더 정확히 안내할 수 있습니다.\n- 장. Observability 정보 기준으로 먼저 확인할 절차를 알려줘\n- 장. Observability 정보에서 상태 확인 명령과 판단 기준을 알려줘",
+      "citation_preview": [],
+      "suggested_queries": [
+        "장. Observability 정보 기준으로 설명해줘",
+        "네트워크 관찰 기능 기준으로 설명해줘"
+      ]
+    },
+    {
+      "case_id": "learn-answer-004",
+      "parent_id": "",
+      "query": "Machine Config Operator가 뭐야?",
+      "source": "corpus\\manifests\\eval\\answer_eval_cases.jsonl",
+      "query_type": "learn",
+      "route_kind": "official",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 651,
+      "citation_count": 2,
+      "cited_indices": [
+        1,
+        2
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: Machine Config Operator(MCO)는 OpenShift 노드의 운영 체제와 클러스터 관리를 통합하여 관리하는 구성 요소입니다. [1]\n\nMCO는 다음과 같은 역할을 수행합니다:\n* **시스템 구성 관리**: systemd, CRI-O, Kubelet, 커널, Network Manager 등 시스템 기능을 업데이트하고 관리합니다. [2]\n* **설정 자동화**: `MachineConfig` CRD를 사용하여 호스트에 구성 파일을 작성하며, ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "machine_configuration",
+          "section": "About the Machine Config Operator",
+          "viewer_path": "/docs/ocp/4.20/ko/machine_configuration/index.html#about-machine-config-operator_machine-config-overview",
+          "cli_commands": []
+        },
+        {
+          "index": 2,
+          "book_slug": "machine_configuration",
+          "section": "Machine config overview",
+          "viewer_path": "/docs/ocp/4.20/ko/machine_configuration/index.html#machine-config-overview_machine-config-overview",
+          "cli_commands": []
+        }
+      ],
+      "suggested_queries": [
+        "Machine config overview 내용을 초보자용 3단계로 다시 정리해줘",
+        "About the Machine Config Operator 기준으로 다음 확인 단계는 뭐야?",
+        "About the Machine Config Operator 절차에서 흔한 실패 지점은 뭐야?"
+      ]
+    },
+    {
+      "case_id": "ops-answer-001",
+      "parent_id": "",
+      "query": "etcd 백업은 어떻게 하나?",
+      "source": "corpus\\manifests\\eval\\answer_eval_cases.jsonl",
+      "query_type": "ops",
+      "route_kind": "official",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 264,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: etcd 백업은 컨트롤 플레인 노드에서 아래 순서로 진행하면 됩니다. [1]\n\n1. 디버그 세션을 시작합니다.\n\n```bash\noc debug --as-root node/<node_name>\n```\n\n2. 호스트 루트로 전환합니다.\n\n3. 백업 스크립트를 실행합니다.\n\n```bash\n/usr/local/bin/cluster-backup.sh /home/core/assets/backup\n```\n\n백업 파일은 단일 컨트롤 플레인 호스트에서만 저장해야 합니다.",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "postinstallation_configuration",
+          "section": "etcd 데이터 백업",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#backing-up-etcd-data_post-install-cluster-tasks",
+          "cli_commands": [
+            "etcdctl snapshot save",
+            "/usr/local/bin/cluster-backup.sh /home/core/assets/backup",
+            "oc get proxy cluster -o yaml",
+            "oc debug --as-root node/<node_name>"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`etcdctl snapshot save` 결과에서 무엇을 확인해야 해?",
+        "`etcdctl snapshot save`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "`/usr/local/bin/cluster-backup.sh /home/core/assets/backup` 명령은 언제 쓰면 돼?"
+      ]
+    },
+    {
+      "case_id": "ops-answer-002",
+      "parent_id": "",
+      "query": "클러스터 업데이트 전에 확인할 사항은?",
+      "source": "corpus\\manifests\\eval\\answer_eval_cases.jsonl",
+      "query_type": "ops",
+      "route_kind": "official",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 196,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 아래 명령으로 진행하면 됩니다. [1]\n\noc adm upgrade recommend 명령 소개 (일반 가용성) 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다. [1]\n\n```bash\noc adm upgrade recommend\n```\n\n실행 후에는 oc adm upgrade recommend 기준으로 결과를 확인하세요. [1]",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "release_notes",
+          "section": "oc adm upgrade recommend 명령 소개 (일반 가용성)",
+          "viewer_path": "/docs/ocp/4.20/ko/release_notes/index.html#ocp-oc-adm-upgrade-recommend_release-notes",
+          "cli_commands": [
+            "oc adm upgrade recommend"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "oc adm upgrade recommend 명령 소개 (일반 가용성) 절차에서 흔한 실패 지점은 뭐야?",
+        "oc adm upgrade recommend 명령 소개 (일반 가용성) 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc adm upgrade recommend` 명령은 언제 쓰면 돼?"
+      ]
+    },
+    {
+      "case_id": "ops-answer-003",
+      "parent_id": "",
+      "query": "이미지 레지스트리 저장소를 구성하려면",
+      "source": "corpus\\manifests\\eval\\answer_eval_cases.jsonl",
+      "query_type": "ops",
+      "route_kind": "official",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 1523,
+      "citation_count": 3,
+      "cited_indices": [
+        1,
+        2,
+        3
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 구성하려는 스토리지 환경(프로덕션 외 환경 또는 Ceph RGW 오브젝트 스토리지)에 따라 절차가 다릅니다. 먼저 어떤 스토리지 유형을 사용하실 예정인지 확인이 필요합니다.\n\n**1. 프로덕션 환경 외 클러스터에서 빈 디렉터리로 구성할 경우**\n테스트 목적으로 이미지 레지스트리를 빈 디렉터리로 설정할 수 있으나, 레지스트리 재시작 시 모든 이미지가 손실되므로 주의하십시오. [1]\n\n* 스토리지 유형을 `emptyDir`로 설정합니다.\n\n```bash\noc",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "registry",
+          "section": "프로덕션 환경 외 클러스터에서 이미지 레지스트리의 스토리지 구성",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#installation-registry-storage-non-production_configuring-registry-storage-vsphere",
+          "cli_commands": [
+            "oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch '{\"spec\":{\"storage\":{\"emptyDir\":{}}}}'",
+            "oc patch"
+          ]
+        },
+        {
+          "index": 2,
+          "book_slug": "registry",
+          "section": "Red Hat OpenShift Data Foundation에서 Ceph RGW 스토리지를 사용하도록 이미지 레지스트리 Operator 구성",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#registry-configuring-registry-storage-rhodf-cephrgw_configuring-registry-storage-rhodf",
+          "cli_commands": [
+            "oc create configmap image-registry-s3-bundle --from-file=ca-bundle.crt=./tls.crt -n openshift-config",
+            "oc",
+            "oc create secret generic image-registry-private-configuration-user --from-literal=REGISTRY_STORAGE_S3_ACCESSKEY=${AWS_ACCESS_KEY_ID} --from-literal=REGISTRY_STORAGE_S3_SECRETKEY=${AWS_SECRET_ACCESS_KEY} --namespace openshift-image-registry",
+            "oc extract secret/$(oc get ingresscontroller -n openshift-ingress-operator default -o json | jq '.spec.defaultCertificate.name // \"router-certs-default\"' -r) -n openshift-ingress --confirm",
+            "oc patch config.image/cluster -p '{\"spec\":{\"managementState\":\"Managed\",\"replicas\":2,\"storage\":{\"managementState\":\"Unmanaged\",\"s3\":{\"bucket\":'\\\"${bucket_name}\\\"',\"region\":\"us-east-1\",\"regionEndpoint\":'\\\"https://${route_host}\\\"',\"virtualHostedStyle\":false,\"encrypt\":false,\"trustedCA\":{\"name\":\"image-registry-s3-bundle\"}}}}}' --type=merge"
+          ]
+        },
+        {
+          "index": 3,
+          "book_slug": "registry",
+          "section": "이미지 레지스트리의 관리 상태 변경",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#registry-change-management-state_configuring-registry-storage-baremetal",
+          "cli_commands": [
+            "oc patch configs.imageregistry.operator.openshift.io cluster --type merge --patch '{\"spec\":{\"managementState\":\"Managed\"}}'"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc create configmap image-registry-s3-bundle --from-file=ca-bundle.crt=./tls....`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "`oc` 명령은 언제 쓰면 돼?",
+        "`oc` 결과에서 무엇을 확인해야 해?"
+      ]
+    },
+    {
+      "case_id": "ops-answer-004",
+      "parent_id": "",
+      "query": "Route와 Ingress 차이가 뭐야?",
+      "source": "corpus\\manifests\\eval\\answer_eval_cases.jsonl",
+      "query_type": "ops",
+      "route_kind": "official",
+      "must_include_terms": [],
+      "expected_citation_terms": [],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 673,
+      "citation_count": 2,
+      "cited_indices": [
+        1,
+        2
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 제공된 근거에는 Route와 Ingress의 차이점에 대한 직접적인 정의나 비교 설명이 포함되어 있지 않습니다.\n\n다만, 근거를 통해 Route를 생성하고 확인하는 실무 절차는 다음과 같이 안내할 수 있습니다.\n\n**Route 생성 및 확인 절차**\n먼저 `oc` 명령어를 사용하여 환경을 준비하고 Route를 생성하십시오.\n\n1. 프로젝트 생성 및 리소스 배포\n\n```bash\noc new-project hello-openshift\noc create -f ",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "ingress_and_load_balancing",
+          "section": "Ingress 컨트롤러 샤딩의 경로 생성",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-sharding-route-configuration_configuring-ingress-cluster-traffic-ingress-controller",
+          "cli_commands": [
+            "oc",
+            "oc new-project hello-openshift",
+            "oc create -f https://raw.githubusercontent.com/openshift/origin/master/examples/hello-openshift/hello-pod.json",
+            "oc expose pod/hello-openshift",
+            "oc -n hello-openshift create -f hello-openshift-route.yaml",
+            "oc -n hello-openshift get routes/hello-openshift-edge -o yaml"
+          ]
+        },
+        {
+          "index": 2,
+          "book_slug": "ingress_and_load_balancing",
+          "section": "Ingress 컨트롤러 샤딩의 경로 생성",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-sharding-route-configuration_creating-basic-routes",
+          "cli_commands": [
+            "oc",
+            "oc new-project hello-openshift",
+            "oc create -f https://raw.githubusercontent.com/openshift/origin/master/examples/hello-openshift/hello-pod.json",
+            "oc expose pod/hello-openshift",
+            "oc -n hello-openshift create -f hello-openshift-route.yaml",
+            "oc -n hello-openshift get routes/hello-openshift-edge -o yaml"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "Ingress 컨트롤러 샤딩의 경로 생성 절차에서 흔한 실패 지점은 뭐야?",
+        "Ingress 컨트롤러 샤딩의 경로 생성 내용을 초보자용 3단계로 다시 정리해줘",
+        "`oc` 결과에서 Route와 Service 연결을 어떻게 확인해?"
+      ]
+    }
+  ]
+}

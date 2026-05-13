@@ -36,6 +36,27 @@ _SECRET_CONFIG_KO_RE = re.compile(
 )
 _NAMESPACE_KO_RE = re.compile(r"namespace|namespaces|네임스페이스|프로젝트|project|projects", re.IGNORECASE)
 
+_DEPLOYMENT_YAML_AUTHORING_RE = re.compile(
+    r"(?:deployment|deploy|배포|디플로이먼트).*(?:yaml|manifest|매니페스트|작성|생성|만들|명령|apply|create)"
+    r"|(?:yaml|manifest|매니페스트).*(?:deployment|deploy|배포|디플로이먼트)",
+    re.IGNORECASE,
+)
+_POD_RESOURCE_INSPECTION_RE = re.compile(
+    r"(?:pod|pods|파드).*(?:resource|usage|cpu|memory|메모리|리소스|자원|사용량|top)"
+    r"|(?:resource|usage|cpu|memory|메모리|리소스|자원|사용량|top).*(?:pod|pods|파드)",
+    re.IGNORECASE,
+)
+_SERVICE_FAILURE_DIAGNOSIS_RE = re.compile(
+    r"(?:service|services|svc|서비스).*(?:장애|오류|에러|안\s*됨|안됨|접속|연결|원인|trouble|fail|error|endpoint)"
+    r"|(?:endpoint|route|selector).*(?:장애|오류|에러|안\s*됨|안됨|접속|연결|원인|trouble|fail|error)",
+    re.IGNORECASE,
+)
+_NAMESPACE_CREATE_RE = re.compile(
+    r"(?:namespace|namespaces|project|projects|네임스페이스|프로젝트).*(?:create|new|make|만들|만드|생성|추가)"
+    r"|(?:create|new|make|만들|만드|생성|추가).*(?:namespace|namespaces|project|projects|네임스페이스|프로젝트)",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class QueryUnderstanding:
@@ -60,6 +81,10 @@ def understand_query(query: str) -> QueryUnderstanding:
     troubleshooting = bool(_TROUBLE_RE.search(text) or _TROUBLE_KO_RE.search(text))
     secret_config = bool(_SECRET_CONFIG_RE.search(text) or _SECRET_CONFIG_KO_RE.search(text))
     namespace = bool(_NAMESPACE_RE.search(text) or _NAMESPACE_KO_RE.search(text))
+    deployment_yaml = bool(_DEPLOYMENT_YAML_AUTHORING_RE.search(text))
+    pod_resource = bool(_POD_RESOURCE_INSPECTION_RE.search(text))
+    service_failure = bool(_SERVICE_FAILURE_DIAGNOSIS_RE.search(text))
+    namespace_create = bool(_NAMESPACE_CREATE_RE.search(text))
 
     if openshift:
         _append_terms(terms, ["OpenShift Container Platform", "OCP", "OpenShift"])
@@ -122,6 +147,69 @@ def understand_query(query: str) -> QueryUnderstanding:
                 "oc get namespaces",
                 "oc get projects",
                 "oc project",
+            ],
+        )
+    if deployment_yaml:
+        intents.append("deployment_yaml_authoring")
+        answer_shape = "command_with_judgement" if command else "grounded_explanation"
+        _append_terms(
+            terms,
+            [
+                "Deployment",
+                "kind: Deployment",
+                "Deployment manifest",
+                "YAML",
+                "Pod template",
+                "ReplicaSet",
+                "oc apply -f",
+                "oc create deployment",
+                "oc rollout status deployment",
+            ],
+        )
+    if pod_resource:
+        intents.append("pod_resource_inspection")
+        answer_shape = "command_with_judgement"
+        _append_terms(
+            terms,
+            [
+                "resource usage",
+                "CPU",
+                "memory",
+                "requests",
+                "limits",
+                "oc adm top pods",
+                "oc top pod",
+                "metrics",
+            ],
+        )
+    if service_failure:
+        intents.append("service_failure_diagnosis")
+        answer_shape = "troubleshooting_steps"
+        _append_terms(
+            terms,
+            [
+                "Service",
+                "Endpoint",
+                "EndpointSlice",
+                "Route",
+                "selector",
+                "targetPort",
+                "oc describe service",
+                "oc get endpoints",
+                "oc describe route",
+            ],
+        )
+    if namespace_create:
+        intents.append("namespace_create")
+        answer_shape = "command_with_judgement"
+        _append_terms(
+            terms,
+            [
+                "Namespace",
+                "Project",
+                "oc create namespace",
+                "oc new-project",
+                "kind: Namespace",
             ],
         )
     if not intents and openshift:

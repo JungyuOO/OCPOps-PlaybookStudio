@@ -25,6 +25,7 @@ oc create secret generic playbookstudio-secret \
 
 oc rollout status deployment/postgres -n "${NAMESPACE}" --timeout=300s
 oc rollout status deployment/qdrant -n "${NAMESPACE}" --timeout=300s
+oc rollout status deployment/bge-reranker -n "${NAMESPACE}" --timeout=1800s
 
 run_job() {
   local name="$1"

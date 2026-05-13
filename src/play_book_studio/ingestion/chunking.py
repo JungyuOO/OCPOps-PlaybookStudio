@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from .models import ChunkRecord, NormalizedSection
 from .internal_markup import render_internal_markup_for_retrieval
+from .chunk_question_candidates import build_chunk_question_candidates
 from .sentence_model import load_sentence_model
 from play_book_studio.config.corpus_policy import chunk_profile_for_section
 from play_book_studio.config.settings import Settings
@@ -164,6 +165,48 @@ def _hard_split_text(text: str, token_counter: TokenCounter, chunk_size: int) ->
     return parts
 
 
+def _is_navigation_only(body: str, chunk_type: str) -> bool:
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    if len(lines) > 4:
+        return False
+    if len(body.split()) >= 60:
+        return False
+    if str(chunk_type or "").strip() != "reference":
+        return False
+    lowered = body.lower()
+    return (
+        "이 문서에서는" in body
+        or "관련 문서" in body
+        or "open document" in lowered
+        or "close" in lowered
+    )
+
+
+def _parent_text(children: list[ChunkRecord]) -> str:
+    parts: list[str] = []
+    seen: set[str] = set()
+    for child in children:
+        for block in child.text.split("\n\n"):
+            cleaned = block.strip()
+            if not cleaned:
+                continue
+            key = cleaned.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            parts.append(cleaned)
+    return "\n\n".join(parts)
+
+
+def _with_question_candidates(chunk: ChunkRecord) -> ChunkRecord:
+    payload = chunk.to_dict()
+    candidates = build_chunk_question_candidates(payload)
+    chunk.starter_question_candidates = tuple(candidates["starter_question_candidates"])
+    chunk.followup_question_candidates = tuple(candidates["followup_question_candidates"])
+    chunk.question_candidates_version = 1
+    return chunk
+
+
 def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> list[ChunkRecord]:
     # chunking은 book slug별 정책을 따른다. 그래서 API/reference-heavy 문서와
     # 개념 설명 문서를 서로 다르게 쪼갤 수 있다.
@@ -171,6 +214,7 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
     chunks: list[ChunkRecord] = []
 
     for section in sections:
+        section_chunks: list[ChunkRecord] = []
         chunk_size, chunk_overlap = chunk_profile_for_section(
             section.book_slug,
             semantic_role=section.semantic_role,
@@ -197,8 +241,8 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
             token_count = token_counter.count(final_text)
             raw_key = f"{section.book_slug}:{section.anchor}:{ordinal}:{final_text}"
             chunk_id = str(uuid.uuid5(uuid.NAMESPACE_URL, raw_key))
-            chunks.append(
-                ChunkRecord(
+            chunk_type = _chunk_type_for_section(section)
+            chunk = ChunkRecord(
                     chunk_id=chunk_id,
                     book_slug=section.book_slug,
                     book_title=section.book_title,
@@ -212,7 +256,7 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
                     token_count=token_count,
                     ordinal=ordinal,
                     section_path=tuple(section.section_path),
-                    chunk_type=_chunk_type_for_section(section),
+                    chunk_type=chunk_type,
                     source_id=section.source_id,
                     source_lane=section.source_lane,
                     source_type=section.source_type,
@@ -253,8 +297,10 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
                     k8s_objects=section.k8s_objects,
                     operator_names=section.operator_names,
                     verification_hints=section.verification_hints,
+                    chunk_role="leaf",
+                    navigation_only=_is_navigation_only(body, chunk_type),
                 )
-            )
+            section_chunks.append(_with_question_candidates(chunk))
             ordinal += 1
             if chunk_overlap <= 0:
                 current_blocks = []
@@ -292,5 +338,74 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
             current_tokens += block_tokens
 
         finalize()
+
+        if section_chunks:
+            parent_text = _parent_text(section_chunks)
+            parent_key = f"{section.book_slug}:{section.anchor}:parent:{parent_text}"
+            parent_id = str(uuid.uuid5(uuid.NAMESPACE_URL, parent_key))
+            child_ids = tuple(child.chunk_id for child in section_chunks)
+            for child in section_chunks:
+                child.parent_chunk_id = parent_id
+            parent = ChunkRecord(
+                chunk_id=parent_id,
+                book_slug=section.book_slug,
+                book_title=section.book_title,
+                chapter=section.section_path[0] if section.section_path else section.book_title,
+                section=section.heading,
+                section_id=section.section_id,
+                anchor=section.anchor,
+                source_url=section.source_url,
+                viewer_path=section.viewer_path,
+                text=parent_text,
+                token_count=token_counter.count(parent_text),
+                ordinal=ordinal,
+                section_path=tuple(section.section_path),
+                chunk_type=_chunk_type_for_section(section),
+                source_id=section.source_id,
+                source_lane=section.source_lane,
+                source_type=section.source_type,
+                source_collection=section.source_collection,
+                product=section.product,
+                version=section.version,
+                locale=section.locale,
+                source_language=section.source_language,
+                display_language=section.display_language,
+                translation_status=section.translation_status,
+                translation_stage=section.translation_stage,
+                translation_source_language=section.translation_source_language,
+                translation_source_url=section.translation_source_url,
+                translation_source_fingerprint=section.translation_source_fingerprint,
+                original_title=section.original_title or section.book_title,
+                legal_notice_url=section.legal_notice_url,
+                license_or_terms=section.license_or_terms,
+                review_status=section.review_status,
+                trust_score=section.trust_score,
+                verifiability=section.verifiability,
+                updated_at=section.updated_at,
+                parsed_artifact_id=section.parsed_artifact_id,
+                tenant_id=section.tenant_id,
+                workspace_id=section.workspace_id,
+                parent_pack_id=section.parent_pack_id,
+                pack_version=section.pack_version,
+                bundle_scope=section.bundle_scope,
+                classification=section.classification,
+                access_groups=section.access_groups,
+                provider_egress_policy=section.provider_egress_policy,
+                approval_state=section.approval_state,
+                publication_state=section.publication_state,
+                redaction_state=section.redaction_state,
+                citation_eligible=section.translation_status == "approved_ko",
+                citation_block_reason="" if section.translation_status == "approved_ko" else "translation_or_review_pending",
+                cli_commands=section.cli_commands,
+                error_strings=section.error_strings,
+                k8s_objects=section.k8s_objects,
+                operator_names=section.operator_names,
+                verification_hints=section.verification_hints,
+                chunk_role="parent",
+                child_chunk_ids=child_ids,
+                navigation_only=False,
+            )
+            chunks.extend(section_chunks)
+            chunks.append(_with_question_candidates(parent))
 
     return chunks

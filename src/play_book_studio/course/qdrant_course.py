@@ -10,6 +10,7 @@ import re
 
 from play_book_studio.config.settings import Settings
 from play_book_studio.ingestion.embedding import EmbeddingClient
+from play_book_studio.ingestion.kmsc_beginner_narrative import derive_ops_learning_chunks
 COURSE_QDRANT_COLLECTION = "course_pbs_ko"
 COURSE_OPS_LEARNING_QDRANT_COLLECTION = "course_ops_learning_ko"
 
@@ -138,8 +139,9 @@ def course_point_payload(chunk: dict[str, Any]) -> dict[str, Any]:
 
 def load_ops_learning_chunks(course_dir: Path) -> list[dict[str, Any]]:
     path = course_dir / "manifests" / "ops_learning_chunks_v1.jsonl"
+    course_chunks = load_course_chunks(course_dir)
     if not path.exists():
-        return []
+        return derive_ops_learning_chunks(course_chunks, existing_learning_chunks=[])
     chunks: list[dict[str, Any]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -147,7 +149,7 @@ def load_ops_learning_chunks(course_dir: Path) -> list[dict[str, Any]]:
         payload = json.loads(line)
         if isinstance(payload, dict) and str(payload.get("learning_chunk_id") or "").strip():
             chunks.append(payload)
-    return chunks
+    return derive_ops_learning_chunks(course_chunks, existing_learning_chunks=chunks)
 
 
 def ops_learning_embedding_text(chunk: dict[str, Any]) -> str:

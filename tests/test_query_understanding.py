@@ -36,7 +36,7 @@ def test_secret_config_error_query_understanding_expands_for_troubleshooting() -
     assert understanding.answer_shape == "troubleshooting_steps"
     assert "oc describe secret" in understanding.retrieval_terms
     assert "Secret" in normalized
-    assert "ConfigMap" in normalized
+    assert "configmap" in normalized.lower()
     assert "describe" in normalized
     assert "events" in normalized
 
@@ -52,3 +52,24 @@ def test_namespace_command_query_understanding_expands_project_commands() -> Non
     assert "oc get projects" in understanding.retrieval_terms
     assert "namespaces" in normalized
     assert "projects" in normalized
+
+
+def test_v012_beginner_intents_expand_operational_terms() -> None:
+    deployment = understand_query("보통 배포 yaml파일은 어케 작성하지")
+    service = understand_query("Service쪽에서 계속 장애나는데 뭐가 원인일까?")
+    namespace = understand_query("특정 namespace를 만드는 명령어가 뭐야?")
+    pod_usage = understand_query("특정 Pod의 리소스가 얼마나 잡아먹고 있는지 확인하는 법")
+
+    assert "deployment_yaml_authoring" in deployment.intents
+    assert "kind: Deployment" in deployment.retrieval_terms
+    assert "oc apply -f" in deployment.retrieval_terms
+
+    assert "service_failure_diagnosis" in service.intents
+    assert "Endpoint" in service.retrieval_terms
+    assert "oc get endpoints" in service.retrieval_terms
+
+    assert "namespace_create" in namespace.intents
+    assert "oc create namespace" in namespace.retrieval_terms
+
+    assert "pod_resource_inspection" in pod_usage.intents
+    assert "oc adm top pods" in pod_usage.retrieval_terms

@@ -73,9 +73,28 @@ The cleanup script stops containers but preserves Docker volumes.
 ```bash
 oc get pods -n pbs-ocpops
 oc get route -n pbs-ocpops
+oc logs deployment/bge-reranker -n pbs-ocpops --tail=80
 oc logs job/official-corpus-seed -n pbs-ocpops --tail=80
 oc logs job/kmsc-corpus-seed -n pbs-ocpops --tail=80
 oc logs job/learning-seed -n pbs-ocpops --tail=80
 ```
 
 Open the `playbookstudio` Route host in a browser.
+
+## Verify BGE Reranker
+
+The reranker runs inside the namespace as Service `bge-reranker`. Its model
+cache is persisted in PVC `bge-reranker-cache`, so the model is not downloaded
+again on every pod restart.
+
+```bash
+oc -n pbs-ocpops run reranker-smoke --rm -it --restart=Never \
+  --image=curlimages/curl:latest \
+  -- curl -sS -X POST http://bge-reranker/rerank \
+    -H 'Content-Type: application/json' \
+    --data '{"query":"Route timeout 어디서 확인해?","texts":["OpenShift Route timeout is configured on HAProxy router annotations.","HSTS policy configures strict transport security for routes."],"raw_scores":true,"return_text":false,"truncate":true}'
+```
+
+If the pod cannot download `BAAI/bge-reranker-v2-m3`, preload the model into
+the `bge-reranker-cache` PVC or mirror the model through an internal artifact
+source before rolling out the app.

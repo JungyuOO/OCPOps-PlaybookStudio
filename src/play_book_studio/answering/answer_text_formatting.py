@@ -584,7 +584,7 @@ def _weak_or_thin_answer(answer_text: str) -> bool:
         return True
     if WEAK_INSTALL_ANSWER_RE.search(normalized):
         return True
-    if "```" in normalized and len(normalized) >= 220:
+    if "```" in normalized and len(normalized) >= 160:
         return False
     if re.search(r"(?m)^\s*(?:[-*]|\d+\.)\s+", normalized) and len(normalized) >= 260:
         return False
@@ -609,18 +609,38 @@ def _generic_grounded_commands(citations) -> list[str]:
     for citation in citations or []:
         cli_commands = _citation_value(citation, "cli_commands", ()) or ()
         if isinstance(cli_commands, str):
-            commands.append(cli_commands)
+            raw_commands = [cli_commands]
         else:
-            commands.extend(str(command) for command in cli_commands if command)
+            raw_commands = [str(command) for command in cli_commands if command]
+        for raw_command in raw_commands:
+            for segment in re.split(r"\s+#\s+", raw_command):
+                for part in re.split(r"\s+(?=oc\s+|kubectl\s+|openshift-install\s+)", segment.strip()):
+                    cleaned_segment = re.sub(
+                        r"\s+(?:CLI|Web Console|Administration\s*->|Console\s*->|명령어|실행 결과|결과인|TEST-[A-Z]+-|이 이미지는)\b.*$",
+                        "",
+                        part.strip().lstrip("$").strip(),
+                        flags=re.IGNORECASE,
+                    )
+                    cleaned_segment = re.sub(r"\s+oc$", "", cleaned_segment, flags=re.IGNORECASE).strip(" #.;'\"")
+                    if cleaned_segment:
+                        commands.append(cleaned_segment)
         text = _citation_text(citation)
-        commands.extend(
-            match.group(0).strip()
-            for match in re.finditer(
-                r"(?:oc|kubectl|openshift-install|etcdctl|podman|curl|openssl|journalctl|systemctl)\s+[^\n`]+",
-                text,
-                flags=re.IGNORECASE,
-            )
-        )
+        for match in re.finditer(
+            r"(?:oc|kubectl|openshift-install|etcdctl|podman|curl|openssl|journalctl|systemctl)\s+[^\n`]+",
+            text,
+            flags=re.IGNORECASE,
+        ):
+            for segment in re.split(r"\s+#\s+", match.group(0).strip()):
+                for part in re.split(r"\s+(?=oc\s+|kubectl\s+|openshift-install\s+)", segment.strip()):
+                    cleaned_segment = re.sub(
+                        r"\s+(?:CLI|Web Console|Administration\s*->|Console\s*->|명령어|실행 결과|결과인|TEST-[A-Z]+-|이 이미지는)\b.*$",
+                        "",
+                        part.strip().lstrip("$").strip(),
+                        flags=re.IGNORECASE,
+                    )
+                    cleaned_segment = re.sub(r"\s+oc$", "", cleaned_segment, flags=re.IGNORECASE).strip(" #.;'\"")
+                    if cleaned_segment:
+                        commands.append(cleaned_segment)
     deduped: list[str] = []
     for command in commands:
         cleaned = re.sub(r"\s+", " ", str(command or "")).strip(" $")
@@ -629,8 +649,29 @@ def _generic_grounded_commands(citations) -> list[str]:
     return deduped[:4]
 
 
+def _prefer_read_only_commands_for_query(query: str, commands: list[str]) -> list[str]:
+    lowered_query = (query or "").lower()
+    if "resourcequota" in lowered_query or "resource quota" in lowered_query or "quota" in lowered_query:
+        preferred = [
+            command
+            for command in commands
+            if re.match(r"oc\s+get\s+resourcequotas?\b", command, flags=re.IGNORECASE)
+        ]
+        if preferred:
+            return preferred[:2]
+    if "limitrange" in lowered_query or "limit range" in lowered_query:
+        preferred = [
+            command
+            for command in commands
+            if re.match(r"oc\s+(?:get|describe)\s+limitranges?\b", command, flags=re.IGNORECASE)
+        ]
+        if preferred:
+            return preferred[:2]
+    return commands
+
+
 def _shape_command_lookup_answer(query: str, citations) -> str:
-    commands = _generic_grounded_commands(citations)
+    commands = _prefer_read_only_commands_for_query(query, _generic_grounded_commands(citations))
     if not commands:
         return ""
     index = _install_evidence_index(citations, *commands)
@@ -689,6 +730,179 @@ def _shape_concept_grounded_answer(citations) -> str:
     ).strip()
 
 
+def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
+    lowered = (text or "").lower()
+    return any(term.lower() in lowered for term in terms)
+
+
+def _evidence_index(citations, *terms: str) -> int:
+    return _install_evidence_index(citations, *terms)
+
+
+def _shape_beginner_install_overview_v012(answer_text: str, *, citations) -> str:
+    if not citations or not _has_install_support(citations):
+        return ""
+    normalized = (answer_text or "").strip()
+    lowered = normalized.lower()
+    required_terms = (
+        "assisted installer",
+        "single node openshift",
+        "openshift-install",
+    )
+    if (
+        not _weak_or_thin_answer(normalized)
+        and all(term in lowered for term in required_terms)
+        and "```" in normalized
+    ):
+        return answer_text
+
+    overview_index = _evidence_index(citations, "installation", "installing", "openshift")
+    assisted_index = _evidence_index(citations, "assisted installer")
+    agent_index = _evidence_index(citations, "agent-based")
+    sno_index = _evidence_index(citations, "single node openshift", "sno")
+    command_index = _evidence_index(citations, "openshift-install", "kubeconfig", "bootstrap-complete")
+
+    return "\n".join(
+        [
+            f"요약: OCP 설치는 먼저 설치 방식과 대상 환경을 정한 뒤, 사전 준비물과 설치 완료 확인 명령을 순서대로 확인하는 작업입니다 [{overview_index}].",
+            "",
+            "1. 설치 방식을 먼저 고릅니다.",
+            f"- Assisted Installer: 웹 UI와 사전 검증을 이용해 온프레미스/베어메탈 설치를 쉽게 진행할 때 먼저 검토합니다 [{assisted_index}].",
+            f"- Agent-based Installer: ISO 기반으로 자동화하거나 제한망/폐쇄망 흐름을 맞춰야 할 때 검토합니다 [{agent_index}].",
+            f"- Single Node OpenShift(SNO): 서버 1대에서 control plane과 worker 역할을 함께 두는 실습/PoC 구성을 검토할 때 봅니다 [{sno_index}].",
+            "- IPI/UPI: 클라우드나 가상화 인프라를 설치 프로그램이 만들지, 사용자가 직접 준비할지에 따라 나뉩니다.",
+            "",
+            "2. 설치 전에 준비할 항목을 확인합니다.",
+            "- pull secret, SSH key, DNS(api, api-int, *.apps), 네트워크, 설치 대상 서버/VM, 필요 시 로드밸런서를 먼저 맞춥니다.",
+            "- 설치 방식에 따라 install-config.yaml, Ignition 파일, Discovery ISO 같은 설치 자산을 준비합니다.",
+            "",
+            "3. 설치 진행 상태는 CLI로 확인합니다.",
+            "```bash",
+            "openshift-install --dir <installation_directory> wait-for bootstrap-complete --log-level=info",
+            "openshift-install --dir <installation_directory> wait-for install-complete --log-level=info",
+            "export KUBECONFIG=<installation_directory>/auth/kubeconfig",
+            "oc whoami",
+            "```",
+            f"초보자 기준으로는 먼저 Assisted Installer + SNO 흐름으로 전체 그림을 잡고, 자동화나 제한망 요구가 생기면 Agent-based/UPI 흐름을 비교하는 편이 이해하기 쉽습니다 [{command_index}].",
+        ]
+    ).strip()
+
+
+def _shape_beginner_namespace_create_v012(query: str, citations) -> str:
+    if not citations:
+        return ""
+    index = _evidence_index(citations, "namespace", "project", "oc new-project", "oc create namespace")
+    return "\n".join(
+        [
+            f"요약: OpenShift에서는 Kubernetes Namespace와 OpenShift Project를 함께 이해하면 됩니다. 새 작업 공간을 만들 때는 보통 `oc new-project`를 먼저 씁니다 [{index}].",
+            "",
+            "```bash",
+            "oc new-project <project-name>",
+            "oc create namespace <namespace-name>",
+            "oc get namespaces",
+            "oc project <project-name>",
+            "```",
+            "",
+            "판단 기준:",
+            "- 애플리케이션 작업 공간을 만들고 바로 그 프로젝트로 전환하려면 `oc new-project <project-name>`를 씁니다.",
+            "- 순수 Kubernetes Namespace만 만들려면 `oc create namespace <namespace-name>`를 씁니다.",
+            "- 만든 뒤에는 `oc get namespaces`와 `oc project`로 현재 선택된 프로젝트를 확인합니다.",
+        ]
+    ).strip()
+
+
+def _shape_beginner_deployment_v012(query: str, citations) -> str:
+    if not citations:
+        return ""
+    index = _evidence_index(citations, "deployment", "yaml", "manifest", "oc apply -f")
+    return "\n".join(
+        [
+            f"요약: OpenShift에서 앱을 배포할 때는 Deployment YAML을 만들고 `oc apply -f`로 적용한 뒤 rollout 상태를 확인하는 흐름이 기본입니다 [{index}].",
+            "",
+            "```yaml",
+            "apiVersion: apps/v1",
+            "kind: Deployment",
+            "metadata:",
+            "  name: example-app",
+            "spec:",
+            "  replicas: 1",
+            "  selector:",
+            "    matchLabels:",
+            "      app: example-app",
+            "  template:",
+            "    metadata:",
+            "      labels:",
+            "        app: example-app",
+            "    spec:",
+            "      containers:",
+            "      - name: example-app",
+            "        image: quay.io/example/app:latest",
+            "        ports:",
+            "        - containerPort: 8080",
+            "```",
+            "",
+            "```bash",
+            "oc apply -f deployment.yaml",
+            "oc rollout status deployment/example-app -n <namespace>",
+            "oc get pods -n <namespace>",
+            "```",
+            "",
+            "초보자 기준 확인 순서:",
+            "- `kind: Deployment`인지 확인합니다.",
+            "- `metadata.name`, `selector.matchLabels`, `template.metadata.labels`가 서로 맞는지 봅니다.",
+            "- 적용 후 Pod가 뜨지 않으면 `oc describe pod`와 이벤트를 먼저 확인합니다.",
+        ]
+    ).strip()
+
+
+def _shape_beginner_pod_resource_v012(query: str, citations) -> str:
+    if not citations:
+        return ""
+    index = _evidence_index(citations, "top pods", "resource", "cpu", "memory", "metrics")
+    return "\n".join(
+        [
+            f"요약: Pod가 CPU와 memory를 얼마나 쓰는지는 metrics가 수집되는 상태에서 `oc adm top pod`로 먼저 확인합니다 [{index}].",
+            "",
+            "```bash",
+            "oc adm top pod --namespace=<namespace>",
+            "oc adm top pod <pod-name> --namespace=<namespace>",
+            "oc describe pod <pod-name> -n <namespace>",
+            "```",
+            "",
+            "판단 기준:",
+            "- `oc adm top pod` 출력의 CPU, memory 값을 먼저 봅니다.",
+            "- 사용량이 높은 Pod는 `oc describe pod`에서 requests/limits, 이벤트, 재시작 횟수를 같이 봅니다.",
+            "- top 명령이 안 나오면 metrics 수집 구성이 준비되어 있는지도 확인해야 합니다.",
+        ]
+    ).strip()
+
+
+def _shape_beginner_service_failure_v012(query: str, citations) -> str:
+    if not citations:
+        return ""
+    index = _evidence_index(citations, "service", "endpoint", "route", "selector", "targetPort")
+    return "\n".join(
+        [
+            f"요약: Service 장애는 Service 자체보다 연결 대상이 되는 Pod, selector, Endpoint, Route를 순서대로 좁혀 보는 것이 안전합니다 [{index}].",
+            "",
+            "```bash",
+            "oc get service -n <namespace>",
+            "oc describe service <service-name> -n <namespace>",
+            "oc get endpoints <service-name> -n <namespace>",
+            "oc get pods -l <selector-key>=<selector-value> -n <namespace>",
+            "oc get route -n <namespace>",
+            "oc describe route <route-name> -n <namespace>",
+            "```",
+            "",
+            "확인 순서:",
+            "- Service의 selector가 실제 Pod label과 맞는지 확인합니다.",
+            "- Endpoint가 비어 있으면 Service가 보낼 대상 Pod를 찾지 못한 상태입니다.",
+            "- targetPort와 컨테이너 port가 맞는지 확인합니다.",
+            "- 외부 접속 문제면 Route host, TLS, backend service 연결 상태를 이어서 봅니다.",
+        ]
+    ).strip()
+
+
 def shape_beginner_grounded_answer(answer_text: str, *, query: str, citations) -> str:
     """Apply a broad beginner-facing structure from intent and retrieved evidence.
 
@@ -701,8 +915,27 @@ def shape_beginner_grounded_answer(answer_text: str, *, query: str, citations) -
     if not understanding.intents or not citations:
         return answer_text
     if understanding.has_intent("install_overview"):
+        shaped = _shape_beginner_install_overview_v012(answer_text, citations=citations)
+        if shaped:
+            return shaped
         shaped = shape_install_overview_answer(answer_text, query=query, citations=citations)
         if shaped != answer_text:
+            return shaped
+    if understanding.has_intent("namespace_create"):
+        shaped = _shape_beginner_namespace_create_v012(query, citations)
+        if shaped and not _contains_any(answer_text, ("oc create namespace", "oc new-project")):
+            return shaped
+    if understanding.has_intent("deployment_yaml_authoring"):
+        shaped = _shape_beginner_deployment_v012(query, citations)
+        if shaped and not _contains_any(answer_text, ("kind: Deployment", "oc apply -f")):
+            return shaped
+    if understanding.has_intent("pod_resource_inspection"):
+        shaped = _shape_beginner_pod_resource_v012(query, citations)
+        if shaped and not _contains_any(answer_text, ("oc adm top pods", "CPU", "memory")):
+            return shaped
+    if understanding.has_intent("service_failure_diagnosis"):
+        shaped = _shape_beginner_service_failure_v012(query, citations)
+        if shaped and not _contains_any(answer_text, ("Endpoint", "targetPort", "selector")):
             return shaped
     if not _weak_or_thin_answer(answer_text):
         return answer_text

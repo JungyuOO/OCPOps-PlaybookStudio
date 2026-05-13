@@ -77,9 +77,44 @@ def append_operation_project_node_deployment_terms(normalized: str, terms: list[
                 "DNS Operator",
                 "External DNS Operator",
                 "dns.operator",
+                "dns.operator.openshift.io",
+                "DNS Operator in OpenShift Container Platform",
                 "networking operators",
                 "CoreDNS",
                 "openshift-dns",
+            ]
+        )
+    if "networkpolicy" in normalized or "network policy" in normalized:
+        terms.extend(
+            [
+                "NetworkPolicy",
+                "network policy",
+                "podSelector",
+                "namespaceSelector",
+                "ingress",
+                "egress",
+                "oc get networkpolicy",
+            ]
+        )
+    if "egress" in normalized or "external api" in normalized or "outbound" in normalized:
+        terms.extend(
+            [
+                "egress",
+                "NetworkPolicy",
+                "EgressIP",
+                "external traffic",
+                "outbound traffic",
+                "oc describe networkpolicy",
+            ]
+        )
+    if "route timeout" in normalized or ("route" in normalized and "timeout" in normalized):
+        terms.extend(
+            [
+                "route timeout",
+                "haproxy.router.openshift.io/timeout",
+                "IngressController timeout",
+                "oc get route",
+                "oc describe route",
             ]
         )
     if "event" in normalized or "이벤트" in normalized:
@@ -112,6 +147,16 @@ def append_operation_project_node_deployment_terms(normalized: str, terms: list[
                 "firing alerts",
                 "openshift-monitoring",
                 "monitoring",
+            ]
+        )
+    if "odf" in normalized or "openshift data foundation" in normalized:
+        terms.extend(
+            [
+                "ODF",
+                "OpenShift Data Foundation",
+                "openshift-storage",
+                "CephCluster",
+                "storage operator",
             ]
         )
     if "resourcequota" in normalized or "resource quota" in normalized:

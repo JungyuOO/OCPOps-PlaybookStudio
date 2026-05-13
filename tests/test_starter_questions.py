@@ -149,6 +149,53 @@ def test_starter_questions_use_postgres_official_metadata_when_database_is_confi
     assert payload["learning_sequence"][2]["target_viewer_path"] == "/playbooks/wiki-runtime/active/machine_configuration/index.html"
 
 
+def test_starter_questions_prefer_chunk_candidate_questions_when_available(monkeypatch) -> None:
+    root = TEST_TMP / "db_chunk_candidates"
+    root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(
+        starter_questions,
+        "load_settings",
+        lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
+    )
+    monkeypatch.setattr(
+        starter_questions,
+        "_chunk_candidate_questions_from_db",
+        lambda _database_url, **kwargs: [
+            starter_questions._starter_question(
+                lane=kwargs["lane"],
+                question="Pod가 안 뜨면 처음에 어디부터 확인하면 돼?",
+                route_kind=kwargs["route_kind"],
+                source=kwargs["source_label"],
+                target_book_slug="applications",
+            )
+        ]
+        if kwargs["source_scope"] == "official_docs"
+        else [],
+    )
+    monkeypatch.setattr(starter_questions, "_official_manifest_entries_from_db", lambda _database_url: [])
+
+    payload = build_studio_starter_questions(root, seed="stable")
+    faq_questions = [item for group in payload["groups"] if group["key"] == "faq" for item in group["questions"]]
+
+    assert faq_questions[0]["question"] == "Pod가 안 뜨면 처음에 어디부터 확인하면 돼?"
+    assert faq_questions[0]["source"] == "postgres.document_chunks"
+    assert faq_questions[0]["target_book_slug"] == "applications"
+
+
+def test_starter_question_preserves_target_anchor() -> None:
+    question = starter_questions._starter_question(
+        lane="faq",
+        question="배포한 앱이 안 뜨면 어디부터 확인해야 해?",
+        route_kind="chat",
+        source="postgres.document_chunks",
+        target_book_slug="applications",
+        target_viewer_path="/playbooks/wiki-runtime/active/applications/index.html",
+        target_anchor="route-service-check",
+    )
+
+    assert question["target_anchor"] == "route-service-check"
+
+
 def test_postgres_official_faq_questions_are_actionable_korean(monkeypatch) -> None:
     root = TEST_TMP / "db_official_troubleshooting"
     root.mkdir(parents=True, exist_ok=True)
