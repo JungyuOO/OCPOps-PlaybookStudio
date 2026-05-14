@@ -16,6 +16,7 @@ Qdrant payload, viewer JSON/HTML, course runtime chunk가 동시에 존재한다
 - Postgres가 canonical corpus truth다. Qdrant는 파생 색인이고, viewer JSON/HTML은 렌더링 산출물이다.
 - v0.1.4의 1순위는 parsing storage와 corpus storage를 분리하는 것이다.
 - 문서 원본, 추출 결과, 정규화 텍스트, 이미지/OCR, chunk, viewer artifact를 한 단계씩 구분한다.
+- PDF든 JSON manifest든 최종 운영 기준은 동일해야 한다: 원본 -> parser artifact -> normalized DB row -> corpus chunk -> projection/viewer artifact.
 - JSONB는 무제한 잡동사니 저장소가 아니라 "확장 필드"로만 쓴다. 검색/필터/운영 판단에 필요한 값은 컬럼으로 승격한다.
 - 평가 report, smoke output, app build artifact, tmp 산출물은 corpus import 대상이 아니다.
 - Viewer가 JSON 기반이든 HTML 기반이든 DB의 canonical document/chunk 구조는 같아야 한다.
@@ -205,6 +206,13 @@ These values should be available to retriever, reranker prompt, starter question
   - Store source chunk/document id, generation method/model/version, quality status, and question type.
   - Randomly sample approved candidates on refresh.
   - Keep curated manifest/JSONL questions only as fallback or test fixtures.
+- Add a data-folder deletion manifest before deleting files.
+  - Classify each data path as source document, parser artifact, viewer artifact, runtime seed, eval fixture, report, or cache.
+  - Record current reader/writer, replacement source, and safe-to-delete decision.
+  - Do not delete runtime seeds until equivalent DB/corpus behavior exists.
+- Normalize JSON-to-HTML viewer flow.
+  - Treat nested JSON as source manifest, parser artifact, or runtime seed, not as the final DB truth.
+  - Render HTML/JSON viewer outputs from DB/corpus rows or registered viewer artifacts.
 - List every JSON/JSONL artifact currently used as corpus source, viewer artifact, eval report, temporary output, or course runtime artifact.
 - Mark each path as:
   - `canonical_source`

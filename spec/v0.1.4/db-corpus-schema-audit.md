@@ -93,6 +93,57 @@ schema에 필요한 조각들은 이미 있지만 경계가 약하다.
 - course runtime table은 document chunk table과 비슷해 보이지만 같은 truth가 아니다.
 - 다음 단계 학습 reference가 metadata에 있긴 하지만 guided learning을 안정적으로 만들 만큼 first-class가 아니다.
 
+## Data Folder Cleanup Policy
+
+Unneeded data folders and files should be deleted only after classification. The target is a production-style data layout where source documents, parser artifacts, generated viewer artifacts, eval fixtures, reports, and runtime caches are separated.
+
+### Proposed Folder Classes
+
+| Class | Purpose | Keep In Repo? | Example |
+| --- | --- | --- | --- |
+| `source_documents` | Canonical source inputs | Yes, if small/public and needed for seed; otherwise external storage | official source manifests, small seed docs |
+| `parser_artifacts` | Rebuildable parser output | Usually no, unless fixture | extracted JSON, OCR debug JSON, intermediate parsed previews |
+| `viewer_artifacts` | Generated render output | No, except tiny fixtures | generated JSON/HTML viewer files |
+| `runtime_seeds` | Transitional runtime bootstrap data | Temporarily | `ops_learning_chunks_v1.jsonl` until corpus replacement exists |
+| `eval_fixtures` | Test/eval cases | Yes, under explicit eval fixture path | `corpus/manifests/eval/*.jsonl` |
+| `reports` | Execution outputs | No | `reports/*.json`, smoke reports |
+| `cache` | Download/model/build cache | No | model caches, temporary OCR/render cache |
+
+### Cleanup Rule
+
+Do not delete by folder name alone. First produce a deletion manifest:
+
+```text
+path
+current_reader
+current_writer
+classification
+replacement_source
+safe_to_delete
+delete_after_commit_or_release
+reason
+```
+
+Only delete files marked `safe_to_delete=true` after confirming no runtime route, seed job, test, or deployment script reads them.
+
+## 실무형 데이터 폴더 정리 원칙
+
+필요없는 데이터 폴더/파일은 삭제 대상이 맞지만, 이름만 보고 바로 삭제하면 현재 기능을 깨뜨릴 수 있다. 먼저 각 파일을 source, parser artifact, viewer artifact, runtime seed, eval fixture, report, cache로 분류해야 한다.
+
+목표는 실무 Database/Storage 구조처럼 정리하는 것이다.
+
+```text
+sources/             원본 문서 또는 원본 manifest
+parsed_artifacts/    parser 중간 산출물, 재생성 가능
+viewer_artifacts/    JSON/HTML viewer 산출물, 재생성 가능
+runtime_seeds/       전환기 runtime seed
+eval_fixtures/       테스트/평가 fixture
+reports/             실행 결과, repo/corpus import 금지
+cache/               모델/렌더/OCR cache, repo/corpus import 금지
+```
+
+삭제는 `safe_to_delete` 판정 후 진행한다. 특히 `ops_learning_chunks_v1.jsonl`처럼 현재 Qdrant/starter question에서 읽는 파일은 canonical이 아니더라도 즉시 삭제하면 안 된다.
+
 ## Priority 1: Split Parsing Storage From Corpus Storage
 
 The first v0.1.4 schema decision is not which individual columns to add. It is to separate parsing-stage data from canonical corpus-stage data.
@@ -164,6 +215,69 @@ embedding_jobs         -> embedding status for corpus_chunks
 Existing `document_chunks` may either be renamed conceptually into `corpus_chunks` or replaced by new `corpus_chunks` with a compatibility view. That decision should happen before migration SQL.
 
 기존 `document_chunks`는 개념적으로 `corpus_chunks`로 전환할 수도 있고, 새 `corpus_chunks` 테이블을 만들고 compatibility view를 둘 수도 있다. 이 결정은 migration SQL 작성 전에 먼저 내려야 한다.
+
+## JSON Source and HTML Viewer Boundary
+
+The current system often treats JSON files as both source data and viewer data. That should change.
+
+For PDF-style ingestion, the normal production flow is:
+
+```text
+PDF/source file
+  -> parser artifact
+  -> normalized DB rows
+  -> corpus chunks
+  -> Qdrant projection
+  -> viewer artifact
+```
+
+For the current JSON-inside-JSON and HTML viewer flow, the target should be:
+
+```text
+JSON source/manifest
+  -> source document registration
+  -> parsed artifact record
+  -> normalized DB rows
+  -> corpus chunks
+  -> generated HTML/JSON viewer artifact
+```
+
+The JSON file may be a source manifest or parser artifact, but it should not remain the primary runtime database. The HTML viewer should be generated from DB/corpus rows or from a registered viewer artifact that points back to corpus rows.
+
+### DB Ownership Rule
+
+| Data | DB Treatment | Viewer Treatment |
+| --- | --- | --- |
+| PDF original | `document_sources` / source storage | Linked as original source |
+| Parsed PDF JSON | parser artifact, not corpus truth | Debug/provenance only |
+| Official source JSON manifest | source manifest, import input | Not directly rendered as truth |
+| Nested runtime JSON | artifact or runtime seed | Transitional only |
+| Normalized text | DB canonical | Renderable |
+| Chunk metadata/facets | DB canonical | Renderable/filterable |
+| HTML viewer output | artifact path only | Rendered UI output |
+
+## JSON 원본과 HTML Viewer 경계
+
+기존 PDF parsing 방식에서는 PDF에서 text/OCR/image를 추출하고 DB에 넣는 흐름이 자연스럽다. 지금 구조는 JSON 파일 안에 JSON 형식 데이터가 있고, 이를 HTML로 변환해서 사용자에게 보여주는 흐름이 섞여 있어 source of truth가 헷갈린다.
+
+v0.1.4 목표는 다음과 같다.
+
+1. JSON 파일이 원본 manifest인지, parser artifact인지, viewer artifact인지 먼저 분류한다.
+2. JSON을 runtime DB처럼 직접 계속 읽지 않는다.
+3. JSON에서 필요한 값은 `parsed_*` 또는 `corpus_*` DB row로 정규화한다.
+4. HTML viewer는 DB truth가 아니라 DB/corpus row에서 생성되는 render artifact다.
+5. viewer artifact에는 `corpus_document_id`, `corpus_chunk_id`, `source_url`, `viewer_artifact_path` 같은 참조만 둔다.
+
+즉 PDF든 JSON이든 최종 운영 기준은 같아야 한다.
+
+```text
+원본 파일/PDF/JSON manifest
+  -> parsing artifact
+  -> normalized DB row
+  -> corpus document/chunk
+  -> Qdrant/search projection
+  -> HTML/JSON viewer artifact
+```
 
 ## Feature Compatibility Before Replacement
 
