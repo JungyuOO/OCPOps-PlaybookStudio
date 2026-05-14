@@ -206,3 +206,21 @@ def test_beginner_pod_resource_answer_adds_top_pods_flow() -> None:
     assert "CPU" in answer
     assert "memory" in answer
     assert "metrics" in answer
+
+
+def test_beginner_deployment_command_answer_replaces_generic_apply_answer() -> None:
+    answer = shape_beginner_grounded_answer(
+        "답변: 실행 예시는 아래 명령을 기준으로 보면 됩니다.\n\n```bash\noc apply -f <your_data_gather_definition>.yaml\n```",
+        query="ocp에서 배포를 하고 싶으면 무슨 명령어로 해야되더라?",
+        citations=[
+            _citation(
+                book_slug="support",
+                excerpt="Use oc apply -f to apply a YAML resource definition.",
+                cli_commands=("oc apply -f <your_data_gather_definition>.yaml",),
+            )
+        ],
+    )
+
+    assert "Deployment" in answer
+    assert "oc apply -f deployment.yaml" in answer
+    assert "oc rollout status deployment/<name>" in answer
