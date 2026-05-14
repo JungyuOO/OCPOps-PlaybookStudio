@@ -12,6 +12,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode
 
+from play_book_studio.cluster.workspace_provisioner import (
+    delete_user_workspace,
+    get_user_workspace_status,
+    set_pinned,
+)
 from play_book_studio.config.settings import load_settings
 
 
@@ -2648,6 +2653,11 @@ def _redirect(handler: Any, location: str) -> None:
 
 def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Path) -> bool:
     state = _with_env_ocp_connection(root_dir, _load_state(root_dir))
+    if path == "/api/v1/workspace/status":
+        owner_hash = handler._session_owner().owner_hash
+        handler._send_json(get_user_workspace_status(owner_hash))
+        return True
+
     if path == "/api/v1/workspaces":
         handler._send_json({"items": state["workspaces"]})
         return True
@@ -3105,6 +3115,27 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
 
 def handle_ops_console_post(handler: Any, path: str, query: str, payload: dict[str, Any], *, root_dir: Path, answerer: Any | None = None) -> bool:
     state = _load_state(root_dir)
+    if path == "/api/v1/workspace/pin":
+        owner_hash = handler._session_owner().owner_hash
+        pinned = bool(payload.get("pinned"))
+        try:
+            set_pinned(owner_hash, pinned)
+        except Exception as exc:  # noqa: BLE001
+            handler._send_json({"error": f"Workspace pin update failed: {exc}"}, HTTPStatus.BAD_GATEWAY)
+            return True
+        handler._send_json({"pinned": pinned, "status": get_user_workspace_status(owner_hash)})
+        return True
+
+    if path == "/api/v1/workspace/reset":
+        owner_hash = handler._session_owner().owner_hash
+        try:
+            deleted = delete_user_workspace(owner_hash)
+        except Exception as exc:  # noqa: BLE001
+            handler._send_json({"error": f"Workspace reset failed: {exc}"}, HTTPStatus.BAD_GATEWAY)
+            return True
+        handler._send_json({"deleted": deleted, "status": get_user_workspace_status(owner_hash)})
+        return True
+
     if path == "/api/v1/workspaces":
         name = str(payload.get("name") or "").strip()
         if not name:

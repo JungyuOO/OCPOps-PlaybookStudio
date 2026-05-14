@@ -10,6 +10,7 @@ from play_book_studio.cluster.workspace_provisioner import (
     build_user_workspace_manifests,
     delete_user_workspace,
     ensure_user_workspace,
+    get_user_workspace_status,
     hibernate_user_workspace,
     set_pinned,
     touch_last_active,
@@ -28,6 +29,7 @@ class FakeKubernetesClient:
         self.deleted: list[str] = []
         self.waits: list[tuple[str, str, int]] = []
         self.pod_queries: list[tuple[str, str]] = []
+        self.responses: dict[tuple[str, str], dict] = {}
 
     def apply_manifest(self, manifest: dict) -> dict:
         self.applied.append(manifest)
@@ -48,6 +50,12 @@ class FakeKubernetesClient:
     def first_ready_pod(self, namespace: str, *, label_selector: str) -> str:
         self.pod_queries.append((namespace, label_selector))
         return "sandbox-abc123"
+
+    def request_json(self, method: str, path: str) -> dict:
+        response = self.responses.get((method, path))
+        if response is None:
+            raise RuntimeError(f"missing fake response for {method} {path}")
+        return response
 
 
 def _by_kind_name(manifests: tuple[dict, ...]) -> dict[tuple[str, str], dict]:
@@ -237,3 +245,32 @@ def test_workspace_lifecycle_helpers_patch_and_delete_expected_resources() -> No
     )
     assert client.deleted == ["/api/v1/namespaces/pbs-user-a3f9c1d2"]
     assert wake_handle.pod_name == "sandbox-abc123"
+
+
+def test_get_user_workspace_status_reads_labels_and_deployment_readiness() -> None:
+    client = FakeKubernetesClient()
+    client.responses = {
+        ("GET", "/api/v1/namespaces/pbs-user-a3f9c1d2"): {
+            "metadata": {
+                "labels": {
+                    "pbs.pinned": "true",
+                    "pbs.hibernated": "false",
+                    "pbs.created-at": "20260514T043758Z",
+                    "pbs.last-active-at": "20260514T050000Z",
+                }
+            }
+        },
+        ("GET", "/apis/apps/v1/namespaces/pbs-user-a3f9c1d2/deployments/sandbox"): {
+            "spec": {"replicas": 1},
+            "status": {"readyReplicas": 1},
+        },
+    }
+
+    status = get_user_workspace_status(OWNER_HASH, client=client)
+
+    assert status["available"] is True
+    assert status["namespace"] == "pbs-user-a3f9c1d2"
+    assert status["ready"] is True
+    assert status["pinned"] is True
+    assert status["hibernated"] is False
+    assert status["last_active_at"] == "20260514T050000Z"

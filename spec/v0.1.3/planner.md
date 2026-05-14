@@ -55,8 +55,8 @@ v0.1.3은 다음 두 축을 합친다.
 - [ ] 사용자 첫 접속 1회용 안내 메시지(브라우저-바운드 정체성, 14일 TTL 설명)
 - [x] in-cluster CronJob: 30분 idle → Pod replicas=0(동면), 14일 미사용 + `pinned=false` → namespace 삭제
 - [x] `last-active-at` 라벨 갱신(WS 메시지 시 60초당 1회 patch)
-- [ ] "보관하기" 토글(`pbs.pinned=true/false` 패치) UI + API
-- [ ] "환경 초기화" 버튼: 현재 owner_hash의 namespace 삭제 후 다음 접속 시 신규 발급
+- [x] "보관하기" 토글(`pbs.pinned=true/false` 패치) UI + API
+- [x] "환경 초기화" 버튼: 현재 owner_hash의 namespace 삭제 후 다음 접속 시 신규 발급
 - [x] `TerminalSessionPanel`에 `onSessionStateChange(state)` prop 추가, WorkspacePage가 `terminalConnected` state 보유
 - [x] Live Cluster 토글 disable 조건: `!terminalConnected` (현재의 `!isClusterConnected`와 AND)
 - [x] Live Cluster 토글을 채팅 화면 좌측 상단 `Docs / Live` 토글 UI로 이동
@@ -789,6 +789,7 @@ oc rollout status deployment/web -n pbs-ocpops
 
 ## 작업 메모
 
+- 2026-05-14: `/api/v1/workspace/status`, `/api/v1/workspace/pin`, `/api/v1/workspace/reset`을 추가하고 Workspace terminal 패널 상단에 Pin/Reset 컨트롤을 붙였다. 상태/토글/초기화는 현재 `pbs_session_owner`의 owner_hash 기준 namespace에만 적용된다.
 - 2026-05-14: terminal WS 메시지 루프에 `touch_last_active(owner_hash)`를 60초 rate-limit로 연결했다. 사용자가 터미널에서 계속 작업하면 reaper의 idle 판단 기준인 `pbs.last-active-at` 라벨이 갱신된다.
 - 2026-05-14: `deploy/openshift/workspace-reaper-cronjob.yaml`을 추가했다. `terminal-broker` SA와 sandbox 이미지를 사용하며 15분마다 `pbs.session=true` namespace를 스캔해 30분 idle이면 `deployment/sandbox` replicas=0 및 `pbs.hibernated=true`, 14일 idle이고 `pbs.pinned=false`면 namespace를 삭제한다.
 - 2026-05-14: terminal ready 프레임의 `workspace_namespace`를 `TerminalSessionPanel`에서 받아 `WorkspacePage` 상태로 올리고, Live Cluster chat payload의 `namespace`를 사용자 workspace namespace로 우선 라우팅하도록 연결했다. 사용자가 별도 namespace를 입력하지 않은 상태면 좌측 리소스 패널 namespace도 자동 발급 namespace로 맞춘다.

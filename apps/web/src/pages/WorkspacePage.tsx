@@ -23,6 +23,8 @@ import {
   Compass,
   Terminal as TerminalIcon,
   X,
+  Pin,
+  RotateCcw,
 } from 'lucide-react';
 import gsap from 'gsap';
 import './WorkspacePage.css';
@@ -88,13 +90,17 @@ import {
   loadOcpOverview,
   loadResourceDetail,
   loadResources,
+  loadLearnerWorkspaceStatus,
   listOcpProfiles,
+  resetLearnerWorkspace,
   sendOpsChatStream,
+  setLearnerWorkspacePinned,
   type OcpResourceItem,
   type OcpMetricsResponse,
   type OcpOverview,
   type ResourceDetailResponse,
   type OcpConnection,
+  type LearnerWorkspaceStatus,
   type OpsChatResponse,
   type OpsChatSource,
 } from '../lib/opsConsoleApi';
@@ -1311,6 +1317,9 @@ export default function WorkspacePage() {
   const [clusterConnectionStatus, setClusterConnectionStatus] = useState<ClusterConnectionStatus>('not_connected');
   const [terminalConnectionState, setTerminalConnectionState] = useState<TerminalConnectionState>('closed');
   const [userWorkspaceNamespace, setUserWorkspaceNamespace] = useState('');
+  const [learnerWorkspaceStatus, setLearnerWorkspaceStatus] = useState<LearnerWorkspaceStatus | null>(null);
+  const [isWorkspaceActionPending, setIsWorkspaceActionPending] = useState(false);
+  const [workspaceActionError, setWorkspaceActionError] = useState('');
   const [selectedResourceKind, setSelectedResourceKind] = useState<ClusterResourceKind>('pods');
   const [selectedResourceNamespace, setSelectedResourceNamespace] = useState('default');
   const [clusterResources, setClusterResources] = useState<OcpResourceItem[]>([]);
@@ -1556,12 +1565,38 @@ export default function WorkspacePage() {
     });
   }, []);
 
+  const refreshLearnerWorkspaceStatus = useCallback(async () => {
+    try {
+      const status = await loadLearnerWorkspaceStatus();
+      setLearnerWorkspaceStatus(status);
+      setWorkspaceActionError('');
+      if (status.namespace) {
+        setUserWorkspaceNamespace(status.namespace);
+      }
+    } catch (error) {
+      console.error(error);
+      setWorkspaceActionError(error instanceof Error ? error.message : 'Workspace status is unavailable.');
+    }
+  }, []);
+
   const handleTerminalWorkspaceReady = useCallback((workspace: { namespace: string; podName: string }) => {
     const namespace = workspace.namespace.trim();
     if (!namespace) {
       return;
     }
     setUserWorkspaceNamespace(namespace);
+    setLearnerWorkspaceStatus((current) => ({
+      available: current?.available ?? true,
+      namespace,
+      ready: true,
+      exists: true,
+      pinned: current?.pinned,
+      hibernated: false,
+      created_at: current?.created_at,
+      last_active_at: current?.last_active_at,
+      replicas: current?.replicas,
+      ready_replicas: current?.ready_replicas,
+    }));
     setSelectedResourceNamespace((current) => {
       const currentNamespace = current.trim();
       const activeDefault = activeFooterConnection?.default_namespace?.trim() || 'default';
@@ -1570,7 +1605,43 @@ export default function WorkspacePage() {
       }
       return namespace;
     });
-  }, [activeFooterConnection?.default_namespace]);
+    void refreshLearnerWorkspaceStatus();
+  }, [activeFooterConnection?.default_namespace, refreshLearnerWorkspaceStatus]);
+
+  const handleWorkspacePinToggle = useCallback(async () => {
+    const nextPinned = !(learnerWorkspaceStatus?.pinned ?? false);
+    setIsWorkspaceActionPending(true);
+    setWorkspaceActionError('');
+    try {
+      const result = await setLearnerWorkspacePinned(nextPinned);
+      setLearnerWorkspaceStatus(result.status);
+    } catch (error) {
+      console.error(error);
+      setWorkspaceActionError(error instanceof Error ? error.message : 'Workspace pin update failed.');
+    } finally {
+      setIsWorkspaceActionPending(false);
+    }
+  }, [learnerWorkspaceStatus?.pinned]);
+
+  const handleWorkspaceReset = useCallback(async () => {
+    const confirmed = window.confirm('Reset this learner workspace? Current sandbox files and resources will be deleted.');
+    if (!confirmed) {
+      return;
+    }
+    setIsWorkspaceActionPending(true);
+    setWorkspaceActionError('');
+    try {
+      const result = await resetLearnerWorkspace();
+      setLearnerWorkspaceStatus(result.status);
+      setUserWorkspaceNamespace(result.status.namespace || '');
+      setTerminalConnectionState('closed');
+    } catch (error) {
+      console.error(error);
+      setWorkspaceActionError(error instanceof Error ? error.message : 'Workspace reset failed.');
+    } finally {
+      setIsWorkspaceActionPending(false);
+    }
+  }, []);
 
   const refreshDashboard = useCallback(async () => {
     if (!activeFooterConnection || !isClusterConnected) {
@@ -4732,13 +4803,43 @@ export default function WorkspacePage() {
             )}
           >
             {rightPanelMode === 'terminal' ? (
-              <TerminalSessionPanel
-                learningContext={terminalLearningContext}
-                onCommandSubmitted={handleTerminalCommandSubmitted}
-                onOutputChunk={handleTerminalOutputChunk}
-                onSessionStateChange={setTerminalConnectionState}
-                onWorkspaceReady={handleTerminalWorkspaceReady}
-              />
+              <>
+                <div className="terminal-workspace-toolbar">
+                  <div className="terminal-workspace-summary">
+                    <span>{learnerWorkspaceStatus?.namespace || userWorkspaceNamespace || 'Workspace pending'}</span>
+                    {learnerWorkspaceStatus?.pinned ? <strong>Pinned</strong> : null}
+                    {learnerWorkspaceStatus?.hibernated ? <strong>Hibernated</strong> : null}
+                    {workspaceActionError ? <em>{workspaceActionError}</em> : null}
+                  </div>
+                  <div className="terminal-workspace-actions">
+                    <button
+                      type="button"
+                      onClick={handleWorkspacePinToggle}
+                      disabled={isWorkspaceActionPending || !learnerWorkspaceStatus?.exists}
+                      title={learnerWorkspaceStatus?.pinned ? 'Allow automatic cleanup' : 'Keep this workspace from automatic deletion'}
+                    >
+                      <Pin size={14} />
+                      {learnerWorkspaceStatus?.pinned ? 'Unpin' : 'Pin'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleWorkspaceReset}
+                      disabled={isWorkspaceActionPending || !learnerWorkspaceStatus?.namespace}
+                      title="Delete this learner namespace; reconnect the terminal to create a fresh one"
+                    >
+                      <RotateCcw size={14} />
+                      Reset
+                    </button>
+                  </div>
+                </div>
+                <TerminalSessionPanel
+                  learningContext={terminalLearningContext}
+                  onCommandSubmitted={handleTerminalCommandSubmitted}
+                  onOutputChunk={handleTerminalOutputChunk}
+                  onSessionStateChange={setTerminalConnectionState}
+                  onWorkspaceReady={handleTerminalWorkspaceReady}
+                />
+              </>
             ) : (
               <>
             {testMode && (

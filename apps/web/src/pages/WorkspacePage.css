@@ -4935,6 +4935,79 @@
   color: #dbe8ef;
 }
 
+.terminal-workspace-toolbar {
+  flex: 0 0 auto;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(96, 165, 250, 0.12);
+  background: rgba(12, 18, 30, 0.98);
+}
+
+.terminal-workspace-summary {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(219, 232, 239, 0.74);
+  font-size: 0.72rem;
+}
+
+.terminal-workspace-summary span,
+.terminal-workspace-summary em {
+  max-width: 13rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-workspace-summary strong {
+  padding: 2px 7px;
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  border-radius: 999px;
+  color: #bae6fd;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.terminal-workspace-summary em {
+  color: #fecdd3;
+  font-style: normal;
+}
+
+.terminal-workspace-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.terminal-workspace-actions button {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #dbe8ef;
+  font-size: 0.7rem;
+}
+
+.terminal-workspace-actions button:hover:not(:disabled) {
+  border-color: rgba(56, 189, 248, 0.34);
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.terminal-workspace-actions button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
 .terminal-session-status {
   min-height: 38px;
   display: flex;

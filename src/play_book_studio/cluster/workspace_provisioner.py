@@ -107,6 +107,54 @@ def delete_user_workspace(owner_hash: str, *, client: Any | None = None) -> bool
     return True
 
 
+def get_user_workspace_status(owner_hash: str, *, client: Any | None = None) -> dict[str, Any]:
+    namespace = user_workspace_namespace(owner_hash)
+    resolved_client = client or KubernetesClient.in_cluster()
+    try:
+        namespace_payload = resolved_client.request_json("GET", f"/api/v1/namespaces/{namespace}")
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "available": False,
+            "namespace": namespace,
+            "ready": False,
+            "exists": False,
+            "error": str(exc),
+        }
+    labels = (namespace_payload.get("metadata") or {}).get("labels") or {}
+    deployment_ready = False
+    replicas = 0
+    ready_replicas = 0
+    try:
+        deployment = resolved_client.request_json(
+            "GET",
+            f"/apis/apps/v1/namespaces/{namespace}/deployments/{SANDBOX_DEPLOYMENT_NAME}",
+        )
+        replicas = int((deployment.get("spec") or {}).get("replicas") or 0)
+        ready_replicas = int((deployment.get("status") or {}).get("readyReplicas") or 0)
+        deployment_ready = replicas > 0 and ready_replicas >= replicas
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "available": True,
+            "namespace": namespace,
+            "ready": False,
+            "exists": True,
+            "error": str(exc),
+            "labels": labels,
+        }
+    return {
+        "available": True,
+        "namespace": namespace,
+        "ready": deployment_ready,
+        "exists": True,
+        "pinned": str(labels.get("pbs.pinned") or "false").lower() == "true",
+        "hibernated": str(labels.get("pbs.hibernated") or "false").lower() == "true",
+        "created_at": str(labels.get("pbs.created-at") or ""),
+        "last_active_at": str(labels.get("pbs.last-active-at") or ""),
+        "replicas": replicas,
+        "ready_replicas": ready_replicas,
+    }
+
+
 def touch_last_active(owner_hash: str, *, client: Any | None = None, now: datetime | None = None) -> None:
     namespace = user_workspace_namespace(owner_hash)
     resolved_client = client or KubernetesClient.in_cluster()
