@@ -4,6 +4,8 @@
 
 v0.1.4는 새로운 기능 추가보다 문서 처리 파이프라인과 저장 구조를 먼저 정리한다.
 
+첫 산출물은 `spec/v0.1.4/db-corpus-schema-audit.md`다. 해당 감사 문서의 결정 항목이 정리되기 전에는 schema migration을 작성하지 않는다.
+
 현재 구조는 `document_sources`, `parsed_documents`, `document_blocks`, `document_assets`, `document_chunks`,
 Qdrant payload, viewer JSON/HTML, course runtime chunk가 동시에 존재한다. 기능상 분리는 되어 있지만 운영자가
 "어떤 데이터가 검색 원본이고 어떤 데이터가 렌더링 산출물인지" 즉시 판단하기 어렵다. 이 상태에서는 RAG 품질을 올리기 전에
@@ -168,6 +170,10 @@ These values should be available to retriever, reranker prompt, starter question
 
 ## Audit Tasks
 
+- Audit the existing DB table/column contract first.
+  - Output: `spec/v0.1.4/db-corpus-schema-audit.md`.
+  - Classify each table/column as canonical, derived, status, artifact, legacy, or candidate.
+  - Decide which JSONB/payload fields must become explicit columns before writing migration SQL.
 - List every JSON/JSONL artifact currently used as corpus source, viewer artifact, eval report, temporary output, or course runtime artifact.
 - Mark each path as:
   - `canonical_source`
