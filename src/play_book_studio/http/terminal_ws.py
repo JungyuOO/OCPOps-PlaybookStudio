@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from urllib.parse import parse_qs
 
 from play_book_studio.cluster.workspace_models import WorkspaceHandle
-from play_book_studio.cluster.workspace_provisioner import ensure_user_workspace
+from play_book_studio.cluster.workspace_provisioner import ensure_user_workspace, touch_last_active
 from play_book_studio.config.settings import Settings
 from play_book_studio.db.terminal_learning_repository import (
     TerminalLearningContext,
@@ -362,6 +363,7 @@ async def _handle_terminal_connection(
     database_url: str = "",
     cluster_server: str = "",
     workspace: WorkspaceHandle | None = None,
+    workspace_owner_hash: str = "",
 ) -> None:
     session = TerminalSession(config).start()
     recorder = TerminalEventRecorder(
@@ -441,8 +443,24 @@ async def _handle_terminal_connection(
             await asyncio.sleep(0.03)
 
     pump_task = asyncio.create_task(pump_output())
+    last_workspace_touch = time.monotonic()
+
+    async def touch_workspace_activity() -> None:
+        nonlocal last_workspace_touch
+        if not workspace_owner_hash:
+            return
+        current = time.monotonic()
+        if current - last_workspace_touch < 60:
+            return
+        last_workspace_touch = current
+        try:
+            await asyncio.to_thread(touch_last_active, workspace_owner_hash)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[server] workspace activity touch failed for {workspace_owner_hash[:8]}: {exc}")
+
     try:
         async for raw_message in websocket:
+            await touch_workspace_activity()
             try:
                 message = json.loads(raw_message)
             except json.JSONDecodeError:
@@ -502,6 +520,7 @@ def start_terminal_websocket_server(*, settings: Settings, root_dir: Path) -> th
         async def handler(websocket, *args: object) -> None:
             session_config = config
             workspace: WorkspaceHandle | None = None
+            owner_hash = ""
             if settings.terminal_user_workspace_enabled:
                 try:
                     await websocket.send(
@@ -565,6 +584,7 @@ def start_terminal_websocket_server(*, settings: Settings, root_dir: Path) -> th
                 database_url=database_url,
                 cluster_server=cluster_server,
                 workspace=workspace,
+                workspace_owner_hash=owner_hash,
             )
 
         async with websocket_serve(handler, host, port):
