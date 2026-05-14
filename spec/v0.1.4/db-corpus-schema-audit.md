@@ -6,6 +6,8 @@ This audit is a planning artifact only. It does not define a migration yet.
 
 v0.1.4 should first decide which tables and columns are canonical corpus data, derived artifacts, runtime status, or legacy compatibility. RAG quality work should not continue until the database contract makes it obvious where document truth lives and which JSON files or viewer outputs are only artifacts.
 
+The target table and column design lives in `spec/v0.1.4/db-target-schema-design.md`.
+
 ## 한국어 요약
 
 이 문서는 migration 정의가 아니라 v0.1.4 schema 결정을 위한 계획 문서다.
@@ -13,6 +15,8 @@ v0.1.4 should first decide which tables and columns are canonical corpus data, d
 v0.1.4에서는 먼저 어떤 테이블/컬럼이 canonical corpus인지, 어떤 것이 파생 artifact인지, 어떤 것이 runtime status인지, 어떤 것이 legacy compatibility인지 결정해야 한다. 문서 truth가 어디에 있고, JSON 파일이나 viewer output이 단순 artifact인지 명확해지기 전에는 RAG 품질 개선을 계속하지 않는다.
 
 가장 중요한 결론은 parsing storage와 corpus storage를 분리하는 것이다. parser가 추출한 원본/중간 산출물과 RAG가 검색해야 하는 정제된 corpus truth를 같은 계층으로 취급하면, OCR/image description/viewer JSON/course runtime/search chunk가 계속 섞인다.
+
+목표 테이블/컬럼 설계는 `spec/v0.1.4/db-target-schema-design.md`에 둔다.
 
 ## Classification
 
