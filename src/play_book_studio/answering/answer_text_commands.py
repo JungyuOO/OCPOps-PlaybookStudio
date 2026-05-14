@@ -141,6 +141,24 @@ _PROMETHEUS_ALERT_QUERY_RE = re.compile(
     r"(prometheus|alertmanager|firing alert|alert|경고)",
     re.IGNORECASE,
 )
+_DNS_QUERY_RE = re.compile(r"(dns|openshift-dns|coredns|dns\.operator)", re.IGNORECASE)
+_CVO_QUERY_RE = re.compile(
+    r"(cluster version operator|cluster\s*version|clusterversion|\bcvo\b)",
+    re.IGNORECASE,
+)
+_UPDATE_PRECHECK_QUERY_RE = re.compile(
+    r"(update|upgrade|precheck|사전|전에|이전).*(clusteroperator|cluster operator|clusteroperators|node|nodes)"
+    r"|(?:clusteroperator|cluster operator|clusteroperators).*(update|upgrade|precheck|사전|전에|이전)",
+    re.IGNORECASE,
+)
+_ODF_QUERY_RE = re.compile(r"(odf|openshift data foundation|openshift-storage|ceph|rook)", re.IGNORECASE)
+_MUST_GATHER_QUERY_RE = re.compile(r"(must-gather|must gather|머스트게더)", re.IGNORECASE)
+_INSPECT_QUERY_RE = re.compile(r"(oc\s+adm\s+inspect|\binspect\b)", re.IGNORECASE)
+_TOP_PODS_QUERY_RE = re.compile(
+    r"(oc\s+adm\s+top|top\s+pods?|cpu|memory|resource\s+usage|리소스|메모리|사용량|잡아먹).*(pod|pods|파드|namespace|네임스페이스)"
+    r"|(?:pod|pods|파드|namespace|네임스페이스).*(oc\s+adm\s+top|top\s+pods?|cpu|memory|resource\s+usage|리소스|메모리|사용량|잡아먹)",
+    re.IGNORECASE,
+)
 _VIEW_ROLE_QUERY_RE = re.compile(
     r"(view|조회).*(권한|role|rolebinding|프로젝트|project|namespace)|(?:권한|role|rolebinding).*(view|조회)",
     re.IGNORECASE,
@@ -150,7 +168,7 @@ _ROUTE_TIMEOUT_QUERY_RE = re.compile(
     re.IGNORECASE,
 )
 _REGISTRY_POLICY_QUERY_RE = re.compile(
-    r"(allowedregistries|allowed registries|허용.*registry|허용.*레지스트리|registry.*허용|레지스트리.*허용)",
+    r"(allowedregistries|allowed registries|allowed.*registry|registry.*allowed|허용.*registry|허용.*레지스트리|registry.*허용|레지스트리.*허용|제한.*registry|registry.*제한)",
     re.IGNORECASE,
 )
 _SERVICE_ROUTE_QUERY_RE = re.compile(
@@ -248,6 +266,34 @@ def _has_networkpolicy_query(query: str) -> bool:
 
 def _has_prometheus_alert_query(query: str) -> bool:
     return bool(_PROMETHEUS_ALERT_QUERY_RE.search(query or ""))
+
+
+def _has_dns_query(query: str) -> bool:
+    return bool(_DNS_QUERY_RE.search(query or ""))
+
+
+def _has_cvo_query(query: str) -> bool:
+    return bool(_CVO_QUERY_RE.search(query or ""))
+
+
+def _has_update_precheck_query(query: str) -> bool:
+    return bool(_UPDATE_PRECHECK_QUERY_RE.search(query or ""))
+
+
+def _has_odf_query(query: str) -> bool:
+    return bool(_ODF_QUERY_RE.search(query or ""))
+
+
+def _has_must_gather_query(query: str) -> bool:
+    return bool(_MUST_GATHER_QUERY_RE.search(query or ""))
+
+
+def _has_inspect_query(query: str) -> bool:
+    return bool(_INSPECT_QUERY_RE.search(query or ""))
+
+
+def _has_top_pods_query(query: str) -> bool:
+    return bool(_TOP_PODS_QUERY_RE.search(query or ""))
 
 
 def _has_view_role_query(query: str) -> bool:
@@ -356,6 +402,33 @@ def has_sufficient_command_grounding(*, query: str, citations) -> bool:
 
     if _has_events_query(query):
         return any(token in joined for token in ("events", "event", "lasttimestamp", "describe"))
+
+    if _has_dns_query(query):
+        return any(token in joined for token in ("dns", "openshift-dns", "dns.operator", "coredns"))
+
+    if _has_route_timeout_query(query):
+        return any(token in joined for token in ("route", "timeout", "haproxy.router.openshift.io/timeout"))
+
+    if _has_networkpolicy_query(query):
+        return any(token in joined for token in ("networkpolicy", "network policy", "podselector", "egress", "ingress"))
+
+    if _has_egress_query(query):
+        return any(token in joined for token in ("egress", "networkpolicy", "network policy", "egressip"))
+
+    if _has_registry_policy_query(query):
+        return any(token in joined for token in ("registry", "allowedregistries", "blockedregistries", "image.config"))
+
+    if _has_cvo_query(query):
+        return any(token in joined for token in ("cluster version operator", "clusterversion", "cvo"))
+
+    if _has_update_precheck_query(query):
+        return any(token in joined for token in ("clusteroperator", "cluster operator", "clusteroperators", "node", "clusterversion"))
+
+    if _has_odf_query(query):
+        return any(token in joined for token in ("odf", "openshift data foundation", "openshift-storage", "ceph", "storage"))
+
+    if _has_prometheus_alert_query(query):
+        return any(token in joined for token in ("prometheus", "alertmanager", "firing", "alert"))
 
     if _has_clusteroperator_status_query(query):
         return any(token in joined for token in ("clusteroperator", "cluster operator", "clusteroperators"))
@@ -484,21 +557,49 @@ def _looks_like_shell_command(value: str) -> bool:
     )
 
 
+def _clean_shell_command_candidate(value: str) -> str:
+    cleaned = (value or "").strip().lstrip("$").strip()
+    cleaned = re.sub(r"^#+\s*", "", cleaned).strip()
+    cleaned = re.split(
+        r"\s+(?:CLI|Web Console|Administration\s*->|Console\s*->|명령어|실행 결과|결과인|TEST-[A-Z]+-|이 이미지는)\b",
+        cleaned,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip()
+    cleaned = re.sub(r"\s+oc$", "", cleaned, flags=re.IGNORECASE).strip()
+    cleaned = cleaned.rstrip(" .;")
+    if cleaned.endswith("'") and cleaned.count("'") % 2 == 1:
+        cleaned = cleaned[:-1].rstrip()
+    if cleaned.endswith('"') and cleaned.count('"') % 2 == 1:
+        cleaned = cleaned[:-1].rstrip()
+    return cleaned
+
+
+def _iter_shell_command_candidates(value: str) -> list[str]:
+    candidates: list[str] = []
+    for segment in re.split(r"\s+#\s+", value or ""):
+        for part in re.split(r"\s+(?=oc\s+|kubectl\s+|openshift-install\s+)", segment.strip()):
+            cleaned = _clean_shell_command_candidate(part)
+            if cleaned:
+                candidates.append(cleaned)
+    return candidates
+
+
 def _ordered_citation_commands(citation, *, limit: int = 3) -> list[str]:
     commands: list[str] = []
     seen: set[str] = set()
 
     for command in (_citation_value(citation, "cli_commands", ()) or ()):
-        normalized = (command or "").strip().lstrip("$").strip()
-        if not _looks_like_shell_command(normalized):
-            continue
-        key = normalized.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        commands.append(normalized)
-        if len(commands) >= limit:
-            return commands
+        for normalized in _iter_shell_command_candidates(str(command or "")):
+            if not _looks_like_shell_command(normalized):
+                continue
+            key = normalized.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            commands.append(normalized)
+            if len(commands) >= limit:
+                return commands
 
     if commands:
         return commands
@@ -511,7 +612,7 @@ def _extract_grounded_commands(*texts: str, limit: int = 3) -> list[str]:
     seen: set[str] = set()
 
     def add(candidate: str) -> None:
-        normalized = (candidate or "").strip().lstrip("$").strip()
+        normalized = _clean_shell_command_candidate(candidate)
         if not _looks_like_shell_command(normalized):
             return
         if normalized in seen:
@@ -526,7 +627,8 @@ def _extract_grounded_commands(*texts: str, limit: int = 3) -> list[str]:
             if raw_line.strip().startswith("#"):
                 continue
             line = raw_line.strip().lstrip("-*").strip()
-            add(line)
+            for segment in _iter_shell_command_candidates(line):
+                add(segment)
         if len(commands) >= limit:
             break
 
@@ -571,14 +673,180 @@ def _collect_verification_hints(citations, *, limit: int = 2) -> list[str]:
 
 
 def _first_citation_has_signal(citations, tokens: tuple[str, ...]) -> bool:
-    return bool(citations) and any(token in _citation_text(citations[0]) for token in tokens)
+    return bool(citations) and any(token.lower() in _citation_text(citations[0]) for token in tokens)
 
 
 def _first_signal_citation_index(citations, tokens: tuple[str, ...]) -> int | None:
     for index, citation in enumerate(citations, start=1):
-        if any(token in _citation_text(citation) for token in tokens):
+        if any(token.lower() in _citation_text(citation) for token in tokens):
             return index
     return None
+
+
+def _commands_containing(citations, tokens: tuple[str, ...], *, limit: int = 3) -> list[str]:
+    normalized_tokens = tuple(token.lower() for token in tokens if token)
+    commands: list[str] = []
+    for command in _collect_ordered_grounded_commands(citations, limit=12):
+        lowered = command.lower()
+        if normalized_tokens and not any(token in lowered for token in normalized_tokens):
+            continue
+        commands.append(command)
+        if len(commands) >= limit:
+            break
+    return commands
+
+
+def _has_node_status_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return ("node" in lowered or "노드" in (query or "")) and bool(
+        has_command_request(query)
+        or any(token in lowered for token in ("ready", "notready", "status", "state", "check"))
+        or any(token in (query or "") for token in ("상태", "확인", "명령"))
+    )
+
+
+def _has_namespace_status_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return any(token in lowered for token in ("namespace", "project", "namespaces", "projects")) or any(
+        token in (query or "") for token in ("네임스페이스", "프로젝트")
+    )
+
+
+def _namespace_query_wants_list(query: str) -> bool:
+    lowered = (query or "").lower()
+    return any(token in lowered for token in ("list", "all", "namespaces", "projects")) or any(
+        token in (query or "") for token in ("목록", "전체", "조회")
+    )
+
+
+def _has_image_pull_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return any(token in lowered for token in ("imagepullbackoff", "errimagepull", "pull secret", "pull-secret"))
+
+
+def _node_status_answer(query: str, citations) -> str | None:
+    if not _has_node_status_query(query):
+        return None
+    citation_index = _first_signal_citation_index(citations, ("node", "nodes", "노드", "ready", "notready"))
+    if citation_index is None:
+        return None
+    commands = _commands_containing(citations, ("oc get node", "oc get nodes", "oc describe node"), limit=2)
+    if not commands:
+        return None
+    if not any("describe node" in command.lower() for command in commands):
+        commands.append("oc describe node <node-name>")
+    ref = citation_marker(citations, citation_index)
+    command_block = "\n".join(commands[:2])
+    return (
+        f"답변: Node 상태는 먼저 전체 목록에서 `Ready`/`NotReady`를 보고, 문제가 있는 노드만 describe로 좁힙니다 {ref}.\n\n"
+        f"```bash\n{command_block}\n```\n\n"
+        f"`Ready`가 아니거나 role/label이 예상과 다르면 해당 노드의 Conditions, Events, kubelet 관련 메시지를 이어서 확인하세요 {ref}."
+    )
+
+
+def _namespace_status_answer(query: str, citations) -> str | None:
+    if not _has_namespace_status_query(query):
+        return None
+    citation_index = _first_signal_citation_index(
+        citations,
+        ("namespace", "namespaces", "project", "projects", "네임스페이스", "프로젝트"),
+    )
+    if citation_index is None:
+        return None
+    if _namespace_query_wants_list(query):
+        commands = _commands_containing(citations, ("oc get namespaces", "oc get projects"), limit=2)
+        intro = "namespace 목록은 cluster에 어떤 작업 공간이 있는지 먼저 보는 용도입니다"
+        fallback = ("oc get namespaces", "oc get projects")
+    else:
+        commands = _commands_containing(citations, ("oc project", "oc config view"), limit=2)
+        intro = "현재 터미널이 바라보는 namespace/project는 먼저 현재 context에서 확인합니다"
+        fallback = ("oc project", "oc config view --minify")
+    if not commands:
+        commands = list(fallback)
+    ref = citation_marker(citations, citation_index)
+    command_block = "\n".join(commands[:2])
+    return (
+        f"답변: {intro} {ref}.\n\n"
+        f"```bash\n{command_block}\n```\n\n"
+        f"현재 namespace가 다르면 이후 `oc get pods`, `oc apply -f` 같은 명령도 다른 공간에 적용될 수 있으니 먼저 context를 맞추세요 {ref}."
+    )
+
+
+def _image_pull_answer(query: str, citations) -> str | None:
+    if not _has_image_pull_query(query):
+        return None
+    citation_index = _first_signal_citation_index(
+        citations,
+        ("imagepullbackoff", "errimagepull", "pull secret", "pull-secret", "registry", "image registry", "secret"),
+    )
+    if citation_index is None:
+        return None
+    commands = _commands_containing(
+        citations,
+        ("oc describe pod", "oc get secret", "oc secrets link", "oc get events"),
+        limit=3,
+    )
+    if not commands:
+        return None
+    ref = citation_marker(citations, citation_index)
+    command_block = "\n".join(commands[:3])
+    return (
+        f"답변: ImagePullBackOff는 먼저 Pod 이벤트에서 실제 실패 원인을 보고, imagePullSecret과 registry 접근 설정을 이어서 확인합니다 {ref}.\n\n"
+        f"```bash\n{command_block}\n```\n\n"
+        f"이벤트에 `unauthorized`, `not found`, `x509`, `timeout` 중 무엇이 나오는지에 따라 secret, 이미지 경로, 인증서, 네트워크 문제로 나눠 보면 됩니다 {ref}."
+    )
+
+
+def _top_pods_answer(query: str, citations) -> str | None:
+    if not _has_top_pods_query(query):
+        return None
+    citation_index = _first_signal_citation_index(citations, ("oc adm top pod", "top pod", "top pods", "metrics", "cpu", "memory"))
+    if citation_index is None:
+        return None
+    commands = _commands_containing(citations, ("oc adm top pod",), limit=2)
+    if not commands:
+        return None
+    ref = citation_marker(citations, citation_index)
+    command_block = "\n".join(commands[:2])
+    return (
+        f"답변: namespace 안에서 CPU나 memory를 많이 쓰는 Pod를 찾을 때는 `oc adm top pods` 계열 명령을 먼저 봅니다 {ref}.\n\n"
+        f"```bash\n{command_block}\n```\n\n"
+        f"공식 CLI 예시는 `oc adm top pod --namespace=<namespace>`처럼 단수 `pod` 하위 명령을 사용하며, 결과에서 CPU/Memory가 높은 Pod를 골라 describe/log로 이어가면 됩니다 {ref}."
+    )
+
+
+def _must_gather_answer(query: str, citations) -> str | None:
+    if not _has_must_gather_query(query):
+        return None
+    citation_index = _first_signal_citation_index(citations, ("must-gather", "must gather", "diagnostic", "support"))
+    if citation_index is None:
+        return None
+    commands = _commands_containing(citations, ("oc adm must-gather", "must-gather"), limit=2)
+    ref = citation_marker(citations, citation_index)
+    command_text = "`oc adm must-gather`"
+    if commands:
+        command_text = ", ".join(f"`{command}`" for command in commands[:2])
+    return (
+        f"답변: 장애 원인을 지원팀이나 운영팀에 전달해야 할 때는 관련 로그를 하나씩 복사하기보다 must-gather로 진단 데이터를 수집합니다 {ref}.\n\n"
+        f"먼저 {command_text}로 클러스터 상태, 이벤트, Operator 정보를 묶어서 수집하고, 특정 Operator 문제가 있으면 해당 Operator 전용 must-gather 이미지나 namespace 범위를 이어서 좁히세요 {ref}."
+    )
+
+
+def _inspect_answer(query: str, citations) -> str | None:
+    if not _has_inspect_query(query):
+        return None
+    citation_index = _first_signal_citation_index(citations, ("oc adm inspect", "inspect", "namespace", "resource"))
+    if citation_index is None:
+        return None
+    commands = _commands_containing(citations, ("oc adm inspect",), limit=2)
+    ref = citation_marker(citations, citation_index)
+    command_text = "`oc adm inspect ns/<namespace>`"
+    if commands:
+        command_text = ", ".join(f"`{command}`" for command in commands[:2])
+    return (
+        f"답변: 특정 namespace의 리소스 상태를 지원팀에 전달해야 하면 oc adm inspect를 쓰는 흐름이 맞습니다 {ref}.\n\n"
+        f"먼저 {command_text}로 namespace 안의 주요 리소스 상태를 묶어 수집하고, Pod 이벤트나 로그가 필요하면 must-gather 또는 개별 `oc describe`/`oc logs` 결과를 함께 전달하세요 {ref}."
+    )
 
 
 def _operator_status_answer(query: str, citations) -> str | None:
@@ -734,19 +1002,93 @@ def _events_answer(query: str, citations) -> str | None:
     )
 
 
+def _dns_answer(query: str, citations) -> str | None:
+    if not _has_dns_query(query):
+        return None
+    citation_index = _first_signal_citation_index(citations, ("dns", "openshift-dns", "dns.operator", "coredns"))
+    if citation_index is None:
+        return None
+    ref = citation_marker(citations, citation_index)
+    commands = _commands_containing(citations, ("oc get dns", "oc get pods -n openshift-dns", "oc describe"), limit=3)
+    command_text = ""
+    if commands:
+        command_text = "```bash\n" + "\n".join(commands[:3]) + "\n```\n\n"
+    else:
+        command_text = "`oc get dns.operator/default -o yaml` and `oc get pods -n openshift-dns` are the first DNS checks.\n\n"
+    return (
+        f"답변: 클러스터 DNS 문제는 DNS Operator 상태와 `openshift-dns` Pod 상태를 먼저 분리해서 확인합니다 {ref}.\n\n"
+        f"{command_text}"
+        f"DNS Operator 조건에서 Degraded/Progressing 상태를 보고, DNS Pod 재시작이나 CoreDNS 오류가 있으면 같은 namespace의 이벤트와 로그로 좁히면 됩니다 {ref}."
+    )
+
+
+def _cvo_answer(query: str, citations) -> str | None:
+    if not _has_cvo_query(query):
+        return None
+    citation_index = _first_signal_citation_index(citations, ("cluster version operator", "clusterversion", "cvo", "cluster version"))
+    if citation_index is None:
+        return None
+    ref = citation_marker(citations, citation_index)
+    commands = _commands_containing(citations, ("oc get clusterversion", "oc describe clusterversion", "oc adm upgrade"), limit=3)
+    command_text = ""
+    if commands:
+        command_text = "```bash\n" + "\n".join(commands[:3]) + "\n```\n\n"
+    else:
+        command_text = "`oc get clusterversion` and `oc describe clusterversion version` are the first CVO checks.\n\n"
+    return (
+        f"답변: Cluster Version Operator(CVO)가 업데이트를 진행하지 못하면 ClusterVersion 조건과 업그레이드 상태를 먼저 확인합니다 {ref}.\n\n"
+        f"{command_text}"
+        f"`Available`, `Progressing`, `Failing` 조건과 메시지를 보면 업데이트 차단 원인이 이미지, Operator 상태, 노드 상태 중 어디에 가까운지 분리할 수 있습니다 {ref}."
+    )
+
+
+def _update_precheck_answer(query: str, citations) -> str | None:
+    if not _has_update_precheck_query(query):
+        return None
+    citation_index = _first_signal_citation_index(
+        citations,
+        ("clusteroperator", "cluster operator", "clusteroperators", "node", "clusterversion", "cluster version operator"),
+    )
+    if citation_index is None:
+        return None
+    ref = citation_marker(citations, citation_index)
+    commands = _commands_containing(
+        citations,
+        ("oc get clusteroperators", "oc get co", "oc get nodes", "oc adm upgrade", "oc get clusterversion"),
+        limit=4,
+    )
+    command_text = ""
+    if commands:
+        command_text = "```bash\n" + "\n".join(commands[:4]) + "\n```\n\n"
+    else:
+        command_text = "`oc get clusteroperators`, `oc get nodes`, `oc get clusterversion`, `oc adm upgrade status` are the first update prechecks.\n\n"
+    return (
+        f"답변: 업데이트 전에는 ClusterOperator 상태, 노드 Ready 상태, Cluster Version Operator 상태를 같은 흐름으로 확인합니다 {ref}.\n\n"
+        f"{command_text}"
+        f"Degraded=True인 Operator나 NotReady 노드가 있으면 업데이트를 진행하기 전에 해당 항목의 describe 조건과 이벤트부터 정리하는 것이 안전합니다 {ref}."
+    )
+
+
 def _clusteroperator_status_answer(query: str, citations) -> str | None:
     if not _has_clusteroperator_status_query(query):
         return None
     citation_index = _first_signal_citation_index(
         citations,
-        ("clusteroperator", "cluster operator", "clusteroperators"),
+        ("clusteroperator", "cluster operator", "clusteroperators", "클러스터 operator", "클러스터 오퍼레이터", "operator 상태"),
     )
     if citation_index is None:
         return None
     ref = citation_marker(citations, citation_index)
+    commands = _commands_containing(citations, ("oc get clusteroperators", "oc describe clusteroperator"), limit=2)
+    if commands and not any("describe clusteroperator" in command.lower() for command in commands):
+        commands.append("oc describe clusteroperator <operator-name>")
+    if commands:
+        command_text = "```bash\n" + "\n".join(commands[:2]) + "\n```\n\n"
+    else:
+        command_text = "`oc get clusteroperators`로 전체 상태를 보고, 문제가 있는 항목은 `oc describe clusteroperator <operator-name>`로 좁힙니다.\n\n"
     return (
         f"답변: ClusterOperator 전체 상태는 먼저 한 번에 보고, Degraded 항목만 describe로 좁힙니다 {ref}.\n\n"
-        "```bash\noc get clusteroperators\noc describe clusteroperator <operator-name>\n```\n\n"
+        f"{command_text}"
         f"`Available`, `Progressing`, `Degraded` 컬럼을 먼저 보고, `Degraded=True`인 Operator의 Conditions 메시지를 확인하면 "
         f"업데이트 차단인지 구성 오류인지 빠르게 분리할 수 있습니다 {ref}."
     )
@@ -755,7 +1097,10 @@ def _clusteroperator_status_answer(query: str, citations) -> str | None:
 def _pdb_answer(query: str, citations) -> str | None:
     if not _has_pdb_query(query):
         return None
-    citation_index = _first_signal_citation_index(citations, ("poddisruptionbudget", "pdb", "disruption"))
+    citation_index = _first_signal_citation_index(
+        citations,
+        ("poddisruptionbudget", "pod disruption budget", "pdb", "disruption budget", "disruption"),
+    )
     if citation_index is None:
         return None
     ref = citation_marker(citations, citation_index)
@@ -790,14 +1135,24 @@ def _quota_limit_answer(query: str, citations) -> str | None:
         return None
     ref = citation_marker(citations, citation_index)
     if _has_limitrange_query(query):
+        commands = [
+            command
+            for command in _collect_ordered_grounded_commands(citations, limit=8)
+            if re.match(r"oc\s+(?:get|describe)\s+limitranges?\b", command, flags=re.IGNORECASE)
+        ] or ["oc get limitrange -n <namespace>", "oc describe limitrange <limitrange-name> -n <namespace>"]
         return (
             f"답변: LimitRange 때문에 컨테이너 리소스 요청이 거절되는지 먼저 namespace 정책을 확인합니다 {ref}.\n\n"
-            "```bash\noc get limitrange -n <namespace>\noc describe limitrange <limitrange-name> -n <namespace>\n```\n\n"
+            f"```bash\n{chr(10).join(commands[:2])}\n```\n\n"
             f"Pod 이벤트의 거절 메시지와 LimitRange의 min/max/default/defaultRequest 값을 맞춰 보면 어떤 request/limit이 정책을 넘었는지 확인할 수 있습니다 {ref}."
         )
+    commands = [
+        command
+        for command in _collect_ordered_grounded_commands(citations, limit=8)
+        if re.match(r"oc\s+get\s+resourcequotas?\b", command, flags=re.IGNORECASE)
+    ] or ["oc get resourcequota -n <namespace>"]
     return (
         f"답변: ResourceQuota 때문에 Pod 생성이 막혔는지는 quota 사용량과 이벤트를 같이 봅니다 {ref}.\n\n"
-        "```bash\noc get resourcequota -n <namespace>\noc describe resourcequota <quota-name> -n <namespace>\noc get events -n <namespace> --sort-by=.lastTimestamp\n```\n\n"
+        f"```bash\n{chr(10).join(commands[:2])}\n```\n\n"
         f"hard/used 값이 한도에 닿았거나 이벤트에 quota 초과 메시지가 있으면 CPU, memory, object count 중 어느 항목이 막는지 좁히면 됩니다 {ref}."
     )
 
@@ -931,6 +1286,33 @@ def _finalizer_answer(query: str, citations) -> str | None:
         f"답변: Namespace가 Terminating에서 멈추면 먼저 남은 리소스와 finalizer를 확인합니다 {ref}.\n\n"
         "```bash\noc get namespace <namespace> -o yaml\noc api-resources --verbs=list --namespaced -o name\n```\n\n"
         f"`metadata.finalizers`가 남아 있거나 삭제되지 않는 namespaced resource가 있으면 해당 리소스의 owner/finalizer를 먼저 정리해야 합니다 {ref}."
+    )
+
+
+def _odf_storage_answer(query: str, citations) -> str | None:
+    if not _has_odf_query(query):
+        return None
+    citation_index = _first_signal_citation_index(
+        citations,
+        ("odf", "openshift data foundation", "openshift-storage", "ceph", "storage"),
+    )
+    if citation_index is None:
+        return None
+    ref = citation_marker(citations, citation_index)
+    commands = _commands_containing(
+        citations,
+        ("oc get pods -n openshift-storage", "oc get cephcluster", "oc get csv", "oc get co storage"),
+        limit=4,
+    )
+    command_text = ""
+    if commands:
+        command_text = "```bash\n" + "\n".join(commands[:4]) + "\n```\n\n"
+    else:
+        command_text = "`oc get pods -n openshift-storage` and ODF/Ceph operator status checks are the first storage checks.\n\n"
+    return (
+        f"답변: ODF 스토리지 상태가 이상하면 먼저 `openshift-storage` namespace의 operator와 Ceph/스토리지 Pod 상태를 봅니다 {ref}.\n\n"
+        f"{command_text}"
+        f"스토리지 문제는 PVC 증상만 보지 말고 ODF operator, CephCluster, 관련 Pod 재시작/이벤트를 함께 봐야 원인을 좁힐 수 있습니다 {ref}."
     )
 
 
@@ -1141,31 +1523,7 @@ def build_grounded_command_guide_answer(
 ) -> str | None:
     if not citations:
         return None
-    status_answer = (
-        _oc_login_answer(query, citations)
-        or _view_role_answer(query, citations)
-        or _scc_answer(query, citations)
-        or _serviceaccount_answer(query, citations)
-        or _auth_can_i_answer(query, citations)
-        or _previous_logs_answer(query, citations)
-        or _clusteroperator_status_answer(query, citations)
-        or _pdb_answer(query, citations)
-        or _hpa_answer(query, citations)
-        or _quota_limit_answer(query, citations)
-        or _pvc_pending_answer(query, citations)
-        or _events_answer(query, citations)
-        or _route_tls_answer(query, citations)
-        or _route_timeout_answer(query, citations)
-        or _service_route_answer(query, citations)
-        or _networkpolicy_answer(query, citations)
-        or _egress_answer(query, citations)
-        or _registry_policy_answer(query, citations)
-        or _audit_answer(query, citations)
-        or _finalizer_answer(query, citations)
-        or _prometheus_alert_answer(query, citations)
-        or _operator_status_answer(query, citations)
-        or _mco_status_answer(query, citations)
-    )
+    status_answer = build_grounded_status_answer(query=query, citations=citations)
     if status_answer is not None:
         return status_answer
     first_step_answer = build_first_step_grounded_answer(
@@ -1216,6 +1574,50 @@ def build_grounded_command_guide_answer(
             f"{verification}"
         )
     return f"{intro} [1].\n\n{code_blocks}{verification}"
+
+
+def build_grounded_status_answer(
+    *,
+    query: str,
+    citations,
+) -> str | None:
+    if not citations:
+        return None
+    return (
+        _oc_login_answer(query, citations)
+        or _view_role_answer(query, citations)
+        or _scc_answer(query, citations)
+        or _serviceaccount_answer(query, citations)
+        or _auth_can_i_answer(query, citations)
+        or _previous_logs_answer(query, citations)
+        or _update_precheck_answer(query, citations)
+        or _pvc_pending_answer(query, citations)
+        or _events_answer(query, citations)
+        or _finalizer_answer(query, citations)
+        or _node_status_answer(query, citations)
+        or _image_pull_answer(query, citations)
+        or _top_pods_answer(query, citations)
+        or _must_gather_answer(query, citations)
+        or _inspect_answer(query, citations)
+        or _dns_answer(query, citations)
+        or _cvo_answer(query, citations)
+        or _namespace_status_answer(query, citations)
+        or _clusteroperator_status_answer(query, citations)
+        or _pdb_answer(query, citations)
+        or _hpa_answer(query, citations)
+        or _quota_limit_answer(query, citations)
+        or _route_tls_answer(query, citations)
+        or _route_timeout_answer(query, citations)
+        or _service_route_answer(query, citations)
+        or _networkpolicy_answer(query, citations)
+        or _egress_answer(query, citations)
+        or _registry_policy_answer(query, citations)
+        or _audit_answer(query, citations)
+        or _odf_storage_answer(query, citations)
+        or _prometheus_alert_answer(query, citations)
+        or _operator_status_answer(query, citations)
+        or _mco_status_answer(query, citations)
+    )
 
 
 def _rbac_grounded_excerpt_text(citations) -> str:
@@ -1862,6 +2264,7 @@ __all__ = [
     "build_first_step_grounded_answer",
     "build_deployment_scaling_answer",
     "build_grounded_command_guide_answer",
+    "build_grounded_status_answer",
     "citation_marker",
     "deployment_scaling_signal",
     "extract_replica_counts",

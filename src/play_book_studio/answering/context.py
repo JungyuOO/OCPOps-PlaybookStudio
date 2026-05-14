@@ -35,6 +35,8 @@ from play_book_studio.retrieval.query import (
     is_generic_intro_query,
     has_route_ingress_compare_intent,
 )
+from play_book_studio.retrieval.query_understanding import understand_query
+from play_book_studio.retrieval.intent_profile import build_intent_profile
 
 from .doc_locator_intent import is_cross_document_follow_query
 from .models import Citation, ContextBundle
@@ -103,6 +105,8 @@ NAVIGATION_ONLY_LABELS = (
 
 
 def _is_navigation_only_hit(hit: RetrievalHit) -> bool:
+    if hit.navigation_only:
+        return True
     if hit.cli_commands or _commands_from_excerpt(hit.text):
         return False
     text = strip_internal_markup(hit.text)
@@ -319,7 +323,77 @@ def _command_lookup_priority(hit: RetrievalHit, query: str) -> tuple[int, int, i
     if namespace_query and any(token in haystack for token in ("delete pods", "서비스가 중단", "remove all")):
         score += 18
 
-    return (score, 0 if hit.book_slug == "cli_tools" else 1, _procedure_chunk_priority(hit))
+    return (
+        score + _generic_official_source_penalty(hit, query),
+        0 if hit.book_slug == "cli_tools" else 1,
+        _procedure_chunk_priority(hit),
+    )
+
+
+def _generic_official_source_penalty(hit: RetrievalHit, query: str) -> int:
+    lowered_query = (query or "").lower()
+    if any(token in lowered_query for token in ("kmsc", "internal course", "internal ops", "study doc", "실운영", "운영 문서")):
+        return 0
+    source_scope = str(hit.source_scope or "").strip()
+    source_collection = str(hit.source_collection or "").strip()
+    source_type = str(hit.source_type or "").strip()
+    if source_scope == "official_docs" or source_type == "official_doc":
+        return 0
+    if source_scope == "study_docs" or source_collection not in {"", "core"}:
+        return 28
+    if hit.book_slug.startswith("kmsc") or "kmsc" in str(hit.source or "").lower():
+        return 28
+    return 0
+
+
+def _beginner_operational_priority(hit: RetrievalHit, query: str) -> tuple[int, int, int]:
+    understanding = understand_query(query)
+    lowered_section = (hit.section or "").lower()
+    lowered_text = (hit.text or "").lower()
+    commands = tuple(command.lower() for command in _all_hit_commands(hit))
+    haystack = " ".join((lowered_section, lowered_text, " ".join(commands)))
+
+    score = 50 + _generic_official_source_penalty(hit, query)
+    if commands:
+        score -= 8
+    score += _procedure_chunk_priority(hit) * 2
+
+    if understanding.has_intent("namespace_create"):
+        if any(token in haystack for token in ("oc new-project", "oc create namespace", "kind: namespace")):
+            score -= 24
+        if any(token in haystack for token in ("namespace", "project")):
+            score -= 8
+    if understanding.has_intent("deployment_yaml_authoring"):
+        if any(token in haystack for token in ("kind: deployment", "oc apply -f", "deployment manifest")):
+            score -= 24
+        if any(token in haystack for token in ("deployment", "replicaset", "pod template", "yaml")):
+            score -= 8
+    if understanding.has_intent("pod_resource_inspection"):
+        if any(token in haystack for token in ("oc adm top pods", "top pods", "resource usage")):
+            score -= 24
+        if any(token in haystack for token in ("cpu", "memory", "metrics", "requests", "limits")):
+            score -= 8
+    if understanding.has_intent("service_failure_diagnosis"):
+        if hit.book_slug in {"networking_overview", "ingress_and_load_balancing", "cli_tools"}:
+            score -= 18
+        elif hit.book_slug in {"authentication_and_authorization", "operators", "backup_and_restore", "support"}:
+            score += 18
+        if any(token in haystack for token in ("service", "endpoint", "endpointslice", "route", "selector", "targetport")):
+            score -= 18
+        if any(token in haystack for token in ("oc describe service", "oc get endpoints", "oc describe route")):
+            score -= 12
+
+    preferred_books = {
+        "cli_tools": 0,
+        "networking_overview": 1,
+        "ingress_and_load_balancing": 2,
+        "networking": 3,
+        "nodes": 4,
+        "applications": 5,
+        "building_applications": 6,
+        "web_console": 7,
+    }
+    return (score, preferred_books.get(hit.book_slug, 9), _procedure_chunk_priority(hit))
 
 
 def _install_guidance_priority(hit: RetrievalHit) -> tuple[int, int, int]:
@@ -906,6 +980,7 @@ def _select_hits(
         return []
 
     normalized = query or ""
+    query_understanding = understand_query(normalized)
     allow_uploaded_hits = (
         _is_customer_pack_explicit_query(normalized)
         or has_active_customer_pack_selection(session_context)
@@ -944,6 +1019,10 @@ def _select_hits(
             has_cluster_node_usage_intent(normalized),
             has_deployment_scaling_intent(normalized),
             has_registry_storage_ops_intent(normalized),
+            query_understanding.has_intent("namespace_create"),
+            query_understanding.has_intent("deployment_yaml_authoring"),
+            query_understanding.has_intent("pod_resource_inspection"),
+            query_understanding.has_intent("service_failure_diagnosis"),
         ]
     )
 
@@ -999,6 +1078,27 @@ def _select_hits(
             ranked_hits,
             key=lambda hit: (
                 *_install_guidance_priority(hit),
+                -_hit_score(hit),
+                hit.book_slug,
+                hit.chunk_id,
+            ),
+        )
+        support_window = ranked_hits[: max(max_chunks * 2, 8)]
+        top_score = _hit_score(support_window[0])
+        top_book = support_window[0].book_slug
+    elif any(
+        query_understanding.has_intent(intent)
+        for intent in (
+            "namespace_create",
+            "deployment_yaml_authoring",
+            "pod_resource_inspection",
+            "service_failure_diagnosis",
+        )
+    ):
+        ranked_hits = sorted(
+            ranked_hits,
+            key=lambda hit: (
+                *_beginner_operational_priority(hit, normalized),
                 -_hit_score(hit),
                 hit.book_slug,
                 hit.chunk_id,
@@ -1748,8 +1848,8 @@ def assemble_context(
     query: str = "",
     session_context: SessionContext | None = None,
     root_dir: Path | None = None,
-    max_chunks: int = 6,
-    max_chars_per_chunk: int = 900,
+    max_chunks: int = 8,
+    max_chars_per_chunk: int = 2000,
 ) -> ContextBundle:
     citations: list[Citation] = []
     seen_chunk_ids: set[str] = set()
@@ -1792,6 +1892,36 @@ def assemble_context(
                 hit.chunk_id,
             ),
         )[:max_chunks]
+    intent_profile = build_intent_profile(query)
+    intent_terms = tuple(
+        term.casefold()
+        for term in (*intent_profile.evidence_terms, *intent_profile.primary_commands, *intent_profile.query_terms)
+        if term.strip()
+    )
+    if intent_terms:
+        def hit_matches_intent_terms(hit: RetrievalHit) -> bool:
+            haystack = " ".join(
+                [
+                    hit.book_slug,
+                    hit.section,
+                    hit.text,
+                    " ".join(hit.cli_commands),
+                    " ".join(hit.k8s_objects),
+                    " ".join(hit.operator_names),
+                ]
+            ).casefold()
+            return any(term and term in haystack for term in intent_terms)
+
+        intent_matched_hits = sorted(
+            [hit for hit in hits if hit_matches_intent_terms(hit)],
+            key=lambda hit: (
+                -_hit_score(hit),
+                hit.book_slug,
+                hit.chunk_id,
+            ),
+        )[:max_chunks]
+        if intent_matched_hits and not any(hit_matches_intent_terms(hit) for hit in selected_hits):
+            selected_hits = intent_matched_hits
     if overlay_exact_scores or overlay_book_scores:
         selected_hits = sorted(
             selected_hits,
@@ -1838,7 +1968,8 @@ def assemble_context(
         seen_signatures.add(signature)
         if section_core and anchor_root:
             seen_mirror_sections.setdefault(mirror_signature, hit.book_slug)
-        citation_excerpt = excerpt[:max_chars_per_chunk].strip()
+        excerpt_limit = 1800 if hit.chunk_role == "parent" else max_chars_per_chunk
+        citation_excerpt = excerpt[:excerpt_limit].strip()
         citations.append(
             Citation(
                 index=len(citations) + 1,

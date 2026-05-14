@@ -105,7 +105,6 @@ class Settings(SettingsPathMixin):
     embedding_api_key: str = ""
     embedding_batch_size: int = 32
     embedding_timeout_seconds: float = 8
-    embedding_verify_ssl: bool = True
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = DEFAULT_CORE_PACK.qdrant_collection
     qdrant_vector_size: int = 1024
@@ -124,6 +123,15 @@ class Settings(SettingsPathMixin):
     llm_model: str = ""
     llm_temperature: float = 0.2
     llm_max_tokens: int = 1100
+    reranker_enabled: bool = False
+    reranker_base_url: str = ""
+    reranker_api_key: str = ""
+    reranker_model: str = "dragonkue/bge-reranker-v2-m3-ko"
+    reranker_top_n: int = 12
+    reranker_batch_size: int = 8
+    reranker_max_parallel_requests: int = 4
+    reranker_device: str = "auto"
+    reranker_timeout_seconds: float = 10.0
     graph_runtime_mode: str = "auto"
     graph_endpoint: str = ""
     graph_api_key: str = ""
@@ -132,6 +140,9 @@ class Settings(SettingsPathMixin):
     customer_pack_pdf_fallback_backend: str = ""
     official_html_fallback_allowed: bool = False
     allow_stale_full_rebuild_export: bool = False
+    surya_ocr_endpoint: str = ""
+    surya_health_endpoint: str = ""
+    surya_timeout_seconds: float = 30.0
     ocp_api_base_url: str = ""
     ocp_api_token: str = ""
     ocp_default_namespace: str = ""
@@ -286,8 +297,6 @@ def load_settings(root_dir: str | Path) -> Settings:
     # RAGAS judge용 OPENAI_* 설정은 evals/ragas_eval.py가 별도로 읽는다.
     root_path = Path(root_dir)
     effective_env = load_effective_env(root_path)
-    embedding_base_url = effective_env.get("EMBEDDING_BASE_URL", "").strip().rstrip("/")
-    embedding_verify_default = "false" if embedding_base_url.startswith("http://") else "true"
 
     return Settings(
         root_dir=root_path,
@@ -305,14 +314,12 @@ def load_settings(root_dir: str | Path) -> Settings:
         docs_language=effective_env.get("DOCS_LANGUAGE", DEFAULT_DOCS_LANGUAGE).strip(),
         book_url_template_str=effective_env.get("BOOK_URL_TEMPLATE", DEFAULT_BOOK_URL_TEMPLATE),
         viewer_path_template_str=effective_env.get("VIEWER_PATH_TEMPLATE", DEFAULT_VIEWER_PATH_TEMPLATE),
-        embedding_base_url=embedding_base_url,
+        embedding_base_url=effective_env.get("EMBEDDING_BASE_URL", "").strip().rstrip("/"),
         embedding_model=effective_env.get("EMBEDDING_MODEL", "dragonkue/bge-m3-ko"),
         embedding_device=effective_env.get("EMBEDDING_DEVICE", "auto").strip(),
         embedding_api_key=effective_env.get("EMBEDDING_API_KEY", "").strip(),
         embedding_batch_size=int(effective_env.get("EMBEDDING_BATCH_SIZE", "32")),
         embedding_timeout_seconds=float(effective_env.get("EMBEDDING_TIMEOUT_SECONDS", "8")),
-        embedding_verify_ssl=effective_env.get("EMBEDDING_VERIFY_SSL", embedding_verify_default).lower()
-        in {"1", "true", "yes", "on"},
         qdrant_url=effective_env.get("QDRANT_URL", "http://localhost:6333").rstrip("/"),
         qdrant_collection=effective_env.get("QDRANT_COLLECTION", DEFAULT_CORE_PACK.qdrant_collection),
         qdrant_vector_size=int(effective_env.get("QDRANT_VECTOR_SIZE", "1024")),
@@ -333,6 +340,22 @@ def load_settings(root_dir: str | Path) -> Settings:
         llm_model=effective_env.get("LLM_MODEL", "").strip(),
         llm_temperature=float(effective_env.get("LLM_TEMPERATURE", "0.2")),
         llm_max_tokens=int(effective_env.get("LLM_MAX_TOKENS", "1100")),
+        reranker_enabled=effective_env.get("RERANKER_ENABLED", "false").lower()
+        in {"1", "true", "yes", "on"},
+        reranker_base_url=effective_env.get(
+            "RERANKER_BASE_URL",
+            effective_env.get("EMBEDDING_BASE_URL", ""),
+        ).strip().rstrip("/"),
+        reranker_api_key=effective_env.get(
+            "RERANKER_API_KEY",
+            effective_env.get("EMBEDDING_API_KEY", ""),
+        ).strip(),
+        reranker_model=effective_env.get("RERANKER_MODEL", "dragonkue/bge-reranker-v2-m3-ko").strip(),
+        reranker_top_n=int(effective_env.get("RERANKER_TOP_N", "12")),
+        reranker_batch_size=int(effective_env.get("RERANKER_BATCH_SIZE", "8")),
+        reranker_max_parallel_requests=int(effective_env.get("RERANKER_MAX_PARALLEL_REQUESTS", "4")),
+        reranker_device=effective_env.get("RERANKER_DEVICE", "auto").strip(),
+        reranker_timeout_seconds=float(effective_env.get("RERANKER_TIMEOUT_SECONDS", "10")),
         graph_runtime_mode=effective_env.get("GRAPH_RUNTIME_MODE", "auto").strip().lower() or "auto",
         graph_endpoint=effective_env.get("GRAPH_ENDPOINT", "").strip().rstrip("/"),
         graph_api_key=effective_env.get("GRAPH_API_KEY", "").strip(),
@@ -350,6 +373,9 @@ def load_settings(root_dir: str | Path) -> Settings:
             "PBS_ALLOW_STALE_FULL_REBUILD_EXPORT",
             "false",
         ).lower() in {"1", "true", "yes", "on"},
+        surya_ocr_endpoint=effective_env.get("SURYA_OCR", "").strip().rstrip("/"),
+        surya_health_endpoint=effective_env.get("SURYA_HEALTH", "").strip().rstrip("/"),
+        surya_timeout_seconds=float(effective_env.get("SURYA_TIMEOUT_SECONDS", "30")),
         ocp_api_base_url=effective_env.get("OCP_API_BASE_URL", "").strip().rstrip("/"),
         ocp_api_token=effective_env.get("OCP_API_TOKEN", "").strip(),
         ocp_default_namespace=effective_env.get("OCP_DEFAULT_NAMESPACE", "").strip(),

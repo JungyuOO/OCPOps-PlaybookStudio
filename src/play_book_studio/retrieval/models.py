@@ -96,6 +96,14 @@ class RetrievalHit:
     topology_relations: tuple[str, ...] = field(default_factory=tuple)
     topology_evidence: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     asset_ids: tuple[str, ...] = field(default_factory=tuple)
+    chunk_role: str = "leaf"
+    parent_chunk_id: str = ""
+    child_chunk_ids: tuple[str, ...] = field(default_factory=tuple)
+    navigation_only: bool = False
+    beginner_narrative: str = ""
+    starter_question_candidates: tuple[str, ...] = field(default_factory=tuple)
+    followup_question_candidates: tuple[str, ...] = field(default_factory=tuple)
+    question_candidates_version: int = 0
     repository_id: str = ""
     document_source_id: str = ""
     owner_user_id: str = ""

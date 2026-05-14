@@ -66,6 +66,14 @@ def load_qdrant_chunk_candidates(
                 c.owner_user_id,
                 c.visibility,
                 c.source_scope,
+                c.chunk_role,
+                c.parent_chunk_id::text AS parent_chunk_id,
+                c.child_chunk_ids,
+                c.navigation_only,
+                c.beginner_narrative,
+                c.starter_question_candidates,
+                c.followup_question_candidates,
+                c.question_candidates_version,
                 c.metadata AS chunk_metadata,
                 pd.id::text AS parsed_document_id,
                 pd.title AS document_title,
@@ -122,6 +130,14 @@ def load_qdrant_payload_refresh_candidates(
                 c.owner_user_id,
                 c.visibility,
                 c.source_scope,
+                c.chunk_role,
+                c.parent_chunk_id::text AS parent_chunk_id,
+                c.child_chunk_ids,
+                c.navigation_only,
+                c.beginner_narrative,
+                c.starter_question_candidates,
+                c.followup_question_candidates,
+                c.question_candidates_version,
                 c.metadata AS chunk_metadata,
                 pd.id::text AS parsed_document_id,
                 pd.title AS document_title,
@@ -174,6 +190,9 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
     section_path = _json_list(row.get("section_path"))
     toc_path = _json_list(row.get("toc_path"))
     asset_ids = _json_list(row.get("asset_ids"))
+    child_chunk_ids = _json_list(row.get("child_chunk_ids"))
+    starter_question_candidates = _string_list(row.get("starter_question_candidates"))
+    followup_question_candidates = _string_list(row.get("followup_question_candidates"))
     chunk_metadata = _json_dict(row.get("chunk_metadata"))
     parsed_metadata = _json_dict(row.get("parsed_metadata"))
     source_metadata = _json_dict(row.get("source_metadata"))
@@ -252,6 +271,18 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "source_anchor": str(row.get("source_anchor") or ""),
         "toc_path": toc_path,
         "asset_ids": asset_ids,
+        "chunk_role": str(row.get("chunk_role") or chunk_metadata.get("chunk_role") or "leaf"),
+        "parent_chunk_id": str(row.get("parent_chunk_id") or chunk_metadata.get("parent_chunk_id") or ""),
+        "child_chunk_ids": child_chunk_ids or _string_list(chunk_metadata.get("child_chunk_ids")),
+        "navigation_only": bool(row.get("navigation_only") or chunk_metadata.get("navigation_only") or False),
+        "beginner_narrative": str(row.get("beginner_narrative") or chunk_metadata.get("beginner_narrative") or ""),
+        "starter_question_candidates": starter_question_candidates
+        or _string_list(chunk_metadata.get("starter_question_candidates")),
+        "followup_question_candidates": followup_question_candidates
+        or _string_list(chunk_metadata.get("followup_question_candidates")),
+        "question_candidates_version": int(
+            row.get("question_candidates_version") or chunk_metadata.get("question_candidates_version") or 0
+        ),
         "repository_id": str(row.get("repository_id") or ""),
         "visibility": str(row.get("visibility") or source_metadata.get("visibility") or "workspace_shared"),
         "owner_user_id": str(row.get("owner_user_id") or ""),

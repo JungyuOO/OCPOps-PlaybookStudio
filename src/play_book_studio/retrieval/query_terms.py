@@ -12,6 +12,8 @@ from .query_terms_core import append_core_query_terms
 from .query_terms_etcd import append_etcd_query_terms
 from .query_terms_operations import append_operation_query_terms
 from .query_understanding import understand_query
+from .concept_expansion import expand_query_terms
+from .cross_lingual import cross_lingual_rewrite_terms
 
 
 _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
@@ -31,7 +33,12 @@ _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
     "oc get namespaces",
     "oc get project",
     "oc get projects",
+    "oc create namespace",
+    "oc new-project",
     "oc get clusteroperators",
+    "oc get nodes",
+    "oc describe node",
+    "oc describe node <node-name>",
     "oc get mcp",
     "oc debug node",
     "admin",
@@ -50,9 +57,34 @@ _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
     "nodes",
     "drain",
     "top",
+    "oc top pod",
+    "oc adm top pods",
+    "resource usage",
+    "memory",
+    "utilization",
+    "requests",
+    "limits",
+    "metrics",
     "describe",
+    "service",
+    "services",
+    "svc",
+    "endpoint",
+    "endpoints",
+    "endpointslice",
+    "selector",
+    "targetport",
+    "oc describe service",
+    "oc get endpoints",
+    "oc describe route",
     "deployment",
     "deployments",
+    "deployment manifest",
+    "pod template",
+    "replicaset",
+    "oc apply -f",
+    "oc create deployment",
+    "oc rollout status deployment",
     "replicas",
     "scale",
     "backup",
@@ -115,10 +147,44 @@ def normalize_query(query: str) -> str:
 
     terms: list[str] = []
     terms.extend(understand_query(normalized).retrieval_terms)
+    terms.extend(cross_lingual_rewrite_terms(normalized))
+    terms.extend(expand_query_terms(normalized))
     append_core_query_terms(normalized, terms)
     append_operation_query_terms(normalized, terms)
     append_etcd_query_terms(normalized, terms)
+    terms = _prioritize_phrase_terms(terms)
     if _contains_hangul(normalized):
         terms = _filter_terms_for_korean_query(normalized, terms)
 
     return _append_terms(normalized, terms)
+
+
+def _prioritize_phrase_terms(terms: list[str]) -> list[str]:
+    command_terms: list[str] = []
+    technical_phrases: list[str] = []
+    rest: list[str] = []
+    for term in terms:
+        cleaned = _collapse_spaces(term)
+        if not cleaned:
+            continue
+        lowered = cleaned.lower()
+        if lowered.startswith("oc "):
+            command_terms.append(cleaned)
+        elif " " in cleaned or ":" in cleaned:
+            technical_phrases.append(cleaned)
+        else:
+            rest.append(cleaned)
+    command_priority = {
+        "oc create namespace": 0,
+        "oc new-project": 1,
+        "oc adm top pods": 2,
+        "oc apply -f": 3,
+        "oc create deployment": 4,
+        "oc describe service": 5,
+        "oc get endpoints": 6,
+        "oc get nodes": 7,
+        "oc describe node": 8,
+        "oc describe node <node-name>": 9,
+    }
+    command_terms = sorted(command_terms, key=lambda term: command_priority.get(term.lower(), 50))
+    return [*command_terms, *technical_phrases, *rest]

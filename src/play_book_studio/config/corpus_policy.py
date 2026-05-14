@@ -53,11 +53,11 @@ def chunk_profile_for_section(
     role = str(semantic_role or "").strip().lower()
     kinds = {str(kind).strip().lower() for kind in block_kinds if str(kind).strip()}
     if has_error_strings or role == "troubleshooting":
-        return min(default_chunk_size, 128), min(default_chunk_overlap, 16)
+        return min(max(default_chunk_size, 256), 256), min(max(default_chunk_overlap, 32), 32)
     if has_cli_commands or role == "procedure" or "code" in kinds:
-        return min(default_chunk_size, 128), min(default_chunk_overlap, 16)
+        return min(max(default_chunk_size, 256), 256), min(max(default_chunk_overlap, 32), 32)
     if role in {"concept", "overview"}:
-        return max(default_chunk_size, 192), default_chunk_overlap
+        return max(default_chunk_size, 320), max(default_chunk_overlap, 32)
     return chunk_profile_for_book_slug(
         book_slug,
         default_chunk_size=default_chunk_size,

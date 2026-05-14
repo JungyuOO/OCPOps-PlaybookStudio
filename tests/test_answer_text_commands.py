@@ -437,3 +437,44 @@ def test_finalizer_answer_mentions_metadata_finalizers() -> None:
 
     assert answer is not None
     assert "metadata.finalizers" in answer
+
+
+def test_pdb_and_hpa_answers_use_grounded_status_paths() -> None:
+    pdb = Citation(
+        index=1,
+        chunk_id="nodes--pdb",
+        book_slug="nodes",
+        section="Pod disruption budget",
+        anchor="pdb",
+        source_url="",
+        viewer_path="/docs/ocp/4.20/ko/nodes/index.html#pdb",
+        excerpt="PodDisruptionBudget shows Allowed disruptions before node drain.",
+        cli_commands=("oc get pdb -n <namespace>",),
+    )
+    hpa = Citation(
+        index=1,
+        chunk_id="nodes--hpa",
+        book_slug="nodes",
+        section="Horizontal Pod Autoscaler",
+        anchor="hpa",
+        source_url="",
+        viewer_path="/docs/ocp/4.20/ko/nodes/index.html#hpa",
+        excerpt="HorizontalPodAutoscaler uses metrics and TARGETS to decide scale out.",
+        cli_commands=("oc get hpa -n <namespace>",),
+    )
+
+    pdb_answer = build_grounded_command_guide_answer(
+        query="PDB blocks node drain. What should I check first?",
+        citations=[pdb],
+    )
+    hpa_answer = build_grounded_command_guide_answer(
+        query="HPA does not scale out. Which metrics should I check?",
+        citations=[hpa],
+    )
+
+    assert pdb_answer is not None
+    assert "PodDisruptionBudget" in pdb_answer
+    assert "oc get pdb" in pdb_answer
+    assert hpa_answer is not None
+    assert "HorizontalPodAutoscaler" in hpa_answer
+    assert "oc get hpa" in hpa_answer

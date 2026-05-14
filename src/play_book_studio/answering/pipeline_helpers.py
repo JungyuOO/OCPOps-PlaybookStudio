@@ -147,6 +147,11 @@ def generate_grounded_answer_text(
         answer_text,
         citations=citations,
     )
+    answer_text = shape_beginner_grounded_answer(
+        answer_text,
+        query=query,
+        citations=citations,
+    )
     answer_text = strip_weak_additional_guidance(
         answer_text,
         mode=mode,

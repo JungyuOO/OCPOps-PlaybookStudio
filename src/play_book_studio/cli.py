@@ -59,6 +59,11 @@ def build_parser() -> argparse.ArgumentParser:
     ui_parser.add_argument("--host", default="127.0.0.1")
     ui_parser.add_argument("--port", type=int, default=8765)
     ui_parser.add_argument("--no-browser", action="store_true")
+    ui_parser.add_argument(
+        "--warmup-reranker",
+        action="store_true",
+        help="Warm the reranker model before serve. Disabled by default to keep shared serve startup fast.",
+    )
 
     ask_parser = subparsers.add_parser("ask", help="Run a single grounded answer query")
     ask_parser.add_argument("--query", required=True)
@@ -70,6 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Answer mode for the query.",
     )
     ask_parser.add_argument("--skip-log", action="store_true")
+    ask_parser.add_argument("--database-url", default="")
     _add_runtime_args(ask_parser)
 
     eval_parser = subparsers.add_parser("eval", help="Run answer evaluation cases")
@@ -78,18 +84,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=ANSWER_EVAL_CASES_PATH,
     )
+    eval_parser.add_argument("--database-url", default="")
     _add_runtime_args(eval_parser)
 
-    retrieval_eval_parser = subparsers.add_parser(
-        "retrieval-eval",
-        help="Run retrieval evaluation cases and write retrieval_eval_report.json",
-    )
+    retrieval_eval_parser = subparsers.add_parser("retrieval-eval", help="Run retrieval evaluation cases")
     retrieval_eval_parser.add_argument(
         "--cases",
         type=Path,
         default=RETRIEVAL_EVAL_CASES_PATH,
     )
-    retrieval_eval_parser.add_argument("--no-vector", action="store_true")
+    retrieval_eval_parser.add_argument("--database-url", default="")
+    retrieval_eval_parser.add_argument("--output", type=Path, default=None)
     _add_runtime_args(retrieval_eval_parser)
 
     ragas_parser = subparsers.add_parser("ragas", help="Run RAGAS evaluation")
@@ -103,25 +108,6 @@ def build_parser() -> argparse.ArgumentParser:
     ragas_parser.add_argument("--embedding-model", default=None)
     ragas_parser.add_argument("--dry-run", action="store_true")
     _add_runtime_args(ragas_parser)
-
-    source_approval_parser = subparsers.add_parser(
-        "source-approval-report",
-        help="Build source approval, translation lane, and corpus gap reports for certification",
-    )
-    source_approval_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    source_approval_parser.add_argument("--output", type=Path, default=None)
-    source_approval_parser.add_argument("--translation-output", type=Path, default=None)
-    source_approval_parser.add_argument("--gap-output", type=Path, default=None)
-    source_approval_parser.add_argument("--skip-translation", action="store_true")
-    source_approval_parser.add_argument("--skip-gap", action="store_true")
-
-    foundry_run_parser = subparsers.add_parser(
-        "foundry-run",
-        help="Run a configured gold foundry profile such as morning_gate",
-    )
-    foundry_run_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    foundry_run_parser.add_argument("--profile", default="morning_gate")
-    foundry_run_parser.add_argument("--retry", action="store_true")
 
     runtime_parser = subparsers.add_parser("runtime", help="Write a runtime readiness report")
     runtime_parser.add_argument("--output", type=Path, default=None)
@@ -285,6 +271,8 @@ def build_parser() -> argparse.ArgumentParser:
     official_gold_import_parser.add_argument("--collection", default="")
     official_gold_import_parser.add_argument("--refresh-limit", type=int, default=0)
     official_gold_import_parser.add_argument("--refresh-batch-size", type=int, default=256)
+    official_gold_import_parser.add_argument("--enrich-runtime-metadata", action="store_true")
+    official_gold_import_parser.add_argument("--bm25-path", type=Path, default=None)
     official_gold_import_parser.add_argument("--dry-run", action="store_true")
 
     learning_seed_parser = subparsers.add_parser(
@@ -423,17 +411,36 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _build_answerer() -> ChatAnswerer:
+def _build_answerer(*, database_url: str = "") -> ChatAnswerer:
     from play_book_studio.answering.answerer import ChatAnswerer
 
     settings = load_settings(ROOT)
+    if database_url.strip():
+        from dataclasses import replace
+
+        settings = replace(settings, database_url=database_url.strip())
     return ChatAnswerer.from_settings(settings)
+
+
+def _warmup_ui_runtime(answerer: ChatAnswerer) -> None:
+    reranker = getattr(answerer.retriever, "reranker", None)
+    if reranker is None:
+        return
+    try:
+        warmed = reranker.warmup()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[ui] reranker warmup failed: {exc}")
+        return
+    if warmed:
+        print(f"[ui] reranker warmed: {reranker.model_name}")
 
 
 def _run_ui(args: argparse.Namespace) -> int:
     from play_book_studio.http.server import serve
 
     answerer = _build_answerer()
+    if getattr(args, "warmup_reranker", False):
+        _warmup_ui_runtime(answerer)
     serve(
         answerer=answerer,
         root_dir=ROOT,
@@ -447,7 +454,7 @@ def _run_ui(args: argparse.Namespace) -> int:
 def _run_ask(args: argparse.Namespace) -> int:
     from play_book_studio.retrieval.models import SessionContext
 
-    answerer = _build_answerer()
+    answerer = _build_answerer(database_url=args.database_url)
     context = SessionContext.from_dict(
         json.loads(args.context_json) if args.context_json else None
     )
@@ -468,7 +475,7 @@ def _run_ask(args: argparse.Namespace) -> int:
 def _run_eval(args: argparse.Namespace) -> int:
     from play_book_studio.evals.answer_eval import evaluate_case, summarize_case_results
 
-    answerer = _build_answerer()
+    answerer = _build_answerer(database_url=args.database_url)
     cases = _read_jsonl(args.cases)
     details: list[dict] = []
     for case in cases:
@@ -499,36 +506,85 @@ def _run_eval(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_retrieval_eval(args: argparse.Namespace) -> int:
-    from play_book_studio.evals.sanity import evaluate_case, summarize_results
+def _retrieval_trace_book_slugs(trace: dict, key: str) -> list[str]:
+    return [
+        str(item.get("book_slug", ""))
+        for item in trace.get(key, [])
+        if str(item.get("book_slug", "")).strip()
+    ]
 
-    answerer = _build_answerer()
+
+def _run_retrieval_eval(args: argparse.Namespace) -> int:
+    from dataclasses import replace
+
+    from play_book_studio.evals.retrieval_eval import summarize_case_results
+    from play_book_studio.retrieval import ChatRetriever
+    from play_book_studio.retrieval.models import SessionContext
+
+    settings = load_settings(ROOT)
+    if args.database_url.strip():
+        settings = replace(settings, database_url=args.database_url.strip())
+    retriever = ChatRetriever.from_settings(settings)
     cases = _read_jsonl(args.cases)
     details: list[dict] = []
     for case in cases:
+        context = SessionContext.from_dict(case.get("context") or case.get("session_context"))
+        result = retriever.retrieve(
+            str(case.get("query", "")),
+            context=context,
+            top_k=args.top_k,
+            candidate_k=args.candidate_k,
+        )
+        top_hits = [
+            {
+                "chunk_id": hit.chunk_id,
+                "book_slug": hit.book_slug,
+                "section": hit.section,
+                "anchor": hit.anchor,
+                "viewer_path": hit.viewer_path,
+                "score": hit.fused_score or hit.raw_score,
+            }
+            for hit in result.hits
+        ]
+        trace = result.trace or {}
         details.append(
-            evaluate_case(
-                answerer.retriever,
-                case,
-                top_k=args.top_k,
-                candidate_k=args.candidate_k,
-                use_vector=not bool(args.no_vector),
-            )
+            {
+                "id": case.get("id", ""),
+                "mode": case.get("mode", "retrieval"),
+                "query_type": case.get("query_type", case.get("category", "unknown")),
+                "query": case.get("query", ""),
+                "rewritten_query": result.rewritten_query,
+                "expected_book_slugs": list(case.get("expected_book_slugs", [])),
+                "expected_landing_terms": list(case.get("expected_landing_terms", [])),
+                "top_book_slugs": [hit["book_slug"] for hit in top_hits],
+                "top_hits": top_hits,
+                "warnings": list(trace.get("warnings", [])),
+                "bm25_top_book_slugs": _retrieval_trace_book_slugs(trace, "bm25"),
+                "vector_top_book_slugs": _retrieval_trace_book_slugs(trace, "vector"),
+                "hybrid_top_book_slugs": _retrieval_trace_book_slugs(trace, "hybrid"),
+                "reranked_top_book_slugs": _retrieval_trace_book_slugs(trace, "reranked"),
+                "rewrite_applied": bool(trace.get("plan", {}).get("rewrite_applied", False)),
+                "rewrite_reason": str(trace.get("plan", {}).get("rewrite_reason", "")),
+                "follow_up_detected": bool(trace.get("plan", {}).get("follow_up_detected", False)),
+                "vector_endpoint_used": str(trace.get("vector_runtime", {}).get("endpoint_used", "")),
+                "hybrid_top_support": str(trace.get("ablation", {}).get("hybrid_top_support", "")),
+                "rerank_top1_changed": bool(trace.get("reranker", {}).get("top1_changed", False)),
+                "rerank_reasons": list(trace.get("reranker", {}).get("reasons", [])),
+            }
         )
 
-    settings = answerer.settings
     report = {
         "cases_file": str(args.cases),
         "top_k": args.top_k,
         "candidate_k": args.candidate_k,
-        "use_vector": not bool(args.no_vector),
-        **summarize_results(details),
+        **summarize_case_results(details),
+        "details": details,
     }
-    output_path = settings.retrieval_eval_report_path
+    output_path = args.output or settings.retrieval_eval_report_path
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"wrote retrieval eval report: {output_path}")
-    print(json.dumps({k: v for k, v in report.items() if k != "details"}, ensure_ascii=False, indent=2))
+    print(json.dumps({key: report[key] for key in ("case_count", "overall", "graph_signal_counts")}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -558,7 +614,6 @@ def _run_ragas(args: argparse.Namespace) -> int:
             row, metadata = build_ragas_case_row(case, generated_result=generated_result)
             rows.append({**metadata, **row})
         output_path = settings.ragas_dataset_preview_path
-        output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"wrote ragas dataset preview: {output_path}")
         print(
@@ -580,98 +635,19 @@ def _run_ragas(args: argparse.Namespace) -> int:
     judge_config.judge_model = args.judge_model or judge_config.judge_model
     judge_config.embedding_model = args.embedding_model or judge_config.embedding_model
 
-    try:
-        report = evaluate_cases_with_ragas(
-            answerer,
-            cases,
-            judge_config=judge_config,
-            top_k=args.top_k,
-            candidate_k=args.candidate_k,
-            max_context_chunks=args.max_context_chunks,
-            batch_size=args.batch_size,
-        )
-    except RuntimeError as exc:
-        print(f"ragas runtime error: {exc}")
-        print("hint: install RAGAS eval dependencies, or run with --dry-run to verify dataset generation")
-        return 1
+    report = evaluate_cases_with_ragas(
+        answerer,
+        cases,
+        judge_config=judge_config,
+        top_k=args.top_k,
+        candidate_k=args.candidate_k,
+        max_context_chunks=args.max_context_chunks,
+        batch_size=args.batch_size,
+    )
     output_path = settings.ragas_eval_report_path
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"wrote ragas eval report: {output_path}")
     print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
-    return 0
-
-
-def _resolve_cli_output(root_dir: Path, path: Path | None, default_path: Path) -> Path:
-    target = path or default_path
-    return (root_dir / target).resolve() if not target.is_absolute() else target.resolve()
-
-
-def _write_json_report(path: Path, payload: dict | list) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _run_source_approval_report(args: argparse.Namespace) -> int:
-    from play_book_studio.ingestion.approval_report import (
-        build_corpus_gap_report,
-        build_source_approval_report,
-        build_translation_lane_report,
-    )
-
-    root_dir = args.root_dir.resolve()
-    settings = load_settings(root_dir)
-    try:
-        approval_report = build_source_approval_report(settings)
-        translation_report = None if args.skip_translation else build_translation_lane_report(settings)
-        gap_report = None if args.skip_gap else build_corpus_gap_report(settings)
-    except FileNotFoundError as exc:
-        print(f"source approval input missing: {exc}")
-        print("hint: restore normalized docs / source manifest inputs before certification can pass")
-        return 1
-
-    output_path = _resolve_cli_output(root_dir, args.output, settings.source_approval_report_path)
-    _write_json_report(output_path, approval_report)
-    written = {"source_approval_report": str(output_path)}
-    if translation_report is not None:
-        translation_output_path = _resolve_cli_output(
-            root_dir,
-            args.translation_output,
-            settings.translation_lane_report_path,
-        )
-        _write_json_report(translation_output_path, translation_report)
-        written["translation_lane_report"] = str(translation_output_path)
-    if gap_report is not None:
-        gap_output_path = _resolve_cli_output(root_dir, args.gap_output, settings.corpus_gap_report_path)
-        _write_json_report(gap_output_path, gap_report)
-        written["corpus_gap_report"] = str(gap_output_path)
-
-    print(json.dumps({"written": written, "summary": approval_report.get("summary", {})}, ensure_ascii=False, indent=2))
-    return 0
-
-
-def _run_foundry_profile_cli(args: argparse.Namespace) -> int:
-    from play_book_studio.ingestion.foundry_orchestrator import (
-        run_foundry_profile,
-        run_foundry_profile_with_retry,
-    )
-
-    root_dir = args.root_dir.resolve()
-    settings = load_settings(root_dir)
-    try:
-        report = (
-            run_foundry_profile_with_retry(settings, args.profile)
-            if args.retry
-            else run_foundry_profile(settings, args.profile)
-        )
-    except FileNotFoundError as exc:
-        print(f"foundry profile configuration missing: {exc}")
-        print("hint: restore pipelines/foundry_routines.json before running certification gates")
-        return 1
-    except KeyError as exc:
-        print(f"foundry profile unavailable: {exc}")
-        return 1
-    print(json.dumps({key: value for key, value in report.items() if key != "job_results"}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -798,7 +774,7 @@ def _run_db_migrate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _upload_ingest_summary(parsed, chunks, *, persisted=None, gold_build_run=None) -> dict:
+def _upload_ingest_summary(parsed, chunks, *, persisted=None) -> dict:
     return {
         "filename": parsed.filename,
         "document_format": parsed.document_format,
@@ -815,7 +791,6 @@ def _upload_ingest_summary(parsed, chunks, *, persisted=None, gold_build_run=Non
             for chunk in chunks
             if chunk.section_path
         ],
-        "gold_build_run": gold_build_run or {},
         "persisted": None if persisted is None else {
             "document_source_id": persisted.document_source_id,
             "document_version_id": persisted.document_version_id,
@@ -831,10 +806,8 @@ def _upload_ingest_summary(parsed, chunks, *, persisted=None, gold_build_run=Non
 
 def _run_upload_ingest(args: argparse.Namespace) -> int:
     from play_book_studio.db.document_repository import persist_parsed_upload_document
-    from play_book_studio.ingestion.asset_storage import remove_stored_asset_files, store_parsed_asset_files
     from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
     from play_book_studio.ingestion.vision import build_qwen_image_describer
-    from play_book_studio.wiki_gold_builder import prepare_upload_gold_build_candidate
 
     root_dir = args.root_dir.resolve()
     source_path = args.path
@@ -852,16 +825,8 @@ def _run_upload_ingest(args: argparse.Namespace) -> int:
         max_chars=args.chunk_max_chars,
         overlap_blocks=args.chunk_overlap_blocks,
     )
-    gold_candidate = prepare_upload_gold_build_candidate(
-        parsed,
-        chunks,
-        source_scope=args.source_scope,
-        dry_run=bool(args.dry_run),
-    )
-    parsed = gold_candidate.parsed
-    chunks = gold_candidate.chunks
     if args.dry_run:
-        print(json.dumps(_upload_ingest_summary(parsed, chunks, gold_build_run=gold_candidate.run), ensure_ascii=False, indent=2))
+        print(json.dumps(_upload_ingest_summary(parsed, chunks), ensure_ascii=False, indent=2))
         return 0
 
     database_url = (args.database_url or settings.database_url).strip()
@@ -871,31 +836,25 @@ def _run_upload_ingest(args: argparse.Namespace) -> int:
 
     import psycopg
 
-    stored_asset_files = store_parsed_asset_files(settings.object_storage_dir, parsed)
-    try:
-        with psycopg.connect(database_url) as connection:
-            persisted = persist_parsed_upload_document(
-                connection,
-                parsed,
-                chunks,
-                tenant_slug=args.tenant_slug,
-                tenant_name=args.tenant_name,
-                workspace_slug=args.workspace_slug,
-                workspace_name=args.workspace_name,
-                storage_key=args.storage_key,
-                created_by=args.created_by,
-                repository_id=args.repository_id,
-                repository_slug=args.repository_slug,
-                repository_title=args.repository_title,
-                repository_kind=args.repository_kind,
-                visibility=args.visibility,
-                source_scope=args.source_scope,
-                gold_build_run=gold_candidate.run,
-            )
-    except Exception:
-        remove_stored_asset_files(stored_asset_files)
-        raise
-    print(json.dumps(_upload_ingest_summary(parsed, chunks, persisted=persisted, gold_build_run=gold_candidate.run), ensure_ascii=False, indent=2))
+    with psycopg.connect(database_url) as connection:
+        persisted = persist_parsed_upload_document(
+            connection,
+            parsed,
+            chunks,
+            tenant_slug=args.tenant_slug,
+            tenant_name=args.tenant_name,
+            workspace_slug=args.workspace_slug,
+            workspace_name=args.workspace_name,
+            storage_key=args.storage_key,
+            created_by=args.created_by,
+            repository_id=args.repository_id,
+            repository_slug=args.repository_slug,
+            repository_title=args.repository_title,
+            repository_kind=args.repository_kind,
+            visibility=args.visibility,
+            source_scope=args.source_scope,
+        )
+    print(json.dumps(_upload_ingest_summary(parsed, chunks, persisted=persisted), ensure_ascii=False, indent=2))
     return 0
 
 
@@ -1050,14 +1009,27 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
     if not chunks_path.is_absolute():
         chunks_path = root_dir / chunks_path
     chunks_path = chunks_path.resolve()
-    if args.dry_run:
-        print(
-            json.dumps(
-                build_official_gold_import_plan(chunks_path, limit=args.limit),
-                ensure_ascii=False,
-                indent=2,
-            )
+    bm25_path = args.bm25_path
+    if bm25_path is not None and not bm25_path.is_absolute():
+        bm25_path = root_dir / bm25_path
+    if bm25_path is not None:
+        bm25_path = bm25_path.resolve()
+    elif args.enrich_runtime_metadata:
+        bm25_path = load_settings(root_dir).bm25_corpus_path.resolve()
+    enrich_report = None
+    if args.enrich_runtime_metadata:
+        from play_book_studio.ingestion.official_gold_enrichment import enrich_official_gold_chunks
+
+        enrich_report = enrich_official_gold_chunks(
+            chunks_path,
+            bm25_path=bm25_path,
+            dry_run=bool(args.dry_run),
         )
+    if args.dry_run:
+        payload = build_official_gold_import_plan(chunks_path, limit=args.limit)
+        if enrich_report is not None:
+            payload["official_gold_enrichment"] = enrich_report
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
 
     settings = load_settings(root_dir)
@@ -1079,6 +1051,8 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
             limit=args.limit,
         )
         payload = result.to_dict()
+        if enrich_report is not None:
+            payload["official_gold_enrichment"] = enrich_report
         if args.index:
             from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
 
@@ -1394,10 +1368,6 @@ def main() -> int:
         return _run_retrieval_eval(args)
     if args.command == "ragas":
         return _run_ragas(args)
-    if args.command == "source-approval-report":
-        return _run_source_approval_report(args)
-    if args.command == "foundry-run":
-        return _run_foundry_profile_cli(args)
     if args.command == "runtime":
         return _run_runtime(args)
     if args.command == "maintenance-smoke":

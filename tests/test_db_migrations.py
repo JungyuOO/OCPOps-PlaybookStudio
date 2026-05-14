@@ -22,6 +22,7 @@ def test_list_migrations_includes_ingestion_foundation():
         "0005_course_runtime_chunks",
         "0006_course_runtime_assets",
         "0007_course_runtime_manifest",
+        "0008_chunk_runtime_enrichment",
         "0008_document_topology_snapshots",
         "0009_upload_pipeline_events_quality_snapshots",
     ]
@@ -38,6 +39,8 @@ def test_list_migrations_includes_ingestion_foundation():
     assert "course_chunks" in migrations[5].sql
     assert "course_assets" in migrations[6].sql
     assert "course_manifests" in migrations[7].sql
+    assert "navigation_only" in migrations[8].sql
+    assert "starter_question_candidates" in migrations[8].sql
     assert "document_topology_snapshots" in migrations[-2].sql
     assert "input_fingerprint" in migrations[-2].sql
     assert "upload_pipeline_events" in migrations[-1].sql

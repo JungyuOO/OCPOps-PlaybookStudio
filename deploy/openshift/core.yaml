@@ -49,9 +49,13 @@ data:
   TERMINAL_SESSION_TTL_SECONDS: "1800"
   TERMINAL_MAX_OUTPUT_BYTES: "1048576"
   RERANKER_ENABLED: "true"
-  RERANKER_TOP_N: "12"
-  RERANKER_BATCH_SIZE: "8"
+  RERANKER_BASE_URL: http://bge-reranker:80
+  RERANKER_MODEL: dragonkue/bge-reranker-v2-m3-ko
+  RERANKER_TOP_N: "4"
+  RERANKER_BATCH_SIZE: "1"
+  RERANKER_MAX_PARALLEL_REQUESTS: "4"
   RERANKER_DEVICE: auto
+  RERANKER_TIMEOUT_SECONDS: "60"
   ARTIFACTS_DIR: /app/artifacts
   OBJECT_STORAGE_ROOT: /app/storage
   CORPUS_SEED_DIR: /app/corpus
@@ -93,6 +97,37 @@ spec:
   resources:
     requests:
       storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bge-reranker
+  namespace: pbs-ocpops
+  labels:
+    app.kubernetes.io/name: bge-reranker
+    app.kubernetes.io/part-of: playbookstudio
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: bge-reranker-external
+  namespace: pbs-ocpops
+  labels:
+    kubernetes.io/service-name: bge-reranker
+    endpointslice.kubernetes.io/managed-by: playbookstudio-manifest
+addressType: IPv4
+ports:
+  - name: http
+    protocol: TCP
+    port: 8082
+endpoints:
+  - addresses:
+      - 192.168.119.27
 ---
 apiVersion: apps/v1
 kind: Deployment

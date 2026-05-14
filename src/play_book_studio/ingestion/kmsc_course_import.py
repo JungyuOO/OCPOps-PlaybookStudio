@@ -18,6 +18,8 @@ from play_book_studio.db.document_repository import (
     _upsert_tenant,
     _upsert_workspace,
 )
+from play_book_studio.ingestion.chunk_question_candidates import build_chunk_question_candidates
+from play_book_studio.ingestion.kmsc_beginner_narrative import NARRATIVE_VERSION, build_beginner_narrative
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,7 +134,62 @@ def _load_rows(course_dir: Path, *, limit: int = 0) -> list[dict[str, Any]]:
     rows = [row for row in load_course_chunks(course_dir) if isinstance(row, dict)]
     if limit > 0:
         rows = rows[:limit]
-    return rows
+    return _with_parent_rows(rows)
+
+
+def _with_parent_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    children_by_parent: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        parent_id = str(row.get("parent_chunk_id") or "").strip()
+        if parent_id:
+            children_by_parent[(_source_key(row), parent_id)].append(row)
+    parent_rows = [
+        _parent_row_from_children(source_key, parent_id, children)
+        for (source_key, parent_id), children in sorted(children_by_parent.items())
+    ]
+    return sorted(
+        [*parent_rows, *rows],
+        key=lambda row: (
+            _source_key(row),
+            0 if str(row.get("chunk_role") or "") == "parent" else 1,
+            str(row.get("parent_chunk_id") or row.get("chunk_id") or ""),
+            str(row.get("chunk_id") or ""),
+        ),
+    )
+
+
+def _parent_row_from_children(source_key: str, parent_id: str, children: list[dict[str, Any]]) -> dict[str, Any]:
+    first = dict(children[0]) if children else {}
+    text = _parent_text(children)
+    row = dict(first)
+    row["chunk_id"] = _source_parent_raw_id(source_key, parent_id)
+    row["parent_chunk_id"] = ""
+    row["child_chunk_ids"] = [str(child.get("chunk_id") or "") for child in children if str(child.get("chunk_id") or "").strip()]
+    row["chunk_role"] = "parent"
+    row["chunk_kind"] = str(first.get("chunk_kind") or "study_reference")
+    row["title"] = str(first.get("title") or first.get("stage_id") or "KMSC 운영 문서")
+    row["body_md"] = text
+    row["search_text"] = text
+    row["index_texts"] = {"dense_text": text}
+    row["navigation_only"] = False
+    return row
+
+
+def _parent_text(children: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    seen: set[str] = set()
+    for child in children:
+        text = _chunk_text(child)
+        for block in text.split("\n\n"):
+            cleaned = block.strip()
+            if not cleaned:
+                continue
+            key = " ".join(cleaned.split()).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            parts.append(cleaned)
+    return "\n\n".join(parts)
 
 
 def _group_rows_by_source(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
@@ -308,6 +365,9 @@ def _upsert_chunk(cursor, *, parsed_document_id: str, row: dict[str, Any], ordin
     chunk_id = _chunk_uuid(row)
     chunk_text = _chunk_text(row)
     metadata = _chunk_metadata(row)
+    beginner_narrative = str(metadata.get("beginner_narrative") or "").strip()
+    if beginner_narrative and not chunk_text.startswith(beginner_narrative):
+        chunk_text = "\n".join(part for part in (beginner_narrative, chunk_text) if part.strip())
     slide_range = row.get("source_slide_range") if isinstance(row.get("source_slide_range"), list) else []
     page_start = int(slide_range[0]) if slide_range and str(slide_range[0]).isdigit() else None
     page_end = int(slide_range[-1]) if slide_range and str(slide_range[-1]).isdigit() else page_start
@@ -318,7 +378,9 @@ def _upsert_chunk(cursor, *, parsed_document_id: str, row: dict[str, Any], ordin
             id, parsed_document_id, chunk_key, ordinal, chunk_type, markdown,
             embedding_text, token_count, page_start, page_end, section_path,
             section_number, heading_title, source_anchor, toc_path,
-            asset_ids, metadata, repository_id, owner_user_id, visibility, source_scope
+            asset_ids, metadata, repository_id, owner_user_id, visibility, source_scope,
+            chunk_role, parent_chunk_id, child_chunk_ids, navigation_only, beginner_narrative,
+            starter_question_candidates, followup_question_candidates, question_candidates_version
         )
         VALUES (
             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb,
@@ -329,7 +391,9 @@ def _upsert_chunk(cursor, *, parsed_document_id: str, row: dict[str, Any], ordin
                 JOIN document_sources ds ON ds.id = pd.document_source_id
                 WHERE pd.id = %s
             ),
-            '', 'workspace_shared', 'study_docs'
+            '', 'workspace_shared', 'study_docs',
+            %s, NULLIF(%s, '')::uuid, %s::jsonb, %s, %s,
+            %s::jsonb, %s::jsonb, %s
         )
         ON CONFLICT (id) DO UPDATE SET
             parsed_document_id = EXCLUDED.parsed_document_id,
@@ -349,7 +413,15 @@ def _upsert_chunk(cursor, *, parsed_document_id: str, row: dict[str, Any], ordin
             metadata = EXCLUDED.metadata,
             repository_id = EXCLUDED.repository_id,
             visibility = EXCLUDED.visibility,
-            source_scope = EXCLUDED.source_scope
+            source_scope = EXCLUDED.source_scope,
+            chunk_role = EXCLUDED.chunk_role,
+            parent_chunk_id = EXCLUDED.parent_chunk_id,
+            child_chunk_ids = EXCLUDED.child_chunk_ids,
+            navigation_only = EXCLUDED.navigation_only,
+            beginner_narrative = EXCLUDED.beginner_narrative,
+            starter_question_candidates = EXCLUDED.starter_question_candidates,
+            followup_question_candidates = EXCLUDED.followup_question_candidates,
+            question_candidates_version = EXCLUDED.question_candidates_version
         RETURNING id
         """,
         (
@@ -370,28 +442,53 @@ def _upsert_chunk(cursor, *, parsed_document_id: str, row: dict[str, Any], ordin
             _json(_asset_ids(row)),
             _json(metadata),
             parsed_document_id,
+            str(row.get("chunk_role") or metadata.get("chunk_role") or "leaf"),
+            _parent_chunk_uuid(row, metadata),
+            _json(row.get("child_chunk_ids") or metadata.get("child_chunk_ids") or []),
+            bool(row.get("navigation_only") or metadata.get("navigation_only") or False),
+            str(row.get("beginner_narrative") or metadata.get("beginner_narrative") or ""),
+            _json(row.get("starter_question_candidates") or metadata.get("starter_question_candidates") or []),
+            _json(row.get("followup_question_candidates") or metadata.get("followup_question_candidates") or []),
+            int(row.get("question_candidates_version") or metadata.get("question_candidates_version") or 0),
         ),
     )
     return _fetch_id(cursor)
 
 
 def _chunk_uuid(row: dict[str, Any]) -> str:
-    raw = str(row.get("chunk_id") or "").strip()
+    return _chunk_uuid_from_raw(str(row.get("chunk_id") or "").strip(), row=row)
+
+
+def _parent_chunk_uuid(row: dict[str, Any], metadata: dict[str, Any]) -> str:
+    raw = str(row.get("parent_chunk_id") or metadata.get("parent_chunk_id") or "").strip()
+    if not raw:
+        return ""
+    return _chunk_uuid_from_raw(_source_parent_raw_id(_source_key(row), raw), row=None)
+
+
+def _source_parent_raw_id(source_key: str, parent_id: str) -> str:
+    return f"{source_key}#{parent_id}"
+
+
+def _chunk_uuid_from_raw(raw: str, *, row: dict[str, Any] | None) -> str:
     try:
         return str(uuid.UUID(raw))
     except ValueError:
-        return _stable_uuid("kmsc-course-chunk", raw or json.dumps(row, sort_keys=True, ensure_ascii=False))
+        fallback = json.dumps(row, sort_keys=True, ensure_ascii=False) if row is not None else raw
+        return _stable_uuid("kmsc-course-chunk", raw or fallback)
 
 
 def _chunk_text(row: dict[str, Any]) -> str:
     index_texts = row.get("index_texts") if isinstance(row.get("index_texts"), dict) else {}
-    return str(
+    beginner_narrative = str(row.get("beginner_narrative") or "").strip()
+    body = str(
         index_texts.get("dense_text")
         or row.get("search_text")
         or row.get("body_md")
         or row.get("title")
         or ""
     )
+    return "\n".join(part for part in (beginner_narrative, body) if part.strip())
 
 
 def _asset_ids(row: dict[str, Any]) -> list[str]:
@@ -408,11 +505,17 @@ def _source_anchor(row: dict[str, Any]) -> str:
 
 def _chunk_metadata(row: dict[str, Any]) -> dict[str, Any]:
     metadata = dict(row)
+    candidates = build_chunk_question_candidates({**row, "text": _chunk_text(row)})
     metadata["source_scope"] = "study_docs"
     metadata["document_format"] = "kmsc_course_jsonl"
     metadata["book_slug"] = "kmsc-operations"
     metadata["book_title"] = "KMSC Operations"
     metadata["category_key"] = "study"
+    metadata.setdefault("beginner_narrative", build_beginner_narrative(row))
+    metadata.setdefault("beginner_narrative_version", NARRATIVE_VERSION)
+    metadata.setdefault("starter_question_candidates", candidates["starter_question_candidates"])
+    metadata.setdefault("followup_question_candidates", candidates["followup_question_candidates"])
+    metadata.setdefault("question_candidates_version", 1 if candidates["starter_question_candidates"] else 0)
     return metadata
 
 

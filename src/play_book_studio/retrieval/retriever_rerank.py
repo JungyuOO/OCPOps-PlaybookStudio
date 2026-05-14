@@ -8,6 +8,7 @@ from play_book_studio.http.wiki_user_overlay import build_wiki_overlay_signal_pa
 
 from .followups import has_follow_up_reference
 from .intake_overlay import has_active_customer_pack_selection
+from .intent_profile import build_intent_profile
 from .models import RetrievalHit, SessionContext
 from .query import (
     has_backup_restore_intent,
@@ -172,6 +173,91 @@ def _has_confident_hybrid_top_hit(hits: list[RetrievalHit]) -> bool:
     if not has_dual_support:
         return False
     return runner_up_score < (top_score * 0.88)
+
+
+def _rerank_candidate_budget(
+    query: str,
+    *,
+    top_k: int,
+    reranker_top_n: int,
+) -> int | None:
+    if reranker_top_n <= 0 or not _is_explanation_query(query):
+        return None
+    cap = 6 if any(
+        (
+            has_openshift_kubernetes_compare_intent(query),
+            has_route_ingress_compare_intent(query),
+        )
+    ) else 5
+    budget = min(reranker_top_n, max(top_k, cap))
+    if budget >= reranker_top_n:
+        return None
+    return budget
+
+
+def _needs_semantic_model_rerank(query: str) -> bool:
+    return any(
+        (
+            has_follow_up_reference(query),
+            has_mco_concept_intent(query),
+            has_openshift_kubernetes_compare_intent(query),
+            has_operator_concept_intent(query),
+            has_pod_lifecycle_concept_intent(query),
+            has_route_ingress_compare_intent(query),
+            is_generic_intro_query(query),
+        )
+    )
+
+
+def _should_apply_reranker_model(
+    query: str,
+    *,
+    hybrid_hits: list[RetrievalHit],
+) -> tuple[bool, str]:
+    if not hybrid_hits:
+        return False, "no_hits"
+    if _has_non_core_or_derived_hits(hybrid_hits):
+        return True, "derived_or_non_core_hits"
+    if has_follow_up_reference(query):
+        return True, "follow_up_reference"
+    if _is_heuristic_first_query(query):
+        return False, "heuristic_first_intent"
+    if _is_explanation_query(query) and not _has_cross_book_ambiguity(hybrid_hits):
+        if _has_confident_hybrid_top_hit(hybrid_hits):
+            return False, "confident_explanation_hybrid_top_hit"
+    if _needs_semantic_model_rerank(query):
+        return True, "semantic_intent"
+    if len(hybrid_hits) <= 2:
+        top_books = {
+            str(hit.book_slug or "").strip()
+            for hit in hybrid_hits[:2]
+            if str(hit.book_slug or "").strip()
+        }
+        if len(top_books) <= 1:
+            return False, "small_candidate_set"
+    if _has_cross_book_ambiguity(hybrid_hits):
+        return True, "cross_book_ambiguity"
+    return True, "default_model_rerank"
+
+
+def _call_reranker(
+    reranker,
+    *,
+    query: str,
+    hybrid_hits: list[RetrievalHit],
+    top_k: int,
+    top_n_override: int | None,
+) -> list[RetrievalHit]:
+    rerank_kwargs: dict[str, Any] = {"top_k": top_k}
+    if top_n_override is not None:
+        rerank_kwargs["top_n_override"] = top_n_override
+    try:
+        return reranker.rerank(query, hybrid_hits, **rerank_kwargs)
+    except TypeError:
+        if "top_n_override" not in rerank_kwargs:
+            raise
+        rerank_kwargs.pop("top_n_override", None)
+        return reranker.rerank(query, hybrid_hits, **rerank_kwargs)
 
 
 def _preferred_derived_family(query: str) -> str | None:
@@ -506,6 +592,84 @@ def _rebalance_registry_follow_up_hits(
             0 if hit.book_slug in preferred_books else 1,
             1 if hit.book_slug == "installation_overview" else 0,
             hybrid_rank.get(hit.chunk_id, 999),
+            -hit.component_scores.get("reranker_score", hit.fused_score),
+            hit.book_slug,
+            hit.chunk_id,
+        )
+    )
+    return reordered
+
+
+_INTENT_PROFILE_BOOK_PRIORITY: dict[str, dict[str, int]] = {
+    "dns": {"dns_operator": 0, "networking_operators": 1, "networking_overview": 2, "operators": 3},
+    "networkpolicy": {"network_security": 0, "networking_overview": 1, "advanced_networking": 2},
+    "egress-network": {"network_security": 0, "networking_overview": 1, "advanced_networking": 2},
+    "route": {"ingress_and_load_balancing": 0, "networking_overview": 1},
+    "image-config": {"images": 0, "registry": 1, "postinstallation_configuration": 2},
+    "clusterversion": {"updating_clusters": 0, "support": 1, "validation_and_troubleshooting": 2},
+    "cluster-health": {"updating_clusters": 0, "support": 1, "nodes": 2, "validation_and_troubleshooting": 3},
+    "project-finalizer": {"support": 0, "nodes": 1, "applications": 2},
+    "poddisruptionbudget": {"nodes": 0, "applications": 1},
+    "horizontalpodautoscaler": {"nodes": 0, "scalability_and_performance": 1, "applications": 2},
+    "storage": {"storage": 0, "backup_and_restore": 1, "support": 2},
+    "monitoring": {"monitoring": 0, "observability_overview": 1, "logging": 2, "support": 3},
+    "pod-metrics": {"nodes": 0, "cli_tools": 1, "support": 2},
+    "node": {"nodes": 0, "support": 1, "cli_tools": 2, "machine_configuration": 4},
+}
+
+
+def _hit_contains_any(hit: RetrievalHit, terms: tuple[str, ...]) -> bool:
+    haystack = f"{hit.book_slug}\n{hit.section or ''}\n{hit.anchor or ''}\n{hit.text or ''}".lower()
+    return any(term.lower() in haystack for term in terms if term)
+
+
+def _rebalance_intent_profile_hits(
+    query: str,
+    *,
+    hybrid_hits: list[RetrievalHit],
+    reranked_hits: list[RetrievalHit],
+) -> list[RetrievalHit]:
+    profile = build_intent_profile(query)
+    preferred_books = _INTENT_PROFILE_BOOK_PRIORITY.get(profile.target_object)
+    if not preferred_books or not reranked_hits:
+        return reranked_hits
+
+    evidence_terms = tuple(term for term in (*profile.evidence_terms, *profile.primary_commands) if term)
+    if not any(
+        hit.book_slug in preferred_books or _hit_contains_any(hit, evidence_terms)
+        for hit in (*reranked_hits, *hybrid_hits[:12])
+    ):
+        return reranked_hits
+
+    hybrid_rank = {hit.chunk_id: index for index, hit in enumerate(hybrid_hits)}
+    reordered = list(reranked_hits)
+    existing_ids = {hit.chunk_id for hit in reordered}
+    for hit in hybrid_hits[:12]:
+        if hit.chunk_id in existing_ids:
+            continue
+        if hit.book_slug not in preferred_books and not _hit_contains_any(hit, evidence_terms):
+            continue
+        rescued_hit = copy.deepcopy(hit)
+        rescued_hit.source = "hybrid_intent_profile_rescued"
+        rescued_hit.component_scores = dict(rescued_hit.component_scores)
+        rescued_hit.component_scores.setdefault("pre_rerank_fused_score", float(rescued_hit.fused_score))
+        rescued_hit.component_scores.setdefault(
+            "reranker_score",
+            float(rescued_hit.component_scores["pre_rerank_fused_score"]),
+        )
+        reordered.append(rescued_hit)
+        existing_ids.add(rescued_hit.chunk_id)
+
+    def _priority(hit: RetrievalHit) -> tuple[int, int]:
+        book_priority = preferred_books.get(hit.book_slug, 9)
+        evidence_priority = 0 if _hit_contains_any(hit, evidence_terms) else 1
+        return book_priority, evidence_priority
+
+    reordered.sort(
+        key=lambda hit: (
+            *_priority(hit),
+            hybrid_rank.get(hit.chunk_id, 999),
+            -hit.component_scores.get("pre_rerank_fused_score", 0.0),
             -hit.component_scores.get("reranker_score", hit.fused_score),
             hit.book_slug,
             hit.chunk_id,
@@ -1151,6 +1315,14 @@ def _apply_rebalance_rules(
         rebalance_reasons=rebalance_reasons,
     )
     reranked_hits = _apply_rebalance_rule(
+        rule_name="intent_profile_book_priority",
+        query=query,
+        hybrid_hits=hybrid_hits,
+        reranked_hits=reranked_hits,
+        rule_fn=_rebalance_intent_profile_hits,
+        rebalance_reasons=rebalance_reasons,
+    )
+    reranked_hits = _apply_rebalance_rule(
         rule_name="mco_concept_intent",
         query=query,
         hybrid_hits=hybrid_hits,
@@ -1214,7 +1386,7 @@ def _apply_rebalance_rules(
     return reranked_hits, rebalance_reasons
 
 
-def apply_retrieval_postprocess(
+def maybe_rerank_hits(
     retriever,
     *,
     query: str,
@@ -1226,31 +1398,57 @@ def apply_retrieval_postprocess(
 ) -> tuple[list[RetrievalHit], dict[str, Any]]:
     hits = hybrid_hits[:top_k]
     reranker_trace: dict[str, Any] = {
-        "enabled": True,
+        "enabled": retriever.reranker is not None,
         "applied": False,
         "model_applied": False,
-        "mode": "bge_hybrid_postprocess",
-        "model": getattr(getattr(retriever, "settings", None), "embedding_model", ""),
-        "top_n": 0,
+        "mode": "skipped",
+        "model": getattr(retriever.reranker, "model_name", ""),
+        "top_n": getattr(retriever.reranker, "top_n", 0),
         "top1_before": _top_book_slug(hybrid_hits),
-        "top1_after_model": _top_book_slug(hybrid_hits),
+        "top1_after_model": "",
         "top1_after": _top_book_slug(hits),
         "top1_changed": False,
         "rebalance_reasons": [],
-        "decision_reason": "bge_hybrid_scores_with_rules",
-        "candidate_budget": len(hybrid_hits),
+        "decision_reason": "",
+        "candidate_budget": getattr(retriever.reranker, "top_n", 0),
     }
-    if not hybrid_hits:
+    if retriever.reranker is None or not hybrid_hits:
         return hits, reranker_trace
     try:
-        rerank_started_at = time.perf_counter()
-        _emit_trace_event(
-            trace_callback,
-            step="rerank",
-            label="BGE 검색 결과 후처리 중",
-            status="running",
+        apply_model, decision_reason = _should_apply_reranker_model(
+            query,
+            hybrid_hits=hybrid_hits,
         )
-        reranked_hits = _prime_hits_for_rebalance(hybrid_hits)
+        reranker_trace["decision_reason"] = decision_reason
+        candidate_budget = _rerank_candidate_budget(
+            query,
+            top_k=top_k,
+            reranker_top_n=getattr(retriever.reranker, "top_n", 0),
+        )
+        if candidate_budget is not None:
+            reranker_trace["candidate_budget"] = candidate_budget
+        rerank_started_at = time.perf_counter()
+        if apply_model:
+            _emit_trace_event(
+                trace_callback,
+                step="rerank",
+                label="리랭킹 중",
+                status="running",
+            )
+            reranked_hits = _call_reranker(
+                retriever.reranker,
+                query=query,
+                hybrid_hits=hybrid_hits,
+                top_k=top_k,
+                top_n_override=candidate_budget,
+            )
+            reranker_trace["top1_after_model"] = _top_book_slug(reranked_hits)
+            reranker_trace["model_applied"] = True
+            reranker_trace["mode"] = "model"
+        else:
+            reranked_hits = _prime_hits_for_rebalance(hybrid_hits)
+            reranker_trace["top1_after_model"] = reranker_trace["top1_before"]
+            reranker_trace["mode"] = "heuristic_only"
         reranked_hits, rebalance_reasons = _apply_rebalance_rules(
             retriever,
             query=query,
@@ -1264,16 +1462,25 @@ def apply_retrieval_postprocess(
         reranker_trace["top1_changed"] = reranker_trace["top1_before"] != reranker_trace["top1_after"]
         reranker_trace.update(
             {
-                "applied": bool(rebalance_reasons or reranker_trace["top1_changed"]),
+                "applied": bool(apply_model or rebalance_reasons or reranker_trace["top1_changed"]),
                 "candidate_count": len(hybrid_hits),
-                "reranked_count": len(hybrid_hits),
+                "reranked_count": (
+                    min(
+                        len(hybrid_hits),
+                        candidate_budget
+                        if candidate_budget is not None
+                        else max(top_k, retriever.reranker.top_n),
+                    )
+                    if apply_model
+                    else len(hybrid_hits)
+                ),
                 "rebalance_reasons": rebalance_reasons,
             }
         )
         _emit_trace_event(
             trace_callback,
             step="rerank",
-            label="BGE 검색 결과 후처리 완료",
+            label="리랭킹 완료" if apply_model else "규칙 재정렬 완료",
             status="done",
             detail=(
                 f"{hits[0].book_slug} · {hits[0].section}"
@@ -1294,12 +1501,47 @@ def apply_retrieval_postprocess(
         )
     except Exception as exc:  # noqa: BLE001
         reranker_trace["error"] = str(exc)
+        reranked_hits = _prime_hits_for_rebalance(hybrid_hits)
+        try:
+            reranked_hits, rebalance_reasons = _apply_rebalance_rules(
+                retriever,
+                query=query,
+                hybrid_hits=hybrid_hits,
+                reranked_hits=reranked_hits,
+                context=context,
+            )
+        except Exception as fallback_exc:  # noqa: BLE001
+            rebalance_reasons = []
+            reranker_trace["fallback_error"] = str(fallback_exc)
+        hits = reranked_hits[:top_k]
+        reranker_trace.update(
+            {
+                "applied": bool(rebalance_reasons),
+                "mode": "error_fallback",
+                "top1_after_model": reranker_trace["top1_before"],
+                "top1_after": _top_book_slug(hits),
+                "top1_changed": reranker_trace["top1_before"] != _top_book_slug(hits),
+                "candidate_count": len(hybrid_hits),
+                "reranked_count": len(hybrid_hits),
+                "rebalance_reasons": rebalance_reasons,
+            }
+        )
         _emit_trace_event(
             trace_callback,
             step="rerank",
-            label="BGE 검색 결과 후처리 실패",
-            status="error",
+            label="rerank fallback",
+            status="done",
             detail=str(exc),
+            meta={
+                "summary": _summarize_hit_list(hits, score_key="fused_score"),
+                "top1_before": reranker_trace["top1_before"],
+                "top1_after": reranker_trace["top1_after"],
+                "top1_changed": reranker_trace["top1_changed"],
+                "rebalance_reasons": reranker_trace["rebalance_reasons"],
+                "mode": reranker_trace["mode"],
+                "decision_reason": reranker_trace["decision_reason"],
+                "candidate_budget": reranker_trace["candidate_budget"],
+                "error": reranker_trace["error"],
+            },
         )
-        raise RuntimeError(f"retrieval postprocess failed: {exc}") from exc
     return hits, reranker_trace

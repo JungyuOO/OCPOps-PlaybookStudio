@@ -39,11 +39,12 @@ from play_book_studio.retrieval.query_understanding import has_beginner_troubles
 from .answer_text_commands import (
     build_deployment_scaling_answer,
     build_grounded_command_guide_answer,
+    build_grounded_status_answer,
     has_sufficient_command_grounding,
     shape_etcd_backup_answer,
     strip_ungrounded_code_blocks,
 )
-from .answer_text_formatting import summarize_session_context
+from .answer_text_formatting import shape_beginner_grounded_answer, summarize_session_context
 from .citations import (
     finalize_citations,
     inject_citation_indices,
@@ -355,6 +356,27 @@ def _is_low_confidence_retrieval(
             "상태",
             "오류",
         )
+    ):
+        return False
+    operational_token_pairs = (
+        ("imagepullbackoff", ("imagepullbackoff", "errimagepull", "pull secret", "registry")),
+        ("errimagepull", ("imagepullbackoff", "errimagepull", "pull secret", "registry")),
+        ("networkpolicy", ("networkpolicy", "network policy", "ingress", "egress")),
+        ("machine config", ("machine config", "machineconfigpool", "mco")),
+        ("machineconfigpool", ("machine config", "machineconfigpool", "mco")),
+        ("cluster version", ("clusterversion", "cluster version", "cvo")),
+        ("clusterversion", ("clusterversion", "cluster version", "cvo")),
+        ("must-gather", ("must-gather", "must gather", "support", "diagnostic")),
+        ("oc adm inspect", ("oc adm inspect", "inspect", "namespace", "resource")),
+        ("finalizer", ("finalizer", "finalizers", "terminating", "namespace")),
+        ("observability", ("observability", "monitoring", "logging")),
+        ("리소스", ("oc adm top pod", "top pod", "metrics", "cpu", "memory")),
+        ("사용량", ("oc adm top pod", "top pod", "metrics", "cpu", "memory")),
+        ("잡아먹", ("oc adm top pod", "top pod", "metrics", "cpu", "memory")),
+    )
+    if any(
+        query_token in normalized_query and any(citation_token in citation_haystack for citation_token in citation_tokens)
+        for query_token, citation_tokens in operational_token_pairs
     ):
         return False
     coverage = _citation_token_coverage(query, citations)
@@ -731,7 +753,7 @@ def _llm_max_tokens_override(*, query: str, default_max_tokens: int) -> int | No
     lowered = str(query or "").lower()
     if any(token in lowered for token in ("한 문단", "한문단", "one paragraph", "single paragraph")):
         return min(default_max_tokens, 192)
-    return min(default_max_tokens, 700)
+    return min(default_max_tokens, 560)
 
 
 class ChatAnswerer:
@@ -1228,6 +1250,25 @@ class ChatAnswerer:
                 grounded_command_answer,
                 context_bundle.citations,
             )
+            status_answer = build_grounded_status_answer(
+                query=query,
+                citations=final_citations or context_bundle.citations,
+            )
+            if status_answer is not None and status_answer != answer_text:
+                answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
+                    status_answer,
+                    final_citations or context_bundle.citations,
+                )
+            beginner_shaped_answer_text = shape_beginner_grounded_answer(
+                answer_text,
+                query=query,
+                citations=final_citations or context_bundle.citations,
+            )
+            if beginner_shaped_answer_text != answer_text:
+                answer_text, final_citations, cited_indices = finalize_citations(
+                    beginner_shaped_answer_text,
+                    final_citations or context_bundle.citations,
+                )
             pipeline_timings_ms["total"] = round(
                 (time.perf_counter() - answer_started_at) * 1000,
                 1,
@@ -1530,6 +1571,17 @@ class ChatAnswerer:
         )
         if guarded_answer_text != answer_text:
             answer_text = guarded_answer_text
+            answer_text, final_citations, cited_indices = finalize_citations(
+                answer_text,
+                final_citations or context_bundle.citations,
+            )
+        beginner_shaped_answer_text = shape_beginner_grounded_answer(
+            answer_text,
+            query=query,
+            citations=final_citations or context_bundle.citations,
+        )
+        if beginner_shaped_answer_text != answer_text:
+            answer_text = beginner_shaped_answer_text
             answer_text, final_citations, cited_indices = finalize_citations(
                 answer_text,
                 final_citations or context_bundle.citations,

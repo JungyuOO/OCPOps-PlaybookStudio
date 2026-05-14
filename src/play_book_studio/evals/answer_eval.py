@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 HANGUL_RE = re.compile(r"[\uac00-\ud7a3]")
-ANSWER_PREFIX_RE = re.compile(r"^\s*답변:")
+ANSWER_PREFIX_RE = re.compile(r"^\s*(?:답변|요약):")
 CLARIFICATION_RE = re.compile(
     r"(불명확|모호|어느 .*말씀|어떤 .*말씀|무슨 .*말씀|확인해 주시겠|알고 싶으신가요|말씀하시는 건가요|의미하시는 건가요|\?$)"
 )
@@ -46,6 +46,8 @@ def _citation_search_text(citation: Any) -> str:
             citation.get("excerpt"),
             " ".join(str(item) for item in citation.get("cli_commands", []) if str(item).strip()),
             " ".join(str(item) for item in citation.get("verification_hints", []) if str(item).strip()),
+            " ".join(str(item) for item in citation.get("k8s_objects", []) if str(item).strip()),
+            " ".join(str(item) for item in citation.get("operator_names", []) if str(item).strip()),
         ]
     else:
         values = [
@@ -55,6 +57,8 @@ def _citation_search_text(citation: Any) -> str:
             getattr(citation, "excerpt", ""),
             " ".join(str(item) for item in (getattr(citation, "cli_commands", ()) or ()) if str(item).strip()),
             " ".join(str(item) for item in (getattr(citation, "verification_hints", ()) or ()) if str(item).strip()),
+            " ".join(str(item) for item in (getattr(citation, "k8s_objects", ()) or ()) if str(item).strip()),
+            " ".join(str(item) for item in (getattr(citation, "operator_names", ()) or ()) if str(item).strip()),
         ]
     return _normalize_for_contains(" ".join(str(value or "") for value in values))
 

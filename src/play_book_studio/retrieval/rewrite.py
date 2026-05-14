@@ -13,6 +13,7 @@ from .text_utils import (
 )
 from .intents import has_explicit_topic_signal, is_generic_intro_query
 from .book_adjustments import query_book_adjustments
+from .cross_lingual import cross_lingual_rewrite_terms
 from .query_terms import normalize_query
 
 
@@ -71,6 +72,7 @@ def rewrite_query(query: str, context: SessionContext | None = None) -> str:
 
 __all__ = [
     "has_explicit_topic_signal",
+    "cross_lingual_rewrite_terms",
     "needs_rewrite",
     "normalize_query",
     "query_book_adjustments",

@@ -1,13 +1,84 @@
 # v0.1.2 청크 품질 재구축과 초보자 답변 깊이 개선
 
+## 진행 메모 (2026-05-13)
+
+- [x] Phase C 보강: reranker를 로컬 mini cross-encoder에서 사내 BGE remote reranker로 전환
+  - 기존 `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` 로컬 로딩 경로를 사용하지 않도록 `RemoteBgeReranker`로 교체
+  - `RERANKER_BASE_URL` 기본값은 `EMBEDDING_BASE_URL`을 따르며, `EMBEDDING_BASE_URL`이 `/v1`로 끝나면 rerank endpoint는 TEI 구조에 맞춰 `http://tei.cywell.co.kr/rerank`로 계산
+  - TEI 스타일 `texts` payload를 먼저 시도하고, 400/404/415/422 응답이면 OpenAI/Cohere 스타일 `documents` payload로 재시도
+  - rerank 문서 입력에 book/chapter/section/path/heading/commands/k8s objects/error strings metadata를 포함해, Route timeout처럼 토큰만 겹치는 잘못된 책 선택을 규칙 매핑이 아니라 의미 점수로 줄이는 방향 적용
+  - OCP ConfigMap과 production env 예시에 `RERANKER_BASE_URL`, `RERANKER_MODEL=dragonkue/bge-reranker-v2-m3-ko`, `RERANKER_TIMEOUT_SECONDS` 추가
+  - 검증: compileall 통과, `tests/test_reranker.py tests/test_chat_grounding_quality.py tests/test_answer_eval_quality.py` 46개 통과
+  - 실호출 확인: `http://tei.cywell.co.kr/v1/rerank`는 404, `http://tei.cywell.co.kr/rerank`는 endpoint가 존재하지만 현재 `texts` payload에 424 Failed Dependency를 반환. 즉 코드 endpoint 계산은 TEI 구조에 맞췄고, 서버 쪽 reranker 모델/backend 준비 여부는 별도 확인 필요
+- [x] Phase D 배포 보강: 사내 TEI reranker 권한이 없을 때를 위해 OCP namespace 내부에 BGE reranker inference service를 추가
+  - `bge-reranker-cache` PV/PVC, `bge-reranker` Deployment/Service 추가
+  - `ghcr.io/huggingface/text-embeddings-inference:cpu-latest` + `dragonkue/bge-reranker-v2-m3-ko`로 시작하며 모델 캐시는 PVC `/data`에 유지
+  - PlayBookStudio `RERANKER_BASE_URL`을 `http://bge-reranker:80`로 변경해 app이 namespace 내부 service를 호출하도록 구성
+  - apply script가 `deployment/bge-reranker` rollout을 기다리도록 수정
+  - README에 reranker 로그 확인 및 `/rerank` smoke 명령 추가
+  - SNO 환경에 default StorageClass가 없어 기존 PBS PV 패턴과 동일한 hostPath PV(`/var/lib/playbookstudio-ocp/bge-reranker-cache`, node `52-54-00-47-49-49`)를 manifest에 추가
+  - 검증: `kubectl kustomize deploy/openshift` 렌더링 통과, `bash -n deploy/openshift/apply-playbookstudio.sh` 통과
+- [x] Phase D 로컬 검증 보강: OCP 내부 reranker를 port-forward/SSH tunnel로 로컬 품질 eval에 연결하는 helper 추가
+  - `deploy/local-reranker-quality-eval.ps1` 추가
+  - 기본 동작: `RERANKER_BASE_URL=http://127.0.0.1:8081` 설정, `/rerank` smoke, `pbs_chat_quality_v012_beginner_cases.jsonl` answer eval 실행
+  - README에 Ubuntu 서버 `oc port-forward`, Windows SSH tunnel, v0.1.2 beginner/extended eval 실행 명령 추가
+  - 검증: PowerShell scriptblock parse 통과
+
+- [x] Phase C 보강: PDB/HPA/finalizer 계열 운영 질문을 intent profile과 intent-profile rerank rescue로 보강
+  - 질문-답변 고정 매핑은 추가하지 않고, `PodDisruptionBudget`, `HorizontalPodAutoscaler`, namespace `finalizers`를 일반 intent profile의 target/evidence/primary command로 등록
+  - reranker가 좋은 hybrid 후보를 잘라낸 경우에도 intent evidence 또는 선호 book slug가 있는 후보를 최종 후보로 구제하는 일반 rescue 경로를 추가
+  - `ClusterOperator` 상태 답변은 `oc get clusteroperators`만 근거에 있어도 `oc describe clusteroperator <operator-name>` 후속 확인을 함께 안내하도록 보강
+  - PVC 질문에 `events` 단어가 포함될 때 일반 이벤트 답변이 PVC 전용 답변을 가로채지 않도록 status answer 우선순위를 조정
+  - 검증: compileall 통과, `tests/test_chat_grounding_quality.py tests/test_starter_questions.py tests/test_answer_eval_quality.py tests/test_query_understanding.py tests/test_answer_text_commands.py` 74개 통과
+  - extended eval: `reports/v012_answer_eval_extended_after.json` 갱신, pass_rate 0.5333 -> 0.5556, warning_free_rate 0.9778, citation_terms_rate 0.6667
+  - 남은 병목: Route timeout은 HSTS route chunk가 timeout 질문을 오염시키고, PDB는 좋은 nodes chunk를 잡아도 일반 troubleshooting formatter가 PDB 전용 status answer를 타지 못함. DNS/NetworkPolicy/monitoring/namespace-list/previous-logs/SCC 등은 citation term과 book 선택 정밀도 보강 필요
+
 
 ## 진행 메모 (2026-05-12)
 
+- [x] Phase C 보강: Node/Namespace/ImagePullBackOff 기본 운영 질의가 generic formatter나 low-confidence clarification으로 새지 않도록 citation 기반 status answer 경로를 추가
+  - 질문-답변 고정 매핑이 아니라, 선택 citation의 실제 signal/cli_commands를 재사용하는 answer shaping 보강으로 처리
+  - `Node 확인하려면 어떤 명령어부터 쓰면 돼?`는 `oc get nodes`/`oc describe node` 중심으로 응답
+  - `네임스페이스 확인`은 현재 context 확인(`oc project`, `oc config view`)과 전체 목록 조회(`oc get namespaces`, `oc get projects`)를 분리
+  - `ImagePullBackOff`는 Pod 이벤트, pull secret, registry 접근 순서로 확인하도록 citation 명령 기반 응답을 추가
+  - 검증: compileall 통과, `tests/test_chat_grounding_quality.py tests/test_starter_questions.py tests/test_answer_eval_quality.py tests/test_query_understanding.py` 47개 통과, v012 beginner answer eval 6/6 통과(pass_rate 1.0, warning_free_rate 1.0)
+  - 참고: full `studio_live_smoke` 재실행은 로컬 app 컨테이너가 Docker health는 healthy이나 `/api/health`와 starter API가 30초 이상 응답하지 않아 보류. 배포/라이브 smoke는 Phase D에서 별도 진행
+- [x] Phase C 보강: must-gather, `oc adm inspect`, Pod CPU/memory 사용량, ClusterOperator 기본 운영 명령의 intent/profile과 status answer를 추가 보강
+  - `must-gather`/`inspect`는 citation 명령이 없을 때도 code block 대신 inline fallback으로 안내하여 ungrounded code block을 만들지 않도록 처리
+  - `특정 Pod의 리소스가 얼마나 잡아먹고 있는지` 같은 초보자 표현을 pod metrics intent로 연결하고 `oc adm top pod(s)` 문서 근거를 회수하도록 보강
+  - balanced quote가 있는 selector 명령(`oc adm top pod --selector='<pod_name>'`)은 유지하고, OCR 설명에서 붙은 trailing quote만 제거하도록 sanitize 수정
+  - 검증: compileall 통과, focused tests 통과, `tests/test_chat_grounding_quality.py tests/test_starter_questions.py tests/test_answer_eval_quality.py tests/test_query_understanding.py` 51개 통과, v012 beginner answer eval 6/6 통과(pass_rate 1.0)
+  - 참고: `pbs_chat_quality_extended_cases.jsonl`은 45건 중 pass_rate 0.4667로 아직 낮음. 이번 보강으로 Pod metrics beginner 회귀는 회복됐으나 Route timeout, registry, DNS, NetworkPolicy, CVO/ODF/monitoring 등은 다음 보강 대상
 - [x] 사전 작업 Step 2: `reports/v012_chunk_quality_before.json`, `reports/v012_chunk_quality_before.md`, `reports/v012_studio_live_smoke_before.json` baseline 동결
+- [x] Phase C Step 13 일부: `reports/v012_retrieval_eval_after.json` 생성
+  - retrieval eval: 18건, hit@1 0.8889, hit@3 0.9444, hit@5 0.9444, warning_free_rate 1.0
+  - landing query: hit@1 0.5, hit@3 0.75, hit@5 1.0. 다음 보강 대상은 landing top1 정렬과 relation-aware miss 1건
+- [ ] Phase C Step 13 일부: `reports/v012_studio_live_smoke_after.json` 기준 미달
+  - 80건 중 47건 pass, pass_rate 0.5875. starter endpoint 502는 `target_anchor` payload 계약 보강으로 해결
+  - RBAC `oc auth can-i`와 `oc login` 계열은 intent 우선순위 보강으로 no-answer에서 citation 기반 답변으로 개선
+  - 남은 큰 이슈는 ResourceQuota/LimitRange/ImagePullBackOff/finalizer 등 운영 객체 질문에서 command book lock 또는 answer shaping이 엉뚱한 CLI 템플릿을 선택하는 문제
+  - 다음 작업은 특정 Q-A 고정이 아니라 intent profile evidence fallback, citation signal matching, answer template selection 순서를 더 일반화하는 방향으로 진행
 - [x] Phase A.1 Step 3: context citation excerpt/cli command/section label 내부 markup sanitize
 - [x] Phase A.1 Step 4 일부: navigation-only hit 런타임 down-rank 추가(DB 컬럼 없음)
 - [x] Phase A.1 Step 10 일부: starter FAQ lane에서 eval JSONL query 직접 노출 제거
 - [x] Phase A.1 Step 15 일부: citation section label 노출 전 sanitize 적용
+- [x] Phase A.2 Step 11: query_understanding intent 4개 + deterministic cross-lingual rewrite terms 추가
+- [x] Phase A.2 Step 12: static concept synonym JSON + concept_expansion 연결(GraphDB 없음)
+- [x] Phase A.2 Step 13 코드만: v012 beginner eval JSONL + schema/expansion test scaffold 추가
+- [x] Phase B Step 14 일부: official gold chunks parent/leaf 보강 후 Postgres/Qdrant 재색인 완료
+  - official gold: leaf 27,907개 + parent 5,815개 = 33,722개
+  - official 신규 parent 5,815개 임베딩/색인, 기존 leaf 27,907개 payload refresh 완료
+  - KMSC shared study_docs: 기존 523개 + source-scoped synthetic parent 100개 = 623개 import/index 완료
+  - course runtime: chunks 523개, assets 775개, manifest 1개 정상 import
+  - course Qdrant: `course_pbs_ko` 523개, `course_ops_learning_ko` 100개 upsert
+  - DB corpus readiness: official_docs 33,722개, study_docs 1,225개, qdrant_index_parity true
+  - `reports/v012_chunk_quality_after.json` 생성: row_count 34,263, mojibake_suspect_count 0
+  - GitHub 100MB 제한 때문에 보강된 official JSONL 자체는 커밋하지 않고, seed 시 `official-gold-import --enrich-runtime-metadata`로 컨테이너 안에서 재생성하도록 변경
+- [x] Phase C Step 13 통과: v012 beginner answer eval 6/6 pass, `reports/v012_answer_eval_after.json` 동결
+  - answer format: `답변:`뿐 아니라 초보자용 `요약:`도 정상 포맷으로 인정하도록 eval 기준 보정
+  - `Service`/`Endpoint`/`Route`, namespace 생성, Deployment YAML, Pod 리소스 확인 질문은 의도 기반 shaping으로 보강
+  - Pod 리소스 명령은 공식 CLI 문서 기준 `oc adm top pod` 단수 명령으로 정정
+  - 관찰 사항: Service 장애 케이스는 pass 상태지만 provenance noise가 1건 남음(`ingress_and_load_balancing` + 보조 citation). 다음 품질 패스에서 citation 압축/정밀도 개선 대상으로 유지
 
 ## 목표
 
@@ -966,3 +1037,23 @@ oc rollout status deployment/web -n pbs-ocpops
 - 2026-05-11: 16 step을 4개 phase로 묶기로 결정. Phase A(코드만, 별도 PR) → Phase B(재색인 1회 묶음 PR) → Phase C(검색 보강 PR) → Phase D(배포). Phase B 중간 partial deploy는 금지하며, Phase A는 markup leak 가시성 때문에 별도 PR로 먼저 머지한다.
 - 2026-05-12: Phase A를 A.1과 A.2 두 PR로 추가 분리. A.1은 사용자 가시 클린업(markup/cli sanitize, FAQ JSONL 노출 차단, nav-only 휴리스틱, section title 노출 정리)이고 A.2는 retrieval add-on 코드 머지(query_understanding intent 4개, concept synonym JSON, cross-lingual rewrite, v012 eval JSONL 파일과 테스트 스켈레톤 추가). "코드 머지 시점"과 "eval 통과 검증 시점"을 분리해 Phase B 재색인 전후 회귀 비교의 기준선을 만든다. v012 6개 통과 단정은 Phase C에서만 한다.
 - 2026-05-11: 사용자 결정에 따라 GraphDB/Neo4j 등 별도 그래프 인프라는 도입하지 않는다. VectorDB(Qdrant) + BM25(Postgres) hybrid를 유지하고, 개념 인접 검색은 `corpus/manifests/concepts/ocp_concept_synonyms_v1.json` 정적 JSON 사전 + 정규식 매칭 + retrieval_terms list extend 수준으로만 처리한다. 기존 `retrieval/graph_runtime.py`(로컬 sidecar JSON 메타데이터 부가 레이어)는 v0.1.2에서 손대지 않는다.
+
+- 2026-05-12: Phase B 일부 구현. `document_chunks`에 `navigation_only`, parent-child, starter/followup candidate, beginner narrative 컬럼을 추가하는 `0008_chunk_runtime_enrichment` migration을 작성했고, official/KMSC import와 Qdrant payload, `RetrievalHit`, vector hydration, context cap(8 chunks/2000 chars, parent 1800 chars)을 연결했다. `starter_questions`는 DB chunk candidate pool을 우선 사용하고, 없을 때만 기존 manifest/ops learning fallback을 사용한다. 검증: `tests/test_chunk_runtime_enrichment.py`, `tests/test_corpus_policy.py`, `tests/test_db_migrations.py`, `tests/test_qdrant_indexer.py`, `tests/test_answer_context_metadata.py`, `tests/test_chunk_hydration.py`, `tests/test_starter_questions.py`, `tests/test_starter_questions_readable.py` 통과. 남음: Step 7/8의 KMSC beginner narrative 및 ops_learning_chunks 100+ 자동 확장, Step 14 전체 재청킹/재색인.
+- 2026-05-12: Phase B Step 7/8 구현. `ingestion/kmsc_beginner_narrative.py`를 추가해 KMSC chunk title/body/image metadata 기반 beginner narrative와 ops learning chunk를 deterministic하게 파생한다. `load_ops_learning_chunks()`는 curated 18개를 유지하면서 course chunk에서 자동 후보를 보강해 최소 100개를 반환한다. 실제 corpus 확인 결과 100개(자동 생성 82개) 로딩. 검증: `tests/test_kmsc_beginner_narrative.py`, `tests/test_course_ops_learning.py`, `tests/test_course_api.py` 통과. 남음: Step 14 전체 재청킹/재색인 및 Phase C live smoke 비교.
+- 2026-05-12: Phase A.1/Step 10 일부 추가 보강. ResourceQuota/LimitRange 계열에서 KMSC 원문 명령이 `oc patch ... # oc get ...`처럼 한 줄에 섞여 들어와 답변이 수정 명령 중심으로 흐르는 문제를 수정했다. citation command를 `#` 기준으로 분해하고, ResourceQuota/LimitRange 질문에서는 read-only 확인 명령(`oc get resourcequotas ...`)을 우선 선택한다. citation 확정 이후 status 전용 답변을 다시 승격하고, 충분한 코드 블록이 있는 구체 답변을 beginner generic command formatter가 덮어쓰지 않도록 조정했다.
+- 2026-05-12: 검증 결과. `pytest -q tests/test_chat_grounding_quality.py tests/test_starter_questions.py tests/test_answer_eval_quality.py tests/test_query_understanding.py`는 41개 통과. v012 beginner answer eval은 6/6 통과, pass_rate 1.0, warning_free_rate 1.0이며 provenance noise는 `v012-beginner-002` 1건 남음. 로컬 API smoke에서 `ResourceQuota 때문에 Pod 생성이 막힌 건지 확인하려면 어디를 봐?`는 warning 없이 `oc get resourcequotas -n chak-test` 중심 답변으로 반환됐다.
+- 2026-05-12: full `studio_live_smoke` 재실행. `reports/v012_studio_live_smoke_after.json` 갱신 결과 80건 중 49건 통과(pass_rate 0.6125)로 이전 47건 대비 개선됐지만 DoD(0.85)에는 미달. ResourceQuota/LimitRange missing required term은 해소됐고, 남은 큰 실패군은 Node/namespace 같은 기본 명령, MCO/CVO/DNS/NetworkPolicy/SCC/ImagePullBackOff/registry/ODF/monitoring intent가 잘못된 문서 또는 generic command formatter로 빠지는 케이스다. 다음 보강은 특정 질문 하나가 아니라 intent profile + context evidence recovery + answer shaping의 공통 경로에서 처리해야 한다.
+- 2026-05-12: 운영 intent profile 보강. Node status, MCO, CVO, DNS, NetworkPolicy, allowed registry, internal image registry, SCC를 별도 profile로 분리하고 context recovery가 `query_terms`까지 evidence 후보로 쓰도록 확장했다. `oc debug node` 질문은 node status보다 host-debug가 먼저 매칭되도록 우선순위를 조정했다.
+- 2026-05-12: CLI command sanitize 보강. OCR/문장형 citation에 `oc get node ... 명령어 실행 결과`, `oc edit ... oc new-project ... oc get networkpolicy ...`처럼 여러 명령과 설명이 한 줄에 섞인 경우 `#`, 반복 `oc`, 한국어 설명 marker를 기준으로 후보 명령을 분리한다. 검증: `tests/test_chat_grounding_quality.py::test_embedded_cli_text_is_split_before_answering`, `test_beginner_command_lookup_sanitizes_embedded_cli_text` 추가 및 통과. 전체 focused suite는 43개 통과.
+- 2026-05-12: 최신 상태. v012 beginner answer eval은 재실행 후에도 6/6 통과, pass_rate 1.0 유지. 단, 실제 API focused check에서 MCO와 ResourceQuota는 개선 확인됐지만 Node/namespace/NetworkPolicy/ImagePullBackOff는 아직 완전하지 않다. 특히 Node/NetworkPolicy는 citation command sanitize가 일부 적용됐지만 final answer 경로에서 여전히 generic formatter가 개입하므로 다음 작업은 status-answer 우선순위와 citation command parity를 더 좁혀야 한다.
+## 진행 메모 (2026-05-13)
+
+- [x] Phase C 보강: DNS, Route timeout, NetworkPolicy/egress, Cluster Version Operator, 업데이트 사전 점검, ODF, Prometheus/Alertmanager 계열 운영 intent profile과 검색어 확장을 추가했다.
+  - 질문-답변 고정 매핑이 아니라 `IntentProfile.query_terms`, evidence term, citation 기반 status answer dispatch를 보강했다.
+  - generic command formatter가 잘못된 근거를 코드블록으로 끌고 오지 않도록 DNS/Route timeout/NetworkPolicy/egress/registry/CVO/update precheck/ODF/monitoring의 command grounding 조건을 추가했다.
+  - `ClusterOperator + node update precheck`, `events namespace 기준`, `finalizer/Terminating`처럼 더 구체적인 운영 intent가 Node/Namespace generic 답변보다 먼저 선택되도록 dispatch 순서를 조정했다.
+  - `pod-metrics` intent에서 nodes CLI 근거를 우선할 수 있도록 intent-profile 기반 book priority rerank를 확장했다.
+  - 검증: compileall 통과, `tests/test_chat_grounding_quality.py tests/test_answer_eval_quality.py` 41개 통과, `tests/test_chat_grounding_quality.py tests/test_starter_questions.py tests/test_answer_eval_quality.py tests/test_query_understanding.py` 53개 통과.
+  - v012 beginner eval: 6/6 통과, pass_rate 1.0, 결과 `reports/v012_answer_eval_after.json` 갱신.
+  - extended eval: pass_rate 0.4667 → 0.5111 → 0.5333으로 개선, 결과 `reports/v012_answer_eval_extended_after.json` 갱신.
+  - 남은 주요 실패군: Route timeout citation이 HSTS route chunk로 빠짐, DNS가 generic Operator 문서로 인용됨, NetworkPolicy가 Day-2 overview로 빠짐, `oc adm inspect` citation 미확보, finalizer/PDB/HPA/SCC/namespace/previous logs 등은 citation term synonym 또는 검색 후보 품질 보강 필요.

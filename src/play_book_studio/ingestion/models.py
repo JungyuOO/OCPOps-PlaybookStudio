@@ -317,7 +317,6 @@ class NormalizedSection:
     k8s_objects: tuple[str, ...] = field(default_factory=tuple)
     operator_names: tuple[str, ...] = field(default_factory=tuple)
     verification_hints: tuple[str, ...] = field(default_factory=tuple)
-
     def to_dict(self) -> dict[str, Any]:
         return {
             "book_slug": self.book_slug,
@@ -443,6 +442,14 @@ class ChunkRecord:
     k8s_objects: tuple[str, ...] = field(default_factory=tuple)
     operator_names: tuple[str, ...] = field(default_factory=tuple)
     verification_hints: tuple[str, ...] = field(default_factory=tuple)
+    chunk_role: str = "leaf"
+    parent_chunk_id: str = ""
+    child_chunk_ids: tuple[str, ...] = field(default_factory=tuple)
+    navigation_only: bool = False
+    beginner_narrative: str = ""
+    starter_question_candidates: tuple[str, ...] = field(default_factory=tuple)
+    followup_question_candidates: tuple[str, ...] = field(default_factory=tuple)
+    question_candidates_version: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -454,6 +461,9 @@ class ChunkRecord:
         payload["k8s_objects"] = list(self.k8s_objects)
         payload["operator_names"] = list(self.operator_names)
         payload["verification_hints"] = list(self.verification_hints)
+        payload["child_chunk_ids"] = list(self.child_chunk_ids)
+        payload["starter_question_candidates"] = list(self.starter_question_candidates)
+        payload["followup_question_candidates"] = list(self.followup_question_candidates)
         payload["parsed_artifact_id"] = self.parsed_artifact_id
         payload["access_groups"] = list(_contract_access_groups(self.access_groups))
         payload["parent_pack_id"] = self.parent_pack_id or f"{self.product}-{self.version}-core"

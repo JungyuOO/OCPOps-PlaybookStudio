@@ -80,7 +80,7 @@ def _apply_intent_profile_adjustments(hit: RetrievalHit, *, signals: ScoreSignal
         return
 
     has_command_surface = bool(hit.cli_commands or _has_shell_command_text(search_text))
-    if signals.command_request_intent and profile.primary_commands and has_command_surface:
+    if profile.primary_commands and has_command_surface:
         hit.fused_score *= 0.88
         hit.component_scores["intent_profile_command_mismatch_penalty"] = 0.88
         return
@@ -90,7 +90,7 @@ def _apply_intent_profile_adjustments(hit: RetrievalHit, *, signals: ScoreSignal
         hit.component_scores["intent_profile_evidence_boost"] = 1.16
         return
 
-    if signals.command_request_intent and has_command_surface:
+    if has_command_surface:
         hit.fused_score *= 0.88
         hit.component_scores["intent_profile_command_mismatch_penalty"] = 0.88
 
