@@ -14,7 +14,7 @@ from play_book_studio.config.settings import Settings
 from .models import RetrievalHit
 
 
-DEFAULT_RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
+DEFAULT_RERANKER_MODEL = "dragonkue/bge-reranker-v2-m3-ko"
 RERANKER_SOURCE = "hybrid_reranked"
 
 

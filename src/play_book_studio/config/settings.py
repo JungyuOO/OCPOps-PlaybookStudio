@@ -126,7 +126,7 @@ class Settings(SettingsPathMixin):
     reranker_enabled: bool = False
     reranker_base_url: str = ""
     reranker_api_key: str = ""
-    reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    reranker_model: str = "dragonkue/bge-reranker-v2-m3-ko"
     reranker_top_n: int = 12
     reranker_batch_size: int = 8
     reranker_max_parallel_requests: int = 4
@@ -350,7 +350,7 @@ def load_settings(root_dir: str | Path) -> Settings:
             "RERANKER_API_KEY",
             effective_env.get("EMBEDDING_API_KEY", ""),
         ).strip(),
-        reranker_model=effective_env.get("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3").strip(),
+        reranker_model=effective_env.get("RERANKER_MODEL", "dragonkue/bge-reranker-v2-m3-ko").strip(),
         reranker_top_n=int(effective_env.get("RERANKER_TOP_N", "12")),
         reranker_batch_size=int(effective_env.get("RERANKER_BATCH_SIZE", "8")),
         reranker_max_parallel_requests=int(effective_env.get("RERANKER_MAX_PARALLEL_REQUESTS", "4")),
