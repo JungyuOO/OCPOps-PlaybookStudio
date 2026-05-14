@@ -178,8 +178,48 @@ Before replacing current tables or JSONL files, each runtime feature must be map
 | Course viewer | `course_chunks`, `course_assets`, `course_manifests` | runtime artifact tables, optionally generated from corpus | Partially | Keep existing tables until viewer can read generated artifacts from corpus. |
 | Course Qdrant collection | `chunks.jsonl`, `course_chunks` payloads | generated runtime projection from corpus/course artifact | Partially | Keep until replacement projection is implemented. |
 | Ops learning Qdrant collection | `ops_learning_chunks_v1.jsonl` or derived chunks | generated learning-step projection from corpus refs | Partially | Current JSONL is active runtime seed, not canonical document truth. |
-| Starter questions | official manifests/DB plus `ops_learning_chunks_v1.jsonl` | corpus metadata plus generated learning suggestions | Partially | Must preserve UI behavior during transition. |
+| Starter questions | official manifests/DB plus `ops_learning_chunks_v1.jsonl` | AI-generated suggestions from corpus chunks | Partially | Current questions are mostly curated/seeded, not true chunk-driven recommendations. |
 | Eval/smoke cases | `corpus/manifests/eval/*.jsonl`, `reports/*.json` | eval-only fixtures | N/A | Never import into corpus. |
+
+## Starter Question 판단
+
+Studio 화면의 추천 질문은 최종적으로 seed JSONL에서 뽑는 질문이 아니라, corpus chunk를 보고 생성한 질문이어야 한다.
+
+현재 구조에는 `starter_question_candidates`와 `followup_question_candidates`가 있고, 일부 chunking 단계에서 chunk 내용 기반 candidate를 만들기도 한다. 하지만 Studio 화면의 추천 질문은 여전히 공식 manifest, file fallback, `ops_learning_chunks_v1.jsonl` 같은 curated seed에 크게 의존한다. 이 방식은 "추천 질문"이라기보다 "우리가 미리 만든 질문 목록"에 가깝다.
+
+v0.1.4 목표:
+
+1. `corpus_chunks`의 title, section, normalized text, commands, objects, next refs를 입력으로 질문 후보를 생성한다.
+2. 생성 방식은 heuristic만으로 고정하지 않고 AI-generated question candidate를 허용한다.
+3. 생성 결과는 chunk에 저장하거나 별도 candidate table/cache에 저장한다.
+4. Studio `/api/studio/starter-questions`는 매 요청 또는 새로고침마다 eligible candidate pool에서 랜덤 샘플링한다.
+5. 질문은 source chunk id, source document id, generation model/version, generated_at, quality status를 가져야 한다.
+6. `ops_learning_chunks_v1.jsonl`과 manifest 기반 질문은 fallback 또는 test fixture로만 사용한다.
+
+권장 후보 저장 형태:
+
+```text
+corpus_question_candidates
+  id
+  corpus_chunk_id
+  corpus_document_id
+  question
+  question_type          -- starter, followup, troubleshooting, command_lookup, learning_next
+  source_basis           -- chunk_text, chunk_command, next_ref, image_description, operator_object
+  generation_method      -- heuristic, ai_generated, curated_fallback
+  generation_model
+  generation_version
+  quality_status         -- candidate, approved, rejected, stale
+  created_at
+```
+
+랜덤 노출 기준:
+
+- 같은 chunk에서 너무 많은 질문이 동시에 나오지 않게 제한한다.
+- 공식문서/운영문서 corpus를 우선한다.
+- eval/demo/report fixture는 후보 pool에 넣지 않는다.
+- 새로고침마다 랜덤으로 바뀌되, 품질 승인된 후보 안에서만 바뀌어야 한다.
+- 빈 pool일 때만 curated fallback을 사용한다.
 
 ## 단계별 가이드 JSONL 판단
 

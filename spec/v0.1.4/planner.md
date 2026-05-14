@@ -200,6 +200,11 @@ These values should be available to retriever, reranker prompt, starter question
   - Confirm whether RAG retrieval, viewer routes, course viewer, ops learning Qdrant, and starter questions can be served from the new corpus boundary.
   - Treat official documents and operations documents as canonical corpus candidates.
   - Treat course/eval/demo/report JSONL files as runtime seeds, fixtures, or artifacts unless proven otherwise.
+- Redefine Studio starter questions as corpus-generated suggestions.
+  - Generate candidates from `corpus_chunks`, not from hand-written JSONL as the primary source.
+  - Store source chunk/document id, generation method/model/version, quality status, and question type.
+  - Randomly sample approved candidates on refresh.
+  - Keep curated manifest/JSONL questions only as fallback or test fixtures.
 - List every JSON/JSONL artifact currently used as corpus source, viewer artifact, eval report, temporary output, or course runtime artifact.
 - Mark each path as:
   - `canonical_source`
