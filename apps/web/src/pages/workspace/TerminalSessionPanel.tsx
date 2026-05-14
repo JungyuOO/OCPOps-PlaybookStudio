@@ -13,6 +13,8 @@ interface TerminalSocketEvent {
   shell?: string;
   workdir?: string;
   cluster_server?: string;
+  workspace_namespace?: string;
+  sandbox_pod?: string;
   exit_code?: number;
   lab_task_id?: string;
   command_check_id?: string;
@@ -34,6 +36,7 @@ interface TerminalSessionPanelProps {
   onCommandSubmitted?: (command: string) => void;
   onOutputChunk?: (chunk: string) => void;
   onSessionStateChange?: (state: TerminalConnectionState) => void;
+  onWorkspaceReady?: (workspace: { namespace: string; podName: string }) => void;
 }
 
 function defaultTerminalWebSocketUrl(): string {
@@ -52,6 +55,7 @@ export default function TerminalSessionPanel({
   onCommandSubmitted,
   onOutputChunk,
   onSessionStateChange,
+  onWorkspaceReady,
 }: TerminalSessionPanelProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -60,7 +64,7 @@ export default function TerminalSessionPanel({
   const commandBufferRef = useRef('');
   const [connectionKey, setConnectionKey] = useState(0);
   const [state, setState] = useState<TerminalConnectionState>('connecting');
-  const [sessionMeta, setSessionMeta] = useState({ shell: '', workdir: '', clusterServer: '' });
+  const [sessionMeta, setSessionMeta] = useState({ shell: '', workdir: '', clusterServer: '', workspaceNamespace: '' });
   const [recentCheckResults, setRecentCheckResults] = useState<TerminalSocketEvent[]>([]);
   const wsUrl = useMemo(defaultTerminalWebSocketUrl, []);
   const stableLearningContext = useMemo<TerminalLearningContext | undefined>(() => {
@@ -92,7 +96,7 @@ export default function TerminalSessionPanel({
     }
 
     setState('connecting');
-    setSessionMeta({ shell: '', workdir: '', clusterServer: '' });
+    setSessionMeta({ shell: '', workdir: '', clusterServer: '', workspaceNamespace: '' });
     const terminal = new Terminal({
       cursorBlink: true,
       convertEol: true,
@@ -273,7 +277,14 @@ export default function TerminalSessionPanel({
           shell: payload.shell ?? '',
           workdir: payload.workdir ?? '',
           clusterServer: payload.cluster_server ?? '',
+          workspaceNamespace: payload.workspace_namespace ?? '',
         });
+        if (payload.workspace_namespace) {
+          onWorkspaceReady?.({
+            namespace: payload.workspace_namespace,
+            podName: payload.sandbox_pod ?? '',
+          });
+        }
         setState('connected');
         terminal.writeln(`Connected: ${payload.shell ?? 'shell'}`);
         return;
@@ -324,7 +335,7 @@ export default function TerminalSessionPanel({
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [connectionKey, onCommandCheckResult, onCommandSubmitted, onOutputChunk, stableLearningContext, wsUrl]);
+  }, [connectionKey, onCommandCheckResult, onCommandSubmitted, onOutputChunk, onWorkspaceReady, stableLearningContext, wsUrl]);
 
   return (
     <section className="terminal-session-shell" aria-label="Terminal Session">
@@ -334,6 +345,7 @@ export default function TerminalSessionPanel({
           <strong>{state === 'connected' ? 'Connected' : state === 'connecting' ? 'Connecting' : state === 'error' ? 'Connection error' : 'Closed'}</strong>
           {sessionMeta.shell ? <span>{sessionMeta.shell}</span> : null}
           {sessionMeta.workdir ? <span>{sessionMeta.workdir}</span> : null}
+          {sessionMeta.workspaceNamespace ? <span>{sessionMeta.workspaceNamespace}</span> : null}
           {sessionMeta.clusterServer ? <span title={sessionMeta.clusterServer}>Cluster {sessionMeta.clusterServer}</span> : null}
           {stableLearningContext?.labTaskId ? <span>Lab attached</span> : null}
         </div>

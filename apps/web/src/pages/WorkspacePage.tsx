@@ -1310,6 +1310,7 @@ export default function WorkspacePage() {
   const [currentMode, setCurrentMode] = useState<WorkspaceChatMode>('document');
   const [clusterConnectionStatus, setClusterConnectionStatus] = useState<ClusterConnectionStatus>('not_connected');
   const [terminalConnectionState, setTerminalConnectionState] = useState<TerminalConnectionState>('closed');
+  const [userWorkspaceNamespace, setUserWorkspaceNamespace] = useState('');
   const [selectedResourceKind, setSelectedResourceKind] = useState<ClusterResourceKind>('pods');
   const [selectedResourceNamespace, setSelectedResourceNamespace] = useState('default');
   const [clusterResources, setClusterResources] = useState<OcpResourceItem[]>([]);
@@ -1554,6 +1555,22 @@ export default function WorkspacePage() {
       return [{ ...latest, outputExcerpt }, ...rest];
     });
   }, []);
+
+  const handleTerminalWorkspaceReady = useCallback((workspace: { namespace: string; podName: string }) => {
+    const namespace = workspace.namespace.trim();
+    if (!namespace) {
+      return;
+    }
+    setUserWorkspaceNamespace(namespace);
+    setSelectedResourceNamespace((current) => {
+      const currentNamespace = current.trim();
+      const activeDefault = activeFooterConnection?.default_namespace?.trim() || 'default';
+      if (currentNamespace && currentNamespace !== 'default' && currentNamespace !== activeDefault) {
+        return current;
+      }
+      return namespace;
+    });
+  }, [activeFooterConnection?.default_namespace]);
 
   const refreshDashboard = useCallback(async () => {
     if (!activeFooterConnection || !isClusterConnected) {
@@ -3182,7 +3199,7 @@ export default function WorkspacePage() {
           });
         }
         if (shouldUseLiveClusterMode) {
-          const namespace = selectedResourceNamespace.trim() || activeFooterConnection?.default_namespace || 'default';
+          const namespace = userWorkspaceNamespace || selectedResourceNamespace.trim() || activeFooterConnection?.default_namespace || 'default';
           const liveResponse = await sendOpsChatStream({
             message: trimmed,
             connection_id: activeFooterConnection?.connection_id || undefined,
@@ -4720,6 +4737,7 @@ export default function WorkspacePage() {
                 onCommandSubmitted={handleTerminalCommandSubmitted}
                 onOutputChunk={handleTerminalOutputChunk}
                 onSessionStateChange={setTerminalConnectionState}
+                onWorkspaceReady={handleTerminalWorkspaceReady}
               />
             ) : (
               <>

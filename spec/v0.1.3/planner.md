@@ -63,7 +63,7 @@ v0.1.3은 다음 두 축을 합친다.
 - [x] `currentMode === 'live_cluster'`일 때 `sendOpsChatStream('/api/v1/chat/query/stream', ...)`로 분기
 - [x] Live 응답(`OpsChatResponse` → 기존 메시지 형) 변환 어댑터
 - [x] 최근 터미널 명령/결과를 Live chat payload에 attach (`recent_terminal_actions`)
-- [ ] Live chat의 `namespace`는 자동 발급된 `pbs-user-<owner_hash[:8]>`로 라우팅
+- [x] Live chat의 `namespace`는 자동 발급된 `pbs-user-<owner_hash[:8]>`로 라우팅
 - [x] backend `_chat_payload`가 `recent_terminal_actions`를 받아 cluster context와 함께 의도 분류/근거로 사용
 - [x] ResourceQuota 자동 부착(per-user ns: cpu 500m, mem 1Gi, pods 5, pvc 2)
 - [x] NetworkPolicy 자동 부착(per-user ns: 같은 ns 내부 + cluster API + 학습용 mirror registry만)
@@ -789,6 +789,7 @@ oc rollout status deployment/web -n pbs-ocpops
 
 ## 작업 메모
 
+- 2026-05-14: terminal ready 프레임의 `workspace_namespace`를 `TerminalSessionPanel`에서 받아 `WorkspacePage` 상태로 올리고, Live Cluster chat payload의 `namespace`를 사용자 workspace namespace로 우선 라우팅하도록 연결했다. 사용자가 별도 namespace를 입력하지 않은 상태면 좌측 리소스 패널 namespace도 자동 발급 namespace로 맞춘다.
 - 2026-05-14: sandbox 이미지를 `deploy/Dockerfile`의 `sandbox` target으로 추가하고, `.github/workflows/publish-images.yml` matrix에 `ocpops-playbookstudio-sandbox`를 포함했다. dev merge 시 app/web과 같은 태그(`dev`, `sha-*`)로 GHCR에 push된다. 이미지에는 bash, vim-minimal, less, grep, jq, 기본 curl-minimal, oc, kubectl을 포함하고 `/home/learner`를 group 0 writable로 준비했다.
 - 2026-05-14: Phase C terminal WS 라우팅을 sandbox exec 방식으로 연결했다. WS 연결 시 `resolve_session_owner`로 owner_hash를 얻고 `ensure_user_workspace`를 호출한 뒤, `/app/scripts/sandbox-exec-entrypoint.sh`가 broker Pod에서 `oc exec -it -n <pbs-user-*> <sandbox-pod> -- /bin/bash -i`로 붙는다. `bootstrap_stage` 프레임(`resolving_owner`, `provisioning_workspace`, `sandbox_ready`)을 보내고, 프런트 터미널 패널은 ready 전까지 connecting 상태를 유지하면서 진행 메시지를 출력한다. 검증: `python -m compileall -q src`, `pytest tests/test_terminal_session.py tests/test_workspace_provisioner_unit.py tests/test_broker_rbac_smoke.py -q`, `bash -n deploy/scripts/terminal-entrypoint.sh`, `bash -n deploy/scripts/sandbox-exec-entrypoint.sh`, `npm --prefix apps/web run build` 통과.
 - 2026-05-14: v0.1.2 smoke/report 산출물은 평가 증거일 뿐 문서 검색/추천 질문 소스가 아니어야 한다. `corpus_import.iter_corpus_source_files`에서 `reports/`, `tmp/`, `artifacts/`, `dist/`, `node_modules/` 등을 제외하도록 막았다. 서버 DB에 이미 `reports`/`smoke`/`report` 계열 document_sources 또는 document_chunks가 들어갔는지는 배포 후 SQL로 점검하고, 발견되면 해당 source와 연결 chunks를 반드시 삭제/재색인한다.
