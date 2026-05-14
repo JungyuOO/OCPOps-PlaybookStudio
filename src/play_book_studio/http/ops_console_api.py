@@ -1047,6 +1047,26 @@ def _history_text(history: list[dict[str, Any]]) -> str:
     return "\n".join(fragments)
 
 
+def _recent_terminal_actions(payload: dict[str, Any]) -> list[dict[str, str]]:
+    rows = payload.get("recent_terminal_actions")
+    if not isinstance(rows, list):
+        return []
+    actions: list[dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        command = re.sub(r"\s+", " ", str(row.get("command") or "")).strip()
+        if not command:
+            continue
+        actions.append(
+            {
+                "command": command[:240],
+                "timestamp": str(row.get("timestamp") or "").strip()[:40],
+            }
+        )
+    return actions[:6]
+
+
 def _is_ops_related_query(query: str, context: dict[str, Any], history: list[dict[str, Any]]) -> bool:
     haystack = _normalize_ops_query(f"{query}\n{_history_text(history)}")
     if any(term in haystack for term in OPS_DOMAIN_TERMS):
@@ -2140,6 +2160,7 @@ def _generate_ops_live_answer(
     query: str,
     context: dict[str, Any],
     history: list[dict[str, Any]],
+    recent_terminal_actions: list[dict[str, str]] | None = None,
     selected_details: list[dict[str, Any]] | None = None,
 ) -> str | None:
     llm_client = getattr(answerer, "llm_client", None)
@@ -2222,6 +2243,7 @@ def _generate_ops_live_answer(
                 {
                     "question": query,
                     "recent_history": history[-6:],
+                    "recent_terminal_actions": (recent_terminal_actions or [])[:6],
                     "live_context": compact_context,
                 },
                 ensure_ascii=False,
@@ -2255,7 +2277,13 @@ def _chat_payload(root_dir: Path, payload: dict[str, Any], *, state: dict[str, A
         namespace = _connection_namespace(connection, str(payload.get("namespace") or "").strip())
         context = _ops_live_context(root_dir, state, connection, namespace)
         history = payload.get("history") if isinstance(payload.get("history"), list) else []
-        if not _is_ops_related_query(query, context, history):
+        recent_terminal_actions = _recent_terminal_actions(payload)
+        terminal_history = [
+            {"role": "terminal", "text": item["command"]}
+            for item in recent_terminal_actions
+        ]
+        history_for_intent = [*history, *terminal_history]
+        if not _is_ops_related_query(query, context, history_for_intent):
             response["mode"] = "ops-guard"
             response["answer"] = (
                 "저는 OpenShift/OCP 운영 전용 챗봇입니다. "
@@ -2266,9 +2294,9 @@ def _chat_payload(root_dir: Path, payload: dict[str, Any], *, state: dict[str, A
                 {"key": "guard", "label": "Ops guard", "detail": "Non-OCP question rejected", "status": "done"},
             ]
             return response
-        selected_details = _selected_live_resource_details(query, context, history)
+        selected_details = _selected_live_resource_details(query, context, history_for_intent)
         artifact_intent = _infer_ops_artifact_intent_from_query(query, context, selected_details)
-        generated = _generate_ops_live_answer(answerer, query, context, history, selected_details)
+        generated = _generate_ops_live_answer(answerer, query, context, history, recent_terminal_actions, selected_details)
         response["answer"] = generated or _fallback_ops_live_answer(query, context, selected_details)
         if not str(response.get("answer") or "").strip():
             response["answer"] = _fallback_ops_live_answer(query, context, selected_details)

@@ -89,11 +89,14 @@ import {
   loadResourceDetail,
   loadResources,
   listOcpProfiles,
+  sendOpsChatStream,
   type OcpResourceItem,
   type OcpMetricsResponse,
   type OcpOverview,
   type ResourceDetailResponse,
   type OcpConnection,
+  type OpsChatResponse,
+  type OpsChatSource,
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../routing/routes';
 import { sendCourseChatStream } from '../lib/courseApi';
@@ -180,6 +183,45 @@ function citationEvidenceMeta(citation: ChatCitation): string {
   ].filter(Boolean).join(' · ');
 }
 
+function opsSourceToChatCitation(source: OpsChatSource, fallbackIndex: number): ChatCitation {
+  const index = Number.isFinite(source.index) && source.index > 0 ? source.index : fallbackIndex;
+  return {
+    index,
+    book_slug: 'live_cluster',
+    book_title: 'Live Cluster',
+    section: source.section_title || source.title || 'Cluster evidence',
+    section_path_label: source.source_path || source.viewer_path || '',
+    viewer_path: source.viewer_path || source.source_path || '',
+    excerpt: source.source_path ? `Live cluster source: ${source.source_path}` : undefined,
+    source_label: source.title || source.section_title || 'Live cluster',
+    source_lane: 'live_cluster',
+    runtime_truth_label: 'Live cluster',
+    boundary_badge: 'Live',
+  };
+}
+
+function opsChatResponseToChatResponse(response: OpsChatResponse, sessionId: string): ChatResponse & { artifacts?: Array<Record<string, unknown>> } {
+  return {
+    answer: response.answer,
+    citations: response.sources.map((source, index) => opsSourceToChatCitation(source, index + 1)),
+    warnings: [],
+    session_id: sessionId,
+    response_kind: response.mode || response.lane || 'live_cluster',
+    suggested_queries: [],
+    related_links: [],
+    related_sections: [],
+    artifacts: response.artifacts.map((artifact) => ({ ...artifact })),
+    pipeline_trace: {
+      live_cluster: {
+        lane: response.lane,
+        mode: response.mode,
+        fallback_used: response.fallback_used,
+        preview_ready: response.preview_ready,
+      },
+    },
+  };
+}
+
 type LeftPanelMode = 'history' | 'outline' | 'signals';
 type RightPanelMode = 'viewer' | 'terminal';
 type WorkspaceChatMode = 'document' | 'live_cluster';
@@ -197,6 +239,11 @@ interface ClusterSignalEvent {
   namespace: string;
   status: string;
   sourceCommand: string;
+}
+
+interface RecentTerminalAction {
+  command: string;
+  timestamp: string;
 }
 
 interface IngestionStatusBanner {
@@ -1258,6 +1305,7 @@ export default function WorkspacePage() {
   const [resourceYamlDetail, setResourceYamlDetail] = useState<ResourceDetailResponse | null>(null);
   const [isResourceYamlLoading, setIsResourceYamlLoading] = useState(false);
   const [signalEvents, setSignalEvents] = useState<ClusterSignalEvent[]>([]);
+  const [recentTerminalActions, setRecentTerminalActions] = useState<RecentTerminalAction[]>([]);
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [dashboardOverview, setDashboardOverview] = useState<OcpOverview | null>(null);
   const [dashboardMetrics, setDashboardMetrics] = useState<OcpMetricsResponse | null>(null);
@@ -1456,6 +1504,10 @@ export default function WorkspacePage() {
   }, []);
 
   const handleTerminalCommandSubmitted = useCallback((command: string) => {
+    setRecentTerminalActions((current) => [
+      { command, timestamp: new Date().toISOString() },
+      ...current.filter((item) => item.command !== command),
+    ].slice(0, 6));
     const signal = detectClusterSignal(command);
     if (!signal) {
       return;
@@ -2991,6 +3043,7 @@ export default function WorkspacePage() {
     const resolvedLearningStepId = options.learningStepId ?? questionMeta?.learningStepId;
     const resolvedLabTaskId = options.labTaskId ?? questionMeta?.labTaskId;
     const shouldUseCourseMode = options.forceCourseMode || resolvedRouteKind === 'course' || isCourseMode;
+    const shouldUseLiveClusterMode = !shouldUseCourseMode && currentMode === 'live_cluster' && isLiveClusterAvailable;
     const messageRouteKind: Message['routeKind'] = shouldUseCourseMode
       ? 'course'
       : resolvedRouteKind || 'official';
@@ -3098,28 +3151,73 @@ export default function WorkspacePage() {
             result: null,
           });
         }
-        response = await sendChatStream(requestPayload, (event) => {
-          if (event.type === 'answer_delta') {
-            streamedAnswer += event.delta;
-            assistantStreamUpdater?.push(streamedAnswer);
-          }
-          if (testMode && event.type === 'trace') {
-            setActiveTestTrace((current) => ({
-              query: current?.query ?? trimmed,
-              sessionId: current?.sessionId ?? sessionId,
-              events: [...(current?.events ?? []), event],
-              result: current?.result ?? null,
-            }));
-          }
-          if (testMode && event.type === 'result') {
-            setActiveTestTrace((current) => ({
-              query: current?.query ?? trimmed,
-              sessionId: event.payload.session_id || current?.sessionId || sessionId,
-              events: current?.events ?? [],
-              result: event.payload,
-            }));
-          }
-        });
+        if (shouldUseLiveClusterMode) {
+          const namespace = selectedResourceNamespace.trim() || activeFooterConnection?.default_namespace || 'default';
+          const liveResponse = await sendOpsChatStream({
+            message: trimmed,
+            connection_id: activeFooterConnection?.connection_id || undefined,
+            namespace,
+            history: messages.slice(-6).map((item) => ({ role: item.role, text: item.content })),
+            recent_terminal_actions: recentTerminalActions.map((item) => ({
+              command: item.command,
+              timestamp: item.timestamp,
+            })),
+          }, (event) => {
+            if (event.type === 'answer_delta') {
+              streamedAnswer += event.delta;
+              assistantStreamUpdater?.push(streamedAnswer);
+            }
+            if (testMode && event.type === 'stage') {
+              setActiveTestTrace((current) => ({
+                query: current?.query ?? trimmed,
+                sessionId: current?.sessionId ?? sessionId,
+                events: [
+                  ...(current?.events ?? []),
+                  {
+                    type: 'trace',
+                    step: `live_cluster:${event.stage.key}`,
+                    label: event.stage.label,
+                    status: event.stage.status,
+                    detail: event.stage.detail,
+                  },
+                ],
+                result: current?.result ?? null,
+              }));
+            }
+            if (testMode && event.type === 'result') {
+              setActiveTestTrace((current) => ({
+                query: current?.query ?? trimmed,
+                sessionId: current?.sessionId ?? sessionId,
+                events: current?.events ?? [],
+                result: opsChatResponseToChatResponse(event.response, sessionId),
+              }));
+            }
+          });
+          response = opsChatResponseToChatResponse(liveResponse, sessionId);
+        } else {
+          response = await sendChatStream(requestPayload, (event) => {
+            if (event.type === 'answer_delta') {
+              streamedAnswer += event.delta;
+              assistantStreamUpdater?.push(streamedAnswer);
+            }
+            if (testMode && event.type === 'trace') {
+              setActiveTestTrace((current) => ({
+                query: current?.query ?? trimmed,
+                sessionId: current?.sessionId ?? sessionId,
+                events: [...(current?.events ?? []), event],
+                result: current?.result ?? null,
+              }));
+            }
+            if (testMode && event.type === 'result') {
+              setActiveTestTrace((current) => ({
+                query: current?.query ?? trimmed,
+                sessionId: event.payload.session_id || current?.sessionId || sessionId,
+                events: current?.events ?? [],
+                result: event.payload,
+              }));
+            }
+          });
+        }
         assistantStreamUpdater.flush();
       }
       const primaryTruth = primaryCitationTruth(response.citations);

@@ -576,6 +576,7 @@ export async function sendOpsChat(payload: {
   connection_id?: string;
   namespace?: string;
   history?: Array<Record<string, unknown>>;
+  recent_terminal_actions?: Array<Record<string, unknown>>;
 }): Promise<OpsChatResponse> {
   return requestJson('/api/v1/chat/query', {
     method: 'POST',
@@ -589,6 +590,7 @@ export async function sendOpsChatStream(
     connection_id?: string;
     namespace?: string;
     history?: Array<Record<string, unknown>>;
+    recent_terminal_actions?: Array<Record<string, unknown>>;
   },
   onEvent: (event: OpsChatStreamEvent) => void,
 ): Promise<OpsChatResponse> {
