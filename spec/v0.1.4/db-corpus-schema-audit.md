@@ -260,6 +260,28 @@ The JSON file may be a source manifest or parser artifact, but it should not rem
 | Chunk metadata/facets | DB canonical | Renderable/filterable |
 | HTML viewer output | artifact path only | Rendered UI output |
 
+### JSON Source Extraction Rule
+
+JSON source files can remain the original input format, but the system must split three concerns:
+
+1. Preserve the original JSON structure.
+2. Promote useful path/location fields into stable DB fields.
+3. Generate embedding text from semantic content only.
+
+Target handling:
+
+| JSON Content | Target Owner | Embedding Treatment |
+| --- | --- | --- |
+| Original object | `parsed_documents.raw_payload` | Never embedded directly |
+| Faithful text rendering | `parsed_documents.raw_text` | Not embedded as-is |
+| Node text/body | `document_blocks.text`, `corpus_chunks.markdown`, `corpus_chunks.normalized_text` | Candidate for embedding after cleanup |
+| JSON Pointer/JSONPath | `document_blocks.source_json_path`, `corpus_chunks.source_json_path` | Not embedded |
+| Logical document path | `corpus_chunks.source_path` | Filter/citation/viewer navigation only |
+| Page/anchor/bbox/upstream id | `source_location`, `source_anchor`, `bbox` | Not embedded |
+| Product/version/install facet | first-class columns such as `domain`, `ocp_version`, `install_category`, `platform`, `provider` | May be summarized into embedding text when semantically helpful |
+
+This means the source can be JSON without forcing JSON syntax, internal keys, file paths, or viewer paths into the vector space. Those fields should be available to retrieval as metadata/facets and to the viewer as navigation provenance.
+
 ## JSON 원본과 HTML Viewer 경계
 
 기존 PDF parsing 방식에서는 PDF에서 text/OCR/image를 추출하고 DB에 넣는 흐름이 자연스럽다. 지금 구조는 JSON 파일 안에 JSON 형식 데이터가 있고, 이를 HTML로 변환해서 사용자에게 보여주는 흐름이 섞여 있어 source of truth가 헷갈린다.

@@ -212,6 +212,7 @@ Parser-level document output. Keep markdown/outline here as parser artifacts, no
 | `parser_version` | text | yes | Parser version. |
 | `title` | text | no | Parser-detected title. |
 | `raw_text` | text | no | Raw extracted text when available. |
+| `raw_payload` | jsonb | no | Original structured source payload when the source itself is JSON. |
 | `markdown` | text | no | Parser markdown artifact. |
 | `normalized_text` | text | no | Parser-level cleaned text before corpus enrichment. |
 | `outline` | jsonb | yes | Parser-detected outline. |
@@ -250,6 +251,8 @@ Parser structural units before corpus chunking.
 | `section_number` | text | no | Section number. |
 | `heading_title` | text | no | Heading context. |
 | `source_anchor` | text | no | Source anchor. |
+| `source_json_path` | text | no | JSON Pointer/JSONPath when the block came from structured JSON. |
+| `source_location` | jsonb | yes | Structured provenance such as page, path, anchor, bbox, or upstream node id. |
 | `bbox` | jsonb | yes | Layout box. |
 | `table_data` | jsonb | yes | Structured table data. |
 | `ocr_text` | text | no | OCR text if block is image/scanned. |
@@ -354,6 +357,9 @@ Canonical searchable chunk and Qdrant projection source.
 | `section_number` | text | no | Section number. |
 | `breadcrumb` | jsonb | yes | UI/navigation breadcrumb. |
 | `source_anchor` | text | no | Source/viewer anchor. |
+| `source_path` | text | no | Stable logical path inside the source document or manifest. |
+| `source_json_path` | text | no | JSON Pointer/JSONPath for source JSON provenance. |
+| `source_location` | jsonb | yes | Non-ranking provenance such as page, anchor, path, bbox, or upstream node id. |
 | `markdown` | text | yes | Human-readable chunk body. |
 | `normalized_text` | text | yes | Searchable cleaned chunk text. |
 | `embedding_text` | text | yes | Text sent to embedding model. |
@@ -392,6 +398,44 @@ Allowed metadata examples:
 ```
 
 Do not store `domain`, `install_category`, `source_url`, `viewer_artifact_path`, `next_refs`, or candidate questions only in `metadata`.
+
+### JSON Source Text and Embedding Boundary
+
+When the original source is JSON, preserve its structure without letting that structure pollute embeddings.
+
+The target flow is:
+
+```text
+source JSON
+  -> parsed_documents.raw_payload / raw_text
+  -> document_blocks with source_json_path and source_location
+  -> corpus_chunks with semantic text plus promoted path/location columns
+  -> embedding_text generated only from useful human-facing content
+```
+
+Rules:
+
+- `raw_payload` keeps the original JSON object when the source is structured JSON.
+- `raw_text` may keep a faithful text rendering of the source, including labels and ordering.
+- `document_blocks.source_json_path` and `corpus_chunks.source_json_path` store a JSON Pointer or JSONPath to the upstream node.
+- `source_path`, `source_anchor`, `source_location`, `breadcrumb`, and `section_path` are provenance/navigation fields. They may be used for filtering, citation, viewer jumps, and guided learning, but they should not be blindly embedded.
+- `normalized_text` is cleaned readable text for keyword search and reranking.
+- `embedding_text` must exclude JSON syntax, internal keys, UUIDs, file paths, viewer artifact paths, and structural labels unless the label is semantically meaningful to the user.
+- `embedding_text` may include concise semantic context such as title, section title, procedure name, product/version, and install category because those improve retrieval intent matching.
+
+Example:
+
+```json
+{
+  "source_json_path": "$.books[0].chapters[2].steps[4]",
+  "source_path": "installing/azure/create-install-config",
+  "title": "Create the install-config.yaml file",
+  "normalized_text": "Create install-config.yaml for Azure installation...",
+  "embedding_text": "Azure OpenShift installation. Create the install-config.yaml file. Configure pull secret, base domain, region, and platform credentials."
+}
+```
+
+Do not embed the literal JSON key path. Keep it as retrieval provenance and viewer navigation data.
 
 ### `corpus_chunk_assets`
 
