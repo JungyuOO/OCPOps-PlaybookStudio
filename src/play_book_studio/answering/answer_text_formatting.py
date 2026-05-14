@@ -520,6 +520,7 @@ def shape_install_overview_answer(answer_text: str, *, query: str, citations) ->
 
     normalized = (answer_text or "").strip()
     lowered = normalized.lower()
+    command_lines = _install_command_lines(citations)
     install_terms_in_answer = sum(
         1
         for token in (
@@ -538,7 +539,6 @@ def shape_install_overview_answer(answer_text: str, *, query: str, citations) ->
     first_index = _install_evidence_index(citations, "installation", "installing", "openshift")
     method_lines = _install_method_lines(citations)
     prep_lines = _install_preparation_lines(citations)
-    command_lines = _install_command_lines(citations)
 
     lines: list[str] = [
         (
@@ -735,6 +735,26 @@ def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
     return any(term.lower() in lowered for term in terms)
 
 
+def _is_beginner_deployment_command_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    has_deploy = any(token in lowered for token in ("deployment", "deploy", "oc apply", "배포", "諛고룷"))
+    asks_command = any(
+        token in lowered
+        for token in (
+            "command",
+            "cli",
+            "oc ",
+            "apply",
+            "명령",
+            "紐낅졊",
+            "어떻게",
+            "?대줈",
+            "해야",
+        )
+    )
+    return has_deploy and asks_command
+
+
 def _evidence_index(citations, *terms: str) -> int:
     return _install_evidence_index(citations, *terms)
 
@@ -744,6 +764,7 @@ def _shape_beginner_install_overview_v012(answer_text: str, *, citations) -> str
         return ""
     normalized = (answer_text or "").strip()
     lowered = normalized.lower()
+    command_lines = _install_command_lines(citations)
     required_terms = (
         "assisted installer",
         "single node openshift",
@@ -753,6 +774,7 @@ def _shape_beginner_install_overview_v012(answer_text: str, *, citations) -> str
         not _weak_or_thin_answer(normalized)
         and all(term in lowered for term in required_terms)
         and "```" in normalized
+        and command_lines
     ):
         return answer_text
 
@@ -777,12 +799,11 @@ def _shape_beginner_install_overview_v012(answer_text: str, *, citations) -> str
             "- 설치 방식에 따라 install-config.yaml, Ignition 파일, Discovery ISO 같은 설치 자산을 준비합니다.",
             "",
             "3. 설치 진행 상태는 CLI로 확인합니다.",
-            "```bash",
-            "openshift-install --dir <installation_directory> wait-for bootstrap-complete --log-level=info",
-            "openshift-install --dir <installation_directory> wait-for install-complete --log-level=info",
-            "export KUBECONFIG=<installation_directory>/auth/kubeconfig",
-            "oc whoami",
-            "```",
+            *(
+                ["```bash", *command_lines, "```"]
+                if command_lines
+                else [f"- ?ㅼ튂 ?꾨즺 ?뺤씤???쇰컲?곸쑝濡 `openshift-install`怨?KUBECONFIG瑜?以鍮꾪븳 ?? ?곹깭瑜?寃利앺븯???먮쫫?낅땲??[{command_index}]."]
+            ),
             f"초보자 기준으로는 먼저 Assisted Installer + SNO 흐름으로 전체 그림을 잡고, 자동화나 제한망 요구가 생기면 Agent-based/UPI 흐름을 비교하는 편이 이해하기 쉽습니다 [{command_index}].",
         ]
     ).strip()
@@ -851,6 +872,21 @@ def _shape_beginner_deployment_v012(query: str, citations) -> str:
             "- `kind: Deployment`인지 확인합니다.",
             "- `metadata.name`, `selector.matchLabels`, `template.metadata.labels`가 서로 맞는지 봅니다.",
             "- 적용 후 Pod가 뜨지 않으면 `oc describe pod`와 이벤트를 먼저 확인합니다.",
+        ]
+    ).strip()
+
+
+def _shape_beginner_deployment_command_v012(query: str, citations) -> str:
+    if not citations:
+        return ""
+    index = _evidence_index(citations, "deployment", "oc apply -f", "yaml", "manifest")
+    return "\n".join(
+        [
+            f"?붿빟: OCP?먯꽌 ?좏뵆由ъ??댁뀡 諛고룷??湲곕낯??Deployment YAML??留뚮뱾怨?`oc apply -f deployment.yaml`濡??곸슜???ㅼ쓬 `oc rollout status deployment/<name> -n <namespace>`濡??곹깭瑜??뺤씤?섎뒗 ?먮쫫?낅땲??[{index}].",
+            "",
+            "- `Deployment`瑜??ㅼ젣濡??앹꽦?섎젮硫?YAML?먯꽌 `apiVersion: apps/v1`, `kind: Deployment`, `metadata.name`, `spec.selector`, `spec.template`瑜?留욎텛怨??곸슜?⑸땲??",
+            "- 癒쇱? ?곸슜 紐낅졊??`oc apply -f deployment.yaml`?낅땲?? ?곸슜 ????곹깭??`oc rollout status deployment/<name> -n <namespace>`濡?蹂대㈃ ?⑸땲??",
+            "- Pod媛 ?⑥? ?딆쑝硫?`oc get pods -n <namespace>`? `oc describe pod <pod-name> -n <namespace>`濡??대깽?몃? 癒쇱? ?뺤씤?⑸땲??",
         ]
     ).strip()
 
@@ -924,6 +960,10 @@ def shape_beginner_grounded_answer(answer_text: str, *, query: str, citations) -
     if understanding.has_intent("namespace_create"):
         shaped = _shape_beginner_namespace_create_v012(query, citations)
         if shaped and not _contains_any(answer_text, ("oc create namespace", "oc new-project")):
+            return shaped
+    if _is_beginner_deployment_command_query(query):
+        shaped = _shape_beginner_deployment_command_v012(query, citations)
+        if shaped and not _contains_any(answer_text, ("deployment", "kind: Deployment")):
             return shaped
     if understanding.has_intent("deployment_yaml_authoring"):
         shaped = _shape_beginner_deployment_v012(query, citations)

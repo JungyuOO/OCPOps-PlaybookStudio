@@ -716,7 +716,7 @@ def _llm_max_tokens_override(*, query: str, default_max_tokens: int) -> int | No
     lowered = str(query or "").lower()
     if any(token in lowered for token in ("한 문단", "한문단", "one paragraph", "single paragraph")):
         return min(default_max_tokens, 192)
-    return min(default_max_tokens, 700)
+    return min(default_max_tokens, 560)
 
 
 class ChatAnswerer:
