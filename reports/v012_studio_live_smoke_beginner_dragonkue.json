@@ -221,7 +221,7 @@
       "suggestion_count": 3,
       "failures": [],
       "pass": true,
-      "answer_preview": "?붿빟: OCP?먯꽌 ?좏뵆由ъ??댁뀡 諛고룷??湲곕낯??Deployment YAML??留뚮뱾怨?`oc apply -f deployment.yaml`濡??곸슜???ㅼ쓬 `oc rollout status deployment/<name> -n <namespace>`濡??곹깭瑜??뺤씤? 섎뒗 ?먮쫫? 낅땲??[1].\n\n- `Deployment`瑜??ㅼ젣濡??앹꽦? 섎젮硫?YAML?먯꽌 `apiVersion: apps/v1`, `kind: Deployment`, `me",
+      "answer_preview": "요약: OCP에서 애플리케이션 배포의 기본은 Deployment YAML을 만들고 `oc apply -f deployment.yaml`로 적용한 다음 `oc rollout status deployment/<name> -n <namespace>`로 상태를 확인하는 흐름입니다 [1].\n\n- `Deployment`를 실제로 생성하려면 YAML에서 `apiVersion: apps/v1`, `kind: Deployment`, `me",
       "citation_preview": [
         {
           "index": 1,

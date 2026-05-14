@@ -18,6 +18,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from play_book_studio.console_encoding import force_utf8_stdio
 from play_book_studio.config.corpus_paths import (
     ANSWER_EVAL_CASES_PATH,
     ANSWER_EVAL_REALWORLD_CASES_PATH,
@@ -472,6 +473,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8_stdio()
     args = build_parser().parse_args(argv)
     report = run_smoke(args)
     output_path = Path(args.report_path)
