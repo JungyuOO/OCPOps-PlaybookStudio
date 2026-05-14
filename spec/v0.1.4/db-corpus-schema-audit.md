@@ -49,6 +49,53 @@ The schema has useful pieces, but their boundaries are soft:
 - Course runtime tables look similar to document chunk tables, but they are not the same kind of truth.
 - Next-step learning references exist in metadata, but are not first-class enough for reliable guided learning.
 
+## Priority 1: Split Parsing Storage From Corpus Storage
+
+The first v0.1.4 schema decision is not which individual columns to add. It is to separate parsing-stage data from canonical corpus-stage data.
+
+Parsing tables should preserve extraction provenance and parser output. Corpus tables should represent the cleaned, queryable, learner-facing document graph. Qdrant, viewer JSON/HTML, and course runtime artifacts should derive from corpus tables, not directly from parser output.
+
+### Proposed Boundary
+
+| Layer | Purpose | Example Tables | Not Responsible For |
+| --- | --- | --- | --- |
+| Parsing | Preserve raw extraction, OCR, image descriptions, blocks, parser warnings, and layout provenance | `parsed_documents`, `document_blocks`, `document_assets`, `parse_jobs` | Search ranking contract, guided learning graph, viewer runtime shape |
+| Corpus | Store normalized document and chunk truth used by retrieval, citation, filtering, and guided learning | future `corpus_documents`, future `corpus_chunks`, future relation tables | Raw parser artifacts, OCR/layout debug details, job state |
+| Projection | Track rebuildable downstream indexes | `qdrant_index_entries`, `embedding_jobs` | Canonical text or metadata ownership |
+| Runtime Artifact | Store generated course/viewer/session outputs | `course_chunks`, `course_assets`, `course_manifests`, viewer JSON/HTML files | Canonical document truth |
+
+### Why This Should Be First
+
+- It removes ambiguity between "what the parser saw" and "what RAG should search".
+- It prevents viewer/course JSON from becoming accidental corpus input.
+- It gives OCR and image description a proper home without forcing every extraction detail into retrieval chunks.
+- It makes re-parsing safe: parser output can change while corpus rows remain versioned and auditable.
+- It creates a clean seam for quality work: normalize and enrich into corpus first, then project to Qdrant.
+
+### Migration Shape To Consider Later
+
+Do not implement this yet, but the likely direction is:
+
+```text
+document_sources       -> source identity and ownership
+document_versions      -> immutable source versions
+parse_jobs             -> parser job status
+parsed_documents       -> parser-level document output
+document_blocks        -> parser-level block/OCR/layout output
+document_assets        -> parser-level extracted assets
+
+corpus_documents       -> canonical searchable document truth
+corpus_chunks          -> canonical searchable chunk truth
+corpus_chunk_assets    -> chunk-to-asset links
+corpus_chunk_refs      -> prerequisite/next/related/lab links
+corpus_chunk_facets    -> optional normalized many-valued facets if JSON arrays become unmanageable
+
+qdrant_index_entries   -> projection status from corpus_chunks
+embedding_jobs         -> embedding status for corpus_chunks
+```
+
+Existing `document_chunks` may either be renamed conceptually into `corpus_chunks` or replaced by new `corpus_chunks` with a compatibility view. That decision should happen before migration SQL.
+
 ## Column Audit: `document_sources`
 
 | Column | Classification | Direction | Reason |

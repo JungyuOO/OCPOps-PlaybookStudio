@@ -14,6 +14,7 @@ Qdrant payload, viewer JSON/HTML, course runtime chunk가 동시에 존재한다
 ## Principles
 
 - Postgres가 canonical corpus truth다. Qdrant는 파생 색인이고, viewer JSON/HTML은 렌더링 산출물이다.
+- v0.1.4의 1순위는 parsing storage와 corpus storage를 분리하는 것이다.
 - 문서 원본, 추출 결과, 정규화 텍스트, 이미지/OCR, chunk, viewer artifact를 한 단계씩 구분한다.
 - JSONB는 무제한 잡동사니 저장소가 아니라 "확장 필드"로만 쓴다. 검색/필터/운영 판단에 필요한 값은 컬럼으로 승격한다.
 - 평가 report, smoke output, app build artifact, tmp 산출물은 corpus import 대상이 아니다.
@@ -70,6 +71,23 @@ Qdrant payload, viewer JSON/HTML, course runtime chunk가 동시에 존재한다
 ## Proposed Canonical Tables
 
 Keep existing tables where possible, but define ownership clearly:
+
+Primary v0.1.4 decision: parser output tables and corpus tables should not be the same conceptual layer.
+
+- Parsing layer:
+  - `parse_jobs`
+  - `parsed_documents`
+  - `document_blocks`
+  - `document_assets`
+- Corpus layer:
+  - future `corpus_documents`
+  - future `corpus_chunks`
+  - future relation tables for chunk assets and learning refs if needed
+- Projection/runtime layer:
+  - `qdrant_index_entries`
+  - `embedding_jobs`
+  - viewer JSON/HTML artifacts
+  - course runtime tables
 
 - `document_sources`
   - Canonical source identity.
