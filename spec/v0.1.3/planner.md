@@ -53,7 +53,7 @@ v0.1.3은 다음 두 축을 합친다.
 - [x] terminal WS 진입부 변경: 기존 앱 Pod PTY 대신 `oc exec` 통해 사용자 sandbox Pod로 연결
 - [x] 부트스트랩 진행 단계 progress 프레임을 WS로 송신(준비중 UI 표시)
 - [ ] 사용자 첫 접속 1회용 안내 메시지(브라우저-바운드 정체성, 14일 TTL 설명)
-- [ ] in-cluster CronJob: 30분 idle → Pod replicas=0(동면), 14일 미사용 + `pinned=false` → namespace 삭제
+- [x] in-cluster CronJob: 30분 idle → Pod replicas=0(동면), 14일 미사용 + `pinned=false` → namespace 삭제
 - [ ] `last-active-at` 라벨 갱신(WS 메시지 시 60초당 1회 patch)
 - [ ] "보관하기" 토글(`pbs.pinned=true/false` 패치) UI + API
 - [ ] "환경 초기화" 버튼: 현재 owner_hash의 namespace 삭제 후 다음 접속 시 신규 발급
@@ -789,6 +789,7 @@ oc rollout status deployment/web -n pbs-ocpops
 
 ## 작업 메모
 
+- 2026-05-14: `deploy/openshift/workspace-reaper-cronjob.yaml`을 추가했다. `terminal-broker` SA와 sandbox 이미지를 사용하며 15분마다 `pbs.session=true` namespace를 스캔해 30분 idle이면 `deployment/sandbox` replicas=0 및 `pbs.hibernated=true`, 14일 idle이고 `pbs.pinned=false`면 namespace를 삭제한다.
 - 2026-05-14: terminal ready 프레임의 `workspace_namespace`를 `TerminalSessionPanel`에서 받아 `WorkspacePage` 상태로 올리고, Live Cluster chat payload의 `namespace`를 사용자 workspace namespace로 우선 라우팅하도록 연결했다. 사용자가 별도 namespace를 입력하지 않은 상태면 좌측 리소스 패널 namespace도 자동 발급 namespace로 맞춘다.
 - 2026-05-14: sandbox 이미지를 `deploy/Dockerfile`의 `sandbox` target으로 추가하고, `.github/workflows/publish-images.yml` matrix에 `ocpops-playbookstudio-sandbox`를 포함했다. dev merge 시 app/web과 같은 태그(`dev`, `sha-*`)로 GHCR에 push된다. 이미지에는 bash, vim-minimal, less, grep, jq, 기본 curl-minimal, oc, kubectl을 포함하고 `/home/learner`를 group 0 writable로 준비했다.
 - 2026-05-14: Phase C terminal WS 라우팅을 sandbox exec 방식으로 연결했다. WS 연결 시 `resolve_session_owner`로 owner_hash를 얻고 `ensure_user_workspace`를 호출한 뒤, `/app/scripts/sandbox-exec-entrypoint.sh`가 broker Pod에서 `oc exec -it -n <pbs-user-*> <sandbox-pod> -- /bin/bash -i`로 붙는다. `bootstrap_stage` 프레임(`resolving_owner`, `provisioning_workspace`, `sandbox_ready`)을 보내고, 프런트 터미널 패널은 ready 전까지 connecting 상태를 유지하면서 진행 메시지를 출력한다. 검증: `python -m compileall -q src`, `pytest tests/test_terminal_session.py tests/test_workspace_provisioner_unit.py tests/test_broker_rbac_smoke.py -q`, `bash -n deploy/scripts/terminal-entrypoint.sh`, `bash -n deploy/scripts/sandbox-exec-entrypoint.sh`, `npm --prefix apps/web run build` 통과.

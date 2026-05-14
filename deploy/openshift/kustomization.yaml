@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - core.yaml
   - broker-rbac.yaml
+  - workspace-reaper-cronjob.yaml
   - app.yaml
   - job-db-migrate.yaml
   - job-official-corpus-seed.yaml
