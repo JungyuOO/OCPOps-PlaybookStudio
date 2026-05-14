@@ -269,3 +269,114 @@ def test_ops_console_documents_do_not_fall_back_to_files_when_database_is_config
         rows = ops_console_api._iter_document_rows(root)
 
     assert rows == []
+
+
+def test_ops_console_recent_terminal_actions_are_sanitized() -> None:
+    actions = ops_console_api._recent_terminal_actions(
+        {
+            "recent_terminal_actions": [
+                {
+                    "command": "  oc   get   pods   -n   payments  ",
+                    "output_excerpt": "NAME READY STATUS\npayments-api-1 1/1 Running",
+                    "timestamp": "2026-05-14T04:37:58.850361Z",
+                },
+                {"command": ""},
+                "not-a-row",
+                {"command": "kubectl get deploy"},
+                {"command": "oc describe pod payments-api-1"},
+                {"command": "oc get events"},
+                {"command": "oc get routes"},
+                {"command": "oc get svc"},
+                {"command": "oc get secrets"},
+            ]
+        }
+    )
+
+    assert len(actions) == 6
+    assert actions[0] == {
+        "command": "oc get pods -n payments",
+        "output_excerpt": "NAME READY STATUS\npayments-api-1 1/1 Running",
+        "timestamp": "2026-05-14T04:37:58.850361Z",
+    }
+    assert actions[-1]["command"] == "oc get svc"
+
+
+def test_ops_console_live_chat_includes_recent_terminal_actions(monkeypatch) -> None:
+    class CapturingLlmClient:
+        def __init__(self) -> None:
+            self.messages: list[dict[str, str]] = []
+
+        def generate(self, messages: list[dict[str, str]], max_tokens: int) -> str:
+            self.messages = messages
+            return "payments namespace의 Pod는 현재 Running 상태입니다."
+
+    class CapturingAnswerer:
+        def __init__(self) -> None:
+            self.llm_client = CapturingLlmClient()
+            self.retriever = SimpleNamespace(reranker=None)
+
+    def fake_live_context(root_dir, state, connection, namespace):  # noqa: ANN001
+        return {
+            "namespace": namespace,
+            "connection": connection,
+            "resources": {
+                "deployments": [],
+                "pods": [
+                    {
+                        "name": "payments-api-1",
+                        "namespace": namespace,
+                        "phase": "Running",
+                        "node_name": "worker-1",
+                    }
+                ],
+                "services": [],
+                "routes": [],
+                "events": [],
+            },
+            "metrics": {"summary": {}},
+        }
+
+    answerer = CapturingAnswerer()
+    monkeypatch.setattr(ops_console_api, "_ops_live_context", fake_live_context)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        response = ops_console_api._chat_payload(
+            Path(tmpdir),
+            {
+                "message": "방금 oc get pods 결과 기준으로 pods 상태 알려줘",
+                "connection_id": "conn_live",
+                "namespace": "payments",
+                "history": [],
+                "recent_terminal_actions": [
+                    {
+                        "command": "oc get pods -n payments",
+                        "output_excerpt": "NAME READY STATUS\npayments-api-1 1/1 Running",
+                        "timestamp": "2026-05-14T04:37:58Z",
+                    }
+                ],
+            },
+            state={
+                "connections": [
+                    {
+                        "connection_id": "conn_live",
+                        "display_name": "dev-cluster",
+                        "status": "connected",
+                        "default_namespace": "default",
+                    }
+                ]
+            },
+            answerer=answerer,
+        )
+
+    user_payload = json.loads(answerer.llm_client.messages[1]["content"])
+
+    assert response["lane"] == "live"
+    assert response["answer"] == "payments namespace의 Pod는 현재 Running 상태입니다."
+    assert user_payload["recent_terminal_actions"] == [
+        {
+            "command": "oc get pods -n payments",
+            "output_excerpt": "NAME READY STATUS\npayments-api-1 1/1 Running",
+            "timestamp": "2026-05-14T04:37:58Z",
+        }
+    ]
+    assert user_payload["live_context"]["namespace"] == "payments"

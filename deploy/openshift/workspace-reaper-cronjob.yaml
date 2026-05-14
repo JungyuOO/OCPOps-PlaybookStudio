@@ -1,0 +1,77 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: workspace-reaper
+  namespace: pbs-ocpops
+  labels:
+    app.kubernetes.io/name: workspace-reaper
+    app.kubernetes.io/part-of: playbookstudio
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: workspace-reaper
+            app.kubernetes.io/part-of: playbookstudio
+        spec:
+          serviceAccountName: terminal-broker
+          restartPolicy: OnFailure
+          containers:
+            - name: reaper
+              image: ghcr.io/jungyuoo/ocpops-playbookstudio-sandbox:dev
+              imagePullPolicy: Always
+              env:
+                - name: PBS_WORKSPACE_HIBERNATE_AFTER_SECONDS
+                  value: "1800"
+                - name: PBS_WORKSPACE_DELETE_AFTER_SECONDS
+                  value: "1209600"
+              command:
+                - /bin/bash
+                - -lc
+                - |
+                  set -euo pipefail
+
+                  hibernate_after="${PBS_WORKSPACE_HIBERNATE_AFTER_SECONDS:-1800}"
+                  delete_after="${PBS_WORKSPACE_DELETE_AFTER_SECONDS:-1209600}"
+                  now="$(date -u +%s)"
+
+                  compact_label_to_epoch() {
+                    local value="${1:-}"
+                    if [[ ! "${value}" =~ ^[0-9]{8}T[0-9]{6}Z$ ]]; then
+                      return 1
+                    fi
+                    date -u -d "${value:0:4}-${value:4:2}-${value:6:2}T${value:9:2}:${value:11:2}:${value:13:2}Z" +%s
+                  }
+
+                  oc get ns -l pbs.session=true -o json |
+                    jq -r '.items[] | [
+                      .metadata.name,
+                      (.metadata.labels."pbs.last-active-at" // .metadata.labels."pbs.created-at" // ""),
+                      (.metadata.labels."pbs.pinned" // "false"),
+                      (.metadata.labels."pbs.hibernated" // "false")
+                    ] | @tsv' |
+                    while IFS=$'\t' read -r namespace last_active pinned hibernated; do
+                      if [ -z "${namespace}" ] || [ "${pinned}" = "true" ]; then
+                        continue
+                      fi
+                      if ! last_epoch="$(compact_label_to_epoch "${last_active}")"; then
+                        echo "Skipping ${namespace}: invalid last-active label '${last_active}'"
+                        continue
+                      fi
+                      idle_seconds="$((now - last_epoch))"
+                      if [ "${idle_seconds}" -ge "${delete_after}" ]; then
+                        echo "Deleting expired workspace namespace ${namespace}"
+                        oc delete namespace "${namespace}"
+                        continue
+                      fi
+                      if [ "${idle_seconds}" -ge "${hibernate_after}" ] && [ "${hibernated}" != "true" ]; then
+                        echo "Hibernating idle workspace namespace ${namespace}"
+                        oc patch deployment sandbox -n "${namespace}" --type=merge -p '{"spec":{"replicas":0}}'
+                        oc label namespace "${namespace}" pbs.hibernated=true --overwrite
+                      fi
+                    done

@@ -7,10 +7,14 @@ from pathlib import Path
 
 import pytest
 
+from play_book_studio.cluster.workspace_models import WorkspaceHandle
+from play_book_studio.config.settings import Settings
 from play_book_studio.db.terminal_learning_repository import CommandCheck, evaluate_command_check_output
 from play_book_studio.http.terminal_session import TerminalSessionConfig, resolve_shell_args
-from play_book_studio.http.terminal_ws import build_terminal_session_config
-from play_book_studio.config.settings import Settings
+from play_book_studio.http.terminal_ws import (
+    build_terminal_session_config,
+    build_workspace_terminal_session_config,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TEST_ROOT = REPO_ROOT / "tmp" / "terminal_session_tests"
@@ -47,6 +51,20 @@ def test_terminal_session_config_resolves_relative_workdir():
     config = build_terminal_session_config(settings, TEST_ROOT)
 
     assert config.workdir == Path(TEST_ROOT, "workspace")
+
+
+def test_workspace_terminal_session_config_routes_to_sandbox_entrypoint():
+    TEST_ROOT.mkdir(parents=True, exist_ok=True)
+    settings = Settings(root_dir=TEST_ROOT, terminal_sandbox_shell="/bin/bash")
+    workspace = WorkspaceHandle(namespace="pbs-user-a3f9c1d2", pod_name="sandbox-abc", ready=True)
+
+    config = build_workspace_terminal_session_config(settings, TEST_ROOT, workspace)
+
+    assert config.shell == "/app/scripts/sandbox-exec-entrypoint.sh"
+    assert config.workdir == TEST_ROOT
+    assert config.env["PBS_SANDBOX_NAMESPACE"] == "pbs-user-a3f9c1d2"
+    assert config.env["PBS_SANDBOX_POD"] == "sandbox-abc"
+    assert config.env["PBS_SANDBOX_SHELL"] == "/bin/bash"
 
 
 def test_evaluate_command_check_output_requires_scoped_stdout_match():
@@ -91,5 +109,5 @@ def test_terminal_entrypoint_does_not_fallback_to_local_shell_without_cluster_co
     output = result.stdout + result.stderr
     assert result.returncode == 1
     assert "Local shell fallback is disabled" in output
-    assert "클러스터 재연결이 필요합니다" in output
+    assert "Refresh the OpenShift API URL and token" in output
     assert "SHOULD_NOT_RUN" not in output
