@@ -44,7 +44,7 @@ v0.1.3은 다음 두 축을 합친다.
 ### Core (P0 - v0.1.3 릴리스 기준)
 
 - [x] v0.1.3 브랜치 생성 및 planner 작성
-- [ ] backend broker ServiceAccount(`pbs-system:terminal-broker`) + ClusterRole/RoleBinding 정의
+- [x] backend broker ServiceAccount(`pbs-ocpops:terminal-broker`) + ClusterRole/RoleBinding 정의
 - [ ] `cluster/workspace_provisioner.py` 신규: `ensure_user_workspace(owner_hash)` / `hibernate_user_workspace` / `wake_user_workspace` / `delete_user_workspace`
 - [ ] namespace `pbs-user-<owner_hash[:8]>` 자동 생성 + 라벨 부착
 - [ ] ServiceAccount `learner` + RoleBinding `edit` 자동 생성
@@ -789,6 +789,8 @@ oc rollout status deployment/web -n pbs-ocpops
 
 ## 작업 메모
 
+- 2026-05-14: v0.1.2 smoke/report 산출물은 평가 증거일 뿐 문서 검색/추천 질문 소스가 아니어야 한다. `corpus_import.iter_corpus_source_files`에서 `reports/`, `tmp/`, `artifacts/`, `dist/`, `node_modules/` 등을 제외하도록 막았다. 서버 DB에 이미 `reports`/`smoke`/`report` 계열 document_sources 또는 document_chunks가 들어갔는지는 배포 후 SQL로 점검하고, 발견되면 해당 source와 연결 chunks를 반드시 삭제/재색인한다.
+- 2026-05-14: Phase C 첫 패치로 `deploy/openshift/broker-rbac.yaml`을 추가했다. 현재 kustomize 구조에 맞춰 broker SA는 `pbs-ocpops:terminal-broker`로 두고, app Deployment만 이 SA를 사용한다. web Deployment는 기존 `playbookstudio` SA를 유지한다.
 - 2026-05-13: planner 작성. v0.1.2 Phase D 마무리(studio_live_smoke 0.85 도달, Playwright/OCP rollout)와 v0.1.3 Phase A/B를 병렬 진행 가능. C/D는 broker RBAC와 클러스터 변경이 들어가므로 순서대로.
 - 2026-05-13: 사용자 식별 결정 — SMTP 부재로 매직링크/이메일은 비범위. owner_hash 쿠키(1년) 기반 익명-자동 부트스트랩으로 합의. 매직링크/SSO는 v0.1.4 이후 `resolve_session_owner` 헤더 1순위 자리에 점진 확장.
 - 2026-05-13: `ops_console_api.py`의 `/api/v1/chat/query/stream`이 라이브 cluster chat 백엔드로 이미 완성되어 있음을 확인. v0.1.3은 새 백엔드를 만들지 않고 Workspace를 이 엔드포인트로 라우팅 + namespace를 사용자 workspace로 강제하는 작업으로 정의.
