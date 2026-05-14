@@ -109,7 +109,7 @@ import {
   truthSurfaceCopy,
 } from './workspace/WorkspaceAnswer';
 import WorkspaceViewerPanel from './workspace/WorkspaceViewerPanel';
-import TerminalSessionPanel, { type TerminalLearningContext } from './workspace/TerminalSessionPanel';
+import TerminalSessionPanel, { type TerminalConnectionState, type TerminalLearningContext } from './workspace/TerminalSessionPanel';
 import CourseChatArtifacts from './CourseChatArtifacts';
 import type {
   Message,
@@ -1249,6 +1249,7 @@ export default function WorkspacePage() {
   const [isFooterProfileLoading, setIsFooterProfileLoading] = useState(false);
   const [currentMode, setCurrentMode] = useState<WorkspaceChatMode>('document');
   const [clusterConnectionStatus, setClusterConnectionStatus] = useState<ClusterConnectionStatus>('not_connected');
+  const [terminalConnectionState, setTerminalConnectionState] = useState<TerminalConnectionState>('closed');
   const [selectedResourceKind, setSelectedResourceKind] = useState<ClusterResourceKind>('pods');
   const [selectedResourceNamespace, setSelectedResourceNamespace] = useState('default');
   const [clusterResources, setClusterResources] = useState<OcpResourceItem[]>([]);
@@ -1321,6 +1322,8 @@ export default function WorkspacePage() {
   }, [activeFooterConnection]);
   const wikiOverlayUserId = footerProfileName;
   const isClusterConnected = clusterConnectionStatus === 'connected';
+  const isTerminalConnected = terminalConnectionState === 'connected';
+  const isLiveClusterAvailable = isClusterConnected && isTerminalConnected;
   const clusterStatusLabel =
     clusterConnectionStatus === 'connected'
       ? 'Connected'
@@ -1375,10 +1378,10 @@ export default function WorkspacePage() {
   }, [activeFooterConnection?.connection_id]);
 
   useEffect(() => {
-    if (currentMode === 'live_cluster' && !isClusterConnected) {
+    if (currentMode === 'live_cluster' && !isLiveClusterAvailable) {
       setCurrentMode('document');
     }
-  }, [currentMode, isClusterConnected]);
+  }, [currentMode, isLiveClusterAvailable]);
 
   useEffect(() => {
     if (activeFooterConnection?.default_namespace && selectedResourceNamespace === 'default') {
@@ -4118,6 +4121,41 @@ export default function WorkspacePage() {
                   </button>
                 </div>
               )}
+              <div className="chat-mode-switch chat-mode-switch--top" role="tablist" aria-label="Chat mode">
+                <button
+                  type="button"
+                  className={`chat-mode-btn ${currentMode === 'document' ? 'active' : ''}`}
+                  onClick={() => setCurrentMode('document')}
+                  aria-selected={currentMode === 'document'}
+                >
+                  <BookOpen size={14} />
+                  Docs
+                </button>
+                <button
+                  type="button"
+                  className={`chat-mode-btn ${currentMode === 'live_cluster' ? 'active' : ''}`}
+                  onClick={() => {
+                    if (isLiveClusterAvailable) {
+                      setCurrentMode('live_cluster');
+                    }
+                  }}
+                  aria-selected={currentMode === 'live_cluster'}
+                  disabled={!isLiveClusterAvailable}
+                  title={
+                    !isClusterConnected
+                      ? 'Cluster is not connected'
+                      : !isTerminalConnected
+                        ? 'Terminal session is not connected'
+                        : 'Live Cluster Mode'
+                  }
+                >
+                  <Cpu size={14} />
+                  Live
+                </button>
+                <span className={`chat-mode-status chat-mode-status--${clusterConnectionStatus}`}>
+                  {isTerminalConnected ? clusterStatusLabel : 'Terminal offline'}
+                </span>
+              </div>
               <div className="chat-messages" ref={chatMessagesRef}>
                 {messages.length === 0 && (
                   <div className="chat-welcome">
@@ -4350,35 +4388,6 @@ export default function WorkspacePage() {
               )}
 
               <div className="chat-input-wrapper">
-                <div className="chat-mode-switch" role="tablist" aria-label="Chat mode">
-                  <button
-                    type="button"
-                    className={`chat-mode-btn ${currentMode === 'document' ? 'active' : ''}`}
-                    onClick={() => setCurrentMode('document')}
-                    aria-selected={currentMode === 'document'}
-                  >
-                    <BookOpen size={14} />
-                    Document Learning
-                  </button>
-                  <button
-                    type="button"
-                    className={`chat-mode-btn ${currentMode === 'live_cluster' ? 'active' : ''}`}
-                    onClick={() => {
-                      if (isClusterConnected) {
-                        setCurrentMode('live_cluster');
-                      }
-                    }}
-                    aria-selected={currentMode === 'live_cluster'}
-                    disabled={!isClusterConnected}
-                    title={isClusterConnected ? 'Live Cluster Mode' : 'Cluster is not connected'}
-                  >
-                    <Cpu size={14} />
-                    Live Cluster
-                  </button>
-                  <span className={`chat-mode-status chat-mode-status--${clusterConnectionStatus}`}>
-                    {clusterStatusLabel}
-                  </span>
-                </div>
                 {(activeRepository || activeDocumentId) && (
                   <div className="chat-scope-status">
                     <BookOpen size={14} />
@@ -4580,6 +4589,7 @@ export default function WorkspacePage() {
               <TerminalSessionPanel
                 learningContext={terminalLearningContext}
                 onCommandSubmitted={handleTerminalCommandSubmitted}
+                onSessionStateChange={setTerminalConnectionState}
               />
             ) : (
               <>

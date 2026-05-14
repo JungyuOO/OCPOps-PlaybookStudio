@@ -3,7 +3,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 
-type TerminalConnectionState = 'connecting' | 'connected' | 'closed' | 'error';
+export type TerminalConnectionState = 'connecting' | 'connected' | 'closed' | 'error';
 
 interface TerminalSocketEvent {
   type?: string;
@@ -30,6 +30,7 @@ interface TerminalSessionPanelProps {
   learningContext?: TerminalLearningContext;
   onCommandCheckResult?: (event: TerminalSocketEvent) => void;
   onCommandSubmitted?: (command: string) => void;
+  onSessionStateChange?: (state: TerminalConnectionState) => void;
 }
 
 function defaultTerminalWebSocketUrl(): string {
@@ -42,7 +43,12 @@ function defaultTerminalWebSocketUrl(): string {
   return `${protocol}//${host}/terminal-ws/`;
 }
 
-export default function TerminalSessionPanel({ learningContext, onCommandCheckResult, onCommandSubmitted }: TerminalSessionPanelProps) {
+export default function TerminalSessionPanel({
+  learningContext,
+  onCommandCheckResult,
+  onCommandSubmitted,
+  onSessionStateChange,
+}: TerminalSessionPanelProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -70,6 +76,10 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
     learningContext?.learningPathId,
     learningContext?.learningStepId,
   ]);
+
+  useEffect(() => {
+    onSessionStateChange?.(state);
+  }, [onSessionStateChange, state]);
 
   useEffect(() => {
     const host = containerRef.current;

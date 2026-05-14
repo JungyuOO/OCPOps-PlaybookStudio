@@ -2962,6 +2962,16 @@
   min-height: 34px;
 }
 
+.chat-mode-switch--top {
+  align-self: flex-start;
+  flex-shrink: 0;
+  margin: 12px 24px 0;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(7, 11, 18, 0.72);
+}
+
 .chat-mode-btn {
   display: inline-flex;
   align-items: center;
