@@ -183,6 +183,18 @@ function citationEvidenceMeta(citation: ChatCitation): string {
   ].filter(Boolean).join(' · ');
 }
 
+const TERMINAL_OUTPUT_EXCERPT_LIMIT = 1000;
+
+function normalizeTerminalOutputExcerpt(value: string): string {
+  return value
+    .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
+    .replace(/\r/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(-TERMINAL_OUTPUT_EXCERPT_LIMIT);
+}
+
 function opsSourceToChatCitation(source: OpsChatSource, fallbackIndex: number): ChatCitation {
   const index = Number.isFinite(source.index) && source.index > 0 ? source.index : fallbackIndex;
   return {
@@ -243,6 +255,7 @@ interface ClusterSignalEvent {
 
 interface RecentTerminalAction {
   command: string;
+  outputExcerpt: string;
   timestamp: string;
 }
 
@@ -1505,7 +1518,7 @@ export default function WorkspacePage() {
 
   const handleTerminalCommandSubmitted = useCallback((command: string) => {
     setRecentTerminalActions((current) => [
-      { command, timestamp: new Date().toISOString() },
+      { command, outputExcerpt: '', timestamp: new Date().toISOString() },
       ...current.filter((item) => item.command !== command),
     ].slice(0, 6));
     const signal = detectClusterSignal(command);
@@ -1524,6 +1537,23 @@ export default function WorkspacePage() {
       void refreshClusterResources();
     }
   }, [isClusterConnected, refreshClusterResources, refreshSignalEvents]);
+
+  const handleTerminalOutputChunk = useCallback((chunk: string) => {
+    if (!chunk) {
+      return;
+    }
+    setRecentTerminalActions((current) => {
+      if (current.length === 0) {
+        return current;
+      }
+      const [latest, ...rest] = current;
+      const outputExcerpt = normalizeTerminalOutputExcerpt(`${latest.outputExcerpt}\n${chunk}`);
+      if (!outputExcerpt || outputExcerpt === latest.outputExcerpt) {
+        return current;
+      }
+      return [{ ...latest, outputExcerpt }, ...rest];
+    });
+  }, []);
 
   const refreshDashboard = useCallback(async () => {
     if (!activeFooterConnection || !isClusterConnected) {
@@ -3160,6 +3190,7 @@ export default function WorkspacePage() {
             history: messages.slice(-6).map((item) => ({ role: item.role, text: item.content })),
             recent_terminal_actions: recentTerminalActions.map((item) => ({
               command: item.command,
+              output_excerpt: item.outputExcerpt || undefined,
               timestamp: item.timestamp,
             })),
           }, (event) => {
@@ -4687,6 +4718,7 @@ export default function WorkspacePage() {
               <TerminalSessionPanel
                 learningContext={terminalLearningContext}
                 onCommandSubmitted={handleTerminalCommandSubmitted}
+                onOutputChunk={handleTerminalOutputChunk}
                 onSessionStateChange={setTerminalConnectionState}
               />
             ) : (

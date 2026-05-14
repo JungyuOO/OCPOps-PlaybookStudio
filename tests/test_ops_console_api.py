@@ -275,7 +275,11 @@ def test_ops_console_recent_terminal_actions_are_sanitized() -> None:
     actions = ops_console_api._recent_terminal_actions(
         {
             "recent_terminal_actions": [
-                {"command": "  oc   get   pods   -n   payments  ", "timestamp": "2026-05-14T04:37:58.850361Z"},
+                {
+                    "command": "  oc   get   pods   -n   payments  ",
+                    "output_excerpt": "NAME READY STATUS\npayments-api-1 1/1 Running",
+                    "timestamp": "2026-05-14T04:37:58.850361Z",
+                },
                 {"command": ""},
                 "not-a-row",
                 {"command": "kubectl get deploy"},
@@ -291,6 +295,7 @@ def test_ops_console_recent_terminal_actions_are_sanitized() -> None:
     assert len(actions) == 6
     assert actions[0] == {
         "command": "oc get pods -n payments",
+        "output_excerpt": "NAME READY STATUS\npayments-api-1 1/1 Running",
         "timestamp": "2026-05-14T04:37:58.850361Z",
     }
     assert actions[-1]["command"] == "oc get svc"
@@ -343,7 +348,11 @@ def test_ops_console_live_chat_includes_recent_terminal_actions(monkeypatch) -> 
                 "namespace": "payments",
                 "history": [],
                 "recent_terminal_actions": [
-                    {"command": "oc get pods -n payments", "timestamp": "2026-05-14T04:37:58Z"}
+                    {
+                        "command": "oc get pods -n payments",
+                        "output_excerpt": "NAME READY STATUS\npayments-api-1 1/1 Running",
+                        "timestamp": "2026-05-14T04:37:58Z",
+                    }
                 ],
             },
             state={
@@ -364,6 +373,10 @@ def test_ops_console_live_chat_includes_recent_terminal_actions(monkeypatch) -> 
     assert response["lane"] == "live"
     assert response["answer"] == "payments namespace의 Pod는 현재 Running 상태입니다."
     assert user_payload["recent_terminal_actions"] == [
-        {"command": "oc get pods -n payments", "timestamp": "2026-05-14T04:37:58Z"}
+        {
+            "command": "oc get pods -n payments",
+            "output_excerpt": "NAME READY STATUS\npayments-api-1 1/1 Running",
+            "timestamp": "2026-05-14T04:37:58Z",
+        }
     ]
     assert user_payload["live_context"]["namespace"] == "payments"

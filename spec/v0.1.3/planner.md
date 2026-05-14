@@ -62,7 +62,7 @@ v0.1.3은 다음 두 축을 합친다.
 - [x] Live Cluster 토글을 채팅 화면 좌측 상단 `Docs / Live` 토글 UI로 이동
 - [x] `currentMode === 'live_cluster'`일 때 `sendOpsChatStream('/api/v1/chat/query/stream', ...)`로 분기
 - [x] Live 응답(`OpsChatResponse` → 기존 메시지 형) 변환 어댑터
-- [x] 최근 터미널 명령을 Live chat payload에 attach (`recent_terminal_actions`; 출력 결과 excerpt는 Step 5에서 별도 확장)
+- [x] 최근 터미널 명령/결과를 Live chat payload에 attach (`recent_terminal_actions`)
 - [ ] Live chat의 `namespace`는 자동 발급된 `pbs-user-<owner_hash[:8]>`로 라우팅
 - [x] backend `_chat_payload`가 `recent_terminal_actions`를 받아 cluster context와 함께 의도 분류/근거로 사용
 - [ ] ResourceQuota 자동 부착(per-user ns: cpu 500m, mem 1Gi, pods 5, pvc 2)
@@ -794,4 +794,4 @@ oc rollout status deployment/web -n pbs-ocpops
 - 2026-05-13: `ops_console_api.py`의 `/api/v1/chat/query/stream`이 라이브 cluster chat 백엔드로 이미 완성되어 있음을 확인. v0.1.3은 새 백엔드를 만들지 않고 Workspace를 이 엔드포인트로 라우팅 + namespace를 사용자 workspace로 강제하는 작업으로 정의.
 - 2026-05-13: WorkspacePage.tsx 라인 표시 — 토글 UI(4352-4381), `requestPayload`(3018-3034), `sendChatStream` 호출(3098), `isClusterConnected` 정의(1323), Live 강제 다운그레이드 useEffect(1377-1381). TerminalSessionPanel.tsx의 Session exited 처리(269-273)가 부모에 알리지 않는 점을 Step 2에서 콜백 prop으로 해결.
 - 2026-05-14: `feat/v0.1.3/user-workspace-bootstrap` 브랜치 생성. Phase A 첫 패치로 `TerminalSessionPanel`의 `TerminalConnectionState`를 export하고 `onSessionStateChange` 콜백을 추가했다. `WorkspacePage`는 `terminalConnectionState`를 보유하며 Live Cluster 진입 조건을 `cluster connected + terminal connected`로 강화했고, 채팅 입력창 위에 있던 모드 전환을 채팅 화면 좌측 상단 `Docs / Live` 토글로 이동했다. 검증: `npm --prefix apps/web run build` 통과.
-- 2026-05-14: Phase B 라우팅 완료. Workspace Live 모드 전송 경로를 `/api/chat/stream`에서 기존 `sendOpsChatStream('/api/v1/chat/query/stream')`로 분기했고, `OpsChatResponse`를 Workspace `ChatResponse`/message 형태로 변환하는 어댑터를 추가했다. 최근 터미널 명령은 `recent_terminal_actions`로 payload에 포함하고 backend `_chat_payload`가 의도 분류 및 LLM context에 반영한다. 출력 결과 excerpt 캡처는 Step 5 후속 확장으로 남겼다. 검증: `npm --prefix apps/web run build`, `python -m compileall -q src`, `pytest tests/test_ops_console_api.py -q` 통과.
+- 2026-05-14: Phase B 라우팅 완료. Workspace Live 모드 전송 경로를 `/api/chat/stream`에서 기존 `sendOpsChatStream('/api/v1/chat/query/stream')`로 분기했고, `OpsChatResponse`를 Workspace `ChatResponse`/message 형태로 변환하는 어댑터를 추가했다. 최근 터미널 명령과 output excerpt는 `recent_terminal_actions`로 payload에 포함하고 backend `_chat_payload`가 의도 분류 및 LLM context에 반영한다. 검증: `npm --prefix apps/web run build`, `python -m compileall -q src`, `pytest tests/test_ops_console_api.py -q` 통과.

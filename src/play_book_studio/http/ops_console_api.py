@@ -1058,9 +1058,11 @@ def _recent_terminal_actions(payload: dict[str, Any]) -> list[dict[str, str]]:
         command = re.sub(r"\s+", " ", str(row.get("command") or "")).strip()
         if not command:
             continue
+        output_excerpt = re.sub(r"\s+\n", "\n", str(row.get("output_excerpt") or "")).strip()
         actions.append(
             {
                 "command": command[:240],
+                "output_excerpt": output_excerpt[-1000:],
                 "timestamp": str(row.get("timestamp") or "").strip()[:40],
             }
         )

@@ -30,6 +30,7 @@ interface TerminalSessionPanelProps {
   learningContext?: TerminalLearningContext;
   onCommandCheckResult?: (event: TerminalSocketEvent) => void;
   onCommandSubmitted?: (command: string) => void;
+  onOutputChunk?: (chunk: string) => void;
   onSessionStateChange?: (state: TerminalConnectionState) => void;
 }
 
@@ -47,6 +48,7 @@ export default function TerminalSessionPanel({
   learningContext,
   onCommandCheckResult,
   onCommandSubmitted,
+  onOutputChunk,
   onSessionStateChange,
 }: TerminalSessionPanelProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -255,7 +257,9 @@ export default function TerminalSessionPanel({
       try {
         payload = JSON.parse(String(event.data)) as TerminalSocketEvent;
       } catch {
-        terminal.write(String(event.data));
+        const chunk = String(event.data);
+        terminal.write(chunk);
+        onOutputChunk?.(chunk);
         return;
       }
       if (payload.type === 'ready') {
@@ -268,7 +272,9 @@ export default function TerminalSessionPanel({
         return;
       }
       if (payload.type === 'output') {
-        terminal.write(payload.data ?? '');
+        const chunk = payload.data ?? '';
+        terminal.write(chunk);
+        onOutputChunk?.(chunk);
         return;
       }
       if (payload.type === 'command_check_result') {
@@ -311,7 +317,7 @@ export default function TerminalSessionPanel({
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [connectionKey, onCommandCheckResult, onCommandSubmitted, stableLearningContext, wsUrl]);
+  }, [connectionKey, onCommandCheckResult, onCommandSubmitted, onOutputChunk, stableLearningContext, wsUrl]);
 
   return (
     <section className="terminal-session-shell" aria-label="Terminal Session">
