@@ -375,11 +375,22 @@ Canonical searchable chunk and Qdrant projection source.
 | `cluster_topology` | text | no | SNO/compact/HA/etc. |
 | `network_mode` | text | no | connected/disconnected/proxy/etc. |
 | `environment` | text | no | lab/prod/airgapped/etc. |
+| `doc_type` | text | yes | `official_doc`, `runbook`, `lab_guide`, `reference`, `release_note`, `troubleshooting_note`. |
+| `task_intent` | text | no | Primary user task: `install`, `configure`, `verify`, `troubleshoot`, `upgrade`, `operate`, `cleanup`, `explain`. |
+| `lifecycle_phase` | text | no | Operational phase: `plan`, `prepare`, `install`, `post_install`, `operate`, `upgrade`, `recover`. |
+| `audience_level` | text | no | `beginner`, `intermediate`, `advanced`, `expert`. |
+| `privilege_scope` | text | no | Required access: `cluster_admin`, `namespace_admin`, `developer`, `readonly`, `unknown`. |
 | `cli_commands` | jsonb | yes | Command list. |
+| `command_names` | jsonb | yes | Normalized command names such as `oc`, `openshift-install`, `helm`, `podman`. |
 | `k8s_objects` | jsonb | yes | Kubernetes/OpenShift object names. |
+| `resource_kinds` | jsonb | yes | Resource kinds such as `Deployment`, `Route`, `ClusterVersion`, `InstallConfig`. |
+| `api_groups` | jsonb | yes | API groups such as `apps`, `route.openshift.io`, `operators.coreos.com`. |
+| `component_names` | jsonb | yes | OCP components such as `ingress`, `authentication`, `machine-config`, `olm`, `monitoring`. |
 | `operator_names` | jsonb | yes | Operator names. |
 | `error_strings` | jsonb | yes | Troubleshooting strings. |
+| `symptom_terms` | jsonb | yes | Normalized failure symptoms such as `pod_crashloop`, `tls_error`, `image_pull_error`. |
 | `verification_hints` | jsonb | yes | Answer/check hints. |
+| `applicability_notes` | text | no | Short note for version/platform caveats. |
 | `beginner_narrative` | text | no | Learner-facing explanation. |
 | `review_status` | text | yes | `unreviewed`, `approved`, `rejected`, `generated`. |
 | `trust_score` | numeric | yes | Chunk trust score. |
@@ -398,6 +409,41 @@ Allowed metadata examples:
 ```
 
 Do not store `domain`, `install_category`, `source_url`, `viewer_artifact_path`, `next_refs`, or candidate questions only in `metadata`.
+
+### High-Confidence Retrieval Metadata
+
+Only promote metadata when it has a concrete retrieval use. The following fields are worth first-class treatment because they either appear in real OCP questions, prevent irrelevant matches, or support guided next-step answers.
+
+| Field | Why It Helps Search | First-Class? |
+| --- | --- | --- |
+| `domain` | Routes broad questions such as install, networking, storage, auth, monitoring, troubleshooting. | yes |
+| `install_category` | Separates IPI, UPI, agent-based, assisted, disconnected, and post-install content. | yes |
+| `platform` / `provider` | Prevents Azure/AWS/vSphere/baremetal install answers from mixing. | yes |
+| `ocp_version` | Avoids answering with incompatible version behavior. | yes |
+| `doc_type` | Allows official docs to outrank labs/reports and excludes release notes unless requested. | yes |
+| `task_intent` | Distinguishes "how to configure", "how to verify", and "how to troubleshoot" even inside the same section. | yes |
+| `lifecycle_phase` | Supports next-step guidance: plan -> prepare -> install -> post_install -> operate -> recover. | yes |
+| `audience_level` | Lets beginner mode prefer explanatory chunks and expert mode prefer reference/runbook chunks. | yes |
+| `privilege_scope` | Avoids suggesting cluster-admin operations for developer-scope questions. | yes |
+| `source_path`, `source_anchor`, `source_json_path`, `source_location` | Required for citation, viewer jump, dedup, and reparse provenance. | yes |
+| `command_names` / `cli_commands` | Captures exact command intent such as `oc rollout status` or `openshift-install create cluster`. | yes |
+| `resource_kinds` / `api_groups` / `k8s_objects` | Improves matches for Kubernetes/OCP resource questions where the natural language is short. | yes |
+| `component_names` / `operator_names` | Separates ingress, auth, monitoring, OLM, machine-config, and other component-specific answers. | yes |
+| `error_strings` / `symptom_terms` | Critical for troubleshooting queries copied from logs or described as symptoms. | yes |
+| `verification_hints` | Supports answers that include "how to confirm it worked" without extra retrieval. | yes |
+| `review_status` / `trust_score` | Lets retrieval prefer approved official/runbook content over generated or transitional chunks. | yes |
+
+Fields that should usually stay in `metadata`:
+
+- parser name/version details beyond `parser_name` and `parser_version`
+- importer run ids
+- raw upstream JSON keys that are not stable paths
+- UI card decoration
+- generated summary diagnostics
+- experimental model scores
+- debug timings
+
+Do not promote a field just because it exists in JSON. Promote it only when retrieval, citation, access control, or guided learning will query it.
 
 ### JSON Source Text and Embedding Boundary
 
