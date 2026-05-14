@@ -72,7 +72,11 @@ Qdrant payload, viewer JSON/HTML, course runtime chunk가 동시에 존재한다
 
 Keep existing tables where possible, but define ownership clearly:
 
+가능하면 기존 테이블은 유지하되, 각 테이블의 ownership을 명확히 정의한다.
+
 Primary v0.1.4 decision: parser output tables and corpus tables should not be the same conceptual layer.
+
+v0.1.4의 핵심 결정은 parser output table과 corpus table을 같은 개념 계층으로 보지 않는 것이다.
 
 - Parsing layer:
   - `parse_jobs`

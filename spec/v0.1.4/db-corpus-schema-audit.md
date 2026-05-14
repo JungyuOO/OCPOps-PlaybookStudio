@@ -6,6 +6,14 @@ This audit is a planning artifact only. It does not define a migration yet.
 
 v0.1.4 should first decide which tables and columns are canonical corpus data, derived artifacts, runtime status, or legacy compatibility. RAG quality work should not continue until the database contract makes it obvious where document truth lives and which JSON files or viewer outputs are only artifacts.
 
+## 한국어 요약
+
+이 문서는 migration 정의가 아니라 v0.1.4 schema 결정을 위한 계획 문서다.
+
+v0.1.4에서는 먼저 어떤 테이블/컬럼이 canonical corpus인지, 어떤 것이 파생 artifact인지, 어떤 것이 runtime status인지, 어떤 것이 legacy compatibility인지 결정해야 한다. 문서 truth가 어디에 있고, JSON 파일이나 viewer output이 단순 artifact인지 명확해지기 전에는 RAG 품질 개선을 계속하지 않는다.
+
+가장 중요한 결론은 parsing storage와 corpus storage를 분리하는 것이다. parser가 추출한 원본/중간 산출물과 RAG가 검색해야 하는 정제된 corpus truth를 같은 계층으로 취급하면, OCR/image description/viewer JSON/course runtime/search chunk가 계속 섞인다.
+
 ## Classification
 
 - `canonical`: Source of truth for document parsing, retrieval, citation, or learning flow.
@@ -14,6 +22,15 @@ v0.1.4 should first decide which tables and columns are canonical corpus data, d
 - `artifact`: Viewer/render/cache/output material that should not drive canonical schema.
 - `legacy`: Keep temporarily for compatibility, but do not build new behavior on top.
 - `candidate`: Useful concept, but needs rename, merge, or stronger ownership before implementation.
+
+## 분류 기준
+
+- `canonical`: 문서 parsing, 검색, citation, 학습 흐름의 source of truth.
+- `derived`: canonical row에서 다시 만들 수 있는 파생 데이터.
+- `status`: job, sync, runtime, audit 상태.
+- `artifact`: viewer/render/cache/output 산출물. canonical schema를 결정하면 안 됨.
+- `legacy`: 호환성을 위해 임시 유지하지만 새 기능의 기반으로 삼지 않음.
+- `candidate`: 개념은 유용하지만 구현 전에 이름 변경, 병합, ownership 정리가 필요한 항목.
 
 ## Table-Level Findings
 
@@ -39,6 +56,23 @@ v0.1.4 should first decide which tables and columns are canonical corpus data, d
 | `course_assets` | Course runtime asset storage | artifact | Keep as course artifact or derive from document assets where possible | Binary/runtime asset store should not define corpus schema. |
 | `course_manifests` | Course runtime manifest | artifact | Keep as derived course artifact | Manifest should be generated from canonical course/corpus state. |
 
+## 테이블 단위 결론
+
+| Table | 현재 역할 | 분류 | v0.1.4 방향 | 이유 |
+| --- | --- | --- | --- | --- |
+| `document_sources` | 원본 문서 identity | canonical | 유지하되 source URI/version/locale/collection을 명확히 함 | 문서가 어디서 왔는지 답해야 함. |
+| `document_versions` | 원본 문서의 immutable version | canonical | 유지 | 재파싱/재색인 재현성에 필요. |
+| `parse_jobs` | parser 실행 상태 | status | 유지하되 corpus truth와 분리 | 처리 상태이지 문서 의미가 아님. |
+| `parsed_documents` | parser가 만든 문서 단위 출력 | parsing canonical | parsing layer로 유지 | parser output/provenance 보존용. |
+| `document_blocks` | OCR/text/table/image/code 등 구조 단위 | parsing canonical | parsing layer로 유지 | chunking 이전의 추출 provenance 보존용. |
+| `document_assets` | 이미지/도표/OCR/description 산출물 | parsing canonical | parsing layer로 유지 | image 기반 RAG와 viewer 참조에 필요. |
+| `document_chunks` | 현재 retrieval/citation 단위 | candidate | `corpus_chunks`로 개념 전환하거나 compatibility view로 분리 결정 필요 | 현재 parsing과 corpus 의미가 섞여 있음. |
+| `embedding_jobs` | embedding 상태 | status | projection/status 계층으로 유지 | corpus truth가 아님. |
+| `qdrant_index_entries` | Qdrant sync 상태 | derived/status | projection/status 계층으로 유지 | Qdrant는 corpus에서 재생성 가능해야 함. |
+| `course_chunks` | course runtime card/content | artifact/candidate | corpus truth로 쓰지 않음 | 학습 runtime artifact이지 원문 corpus가 아님. |
+| `course_assets` | course runtime asset | artifact | runtime artifact로 유지 | binary/runtime 저장소가 corpus schema를 결정하면 안 됨. |
+| `course_manifests` | course runtime manifest | artifact | 파생 manifest로 유지 | canonical corpus/course state에서 생성되어야 함. |
+
 ## Main Problem
 
 The schema has useful pieces, but their boundaries are soft:
@@ -49,11 +83,27 @@ The schema has useful pieces, but their boundaries are soft:
 - Course runtime tables look similar to document chunk tables, but they are not the same kind of truth.
 - Next-step learning references exist in metadata, but are not first-class enough for reliable guided learning.
 
+## 현재 핵심 문제
+
+schema에 필요한 조각들은 이미 있지만 경계가 약하다.
+
+- `metadata jsonb`와 `payload jsonb`가 중요한 의미를 담고 있지만 안정적인 계약이 없다.
+- source taxonomy가 `source_kind`, `source_scope`, `source_type`, `source_lane`, `source_collection`, repository field로 흩어져 있다.
+- viewer path와 JSON/HTML artifact가 retrieval payload에 들어가지만, DB가 이것이 artifact라고 명확히 표현하지 않는다.
+- course runtime table은 document chunk table과 비슷해 보이지만 같은 truth가 아니다.
+- 다음 단계 학습 reference가 metadata에 있긴 하지만 guided learning을 안정적으로 만들 만큼 first-class가 아니다.
+
 ## Priority 1: Split Parsing Storage From Corpus Storage
 
 The first v0.1.4 schema decision is not which individual columns to add. It is to separate parsing-stage data from canonical corpus-stage data.
 
 Parsing tables should preserve extraction provenance and parser output. Corpus tables should represent the cleaned, queryable, learner-facing document graph. Qdrant, viewer JSON/HTML, and course runtime artifacts should derive from corpus tables, not directly from parser output.
+
+## 1순위: Parsing Storage와 Corpus Storage 분리
+
+v0.1.4의 첫 schema 결정은 개별 컬럼을 무엇을 추가할지가 아니다. 먼저 parsing-stage data와 canonical corpus-stage data를 분리해야 한다.
+
+Parsing table은 parser output과 extraction provenance를 보존해야 한다. Corpus table은 정제되고 검색 가능하며 학습자에게 보여줄 수 있는 document graph를 표현해야 한다. Qdrant, viewer JSON/HTML, course runtime artifact는 parser output에서 직접 파생되는 것이 아니라 corpus table에서 파생되어야 한다.
 
 ### Proposed Boundary
 
@@ -64,6 +114,15 @@ Parsing tables should preserve extraction provenance and parser output. Corpus t
 | Projection | Track rebuildable downstream indexes | `qdrant_index_entries`, `embedding_jobs` | Canonical text or metadata ownership |
 | Runtime Artifact | Store generated course/viewer/session outputs | `course_chunks`, `course_assets`, `course_manifests`, viewer JSON/HTML files | Canonical document truth |
 
+### 제안 경계
+
+| Layer | 목적 | 예시 테이블 | 책임지지 않는 것 |
+| --- | --- | --- | --- |
+| Parsing | raw extraction, OCR, image description, block, parser warning, layout provenance 보존 | `parsed_documents`, `document_blocks`, `document_assets`, `parse_jobs` | 검색 ranking 계약, guided learning graph, viewer runtime shape |
+| Corpus | retrieval, citation, filtering, guided learning에 쓰이는 normalized document/chunk truth 저장 | future `corpus_documents`, future `corpus_chunks`, future relation tables | raw parser artifact, OCR/layout debug detail, job state |
+| Projection | 재생성 가능한 downstream index 상태 추적 | `qdrant_index_entries`, `embedding_jobs` | canonical text/metadata ownership |
+| Runtime Artifact | 생성된 course/viewer/session output 저장 | `course_chunks`, `course_assets`, `course_manifests`, viewer JSON/HTML files | canonical document truth |
+
 ### Why This Should Be First
 
 - It removes ambiguity between "what the parser saw" and "what RAG should search".
@@ -71,6 +130,14 @@ Parsing tables should preserve extraction provenance and parser output. Corpus t
 - It gives OCR and image description a proper home without forcing every extraction detail into retrieval chunks.
 - It makes re-parsing safe: parser output can change while corpus rows remain versioned and auditable.
 - It creates a clean seam for quality work: normalize and enrich into corpus first, then project to Qdrant.
+
+### 이것이 먼저여야 하는 이유
+
+- "parser가 본 것"과 "RAG가 검색해야 하는 것"의 모호함을 제거한다.
+- viewer/course JSON이 실수로 corpus input이 되는 것을 막는다.
+- OCR과 image description을 retrieval chunk에 억지로 밀어 넣지 않고 적절한 위치에 둘 수 있다.
+- 재파싱이 안전해진다. parser output은 바뀔 수 있지만 corpus row는 versioned/auditable하게 유지할 수 있다.
+- 품질 개선의 경계가 명확해진다. 먼저 normalize/enrich해서 corpus에 넣고, 그 다음 Qdrant로 projection한다.
 
 ### Migration Shape To Consider Later
 
@@ -95,6 +162,8 @@ embedding_jobs         -> embedding status for corpus_chunks
 ```
 
 Existing `document_chunks` may either be renamed conceptually into `corpus_chunks` or replaced by new `corpus_chunks` with a compatibility view. That decision should happen before migration SQL.
+
+기존 `document_chunks`는 개념적으로 `corpus_chunks`로 전환할 수도 있고, 새 `corpus_chunks` 테이블을 만들고 compatibility view를 둘 수도 있다. 이 결정은 migration SQL 작성 전에 먼저 내려야 한다.
 
 ## Column Audit: `document_sources`
 
@@ -485,6 +554,19 @@ Do not delete these immediately, but stop expanding them until audited:
 | `toc_path` if breadcrumb is adopted | Could become redundant. |
 | JSON array links like `child_chunk_ids`, `asset_ids` | Consider relation tables if consistency matters. |
 
+## 삭제/정리 후보
+
+바로 삭제하지는 않는다. 다만 감사가 끝나기 전까지는 아래 항목을 더 확장하지 않는다.
+
+| 후보 | 이유 |
+| --- | --- |
+| 필수 데이터처럼 쓰이는 넓은 `metadata` field | corpus 의미가 숨는다. |
+| course table의 넓은 `payload` field | runtime 계약이 숨는다. |
+| `qwen_description` / `qwen_model` 이름 | 특정 모델명에 묶인 컬럼명은 canonical이 되기 어렵다. |
+| 다른 곳에 추가된 `source_lane` | collection/scope와 중복될 가능성이 높다. |
+| breadcrumb를 도입할 경우 `toc_path` | 중복될 수 있다. |
+| `child_chunk_ids`, `asset_ids` 같은 JSON array link | consistency가 중요해지면 relation table 검토가 필요하다. |
+
 ## Decision Needed Before Migration
 
 Before writing SQL, decide these names:
@@ -494,3 +576,13 @@ Before writing SQL, decide these names:
 3. Keep JSON arrays for refs/assets or introduce relation tables.
 4. Decide whether course runtime tables remain artifacts or become a separate canonical curriculum schema.
 5. Decide the enum values for `domain`, `install_category`, `platform`, `provider`, `chunk_type`, and `block_type`.
+
+## Migration 전 결정 필요
+
+SQL을 작성하기 전에 아래 결정을 먼저 내려야 한다.
+
+1. `viewer_path`를 유지할지, `viewer_artifact_path`로 이름을 바꿀지 결정한다.
+2. `source_scope`를 유지할지, `access_scope`와 `corpus_scope`로 나눌지 결정한다.
+3. refs/assets를 JSON array로 유지할지, relation table을 만들지 결정한다.
+4. course runtime table을 artifact로 유지할지, 별도의 canonical curriculum schema로 승격할지 결정한다.
+5. `domain`, `install_category`, `platform`, `provider`, `chunk_type`, `block_type`의 enum 값을 결정한다.
