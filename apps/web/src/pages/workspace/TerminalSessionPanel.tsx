@@ -8,6 +8,8 @@ export type TerminalConnectionState = 'connecting' | 'connected' | 'closed' | 'e
 interface TerminalSocketEvent {
   type?: string;
   data?: string;
+  message?: string;
+  stage?: string;
   shell?: string;
   workdir?: string;
   cluster_server?: string;
@@ -245,7 +247,6 @@ export default function TerminalSessionPanel({
     });
 
     socket.addEventListener('open', () => {
-      setState('connected');
       fitTerminal();
       if (stableLearningContext) {
         socket.send(JSON.stringify({ type: 'context', ...stableLearningContext }));
@@ -262,12 +263,18 @@ export default function TerminalSessionPanel({
         onOutputChunk?.(chunk);
         return;
       }
+      if (payload.type === 'bootstrap_stage') {
+        const message = payload.message || payload.stage || 'Preparing terminal session.';
+        terminal.writeln(message);
+        return;
+      }
       if (payload.type === 'ready') {
         setSessionMeta({
           shell: payload.shell ?? '',
           workdir: payload.workdir ?? '',
           clusterServer: payload.cluster_server ?? '',
         });
+        setState('connected');
         terminal.writeln(`Connected: ${payload.shell ?? 'shell'}`);
         return;
       }

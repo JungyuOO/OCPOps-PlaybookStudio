@@ -44,7 +44,7 @@ COPY src /app/src
 COPY db /app/db
 COPY corpus /app/corpus
 COPY deploy/scripts /app/scripts
-RUN chmod +x /app/scripts/terminal-entrypoint.sh
+RUN chmod +x /app/scripts/*.sh
 RUN pip install --no-cache-dir --no-deps -e .
 
 COPY --from=frontend-build /app/apps/web/dist /app/apps/web/dist

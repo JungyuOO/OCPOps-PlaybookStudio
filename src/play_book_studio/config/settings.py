@@ -153,6 +153,8 @@ class Settings(SettingsPathMixin):
     terminal_workdir_override: str = ""
     terminal_session_ttl_seconds: int = 1800
     terminal_max_output_bytes: int = 1048576
+    terminal_user_workspace_enabled: bool = False
+    terminal_sandbox_shell: str = "/bin/bash"
     scm_github_client_id: str = ""
     scm_github_client_secret: str = ""
     scm_gitlab_client_id: str = ""
@@ -387,6 +389,9 @@ def load_settings(root_dir: str | Path) -> Settings:
         terminal_workdir_override=effective_env.get("TERMINAL_WORKDIR", "").strip(),
         terminal_session_ttl_seconds=int(effective_env.get("TERMINAL_SESSION_TTL_SECONDS", "1800")),
         terminal_max_output_bytes=int(effective_env.get("TERMINAL_MAX_OUTPUT_BYTES", "1048576")),
+        terminal_user_workspace_enabled=effective_env.get("TERMINAL_USER_WORKSPACE_ENABLED", "false").lower()
+        in {"1", "true", "yes", "on"},
+        terminal_sandbox_shell=effective_env.get("TERMINAL_SANDBOX_SHELL", "/bin/bash").strip() or "/bin/bash",
         scm_github_client_id=effective_env.get("SCM_GITHUB_CLIENT_ID", "").strip(),
         scm_github_client_secret=effective_env.get("SCM_GITHUB_CLIENT_SECRET", "").strip(),
         scm_gitlab_client_id=effective_env.get("SCM_GITLAB_CLIENT_ID", "").strip(),

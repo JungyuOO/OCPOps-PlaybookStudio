@@ -50,8 +50,8 @@ v0.1.3은 다음 두 축을 합친다.
 - [x] ServiceAccount `learner` + RoleBinding `edit` 자동 생성
 - [x] PVC `home-learner`(1Gi, RWO) 자동 생성, sandbox Pod `/home/learner`에 mount
 - [x] Deployment `sandbox` 자동 생성 (이미지: oc CLI + vi + bash 포함한 ubi9 파생)
-- [ ] terminal WS 진입부 변경: 기존 앱 Pod PTY 대신 `oc exec` 통해 사용자 sandbox Pod로 연결
-- [ ] 부트스트랩 진행 단계 progress 프레임을 WS로 송신(준비중 UI 표시)
+- [x] terminal WS 진입부 변경: 기존 앱 Pod PTY 대신 `oc exec` 통해 사용자 sandbox Pod로 연결
+- [x] 부트스트랩 진행 단계 progress 프레임을 WS로 송신(준비중 UI 표시)
 - [ ] 사용자 첫 접속 1회용 안내 메시지(브라우저-바운드 정체성, 14일 TTL 설명)
 - [ ] in-cluster CronJob: 30분 idle → Pod replicas=0(동면), 14일 미사용 + `pinned=false` → namespace 삭제
 - [ ] `last-active-at` 라벨 갱신(WS 메시지 시 60초당 1회 patch)
@@ -789,6 +789,7 @@ oc rollout status deployment/web -n pbs-ocpops
 
 ## 작업 메모
 
+- 2026-05-14: Phase C terminal WS 라우팅을 sandbox exec 방식으로 연결했다. WS 연결 시 `resolve_session_owner`로 owner_hash를 얻고 `ensure_user_workspace`를 호출한 뒤, `/app/scripts/sandbox-exec-entrypoint.sh`가 broker Pod에서 `oc exec -it -n <pbs-user-*> <sandbox-pod> -- /bin/bash -i`로 붙는다. `bootstrap_stage` 프레임(`resolving_owner`, `provisioning_workspace`, `sandbox_ready`)을 보내고, 프런트 터미널 패널은 ready 전까지 connecting 상태를 유지하면서 진행 메시지를 출력한다. 검증: `python -m compileall -q src`, `pytest tests/test_terminal_session.py tests/test_workspace_provisioner_unit.py tests/test_broker_rbac_smoke.py -q`, `bash -n deploy/scripts/terminal-entrypoint.sh`, `bash -n deploy/scripts/sandbox-exec-entrypoint.sh`, `npm --prefix apps/web run build` 통과.
 - 2026-05-14: v0.1.2 smoke/report 산출물은 평가 증거일 뿐 문서 검색/추천 질문 소스가 아니어야 한다. `corpus_import.iter_corpus_source_files`에서 `reports/`, `tmp/`, `artifacts/`, `dist/`, `node_modules/` 등을 제외하도록 막았다. 서버 DB에 이미 `reports`/`smoke`/`report` 계열 document_sources 또는 document_chunks가 들어갔는지는 배포 후 SQL로 점검하고, 발견되면 해당 source와 연결 chunks를 반드시 삭제/재색인한다.
 - 2026-05-14: Phase C 첫 패치로 `deploy/openshift/broker-rbac.yaml`을 추가했다. 현재 kustomize 구조에 맞춰 broker SA는 `pbs-ocpops:terminal-broker`로 두고, app Deployment만 이 SA를 사용한다. web Deployment는 기존 `playbookstudio` SA를 유지한다.
 - 2026-05-14: `src/play_book_studio/cluster/workspace_provisioner.py`의 순수 manifest builder를 추가했다. 아직 cluster API apply/wait는 붙이지 않았고, Namespace/ResourceQuota/NetworkPolicy/ServiceAccount/RoleBinding/PVC/Deployment 스펙과 owner_hash→`pbs-user-<8>` 규칙을 단위 테스트로 먼저 고정했다.

@@ -18,7 +18,7 @@ print_login_log_tail() {
 
 fail_cluster_terminal() {
   echo "Cluster terminal connection is not ready."
-  echo "클러스터 재연결이 필요합니다. OpenShift API URL과 토큰을 갱신한 뒤 Terminal Session을 다시 연결하세요."
+  echo "Refresh the OpenShift API URL and token, then reconnect the Terminal Session."
   echo "Local shell fallback is disabled. This terminal opens only after a successful OpenShift CLI login."
   exit 1
 }

@@ -6,9 +6,12 @@ import asyncio
 import json
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import parse_qs
 
+from play_book_studio.cluster.workspace_models import WorkspaceHandle
+from play_book_studio.cluster.workspace_provisioner import ensure_user_workspace
 from play_book_studio.config.settings import Settings
 from play_book_studio.db.terminal_learning_repository import (
     TerminalLearningContext,
@@ -23,7 +26,9 @@ from play_book_studio.db.terminal_learning_repository import (
     upsert_command_check_result,
 )
 
+from .session_owner import resolve_session_owner
 from .terminal_session import TerminalSession, TerminalSessionConfig
+
 
 def _json_event(event: dict[str, Any]) -> str:
     return json.dumps(event, ensure_ascii=False)
@@ -44,6 +49,24 @@ def build_terminal_session_config(settings: Settings, root_dir: Path) -> Termina
         workdir=_terminal_workdir(settings, root_dir),
         ttl_seconds=settings.terminal_session_ttl_seconds,
         max_output_bytes=settings.terminal_max_output_bytes,
+    )
+
+
+def build_workspace_terminal_session_config(
+    settings: Settings,
+    root_dir: Path,
+    workspace: WorkspaceHandle,
+) -> TerminalSessionConfig:
+    return TerminalSessionConfig(
+        shell="/app/scripts/sandbox-exec-entrypoint.sh",
+        workdir=_terminal_workdir(settings, root_dir),
+        ttl_seconds=settings.terminal_session_ttl_seconds,
+        max_output_bytes=settings.terminal_max_output_bytes,
+        env={
+            "PBS_SANDBOX_NAMESPACE": workspace.namespace,
+            "PBS_SANDBOX_POD": workspace.pod_name,
+            "PBS_SANDBOX_SHELL": settings.terminal_sandbox_shell,
+        },
     )
 
 
@@ -72,6 +95,12 @@ def _websocket_path(websocket, args: tuple[object, ...]) -> str:
         return args[0]
     request = getattr(websocket, "request", None)
     return str(getattr(request, "path", "") or "")
+
+
+def _owner_hash_from_websocket(websocket) -> str:
+    request = getattr(websocket, "request", None)
+    headers = getattr(request, "headers", {}) or {}
+    return resolve_session_owner(SimpleNamespace(headers=headers)).owner_hash
 
 
 class TerminalEventRecorder:
@@ -332,6 +361,7 @@ async def _handle_terminal_connection(
     config: TerminalSessionConfig,
     database_url: str = "",
     cluster_server: str = "",
+    workspace: WorkspaceHandle | None = None,
 ) -> None:
     session = TerminalSession(config).start()
     recorder = TerminalEventRecorder(
@@ -347,8 +377,10 @@ async def _handle_terminal_connection(
                 "session_id": session.session_id,
                 "persisted_session_id": recorder.terminal_session_id,
                 "shell": session.shell_label,
-                "workdir": str(config.workdir),
+                "workdir": "/home/learner" if workspace else str(config.workdir),
                 "cluster_server": cluster_server,
+                "workspace_namespace": workspace.namespace if workspace else "",
+                "sandbox_pod": workspace.pod_name if workspace else "",
             }
         )
     )
@@ -468,12 +500,71 @@ def start_terminal_websocket_server(*, settings: Settings, root_dir: Path) -> th
 
     async def run_server() -> None:
         async def handler(websocket, *args: object) -> None:
+            session_config = config
+            workspace: WorkspaceHandle | None = None
+            if settings.terminal_user_workspace_enabled:
+                try:
+                    await websocket.send(
+                        _json_event(
+                            {
+                                "type": "bootstrap_stage",
+                                "stage": "resolving_owner",
+                                "message": "Resolving workspace owner.",
+                            }
+                        )
+                    )
+                    owner_hash = _owner_hash_from_websocket(websocket)
+                    await websocket.send(
+                        _json_event(
+                            {
+                                "type": "bootstrap_stage",
+                                "stage": "provisioning_workspace",
+                                "message": "Preparing sandbox workspace.",
+                            }
+                        )
+                    )
+                    workspace = await asyncio.to_thread(ensure_user_workspace, owner_hash)
+                    if not workspace.ready or not workspace.pod_name:
+                        await websocket.send(
+                            _json_event(
+                                {
+                                    "type": "error",
+                                    "data": "Sandbox workspace is not ready.",
+                                    "workspace_namespace": workspace.namespace,
+                                    "sandbox_pod": workspace.pod_name,
+                                }
+                            )
+                        )
+                        return
+                    await websocket.send(
+                        _json_event(
+                            {
+                                "type": "bootstrap_stage",
+                                "stage": "sandbox_ready",
+                                "message": "Sandbox workspace is ready.",
+                                "workspace_namespace": workspace.namespace,
+                                "sandbox_pod": workspace.pod_name,
+                            }
+                        )
+                    )
+                    session_config = build_workspace_terminal_session_config(settings, root_dir, workspace)
+                except Exception as exc:  # noqa: BLE001
+                    await websocket.send(
+                        _json_event(
+                            {
+                                "type": "error",
+                                "data": f"Sandbox workspace bootstrap failed: {exc}",
+                            }
+                        )
+                    )
+                    return
             await _handle_terminal_connection(
                 websocket,
                 *args,
-                config=config,
+                config=session_config,
                 database_url=database_url,
                 cluster_server=cluster_server,
+                workspace=workspace,
             )
 
         async with websocket_serve(handler, host, port):
@@ -494,5 +585,6 @@ def start_terminal_websocket_server(*, settings: Settings, root_dir: Path) -> th
 
 __all__ = [
     "build_terminal_session_config",
+    "build_workspace_terminal_session_config",
     "start_terminal_websocket_server",
 ]
