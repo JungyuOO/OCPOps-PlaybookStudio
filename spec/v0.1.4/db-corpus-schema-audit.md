@@ -87,6 +87,32 @@ The schema has useful pieces, but their boundaries are soft:
 - Course runtime tables look similar to document chunk tables, but they are not the same kind of truth.
 - Next-step learning references exist in metadata, but are not first-class enough for reliable guided learning.
 
+## Operating Wiki First Rule
+
+v0.1.4 schema decisions should be derived from the actual operating wiki corpus before adding generic OCP metadata. The repository's current operating wiki runtime manifest contains 29 active books, while the gold chunk corpus contains 27,907 chunks. If deployment or upstream storage contains 34 books, the missing five must be reconciled before migration. The largest books in the current repo corpus are `nodes`, `security_and_compliance`, `backup_and_restore`, `machine_management`, `postinstallation_configuration`, `storage`, `operators`, `authentication_and_authorization`, `ingress_and_load_balancing`, `support`, `disconnected_environments`, and `advanced_networking`.
+
+That distribution means the stable global schema should optimize for the whole operating wiki, not only installation content.
+
+Rules:
+
+- Promote fields to top-level columns only when they apply broadly across the operating wiki or are required for access, citation, versioning, or ranking.
+- Put book/domain-specific retrieval values in `facets jsonb`, not in sparse global columns.
+- Keep `book_slug` and source/viewer path fields first-class because they match the real book and viewer boundaries.
+- Treat `install_category` as `facets.install.install_category`, not a global column.
+- Derive facet vocabularies from observed book slugs, section paths, commands, objects, operators, errors, and verification hints before migration.
+
+Initial facet groups should mirror the current corpus shape:
+
+| Facet Group | Applies To | Example Values |
+| --- | --- | --- |
+| `install` | `installation_overview`, `installing_on_any_platform`, disconnected install sections | `install_category`, `cluster_topology`, `network_mode` |
+| `nodes` | `nodes`, `machine_configuration`, `machine_management` | `node_role`, `machine_config_pool`, `node_health`, `drain_reboot` |
+| `operators` | `operators`, OLM-heavy sections | `operator_name`, `channel`, `install_mode`, `target_namespace` |
+| `storage` | `storage`, backup storage sections | `storage_class`, `csi_driver`, `pv_pvc`, `snapshot`, `expansion` |
+| `security` | `security_and_compliance`, authentication/authorization | `identity_provider`, `rbac_scope`, `scc`, `certificate`, `compliance_profile` |
+| `networking` | networking, ingress, routes, load balancing | `ingress`, `route`, `dns`, `mtu`, `bgp`, `network_policy` |
+| `backup_restore` | backup/restore and etcd recovery | `backup_tool`, `restore_scope`, `oadp`, `velero`, `etcd_recovery` |
+
 ## 현재 핵심 문제
 
 schema에 필요한 조각들은 이미 있지만 경계가 약하다.
