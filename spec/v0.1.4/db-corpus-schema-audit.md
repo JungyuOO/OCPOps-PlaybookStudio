@@ -165,6 +165,49 @@ Existing `document_chunks` may either be renamed conceptually into `corpus_chunk
 
 기존 `document_chunks`는 개념적으로 `corpus_chunks`로 전환할 수도 있고, 새 `corpus_chunks` 테이블을 만들고 compatibility view를 둘 수도 있다. 이 결정은 migration SQL 작성 전에 먼저 내려야 한다.
 
+## Feature Compatibility Before Replacement
+
+Before replacing current tables or JSONL files, each runtime feature must be mapped to the new parsing/corpus boundary.
+
+| Feature | Current Source | Replacement Target | Can Replace Without Killing Feature? | Notes |
+| --- | --- | --- | --- | --- |
+| General RAG retrieval | `document_chunks` plus Qdrant payload | `corpus_chunks` projected to Qdrant | Yes, with compatibility view or dual-read phase | Qdrant payload fields must remain stable during migration. |
+| Official document citation | official manifests, official chunks, `document_chunks.metadata` | `corpus_documents` / `corpus_chunks` | Yes | Official docs should become canonical corpus. |
+| Uploaded/private document retrieval | `document_sources`, `parsed_documents`, `document_chunks` | parsing tables plus `corpus_*` rows | Yes | Upload parsing output should be transformed into corpus rows after normalization. |
+| Viewer document route | viewer JSON/HTML, `viewer_path` payloads | `viewer_artifact_path` derived from corpus rows | Yes, but needs route fallback | Viewer format must stay artifact-only. |
+| Course viewer | `course_chunks`, `course_assets`, `course_manifests` | runtime artifact tables, optionally generated from corpus | Partially | Keep existing tables until viewer can read generated artifacts from corpus. |
+| Course Qdrant collection | `chunks.jsonl`, `course_chunks` payloads | generated runtime projection from corpus/course artifact | Partially | Keep until replacement projection is implemented. |
+| Ops learning Qdrant collection | `ops_learning_chunks_v1.jsonl` or derived chunks | generated learning-step projection from corpus refs | Partially | Current JSONL is active runtime seed, not canonical document truth. |
+| Starter questions | official manifests/DB plus `ops_learning_chunks_v1.jsonl` | corpus metadata plus generated learning suggestions | Partially | Must preserve UI behavior during transition. |
+| Eval/smoke cases | `corpus/manifests/eval/*.jsonl`, `reports/*.json` | eval-only fixtures | N/A | Never import into corpus. |
+
+## 단계별 가이드 JSONL 판단
+
+현재 단계별 가이드 계열 JSONL/JSON은 모두 같은 등급이 아니다.
+
+| Path/Family | Current Use | v0.1.4 Classification | Direction |
+| --- | --- | --- | --- |
+| `corpus/sources/official/**/chunks.jsonl` | 공식문서 chunk source | canonical source candidate | Corpus import 대상. |
+| `corpus/manifests/official/*.json` | 공식문서 source manifest | canonical source manifest | Corpus import 대상. |
+| 운영문서/업로드 문서 원본 | 사내/사용자 운영 지식 | canonical source candidate | Parsing 후 corpus import 대상. |
+| `corpus/sources/kmsc/parsed-preview/course_pbs/chunks.jsonl` | course viewer/Qdrant runtime seed | artifact/candidate | 문서 corpus truth로 직접 쓰지 않음. 필요 시 corpus에서 재생성. |
+| `ops_learning_chunks_v1.jsonl` | 단계별 ops learning Qdrant/starter question seed | runtime seed/candidate | canonical 문서가 아니라 학습 projection seed. corpus refs에서 생성되도록 대체. |
+| `ops_learning_guides_v1.json` | 단계별 guide definition | curriculum seed/candidate | 공식/운영 corpus를 참조하는 curriculum schema로 승격하거나 generated artifact로 유지. |
+| `corpus/manifests/course/*.jsonl` | course QA/golden/review | eval/test fixture | Corpus import 금지. |
+| `corpus/manifests/demo/*.jsonl` | demo scenario | demo fixture | Corpus import 금지. |
+| `corpus/manifests/eval/*.jsonl` | eval/smoke/benchmark | eval fixture | Corpus import 금지. |
+| `reports/*.json` | execution report | report artifact | Corpus import 금지. |
+
+판단: 공식문서와 운영문서 원본을 제외한 단계별 guide JSONL은 대부분 canonical corpus가 아니다. 다만 현재 기능이 이 파일을 읽고 있으므로 즉시 삭제하지 않는다. v0.1.4에서는 이를 `runtime seed` 또는 `curriculum seed`로 격하하고, 새 corpus schema에서 같은 정보를 생성할 수 있는지 확인한 뒤 제거한다.
+
+대체 기준:
+
+1. 공식문서/운영문서 원본은 `corpus_documents`와 `corpus_chunks`로 들어간다.
+2. 단계별 guide는 `corpus_chunk_refs`, `next_refs`, `related_refs`, `starter_question_candidates`, `followup_question_candidates`에서 생성한다.
+3. `ops_learning_chunks_v1.jsonl`은 새 schema가 동일한 Qdrant payload와 starter question 결과를 만들 수 있을 때만 삭제한다.
+4. eval/demo/report JSONL은 절대 corpus import 대상이 아니다.
+5. 삭제 전에는 기능별 compatibility check를 통과해야 한다.
+
 ## Column Audit: `document_sources`
 
 | Column | Classification | Direction | Reason |
