@@ -64,6 +64,21 @@ def test_iter_corpus_source_files_keeps_supported_documents_only():
     assert [path.name for path in files] == ["deck.pptx", "guide.md"]
 
 
+def test_iter_corpus_source_files_excludes_runtime_reports_and_build_outputs():
+    source_dir = _case_dir("excluded_dirs")
+    (source_dir / "guide.md").write_text("# Guide", encoding="utf-8")
+    (source_dir / "reports").mkdir(exist_ok=True)
+    (source_dir / "reports" / "smoke.md").write_text("# Smoke report\n\nDo not ingest.", encoding="utf-8")
+    (source_dir / "tmp").mkdir(exist_ok=True)
+    (source_dir / "tmp" / "scratch.txt").write_text("Do not ingest.", encoding="utf-8")
+    (source_dir / "artifacts").mkdir(exist_ok=True)
+    (source_dir / "artifacts" / "eval.md").write_text("# Eval artifact", encoding="utf-8")
+
+    files = iter_corpus_source_files(source_dir)
+
+    assert [path.relative_to(source_dir).as_posix() for path in files] == ["guide.md"]
+
+
 def test_build_corpus_import_plan_reports_repository_scope():
     source_dir = _case_dir("plan")
     (source_dir / "ops.md").write_text("# Ops\n\nCheck status.", encoding="utf-8")

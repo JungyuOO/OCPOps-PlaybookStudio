@@ -383,6 +383,20 @@ export interface ActionAuditItem {
   created_at: string;
 }
 
+export interface LearnerWorkspaceStatus {
+  available: boolean;
+  namespace: string;
+  ready: boolean;
+  exists: boolean;
+  pinned?: boolean;
+  hibernated?: boolean;
+  created_at?: string;
+  last_active_at?: string;
+  replicas?: number;
+  ready_replicas?: number;
+  error?: string;
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers ?? {});
   const hasBody = init?.body !== undefined && init?.body !== null;
@@ -433,6 +447,24 @@ async function requestResponse(path: string, init?: RequestInit): Promise<Respon
 export async function listOpsWorkspaces(): Promise<OpsWorkspace[]> {
   const payload = await requestJson<{ items: OpsWorkspace[] }>('/api/v1/workspaces');
   return payload.items;
+}
+
+export async function loadLearnerWorkspaceStatus(): Promise<LearnerWorkspaceStatus> {
+  return requestJson('/api/v1/workspace/status');
+}
+
+export async function setLearnerWorkspacePinned(pinned: boolean): Promise<{ pinned: boolean; status: LearnerWorkspaceStatus }> {
+  return requestJson('/api/v1/workspace/pin', {
+    method: 'POST',
+    body: JSON.stringify({ pinned }),
+  });
+}
+
+export async function resetLearnerWorkspace(): Promise<{ deleted: boolean; status: LearnerWorkspaceStatus }> {
+  return requestJson('/api/v1/workspace/reset', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
 }
 
 export async function listRecommendations(workspaceId: string): Promise<RecommendationItem[]> {
@@ -576,6 +608,7 @@ export async function sendOpsChat(payload: {
   connection_id?: string;
   namespace?: string;
   history?: Array<Record<string, unknown>>;
+  recent_terminal_actions?: Array<Record<string, unknown>>;
 }): Promise<OpsChatResponse> {
   return requestJson('/api/v1/chat/query', {
     method: 'POST',
@@ -589,6 +622,7 @@ export async function sendOpsChatStream(
     connection_id?: string;
     namespace?: string;
     history?: Array<Record<string, unknown>>;
+    recent_terminal_actions?: Array<Record<string, unknown>>;
   },
   onEvent: (event: OpsChatStreamEvent) => void,
 ): Promise<OpsChatResponse> {

@@ -3,14 +3,18 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 
-type TerminalConnectionState = 'connecting' | 'connected' | 'closed' | 'error';
+export type TerminalConnectionState = 'connecting' | 'connected' | 'closed' | 'error';
 
 interface TerminalSocketEvent {
   type?: string;
   data?: string;
+  message?: string;
+  stage?: string;
   shell?: string;
   workdir?: string;
   cluster_server?: string;
+  workspace_namespace?: string;
+  sandbox_pod?: string;
   exit_code?: number;
   lab_task_id?: string;
   command_check_id?: string;
@@ -30,6 +34,9 @@ interface TerminalSessionPanelProps {
   learningContext?: TerminalLearningContext;
   onCommandCheckResult?: (event: TerminalSocketEvent) => void;
   onCommandSubmitted?: (command: string) => void;
+  onOutputChunk?: (chunk: string) => void;
+  onSessionStateChange?: (state: TerminalConnectionState) => void;
+  onWorkspaceReady?: (workspace: { namespace: string; podName: string }) => void;
 }
 
 function defaultTerminalWebSocketUrl(): string {
@@ -42,7 +49,14 @@ function defaultTerminalWebSocketUrl(): string {
   return `${protocol}//${host}/terminal-ws/`;
 }
 
-export default function TerminalSessionPanel({ learningContext, onCommandCheckResult, onCommandSubmitted }: TerminalSessionPanelProps) {
+export default function TerminalSessionPanel({
+  learningContext,
+  onCommandCheckResult,
+  onCommandSubmitted,
+  onOutputChunk,
+  onSessionStateChange,
+  onWorkspaceReady,
+}: TerminalSessionPanelProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -50,7 +64,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
   const commandBufferRef = useRef('');
   const [connectionKey, setConnectionKey] = useState(0);
   const [state, setState] = useState<TerminalConnectionState>('connecting');
-  const [sessionMeta, setSessionMeta] = useState({ shell: '', workdir: '', clusterServer: '' });
+  const [sessionMeta, setSessionMeta] = useState({ shell: '', workdir: '', clusterServer: '', workspaceNamespace: '' });
   const [recentCheckResults, setRecentCheckResults] = useState<TerminalSocketEvent[]>([]);
   const wsUrl = useMemo(defaultTerminalWebSocketUrl, []);
   const stableLearningContext = useMemo<TerminalLearningContext | undefined>(() => {
@@ -72,13 +86,17 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
   ]);
 
   useEffect(() => {
+    onSessionStateChange?.(state);
+  }, [onSessionStateChange, state]);
+
+  useEffect(() => {
     const host = containerRef.current;
     if (!host) {
       return undefined;
     }
 
     setState('connecting');
-    setSessionMeta({ shell: '', workdir: '', clusterServer: '' });
+    setSessionMeta({ shell: '', workdir: '', clusterServer: '', workspaceNamespace: '' });
     const terminal = new Terminal({
       cursorBlink: true,
       convertEol: true,
@@ -233,7 +251,6 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
     });
 
     socket.addEventListener('open', () => {
-      setState('connected');
       fitTerminal();
       if (stableLearningContext) {
         socket.send(JSON.stringify({ type: 'context', ...stableLearningContext }));
@@ -245,7 +262,14 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
       try {
         payload = JSON.parse(String(event.data)) as TerminalSocketEvent;
       } catch {
-        terminal.write(String(event.data));
+        const chunk = String(event.data);
+        terminal.write(chunk);
+        onOutputChunk?.(chunk);
+        return;
+      }
+      if (payload.type === 'bootstrap_stage') {
+        const message = payload.message || payload.stage || 'Preparing terminal session.';
+        terminal.writeln(message);
         return;
       }
       if (payload.type === 'ready') {
@@ -253,12 +277,22 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
           shell: payload.shell ?? '',
           workdir: payload.workdir ?? '',
           clusterServer: payload.cluster_server ?? '',
+          workspaceNamespace: payload.workspace_namespace ?? '',
         });
+        if (payload.workspace_namespace) {
+          onWorkspaceReady?.({
+            namespace: payload.workspace_namespace,
+            podName: payload.sandbox_pod ?? '',
+          });
+        }
+        setState('connected');
         terminal.writeln(`Connected: ${payload.shell ?? 'shell'}`);
         return;
       }
       if (payload.type === 'output') {
-        terminal.write(payload.data ?? '');
+        const chunk = payload.data ?? '';
+        terminal.write(chunk);
+        onOutputChunk?.(chunk);
         return;
       }
       if (payload.type === 'command_check_result') {
@@ -301,7 +335,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [connectionKey, onCommandCheckResult, onCommandSubmitted, stableLearningContext, wsUrl]);
+  }, [connectionKey, onCommandCheckResult, onCommandSubmitted, onOutputChunk, onWorkspaceReady, stableLearningContext, wsUrl]);
 
   return (
     <section className="terminal-session-shell" aria-label="Terminal Session">
@@ -311,6 +345,7 @@ export default function TerminalSessionPanel({ learningContext, onCommandCheckRe
           <strong>{state === 'connected' ? 'Connected' : state === 'connecting' ? 'Connecting' : state === 'error' ? 'Connection error' : 'Closed'}</strong>
           {sessionMeta.shell ? <span>{sessionMeta.shell}</span> : null}
           {sessionMeta.workdir ? <span>{sessionMeta.workdir}</span> : null}
+          {sessionMeta.workspaceNamespace ? <span>{sessionMeta.workspaceNamespace}</span> : null}
           {sessionMeta.clusterServer ? <span title={sessionMeta.clusterServer}>Cluster {sessionMeta.clusterServer}</span> : null}
           {stableLearningContext?.labTaskId ? <span>Lab attached</span> : null}
         </div>

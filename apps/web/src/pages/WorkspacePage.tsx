@@ -23,6 +23,8 @@ import {
   Compass,
   Terminal as TerminalIcon,
   X,
+  Pin,
+  RotateCcw,
 } from 'lucide-react';
 import gsap from 'gsap';
 import './WorkspacePage.css';
@@ -92,12 +94,19 @@ import {
   loadOcpOverview,
   loadResourceDetail,
   loadResources,
+  loadLearnerWorkspaceStatus,
   listOcpProfiles,
+  resetLearnerWorkspace,
+  sendOpsChatStream,
+  setLearnerWorkspacePinned,
   type OcpResourceItem,
   type OcpMetricsResponse,
   type OcpOverview,
   type ResourceDetailResponse,
   type OcpConnection,
+  type LearnerWorkspaceStatus,
+  type OpsChatResponse,
+  type OpsChatSource,
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../routing/routes';
 import { sendCourseChatStream } from '../lib/courseApi';
@@ -120,7 +129,7 @@ import {
   truthSurfaceCopy,
 } from './workspace/WorkspaceAnswer';
 import WorkspaceViewerPanel from './workspace/WorkspaceViewerPanel';
-import TerminalSessionPanel, { type TerminalLearningContext } from './workspace/TerminalSessionPanel';
+import TerminalSessionPanel, { type TerminalConnectionState, type TerminalLearningContext } from './workspace/TerminalSessionPanel';
 import CourseChatArtifacts from './CourseChatArtifacts';
 import type {
   Message,
@@ -243,6 +252,57 @@ function citationEvidenceMeta(citation: ChatCitation): string {
   ].filter(Boolean).join(' · ');
 }
 
+const TERMINAL_OUTPUT_EXCERPT_LIMIT = 1000;
+
+function normalizeTerminalOutputExcerpt(value: string): string {
+  return value
+    .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
+    .replace(/\r/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(-TERMINAL_OUTPUT_EXCERPT_LIMIT);
+}
+
+function opsSourceToChatCitation(source: OpsChatSource, fallbackIndex: number): ChatCitation {
+  const index = Number.isFinite(source.index) && source.index > 0 ? source.index : fallbackIndex;
+  return {
+    index,
+    book_slug: 'live_cluster',
+    book_title: 'Live Cluster',
+    section: source.section_title || source.title || 'Cluster evidence',
+    section_path_label: source.source_path || source.viewer_path || '',
+    viewer_path: source.viewer_path || source.source_path || '',
+    excerpt: source.source_path ? `Live cluster source: ${source.source_path}` : undefined,
+    source_label: source.title || source.section_title || 'Live cluster',
+    source_lane: 'live_cluster',
+    runtime_truth_label: 'Live cluster',
+    boundary_badge: 'Live',
+  };
+}
+
+function opsChatResponseToChatResponse(response: OpsChatResponse, sessionId: string): ChatResponse & { artifacts?: Array<Record<string, unknown>> } {
+  return {
+    answer: response.answer,
+    citations: response.sources.map((source, index) => opsSourceToChatCitation(source, index + 1)),
+    warnings: [],
+    session_id: sessionId,
+    response_kind: response.mode || response.lane || 'live_cluster',
+    suggested_queries: [],
+    related_links: [],
+    related_sections: [],
+    artifacts: response.artifacts.map((artifact) => ({ ...artifact })),
+    pipeline_trace: {
+      live_cluster: {
+        lane: response.lane,
+        mode: response.mode,
+        fallback_used: response.fallback_used,
+        preview_ready: response.preview_ready,
+      },
+    },
+  };
+}
+
 type LeftPanelMode = 'history' | 'outline' | 'signals';
 type RightPanelMode = 'viewer' | 'terminal';
 type WorkspaceChatMode = 'document' | 'live_cluster';
@@ -259,6 +319,12 @@ interface ClusterSignalEvent {
   namespace: string;
   status: string;
   sourceCommand: string;
+}
+
+interface RecentTerminalAction {
+  command: string;
+  outputExcerpt: string;
+  timestamp: string;
 }
 
 interface IngestionStatusBanner {
@@ -1302,6 +1368,11 @@ export default function WorkspacePage() {
   const [isFooterProfileLoading, setIsFooterProfileLoading] = useState(false);
   const [currentMode, setCurrentMode] = useState<WorkspaceChatMode>('document');
   const [clusterConnectionStatus, setClusterConnectionStatus] = useState<ClusterConnectionStatus>('not_connected');
+  const [terminalConnectionState, setTerminalConnectionState] = useState<TerminalConnectionState>('closed');
+  const [userWorkspaceNamespace, setUserWorkspaceNamespace] = useState('');
+  const [learnerWorkspaceStatus, setLearnerWorkspaceStatus] = useState<LearnerWorkspaceStatus | null>(null);
+  const [isWorkspaceActionPending, setIsWorkspaceActionPending] = useState(false);
+  const [workspaceActionError, setWorkspaceActionError] = useState('');
   const [selectedResourceKind, setSelectedResourceKind] = useState<ClusterResourceKind>('pods');
   const [selectedResourceNamespace, setSelectedResourceNamespace] = useState('default');
   const [clusterResources, setClusterResources] = useState<OcpResourceItem[]>([]);
@@ -1310,6 +1381,7 @@ export default function WorkspacePage() {
   const [resourceYamlDetail, setResourceYamlDetail] = useState<ResourceDetailResponse | null>(null);
   const [isResourceYamlLoading, setIsResourceYamlLoading] = useState(false);
   const [signalEvents, setSignalEvents] = useState<ClusterSignalEvent[]>([]);
+  const [recentTerminalActions, setRecentTerminalActions] = useState<RecentTerminalAction[]>([]);
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [dashboardOverview, setDashboardOverview] = useState<OcpOverview | null>(null);
   const [dashboardMetrics, setDashboardMetrics] = useState<OcpMetricsResponse | null>(null);
@@ -1372,6 +1444,8 @@ export default function WorkspacePage() {
   }, [activeFooterConnection]);
   const wikiOverlayUserId = footerProfileName;
   const isClusterConnected = clusterConnectionStatus === 'connected';
+  const isTerminalConnected = terminalConnectionState === 'connected';
+  const isLiveClusterAvailable = isClusterConnected && isTerminalConnected;
   const clusterStatusLabel = clusterConnectionStatusLabel(clusterConnectionStatus);
 
   useEffect(() => {
@@ -1434,10 +1508,10 @@ export default function WorkspacePage() {
   }, [activeFooterConnection?.connection_id]);
 
   useEffect(() => {
-    if (currentMode === 'live_cluster' && !isClusterConnected) {
+    if (currentMode === 'live_cluster' && !isLiveClusterAvailable) {
       setCurrentMode('document');
     }
-  }, [currentMode, isClusterConnected]);
+  }, [currentMode, isLiveClusterAvailable]);
 
   useEffect(() => {
     if (activeFooterConnection?.default_namespace && selectedResourceNamespace === 'default') {
@@ -1512,6 +1586,10 @@ export default function WorkspacePage() {
   }, []);
 
   const handleTerminalCommandSubmitted = useCallback((command: string) => {
+    setRecentTerminalActions((current) => [
+      { command, outputExcerpt: '', timestamp: new Date().toISOString() },
+      ...current.filter((item) => item.command !== command),
+    ].slice(0, 6));
     const signal = detectClusterSignal(command);
     if (!signal) {
       return;
@@ -1528,6 +1606,122 @@ export default function WorkspacePage() {
       void refreshClusterResources();
     }
   }, [isClusterConnected, refreshClusterResources, refreshSignalEvents]);
+
+  const handleTerminalOutputChunk = useCallback((chunk: string) => {
+    if (!chunk) {
+      return;
+    }
+    setRecentTerminalActions((current) => {
+      if (current.length === 0) {
+        return current;
+      }
+      const [latest, ...rest] = current;
+      const outputExcerpt = normalizeTerminalOutputExcerpt(`${latest.outputExcerpt}\n${chunk}`);
+      if (!outputExcerpt || outputExcerpt === latest.outputExcerpt) {
+        return current;
+      }
+      return [{ ...latest, outputExcerpt }, ...rest];
+    });
+  }, []);
+
+  const refreshLearnerWorkspaceStatus = useCallback(async () => {
+    try {
+      const status = await loadLearnerWorkspaceStatus();
+      setLearnerWorkspaceStatus(status);
+      setWorkspaceActionError('');
+      if (status.namespace) {
+        setUserWorkspaceNamespace(status.namespace);
+      }
+    } catch (error) {
+      console.error(error);
+      setWorkspaceActionError(error instanceof Error ? error.message : 'Workspace status is unavailable.');
+    }
+  }, []);
+
+  const handleTerminalWorkspaceReady = useCallback((workspace: { namespace: string; podName: string }) => {
+    const namespace = workspace.namespace.trim();
+    if (!namespace) {
+      return;
+    }
+    setUserWorkspaceNamespace(namespace);
+    setLearnerWorkspaceStatus((current) => ({
+      available: current?.available ?? true,
+      namespace,
+      ready: true,
+      exists: true,
+      pinned: current?.pinned,
+      hibernated: false,
+      created_at: current?.created_at,
+      last_active_at: current?.last_active_at,
+      replicas: current?.replicas,
+      ready_replicas: current?.ready_replicas,
+    }));
+    setSelectedResourceNamespace((current) => {
+      const currentNamespace = current.trim();
+      const activeDefault = activeFooterConnection?.default_namespace?.trim() || 'default';
+      if (currentNamespace && currentNamespace !== 'default' && currentNamespace !== activeDefault) {
+        return current;
+      }
+      return namespace;
+    });
+    void refreshLearnerWorkspaceStatus();
+    if (typeof window !== 'undefined') {
+      const noticeKey = `pbs.workspaceNotice.${namespace}`;
+      if (!window.localStorage.getItem(noticeKey)) {
+        window.localStorage.setItem(noticeKey, 'shown');
+        setMessages((current) => [
+          ...current,
+          {
+            id: makeId('assistant'),
+            role: 'assistant',
+            content: `Your learner workspace is ${namespace}. It is tied to this browser session, hibernates after 30 minutes of inactivity, and is deleted after 14 days unless pinned.`,
+            citations: [],
+            suggestedQueries: [],
+            relatedLinks: [],
+            relatedSections: [],
+            artifacts: [],
+            responseKind: 'workspace_notice',
+            routeKind: 'learning',
+          },
+        ]);
+      }
+    }
+  }, [activeFooterConnection?.default_namespace, refreshLearnerWorkspaceStatus]);
+
+  const handleWorkspacePinToggle = useCallback(async () => {
+    const nextPinned = !(learnerWorkspaceStatus?.pinned ?? false);
+    setIsWorkspaceActionPending(true);
+    setWorkspaceActionError('');
+    try {
+      const result = await setLearnerWorkspacePinned(nextPinned);
+      setLearnerWorkspaceStatus(result.status);
+    } catch (error) {
+      console.error(error);
+      setWorkspaceActionError(error instanceof Error ? error.message : 'Workspace pin update failed.');
+    } finally {
+      setIsWorkspaceActionPending(false);
+    }
+  }, [learnerWorkspaceStatus?.pinned]);
+
+  const handleWorkspaceReset = useCallback(async () => {
+    const confirmed = window.confirm('Reset this learner workspace? Current sandbox files and resources will be deleted.');
+    if (!confirmed) {
+      return;
+    }
+    setIsWorkspaceActionPending(true);
+    setWorkspaceActionError('');
+    try {
+      const result = await resetLearnerWorkspace();
+      setLearnerWorkspaceStatus(result.status);
+      setUserWorkspaceNamespace(result.status.namespace || '');
+      setTerminalConnectionState('closed');
+    } catch (error) {
+      console.error(error);
+      setWorkspaceActionError(error instanceof Error ? error.message : 'Workspace reset failed.');
+    } finally {
+      setIsWorkspaceActionPending(false);
+    }
+  }, []);
 
   const refreshDashboard = useCallback(async () => {
     if (!activeFooterConnection || !isClusterConnected) {
@@ -3126,6 +3320,7 @@ export default function WorkspacePage() {
     const resolvedLearningStepId = options.learningStepId ?? questionMeta?.learningStepId;
     const resolvedLabTaskId = options.labTaskId ?? questionMeta?.labTaskId;
     const shouldUseCourseMode = options.forceCourseMode || resolvedRouteKind === 'course' || isCourseMode;
+    const shouldUseLiveClusterMode = !shouldUseCourseMode && currentMode === 'live_cluster' && isLiveClusterAvailable;
     const messageRouteKind: Message['routeKind'] = shouldUseCourseMode
       ? 'course'
       : resolvedRouteKind || 'official';
@@ -3233,28 +3428,74 @@ export default function WorkspacePage() {
             result: null,
           });
         }
-        response = await sendChatStream(requestPayload, (event) => {
-          if (event.type === 'answer_delta') {
-            streamedAnswer += event.delta;
-            assistantStreamUpdater?.push(streamedAnswer);
-          }
-          if (testMode && event.type === 'trace') {
-            setActiveTestTrace((current) => ({
-              query: current?.query ?? trimmed,
-              sessionId: current?.sessionId ?? sessionId,
-              events: [...(current?.events ?? []), event],
-              result: current?.result ?? null,
-            }));
-          }
-          if (testMode && event.type === 'result') {
-            setActiveTestTrace((current) => ({
-              query: current?.query ?? trimmed,
-              sessionId: event.payload.session_id || current?.sessionId || sessionId,
-              events: current?.events ?? [],
-              result: event.payload,
-            }));
-          }
-        });
+        if (shouldUseLiveClusterMode) {
+          const namespace = userWorkspaceNamespace || selectedResourceNamespace.trim() || activeFooterConnection?.default_namespace || 'default';
+          const liveResponse = await sendOpsChatStream({
+            message: trimmed,
+            connection_id: activeFooterConnection?.connection_id || undefined,
+            namespace,
+            history: messages.slice(-6).map((item) => ({ role: item.role, text: item.content })),
+            recent_terminal_actions: recentTerminalActions.map((item) => ({
+              command: item.command,
+              output_excerpt: item.outputExcerpt || undefined,
+              timestamp: item.timestamp,
+            })),
+          }, (event) => {
+            if (event.type === 'answer_delta') {
+              streamedAnswer += event.delta;
+              assistantStreamUpdater?.push(streamedAnswer);
+            }
+            if (testMode && event.type === 'stage') {
+              setActiveTestTrace((current) => ({
+                query: current?.query ?? trimmed,
+                sessionId: current?.sessionId ?? sessionId,
+                events: [
+                  ...(current?.events ?? []),
+                  {
+                    type: 'trace',
+                    step: `live_cluster:${event.stage.key}`,
+                    label: event.stage.label,
+                    status: event.stage.status,
+                    detail: event.stage.detail,
+                  },
+                ],
+                result: current?.result ?? null,
+              }));
+            }
+            if (testMode && event.type === 'result') {
+              setActiveTestTrace((current) => ({
+                query: current?.query ?? trimmed,
+                sessionId: current?.sessionId ?? sessionId,
+                events: current?.events ?? [],
+                result: opsChatResponseToChatResponse(event.response, sessionId),
+              }));
+            }
+          });
+          response = opsChatResponseToChatResponse(liveResponse, sessionId);
+        } else {
+          response = await sendChatStream(requestPayload, (event) => {
+            if (event.type === 'answer_delta') {
+              streamedAnswer += event.delta;
+              assistantStreamUpdater?.push(streamedAnswer);
+            }
+            if (testMode && event.type === 'trace') {
+              setActiveTestTrace((current) => ({
+                query: current?.query ?? trimmed,
+                sessionId: current?.sessionId ?? sessionId,
+                events: [...(current?.events ?? []), event],
+                result: current?.result ?? null,
+              }));
+            }
+            if (testMode && event.type === 'result') {
+              setActiveTestTrace((current) => ({
+                query: current?.query ?? trimmed,
+                sessionId: event.payload.session_id || current?.sessionId || sessionId,
+                events: current?.events ?? [],
+                result: event.payload,
+              }));
+            }
+          });
+        }
         assistantStreamUpdater.flush();
       }
       const primaryTruth = primaryCitationTruth(response.citations);
@@ -4259,6 +4500,41 @@ export default function WorkspacePage() {
                   </button>
                 </div>
               )}
+              <div className="chat-mode-switch chat-mode-switch--top" role="tablist" aria-label="Chat mode">
+                <button
+                  type="button"
+                  className={`chat-mode-btn ${currentMode === 'document' ? 'active' : ''}`}
+                  onClick={() => setCurrentMode('document')}
+                  aria-selected={currentMode === 'document'}
+                >
+                  <BookOpen size={14} />
+                  Docs
+                </button>
+                <button
+                  type="button"
+                  className={`chat-mode-btn ${currentMode === 'live_cluster' ? 'active' : ''}`}
+                  onClick={() => {
+                    if (isLiveClusterAvailable) {
+                      setCurrentMode('live_cluster');
+                    }
+                  }}
+                  aria-selected={currentMode === 'live_cluster'}
+                  disabled={!isLiveClusterAvailable}
+                  title={
+                    !isClusterConnected
+                      ? 'Cluster is not connected'
+                      : !isTerminalConnected
+                        ? 'Terminal session is not connected'
+                        : 'Live Cluster Mode'
+                  }
+                >
+                  <Cpu size={14} />
+                  Live
+                </button>
+                <span className={`chat-mode-status chat-mode-status--${clusterConnectionStatus}`}>
+                  {isTerminalConnected ? clusterStatusLabel : 'Terminal offline'}
+                </span>
+              </div>
               <div className="chat-messages" ref={chatMessagesRef}>
                 {messages.length === 0 && (
                   <div className="chat-welcome">
@@ -4491,35 +4767,6 @@ export default function WorkspacePage() {
               )}
 
               <div className="chat-input-wrapper">
-                <div className="chat-mode-switch" role="tablist" aria-label="Chat mode">
-                  <button
-                    type="button"
-                    className={`chat-mode-btn ${currentMode === 'document' ? 'active' : ''}`}
-                    onClick={() => setCurrentMode('document')}
-                    aria-selected={currentMode === 'document'}
-                  >
-                    <BookOpen size={14} />
-                    Document Learning
-                  </button>
-                  <button
-                    type="button"
-                    className={`chat-mode-btn ${currentMode === 'live_cluster' ? 'active' : ''}`}
-                    onClick={() => {
-                      if (isClusterConnected) {
-                        setCurrentMode('live_cluster');
-                      }
-                    }}
-                    aria-selected={currentMode === 'live_cluster'}
-                    disabled={!isClusterConnected}
-                    title={isClusterConnected ? 'Live Cluster Mode' : 'Cluster is not connected'}
-                  >
-                    <Cpu size={14} />
-                    Live Cluster
-                  </button>
-                  <span className={`chat-mode-status chat-mode-status--${clusterConnectionStatus}`}>
-                    {clusterStatusLabel}
-                  </span>
-                </div>
                 {(activeRepository || activeDocumentId) && (
                   <div className="chat-scope-status">
                     <BookOpen size={14} />
@@ -4718,10 +4965,43 @@ export default function WorkspacePage() {
             )}
           >
             {rightPanelMode === 'terminal' ? (
-              <TerminalSessionPanel
-                learningContext={terminalLearningContext}
-                onCommandSubmitted={handleTerminalCommandSubmitted}
-              />
+              <>
+                <div className="terminal-workspace-toolbar">
+                  <div className="terminal-workspace-summary">
+                    <span>{learnerWorkspaceStatus?.namespace || userWorkspaceNamespace || 'Workspace pending'}</span>
+                    {learnerWorkspaceStatus?.pinned ? <strong>Pinned</strong> : null}
+                    {learnerWorkspaceStatus?.hibernated ? <strong>Hibernated</strong> : null}
+                    {workspaceActionError ? <em>{workspaceActionError}</em> : null}
+                  </div>
+                  <div className="terminal-workspace-actions">
+                    <button
+                      type="button"
+                      onClick={handleWorkspacePinToggle}
+                      disabled={isWorkspaceActionPending || !learnerWorkspaceStatus?.exists}
+                      title={learnerWorkspaceStatus?.pinned ? 'Allow automatic cleanup' : 'Keep this workspace from automatic deletion'}
+                    >
+                      <Pin size={14} />
+                      {learnerWorkspaceStatus?.pinned ? 'Unpin' : 'Pin'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleWorkspaceReset}
+                      disabled={isWorkspaceActionPending || !learnerWorkspaceStatus?.namespace}
+                      title="Delete this learner namespace; reconnect the terminal to create a fresh one"
+                    >
+                      <RotateCcw size={14} />
+                      Reset
+                    </button>
+                  </div>
+                </div>
+                <TerminalSessionPanel
+                  learningContext={terminalLearningContext}
+                  onCommandSubmitted={handleTerminalCommandSubmitted}
+                  onOutputChunk={handleTerminalOutputChunk}
+                  onSessionStateChange={setTerminalConnectionState}
+                  onWorkspaceReady={handleTerminalWorkspaceReady}
+                />
+              </>
             ) : (
               <>
             {testMode && (

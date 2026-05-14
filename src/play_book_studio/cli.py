@@ -10,6 +10,7 @@ import argparse
 import json
 from pathlib import Path
 
+from play_book_studio.console_encoding import force_utf8_stdio
 from play_book_studio.config.corpus_paths import (
     ANSWER_EVAL_CASES_PATH,
     COURSE_OPS_LEARNING_GOLDEN_CASES_PATH,
@@ -1366,6 +1367,7 @@ def _run_kmsc_course_import(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    force_utf8_stdio()
     args = build_parser().parse_args()
     if args.command == "ui":
         return _run_ui(args)

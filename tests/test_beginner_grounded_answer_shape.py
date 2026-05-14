@@ -5,6 +5,9 @@ from play_book_studio.answering.models import Citation
 from play_book_studio.retrieval.query_understanding import understand_query
 
 
+MOJIBAKE_MARKERS = ("?붿", "?ㅼ", "留", "濡", "寃", "쑝", "섎", "낅")
+
+
 def _citation(**overrides) -> Citation:
     payload = {
         "index": 1,
@@ -222,5 +225,27 @@ def test_beginner_deployment_command_answer_replaces_generic_apply_answer() -> N
     )
 
     assert "Deployment" in answer
+    assert "애플리케이션 배포" in answer
+    assert "상태를 확인하는 흐름" in answer
     assert "oc apply -f deployment.yaml" in answer
     assert "oc rollout status deployment/<name>" in answer
+    assert not any(marker in answer for marker in MOJIBAKE_MARKERS)
+
+
+def test_beginner_install_answer_without_commands_stays_readable_korean() -> None:
+    answer = shape_beginner_grounded_answer(
+        "요약: 설치하면 됩니다.",
+        query="OCP 설치 완료는 어떻게 확인해?",
+        citations=[
+            _citation(
+                book_slug="installation_overview",
+                excerpt="OpenShift installation overview mentions openshift-install and KUBECONFIG.",
+                cli_commands=(),
+            )
+        ],
+    )
+
+    assert "설치 완료 확인" in answer
+    assert "openshift-install" in answer
+    assert "KUBECONFIG" in answer
+    assert not any(marker in answer for marker in MOJIBAKE_MARKERS)

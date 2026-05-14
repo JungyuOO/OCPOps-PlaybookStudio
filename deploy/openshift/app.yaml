@@ -17,7 +17,7 @@ spec:
         app.kubernetes.io/name: app
         app.kubernetes.io/part-of: playbookstudio
     spec:
-      serviceAccountName: playbookstudio
+      serviceAccountName: terminal-broker
       containers:
         - name: app
           image: ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev

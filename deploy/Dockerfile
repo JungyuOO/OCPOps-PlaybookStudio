@@ -44,7 +44,7 @@ COPY src /app/src
 COPY db /app/db
 COPY corpus /app/corpus
 COPY deploy/scripts /app/scripts
-RUN chmod +x /app/scripts/terminal-entrypoint.sh
+RUN chmod +x /app/scripts/*.sh
 RUN pip install --no-cache-dir --no-deps -e .
 
 COPY --from=frontend-build /app/apps/web/dist /app/apps/web/dist
@@ -62,3 +62,48 @@ RUN chgrp -R 0 /var/cache/nginx /var/run /var/log/nginx /etc/nginx/conf.d /usr/s
     && chmod -R g=u /var/cache/nginx /var/run /var/log/nginx /etc/nginx/conf.d /usr/share/nginx/html
 
 EXPOSE 8080
+
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal AS sandbox
+
+ARG OC_CLIENT_ARCHIVE_URL=https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
+
+RUN microdnf install -y \
+    bash \
+    ca-certificates \
+    findutils \
+    grep \
+    gzip \
+    jq \
+    less \
+    procps-ng \
+    tar \
+    vim-minimal \
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
+
+RUN curl -fsSL "${OC_CLIENT_ARCHIVE_URL}" -o /tmp/openshift-client-linux.tar.gz \
+    && tar -xzf /tmp/openshift-client-linux.tar.gz -C /usr/local/bin oc kubectl \
+    && chmod +x /usr/local/bin/oc /usr/local/bin/kubectl \
+    && rm -f /tmp/openshift-client-linux.tar.gz
+
+RUN mkdir -p /home/learner /home/learner/.kube /etc/skel \
+    && echo 'learner:x:1001:0:learner:/home/learner:/bin/bash' >> /etc/passwd \
+    && printf '%s\n' \
+      'export HOME=/home/learner' \
+      'export KUBECONFIG=${KUBECONFIG:-/home/learner/.kube/config}' \
+      'alias ll="ls -la"' \
+      'PS1="[learner@\h \W]\\$ "' \
+      > /etc/skel/.bashrc \
+    && cp /etc/skel/.bashrc /home/learner/.bashrc \
+    && chgrp -R 0 /home/learner /etc/skel \
+    && chmod -R g=u /home/learner /etc/skel
+
+ENV HOME=/home/learner \
+    SHELL=/bin/bash \
+    KUBECONFIG=/home/learner/.kube/config
+
+WORKDIR /home/learner
+USER 1001
+
+CMD ["/bin/bash", "-lc", "sleep infinity"]

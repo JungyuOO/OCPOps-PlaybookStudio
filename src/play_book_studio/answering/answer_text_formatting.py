@@ -802,7 +802,7 @@ def _shape_beginner_install_overview_v012(answer_text: str, *, citations) -> str
             *(
                 ["```bash", *command_lines, "```"]
                 if command_lines
-                else [f"- ?ㅼ튂 ?꾨즺 ?뺤씤???쇰컲?곸쑝濡 `openshift-install`怨?KUBECONFIG瑜?以鍮꾪븳 ?? ?곹깭瑜?寃利앺븯???먮쫫?낅땲??[{command_index}]."]
+                else [f"- 설치 완료 확인은 일반적으로 `openshift-install`과 KUBECONFIG를 준비한 뒤 클러스터 상태를 검증하는 흐름입니다 [{command_index}]."]
             ),
             f"초보자 기준으로는 먼저 Assisted Installer + SNO 흐름으로 전체 그림을 잡고, 자동화나 제한망 요구가 생기면 Agent-based/UPI 흐름을 비교하는 편이 이해하기 쉽습니다 [{command_index}].",
         ]
@@ -882,11 +882,11 @@ def _shape_beginner_deployment_command_v012(query: str, citations) -> str:
     index = _evidence_index(citations, "deployment", "oc apply -f", "yaml", "manifest")
     return "\n".join(
         [
-            f"?붿빟: OCP?먯꽌 ?좏뵆由ъ??댁뀡 諛고룷??湲곕낯??Deployment YAML??留뚮뱾怨?`oc apply -f deployment.yaml`濡??곸슜???ㅼ쓬 `oc rollout status deployment/<name> -n <namespace>`濡??곹깭瑜??뺤씤?섎뒗 ?먮쫫?낅땲??[{index}].",
+            f"요약: OCP에서 애플리케이션 배포의 기본은 Deployment YAML을 만들고 `oc apply -f deployment.yaml`로 적용한 다음 `oc rollout status deployment/<name> -n <namespace>`로 상태를 확인하는 흐름입니다 [{index}].",
             "",
-            "- `Deployment`瑜??ㅼ젣濡??앹꽦?섎젮硫?YAML?먯꽌 `apiVersion: apps/v1`, `kind: Deployment`, `metadata.name`, `spec.selector`, `spec.template`瑜?留욎텛怨??곸슜?⑸땲??",
-            "- 癒쇱? ?곸슜 紐낅졊??`oc apply -f deployment.yaml`?낅땲?? ?곸슜 ????곹깭??`oc rollout status deployment/<name> -n <namespace>`濡?蹂대㈃ ?⑸땲??",
-            "- Pod媛 ?⑥? ?딆쑝硫?`oc get pods -n <namespace>`? `oc describe pod <pod-name> -n <namespace>`濡??대깽?몃? 癒쇱? ?뺤씤?⑸땲??",
+            "- `Deployment`를 실제로 생성하려면 YAML에서 `apiVersion: apps/v1`, `kind: Deployment`, `metadata.name`, `spec.selector`, `spec.template`를 맞춘 뒤 적용합니다.",
+            "- 먼저 적용 명령은 `oc apply -f deployment.yaml`입니다. 적용 후 배포 상태는 `oc rollout status deployment/<name> -n <namespace>`로 보면 됩니다.",
+            "- Pod가 뜨지 않으면 `oc get pods -n <namespace>`와 `oc describe pod <pod-name> -n <namespace>`로 이벤트를 먼저 확인합니다.",
         ]
     ).strip()
 

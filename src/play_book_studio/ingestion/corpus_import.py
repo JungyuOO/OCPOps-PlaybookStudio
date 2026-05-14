@@ -32,6 +32,17 @@ SUPPORTED_CORPUS_SUFFIXES = {
     ".xlsx",
 }
 
+EXCLUDED_CORPUS_DIR_NAMES = {
+    ".git",
+    ".venv",
+    "__pycache__",
+    "artifacts",
+    "dist",
+    "node_modules",
+    "reports",
+    "tmp",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class CorpusImportProfile:
@@ -78,6 +89,7 @@ def iter_corpus_source_files(source_dir: Path) -> tuple[Path, ...]:
                 if path.is_file()
                 and path.suffix.lower() in SUPPORTED_CORPUS_SUFFIXES
                 and not path.name.startswith("~$")
+                and not set(path.relative_to(source_dir).parts[:-1]).intersection(EXCLUDED_CORPUS_DIR_NAMES)
             ),
             key=lambda path: path.relative_to(source_dir).as_posix().lower(),
         )
