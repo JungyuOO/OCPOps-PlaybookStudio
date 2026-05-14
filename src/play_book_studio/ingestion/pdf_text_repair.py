@@ -14,6 +14,19 @@ _YAML_COMMENT_FRAGMENT_RE = re.compile(r"^[A-Za-z가-힣0-9 ()_.-]{1,32}$")
 _FOOTER_LABEL_RE = re.compile(r"^[A-Za-z가-힣][A-Za-z가-힣 ._-]{0,31}$")
 _STRUCTURAL_LINE_RE = re.compile(r"^\s*(?:#{1,6}\s+|```|~~~|[-*]\s+|\|)")
 _YAML_KEY_RE = re.compile(r"^\s{0,12}[A-Za-z_][\w.-]*\s*:")
+_CODE_LIKE_YAML_KEY_RE = re.compile(
+    r"^\s{0,12}(?:apiVersion|kind|metadata|spec|subjects|roleRef|rules|verbs|resources|namespace|name|"
+    r"allowHostDirVolumePlugin|allowHostIPC|allowHostNetwork|allowHostPID|allowHostPorts|"
+    r"allowPrivilegeEscalation|allowPrivilegedContainer|priority|readOnlyRootFilesystem|type|"
+    r"runAsUser|seLinuxContext|supplementalGroups|serviceAccountName|securityContext|users|groups|volumes):\s*"
+)
+_PAREN_CONTINUATION_RE = re.compile(r"^[A-Za-z][A-Za-z0-9 ._/-]{1,64}\)$")
+_KOREAN_QUESTION_FRAGMENT_RE = re.compile(r"^[가-힣]{1,3}[?][\"']?$")
+_KNOWN_STUCK_TOKEN_REPLACEMENTS = (
+    (re.compile(r"\bUser\s+IDUID\b"), "User ID(UID)"),
+    (re.compile(r"\bRBAC\s+Role-Based\s+Access\s+Control\)"), "RBAC (Role-Based Access Control)"),
+    (re.compile(r"\bSCC\s+Security\s+Context\s+Constraints\)"), "SCC (Security Context Constraints)"),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +113,9 @@ def repair_pdf_text_artifacts(markdown: str) -> PdfTextRepairResult:
 
         output.append(line)
         index += 1
+
+    output, prose_repairs = _repair_prose_spacing(output)
+    repairs.extend(prose_repairs)
 
     repaired = "\n".join(output)
     if source.endswith("\n"):
@@ -202,6 +218,12 @@ def _should_join_fragment(previous: str, fragment: str) -> bool:
         return False
     if prev.endswith(("-n", "--namespace")):
         return bool(re.fullmatch(r"[A-Za-z0-9_.-]{1,63}", fragment))
+    if re.search(r"\bRBAC\s+Role-Based\s+Access$", prev) and fragment.startswith("Control)"):
+        return True
+    if prev.count("(") > prev.count(")") and _PAREN_CONTINUATION_RE.match(fragment):
+        return True
+    if re.search(r"[가-힣]$", prev) and _KOREAN_QUESTION_FRAGMENT_RE.match(fragment):
+        return True
     if _YAML_KEY_RE.match(prev) and _YAML_COMMENT_FRAGMENT_RE.match(fragment):
         return True
     if prev.endswith((".", ":", ";", ")", "]", "}")):
@@ -219,6 +241,12 @@ def _needs_space_before_fragment(previous: str, fragment: str) -> bool:
     prev = previous.rstrip()
     if prev.endswith(("-n", "--namespace")):
         return True
+    if re.search(r"\bRBAC\s+Role-Based\s+Access$", prev) and fragment.startswith("Control)"):
+        return True
+    if prev.count("(") > prev.count(")") and _PAREN_CONTINUATION_RE.match(fragment):
+        return True
+    if _KOREAN_QUESTION_FRAGMENT_RE.match(fragment):
+        return False
     if prev.endswith("-"):
         return False
     if re.search(r"[가-힣]$", prev):
@@ -232,6 +260,112 @@ def _needs_space_before_fragment(previous: str, fragment: str) -> bool:
     if _YAML_KEY_RE.match(prev) and " " in fragment.strip():
         return True
     return False
+
+
+def _repair_prose_spacing(lines: list[str]) -> tuple[list[str], list[PdfTextRepairBlock]]:
+    repaired_lines: list[str] = []
+    repairs: list[PdfTextRepairBlock] = []
+    in_fence = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith(("```", "~~~")):
+            in_fence = not in_fence
+            repaired_lines.append(line)
+            continue
+        if in_fence:
+            repaired = _normalize_code_comment_line(line)
+            repaired_lines.append(repaired)
+            if repaired != line:
+                repairs.append(
+                    _block(
+                        "code_comment_spacing",
+                        index,
+                        index + 1,
+                        [line],
+                        "normalized PDF spacing inside code comments",
+                    )
+                )
+            continue
+        heading_match = re.match(r"^(\s*#{1,6}\s+)(.+?)\s*$", line)
+        if heading_match:
+            prefix, title = heading_match.groups()
+            repaired = prefix + _normalize_prose_line(title).strip()
+            repaired_lines.append(repaired)
+            if repaired != line:
+                repairs.append(
+                    _block(
+                        "prose_spacing",
+                        index,
+                        index + 1,
+                        [line],
+                        "normalized PDF heading spacing and stuck tokens",
+                    )
+                )
+            continue
+        if _STRUCTURAL_LINE_RE.match(line) or _CODE_LIKE_YAML_KEY_RE.match(line):
+            repaired_lines.append(line)
+            continue
+        repaired = _normalize_prose_line(line)
+        repaired_lines.append(repaired)
+        if repaired != line:
+            repairs.append(
+                _block(
+                    "prose_spacing",
+                    index,
+                    index + 1,
+                    [line],
+                    "normalized PDF prose spacing and stuck tokens",
+                )
+            )
+    return repaired_lines, repairs
+
+
+def _normalize_code_comment_line(line: str) -> str:
+    comment_index = _code_comment_index(line)
+    if comment_index < 0:
+        return line
+    prefix = line[:comment_index]
+    comment = line[comment_index + 1 :]
+    if not comment.strip():
+        return line
+    normalized_comment = _normalize_prose_line(comment).strip()
+    return f"{prefix}# {normalized_comment}"
+
+
+def _code_comment_index(line: str) -> int:
+    in_single_quote = False
+    in_double_quote = False
+    escaped = False
+    for index, char in enumerate(line):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == "'" and not in_double_quote:
+            in_single_quote = not in_single_quote
+            continue
+        if char == '"' and not in_single_quote:
+            in_double_quote = not in_double_quote
+            continue
+        if char == "#" and not in_single_quote and not in_double_quote:
+            return index
+    return -1
+
+
+def _normalize_prose_line(line: str) -> str:
+    if not line.strip():
+        return line
+    prefix = re.match(r"^\s*", line).group(0)
+    body = line.strip()
+    for pattern, replacement in _KNOWN_STUCK_TOKEN_REPLACEMENTS:
+        body = pattern.sub(replacement, body)
+    body = re.sub(r"[ \t]{2,}", " ", body)
+    body = re.sub(r"\(\s+", "(", body)
+    body = re.sub(r"\s+\)", ")", body)
+    body = re.sub(r"\s+([,.;:!?])", r"\1", body)
+    return prefix + body
 
 
 __all__ = [

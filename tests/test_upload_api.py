@@ -653,7 +653,9 @@ def test_upload_pipeline_status_resolves_parsed_id_from_quality(monkeypatch):
             "22222222-2222-2222-2222-222222222222",
         )
     ]
-    assert result["pipeline_summary"]["stages"]["topology"] == "completed"
+    assert result["topology"]["state"] == "ready"
+    assert result["pipeline_summary"]["stages"]["topology"] == "pending"
+    assert "topology" in result["pipeline_summary"]["missing_stages"]
 
 
 def test_pipeline_summary_ignores_complete_pipeline_stage_for_topology():
@@ -674,6 +676,34 @@ def test_pipeline_summary_ignores_complete_pipeline_stage_for_topology():
 
     assert summary["stages"]["topology"] == "completed"
     assert summary["stages"]["judge"] == "deferred"
+
+
+def test_pipeline_summary_does_not_complete_missing_event_stages_from_final_result():
+    summary = _pipeline_summary(
+        {
+            "storage_key": "uploads/sources/run/file.pdf",
+            "persisted": {"document_source_id": "doc-1"},
+            "index": {"status": "completed"},
+            "quality": {"state": "gold_ready"},
+            "topology": {
+                "snapshot_id": "33333333-3333-3333-3333-333333333333",
+                "state": "ready",
+                "summary": {"state": "ready", "blockers": []},
+            },
+        },
+        events=[
+            {"pipeline_stage": "bronze", "status": "completed"},
+            {"pipeline_stage": "silver", "status": "completed"},
+            {"pipeline_stage": "pipeline", "status": "completed"},
+        ],
+    )
+
+    assert summary["stages"]["bronze"] == "completed"
+    assert summary["stages"]["silver"] == "completed"
+    assert summary["stages"]["gold"] == "pending"
+    assert summary["stages"]["judge"] == "pending"
+    assert summary["stages"]["topology"] == "pending"
+    assert summary["overall_status"] == "running"
 
 
 def test_upload_pipeline_status_rejects_private_upload_owner_mismatch(monkeypatch):
@@ -1383,6 +1413,8 @@ def test_code_block_repair_apply_rebuilds_and_reindexes(monkeypatch):
     assert result["ok"] is True
     assert replaced_payloads
     assert [stage for stage, _data in events] == [
+        "source_stored",
+        "persisted",
         "repair_start",
         "code_block_repaired",
         "reindex_start",
@@ -1480,6 +1512,7 @@ def test_code_block_repair_no_change_does_not_bypass_gold_gate(monkeypatch):
         raise AssertionError("no-change repair must not rebuild persisted content")
 
     monkeypatch.setattr("play_book_studio.http.upload_api.replace_parsed_document_content", fail_replace)
+    events = []
 
     result = build_upload_code_block_repair_response(
         REPO_ROOT,
@@ -1489,6 +1522,7 @@ def test_code_block_repair_no_change_does_not_bypass_gold_gate(monkeypatch):
             "dry_run": False,
             "created_by": "owner-a",
         },
+        emit_event=lambda stage, data: events.append((stage, data)),
     )
 
     assert result["repair_status"] == "no_change"
@@ -1498,6 +1532,16 @@ def test_code_block_repair_no_change_does_not_bypass_gold_gate(monkeypatch):
     assert result["pipeline_summary"]["stages"]["bronze"] == "completed"
     assert result["pipeline_summary"]["stages"]["silver"] == "completed"
     assert result["pipeline_summary"]["stages"]["gold"] == "deferred"
+    assert [stage for stage, _data in events] == [
+        "source_stored",
+        "persisted",
+        "index_deferred",
+        "topology_start",
+        "topology_deferred",
+        "judge_start",
+        "judge_completed",
+        "complete",
+    ]
 
 
 def test_page_stub_repair_dry_run_does_not_mutate(monkeypatch):
@@ -1672,6 +1716,8 @@ def test_page_stub_repair_apply_rebuilds_reindexes_and_rechecks(monkeypatch):
     assert result["ok"] is True
     assert replaced_payloads
     assert [stage for stage, _data in events] == [
+        "source_stored",
+        "persisted",
         "repair_start",
         "page_stubs_repaired",
         "reindex_start",

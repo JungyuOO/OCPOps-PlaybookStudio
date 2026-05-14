@@ -31,6 +31,10 @@ _KNOWN_KO_SPLIT_RE = re.compile(
     r"쿠버네티\s+스|클러\s+스터|사용\s+자|서비\s+스|권한\s+부\s+여|SA\s+지\s+정|"
     r"설\s+정|금\s+지|공\s+유|우\s+선순위)"
 )
+_KNOWN_READABILITY_ARTIFACT_RE = re.compile(
+    r"(?:User\s+IDUID|(?<!\()Role-Based\s+Access\s+Control\)|(?<!\()Security\s+Context\s+Constraints\))"
+)
+_EXCESSIVE_PROSE_SPACE_RE = re.compile(r"[A-Za-z가-힣0-9)][ \t]{2,}[A-Za-z가-힣0-9(]")
 
 
 def build_document_quality_snapshot(
@@ -88,6 +92,17 @@ def build_document_quality_snapshot(
         "repair_required",
         f"단어 깨짐 후보 {len(split_artifacts)}개",
         evidence=split_artifacts[:10],
+    )
+
+    readability_artifacts = _readability_artifacts(markdown)
+    _append_check(
+        checks,
+        "readability_artifact",
+        "읽기 품질",
+        "fail" if readability_artifacts else "pass",
+        "repair_required",
+        f"읽기 방해 텍스트 오염 {len(readability_artifacts)}개",
+        evidence=readability_artifacts[:10],
     )
 
     page_footer_noise = _page_footer_noise(markdown)
@@ -298,6 +313,22 @@ def _split_text_artifacts(markdown: str) -> list[str]:
     return sorted(candidates)
 
 
+def _readability_artifacts(markdown: str) -> list[str]:
+    candidates: set[str] = set()
+    without_code = re.sub(r"```.*?```|~~~.*?~~~", "", markdown or "", flags=re.DOTALL)
+    for match in _KNOWN_READABILITY_ARTIFACT_RE.finditer(without_code):
+        candidates.add(match.group(0))
+    for raw_line in without_code.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", "|", "-", "*")):
+            continue
+        if _COMMANDISH_LINE_RE.match(line) or _YAMLISH_LINE_RE.match(line):
+            continue
+        if _EXCESSIVE_PROSE_SPACE_RE.search(line):
+            candidates.add(f"excessive_space={line[:160]}")
+    return sorted(candidates)
+
+
 def _page_footer_noise(markdown: str) -> list[str]:
     candidates = set()
     for match in _PAGE_FOOTER_RE.finditer(markdown or ""):
@@ -358,7 +389,7 @@ def _quality_repair_action(check: dict[str, Any]) -> dict[str, Any]:
         next_action = "빈 페이지 표식을 제거하고 chunk, Qdrant 색인, 지식망, 품질 판정을 다시 생성"
     elif check_id == "code_loss":
         next_action = "코드블록 자동 수리 후 chunk, Qdrant 색인, 지식망, 품질 판정을 다시 생성"
-    elif check_id in {"page_footer_noise", "broken_wrapped_command", "split_text"}:
+    elif check_id in {"page_footer_noise", "broken_wrapped_command", "split_text", "readability_artifact"}:
         next_action = "PDF 텍스트 오염을 정리한 뒤 코드블록, chunk, Qdrant 색인, 지식망, 품질 판정을 다시 생성"
     return {
         "id": f"quality_{check_id}",

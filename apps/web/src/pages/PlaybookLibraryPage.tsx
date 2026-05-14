@@ -1382,34 +1382,36 @@ function goldBuildBlockingMessage(run?: GoldBuildRun | null): string {
 }
 
 function goldBuildHasCodeLoss(run?: GoldBuildRun | null): boolean {
-  if (!run) {
+  if (!run || run.status === 'gold') {
     return false;
   }
   const diagnostics = Array.isArray(run.diagnostics) ? run.diagnostics : [];
-  if (diagnostics.some((item) => String(item.code || '').trim() === 'code_loss')) {
+  if (diagnostics.some((item) => String(item.code || '').trim() === 'code_loss' && String(item.severity || '').trim() === 'blocking')) {
     return true;
   }
   const actions = Array.isArray(run.repair_actions) ? run.repair_actions : [];
   return actions.some((item) => {
     const id = String(item.id || '').trim();
     const diagnostic = String(item.diagnostic || '').trim();
-    return id === 'quality_code_loss' || diagnostic === 'code_loss';
+    const status = String(item.status || '').trim();
+    return (id === 'quality_code_loss' || diagnostic === 'code_loss') && !['applied', 'completed', 'done', 'verified'].includes(status);
   });
 }
 
 function goldBuildHasPageStub(run?: GoldBuildRun | null): boolean {
-  if (!run) {
+  if (!run || run.status === 'gold') {
     return false;
   }
   const diagnostics = Array.isArray(run.diagnostics) ? run.diagnostics : [];
-  if (diagnostics.some((item) => String(item.code || '').trim() === 'page_stub')) {
+  if (diagnostics.some((item) => String(item.code || '').trim() === 'page_stub' && String(item.severity || '').trim() === 'blocking')) {
     return true;
   }
   const actions = Array.isArray(run.repair_actions) ? run.repair_actions : [];
   return actions.some((item) => {
     const id = String(item.id || '').trim();
     const diagnostic = String(item.diagnostic || '').trim();
-    return id === 'quality_page_stub' || diagnostic === 'page_stub';
+    const status = String(item.status || '').trim();
+    return (id === 'quality_page_stub' || diagnostic === 'page_stub') && !['applied', 'completed', 'done', 'verified'].includes(status);
   });
 }
 
@@ -1759,17 +1761,21 @@ function uploadPipelineVisualStateFromLedger(events: UploadPipelineLedgerEvent[]
     }
     statuses[stage] = String(event.status || 'running');
   }
-  const firstKnownIndex = order.findIndex((stage) => Boolean(statuses[stage]));
-  if (firstKnownIndex > 0) {
-    for (let index = 0; index < firstKnownIndex; index += 1) {
-      statuses[order[index]] = 'completed';
+  const contiguousCompletedBefore = (stopIndex: number) => {
+    let completedIndex = -1;
+    for (let index = 0; index < stopIndex; index += 1) {
+      if (statuses[order[index]] !== 'completed') {
+        break;
+      }
+      completedIndex = index;
     }
-  }
+    return completedIndex;
+  };
   const failedIndex = order.findIndex((stage) => statuses[stage] === 'failed');
   if (failedIndex >= 0) {
     return {
       activeIndex: failedIndex,
-      completedIndex: failedIndex - 1,
+      completedIndex: contiguousCompletedBefore(failedIndex),
       errorIndex: failedIndex,
     };
   }
@@ -1777,7 +1783,7 @@ function uploadPipelineVisualStateFromLedger(events: UploadPipelineLedgerEvent[]
   if (deferredIndex >= 0) {
     return {
       activeIndex: deferredIndex,
-      completedIndex: deferredIndex - 1,
+      completedIndex: contiguousCompletedBefore(deferredIndex),
       deferredIndex,
     };
   }
@@ -1788,7 +1794,7 @@ function uploadPipelineVisualStateFromLedger(events: UploadPipelineLedgerEvent[]
     const activeIndex = Math.max(...runningIndexes);
     return {
       activeIndex,
-      completedIndex: activeIndex - 1,
+      completedIndex: contiguousCompletedBefore(activeIndex),
     };
   }
   let completedIndex = -1;

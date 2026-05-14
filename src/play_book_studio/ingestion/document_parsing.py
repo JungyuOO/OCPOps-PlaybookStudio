@@ -737,23 +737,9 @@ def _convert_pdf_to_markdown(path: Path) -> ConvertedMarkdown:
     assets_by_page: dict[int, list[DocumentAsset]] = {}
     for asset in pdf_assets:
         assets_by_page.setdefault(int(asset.page_number or 0), []).append(asset)
-    try:
-        from pypdf import PdfReader
-    except Exception:  # noqa: BLE001
-        converted = _convert_with_markitdown(path)
-        if pdf_assets:
-            converted = _append_pdf_assets_to_markdown(converted, pdf_assets)
-        return ConvertedMarkdown(
-            markdown=converted,
-            assets=tuple(pdf_assets),
-            warnings=("pdf_used_markitdown_fallback", *pdf_asset_warnings),
-            metadata={"pdf_image_count": len(pdf_assets)},
-        )
-
-    reader = PdfReader(str(path))
+    page_texts, text_warnings, text_metadata = _extract_pdf_page_texts(path)
     lines = [f"# {path.stem}"]
-    for page_index, page in enumerate(reader.pages, start=1):
-        text = str(page.extract_text() or "").strip()
+    for page_index, text in enumerate(page_texts, start=1):
         page_assets = assets_by_page.get(page_index, [])
         if text:
             lines.extend(["", f"<!-- page: {page_index} -->", f"## Page {page_index}", "", text])
@@ -769,15 +755,64 @@ def _convert_pdf_to_markdown(path: Path) -> ConvertedMarkdown:
         return ConvertedMarkdown(
             markdown=converted,
             assets=tuple(pdf_assets),
-            warnings=("pdf_used_markitdown_fallback", *pdf_asset_warnings),
-            metadata={"pdf_image_count": len(pdf_assets), "page_count": len(reader.pages)},
+            warnings=("pdf_used_markitdown_fallback", *text_warnings, *pdf_asset_warnings),
+            metadata={"pdf_image_count": len(pdf_assets), **text_metadata},
         )
     return ConvertedMarkdown(
         markdown=markdown,
         assets=tuple(pdf_assets),
-        warnings=tuple(pdf_asset_warnings),
-        metadata={"pdf_image_count": len(pdf_assets), "page_count": len(reader.pages)},
+        warnings=(*text_warnings, *pdf_asset_warnings),
+        metadata={"pdf_image_count": len(pdf_assets), **text_metadata},
     )
+
+
+def _extract_pdf_page_texts(path: Path) -> tuple[list[str], tuple[str, ...], dict[str, Any]]:
+    """Extract PDF text with the least destructive local extractor available."""
+
+    warnings: list[str] = []
+    try:
+        import fitz  # type: ignore[import-untyped]
+    except Exception:  # noqa: BLE001
+        fitz = None  # type: ignore[assignment]
+    if fitz is not None:
+        try:
+            document = fitz.open(str(path))
+            try:
+                pages = [
+                    _normalize_pdf_page_text(str(document.load_page(index).get_text("text") or ""))
+                    for index in range(len(document))
+                ]
+                if any(text.strip() for text in pages):
+                    return (
+                        pages,
+                        tuple(warnings),
+                        {"page_count": len(document), "pdf_text_extractor": "pymupdf"},
+                    )
+                warnings.append("pdf_text_pymupdf_empty")
+            finally:
+                document.close()
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"pdf_text_pymupdf_failed:{exc}")
+
+    try:
+        from pypdf import PdfReader
+    except Exception as exc:  # noqa: BLE001
+        return [], (*warnings, f"pdf_text_pypdf_unavailable:{exc}"), {"pdf_text_extractor": "none"}
+
+    try:
+        reader = PdfReader(str(path))
+        pages = [_normalize_pdf_page_text(str(page.extract_text() or "")) for page in reader.pages]
+    except Exception as exc:  # noqa: BLE001
+        return [], (*warnings, f"pdf_text_pypdf_failed:{exc}"), {"pdf_text_extractor": "none"}
+    return (
+        pages,
+        (*warnings, "pdf_text_used_pypdf_fallback") if warnings else ("pdf_text_used_pypdf",),
+        {"page_count": len(reader.pages), "pdf_text_extractor": "pypdf"},
+    )
+
+
+def _normalize_pdf_page_text(text: str) -> str:
+    return str(text or "").replace("\x00", "").strip()
 
 
 def _append_pdf_assets_to_markdown(markdown: str, assets: tuple[DocumentAsset, ...]) -> str:

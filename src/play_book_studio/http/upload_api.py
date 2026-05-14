@@ -110,6 +110,96 @@ def _parsed_document_is_pdf(parsed: Any) -> bool:
     )
 
 
+def _emit_existing_upload_baseline(
+    emit_event: Any | None,
+    loaded: Any,
+    *,
+    document_source_id: str,
+    parsed_document_id: str,
+) -> None:
+    if not emit_event:
+        return
+    base_payload = {
+        "document_source_id": document_source_id,
+        "parsed_document_id": parsed_document_id,
+        "filename": getattr(getattr(loaded, "parsed", None), "filename", ""),
+        "source": "existing_upload",
+    }
+    emit_event(
+        "source_stored",
+        {
+            **base_payload,
+            "storage_key": getattr(loaded, "storage_key", ""),
+        },
+    )
+    emit_event(
+        "persisted",
+        {
+            **base_payload,
+            "repository_id": getattr(loaded, "repository_id", ""),
+            "source_scope": getattr(loaded, "source_scope", ""),
+        },
+    )
+
+
+def _emit_repair_verification_events(
+    emit_event: Any | None,
+    loaded: Any,
+    result: dict[str, Any],
+    *,
+    document_source_id: str,
+    parsed_document_id: str,
+) -> None:
+    if not emit_event:
+        return
+    index_result = result.get("index") if isinstance(result.get("index"), dict) else {}
+    if index_result:
+        emit_event("index_deferred" if index_result.get("status") == "deferred" else "indexed", index_result)
+    topology = result.get("topology") if isinstance(result.get("topology"), dict) else {}
+    if topology:
+        emit_event(
+            "topology_start",
+            {
+                "document_source_id": document_source_id,
+                "parsed_document_id": parsed_document_id,
+                "source_scope": getattr(loaded, "source_scope", ""),
+            },
+        )
+        topology_payload = _topology_event_payload(topology)
+        if topology_payload.get("status") == "ready":
+            emit_event("topology_ready", topology_payload)
+        else:
+            emit_event("topology_deferred", topology_payload)
+    quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
+    if quality:
+        emit_event(
+            "judge_start",
+            {
+                "document_source_id": document_source_id,
+                "parsed_document_id": parsed_document_id,
+                "source_scope": getattr(loaded, "source_scope", ""),
+            },
+        )
+        emit_event(
+            "judge_completed",
+            {
+                "document_source_id": document_source_id,
+                "parsed_document_id": parsed_document_id,
+                "quality_state": quality.get("state", ""),
+                "quality_score": quality.get("score", 0),
+                "blocker_count": len(quality.get("blockers") or []),
+            },
+        )
+    emit_event(
+        "complete",
+        {
+            "filename": getattr(getattr(loaded, "parsed", None), "filename", ""),
+            "status": result.get("gold_build_run", {}).get("status"),
+            "pipeline_summary": _pipeline_summary(result),
+        },
+    )
+
+
 def _store_uploaded_file(root_dir: Path, payload: dict[str, Any]) -> tuple[Path, str, int]:
     settings = load_settings(root_dir)
     content = _file_bytes_from_payload(payload)
@@ -405,6 +495,7 @@ def _pending_cleanup_map(payload: Any) -> dict[str, list[str]]:
 
 
 def _pipeline_summary(result: dict[str, Any], *, events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    has_event_ledger = events is not None
     stage_status: dict[str, str] = {
         "bronze": "pending",
         "silver": "pending",
@@ -417,29 +508,37 @@ def _pipeline_summary(result: dict[str, Any], *, events: list[dict[str, Any]] | 
         status = str(event.get("status") or "")
         if stage in stage_status and status:
             stage_status[stage] = status
+
+    def apply_derived(stage: str, status: str) -> None:
+        if not status:
+            return
+        if has_event_ledger and status == "completed":
+            return
+        stage_status[stage] = status
+
     if result.get("storage_key"):
-        stage_status["bronze"] = "completed"
+        apply_derived("bronze", "completed")
     if result.get("persisted"):
-        stage_status["silver"] = "completed"
+        apply_derived("silver", "completed")
     if str(result.get("repair_status") or "") in {"applied", "no_change"}:
-        stage_status["bronze"] = "completed"
-        stage_status["silver"] = "completed"
+        apply_derived("bronze", "completed")
+        apply_derived("silver", "completed")
     index_result = result.get("index") if isinstance(result.get("index"), dict) else {}
     if index_result:
-        stage_status["gold"] = "deferred" if index_result.get("status") == "deferred" else "completed"
+        apply_derived("gold", "deferred" if index_result.get("status") == "deferred" else "completed")
     quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
     if quality:
         if quality.get("state") == "gold_ready":
-            stage_status["judge"] = "completed"
+            apply_derived("judge", "completed")
         elif quality.get("state") == "blocked":
-            stage_status["judge"] = "failed"
+            apply_derived("judge", "failed")
         else:
-            stage_status["judge"] = "deferred"
+            apply_derived("judge", "deferred")
     topology = result.get("topology") if isinstance(result.get("topology"), dict) else {}
     topology_payload = _topology_event_payload(topology) if topology else {}
     if topology_payload:
         topology_status = str(topology_payload.get("status") or "pending")
-        stage_status["topology"] = "completed" if topology_status == "ready" else topology_status
+        apply_derived("topology", "completed" if topology_status == "ready" else topology_status)
     if "failed" in stage_status.values():
         overall_status = "failed"
     elif "deferred" in stage_status.values():
@@ -1325,6 +1424,12 @@ def build_upload_code_block_repair_response(
         base_result["pipeline_summary"] = _pipeline_summary(base_result)
         return base_result
     if not repair_changed:
+        _emit_existing_upload_baseline(
+            emit_event,
+            loaded,
+            document_source_id=document_source_id,
+            parsed_document_id=parsed_document_id,
+        )
         with psycopg.connect(database_url) as connection:
             updated_documents = _refresh_gold_index_verification(
                 connection,
@@ -1367,8 +1472,21 @@ def build_upload_code_block_repair_response(
             and quality_result["gold_build_run"].get("status") == "gold"
         )
         base_result["pipeline_summary"] = _pipeline_summary(base_result)
+        _emit_repair_verification_events(
+            emit_event,
+            loaded,
+            base_result,
+            document_source_id=document_source_id,
+            parsed_document_id=parsed_document_id,
+        )
         return base_result
 
+    _emit_existing_upload_baseline(
+        emit_event,
+        loaded,
+        document_source_id=document_source_id,
+        parsed_document_id=parsed_document_id,
+    )
     if emit_event:
         emit_event(
             "repair_start",
@@ -1671,6 +1789,12 @@ def build_upload_page_stub_repair_response(
         base_result["pipeline_summary"] = _pipeline_summary(base_result)
         return base_result
     if not repair.changed:
+        _emit_existing_upload_baseline(
+            emit_event,
+            loaded,
+            document_source_id=document_source_id,
+            parsed_document_id=parsed_document_id,
+        )
         with psycopg.connect(database_url) as connection:
             updated_documents = _refresh_gold_index_verification(
                 connection,
@@ -1713,8 +1837,21 @@ def build_upload_page_stub_repair_response(
             and quality_result["gold_build_run"].get("status") == "gold"
         )
         base_result["pipeline_summary"] = _pipeline_summary(base_result)
+        _emit_repair_verification_events(
+            emit_event,
+            loaded,
+            base_result,
+            document_source_id=document_source_id,
+            parsed_document_id=parsed_document_id,
+        )
         return base_result
 
+    _emit_existing_upload_baseline(
+        emit_event,
+        loaded,
+        document_source_id=document_source_id,
+        parsed_document_id=parsed_document_id,
+    )
     if emit_event:
         emit_event(
             "repair_start",

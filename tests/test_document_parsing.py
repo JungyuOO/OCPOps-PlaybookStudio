@@ -207,6 +207,7 @@ def test_pdf_default_pipeline_extracts_embedded_page_images():
     chunks = build_document_chunks(parsed, max_chars=300, overlap_blocks=0)
 
     assert parsed.document_format == "pdf"
+    assert parsed.metadata["pdf_text_extractor"] == "pymupdf"
     assert parsed.metadata["pdf_image_count"] == 1
     assert len(parsed.assets) == 1
     assert parsed.assets[0].content

@@ -145,3 +145,38 @@ runAsUser:
     blocker_ids = {item["id"] for item in quality["blockers"]}
     assert quality["state"] == "needs_repair"
     assert "code_loss" in blocker_ids
+
+
+def test_quality_blocks_readability_artifacts_that_should_not_be_gold() -> None:
+    quality = build_document_quality_snapshot(
+        _document(
+            """# SCC
+
+SCC 는  OpenShift 에서  Pod 의  보안  컨텍스트를  제어합니다.
+User IDUID 범위를 지정합니다.
+구분 RBAC Role-Based Access Control) SCC Security Context Constraints)
+"""
+        ),
+        topology=_ready_topology(),
+    )
+
+    blocker_ids = {item["id"] for item in quality["blockers"]}
+    assert quality["state"] == "needs_repair"
+    assert "readability_artifact" in blocker_ids
+
+
+def test_quality_allows_clean_parenthetical_terms() -> None:
+    quality = build_document_quality_snapshot(
+        _document(
+            """# SCC
+
+RBAC (Role-Based Access Control)
+SCC (Security Context Constraints)
+컨테이너가 실행될 User ID(UID) 범위 지정
+"""
+        ),
+        topology=_ready_topology(),
+    )
+
+    blocker_ids = {item["id"] for item in quality["blockers"]}
+    assert "readability_artifact" not in blocker_ids

@@ -131,3 +131,50 @@ ct
     assert "$ oc adm policy add-scc-to-user anyuid -z my-sa -n my-project" in result.repaired_markdown
     assert "## Page 3" in result.repaired_markdown
     assert "\nct\n" not in result.repaired_markdown
+
+
+def test_normalizes_pdf_prose_spacing_without_touching_code_syntax() -> None:
+    markdown = """구분 RBAC Role-Based Access
+Control) SCC Security Context Constraints)
+SCC 는  OpenShift 에서  Pod 의  보안  컨텍스트를  제어합니다.
+User IDUID 범위를 지정합니다.
+restricted: 가장  엄격한  제한  ( 기본값 ).
+# 특정  프로젝트의  서비스  계정 (my-sa) 에  anyuid SCC 권한  추가
+
+```yaml
+readOnlyRootFilesystem: false     # 루트  파일시스템  읽기  전용
+```
+"""
+
+    result = repair_pdf_text_artifacts(markdown)
+
+    assert result.changed is True
+    assert "RBAC (Role-Based Access Control)" in result.repaired_markdown
+    assert "SCC (Security Context Constraints)" in result.repaired_markdown
+    assert "SCC 는 OpenShift 에서 Pod 의 보안 컨텍스트를 제어합니다." in result.repaired_markdown
+    assert "User ID(UID) 범위를 지정합니다." in result.repaired_markdown
+    assert "restricted: 가장 엄격한 제한 (기본값)." in result.repaired_markdown
+    assert "# 특정 프로젝트의 서비스 계정 (my-sa) 에 anyuid SCC 권한 추가" in result.repaired_markdown
+    assert "readOnlyRootFilesystem: false     # 루트 파일시스템 읽기 전용" in result.repaired_markdown
+    quoted_hash_result = repair_pdf_text_artifacts(
+        '```yaml\nurl: "https://example.com/a#  section"\nannotation: "a#  b"\n```\n'
+    )
+    assert "url: \"https://example.com/a#  section\"" in quoted_hash_result.repaired_markdown
+    assert "annotation: \"a#  b\"" in quoted_hash_result.repaired_markdown
+
+
+def test_joins_parenthetical_terms_and_short_question_fragments() -> None:
+    markdown = """RBAC (Role-Based Access
+Control)
+SCC (Security Context
+Constraints)
+"이 Pod가 루트 권한으로 실행될 수 있는
+가?"
+"""
+
+    result = repair_pdf_text_artifacts(markdown)
+
+    assert result.changed is True
+    assert "RBAC (Role-Based Access Control)" in result.repaired_markdown
+    assert "SCC (Security Context Constraints)" in result.repaired_markdown
+    assert "실행될 수 있는가?" in result.repaired_markdown
