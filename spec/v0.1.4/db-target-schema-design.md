@@ -432,7 +432,7 @@ Example:
 
 ### High-Confidence Retrieval Metadata
 
-Only promote metadata when it has a concrete retrieval use and appears across enough of the operating wiki corpus to justify a stable contract. The repository's current operating wiki corpus has 29 active runtime books and 27,907 gold chunks. The largest books are nodes, security/compliance, backup/restore, machine management, post-installation, storage, operators, authentication/authorization, ingress/load balancing, support, disconnected environments, and advanced networking. Because installation is only one slice of that corpus, installation-specific fields belong in `facets`, not global nullable columns.
+Only promote metadata when it has a concrete retrieval use and appears across enough of the operating wiki corpus to justify a stable contract. The web source catalog is anchored to 34 approved books from `corpus/manifests/official/ocp_ko_4_20_approved_ko.json`. The active runtime/gold chunk materialization currently covers 29 of those books and 27,907 chunks; the remaining approved books must still be represented in the schema even if their runtime artifacts lag. Because installation is only one slice of that corpus, installation-specific fields belong in `facets`, not global nullable columns.
 
 The following fields are worth first-class treatment because they either appear in real OCP questions, prevent irrelevant matches, or support guided next-step answers.
 

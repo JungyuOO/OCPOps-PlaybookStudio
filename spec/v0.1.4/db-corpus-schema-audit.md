@@ -89,7 +89,7 @@ The schema has useful pieces, but their boundaries are soft:
 
 ## Operating Wiki First Rule
 
-v0.1.4 schema decisions should be derived from the actual operating wiki corpus before adding generic OCP metadata. The repository's current operating wiki runtime manifest contains 29 active books, while the gold chunk corpus contains 27,907 chunks. If deployment or upstream storage contains 34 books, the missing five must be reconciled before migration. The largest books in the current repo corpus are `nodes`, `security_and_compliance`, `backup_and_restore`, `machine_management`, `postinstallation_configuration`, `storage`, `operators`, `authentication_and_authorization`, `ingress_and_load_balancing`, `support`, `disconnected_environments`, and `advanced_networking`.
+v0.1.4 schema decisions should be derived from the actual operating wiki corpus before adding generic OCP metadata. The web source catalog is based on the approved source manifest (`corpus/manifests/official/ocp_ko_4_20_approved_ko.json`), which currently contains 34 approved books. The materialized active runtime manifest and gold chunk corpus currently contain 29 books and 27,907 chunks. The five approved-but-not-yet-materialized books are `ai_workloads`, `api_overview`, `hosted_control_planes`, `installing_an_on-premise_cluster_with_the_agent-based_installer`, and `installing_on_bare_metal`. The largest materialized books in the current repo corpus are `nodes`, `security_and_compliance`, `backup_and_restore`, `machine_management`, `postinstallation_configuration`, `storage`, `operators`, `authentication_and_authorization`, `ingress_and_load_balancing`, `support`, `disconnected_environments`, and `advanced_networking`.
 
 That distribution means the stable global schema should optimize for the whole operating wiki, not only installation content.
 
@@ -99,7 +99,7 @@ Rules:
 - Put book/domain-specific retrieval values in `facets jsonb`, not in sparse global columns.
 - Keep `book_slug` and source/viewer path fields first-class because they match the real book and viewer boundaries.
 - Treat `install_category` as `facets.install.install_category`, not a global column.
-- Derive facet vocabularies from observed book slugs, section paths, commands, objects, operators, errors, and verification hints before migration.
+- Derive facet vocabularies from the 34 approved book slugs first, then mark whether each book is materialized in runtime/chunks.
 
 Initial facet groups should mirror the current corpus shape:
 
