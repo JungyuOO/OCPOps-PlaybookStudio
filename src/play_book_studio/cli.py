@@ -775,6 +775,14 @@ def _run_db_migrate(args: argparse.Namespace) -> int:
 
 
 def _upload_ingest_summary(parsed, chunks, *, persisted=None) -> dict:
+    from play_book_studio.wiki_gold_builder import prepare_upload_gold_build_candidate
+
+    gold_candidate = prepare_upload_gold_build_candidate(
+        parsed,
+        tuple(chunks),
+        source_scope=getattr(parsed, "source_scope", "user_upload"),
+        dry_run=persisted is None,
+    )
     return {
         "filename": parsed.filename,
         "document_format": parsed.document_format,
@@ -791,6 +799,7 @@ def _upload_ingest_summary(parsed, chunks, *, persisted=None) -> dict:
             for chunk in chunks
             if chunk.section_path
         ],
+        "gold_build_run": gold_candidate.run,
         "persisted": None if persisted is None else {
             "document_source_id": persisted.document_source_id,
             "document_version_id": persisted.document_version_id,

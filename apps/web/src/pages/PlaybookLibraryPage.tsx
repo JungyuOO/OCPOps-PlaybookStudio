@@ -67,6 +67,7 @@ import {
   type UploadIngestStreamEvent,
   recheckUploadDocumentQuality,
   repairUploadCodeBlocks,
+  repairUploadPageStubs,
   retryUploadDocumentTopology,
   retryUploadDocumentIndex,
   uploadDocumentIngestionStream,
@@ -1358,6 +1359,9 @@ function goldBuildPrimaryAction(run?: GoldBuildRun | null): string {
   if (action && (String(action.diagnostic || '').trim() === 'code_loss' || String(action.id || '').trim() === 'quality_code_loss')) {
     return '코드블록 자동 수리로 YAML/명령어를 보존한 뒤 재색인과 품질 재검사를 실행';
   }
+  if (action && (String(action.diagnostic || '').trim() === 'page_stub' || String(action.id || '').trim() === 'quality_page_stub')) {
+    return '빈 페이지 표식을 제거하고 문서를 재청킹한 뒤 재색인과 품질 재검사를 실행';
+  }
   return action?.next_action || action?.summary || run?.gold_evidence?.[0] || '';
 }
 
@@ -1368,6 +1372,8 @@ function goldBuildBlockingMessage(run?: GoldBuildRun | null): string {
   const diagnostic = run.diagnostics?.find((item) => item.severity === 'blocking') || run.diagnostics?.[0];
   const reason = diagnostic?.code === 'code_loss'
     ? 'YAML/명령어가 코드블록으로 보존되지 않았습니다.'
+    : diagnostic?.code === 'page_stub'
+      ? '페이지 번호 표식만 있는 빈 조각이 본문처럼 색인됐습니다.'
     : diagnostic?.summary || 'Judge 검수 기준을 통과하지 못했습니다.';
   const nextAction = goldBuildPrimaryAction(run);
   return nextAction
@@ -1391,6 +1397,22 @@ function goldBuildHasCodeLoss(run?: GoldBuildRun | null): boolean {
   });
 }
 
+function goldBuildHasPageStub(run?: GoldBuildRun | null): boolean {
+  if (!run) {
+    return false;
+  }
+  const diagnostics = Array.isArray(run.diagnostics) ? run.diagnostics : [];
+  if (diagnostics.some((item) => String(item.code || '').trim() === 'page_stub')) {
+    return true;
+  }
+  const actions = Array.isArray(run.repair_actions) ? run.repair_actions : [];
+  return actions.some((item) => {
+    const id = String(item.id || '').trim();
+    const diagnostic = String(item.diagnostic || '').trim();
+    return id === 'quality_page_stub' || diagnostic === 'page_stub';
+  });
+}
+
 function codeLossRepairSummary(run?: GoldBuildRun | null): string {
   const action = run?.repair_actions?.find((item) => String(item.diagnostic || '').trim() === 'code_loss' || String(item.id || '').trim() === 'quality_code_loss');
   const evidence = action?.evidence?.filter(Boolean).slice(0, 3) || [];
@@ -1405,22 +1427,48 @@ function codeLossRepairNextAction(run?: GoldBuildRun | null): string {
     || '코드블록 자동 수리 후 chunk, Qdrant 색인, 지식망, 품질 판정을 다시 생성합니다.';
 }
 
+function pageStubRepairSummary(run?: GoldBuildRun | null): string {
+  const action = run?.repair_actions?.find((item) => String(item.diagnostic || '').trim() === 'page_stub' || String(item.id || '').trim() === 'quality_page_stub');
+  const evidence = action?.evidence?.filter(Boolean).slice(0, 3) || [];
+  return evidence.length
+    ? `빈 페이지 표식 조각: ${evidence.join(' · ')}`
+    : '페이지 번호 표식만 있는 빈 조각이 본문처럼 색인됐습니다.';
+}
+
+function pageStubRepairNextAction(run?: GoldBuildRun | null): string {
+  const action = run?.repair_actions?.find((item) => String(item.diagnostic || '').trim() === 'page_stub' || String(item.id || '').trim() === 'quality_page_stub');
+  return String(action?.next_action || '').trim()
+    || '빈 페이지 표식을 제거하고 chunk, Qdrant 색인, 지식망, 품질 판정을 다시 생성합니다.';
+}
+
 function repairActionTitle(action: { id?: string; diagnostic?: string; title?: string }): string {
-  return String(action.diagnostic || '').trim() === 'code_loss' || String(action.id || '').trim() === 'quality_code_loss'
-    ? '코드블록 자동 수리'
-    : String(action.title || '수리 항목');
+  if (String(action.diagnostic || '').trim() === 'code_loss' || String(action.id || '').trim() === 'quality_code_loss') {
+    return '코드블록 자동 수리';
+  }
+  if (String(action.diagnostic || '').trim() === 'page_stub' || String(action.id || '').trim() === 'quality_page_stub') {
+    return '빈 페이지 조각 자동 수리';
+  }
+  return String(action.title || '수리 항목');
 }
 
 function repairActionSummary(action: { id?: string; diagnostic?: string; summary?: string }): string {
-  return String(action.diagnostic || '').trim() === 'code_loss' || String(action.id || '').trim() === 'quality_code_loss'
-    ? 'YAML/명령어가 평문에 섞인 부분을 찾아 코드블록으로 감싸고 재색인합니다.'
-    : String(action.summary || '');
+  if (String(action.diagnostic || '').trim() === 'code_loss' || String(action.id || '').trim() === 'quality_code_loss') {
+    return 'YAML/명령어가 평문에 섞인 부분을 찾아 코드블록으로 감싸고 재색인합니다.';
+  }
+  if (String(action.diagnostic || '').trim() === 'page_stub' || String(action.id || '').trim() === 'quality_page_stub') {
+    return '페이지 번호 표식만 있는 조각을 제거하고 문서를 다시 chunk로 구성합니다.';
+  }
+  return String(action.summary || '');
 }
 
 function repairActionNextAction(action: { id?: string; diagnostic?: string; next_action?: string }): string {
-  return String(action.diagnostic || '').trim() === 'code_loss' || String(action.id || '').trim() === 'quality_code_loss'
-    ? '버튼 실행 전 dry-run 요약을 확인하고 적용하면 chunk, Qdrant, 지식망, 품질 판정을 다시 생성합니다.'
-    : String(action.next_action || '');
+  if (String(action.diagnostic || '').trim() === 'code_loss' || String(action.id || '').trim() === 'quality_code_loss') {
+    return '버튼 실행 전 dry-run 요약을 확인하고 적용하면 chunk, Qdrant, 지식망, 품질 판정을 다시 생성합니다.';
+  }
+  if (String(action.diagnostic || '').trim() === 'page_stub' || String(action.id || '').trim() === 'quality_page_stub') {
+    return '버튼 실행 전 dry-run 요약을 확인하고 적용하면 빈 페이지 표식을 구조 메타데이터로만 남긴 뒤 재색인합니다.';
+  }
+  return String(action.next_action || '');
 }
 
 function goldBuildStageLabel(stage: string): string {
@@ -1553,8 +1601,8 @@ const FACTORY_PIPELINE_STEPS: Record<FactoryLane, Array<{ badge: string; title: 
     { badge: 'Bronze', title: '원본 수신', description: '파일 업로드 · 원본 캡처' },
     { badge: 'Silver', title: '구조화', description: '정규화 · 섹션 · 위키 문서' },
     { badge: 'Gold', title: '검색 근거 생성', description: 'chunk · Qdrant 색인 생성' },
-    { badge: 'Judge', title: '검수 / 합류', description: 'Gold 판정 후 내 업로드 반영' },
     { badge: 'Topology', title: '지식망 생성', description: '개념 · 이미지 · 절차 관계 스냅샷 저장' },
+    { badge: 'Judge', title: '검수 / 합류', description: '품질 판정 후 내 업로드 반영' },
   ],
 };
 
@@ -1570,7 +1618,9 @@ function normalizeUploadStreamStage(stage: string): PipelineStage | null {
     case 'persisting':
     case 'persisted':
     case 'repair_start':
+    case 'pdf_text_repaired':
     case 'code_block_repaired':
+    case 'page_stubs_repaired':
     case 'index_start':
     case 'indexing':
     case 'reindex_start':
@@ -1607,7 +1657,9 @@ function uploadPipelineStageFromEventName(eventName: string): PipelineStage | nu
     case 'repair_start':
       return 'persisting';
     case 'persisted':
+    case 'pdf_text_repaired':
     case 'code_block_repaired':
+    case 'page_stubs_repaired':
       return 'persisted';
     case 'index_start':
     case 'indexing':
@@ -1636,7 +1688,7 @@ function uploadPipelineStageFromEventName(eventName: string): PipelineStage | nu
 function uploadLedgerPipelineStageFromEventName(eventName: string): UploadPipelineLedgerEvent['pipelineStage'] {
   const visualStage = uploadPipelineStageFromEventName(eventName);
   const index = uploadPipelineStepIndex(visualStage);
-  return ['bronze', 'silver', 'gold', 'judge', 'topology'][index] || 'bronze';
+  return ['bronze', 'silver', 'gold', 'topology', 'judge'][index] || 'bronze';
 }
 
 function uploadPipelineStepIndex(stage: PipelineStage | null): number {
@@ -1653,12 +1705,12 @@ function uploadPipelineStepIndex(stage: PipelineStage | null): number {
     case 'indexed':
     case 'index_deferred':
       return 2;
-    case 'gold_build':
-      return 3;
     case 'topology_build':
     case 'topology_ready':
     case 'topology_deferred':
     case 'topology_failed':
+      return 3;
+    case 'gold_build':
     case 'done':
       return 4;
     default:
@@ -1674,13 +1726,13 @@ function uploadPipelineVisualState(stage: PipelineStage, failedStage: PipelineSt
     return { activeIndex: 2, completedIndex: 1, deferredIndex: 2 };
   }
   if (stage === 'gold_build') {
-    return { activeIndex: 3, completedIndex: 2, deferredIndex: 3 };
-  }
-  if (stage === 'topology_deferred') {
     return { activeIndex: 4, completedIndex: 3, deferredIndex: 4 };
   }
+  if (stage === 'topology_deferred') {
+    return { activeIndex: 3, completedIndex: 2, deferredIndex: 3 };
+  }
   if (stage === 'topology_failed') {
-    return { activeIndex: 4, completedIndex: 3, errorIndex: 4 };
+    return { activeIndex: 3, completedIndex: 2, errorIndex: 3 };
   }
   if (stage === 'error') {
     const failedIndex = uploadPipelineStepIndex(failedStage);
@@ -1698,7 +1750,7 @@ function uploadPipelineVisualStateFromLedger(events: UploadPipelineLedgerEvent[]
   if (!events.length) {
     return fallback;
   }
-  const order = ['bronze', 'silver', 'gold', 'judge', 'topology'];
+  const order = ['bronze', 'silver', 'gold', 'topology', 'judge'];
   const statuses: Record<string, string> = {};
   for (const event of events) {
     const stage = String(event.pipelineStage || '');
@@ -1809,9 +1861,25 @@ function uploadStreamEventLog(event: UploadIngestStreamEvent): LogEntry | null {
     case 'persisted':
       return { time: nowTime(), tag: 'success', msg: `DB 저장 완료: source ${String(data.document_source_id || '')}` };
     case 'repair_start':
-      return { time: nowTime(), tag: 'info', msg: `코드블록 자동 수리 시작: ${num('changed_block_count')}개 후보` };
+      {
+        const repairKind = String(data.repair_kind || '');
+        const repairLabel = repairKind === 'pdf_text' ? 'PDF 텍스트 정리' : repairKind === 'page_stub' ? '빈 페이지 조각' : '코드블록';
+        return {
+          time: nowTime(),
+          tag: 'info',
+          msg: `${repairLabel} 자동 수리 시작: ${num('changed_block_count')}개 후보`,
+        };
+      }
+    case 'pdf_text_repaired':
+      return {
+        time: nowTime(),
+        tag: 'success',
+        msg: `PDF 텍스트 정리 적용: ${num('changed_block_count')}개 오염 후보 정리, ${num('chunk_count')}개 chunk 재생성`,
+      };
     case 'code_block_repaired':
       return { time: nowTime(), tag: 'success', msg: `코드블록 수리 적용: ${num('changed_block_count')}개 block, ${num('chunk_count')}개 chunk 재생성` };
+    case 'page_stubs_repaired':
+      return { time: nowTime(), tag: 'success', msg: `빈 페이지 조각 수리 적용: ${num('changed_block_count')}개 표식 정리, ${num('chunk_count')}개 chunk 재생성` };
     case 'index_start':
     case 'indexing':
     case 'reindex_start':
@@ -1878,7 +1946,9 @@ function stageLabelForEvent(stage: string): string {
     case 'persisting': return 'DB 저장 중';
     case 'persisted': return 'DB 저장 완료';
     case 'repair_start': return '수리 시작';
+    case 'pdf_text_repaired': return 'PDF 텍스트 정리';
     case 'code_block_repaired': return '코드블록 수리';
+    case 'page_stubs_repaired': return '빈 페이지 조각 수리';
     case 'index_start': return '색인 시작';
     case 'indexing': return '색인 중';
     case 'reindex_start': return '재색인 시작';
@@ -2543,6 +2613,7 @@ const PlaybookLibraryPage: React.FC = () => {
   const [uploadStreamActive, setUploadStreamActive] = useState(false);
   const [indexRetrying, setIndexRetrying] = useState(false);
   const [codeRepairingDocumentId, setCodeRepairingDocumentId] = useState<string | null>(null);
+  const [pageStubRepairingDocumentId, setPageStubRepairingDocumentId] = useState<string | null>(null);
   const [documentRecoveryAction, setDocumentRecoveryAction] = useState<{
     documentSourceId: string;
     action: 'quality' | 'topology';
@@ -2650,7 +2721,7 @@ const PlaybookLibraryPage: React.FC = () => {
     [pipelineFailedStage, pipelineStage, uploadPipelineLedger],
   );
   const uploadPipelineRunningIndex = useMemo(() => {
-    const order = ['bronze', 'silver', 'gold', 'judge', 'topology'];
+    const order = ['bronze', 'silver', 'gold', 'topology', 'judge'];
     const latestRunning = [...uploadPipelineLedger].reverse().find((event) => event.status === 'running');
     return latestRunning ? order.indexOf(latestRunning.pipelineStage) : -1;
   }, [uploadPipelineLedger]);
@@ -2871,6 +2942,128 @@ const PlaybookLibraryPage: React.FC = () => {
       addLog('error', message);
     } finally {
       setCodeRepairingDocumentId(null);
+    }
+  }, [refreshData]);
+
+  const handlePageStubRepair = useCallback(async (document: DocumentRepositoryDocument) => {
+    const goldRun = documentGoldBuildRun(document);
+    if (!goldBuildHasPageStub(goldRun)) {
+      addLog('info', '이 문서는 빈 페이지 조각 자동 수리 대상이 아닙니다.');
+      return;
+    }
+    const documentId = document.document_source_id;
+    const parsedId = document.parsed_document_id;
+    setPageStubRepairingDocumentId(documentId);
+    setErrorMsg('');
+    setPipelineWarningMsg('');
+    try {
+      const preview = await repairUploadPageStubs({
+        documentSourceId: documentId,
+        parsedDocumentId: parsedId,
+        dryRun: true,
+      });
+      if (!preview.changed_block_count) {
+        addLog('info', '빈 페이지 조각 자동 수리 후보가 없습니다. 품질 재검사가 필요합니다.');
+        return;
+      }
+      const diffSummary = preview.diff_summary
+        .slice(0, 8)
+        .map((item) => {
+          const page = item.page_number ? `페이지 ${item.page_number}` : '페이지 표식';
+          const previewText = (item.preview || []).slice(0, 2).join(' / ');
+          return `${page} ${item.start_line ?? '?'}-${item.end_line ?? '?'}: ${previewText}`;
+        })
+        .join('\n');
+      const confirmed = typeof window === 'undefined'
+        ? true
+        : window.confirm(
+          [
+            `빈 페이지 표식 ${preview.changed_block_count}개를 구조 메타데이터로 낮춥니다.`,
+            '',
+            diffSummary,
+            '',
+            '적용하면 markdown, chunk, Qdrant 색인, 지식망, 품질 판정을 다시 생성합니다.',
+          ].join('\n'),
+        );
+      if (!confirmed) {
+        addLog('info', '빈 페이지 조각 자동 수리를 취소했습니다.');
+        return;
+      }
+      setUploadPipelineLedger([]);
+      setUploadEventTrace([]);
+      setPipelineStage('persisting');
+      const applied = await repairUploadPageStubs({
+        documentSourceId: documentId,
+        parsedDocumentId: parsedId,
+        dryRun: false,
+      });
+      const events = (applied.events || []).filter((event): event is Extract<UploadIngestStreamEvent, { type: 'event' }> => event.type === 'event');
+      if (events.length) {
+        setUploadPipelineLedger(events.map((event) => ({
+          event: event.event || event.stage,
+          pipelineStage: event.pipeline_stage || uploadLedgerPipelineStageFromEventName(event.event || event.stage),
+          status: event.status || 'running',
+          occurredAt: event.occurred_at || '',
+          data: event.data ?? event.payload ?? {},
+        })));
+        setUploadEventTrace(events
+          .map((event, index) => uploadEventTraceFromStreamEvent(event, index))
+          .filter((item): item is UploadEventTraceItem => Boolean(item)));
+        const newLogs = events
+          .map(uploadStreamEventLog)
+          .filter((item): item is LogEntry => Boolean(item));
+        if (newLogs.length) {
+          setLogs((prev) => [...newLogs.reverse(), ...prev].slice(0, 10));
+        }
+      }
+      if (applied.gold_build_run) {
+        setLatestUploadIngest((current) => ({
+          dry_run: false,
+          filename: applied.filename || current?.filename || document.filename,
+          storage_key: current?.storage_key || '',
+          byte_size: current?.byte_size || 0,
+          document_format: current?.document_format || String(document.metadata?.document_format || ''),
+          mime_type: current?.mime_type || document.mime_type || '',
+          sha256: current?.sha256 || '',
+          block_count: current?.block_count || 0,
+          asset_count: current?.asset_count || 0,
+          chunk_count: applied.index?.candidate_count || document.chunk_count || current?.chunk_count || 0,
+          warnings: applied.warnings || current?.warnings || [],
+          sections: current?.sections || [],
+          persisted: current?.persisted || {
+            document_source_id: documentId,
+            document_version_id: '',
+            parse_job_id: '',
+            parsed_document_id: parsedId,
+            block_count: 0,
+            asset_count: 0,
+            chunk_count: applied.index?.candidate_count || document.chunk_count || 0,
+          },
+          index: applied.index,
+          gold_build_run: applied.gold_build_run,
+          topology: applied.topology || undefined,
+          quality: applied.quality || undefined,
+          source_scope: applied.source_scope || document.source_scope,
+        }));
+      }
+      if (applied.ok) {
+        setPipelineStage('done');
+        addLog('success', '빈 페이지 조각 자동 수리 후 Gold 승급 조건을 통과했습니다.');
+      } else {
+        setPipelineStage(uploadPipelineOutcomeFromResult(applied as unknown as UploadIngestResponse));
+        const blockers = applied.quality?.blockers?.length ?? 0;
+        setPipelineWarningMsg(`빈 페이지 조각 수리는 적용됐지만 Gold 승급은 아직 보류입니다. 남은 blocker ${blockers}개`);
+        addLog('warn', `빈 페이지 조각 수리 완료, 남은 blocker ${blockers}개`);
+      }
+      refreshData();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '빈 페이지 조각 자동 수리 실패';
+      setPipelineStage('error');
+      setPipelineFailedStage('gold_build');
+      setErrorMsg(message);
+      addLog('error', message);
+    } finally {
+      setPageStubRepairingDocumentId(null);
     }
   }, [refreshData]);
 
@@ -3337,7 +3530,7 @@ const PlaybookLibraryPage: React.FC = () => {
       writeIngestionStatus('received');
       const ingest = await uploadDocumentIngestionStream(
         file,
-        { index: true, sourceScope: 'user_upload' },
+        { index: true, sourceScope: 'user_upload', autoRepair: factoryRunMode === 'auto' },
         (event) => {
           if (event.type === 'event') {
             const eventName = event.event || event.stage;
@@ -4546,7 +4739,7 @@ const PlaybookLibraryPage: React.FC = () => {
   const bookFactoryScopeDescription = activeWikiScope === 'official'
     ? '질문으로 부족한 OCP 공식 자료를 찾고, Bronze 원천 후보를 Gold Wiki 데이터로 승급시킵니다.'
     : activeWikiScope === 'uploads'
-      ? '업로드 파일을 Bronze 시작점으로 받아 Silver 구조화, Gold 생성, Judge 합류까지 한 화면에서 봅니다.'
+    ? '업로드 파일을 Bronze 시작점으로 받아 Silver 구조화, Gold 색인, 지식망 생성, Judge 합류까지 한 화면에서 봅니다.'
       : '고객/현장 문서를 Wiki Library 안에서 보강하고, 신뢰 가능한 Gold 데이터로 승급시킵니다.';
   const bookFactoryMainStatusLabel = activeWikiScope === 'customer'
     ? `${activeWikiBookStats.all.toLocaleString()}개 고객사 문서 · ${activeWikiBookStats.gold.toLocaleString()}개 Gold`
@@ -4601,15 +4794,15 @@ const PlaybookLibraryPage: React.FC = () => {
     }
     if (index === 3) {
       return {
-        count: activeWikiScope === 'official' ? sourceJudgeReports.length : activeWikiBookStats.readable,
-        note: activeWikiScope === 'official' ? 'Judge 리포트' : '읽기 가능',
-        action: latestSourceJudgeReport ? sourceJudgeVerdictLabel(latestSourceJudgeReport.overall_verdict) : 'REVIEW',
+        count: Number(topologyPreview?.ready_count || 0),
+        note: '지식망 스냅샷',
+        action: topologyPreview?.needs_review_count ? '지식망 보강' : '연결 근거',
       };
     }
     return {
-      count: Number(topologyPreview?.ready_count || 0),
-      note: '지식망 스냅샷',
-      action: topologyPreview?.needs_review_count ? '지식망 보강' : '연결 근거',
+      count: activeWikiScope === 'official' ? sourceJudgeReports.length : activeWikiBookStats.readable,
+      note: activeWikiScope === 'official' ? 'Judge 리포트' : '읽기 가능',
+      action: latestSourceJudgeReport ? sourceJudgeVerdictLabel(latestSourceJudgeReport.overall_verdict) : 'REVIEW',
     };
   });
   const toggleFactoryManualChecklist = (checkId: string) => {
@@ -5013,7 +5206,7 @@ const PlaybookLibraryPage: React.FC = () => {
                     <div className="book-factory-primary-copy">
                       <span>Primary Action</span>
                       <strong>Upload File</strong>
-                      <p>파일 업로드가 Bronze 시작점입니다. 업로드 후 Silver 구조화, Gold build, Judge 합류 상태가 이어집니다.</p>
+                      <p>파일 업로드가 Bronze 시작점입니다. 업로드 후 Silver 구조화, Gold 색인, 지식망 생성, Judge 합류 상태가 이어집니다.</p>
                     </div>
                     <button
                       type="button"
@@ -5113,7 +5306,7 @@ const PlaybookLibraryPage: React.FC = () => {
                   <React.Fragment key={`book-factory:${step.badge}`}>
                     <div
                       className={`pipeline-step ${index <= bookFactoryPipelineState.completedIndex ? 'completed' : ''
-                        } ${index === bookFactoryPipelineState.activeIndex ? 'active' : ''} ${index === 3 && bookFactoryPipelineState.activeIndex === 3 ? 'final' : ''
+                        } ${index === bookFactoryPipelineState.activeIndex ? 'active' : ''} ${index === 4 && bookFactoryPipelineState.activeIndex === 4 ? 'final' : ''
                         } ${index === bookFactoryPipelineState.errorIndex ? 'error' : ''
                         } ${index === bookFactoryPipelineState.deferredIndex ? 'deferred' : ''
                         }`}
@@ -5128,7 +5321,9 @@ const PlaybookLibraryPage: React.FC = () => {
                             ? <HardDrive />
                             : index === 2
                               ? <Cpu />
-                              : <BookOpen />}
+                              : index === 3
+                                ? <Layers />
+                                : <BookOpen />}
                       </div>
                       <div className="step-info">
                         <h4>{step.title}</h4>
@@ -5228,6 +5423,36 @@ const PlaybookLibraryPage: React.FC = () => {
                     >
                       {codeRepairingDocumentId === latestUploadIngest.persisted.document_source_id ? <Loader2 size={14} className="spin-icon" /> : <Wrench size={14} />}
                       <span>코드블록 자동 수리</span>
+                    </button>
+                  )}
+                  {latestUploadIngest.persisted && (latestUploadIngest.source_scope || 'user_upload') === 'user_upload' && goldBuildHasPageStub(latestUploadIngest.gold_build_run) && (
+                    <button
+                      type="button"
+                      className="gold-build-repair-cta"
+                      disabled={pageStubRepairingDocumentId === latestUploadIngest.persisted.document_source_id}
+                      onClick={() => {
+                        const document: DocumentRepositoryDocument = {
+                          document_source_id: latestUploadIngest.persisted?.document_source_id || '',
+                          parsed_document_id: latestUploadIngest.persisted?.parsed_document_id || '',
+                          title: latestUploadIngest.filename,
+                          filename: latestUploadIngest.filename,
+                          source_kind: 'upload',
+                          mime_type: latestUploadIngest.mime_type,
+                          source_scope: latestUploadIngest.source_scope || 'user_upload',
+                          visibility: latestUploadIngest.visibility || 'private_user',
+                          metadata: { document_format: latestUploadIngest.document_format },
+                          gold_build_run: latestUploadIngest.gold_build_run,
+                          parse_status: 'parsed',
+                          chunk_count: latestUploadIngest.chunk_count,
+                          indexed_chunk_count: latestUploadIngest.index?.indexed_count || 0,
+                          created_at: '',
+                          updated_at: '',
+                        };
+                        void handlePageStubRepair(document);
+                      }}
+                    >
+                      {pageStubRepairingDocumentId === latestUploadIngest.persisted.document_source_id ? <Loader2 size={14} className="spin-icon" /> : <Wrench size={14} />}
+                      <span>빈 페이지 조각 자동 수리</span>
                     </button>
                   )}
                   {latestUploadIngest.gold_build_run.gold_evidence.length > 0 && (
@@ -5634,6 +5859,12 @@ const PlaybookLibraryPage: React.FC = () => {
                               <span>조치: {codeLossRepairNextAction(goldBuild)}</span>
                             </div>
                           )}
+                          {goldBuildHasPageStub(goldBuild) && (
+                            <div className="gold-build-visible-repair-note">
+                              <strong>원인: {pageStubRepairSummary(goldBuild)}</strong>
+                              <span>조치: {pageStubRepairNextAction(goldBuild)}</span>
+                            </div>
+                          )}
                         </div>
                         <div className="library-document-actions">
                           {document.source_scope === 'user_upload' && goldBuildHasCodeLoss(goldBuild) && (
@@ -5648,6 +5879,20 @@ const PlaybookLibraryPage: React.FC = () => {
                             >
                               {codeRepairingDocumentId === document.document_source_id ? <Loader2 size={14} className="spin-icon" /> : <Wrench size={14} />}
                               <span>{codeRepairingDocumentId === document.document_source_id ? '수리 중' : '코드블록 자동 수리'}</span>
+                            </button>
+                          )}
+                          {document.source_scope === 'user_upload' && goldBuildHasPageStub(goldBuild) && (
+                            <button
+                              type="button"
+                              className="library-document-chat-btn library-document-repair-btn"
+                              title={pageStubRepairSummary(goldBuild)}
+                              disabled={pageStubRepairingDocumentId === document.document_source_id}
+                              onClick={() => {
+                                void handlePageStubRepair(document);
+                              }}
+                            >
+                              {pageStubRepairingDocumentId === document.document_source_id ? <Loader2 size={14} className="spin-icon" /> : <Wrench size={14} />}
+                              <span>{pageStubRepairingDocumentId === document.document_source_id ? '수리 중' : '빈 페이지 조각 자동 수리'}</span>
                             </button>
                           )}
                           {showDocumentRecoveryActions && (
@@ -6687,6 +6932,12 @@ const PlaybookLibraryPage: React.FC = () => {
                             <span>조치: {codeLossRepairNextAction(goldBuild)}</span>
                           </div>
                         )}
+                        {goldBuildHasPageStub(goldBuild) && (
+                          <div className="gold-build-visible-repair-note">
+                            <strong>원인: {pageStubRepairSummary(goldBuild)}</strong>
+                            <span>조치: {pageStubRepairNextAction(goldBuild)}</span>
+                          </div>
+                        )}
                       </div>
                       <div className="library-document-actions">
                         {document.source_scope === 'user_upload' && goldBuildHasCodeLoss(goldBuild) && (
@@ -6701,6 +6952,20 @@ const PlaybookLibraryPage: React.FC = () => {
                           >
                             {codeRepairingDocumentId === document.document_source_id ? <Loader2 size={14} className="spin-icon" /> : <Wrench size={14} />}
                             <span>{codeRepairingDocumentId === document.document_source_id ? '수리 중' : '코드블록 자동 수리'}</span>
+                          </button>
+                        )}
+                        {document.source_scope === 'user_upload' && goldBuildHasPageStub(goldBuild) && (
+                          <button
+                            type="button"
+                            className="library-document-chat-btn library-document-repair-btn"
+                            title={pageStubRepairSummary(goldBuild)}
+                            disabled={pageStubRepairingDocumentId === document.document_source_id}
+                            onClick={() => {
+                              void handlePageStubRepair(document);
+                            }}
+                          >
+                            {pageStubRepairingDocumentId === document.document_source_id ? <Loader2 size={14} className="spin-icon" /> : <Wrench size={14} />}
+                            <span>{pageStubRepairingDocumentId === document.document_source_id ? '수리 중' : '빈 페이지 조각 자동 수리'}</span>
                           </button>
                         )}
                         {showDocumentRecoveryActions && (

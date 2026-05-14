@@ -53,6 +53,7 @@ export interface GoldBuildRun {
   manual_repair_needed: boolean;
   reader_path?: string;
   qdrant_index?: Record<string, unknown>;
+  quality_snapshot?: DocumentQualitySnapshot;
 }
 
 export interface LibraryBook {
@@ -332,9 +333,12 @@ export interface UploadCodeBlockRepairResponse {
   parsed_document_id: string;
   source_scope?: string;
   filename?: string;
+  repair_kind?: 'code_block' | 'page_stub' | string;
   changed_block_count: number;
   diff_summary: Array<{
+    repair_kind?: string;
     language?: string;
+    page_number?: number;
     start_line?: number;
     end_line?: number;
     line_count?: number;
@@ -354,6 +358,7 @@ export interface UploadCodeBlockRepairResponse {
 type UploadIngestOptions = {
   dryRun?: boolean;
   index?: boolean;
+  autoRepair?: boolean;
   createdBy?: string;
   repositoryId?: string;
   repositorySlug?: string;
@@ -2143,6 +2148,7 @@ function buildUploadIngestFormData(file: File, options: UploadIngestOptions): Fo
   payload.append('file', file, file.name);
   payload.append('dry_run', String(Boolean(options.dryRun)));
   payload.append('index', String(options.index ?? true));
+  payload.append('auto_repair', String(Boolean(options.autoRepair)));
   if (options.createdBy) {
     payload.append('created_by', options.createdBy);
   }
@@ -2302,6 +2308,21 @@ export async function repairUploadCodeBlocks(payload: {
   dryRun?: boolean;
 }): Promise<UploadCodeBlockRepairResponse> {
   return requestJson('/api/uploads/repair-code-blocks', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_source_id: payload.documentSourceId,
+      parsed_document_id: payload.parsedDocumentId ?? '',
+      dry_run: payload.dryRun ?? true,
+    }),
+  });
+}
+
+export async function repairUploadPageStubs(payload: {
+  documentSourceId: string;
+  parsedDocumentId?: string;
+  dryRun?: boolean;
+}): Promise<UploadCodeBlockRepairResponse> {
+  return requestJson('/api/uploads/repair-page-stubs', {
     method: 'POST',
     body: JSON.stringify({
       document_source_id: payload.documentSourceId,

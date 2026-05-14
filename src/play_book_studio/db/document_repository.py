@@ -501,6 +501,7 @@ def replace_parsed_document_content(
     points_by_collection: dict[str, list[str]] = {}
     block_ids: tuple[str, ...] = ()
     chunk_ids: tuple[str, ...] = ()
+    block_rows, asset_rows, chunk_rows = _remap_child_row_ids_for_replace(rows, parsed_document_id)
     with connection.transaction():
         with connection.cursor() as cursor:
             cursor.execute(
@@ -561,9 +562,9 @@ def replace_parsed_document_content(
             )
             block_ids = tuple(
                 _insert_document_block(cursor, parsed_document_id=parsed_document_id, row=row)
-                for row in rows.blocks
+                for row in block_rows
             )
-            asset_block_by_id = {str(row.get("id") or ""): str(row.get("block_id") or "") for row in rows.assets}
+            asset_block_by_id = {str(row.get("id") or ""): str(row.get("block_id") or "") for row in asset_rows}
             for asset_id, block_id in asset_block_by_id.items():
                 cursor.execute(
                     """
@@ -576,7 +577,7 @@ def replace_parsed_document_content(
                 )
             chunk_ids = tuple(
                 _insert_document_chunk(cursor, parsed_document_id=parsed_document_id, row=row)
-                for row in rows.chunks
+                for row in chunk_rows
             )
             if gold_build_run is not None:
                 cursor.execute(
@@ -700,6 +701,42 @@ def _remap_child_row_ids_for_parse(
     )
     parsed_markdown = _replace_asset_refs(str(rows.parsed_document.get("markdown") or ""), asset_id_map)
     return block_rows, asset_rows, chunk_rows, parsed_markdown
+
+
+def _remap_child_row_ids_for_replace(
+    rows: ParsedDocumentRows,
+    parsed_document_id: str,
+) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]]:
+    block_id_map = {
+        str(row.get("id") or ""): _parse_scoped_uuid(parsed_document_id, str(row.get("id") or "block"))
+        for row in rows.blocks
+    }
+    chunk_id_map = {
+        str(row.get("id") or ""): _parse_scoped_uuid(parsed_document_id, str(row.get("id") or "chunk"))
+        for row in rows.chunks
+    }
+    block_rows = tuple(
+        {
+            **row,
+            "id": block_id_map.get(str(row.get("id") or ""), str(row.get("id") or "")),
+        }
+        for row in rows.blocks
+    )
+    asset_rows = tuple(
+        {
+            **row,
+            "block_id": block_id_map.get(str(row.get("block_id") or ""), str(row.get("block_id") or "")),
+        }
+        for row in rows.assets
+    )
+    chunk_rows = tuple(
+        {
+            **row,
+            "id": chunk_id_map.get(str(row.get("id") or ""), str(row.get("id") or "")),
+        }
+        for row in rows.chunks
+    )
+    return block_rows, asset_rows, chunk_rows
 
 
 def _parse_scoped_uuid(parsed_document_id: str, child_id: str) -> str:

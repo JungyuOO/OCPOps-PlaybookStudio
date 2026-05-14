@@ -10,16 +10,26 @@ QUALITY_SCHEMA_VERSION = "llm_wiki.document_quality.v1"
 
 _FENCE_RE = re.compile(r"^\s*(```|~~~)")
 _COMMANDISH_LINE_RE = re.compile(
-    r"^\s*(?:oc|kubectl|helm|podman|docker|python|ansible-playbook|curl)\s+",
+    r"^\s*(?:\$+\s*)?(?:oc|kubectl|helm|podman|docker|python|ansible-playbook|curl)\s+",
     re.IGNORECASE,
 )
 _YAMLISH_LINE_RE = re.compile(
-    r"^\s*(?:apiVersion|kind|metadata|spec|subjects|roleRef|rules|verbs|resources|namespace|name):\s*",
+    r"^\s*(?:apiVersion|kind|metadata|spec|subjects|roleRef|rules|verbs|resources|namespace|name|"
+    r"allowHostDirVolumePlugin|allowHostIPC|allowHostNetwork|allowHostPID|allowHostPorts|"
+    r"allowPrivilegeEscalation|allowPrivilegedContainer|priority|readOnlyRootFilesystem|"
+    r"runAsUser|seLinuxContext|supplementalGroups|serviceAccountName|securityContext|users|groups|volumes):\s*",
 )
 _PAGE_HEADING_RE = re.compile(r"^\s*#{1,6}\s*Page\s+\d+\s*$", re.IGNORECASE)
+_PAGE_FOOTER_RE = re.compile(r"(?m)^[A-Za-z가-힣][A-Za-z가-힣 ._-]{0,31}\n\d{1,4}$")
+_BROKEN_BASH_RE = re.compile(
+    r"```bash\n(?P<body>.*?)```",
+    re.DOTALL,
+)
 _LATIN_SPLIT_RE = re.compile(r"$^")
 _KNOWN_KO_SPLIT_RE = re.compile(
-    r"(?:오픈시\s+프트|비활\s+성화|네임스페이\s*스|테스\s+트|인\s+프라|프로젝\s+트|쿠버네티\s+스|클러\s+스터|사용\s+자|서비\s+스)"
+    r"(?:오픈시\s+프트|비활\s+성화|네임스페이\s+스|테스\s+트|인\s+프라|프로젝\s+트|"
+    r"쿠버네티\s+스|클러\s+스터|사용\s+자|서비\s+스|권한\s+부\s+여|SA\s+지\s+정|"
+    r"설\s+정|금\s+지|공\s+유|우\s+선순위)"
 )
 
 
@@ -52,7 +62,7 @@ def build_document_quality_snapshot(
         checks,
         "page_stub",
         "빈 페이지 조각",
-        "fail" if page_stub_count >= 2 else "warn" if page_stub_count else "pass",
+        "fail" if page_stub_count else "pass",
         "repair_required",
         f"짧은 Page stub {page_stub_count}개",
         evidence=[f"page_stub_count={page_stub_count}"],
@@ -78,6 +88,28 @@ def build_document_quality_snapshot(
         "repair_required",
         f"단어 깨짐 후보 {len(split_artifacts)}개",
         evidence=split_artifacts[:10],
+    )
+
+    page_footer_noise = _page_footer_noise(markdown)
+    _append_check(
+        checks,
+        "page_footer_noise",
+        "페이지 푸터 오염",
+        "fail" if page_footer_noise else "pass",
+        "repair_required",
+        f"본문에 섞인 페이지 푸터 {len(page_footer_noise)}개",
+        evidence=page_footer_noise[:8],
+    )
+
+    broken_commands = _broken_wrapped_commands(markdown)
+    _append_check(
+        checks,
+        "broken_wrapped_command",
+        "페이지 경계 명령어 깨짐",
+        "fail" if broken_commands else "pass",
+        "repair_required",
+        f"페이지/줄바꿈으로 깨진 명령어 {len(broken_commands)}개",
+        evidence=broken_commands[:8],
     )
 
     described_assets = [
@@ -167,15 +199,7 @@ def merge_quality_into_gold_run(gold_build_run: dict[str, Any], quality: dict[st
         if isinstance(check, dict)
     ]
     repair_actions = [
-        {
-            "id": f"quality_{str(check.get('id') or 'gate')}",
-            "diagnostic": str(check.get("id") or "quality_gate"),
-            "status": "queued",
-            "title": str(check.get("label") or "품질 gate 수리"),
-            "summary": str(check.get("summary") or "Gold 승급 전에 품질 gate를 통과해야 합니다."),
-            "evidence": list(check.get("evidence") or []),
-            "next_action": "품질 재검사 API로 수리 결과를 다시 확인",
-        }
+        _quality_repair_action(check)
         for check in quality.get("blockers") or []
         if isinstance(check, dict)
     ]
@@ -274,6 +298,36 @@ def _split_text_artifacts(markdown: str) -> list[str]:
     return sorted(candidates)
 
 
+def _page_footer_noise(markdown: str) -> list[str]:
+    candidates = set()
+    for match in _PAGE_FOOTER_RE.finditer(markdown or ""):
+        text = match.group(0).strip()
+        label = text.splitlines()[0].strip()
+        if label and ":" not in label and not label.startswith("#"):
+            candidates.add(text.replace("\n", " "))
+    return sorted(candidates)
+
+
+def _broken_wrapped_commands(markdown: str) -> list[str]:
+    candidates: set[str] = set()
+    for match in _BROKEN_BASH_RE.finditer(markdown or ""):
+        body = match.group("body")
+        lines = [line.rstrip() for line in body.splitlines() if line.strip()]
+        if not lines:
+            continue
+        last = lines[-1].strip()
+        if re.search(r"\s(?:-n|--namespace)$", last) or re.search(r"\b[A-Za-z0-9_-]{3,}-$", last):
+            candidates.add(last[:180])
+        if re.search(r"\b[A-Za-z0-9_-]{3,}-[A-Za-z]{1,4}$", last):
+            candidates.add(last[:180])
+    outside_fence = re.sub(r"```.*?```", "", markdown or "", flags=re.DOTALL)
+    for match in re.finditer(r"(?m)^[A-Za-z]{1,4}$", outside_fence):
+        fragment = match.group(0)
+        if fragment.lower() in {"ct", "ject", "tion"}:
+            candidates.add(f"orphan_fragment={fragment}")
+    return sorted(candidates)
+
+
 def _topology_status(topology: dict[str, Any] | None) -> str:
     if not topology:
         return "missing"
@@ -295,6 +349,26 @@ def _quality_blocking_message(quality: dict[str, Any]) -> str:
     if not labels:
         return "품질 판정서를 통과하지 못해 Gold 승급이 보류되었습니다."
     return "품질 판정서 보류: " + " · ".join(labels[:4])
+
+
+def _quality_repair_action(check: dict[str, Any]) -> dict[str, Any]:
+    check_id = str(check.get("id") or "quality_gate")
+    next_action = "품질 재검사 API로 수리 결과를 다시 확인"
+    if check_id == "page_stub":
+        next_action = "빈 페이지 표식을 제거하고 chunk, Qdrant 색인, 지식망, 품질 판정을 다시 생성"
+    elif check_id == "code_loss":
+        next_action = "코드블록 자동 수리 후 chunk, Qdrant 색인, 지식망, 품질 판정을 다시 생성"
+    elif check_id in {"page_footer_noise", "broken_wrapped_command", "split_text"}:
+        next_action = "PDF 텍스트 오염을 정리한 뒤 코드블록, chunk, Qdrant 색인, 지식망, 품질 판정을 다시 생성"
+    return {
+        "id": f"quality_{check_id}",
+        "diagnostic": check_id,
+        "status": "queued",
+        "title": str(check.get("label") or "품질 gate 수리"),
+        "summary": str(check.get("summary") or "Gold 승급 전에 품질 gate를 통과해야 합니다."),
+        "evidence": list(check.get("evidence") or []),
+        "next_action": next_action,
+    }
 
 
 __all__ = [

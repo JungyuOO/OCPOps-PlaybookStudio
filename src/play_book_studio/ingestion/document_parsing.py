@@ -414,6 +414,11 @@ def build_document_chunks(
             current = current[-overlap_blocks:]
         current_chars = sum(len(block.markdown) for block in current)
 
+    def is_page_heading_only(block: DocumentBlock) -> bool:
+        if block.block_type != "heading":
+            return False
+        return bool(re.match(r"^Page\s+\d+$", str(block.heading_title or block.text or "").strip(), re.I))
+
     for block in parsed.blocks:
         if block.block_type == "heading":
             flush()
@@ -421,7 +426,9 @@ def build_document_chunks(
             current_chars = len(block.markdown)
             continue
         block_chars = len(block.markdown)
-        if current and current_chars + block_chars > max_chars:
+        if current and current_chars + block_chars > max_chars and not (
+            len(current) == 1 and is_page_heading_only(current[0])
+        ):
             flush()
         current.append(block)
         current_chars += block_chars

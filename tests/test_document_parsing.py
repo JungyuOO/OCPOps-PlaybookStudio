@@ -157,6 +157,18 @@ def test_markdown_sections_store_toc_metadata_outside_body_text():
     assert "1.1 Network check" not in chunks[-1].markdown
 
 
+def test_page_heading_is_not_split_into_standalone_stub_chunk():
+    source = _case_dir("page_heading_chunk") / "report.md"
+    body = " ".join(["본문"] * 120)
+    source.write_text("# Report\n\n<!-- page: 6 -->\n## Page 6\n\n" + body, encoding="utf-8")
+
+    parsed = parse_upload_document(source)
+    chunks = build_document_chunks(parsed, max_chars=80, overlap_blocks=0)
+
+    assert all(chunk.markdown.strip() != "## Page 6" for chunk in chunks)
+    assert any("## Page 6" in chunk.markdown and "본문" in chunk.markdown for chunk in chunks)
+
+
 def test_parse_image_document_keeps_asset_and_description():
     image_path = _case_dir("image_asset") / "diagram.png"
     image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")

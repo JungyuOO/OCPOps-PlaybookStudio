@@ -43,6 +43,24 @@ _YAML_STRONG_KEYS = {
     "ports",
     "resources",
     "verbs",
+    "allowHostDirVolumePlugin",
+    "allowHostIPC",
+    "allowHostNetwork",
+    "allowHostPID",
+    "allowHostPorts",
+    "allowPrivilegeEscalation",
+    "allowPrivilegedContainer",
+    "priority",
+    "readOnlyRootFilesystem",
+    "runAsUser",
+    "seLinuxContext",
+    "supplementalGroups",
+    "serviceAccountName",
+    "securityContext",
+    "users",
+    "groups",
+    "volumes",
+    "type",
 }
 _YAML_LIST_PARENT_KEYS = {
     "apiGroups",
@@ -56,6 +74,7 @@ _YAML_LIST_PARENT_KEYS = {
     "containers",
     "env",
     "ports",
+    "volumes",
 }
 
 
@@ -208,8 +227,17 @@ def _is_orphan_bash_continuation(line: str, previous_line: str) -> bool:
         return False
     if stripped.endswith(":") or re.match(r"^[A-Z][A-Za-z ]+:", stripped):
         return False
+    if re.match(r"^-[A-Za-z]\s+\S+", stripped):
+        return True
     if not re.match(r"^[A-Za-z0-9./:_-]+(?:\s+--?[A-Za-z0-9_-]+(?:[=\s].*)?)*$", stripped):
         return False
+    if previous.endswith(("-n", "--namespace")):
+        return True
+    if re.search(r"(?:\s-n|--namespace)\s+[A-Za-z0-9_-]{3,}$", previous) and re.fullmatch(
+        r"[A-Za-z]{1,8}",
+        stripped,
+    ):
+        return True
     if not ("/" in stripped or "--" in stripped or stripped.startswith(("-", "--")) or previous.endswith("\\")):
         return False
     return (
@@ -219,6 +247,21 @@ def _is_orphan_bash_continuation(line: str, previous_line: str) -> bool:
         or previous.count("'") % 2 == 1
         or previous.count('"') % 2 == 1
     )
+
+
+def _joined_orphan_bash_continuation(previous_line: str, continuation_line: str) -> str | None:
+    previous = previous_line.rstrip()
+    stripped = continuation_line.strip()
+    if previous.endswith(("-n", "--namespace")):
+        return f"{previous} {stripped}"
+    if re.search(r"(?:\s-n|--namespace)\s+[A-Za-z0-9_-]{3,}$", previous) and re.fullmatch(
+        r"[A-Za-z]{1,8}",
+        stripped,
+    ):
+        return f"{previous}{stripped}"
+    if re.match(r"^-[A-Za-z]\s+\S+", stripped):
+        return f"{previous} {stripped}"
+    return None
 
 
 def _is_yaml_candidate_line(line: str) -> bool:
@@ -241,7 +284,7 @@ def _is_yaml_continuation_line(line: str, *, previous_line: str = "") -> bool:
         return False
     if _YAML_LIST_SCALAR_RE.match(line):
         parent_key = _yaml_key(previous_line)
-        if line.startswith((" ", "\t")) or parent_key in _YAML_LIST_PARENT_KEYS:
+        if line.startswith((" ", "\t")) or parent_key in _YAML_LIST_PARENT_KEYS or _YAML_LIST_SCALAR_RE.match(previous_line):
             return True
     if _looks_like_non_code(line):
         return False
@@ -286,7 +329,21 @@ def _looks_like_non_code(line: str) -> bool:
 
 
 def _fenced(language: RepairLanguage, group: list[str]) -> list[str]:
+    if language == "bash":
+        group = _normalize_bash_group(group)
     return [f"```{language}", *group, "```"]
+
+
+def _normalize_bash_group(group: list[str]) -> list[str]:
+    output: list[str] = []
+    for line in group:
+        if output and _is_orphan_bash_continuation(line, output[-1]):
+            joined = _joined_orphan_bash_continuation(output[-1], line)
+            if joined is not None:
+                output[-1] = joined
+                continue
+        output.append(line)
+    return output
 
 
 def _fence_marker(line: str) -> tuple[str, int] | None:
@@ -340,24 +397,40 @@ def _absorb_orphan_bash_continuations(
         closing = lines[index]
         index += 1
         absorbed: list[str] = []
+        absorbed_preview: list[str] = []
+        pending_blank: list[str] = []
         while index < len(lines):
+            current = lines[index]
+            if not current.strip():
+                pending_blank.append(current)
+                index += 1
+                continue
             previous = absorbed[-1] if absorbed else body[-1] if body else ""
-            if not _is_orphan_bash_continuation(lines[index], previous):
+            if not _is_orphan_bash_continuation(current, previous):
                 break
-            absorbed.append(lines[index])
+            pending_blank.clear()
+            absorbed_preview.append(current)
+            joined = _joined_orphan_bash_continuation(previous, current)
+            if joined is not None and absorbed:
+                absorbed[-1] = joined
+            elif joined is not None and body:
+                body[-1] = joined
+            else:
+                absorbed.append(current)
             index += 1
         output.append(line)
         output.extend(body)
         output.extend(absorbed)
         output.append(closing)
-        if absorbed:
+        output.extend(pending_blank)
+        if absorbed_preview:
             repairs.append(
                 CodeBlockRepairBlock(
                     language="bash",
                     start_line=fence_start + 1,
                     end_line=fence_start + len(body) + len(absorbed) + 2,
-                    line_count=len(absorbed),
-                    preview=tuple(item.strip() for item in absorbed[:4]),
+                    line_count=len(absorbed_preview),
+                    preview=tuple(item.strip() for item in absorbed_preview[:4]),
                     reason="absorbed split shell command continuation",
                 )
             )

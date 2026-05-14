@@ -15,6 +15,7 @@ from play_book_studio.http.upload_api import (
     build_upload_code_block_repair_response,
     build_upload_ingest_response,
     build_upload_index_retry_response,
+    build_upload_page_stub_repair_response,
     build_upload_pipeline_status_response,
     build_upload_quality_recheck_response,
     build_upload_topology_retry_response,
@@ -298,9 +299,189 @@ def test_upload_ingest_stream_emits_topology_events_after_persist(monkeypatch):
 
     stages = [stage for stage, _data in events]
     assert "topology_start" in stages
-    assert stages[-4:] == ["topology_start", "topology_ready", "judge_completed", "complete"]
+    assert stages[-5:] == ["topology_start", "topology_ready", "judge_start", "judge_completed", "complete"]
     assert result["topology"]["metadata"]["storage"] == "postgres"
     assert result["topology"]["summary"]["node_count"] == 2
+
+
+def test_upload_ingest_auto_repairs_unfenced_code_before_persist(monkeypatch):
+    storage_dir = _storage_dir("auto_repair_code")
+    monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(storage_dir))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://unit-test")
+    events = []
+    persisted_markdowns = []
+
+    class FakeConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def commit(self):
+            return None
+
+    monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(connect=lambda _database_url: FakeConnection()))
+
+    def fake_persist(_connection, parsed, chunks, **_kwargs):
+        persisted_markdowns.append(parsed.markdown)
+        return SimpleNamespace(
+            document_source_id="11111111-1111-1111-1111-111111111111",
+            document_version_id="22222222-2222-2222-2222-222222222222",
+            parse_job_id="33333333-3333-3333-3333-333333333333",
+            parsed_document_id="44444444-4444-4444-4444-444444444444",
+            repository_id="55555555-5555-5555-5555-555555555555",
+            block_ids=["block-1"],
+            asset_ids=[],
+            chunk_ids=[f"chunk-{index}" for index, _chunk in enumerate(chunks, start=1)],
+        )
+
+    monkeypatch.setattr("play_book_studio.http.upload_api.persist_parsed_upload_document", fake_persist)
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api._index_pending_with_retry",
+        lambda *_args, **kwargs: {
+            "collection": "openshift_docs",
+            "candidate_count": kwargs["chunk_count"],
+            "indexed_count": kwargs["chunk_count"],
+        },
+    )
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.get_or_create_document_topology_snapshot_by_id",
+        lambda *_args, **_kwargs: {
+            "snapshot_id": "66666666-6666-6666-6666-666666666666",
+            "schema_version": "wiki_topology_v1",
+            "document_source_id": "11111111-1111-1111-1111-111111111111",
+            "parsed_document_id": "44444444-4444-4444-4444-444444444444",
+            "state": "ready",
+            "summary": {"state": "ready", "node_count": 2, "edge_count": 1, "blockers": []},
+            "nodes": [],
+            "edges": [],
+            "metadata": {"storage": "postgres"},
+        },
+    )
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.load_document_topology_source",
+        lambda *_args, **_kwargs: {
+            "document_source_id": "11111111-1111-1111-1111-111111111111",
+            "parsed_document_id": "44444444-4444-4444-4444-444444444444",
+            "source_scope": "user_upload",
+            "chunks": [{"chunk_id": "chunk-1", "markdown": "```yaml\nkind: Deployment\nmetadata:\n  name: app\n```", "token_count": 8}],
+            "assets": [],
+            "metadata": {"gold_build_run": {"status": "gold"}},
+        },
+    )
+    monkeypatch.setattr("play_book_studio.http.upload_api.upsert_document_quality_snapshot", lambda _connection, *, quality: quality)
+    monkeypatch.setattr("play_book_studio.http.upload_api.update_document_source_gold_build_run", lambda *_args, **_kwargs: None)
+
+    result = build_upload_ingest_response(
+        REPO_ROOT,
+        {
+            "file_name": "auto-repair.md",
+            "file_bytes": b"# App\n\nkind: Deployment\nmetadata:\n  name: app\nspec:\n  replicas: 1\n",
+            "source_scope": "user_upload",
+            "auto_repair": True,
+            "index": True,
+        },
+        emit_event=lambda stage, data: events.append((stage, data)),
+    )
+
+    assert persisted_markdowns
+    assert "```yaml" in persisted_markdowns[0]
+    assert result["auto_repairs"][0]["kind"] == "code_block"
+    assert [stage for stage, _data in events][:5] == [
+        "received",
+        "source_stored",
+        "parse_start",
+        "parsed",
+        "repair_start",
+    ]
+    assert "code_block_repaired" in [stage for stage, _data in events]
+
+
+def test_upload_ingest_auto_repairs_page_stub_before_chunking(monkeypatch):
+    storage_dir = _storage_dir("auto_repair_page_stub")
+    monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(storage_dir))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://unit-test")
+    events = []
+    persisted_markdowns = []
+
+    class FakeConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def commit(self):
+            return None
+
+    monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(connect=lambda _database_url: FakeConnection()))
+
+    def fake_persist(_connection, parsed, chunks, **_kwargs):
+        persisted_markdowns.append(parsed.markdown)
+        assert all(str(chunk.markdown).strip() != "## Page 1" for chunk in chunks)
+        return SimpleNamespace(
+            document_source_id="11111111-1111-1111-1111-111111111111",
+            document_version_id="22222222-2222-2222-2222-222222222222",
+            parse_job_id="33333333-3333-3333-3333-333333333333",
+            parsed_document_id="44444444-4444-4444-4444-444444444444",
+            repository_id="55555555-5555-5555-5555-555555555555",
+            block_ids=["block-1"],
+            asset_ids=[],
+            chunk_ids=[f"chunk-{index}" for index, _chunk in enumerate(chunks, start=1)],
+        )
+
+    monkeypatch.setattr("play_book_studio.http.upload_api.persist_parsed_upload_document", fake_persist)
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api._index_pending_with_retry",
+        lambda *_args, **kwargs: {
+            "collection": "openshift_docs",
+            "candidate_count": kwargs["chunk_count"],
+            "indexed_count": kwargs["chunk_count"],
+        },
+    )
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.get_or_create_document_topology_snapshot_by_id",
+        lambda *_args, **_kwargs: {
+            "state": "ready",
+            "summary": {"state": "ready", "node_count": 1, "edge_count": 0, "blockers": []},
+            "nodes": [],
+            "edges": [],
+            "metadata": {"storage": "postgres"},
+        },
+    )
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.load_document_topology_source",
+        lambda *_args, **_kwargs: {
+            "document_source_id": "11111111-1111-1111-1111-111111111111",
+            "parsed_document_id": "44444444-4444-4444-4444-444444444444",
+            "source_scope": "user_upload",
+            "chunks": [{"chunk_id": "chunk-1", "markdown": "# SCC\n\n본문입니다.", "token_count": 4}],
+            "assets": [],
+            "metadata": {"gold_build_run": {"status": "gold"}},
+        },
+    )
+    monkeypatch.setattr("play_book_studio.http.upload_api.upsert_document_quality_snapshot", lambda _connection, *, quality: quality)
+    monkeypatch.setattr("play_book_studio.http.upload_api.update_document_source_gold_build_run", lambda *_args, **_kwargs: None)
+
+    result = build_upload_ingest_response(
+        REPO_ROOT,
+        {
+            "file_name": "page-stub.md",
+            "file_bytes": b"## Page 1\n\n# SCC\n\nBody",
+            "source_scope": "user_upload",
+            "auto_repair": True,
+            "index": True,
+        },
+        emit_event=lambda stage, data: events.append((stage, data)),
+    )
+
+    stages = [stage for stage, _data in events]
+    assert persisted_markdowns
+    assert "## Page 1" not in persisted_markdowns[0]
+    assert result["auto_repairs"][0]["kind"] == "page_stub"
+    assert "page_stubs_repaired" in stages
+    assert stages.index("page_stubs_repaired") < stages.index("chunk_start")
 
 
 def test_upload_ingest_stream_keeps_result_when_topology_is_deferred(monkeypatch):
@@ -349,7 +530,7 @@ def test_upload_ingest_stream_keeps_result_when_topology_is_deferred(monkeypatch
         emit_event=lambda stage, data: events.append((stage, data)),
     )
 
-    assert [stage for stage, _data in events][-4:] == ["topology_start", "topology_deferred", "judge_completed", "complete"]
+    assert [stage for stage, _data in events][-5:] == ["topology_start", "topology_deferred", "judge_start", "judge_completed", "complete"]
     assert result["persisted"]["document_source_id"] == "11111111-1111-1111-1111-111111111111"
     assert result["topology"]["metadata"]["storage"] == "transient"
     assert result["warnings"]
@@ -398,7 +579,7 @@ def test_upload_ingest_stream_keeps_result_when_topology_fails(monkeypatch):
         emit_event=lambda stage, data: events.append((stage, data)),
     )
 
-    assert [stage for stage, _data in events][-4:] == ["topology_start", "topology_failed", "judge_completed", "complete"]
+    assert [stage for stage, _data in events][-5:] == ["topology_start", "topology_failed", "judge_start", "judge_completed", "complete"]
     assert result["persisted"]["document_source_id"] == "11111111-1111-1111-1111-111111111111"
     assert result["topology"]["status"] == "failed"
     assert result["warnings"]
@@ -431,7 +612,7 @@ def test_upload_pipeline_status_resolves_parsed_id_from_quality(monkeypatch):
             parsed_document_id="22222222-2222-2222-2222-222222222222",
             source_scope="user_upload",
             visibility="private_user",
-            owner_user_id="",
+            owner_user_id="owner-a",
             parsed=parsed,
         ),
     )
@@ -462,6 +643,7 @@ def test_upload_pipeline_status_resolves_parsed_id_from_quality(monkeypatch):
     result = build_upload_pipeline_status_response(
         REPO_ROOT,
         "document_source_id=11111111-1111-1111-1111-111111111111",
+        owner_user_id="owner-a",
     )
 
     assert result["parsed_document_id"] == "22222222-2222-2222-2222-222222222222"
@@ -1050,6 +1232,8 @@ def test_code_block_repair_dry_run_does_not_mutate(monkeypatch):
             document_source_id="11111111-1111-1111-1111-111111111111",
             parsed_document_id="22222222-2222-2222-2222-222222222222",
             source_scope="user_upload",
+            visibility="private_user",
+            owner_user_id="owner-a",
             filename="deployment.md",
             parsed=parsed,
         ),
@@ -1074,6 +1258,7 @@ def test_code_block_repair_dry_run_does_not_mutate(monkeypatch):
             "document_source_id": "11111111-1111-1111-1111-111111111111",
             "parsed_document_id": "22222222-2222-2222-2222-222222222222",
             "dry_run": True,
+            "created_by": "owner-a",
         },
     )
 
@@ -1189,6 +1374,7 @@ def test_code_block_repair_apply_rebuilds_and_reindexes(monkeypatch):
             "document_source_id": "11111111-1111-1111-1111-111111111111",
             "parsed_document_id": "22222222-2222-2222-2222-222222222222",
             "dry_run": False,
+            "created_by": "owner",
         },
         emit_event=lambda stage, data: events.append((stage, data)),
     )
@@ -1203,6 +1389,7 @@ def test_code_block_repair_apply_rebuilds_and_reindexes(monkeypatch):
         "indexed",
         "topology_start",
         "topology_ready",
+        "judge_start",
         "judge_completed",
         "complete",
     ]
@@ -1248,6 +1435,8 @@ def test_code_block_repair_no_change_does_not_bypass_gold_gate(monkeypatch):
             document_source_id="11111111-1111-1111-1111-111111111111",
             parsed_document_id="22222222-2222-2222-2222-222222222222",
             source_scope="user_upload",
+            visibility="private_user",
+            owner_user_id="owner-a",
             parsed=parsed,
         ),
     )
@@ -1298,6 +1487,7 @@ def test_code_block_repair_no_change_does_not_bypass_gold_gate(monkeypatch):
             "document_source_id": "11111111-1111-1111-1111-111111111111",
             "parsed_document_id": "22222222-2222-2222-2222-222222222222",
             "dry_run": False,
+            "created_by": "owner-a",
         },
     )
 
@@ -1308,3 +1498,187 @@ def test_code_block_repair_no_change_does_not_bypass_gold_gate(monkeypatch):
     assert result["pipeline_summary"]["stages"]["bronze"] == "completed"
     assert result["pipeline_summary"]["stages"]["silver"] == "completed"
     assert result["pipeline_summary"]["stages"]["gold"] == "deferred"
+
+
+def test_page_stub_repair_dry_run_does_not_mutate(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://unit-test")
+
+    parsed = ParsedUploadDocument(
+        document_id="doc-page",
+        filename="rbac.pdf",
+        document_format="pdf",
+        mime_type="application/pdf",
+        sha256="sha",
+        markdown="# RBAC\n\n<!-- page: 6 -->\n## Page 6\n\n본문\n\n<!-- page: 8 -->\n## Page 8\n\n다음 본문\n",
+    )
+
+    class FakeConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(connect=lambda _database_url: FakeConnection()))
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.load_parsed_document_for_repair",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            document_source_id="11111111-1111-1111-1111-111111111111",
+            parsed_document_id="22222222-2222-2222-2222-222222222222",
+            source_scope="user_upload",
+            visibility="private_user",
+            owner_user_id="owner-a",
+            filename="rbac.pdf",
+            parsed=parsed,
+        ),
+    )
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.load_document_quality_snapshot",
+        lambda *_args, **_kwargs: {"state": "needs_repair", "blockers": [{"id": "page_stub"}]},
+    )
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.load_document_topology_snapshot_summary",
+        lambda *_args, **_kwargs: {"state": "ready"},
+    )
+
+    def fail_replace(*_args, **_kwargs):
+        raise AssertionError("dry_run must not replace persisted document content")
+
+    monkeypatch.setattr("play_book_studio.http.upload_api.replace_parsed_document_content", fail_replace)
+
+    result = build_upload_page_stub_repair_response(
+        REPO_ROOT,
+        {
+            "document_source_id": "11111111-1111-1111-1111-111111111111",
+            "parsed_document_id": "22222222-2222-2222-2222-222222222222",
+            "dry_run": True,
+            "created_by": "owner-a",
+        },
+    )
+
+    assert result["repair_status"] == "dry_run_changed"
+    assert result["repair_kind"] == "page_stub"
+    assert result["changed_block_count"] == 2
+    assert result["diff_summary"][0]["page_number"] == 6
+
+
+def test_page_stub_repair_apply_rebuilds_reindexes_and_rechecks(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://unit-test")
+
+    parsed = ParsedUploadDocument(
+        document_id="33333333-3333-3333-3333-333333333333",
+        filename="rbac.pdf",
+        document_format="pdf",
+        mime_type="application/pdf",
+        sha256="sha",
+        markdown="# RBAC\n\n<!-- page: 6 -->\n## Page 6\n\n본문\n\n<!-- page: 8 -->\n## Page 8\n\n다음 본문\n",
+        metadata={"byte_size": 120},
+    )
+
+    class FakeConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def commit(self):
+            return None
+
+    monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(connect=lambda _database_url: FakeConnection()))
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.load_parsed_document_for_repair",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            document_source_id="11111111-1111-1111-1111-111111111111",
+            parsed_document_id="22222222-2222-2222-2222-222222222222",
+            storage_key="uploads/sources/rbac.pdf",
+            owner_user_id="owner",
+            repository_id="44444444-4444-4444-4444-444444444444",
+            visibility="private_user",
+            source_scope="user_upload",
+            parsed=parsed,
+        ),
+    )
+    monkeypatch.setattr("play_book_studio.http.upload_api.load_document_quality_snapshot", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("play_book_studio.http.upload_api.load_document_topology_snapshot_summary", lambda *_args, **_kwargs: None)
+    replaced_payloads = []
+
+    def fake_replace(_connection, **kwargs):
+        replaced_payloads.append(kwargs)
+        assert "## Page 6" not in kwargs["parsed"].markdown
+        assert "본문" in kwargs["parsed"].markdown
+        return SimpleNamespace(
+            block_ids=("block-1", "block-2"),
+            chunk_ids=tuple(chunk.chunk_id for chunk in kwargs["chunks"]),
+            old_qdrant_point_ids=("old-point-1",),
+            old_qdrant_points_by_collection={"openshift_docs": ("old-point-1",)},
+        )
+
+    monkeypatch.setattr("play_book_studio.http.upload_api.replace_parsed_document_content", fake_replace)
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.delete_qdrant_points",
+        lambda _settings, *, collection, point_ids: {
+            "collection": collection,
+            "requested_count": len(point_ids),
+            "deleted_count": len(point_ids),
+        },
+    )
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api._index_pending_with_retry",
+        lambda *_args, **kwargs: {
+            "collection": "openshift_docs",
+            "candidate_count": kwargs["chunk_count"],
+            "indexed_count": kwargs["chunk_count"],
+        },
+    )
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.get_or_create_document_topology_snapshot_by_id",
+        lambda *_args, **_kwargs: {
+            "snapshot_id": "55555555-5555-5555-5555-555555555555",
+            "state": "ready",
+            "summary": {"state": "ready", "blockers": []},
+            "metadata": {"storage": "postgres"},
+        },
+    )
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api._quality_recheck_for_document",
+        lambda *_args, **_kwargs: {
+            "quality": {"state": "gold_ready", "score": 100, "blockers": []},
+            "gold_build_run": {"status": "gold", "final_grade": "Gold", "diagnostics": [], "repair_actions": []},
+        },
+    )
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.update_document_source_gold_build_run",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.update_document_source_metadata",
+        lambda *_args, **_kwargs: None,
+    )
+    events = []
+
+    result = build_upload_page_stub_repair_response(
+        REPO_ROOT,
+        {
+            "document_source_id": "11111111-1111-1111-1111-111111111111",
+            "parsed_document_id": "22222222-2222-2222-2222-222222222222",
+            "dry_run": False,
+            "created_by": "owner",
+        },
+        emit_event=lambda stage, data: events.append((stage, data)),
+    )
+
+    assert result["repair_status"] == "applied"
+    assert result["ok"] is True
+    assert replaced_payloads
+    assert [stage for stage, _data in events] == [
+        "repair_start",
+        "page_stubs_repaired",
+        "reindex_start",
+        "indexed",
+        "topology_start",
+        "topology_ready",
+        "judge_start",
+        "judge_completed",
+        "complete",
+    ]

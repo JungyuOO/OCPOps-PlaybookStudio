@@ -169,3 +169,67 @@ Docker images are stored in the registry.
 
     assert result.changed is False
     assert "```bash" not in result.repaired_markdown
+
+
+def test_repairs_scc_yaml_fields_as_yaml():
+    markdown = """# SCC
+
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+priority: 10
+readOnlyRootFilesystem: false
+runAsUser:
+  type: MustRunAsRange
+serviceAccountName: default
+users: []
+groups: []
+volumes:
+- configMap
+- secret
+"""
+
+    result = repair_unfenced_code_blocks(markdown)
+
+    assert result.changed is True
+    assert "```yaml\nallowHostDirVolumePlugin: false" in result.repaired_markdown
+    assert "- secret\n```" in result.repaired_markdown
+
+
+def test_absorbs_namespace_and_short_suffix_after_existing_bash_fence():
+    markdown = """# Commands
+
+```bash
+$ oc adm policy add-scc-to-user anyuid -z my-sa -n my-proje
+```
+
+ct
+
+```bash
+$ oc adm policy add-scc-to-user privileged -z logging-sa -n
+```
+
+logging-project
+"""
+
+    result = repair_unfenced_code_blocks(markdown)
+
+    assert result.changed is True
+    assert "$ oc adm policy add-scc-to-user anyuid -z my-sa -n my-project\n```" in result.repaired_markdown
+    assert "$ oc adm policy add-scc-to-user privileged -z logging-sa -n logging-project\n```" in result.repaired_markdown
+
+
+def test_joins_option_continuation_inside_new_bash_fence():
+    markdown = """# Grant
+
+$ oc adm policy add-scc-to-user custom-app-scc -z my-sa
+-n my-project
+"""
+
+    result = repair_unfenced_code_blocks(markdown)
+
+    assert result.changed is True
+    assert "$ oc adm policy add-scc-to-user custom-app-scc -z my-sa -n my-project\n```" in result.repaired_markdown

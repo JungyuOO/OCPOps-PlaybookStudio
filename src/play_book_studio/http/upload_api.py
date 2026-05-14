@@ -35,6 +35,8 @@ from play_book_studio.ingestion.document_parsing import (
     parse_upload_document,
     rebuild_parsed_document_from_markdown,
 )
+from play_book_studio.ingestion.page_stub_repair import repair_page_stub_headings
+from play_book_studio.ingestion.pdf_text_repair import repair_pdf_text_artifacts
 from play_book_studio.ingestion.vision import build_qwen_image_describer
 from play_book_studio.wiki_gold_builder import prepare_upload_gold_build_candidate, with_index_verification
 
@@ -70,13 +72,13 @@ def _payload_owner_user_id(payload: dict[str, Any]) -> str:
 
 
 def _assert_loaded_document_owner(loaded: Any | None, owner_user_id: str) -> None:
-    if loaded is None or not owner_user_id:
+    if loaded is None:
         return
     source_scope = str(getattr(loaded, "source_scope", "") or "").strip()
     visibility = str(getattr(loaded, "visibility", "") or "").strip()
     document_owner = str(getattr(loaded, "owner_user_id", "") or "").strip()
     if source_scope == "user_upload" or visibility == "private_user":
-        if not document_owner or document_owner != owner_user_id:
+        if not owner_user_id or not document_owner or document_owner != owner_user_id:
             raise ValueError("document_source_id is not visible to the current user")
 
 
@@ -98,6 +100,14 @@ def _safe_upload_name(file_name: str) -> str:
     suffix = Path(source).suffix
     safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", Path(source).stem).strip("-._")
     return f"{safe_stem or 'upload'}{suffix or '.bin'}"
+
+
+def _parsed_document_is_pdf(parsed: Any) -> bool:
+    return (
+        str(getattr(parsed, "document_format", "") or "").strip().lower() == "pdf"
+        or str(getattr(parsed, "mime_type", "") or "").strip().lower() == "application/pdf"
+        or str(getattr(parsed, "filename", "") or "").strip().lower().endswith(".pdf")
+    )
 
 
 def _store_uploaded_file(root_dir: Path, payload: dict[str, Any]) -> tuple[Path, str, int]:
@@ -129,7 +139,7 @@ def _event_contract(event: str, data: dict[str, Any] | None = None) -> tuple[str
         return "bronze", event, "completed"
     if event in {"parse_start", "parsed", "chunk_start", "chunked", "persist_start", "repair_start"}:
         return "silver", event, "running"
-    if event in {"persisted", "code_block_repaired"}:
+    if event in {"persisted", "pdf_text_repaired", "code_block_repaired", "page_stubs_repaired"}:
         return "silver", event, "completed"
     if event in {"index_start", "indexing"}:
         return "gold", "index_start", "running"
@@ -561,6 +571,142 @@ def build_upload_ingest_response(
                 "warning_count": len(parsed.warnings),
             },
         )
+    dry_run = _bool_payload(payload.get("dry_run"), default=False)
+    source_scope = str(payload.get("source_scope") or "user_upload").strip() or "user_upload"
+    auto_repair = (
+        _bool_payload(payload.get("auto_repair"), default=False)
+        and not dry_run
+        and source_scope == "user_upload"
+    )
+    auto_repairs: list[dict[str, Any]] = []
+    if auto_repair:
+        text_repair = repair_pdf_text_artifacts(parsed.markdown) if _parsed_document_is_pdf(parsed) else None
+        if text_repair and text_repair.changed:
+            if emit_event:
+                emit_event(
+                    "repair_start",
+                    {
+                        "filename": parsed.filename,
+                        "repair_kind": "pdf_text",
+                        "changed_block_count": text_repair.changed_block_count,
+                    },
+                )
+            parsed = rebuild_parsed_document_from_markdown(
+                parsed,
+                text_repair.repaired_markdown,
+                metadata={
+                    "pdf_text_repair": {
+                        "source": "deterministic_v1",
+                        "trigger": "upload_auto_repair",
+                        "changed_block_count": text_repair.changed_block_count,
+                        "applied_at": _utc_iso(),
+                        "diff_summary": [block.to_dict() for block in text_repair.diff_summary],
+                    }
+                },
+                warnings=tuple(dict.fromkeys((*parsed.warnings, "pdf_text_repair_applied"))),
+            )
+            auto_repairs.append(
+                {
+                    "kind": "pdf_text",
+                    "changed_block_count": text_repair.changed_block_count,
+                    "diff_summary": [block.to_dict() for block in text_repair.diff_summary],
+                }
+            )
+            if emit_event:
+                emit_event(
+                    "pdf_text_repaired",
+                    {
+                        "filename": parsed.filename,
+                        "repair_kind": "pdf_text",
+                        "changed_block_count": text_repair.changed_block_count,
+                        "block_count": len(parsed.blocks),
+                    },
+                )
+        code_repair = repair_unfenced_code_blocks(parsed.markdown)
+        if code_repair.changed:
+            if emit_event:
+                emit_event(
+                    "repair_start",
+                    {
+                        "filename": parsed.filename,
+                        "repair_kind": "code_block",
+                        "changed_block_count": code_repair.changed_block_count,
+                    },
+                )
+            parsed = rebuild_parsed_document_from_markdown(
+                parsed,
+                code_repair.repaired_markdown,
+                metadata={
+                    "code_block_repair": {
+                        "source": "deterministic_v1",
+                        "trigger": "upload_auto_repair",
+                        "changed_block_count": code_repair.changed_block_count,
+                        "applied_at": _utc_iso(),
+                        "diff_summary": [block.to_dict() for block in code_repair.diff_summary],
+                    }
+                },
+                warnings=tuple(dict.fromkeys((*parsed.warnings, "code_block_repair_applied"))),
+            )
+            auto_repairs.append(
+                {
+                    "kind": "code_block",
+                    "changed_block_count": code_repair.changed_block_count,
+                    "diff_summary": [block.to_dict() for block in code_repair.diff_summary],
+                }
+            )
+            if emit_event:
+                emit_event(
+                    "code_block_repaired",
+                    {
+                        "filename": parsed.filename,
+                        "repair_kind": "code_block",
+                        "changed_block_count": code_repair.changed_block_count,
+                        "block_count": len(parsed.blocks),
+                    },
+                )
+        page_repair = repair_page_stub_headings(parsed.markdown)
+        if page_repair.changed:
+            if emit_event:
+                emit_event(
+                    "repair_start",
+                    {
+                        "filename": parsed.filename,
+                        "repair_kind": "page_stub",
+                        "changed_block_count": page_repair.changed_block_count,
+                    },
+                )
+            parsed = rebuild_parsed_document_from_markdown(
+                parsed,
+                page_repair.repaired_markdown,
+                metadata={
+                    "page_stub_repair": {
+                        "source": "deterministic_v1",
+                        "trigger": "upload_auto_repair",
+                        "changed_block_count": page_repair.changed_block_count,
+                        "applied_at": _utc_iso(),
+                        "diff_summary": [block.to_dict() for block in page_repair.diff_summary],
+                    }
+                },
+                warnings=tuple(dict.fromkeys((*parsed.warnings, "page_stub_repair_applied"))),
+            )
+            auto_repairs.append(
+                {
+                    "kind": "page_stub",
+                    "changed_block_count": page_repair.changed_block_count,
+                    "diff_summary": [block.to_dict() for block in page_repair.diff_summary],
+                }
+            )
+            if emit_event:
+                emit_event(
+                    "page_stubs_repaired",
+                    {
+                        "filename": parsed.filename,
+                        "repair_kind": "page_stub",
+                        "changed_block_count": page_repair.changed_block_count,
+                        "block_count": len(parsed.blocks),
+                    },
+                )
+    if emit_event:
         emit_event("chunk_start", {"block_count": len(parsed.blocks), "asset_count": len(parsed.assets)})
     chunks = build_document_chunks(
         parsed,
@@ -569,10 +715,8 @@ def build_upload_ingest_response(
     )
     if emit_event:
         emit_event("chunked", {"chunk_count": len(chunks)})
-    dry_run = _bool_payload(payload.get("dry_run"), default=False)
     created_by = str(payload.get("created_by") or "").strip()
     visibility = str(payload.get("visibility") or "").strip()
-    source_scope = str(payload.get("source_scope") or "user_upload").strip() or "user_upload"
     gold_candidate = prepare_upload_gold_build_candidate(
         parsed,
         chunks,
@@ -597,6 +741,7 @@ def build_upload_ingest_response(
         "visibility": visibility or ("private_user" if created_by else "workspace_shared"),
         "source_scope": source_scope,
         "warnings": list(parsed.warnings),
+        "auto_repairs": auto_repairs,
         "sections": [list(chunk.section_path) for chunk in chunks if chunk.section_path],
         "gold_build_run": gold_candidate.run,
     }
@@ -699,15 +844,6 @@ def build_upload_ingest_response(
         persisted = result["persisted"]
         if emit_event:
             emit_event(
-                "judge_start",
-                {
-                    "document_source_id": persisted.get("document_source_id", ""),
-                    "parsed_document_id": persisted.get("parsed_document_id", ""),
-                    "source_scope": source_scope,
-                },
-            )
-        if emit_event:
-            emit_event(
                 "topology_start",
                 {
                     "document_source_id": persisted.get("document_source_id", ""),
@@ -749,6 +885,15 @@ def build_upload_ingest_response(
             )
             if emit_event:
                 emit_event("topology_failed", topology_payload)
+        if emit_event:
+            emit_event(
+                "judge_start",
+                {
+                    "document_source_id": persisted.get("document_source_id", ""),
+                    "parsed_document_id": persisted.get("parsed_document_id", ""),
+                    "source_scope": source_scope,
+                },
+            )
         try:
             with psycopg.connect(database_url) as quality_connection:
                 quality_document = load_document_topology_source(
@@ -1109,7 +1254,389 @@ def build_upload_code_block_repair_response(
         if loaded.source_scope != "user_upload":
             raise ValueError("code block repair v1 is only available for user uploads")
         parsed_document_id = loaded.parsed_document_id
-        repair = repair_unfenced_code_blocks(loaded.parsed.markdown)
+        text_repair = repair_pdf_text_artifacts(loaded.parsed.markdown) if _parsed_document_is_pdf(loaded.parsed) else None
+        code_repair = repair_unfenced_code_blocks(
+            text_repair.repaired_markdown if text_repair else loaded.parsed.markdown
+        )
+        text_repair_changed = bool(text_repair and text_repair.changed)
+        text_changed_block_count = text_repair.changed_block_count if text_repair else 0
+        repair_changed = text_repair_changed or code_repair.changed
+        repair_changed_block_count = text_changed_block_count + code_repair.changed_block_count
+        repair_diff_summary: list[dict[str, object]] = []
+        if text_repair:
+            repair_diff_summary.extend(block.to_dict() for block in text_repair.diff_summary)
+        repair_diff_summary.extend(block.to_dict() for block in code_repair.diff_summary)
+        repair_kind = (
+            "pdf_text+code_block"
+            if text_repair_changed and code_repair.changed
+            else "pdf_text"
+            if text_repair_changed
+            else "code_block"
+        )
+        repair_metadata: dict[str, Any] = {}
+        repair_warnings = list(loaded.parsed.warnings)
+        if text_repair_changed and text_repair:
+            repair_metadata["pdf_text_repair"] = {
+                "source": "deterministic_v1",
+                "changed_block_count": text_repair.changed_block_count,
+                "applied_at": _utc_iso(),
+                "diff_summary": [block.to_dict() for block in text_repair.diff_summary],
+            }
+            repair_warnings.append("pdf_text_repair_applied")
+        if code_repair.changed:
+            repair_metadata["code_block_repair"] = {
+                "source": "deterministic_v1",
+                "changed_block_count": code_repair.changed_block_count,
+                "applied_at": _utc_iso(),
+                "diff_summary": [block.to_dict() for block in code_repair.diff_summary],
+            }
+            repair_warnings.append("code_block_repair_applied")
+        existing_quality = load_document_quality_snapshot(
+            connection,
+            document_source_id=document_source_id,
+            parsed_document_id=parsed_document_id,
+        )
+        existing_topology = load_document_topology_snapshot_summary(
+            connection,
+            document_source_id=document_source_id,
+            parsed_document_id=parsed_document_id,
+        )
+
+    base_result: dict[str, Any] = {
+        "ok": False,
+        "dry_run": dry_run,
+        "repair_status": "dry_run_changed" if dry_run and repair_changed else "no_change",
+        "repair_kind": repair_kind,
+        "document_source_id": document_source_id,
+        "parsed_document_id": parsed_document_id,
+        "source_scope": loaded.source_scope,
+        "filename": loaded.parsed.filename,
+        "changed_block_count": repair_changed_block_count,
+        "diff_summary": repair_diff_summary,
+        "quality": existing_quality,
+        "topology": existing_topology,
+    }
+    if dry_run:
+        base_result["ok"] = (
+            bool(existing_quality and existing_quality.get("state") == "gold_ready")
+            and _topology_event_payload(existing_topology if isinstance(existing_topology, dict) else None).get("status") == "ready"
+            and bool(existing_quality.get("metadata", {}).get("gold_build_status") == "gold" if isinstance(existing_quality, dict) else False)
+        )
+        base_result["pipeline_summary"] = _pipeline_summary(base_result)
+        return base_result
+    if not repair_changed:
+        with psycopg.connect(database_url) as connection:
+            updated_documents = _refresh_gold_index_verification(
+                connection,
+                settings,
+                source_scope=loaded.source_scope,
+                document_source_id=document_source_id,
+            )
+            updated_document = updated_documents[0] if updated_documents else {}
+            topology = get_or_create_document_topology_snapshot_by_id(
+                connection,
+                document_source_id=document_source_id,
+                parsed_document_id=parsed_document_id,
+                force_refresh=False,
+            )
+            quality_result = _quality_recheck_for_document(
+                connection,
+                document_source_id=document_source_id,
+                parsed_document_id=parsed_document_id,
+                topology=topology,
+            )
+            connection.commit()
+        chunk_count = int(updated_document.get("chunk_count") or 0)
+        indexed_count = int(updated_document.get("indexed_chunk_count") or 0)
+        base_result["quality"] = quality_result["quality"]
+        base_result["topology"] = topology
+        base_result["gold_build_run"] = quality_result["gold_build_run"]
+        base_result["index"] = {
+            "collection": settings.qdrant_collection,
+            "source_scope": loaded.source_scope,
+            "document_source_id": document_source_id,
+            "candidate_count": chunk_count,
+            "indexed_count": indexed_count,
+            **({"status": "deferred"} if chunk_count <= 0 or indexed_count < chunk_count else {}),
+        }
+        base_result["ok"] = (
+            quality_result["quality"].get("state") == "gold_ready"
+            and chunk_count > 0
+            and indexed_count >= chunk_count
+            and _topology_event_payload(topology).get("status") == "ready"
+            and quality_result["gold_build_run"].get("status") == "gold"
+        )
+        base_result["pipeline_summary"] = _pipeline_summary(base_result)
+        return base_result
+
+    if emit_event:
+        emit_event(
+            "repair_start",
+            {
+                "document_source_id": document_source_id,
+                "parsed_document_id": parsed_document_id,
+                "filename": loaded.parsed.filename,
+                "repair_kind": repair_kind,
+                "changed_block_count": repair_changed_block_count,
+            },
+        )
+    repaired = rebuild_parsed_document_from_markdown(
+        loaded.parsed,
+        code_repair.repaired_markdown,
+        metadata=repair_metadata,
+        warnings=tuple(dict.fromkeys(repair_warnings)),
+    )
+    chunks = build_document_chunks(
+        repaired,
+        max_chars=_int_payload(payload.get("chunk_max_chars"), default=1800),
+        overlap_blocks=_int_payload(payload.get("chunk_overlap_blocks"), default=1),
+    )
+    gold_candidate = prepare_upload_gold_build_candidate(
+        repaired,
+        chunks,
+        source_scope=loaded.source_scope,
+        dry_run=False,
+    )
+    repaired = gold_candidate.parsed
+    chunks = gold_candidate.chunks
+    result: dict[str, Any] = {
+        **base_result,
+        "dry_run": False,
+        "repair_status": "applied",
+        "quality": {},
+        "topology": {},
+        "gold_build_run": gold_candidate.run,
+        "block_count": len(repaired.blocks),
+        "chunk_count": len(chunks),
+    }
+
+    with psycopg.connect(database_url) as connection:
+        replaced = replace_parsed_document_content(
+            connection,
+            document_source_id=document_source_id,
+            parsed_document_id=parsed_document_id,
+            parsed=repaired,
+            chunks=chunks,
+            storage_key=loaded.storage_key,
+            owner_user_id=loaded.owner_user_id,
+            repository_id=loaded.repository_id,
+            visibility=loaded.visibility,
+            source_scope=loaded.source_scope,
+            gold_build_run=result["gold_build_run"],
+            collection=collection,
+        )
+        connection.commit()
+        if emit_event:
+            event_payload = {
+                "document_source_id": document_source_id,
+                "parsed_document_id": parsed_document_id,
+                "block_count": len(replaced.block_ids),
+                "chunk_count": len(replaced.chunk_ids),
+                "old_qdrant_point_count": sum(
+                    len(point_ids) for point_ids in replaced.old_qdrant_points_by_collection.values()
+                ),
+            }
+            if text_repair_changed and text_repair:
+                emit_event(
+                    "pdf_text_repaired",
+                    {
+                        **event_payload,
+                        "repair_kind": "pdf_text",
+                        "changed_block_count": text_repair.changed_block_count,
+                    },
+                )
+            if code_repair.changed:
+                emit_event(
+                    "code_block_repaired",
+                    {
+                        **event_payload,
+                        "repair_kind": "code_block",
+                        "changed_block_count": code_repair.changed_block_count,
+                    },
+                )
+        cleanup_result = _delete_qdrant_points_by_collection(
+            settings,
+            replaced.old_qdrant_points_by_collection,
+        )
+        cleanup_failed = cleanup_result["status"] == "deferred"
+        update_document_source_metadata(
+            connection,
+            document_source_id=document_source_id,
+            metadata_patch={
+                "pending_qdrant_cleanup": cleanup_result if cleanup_failed else None,
+            },
+        )
+        result["qdrant_cleanup"] = cleanup_result
+        if emit_event:
+            emit_event(
+                "reindex_start",
+                {
+                    "document_source_id": document_source_id,
+                    "parsed_document_id": parsed_document_id,
+                    "chunk_count": len(chunks),
+                    "qdrant_cleanup": cleanup_result,
+                },
+            )
+        if cleanup_failed:
+            result["index"] = _deferred_index_result(
+                settings,
+                {"collection": collection},
+                source_scope=loaded.source_scope,
+                document_source_id=document_source_id,
+                chunk_count=len(chunks),
+                error=RuntimeError(f"stale Qdrant point cleanup failed: {cleanup_result.get('error') or ''}"),
+            )
+            if emit_event:
+                emit_event("index_deferred", result["index"])
+        else:
+            result["index"] = _index_pending_with_retry(
+                settings,
+                connection,
+                {**payload, "collection": collection},
+                source_scope=loaded.source_scope,
+                document_source_id=document_source_id,
+                chunk_count=len(chunks),
+            )
+            if result["index"].get("status") == "deferred":
+                if emit_event:
+                    emit_event("index_deferred", result["index"])
+            elif emit_event:
+                emit_event("indexed", result["index"])
+        result["gold_build_run"] = with_index_verification(
+            result["gold_build_run"],
+            index_result=result["index"],
+        )
+        update_document_source_gold_build_run(
+            connection,
+            document_source_id=document_source_id,
+            gold_build_run=result["gold_build_run"],
+        )
+        connection.commit()
+
+    if emit_event:
+        emit_event(
+            "topology_start",
+            {
+                "document_source_id": document_source_id,
+                "parsed_document_id": parsed_document_id,
+                "source_scope": loaded.source_scope,
+            },
+        )
+    try:
+        with psycopg.connect(database_url) as topology_connection:
+            topology = get_or_create_document_topology_snapshot_by_id(
+                topology_connection,
+                document_source_id=document_source_id,
+                parsed_document_id=parsed_document_id,
+                force_refresh=True,
+            )
+            topology_connection.commit()
+        result["topology"] = topology
+        topology_payload = _topology_event_payload(topology)
+        if topology_payload.get("status") == "ready":
+            if emit_event:
+                emit_event("topology_ready", topology_payload)
+        elif emit_event:
+            emit_event("topology_deferred", topology_payload)
+    except Exception as exc:  # noqa: BLE001
+        result["topology"] = {
+            "status": "failed",
+            "state": "failed",
+            "retryable": True,
+            "document_source_id": document_source_id,
+            "parsed_document_id": parsed_document_id,
+            "error": str(exc),
+        }
+        if emit_event:
+            emit_event("topology_failed", result["topology"])
+
+    if emit_event:
+        emit_event(
+            "judge_start",
+            {
+                "document_source_id": document_source_id,
+                "parsed_document_id": parsed_document_id,
+                "source_scope": loaded.source_scope,
+            },
+        )
+    with psycopg.connect(database_url) as quality_connection:
+        quality_result = _quality_recheck_for_document(
+            quality_connection,
+            document_source_id=document_source_id,
+            parsed_document_id=parsed_document_id,
+            topology=result.get("topology") if isinstance(result.get("topology"), dict) else None,
+        )
+        result["quality"] = quality_result["quality"]
+        if isinstance(quality_result.get("gold_build_run"), dict):
+            result["gold_build_run"] = quality_result["gold_build_run"]
+        else:
+            result["gold_build_run"] = merge_quality_into_gold_run(result["gold_build_run"], result["quality"])
+        update_document_source_gold_build_run(
+            quality_connection,
+            document_source_id=document_source_id,
+            gold_build_run=result["gold_build_run"],
+        )
+        quality_connection.commit()
+    if emit_event:
+        emit_event(
+            "judge_completed",
+            {
+                "document_source_id": document_source_id,
+                "parsed_document_id": parsed_document_id,
+                "quality_state": result.get("quality", {}).get("state", ""),
+                "quality_score": result.get("quality", {}).get("score", 0),
+                "blocker_count": len(result.get("quality", {}).get("blockers") or []),
+            },
+        )
+        emit_event(
+            "complete",
+            {
+                "filename": loaded.parsed.filename,
+                "status": result.get("gold_build_run", {}).get("status"),
+                "pipeline_summary": _pipeline_summary(result),
+            },
+        )
+    result["ok"] = (
+        result.get("quality", {}).get("state") == "gold_ready"
+        and result.get("index", {}).get("status") != "deferred"
+        and _topology_event_payload(result.get("topology") if isinstance(result.get("topology"), dict) else None).get("status") == "ready"
+        and result.get("gold_build_run", {}).get("status") == "gold"
+    )
+    result["pipeline_summary"] = _pipeline_summary(result)
+    return result
+
+
+def build_upload_page_stub_repair_response(
+    root_dir: Path,
+    payload: dict[str, Any],
+    *,
+    emit_event: Any | None = None,
+) -> dict[str, Any]:
+    settings = load_settings(root_dir)
+    database_url = str(payload.get("database_url") or settings.database_url or "").strip()
+    if not database_url:
+        raise ValueError("DATABASE_URL is required for page stub repair")
+    document_source_id = _required_uuid_payload(payload, "document_source_id")
+    parsed_document_id = str(payload.get("parsed_document_id") or "").strip()
+    dry_run = _bool_payload(payload.get("dry_run"), default=True)
+    collection = str(payload.get("collection") or "").strip() or settings.qdrant_collection
+    owner_user_id = _payload_owner_user_id(payload)
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        loaded = load_parsed_document_for_repair(
+            connection,
+            document_source_id=document_source_id,
+            parsed_document_id=parsed_document_id,
+        )
+        if loaded is None:
+            raise ValueError("document_source_id was not found")
+        _assert_loaded_document_owner(loaded, owner_user_id)
+        if loaded.source_scope != "user_upload":
+            raise ValueError("page stub repair v1 is only available for user uploads")
+        parsed_document_id = loaded.parsed_document_id
+        repair = repair_page_stub_headings(loaded.parsed.markdown)
         existing_quality = load_document_quality_snapshot(
             connection,
             document_source_id=document_source_id,
@@ -1125,6 +1652,7 @@ def build_upload_code_block_repair_response(
         "ok": False,
         "dry_run": dry_run,
         "repair_status": "dry_run_changed" if dry_run and repair.changed else "no_change",
+        "repair_kind": "page_stub",
         "document_source_id": document_source_id,
         "parsed_document_id": parsed_document_id,
         "source_scope": loaded.source_scope,
@@ -1195,20 +1723,21 @@ def build_upload_code_block_repair_response(
                 "parsed_document_id": parsed_document_id,
                 "filename": loaded.parsed.filename,
                 "changed_block_count": repair.changed_block_count,
+                "repair_kind": "page_stub",
             },
         )
     repaired = rebuild_parsed_document_from_markdown(
         loaded.parsed,
         repair.repaired_markdown,
         metadata={
-            "code_block_repair": {
+            "page_stub_repair": {
                 "source": "deterministic_v1",
                 "changed_block_count": repair.changed_block_count,
                 "applied_at": _utc_iso(),
                 "diff_summary": [block.to_dict() for block in repair.diff_summary],
             }
         },
-        warnings=tuple(dict.fromkeys((*loaded.parsed.warnings, "code_block_repair_applied"))),
+        warnings=tuple(dict.fromkeys((*loaded.parsed.warnings, "page_stub_repair_applied"))),
     )
     chunks = build_document_chunks(
         repaired,
@@ -1252,7 +1781,7 @@ def build_upload_code_block_repair_response(
         connection.commit()
         if emit_event:
             emit_event(
-                "code_block_repaired",
+                "page_stubs_repaired",
                 {
                     "document_source_id": document_source_id,
                     "parsed_document_id": parsed_document_id,
@@ -1360,6 +1889,15 @@ def build_upload_code_block_repair_response(
         if emit_event:
             emit_event("topology_failed", result["topology"])
 
+    if emit_event:
+        emit_event(
+            "judge_start",
+            {
+                "document_source_id": document_source_id,
+                "parsed_document_id": parsed_document_id,
+                "source_scope": loaded.source_scope,
+            },
+        )
     with psycopg.connect(database_url) as quality_connection:
         quality_result = _quality_recheck_for_document(
             quality_connection,
@@ -1587,6 +2125,25 @@ def handle_upload_code_block_repair(handler: Any, payload: dict[str, Any], *, ro
     handler._send_json(result)
 
 
+def handle_upload_page_stub_repair(handler: Any, payload: dict[str, Any], *, root_dir: Path) -> None:
+    settings = load_settings(root_dir)
+    database_url = str(payload.get("database_url") or settings.database_url or "").strip()
+    recorder = _UploadPipelineEventRecorder(database_url=database_url)
+    try:
+        result = build_upload_page_stub_repair_response(root_dir, payload, emit_event=recorder.emit)
+    except ValueError as exc:
+        handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        return
+    except Exception as exc:  # noqa: BLE001
+        handler._send_json({"error": f"upload page stub repair failed: {exc}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    result["events"] = recorder.events
+    result["pipeline_summary"] = recorder.complete_payload(result)
+    if recorder.ledger_error:
+        result.setdefault("warnings", []).append(f"처리 이벤트 원장 기록 경고: {recorder.ledger_error}")
+    handler._send_json(result)
+
+
 def handle_upload_pipeline_status(handler: Any, query: str, *, root_dir: Path, owner_user_id: str = "") -> None:
     try:
         result = build_upload_pipeline_status_response(root_dir, query, owner_user_id=owner_user_id)
@@ -1601,6 +2158,7 @@ def handle_upload_pipeline_status(handler: Any, query: str, *, root_dir: Path, o
 
 __all__ = [
     "build_upload_code_block_repair_response",
+    "build_upload_page_stub_repair_response",
     "build_upload_index_retry_response",
     "build_upload_ingest_response",
     "build_upload_pipeline_status_response",
@@ -1610,6 +2168,7 @@ __all__ = [
     "handle_upload_index_retry",
     "handle_upload_ingest",
     "handle_upload_code_block_repair",
+    "handle_upload_page_stub_repair",
     "handle_upload_pipeline_status",
     "handle_upload_quality_recheck",
     "handle_upload_topology_retry",

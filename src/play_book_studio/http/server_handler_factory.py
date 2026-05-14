@@ -30,6 +30,7 @@ from play_book_studio.http.upload_api import (
     handle_upload_index_retry as _handle_upload_index_retry_request,
     handle_upload_ingest as _handle_upload_ingest_request,
     handle_upload_ingest_stream as _handle_upload_ingest_stream_request,
+    handle_upload_page_stub_repair as _handle_upload_page_stub_repair_request,
     handle_upload_pipeline_status as _handle_upload_pipeline_status_request,
     handle_upload_quality_recheck as _handle_upload_quality_recheck_request,
     handle_upload_topology_retry as _handle_upload_topology_retry_request,
@@ -366,6 +367,9 @@ def _build_handler(
             if parsed_request.path == "/api/uploads/repair-code-blocks":
                 self._handle_upload_code_block_repair(payload)
                 return
+            if parsed_request.path == "/api/uploads/repair-page-stubs":
+                self._handle_upload_page_stub_repair(payload)
+                return
             if parsed_request.path == "/api/customer-packs/ingest":
                 self._handle_customer_pack_ingest(payload)
                 return
@@ -675,28 +679,32 @@ def _build_handler(
             _handle_customer_pack_delete_draft_request(self, payload, root_dir=root_dir)
         def _handle_upload_ingest(self, payload: dict[str, Any]) -> None:
             owner = self._session_owner()
-            payload.setdefault("created_by", owner.owner_hash)
+            payload["created_by"] = owner.owner_hash
             _handle_upload_ingest_request(self, payload, root_dir=root_dir)
         def _handle_upload_ingest_stream(self, payload: dict[str, Any]) -> None:
             owner = self._session_owner()
-            payload.setdefault("created_by", owner.owner_hash)
+            payload["created_by"] = owner.owner_hash
             _handle_upload_ingest_stream_request(self, payload, root_dir=root_dir)
         def _handle_upload_index_retry(self, payload: dict[str, Any]) -> None:
             owner = self._session_owner()
-            payload.setdefault("created_by", owner.owner_hash)
+            payload["created_by"] = owner.owner_hash
             _handle_upload_index_retry_request(self, payload, root_dir=root_dir)
         def _handle_upload_topology_retry(self, payload: dict[str, Any]) -> None:
             owner = self._session_owner()
-            payload.setdefault("created_by", owner.owner_hash)
+            payload["created_by"] = owner.owner_hash
             _handle_upload_topology_retry_request(self, payload, root_dir=root_dir)
         def _handle_upload_quality_recheck(self, payload: dict[str, Any]) -> None:
             owner = self._session_owner()
-            payload.setdefault("created_by", owner.owner_hash)
+            payload["created_by"] = owner.owner_hash
             _handle_upload_quality_recheck_request(self, payload, root_dir=root_dir)
         def _handle_upload_code_block_repair(self, payload: dict[str, Any]) -> None:
             owner = self._session_owner()
-            payload.setdefault("created_by", owner.owner_hash)
+            payload["created_by"] = owner.owner_hash
             _handle_upload_code_block_repair_request(self, payload, root_dir=root_dir)
+        def _handle_upload_page_stub_repair(self, payload: dict[str, Any]) -> None:
+            owner = self._session_owner()
+            payload["created_by"] = owner.owner_hash
+            _handle_upload_page_stub_repair_request(self, payload, root_dir=root_dir)
         def _handle_upload_pipeline_status(self, query: str) -> None:
             _handle_upload_pipeline_status_request(
                 self,
