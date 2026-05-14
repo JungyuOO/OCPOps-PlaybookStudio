@@ -12,7 +12,11 @@ from typing import Any
 from urllib.parse import parse_qs
 
 from play_book_studio.cluster.workspace_models import WorkspaceHandle
-from play_book_studio.cluster.workspace_provisioner import ensure_user_workspace, touch_last_active
+from play_book_studio.cluster.workspace_provisioner import (
+    enforce_active_workspace_limit,
+    ensure_user_workspace,
+    touch_last_active,
+)
 from play_book_studio.config.settings import Settings
 from play_book_studio.db.terminal_learning_repository import (
     TerminalLearningContext,
@@ -533,6 +537,11 @@ def start_terminal_websocket_server(*, settings: Settings, root_dir: Path) -> th
                         )
                     )
                     owner_hash = _owner_hash_from_websocket(websocket)
+                    await asyncio.to_thread(
+                        enforce_active_workspace_limit,
+                        owner_hash,
+                        settings.pbs_max_active_workspaces,
+                    )
                     await websocket.send(
                         _json_event(
                             {

@@ -52,7 +52,7 @@ v0.1.3은 다음 두 축을 합친다.
 - [x] Deployment `sandbox` 자동 생성 (이미지: oc CLI + vi + bash 포함한 ubi9 파생)
 - [x] terminal WS 진입부 변경: 기존 앱 Pod PTY 대신 `oc exec` 통해 사용자 sandbox Pod로 연결
 - [x] 부트스트랩 진행 단계 progress 프레임을 WS로 송신(준비중 UI 표시)
-- [ ] 사용자 첫 접속 1회용 안내 메시지(브라우저-바운드 정체성, 14일 TTL 설명)
+- [x] 사용자 첫 접속 1회용 안내 메시지(브라우저-바운드 정체성, 14일 TTL 설명)
 - [x] in-cluster CronJob: 30분 idle → Pod replicas=0(동면), 14일 미사용 + `pinned=false` → namespace 삭제
 - [x] `last-active-at` 라벨 갱신(WS 메시지 시 60초당 1회 patch)
 - [x] "보관하기" 토글(`pbs.pinned=true/false` 패치) UI + API
@@ -67,9 +67,9 @@ v0.1.3은 다음 두 축을 합친다.
 - [x] backend `_chat_payload`가 `recent_terminal_actions`를 받아 cluster context와 함께 의도 분류/근거로 사용
 - [x] ResourceQuota 자동 부착(per-user ns: cpu 500m, mem 1Gi, pods 5, pvc 2)
 - [x] NetworkPolicy 자동 부착(per-user ns: 같은 ns 내부 + cluster API + 학습용 mirror registry만)
-- [ ] backend 동시 활성 workspace 상한 env(`PBS_MAX_ACTIVE_WORKSPACES`) + 초과 시 친절한 안내
-- [ ] backend focused tests 통과
-- [ ] frontend production build 통과
+- [x] backend 동시 활성 workspace 상한 env(`PBS_MAX_ACTIVE_WORKSPACES`) + 초과 시 친절한 안내
+- [x] backend focused tests 통과
+- [x] frontend production build 통과
 - [ ] Playwright smoke: 첫 접속 부트스트랩, `mkdir`/`vi` 실습, Live Cluster 토글 OFF/ON 분기, 동면 후 재접속
 
 ### Extras (P1 - 가능하면 포함)
@@ -789,6 +789,9 @@ oc rollout status deployment/web -n pbs-ocpops
 
 ## 작업 메모
 
+- 2026-05-14: `PBS_MAX_ACTIVE_WORKSPACES` 설정을 추가하고 OpenShift ConfigMap 기본값을 20으로 두었다. 터미널 bootstrap은 `pbs.session=true` namespace 중 hibernated=false인 활성 workspace 수를 확인해 상한 초과 시 새 workspace 생성을 막되, 기존 owner namespace 재접속은 허용한다.
+- 2026-05-14: v0.1.3 backend focused suite(`tests/test_workspace_api_routes.py`, `tests/test_workspace_provisioner_unit.py`, `tests/test_workspace_reaper_manifest.py`, `tests/test_terminal_session.py`, `tests/test_broker_rbac_smoke.py`, `tests/test_sandbox_image_publish.py`)와 `python -m compileall -q src`, `npm --prefix apps/web run build`를 통과했다.
+- 2026-05-14: 터미널 ready 이후 브라우저 localStorage 기준 namespace별 1회 안내 메시지를 chat에 추가했다. 안내에는 브라우저 세션에 묶인 workspace, 30분 idle 동면, 14일 미사용 삭제, Pin 시 삭제 방지를 명시한다.
 - 2026-05-14: `/api/v1/workspace/status`, `/api/v1/workspace/pin`, `/api/v1/workspace/reset`을 추가하고 Workspace terminal 패널 상단에 Pin/Reset 컨트롤을 붙였다. 상태/토글/초기화는 현재 `pbs_session_owner`의 owner_hash 기준 namespace에만 적용된다.
 - 2026-05-14: terminal WS 메시지 루프에 `touch_last_active(owner_hash)`를 60초 rate-limit로 연결했다. 사용자가 터미널에서 계속 작업하면 reaper의 idle 판단 기준인 `pbs.last-active-at` 라벨이 갱신된다.
 - 2026-05-14: `deploy/openshift/workspace-reaper-cronjob.yaml`을 추가했다. `terminal-broker` SA와 sandbox 이미지를 사용하며 15분마다 `pbs.session=true` namespace를 스캔해 30분 idle이면 `deployment/sandbox` replicas=0 및 `pbs.hibernated=true`, 14일 idle이고 `pbs.pinned=false`면 namespace를 삭제한다.

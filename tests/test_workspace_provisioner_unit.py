@@ -9,6 +9,7 @@ from play_book_studio.cluster.workspace_provisioner import (
     DEFAULT_SANDBOX_IMAGE,
     build_user_workspace_manifests,
     delete_user_workspace,
+    enforce_active_workspace_limit,
     ensure_user_workspace,
     get_user_workspace_status,
     hibernate_user_workspace,
@@ -274,3 +275,32 @@ def test_get_user_workspace_status_reads_labels_and_deployment_readiness() -> No
     assert status["pinned"] is True
     assert status["hibernated"] is False
     assert status["last_active_at"] == "20260514T050000Z"
+
+
+def test_enforce_active_workspace_limit_allows_existing_owner_namespace() -> None:
+    client = FakeKubernetesClient()
+    client.responses = {
+        ("GET", "/api/v1/namespaces?labelSelector=pbs.session%3Dtrue"): {
+            "items": [
+                {"metadata": {"name": "pbs-user-a3f9c1d2", "labels": {"pbs.hibernated": "false"}}},
+                {"metadata": {"name": "pbs-user-other001", "labels": {"pbs.hibernated": "false"}}},
+            ]
+        }
+    }
+
+    enforce_active_workspace_limit(OWNER_HASH, 1, client=client)
+
+
+def test_enforce_active_workspace_limit_rejects_new_workspace_when_full() -> None:
+    client = FakeKubernetesClient()
+    client.responses = {
+        ("GET", "/api/v1/namespaces?labelSelector=pbs.session%3Dtrue"): {
+            "items": [
+                {"metadata": {"name": "pbs-user-other001", "labels": {"pbs.hibernated": "false"}}},
+                {"metadata": {"name": "pbs-user-other002", "labels": {"pbs.hibernated": "true"}}},
+            ]
+        }
+    }
+
+    with pytest.raises(RuntimeError, match="Active learner workspace limit"):
+        enforce_active_workspace_limit(OWNER_HASH, 1, client=client)

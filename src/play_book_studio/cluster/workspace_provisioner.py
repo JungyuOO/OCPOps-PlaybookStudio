@@ -77,6 +77,28 @@ def ensure_user_workspace(
     )
 
 
+def enforce_active_workspace_limit(owner_hash: str, max_active_workspaces: int, *, client: Any | None = None) -> None:
+    if max_active_workspaces <= 0:
+        return
+    resolved_client = client or KubernetesClient.in_cluster()
+    namespace = user_workspace_namespace(owner_hash)
+    payload = resolved_client.request_json("GET", "/api/v1/namespaces?labelSelector=pbs.session%3Dtrue")
+    active_count = 0
+    for item in payload.get("items") or []:
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        name = str(metadata.get("name") or "")
+        if name == namespace:
+            return
+        labels = metadata.get("labels") if isinstance(metadata.get("labels"), dict) else {}
+        if str(labels.get("pbs.hibernated") or "false").lower() != "true":
+            active_count += 1
+    if active_count >= max_active_workspaces:
+        raise RuntimeError(
+            f"Active learner workspace limit reached ({active_count}/{max_active_workspaces}). "
+            "Try again later or ask an administrator to increase PBS_MAX_ACTIVE_WORKSPACES."
+        )
+
+
 def hibernate_user_workspace(owner_hash: str, *, client: Any | None = None) -> None:
     namespace = user_workspace_namespace(owner_hash)
     resolved_client = client or KubernetesClient.in_cluster()

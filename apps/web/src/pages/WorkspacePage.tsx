@@ -1606,6 +1606,27 @@ export default function WorkspacePage() {
       return namespace;
     });
     void refreshLearnerWorkspaceStatus();
+    if (typeof window !== 'undefined') {
+      const noticeKey = `pbs.workspaceNotice.${namespace}`;
+      if (!window.localStorage.getItem(noticeKey)) {
+        window.localStorage.setItem(noticeKey, 'shown');
+        setMessages((current) => [
+          ...current,
+          {
+            id: makeId('assistant'),
+            role: 'assistant',
+            content: `Your learner workspace is ${namespace}. It is tied to this browser session, hibernates after 30 minutes of inactivity, and is deleted after 14 days unless pinned.`,
+            citations: [],
+            suggestedQueries: [],
+            relatedLinks: [],
+            relatedSections: [],
+            artifacts: [],
+            responseKind: 'workspace_notice',
+            routeKind: 'learning',
+          },
+        ]);
+      }
+    }
   }, [activeFooterConnection?.default_namespace, refreshLearnerWorkspaceStatus]);
 
   const handleWorkspacePinToggle = useCallback(async () => {
