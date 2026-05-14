@@ -45,11 +45,11 @@ v0.1.3은 다음 두 축을 합친다.
 
 - [x] v0.1.3 브랜치 생성 및 planner 작성
 - [x] backend broker ServiceAccount(`pbs-ocpops:terminal-broker`) + ClusterRole/RoleBinding 정의
-- [ ] `cluster/workspace_provisioner.py` 신규: `ensure_user_workspace(owner_hash)` / `hibernate_user_workspace` / `wake_user_workspace` / `delete_user_workspace`
-- [ ] namespace `pbs-user-<owner_hash[:8]>` 자동 생성 + 라벨 부착
-- [ ] ServiceAccount `learner` + RoleBinding `edit` 자동 생성
-- [ ] PVC `home-learner`(1Gi, RWO) 자동 생성, sandbox Pod `/home/learner`에 mount
-- [ ] Deployment `sandbox` 자동 생성 (이미지: oc CLI + vi + bash 포함한 ubi9 파생)
+- [x] `cluster/workspace_provisioner.py` 신규: `ensure_user_workspace(owner_hash)` / `hibernate_user_workspace` / `wake_user_workspace` / `delete_user_workspace`
+- [x] namespace `pbs-user-<owner_hash[:8]>` 자동 생성 + 라벨 부착
+- [x] ServiceAccount `learner` + RoleBinding `edit` 자동 생성
+- [x] PVC `home-learner`(1Gi, RWO) 자동 생성, sandbox Pod `/home/learner`에 mount
+- [x] Deployment `sandbox` 자동 생성 (이미지: oc CLI + vi + bash 포함한 ubi9 파생)
 - [ ] terminal WS 진입부 변경: 기존 앱 Pod PTY 대신 `oc exec` 통해 사용자 sandbox Pod로 연결
 - [ ] 부트스트랩 진행 단계 progress 프레임을 WS로 송신(준비중 UI 표시)
 - [ ] 사용자 첫 접속 1회용 안내 메시지(브라우저-바운드 정체성, 14일 TTL 설명)
@@ -65,8 +65,8 @@ v0.1.3은 다음 두 축을 합친다.
 - [x] 최근 터미널 명령/결과를 Live chat payload에 attach (`recent_terminal_actions`)
 - [ ] Live chat의 `namespace`는 자동 발급된 `pbs-user-<owner_hash[:8]>`로 라우팅
 - [x] backend `_chat_payload`가 `recent_terminal_actions`를 받아 cluster context와 함께 의도 분류/근거로 사용
-- [ ] ResourceQuota 자동 부착(per-user ns: cpu 500m, mem 1Gi, pods 5, pvc 2)
-- [ ] NetworkPolicy 자동 부착(per-user ns: 같은 ns 내부 + cluster API + 학습용 mirror registry만)
+- [x] ResourceQuota 자동 부착(per-user ns: cpu 500m, mem 1Gi, pods 5, pvc 2)
+- [x] NetworkPolicy 자동 부착(per-user ns: 같은 ns 내부 + cluster API + 학습용 mirror registry만)
 - [ ] backend 동시 활성 workspace 상한 env(`PBS_MAX_ACTIVE_WORKSPACES`) + 초과 시 친절한 안내
 - [ ] backend focused tests 통과
 - [ ] frontend production build 통과
@@ -792,6 +792,7 @@ oc rollout status deployment/web -n pbs-ocpops
 - 2026-05-14: v0.1.2 smoke/report 산출물은 평가 증거일 뿐 문서 검색/추천 질문 소스가 아니어야 한다. `corpus_import.iter_corpus_source_files`에서 `reports/`, `tmp/`, `artifacts/`, `dist/`, `node_modules/` 등을 제외하도록 막았다. 서버 DB에 이미 `reports`/`smoke`/`report` 계열 document_sources 또는 document_chunks가 들어갔는지는 배포 후 SQL로 점검하고, 발견되면 해당 source와 연결 chunks를 반드시 삭제/재색인한다.
 - 2026-05-14: Phase C 첫 패치로 `deploy/openshift/broker-rbac.yaml`을 추가했다. 현재 kustomize 구조에 맞춰 broker SA는 `pbs-ocpops:terminal-broker`로 두고, app Deployment만 이 SA를 사용한다. web Deployment는 기존 `playbookstudio` SA를 유지한다.
 - 2026-05-14: `src/play_book_studio/cluster/workspace_provisioner.py`의 순수 manifest builder를 추가했다. 아직 cluster API apply/wait는 붙이지 않았고, Namespace/ResourceQuota/NetworkPolicy/ServiceAccount/RoleBinding/PVC/Deployment 스펙과 owner_hash→`pbs-user-<8>` 규칙을 단위 테스트로 먼저 고정했다.
+- 2026-05-14: `cluster/k8s_client.py`와 provisioner lifecycle 함수를 추가했다. `ensure_user_workspace`는 in-cluster SA 토큰으로 server-side apply 후 Deployment readiness와 ready Pod를 확인하고, hibernate/wake/delete/touch/pin helper는 namespace/deployment patch/delete 경로를 사용한다. 단위 테스트는 fake client로 apply/patch/delete 순서를 검증했다.
 - 2026-05-13: planner 작성. v0.1.2 Phase D 마무리(studio_live_smoke 0.85 도달, Playwright/OCP rollout)와 v0.1.3 Phase A/B를 병렬 진행 가능. C/D는 broker RBAC와 클러스터 변경이 들어가므로 순서대로.
 - 2026-05-13: 사용자 식별 결정 — SMTP 부재로 매직링크/이메일은 비범위. owner_hash 쿠키(1년) 기반 익명-자동 부트스트랩으로 합의. 매직링크/SSO는 v0.1.4 이후 `resolve_session_owner` 헤더 1순위 자리에 점진 확장.
 - 2026-05-13: `ops_console_api.py`의 `/api/v1/chat/query/stream`이 라이브 cluster chat 백엔드로 이미 완성되어 있음을 확인. v0.1.3은 새 백엔드를 만들지 않고 Workspace를 이 엔드포인트로 라우팅 + namespace를 사용자 workspace로 강제하는 작업으로 정의.

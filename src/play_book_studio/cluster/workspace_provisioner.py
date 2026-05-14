@@ -4,6 +4,9 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
+from .k8s_client import KubernetesClient
+from .workspace_models import WorkspaceHandle
+
 
 DEFAULT_SANDBOX_IMAGE = "ghcr.io/jungyuoo/ocpops-playbookstudio-sandbox:dev"
 LEARNER_SERVICE_ACCOUNT = "learner"
@@ -38,6 +41,88 @@ def build_user_workspace_manifests(
         _role_binding_manifest(namespace, labels),
         _pvc_manifest(namespace, labels, storage_size=storage_size),
         _deployment_manifest(namespace, labels, selector_labels, sandbox_image=sandbox_image),
+    )
+
+
+def ensure_user_workspace(
+    owner_hash: str,
+    *,
+    client: Any | None = None,
+    sandbox_image: str = DEFAULT_SANDBOX_IMAGE,
+    now: datetime | None = None,
+    timeout_seconds: int = 20,
+) -> WorkspaceHandle:
+    resolved_client = client or KubernetesClient.in_cluster()
+    namespace = user_workspace_namespace(owner_hash)
+    manifests = build_user_workspace_manifests(owner_hash, sandbox_image=sandbox_image, now=now)
+    created = False
+    for manifest in manifests:
+        result = resolved_client.apply_manifest(manifest)
+        created = created or bool(result.get("_created"))
+    resolved_client.wait_for_deployment_ready(namespace, SANDBOX_DEPLOYMENT_NAME, timeout_seconds=timeout_seconds)
+    pod_name = resolved_client.first_ready_pod(
+        namespace,
+        label_selector=f"app.kubernetes.io/name={SANDBOX_DEPLOYMENT_NAME},pbs.owner-hash={_normalized_owner_hash(owner_hash)}",
+    )
+    return WorkspaceHandle(
+        namespace=namespace,
+        pod_name=pod_name,
+        service_account_name=LEARNER_SERVICE_ACCOUNT,
+        pvc_name=HOME_PVC_NAME,
+        deployment_name=SANDBOX_DEPLOYMENT_NAME,
+        ready=bool(pod_name),
+        created=created,
+        hibernated=False,
+        manifests=manifests,
+    )
+
+
+def hibernate_user_workspace(owner_hash: str, *, client: Any | None = None) -> None:
+    namespace = user_workspace_namespace(owner_hash)
+    resolved_client = client or KubernetesClient.in_cluster()
+    resolved_client.patch_resource(
+        f"/apis/apps/v1/namespaces/{namespace}/deployments/{SANDBOX_DEPLOYMENT_NAME}",
+        {"spec": {"replicas": 0}},
+    )
+    _patch_namespace_labels(resolved_client, namespace, {"pbs.hibernated": "true"})
+
+
+def wake_user_workspace(owner_hash: str, *, client: Any | None = None, timeout_seconds: int = 20) -> WorkspaceHandle:
+    namespace = user_workspace_namespace(owner_hash)
+    resolved_client = client or KubernetesClient.in_cluster()
+    resolved_client.patch_resource(
+        f"/apis/apps/v1/namespaces/{namespace}/deployments/{SANDBOX_DEPLOYMENT_NAME}",
+        {"spec": {"replicas": 1}},
+    )
+    _patch_namespace_labels(resolved_client, namespace, {"pbs.hibernated": "false"})
+    resolved_client.wait_for_deployment_ready(namespace, SANDBOX_DEPLOYMENT_NAME, timeout_seconds=timeout_seconds)
+    pod_name = resolved_client.first_ready_pod(namespace, label_selector=f"app.kubernetes.io/name={SANDBOX_DEPLOYMENT_NAME}")
+    return WorkspaceHandle(namespace=namespace, pod_name=pod_name, ready=bool(pod_name), hibernated=False)
+
+
+def delete_user_workspace(owner_hash: str, *, client: Any | None = None) -> bool:
+    namespace = user_workspace_namespace(owner_hash)
+    resolved_client = client or KubernetesClient.in_cluster()
+    resolved_client.delete_resource(f"/api/v1/namespaces/{namespace}")
+    return True
+
+
+def touch_last_active(owner_hash: str, *, client: Any | None = None, now: datetime | None = None) -> None:
+    namespace = user_workspace_namespace(owner_hash)
+    resolved_client = client or KubernetesClient.in_cluster()
+    _patch_namespace_labels(resolved_client, namespace, {"pbs.last-active-at": _label_timestamp(now)})
+
+
+def set_pinned(owner_hash: str, pinned: bool, *, client: Any | None = None) -> None:
+    namespace = user_workspace_namespace(owner_hash)
+    resolved_client = client or KubernetesClient.in_cluster()
+    _patch_namespace_labels(resolved_client, namespace, {"pbs.pinned": "true" if pinned else "false"})
+
+
+def _patch_namespace_labels(client: Any, namespace: str, labels: dict[str, str]) -> None:
+    client.patch_resource(
+        f"/api/v1/namespaces/{namespace}",
+        {"metadata": {"labels": labels}},
     )
 
 
