@@ -30,7 +30,7 @@ def _settings(**overrides: Any) -> Settings:
         "reranker_enabled": True,
         "embedding_base_url": "http://tei.internal/v1",
         "reranker_base_url": "",
-        "reranker_model": "BAAI/bge-reranker-v2-m3",
+        "reranker_model": "dragonkue/bge-reranker-v2-m3-ko",
         "reranker_timeout_seconds": 3,
         "reranker_max_parallel_requests": 4,
     }
@@ -82,7 +82,7 @@ def test_remote_bge_reranker_uses_embedding_base_url_and_reorders(monkeypatch):
 
     assert [hit.chunk_id for hit in reranked] == ["right", "wrong"]
     assert calls[0]["url"] == "http://tei.internal/rerank"
-    assert calls[0]["json"]["model"] == "BAAI/bge-reranker-v2-m3"
+    assert calls[0]["json"]["model"] == "dragonkue/bge-reranker-v2-m3-ko"
     assert calls[0]["json"]["texts"]
     assert reranked[0].component_scores["pre_rerank_fused_score"] == 0.4
     assert reranked[0].component_scores["reranker_score"] == 0.91

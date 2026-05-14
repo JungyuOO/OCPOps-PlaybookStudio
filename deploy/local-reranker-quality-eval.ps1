@@ -19,7 +19,7 @@ Set-Location $root
 
 $env:RERANKER_ENABLED = "true"
 $env:RERANKER_BASE_URL = $RerankerBaseUrl.TrimEnd("/")
-$env:RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
+$env:RERANKER_MODEL = "dragonkue/bge-reranker-v2-m3-ko"
 $env:RERANKER_TOP_N = "4"
 $env:RERANKER_BATCH_SIZE = "1"
 $env:RERANKER_MAX_PARALLEL_REQUESTS = "4"
