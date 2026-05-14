@@ -91,6 +91,10 @@ class RetrievalHit:
     operator_names: tuple[str, ...] = field(default_factory=tuple)
     verification_hints: tuple[str, ...] = field(default_factory=tuple)
     graph_relations: tuple[str, ...] = field(default_factory=tuple)
+    topology_node_ids: tuple[str, ...] = field(default_factory=tuple)
+    topology_edge_ids: tuple[str, ...] = field(default_factory=tuple)
+    topology_relations: tuple[str, ...] = field(default_factory=tuple)
+    topology_evidence: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     asset_ids: tuple[str, ...] = field(default_factory=tuple)
     repository_id: str = ""
     document_source_id: str = ""

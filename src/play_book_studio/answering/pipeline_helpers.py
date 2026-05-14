@@ -254,6 +254,8 @@ def build_answer_result(
     }
     if selected_hits is not None:
         pipeline_trace["selection"] = {"selected_hits": selected_hits}
+    if isinstance(trace.get("topology_expansion"), dict):
+        pipeline_trace["topology_expansion"] = trace["topology_expansion"]
     if llm_runtime_meta is not None:
         pipeline_trace["llm"] = llm_runtime_meta
     return AnswerResult(

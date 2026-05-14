@@ -19,6 +19,8 @@ from play_book_studio.ingestion.document_parsing import DocumentChunk, ParsedUpl
 
 GOLD_BUILD_SCHEMA = "llm_wiki.gold_build_run.v1"
 GOLD_BUILD_STAGES = ("diagnose", "repair", "rebuild", "reindex", "verify", "promote")
+NON_KO_BLOCKING_RATIO = 0.05
+MIXED_KO_BLOCKING_RATIO = 0.7
 
 _HEADING_RE = re.compile(r"^\s*#{1,6}\s+\S+", re.MULTILINE)
 _CODE_FENCE_RE = re.compile(r"```")
@@ -108,15 +110,19 @@ def with_index_verification(run: dict[str, Any], *, index_result: dict[str, Any]
     if index_result is not None:
         indexed_count = _safe_int(index_result.get("indexed_count"))
         candidate_count = _safe_int(index_result.get("candidate_count"))
+        index_error = str(index_result.get("error") or "").strip()
         metrics["qdrant_candidate_count"] = candidate_count
         metrics["qdrant_indexed_count"] = indexed_count
         if chunk_count > 0 and indexed_count < chunk_count:
+            evidence = [f"chunks={chunk_count}", f"indexed={indexed_count}"]
+            if index_error:
+                evidence.append(f"error={index_error}")
             diagnostics.append(
                 _diagnostic(
                     "index_gap",
                     severity="blocking",
-                    summary="chunk 수보다 Qdrant index 수가 적습니다.",
-                    evidence=[f"chunks={chunk_count}", f"indexed={indexed_count}"],
+                    summary="Qdrant 색인이 완료되지 않았습니다." if index_error else "chunk 수보다 Qdrant index 수가 적습니다.",
+                    evidence=evidence,
                 )
             )
     return build_gold_build_run(
@@ -229,14 +235,21 @@ def build_gold_build_run(
         for action in repair_actions
         if str(action.get("status") or "") not in {"applied", "verified", "not_needed"}
     ]
-    status = "gold" if not dry_run and not blocking and not unapplied_actions else "building_gold"
+    index_ready = _index_evidence_complete(index_result=index_result, metrics=metrics)
+    status = "gold" if not dry_run and not blocking and not unapplied_actions and index_ready else "building_gold"
     if dry_run:
         status = "auto_candidate"
     elif unapplied_actions:
         status = "needs_manual_repair"
     elif blocking:
         status = "repairing"
-    stage_results = _stage_results(status=status, diagnostics=diagnostics, repair_actions=repair_actions, index_result=index_result)
+    stage_results = _stage_results(
+        status=status,
+        diagnostics=diagnostics,
+        repair_actions=repair_actions,
+        index_result=index_result,
+        metrics=metrics,
+    )
     return {
         "schema": GOLD_BUILD_SCHEMA,
         "run_id": run_id,
@@ -280,22 +293,28 @@ def _diagnose_upload(
     if chunk_count <= 0:
         diagnostics.append(_diagnostic("zero_chunks", severity="blocking", summary="검색/인용에 쓸 chunk가 없습니다."))
     language = _language_profile([chunk.embedding_text or chunk.markdown for chunk in chunks] or [parsed.markdown])
-    if language["text_unit_count"] > 0 and language["hangul_unit_ratio"] < 0.05:
+    if language["text_unit_count"] > 0 and language["hangul_unit_ratio"] < NON_KO_BLOCKING_RATIO:
         diagnostics.append(
             _diagnostic(
                 "non_ko_content",
                 severity="blocking",
                 summary="본문이 한국어 운영 문서체로 정리되지 않았습니다.",
-                evidence=[f"hangul_ratio={language['hangul_unit_ratio']}"],
+                evidence=[
+                    f"hangul_ratio={language['hangul_unit_ratio']}",
+                    f"latin_only_ratio={language['latin_only_unit_ratio']}",
+                ],
             )
         )
-    elif language["text_unit_count"] > 0 and language["hangul_unit_ratio"] < 0.85:
+    elif language["text_unit_count"] > 0 and language["hangul_unit_ratio"] < MIXED_KO_BLOCKING_RATIO:
         diagnostics.append(
             _diagnostic(
                 "mixed_ko_content",
                 severity="blocking",
-                summary="한국어 설명과 비한국어 본문이 섞여 있습니다.",
-                evidence=[f"hangul_ratio={language['hangul_unit_ratio']}"],
+                summary="한국어 운영 문서 비율이 낮아 Gold 승급 전에 재작성 검수가 필요합니다.",
+                evidence=[
+                    f"hangul_ratio={language['hangul_unit_ratio']}",
+                    f"latin_only_ratio={language['latin_only_unit_ratio']}",
+                ],
             )
         )
     if _has_poor_readability(parsed.markdown):
@@ -309,7 +328,7 @@ def _diagnose_upload(
     if _TABLEISH_LINE_RE.search(parsed.markdown) and "|---" not in parsed.markdown:
         diagnostics.append(_diagnostic("table_loss", severity="warning", summary="표가 Markdown table로 안정화되지 않았을 수 있습니다."))
     if _COMMANDISH_LINE_RE.search(parsed.markdown) and not _CODE_FENCE_RE.search(parsed.markdown):
-        diagnostics.append(_diagnostic("code_loss", severity="warning", summary="명령어가 code block으로 보호되지 않았습니다."))
+        diagnostics.append(_diagnostic("code_loss", severity="blocking", summary="명령어가 code block으로 보호되지 않았습니다."))
     if index_result is not None:
         indexed_count = _safe_int(index_result.get("indexed_count"))
         if chunk_count > 0 and indexed_count < chunk_count:
@@ -332,6 +351,8 @@ def _planned_repair_actions(
     already_applied = already_applied or set()
     rows: list[dict[str, Any]] = []
     for diagnostic in diagnostics:
+        if str(diagnostic.get("severity") or "") != "blocking":
+            continue
         code = str(diagnostic.get("code") or "")
         if code in already_applied:
             continue
@@ -496,9 +517,11 @@ def _stage_results(
     diagnostics: list[dict[str, Any]],
     repair_actions: list[dict[str, Any]],
     index_result: dict[str, Any] | None,
+    metrics: dict[str, Any],
 ) -> list[dict[str, str]]:
     action_statuses = {str(action.get("status") or "") for action in repair_actions}
     blocking_count = len([item for item in diagnostics if str(item.get("severity") or "") == "blocking"])
+    index_ready = _index_evidence_complete(index_result=index_result, metrics=metrics)
     stages: list[dict[str, str]] = []
     for stage in GOLD_BUILD_STAGES:
         stage_status = "pass"
@@ -517,10 +540,19 @@ def _stage_results(
                 detail = "repairs applied"
         elif stage == "reindex":
             if index_result is None:
-                stage_status = "pending" if status != "gold" else "pass"
-                detail = "index evidence pending"
+                if index_ready:
+                    detail = f"{_safe_int(metrics.get('qdrant_indexed_count'))} indexed"
+                else:
+                    stage_status = "pending"
+                    detail = "index evidence pending"
             else:
-                detail = f"{_safe_int(index_result.get('indexed_count'))} indexed"
+                indexed_count = _safe_int(index_result.get("indexed_count"))
+                candidate_count = _safe_int(index_result.get("candidate_count"))
+                if index_ready:
+                    detail = f"{indexed_count} indexed"
+                else:
+                    stage_status = "fail"
+                    detail = f"index incomplete: {indexed_count}/{candidate_count}"
         elif stage == "verify":
             if blocking_count:
                 stage_status = "fail"
@@ -535,6 +567,20 @@ def _stage_results(
                 detail = "Gold"
         stages.append({"stage": stage, "status": stage_status, "detail": detail})
     return stages
+
+
+def _index_evidence_complete(*, index_result: dict[str, Any] | None, metrics: dict[str, Any]) -> bool:
+    chunk_count = _safe_int(metrics.get("chunk_count"))
+    if chunk_count <= 0:
+        return False
+    if index_result is not None:
+        indexed_count = _safe_int(index_result.get("indexed_count"))
+        status = str(index_result.get("status") or "").strip()
+        error = str(index_result.get("error") or "").strip()
+        return indexed_count >= chunk_count and status != "deferred" and not error
+    if "qdrant_indexed_count" not in metrics:
+        return False
+    return _safe_int(metrics.get("qdrant_indexed_count")) >= chunk_count
 
 
 def _gold_evidence(*, status: str, metrics: dict[str, Any], stage_results: list[dict[str, str]]) -> list[str]:

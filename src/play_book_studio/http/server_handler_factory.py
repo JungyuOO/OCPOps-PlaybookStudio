@@ -25,10 +25,19 @@ from play_book_studio.http.ops_console_api import (
     handle_ops_console_post as _handle_ops_console_post_request,
     handle_ops_console_put as _handle_ops_console_put_request,
 )
-from play_book_studio.http.upload_api import handle_upload_ingest as _handle_upload_ingest_request
+from play_book_studio.http.upload_api import (
+    handle_upload_code_block_repair as _handle_upload_code_block_repair_request,
+    handle_upload_index_retry as _handle_upload_index_retry_request,
+    handle_upload_ingest as _handle_upload_ingest_request,
+    handle_upload_ingest_stream as _handle_upload_ingest_stream_request,
+    handle_upload_pipeline_status as _handle_upload_pipeline_status_request,
+    handle_upload_quality_recheck as _handle_upload_quality_recheck_request,
+    handle_upload_topology_retry as _handle_upload_topology_retry_request,
+)
 from play_book_studio.http.repository_api import (
     handle_document_reader as _handle_document_reader_request,
     handle_document_repositories as _handle_document_repositories_request,
+    handle_document_topology as _handle_document_topology_request,
 )
 from play_book_studio.http.document_status_api import handle_document_status as _handle_document_status_request
 from play_book_studio.http.signals_api import handle_signals as _handle_signals_request
@@ -262,6 +271,12 @@ def _build_handler(
             if request_path == "/api/repositories/document-reader":
                 self._handle_document_reader(parsed_request.query)
                 return
+            if request_path == "/api/repositories/topology":
+                self._handle_document_topology(parsed_request.query)
+                return
+            if request_path == "/api/uploads/pipeline-status":
+                self._handle_upload_pipeline_status(parsed_request.query)
+                return
             if request_path == "/api/documents/ingest-status":
                 self._handle_document_status(parsed_request.query)
                 return
@@ -333,8 +348,23 @@ def _build_handler(
             if parsed_request.path == "/api/customer-packs/drafts":
                 self._handle_customer_pack_draft_create(payload)
                 return
+            if parsed_request.path == "/api/uploads/ingest-stream":
+                self._handle_upload_ingest_stream(payload)
+                return
             if parsed_request.path == "/api/uploads/ingest":
                 self._handle_upload_ingest(payload)
+                return
+            if parsed_request.path == "/api/uploads/index-retry":
+                self._handle_upload_index_retry(payload)
+                return
+            if parsed_request.path == "/api/uploads/topology-retry":
+                self._handle_upload_topology_retry(payload)
+                return
+            if parsed_request.path == "/api/uploads/quality-recheck":
+                self._handle_upload_quality_recheck(payload)
+                return
+            if parsed_request.path == "/api/uploads/repair-code-blocks":
+                self._handle_upload_code_block_repair(payload)
                 return
             if parsed_request.path == "/api/customer-packs/ingest":
                 self._handle_customer_pack_ingest(payload)
@@ -456,6 +486,14 @@ def _build_handler(
 
         def _handle_document_reader(self, query: str) -> None:
             _handle_document_reader_request(
+                self,
+                query,
+                root_dir=root_dir,
+                owner_user_id=self._session_owner().owner_hash,
+            )
+
+        def _handle_document_topology(self, query: str) -> None:
+            _handle_document_topology_request(
                 self,
                 query,
                 root_dir=root_dir,
@@ -639,6 +677,33 @@ def _build_handler(
             owner = self._session_owner()
             payload.setdefault("created_by", owner.owner_hash)
             _handle_upload_ingest_request(self, payload, root_dir=root_dir)
+        def _handle_upload_ingest_stream(self, payload: dict[str, Any]) -> None:
+            owner = self._session_owner()
+            payload.setdefault("created_by", owner.owner_hash)
+            _handle_upload_ingest_stream_request(self, payload, root_dir=root_dir)
+        def _handle_upload_index_retry(self, payload: dict[str, Any]) -> None:
+            owner = self._session_owner()
+            payload.setdefault("created_by", owner.owner_hash)
+            _handle_upload_index_retry_request(self, payload, root_dir=root_dir)
+        def _handle_upload_topology_retry(self, payload: dict[str, Any]) -> None:
+            owner = self._session_owner()
+            payload.setdefault("created_by", owner.owner_hash)
+            _handle_upload_topology_retry_request(self, payload, root_dir=root_dir)
+        def _handle_upload_quality_recheck(self, payload: dict[str, Any]) -> None:
+            owner = self._session_owner()
+            payload.setdefault("created_by", owner.owner_hash)
+            _handle_upload_quality_recheck_request(self, payload, root_dir=root_dir)
+        def _handle_upload_code_block_repair(self, payload: dict[str, Any]) -> None:
+            owner = self._session_owner()
+            payload.setdefault("created_by", owner.owner_hash)
+            _handle_upload_code_block_repair_request(self, payload, root_dir=root_dir)
+        def _handle_upload_pipeline_status(self, query: str) -> None:
+            _handle_upload_pipeline_status_request(
+                self,
+                query,
+                root_dir=root_dir,
+                owner_user_id=self._session_owner().owner_hash,
+            )
         def _handle_repository_favorites_save(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_save_request(self, payload, root_dir=root_dir)
         def _handle_repository_favorites_remove(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_remove_request(self, payload, root_dir=root_dir)
         def _handle_repository_official_materialize(self, payload: dict[str, Any]) -> None:

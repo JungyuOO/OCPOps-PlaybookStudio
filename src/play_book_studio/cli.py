@@ -831,6 +831,7 @@ def _upload_ingest_summary(parsed, chunks, *, persisted=None, gold_build_run=Non
 
 def _run_upload_ingest(args: argparse.Namespace) -> int:
     from play_book_studio.db.document_repository import persist_parsed_upload_document
+    from play_book_studio.ingestion.asset_storage import remove_stored_asset_files, store_parsed_asset_files
     from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
     from play_book_studio.ingestion.vision import build_qwen_image_describer
     from play_book_studio.wiki_gold_builder import prepare_upload_gold_build_candidate
@@ -870,25 +871,30 @@ def _run_upload_ingest(args: argparse.Namespace) -> int:
 
     import psycopg
 
-    with psycopg.connect(database_url) as connection:
-        persisted = persist_parsed_upload_document(
-            connection,
-            parsed,
-            chunks,
-            tenant_slug=args.tenant_slug,
-            tenant_name=args.tenant_name,
-            workspace_slug=args.workspace_slug,
-            workspace_name=args.workspace_name,
-            storage_key=args.storage_key,
-            created_by=args.created_by,
-            repository_id=args.repository_id,
-            repository_slug=args.repository_slug,
-            repository_title=args.repository_title,
-            repository_kind=args.repository_kind,
-            visibility=args.visibility,
-            source_scope=args.source_scope,
-            gold_build_run=gold_candidate.run,
-        )
+    stored_asset_files = store_parsed_asset_files(settings.object_storage_dir, parsed)
+    try:
+        with psycopg.connect(database_url) as connection:
+            persisted = persist_parsed_upload_document(
+                connection,
+                parsed,
+                chunks,
+                tenant_slug=args.tenant_slug,
+                tenant_name=args.tenant_name,
+                workspace_slug=args.workspace_slug,
+                workspace_name=args.workspace_name,
+                storage_key=args.storage_key,
+                created_by=args.created_by,
+                repository_id=args.repository_id,
+                repository_slug=args.repository_slug,
+                repository_title=args.repository_title,
+                repository_kind=args.repository_kind,
+                visibility=args.visibility,
+                source_scope=args.source_scope,
+                gold_build_run=gold_candidate.run,
+            )
+    except Exception:
+        remove_stored_asset_files(stored_asset_files)
+        raise
     print(json.dumps(_upload_ingest_summary(parsed, chunks, persisted=persisted, gold_build_run=gold_candidate.run), ensure_ascii=False, indent=2))
     return 0
 

@@ -65,6 +65,7 @@ import {
   loadDbChatMessages,
   loadDocumentIngestStatus,
   loadDocumentRepositories,
+  loadUploadPipelineStatus,
   loadSignals,
   loadWikiOverlaySignals,
   loadWikiOverlays,
@@ -80,8 +81,10 @@ import {
   saveRepositorySourceRequest,
   saveWikiOverlay,
   sendChatStream,
+  setRuntimeIdentityUser,
   toRuntimeUrl,
-  uploadDocumentIngestion,
+  type UploadIngestStreamEvent,
+  uploadDocumentIngestionStream,
 } from '../lib/runtimeApi';
 import {
   loadOcpStatus,
@@ -98,6 +101,12 @@ import {
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../routing/routes';
 import { sendCourseChatStream } from '../lib/courseApi';
+import {
+  clusterConnectionStatusLabel,
+  clusterProfileName,
+  normalizeClusterConnectionStatus,
+  type ClusterConnectionStatus,
+} from '../lib/clusterProfile';
 import { useGlobalTheme } from '../lib/globalTheme';
 import { loadStoredVisionMode, type VisionMode } from '../lib/wikiVision';
 import { resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';
@@ -170,6 +179,58 @@ function loadStoredIngestionStatus(): IngestionStatusBanner | null {
   }
 }
 
+function ingestionBannerFromPipelineStatus(
+  payload: Awaited<ReturnType<typeof loadUploadPipelineStatus>>,
+  current: IngestionStatusBanner,
+): IngestionStatusBanner {
+  const stages = payload.pipeline_summary?.stages ?? {};
+  const overall = String(payload.pipeline_summary?.overall_status || '');
+  const latestServerEvent = [...(payload.events ?? [])]
+    .reverse()
+    .find((event) => event.type === 'event' && event.occurred_at);
+  const blockerCount = payload.quality?.blockers?.length ?? 0;
+  const updatedAt = latestServerEvent?.occurred_at || current.updatedAt || new Date().toISOString();
+  let status: IngestionStatusBanner['status'] = 'indexing';
+  let message = '서버 이벤트 원장을 확인 중입니다.';
+  if (overall === 'failed' || Object.values(stages).includes('failed')) {
+    status = 'failed';
+    message = '서버 이벤트 원장에 실패 단계가 기록되었습니다.';
+  } else if (overall === 'completed') {
+    status = 'ready';
+    message = '업로드 파이프라인이 완료되었습니다.';
+  } else if (stages.topology === 'deferred' || stages.judge === 'deferred' || payload.quality?.state === 'needs_repair') {
+    status = 'gold_build';
+    message = blockerCount > 0
+      ? `문서는 저장됐고 품질/지식망 보류 항목 ${blockerCount}개가 남았습니다.`
+      : '문서는 저장됐고 품질/지식망 판정이 보류되었습니다.';
+  } else if (stages.gold === 'completed') {
+    status = 'indexing';
+    message = '검색 인덱스 생성이 완료됐고 다음 판정을 기다립니다.';
+  } else if (stages.gold === 'running') {
+    status = 'indexing';
+    message = 'Qdrant 검색 인덱스를 생성 중입니다.';
+  } else if (stages.silver === 'completed') {
+    status = 'saved';
+    message = '문서가 DB에 저장되었습니다.';
+  } else if (stages.silver === 'running') {
+    status = 'saving';
+    message = '문서와 chunk를 DB에 저장 중입니다.';
+  } else if (stages.bronze === 'completed') {
+    status = 'parsing';
+    message = '원본 파일을 저장했고 파싱 이벤트를 기다립니다.';
+  } else if (stages.bronze === 'running') {
+    status = 'recognizing';
+    message = '파일을 서버가 수신했습니다.';
+  }
+  return {
+    ...current,
+    status,
+    message,
+    documentSourceId: payload.document_source_id || current.documentSourceId,
+    updatedAt,
+  };
+}
+
 function citationEvidenceTitle(citation: ChatCitation): string {
   return citation.source_label || citation.book_title || citation.section || citation.book_slug || `Citation ${citation.index}`;
 }
@@ -185,7 +246,6 @@ function citationEvidenceMeta(citation: ChatCitation): string {
 type LeftPanelMode = 'history' | 'outline' | 'signals';
 type RightPanelMode = 'viewer' | 'terminal';
 type WorkspaceChatMode = 'document' | 'live_cluster';
-type ClusterConnectionStatus = 'not_connected' | 'connecting' | 'connected' | 'error';
 type SignalsFavoriteFilter = 'favorites' | 'edited';
 const CLUSTER_RESOURCE_OPTIONS = ['pods', 'deployments', 'services', 'routes', 'events'] as const;
 type ClusterResourceKind = typeof CLUSTER_RESOURCE_OPTIONS[number];
@@ -202,7 +262,17 @@ interface ClusterSignalEvent {
 }
 
 interface IngestionStatusBanner {
-  status: 'recognizing' | 'parsing' | 'embedding' | 'indexing' | 'ready' | 'failed';
+  status:
+    | 'recognizing'
+    | 'parsing'
+    | 'saving'
+    | 'saved'
+    | 'embedding'
+    | 'indexing'
+    | 'index_deferred'
+    | 'gold_build'
+    | 'ready'
+    | 'failed';
   message: string;
   filename?: string;
   repositoryId?: string;
@@ -728,22 +798,6 @@ function NoAnswerAcquisitionCard({
       </button>
     </div>
   );
-}
-
-const FALLBACK_CLUSTER_USER_LABEL = 'Undefined';
-
-function normalizeClusterConnectionStatus(connection?: OcpConnection | null): ClusterConnectionStatus {
-  const status = connection?.status?.toLowerCase().trim();
-  if (!connection || !status || status === 'disconnected' || status === 'not_connected') {
-    return 'not_connected';
-  }
-  if (status === 'connected' || status === 'ready' || status === 'active') {
-    return 'connected';
-  }
-  if (status === 'connecting' || status === 'pending' || status === 'testing') {
-    return 'connecting';
-  }
-  return 'error';
 }
 
 function detectClusterSignal(command: string): Omit<ClusterSignalEvent, 'id' | 'timestamp' | 'status'> | null {
@@ -1314,20 +1368,26 @@ export default function WorkspacePage() {
     [footerConnections, opsConnectionId],
   );
   const footerProfileName = useMemo(() => {
-    const username = activeFooterConnection?.username_hint?.trim();
-    const displayName = activeFooterConnection?.display_name?.trim();
-    return username || displayName || FALLBACK_CLUSTER_USER_LABEL;
+    return clusterProfileName(activeFooterConnection);
   }, [activeFooterConnection]);
   const wikiOverlayUserId = footerProfileName;
   const isClusterConnected = clusterConnectionStatus === 'connected';
-  const clusterStatusLabel =
-    clusterConnectionStatus === 'connected'
-      ? 'Connected'
-      : clusterConnectionStatus === 'connecting'
-        ? 'Connecting'
-        : clusterConnectionStatus === 'error'
-          ? 'Error'
-          : 'Not connected';
+  const clusterStatusLabel = clusterConnectionStatusLabel(clusterConnectionStatus);
+
+  useEffect(() => {
+    const identity = activeFooterConnection
+      ? (
+        activeFooterConnection.username_hint?.trim()
+        || activeFooterConnection.display_name?.trim()
+        || activeFooterConnection.connection_id
+      )
+      : '';
+    setRuntimeIdentityUser(identity || null);
+  }, [
+    activeFooterConnection?.connection_id,
+    activeFooterConnection?.display_name,
+    activeFooterConnection?.username_hint,
+  ]);
 
   const refreshFooterProfile = useCallback(async () => {
     setIsFooterProfileLoading(true);
@@ -1513,9 +1573,20 @@ export default function WorkspacePage() {
     let cancelled = false;
     const refreshStatus = async () => {
       try {
+        if (ingestionStatusBanner.documentSourceId) {
+          const payload = await loadUploadPipelineStatus({
+            documentSourceId: ingestionStatusBanner.documentSourceId,
+          });
+          if (cancelled) {
+            return;
+          }
+          const nextBanner = ingestionBannerFromPipelineStatus(payload, ingestionStatusBanner);
+          setIngestionStatusBanner(nextBanner);
+          window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
+          return;
+        }
         const payload = await loadDocumentIngestStatus({
           repositoryId: ingestionStatusBanner.repositoryId,
-          documentSourceId: ingestionStatusBanner.documentSourceId,
         });
         const latest = payload.latest;
         if (!latest || cancelled) {
@@ -2886,37 +2957,112 @@ export default function WorkspacePage() {
       return;
     }
 
+    const publishBanner = (banner: IngestionStatusBanner) => {
+      setIngestionStatusBanner(banner);
+      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(banner));
+    };
+    const bannerFromStreamEvent = (streamEvent: UploadIngestStreamEvent): IngestionStatusBanner | null => {
+      if (streamEvent.type !== 'event') {
+        return null;
+      }
+      const data = streamEvent.data ?? streamEvent.payload ?? {};
+      const eventName = streamEvent.event || streamEvent.stage;
+      const repositoryId = String(data.repository_id || activeRepository?.repository_id || '');
+      const documentSourceId = String(data.document_source_id || '');
+      const base = {
+        filename: file.name,
+        repositoryId,
+        documentSourceId,
+        updatedAt: streamEvent.occurred_at || new Date().toISOString(),
+      };
+      switch (eventName) {
+        case 'received':
+          return { ...base, status: 'recognizing', message: '파일을 서버가 수신했습니다.' };
+        case 'source_stored':
+          return { ...base, status: 'recognizing', message: '원본 파일을 저장했습니다.' };
+        case 'parse_start':
+          return { ...base, status: 'parsing', message: '문서 파싱을 시작했습니다.' };
+        case 'parsed':
+          return { ...base, status: 'parsing', message: '문서 구조를 읽었습니다.' };
+        case 'chunk_start':
+          return { ...base, status: 'parsing', message: '문서 조각 생성을 시작했습니다.' };
+        case 'chunked':
+          return { ...base, status: 'parsing', message: '문서 조각을 만들었습니다.' };
+        case 'persist_start':
+        case 'persisting':
+          return { ...base, status: 'saving', message: '문서와 chunk를 DB에 저장 중입니다.' };
+        case 'persisted':
+          return { ...base, status: 'saved', message: '문서가 DB에 저장되었습니다.' };
+        case 'index_start':
+        case 'indexing':
+          return { ...base, status: 'indexing', message: 'Qdrant 검색 인덱스를 생성 중입니다.' };
+        case 'indexed':
+          return { ...base, status: 'indexing', message: '검색 인덱스 생성이 완료되었습니다.' };
+        case 'index_deferred':
+          return {
+            ...base,
+            status: 'index_deferred',
+            message: '문서는 저장됐고 색인은 보류되었습니다.',
+          };
+        case 'gold_build':
+        case 'judge_start':
+        case 'judge_completed':
+          return { ...base, status: 'gold_build', message: 'Gold/Judge 상태를 확인했습니다.' };
+        case 'topology_start':
+        case 'topology_ready':
+        case 'topology_deferred':
+        case 'topology_failed':
+          return { ...base, status: 'gold_build', message: '지식망 스냅샷 상태를 확인했습니다.' };
+        default:
+          return null;
+      }
+    };
+
     try {
-      setIngestionStatusBanner({
-        status: 'parsing',
+      publishBanner({
+        status: 'recognizing',
         message: '문서 파싱중입니다.',
         filename: file.name,
         updatedAt: new Date().toISOString(),
       });
-      const uploaded = await uploadDocumentIngestion(file, {
+      const uploaded = await uploadDocumentIngestionStream(file, {
         index: true,
         repositoryId: activeRepository?.repository_id,
+        sourceScope: 'user_upload',
+      }, (streamEvent) => {
+        const nextBanner = bannerFromStreamEvent(streamEvent);
+        if (nextBanner) {
+          publishBanner(nextBanner);
+          if (streamEvent.type === 'event' && (streamEvent.event || streamEvent.stage) === 'persisted') {
+            void loadDocumentRepositories()
+              .then((repositoryPayload) => setDocumentRepositories(repositoryPayload.repositories ?? []))
+              .catch((repositoryError) => console.error(repositoryError));
+          }
+        }
+        if (streamEvent.type === 'error') {
+          publishBanner({
+            status: 'failed',
+            message: streamEvent.error || '업로드 스트림 오류',
+            filename: file.name,
+            updatedAt: new Date().toISOString(),
+          });
+        }
       });
       const repositoryPayload = await loadDocumentRepositories().catch(() => ({ repositories: [] }));
       const repositoryId = uploaded.repository_id || uploaded.persisted?.repository_id || activeRepository?.repository_id || '';
-      const documentSourceId = uploaded.persisted?.document_source_id || '';
       setDocumentRepositories(repositoryPayload.repositories ?? []);
       if (repositoryId) {
         setActiveSourceId(`repository:${repositoryId}`);
       }
-      const nextBanner: IngestionStatusBanner = {
-        status: 'ready',
-        message: '문서 준비가 완료되었습니다.',
-        filename: uploaded.filename || file.name,
-        repositoryId,
-        documentSourceId,
-        updatedAt: new Date().toISOString(),
-      };
-      setIngestionStatusBanner(nextBanner);
-      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
       setPreview({ kind: 'empty' });
     } catch (error) {
       console.error(error);
+      publishBanner({
+        status: 'failed',
+        message: error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.',
+        filename: file.name,
+        updatedAt: new Date().toISOString(),
+      });
       window.alert(error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.');
     } finally {
       if (fileInputRef.current) {
@@ -3207,7 +3353,7 @@ export default function WorkspacePage() {
   ): Promise<void> {
     const repositoryQuery = acquisition.repository_query.trim();
     if (!repositoryQuery) {
-      navigate('/playbook-library?scope=customer&lane=customer');
+      navigate('/playbook-library?scope=official&lane=tools#book-factory');
       return;
     }
     try {
@@ -3222,7 +3368,7 @@ export default function WorkspacePage() {
     } catch (error) {
       console.warn('[source-request] save failed:', error);
     }
-    navigate(`/playbook-library?scope=customer&lane=customer&q=${encodeURIComponent(repositoryQuery)}`);
+    navigate(`/playbook-library?scope=official&lane=tools&q=${encodeURIComponent(repositoryQuery)}#book-factory`);
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
@@ -3545,6 +3691,10 @@ export default function WorkspacePage() {
         onOpenDashboard={() => setDashboardOpen(true)}
         onOpenLibrary={() => navigate('/playbook-library')}
         onToggleGlobalTheme={toggleGlobalTheme}
+        profileName={footerProfileName}
+        profileStatus={clusterConnectionStatus}
+        profileStatusLabel={clusterStatusLabel}
+        isProfileLoading={isFooterProfileLoading}
       />
 
       <main className="workspace-content">
@@ -4067,27 +4217,6 @@ export default function WorkspacePage() {
                 </div>
               )}
 
-              <div className="user-profile-section">
-                <div className="profile-container profile-container-ops">
-                  <div className="profile-avatar profile-avatar-ops">
-                    <Cpu size={18} />
-                    <div className={`status-dot-online ${isClusterConnected ? '' : 'status-dot-idle'}`}></div>
-                  </div>
-                  <div className="profile-ops-summary">
-                    <button
-                      className={`profile-ops-name-btn ${activeFooterConnection ? '' : 'is-undefined'}`}
-                      type="button"
-                      onClick={() => setDashboardOpen(true)}
-                      title={activeFooterConnection ? 'Open cluster dashboard' : 'Cluster is not connected'}
-                    >
-                      {isFooterProfileLoading ? 'Syncing' : footerProfileName}
-                    </button>
-                    <span className={`profile-cluster-status profile-cluster-status--${clusterConnectionStatus}`}>
-                      {clusterStatusLabel}
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
           </Panel>
 
@@ -4642,6 +4771,7 @@ export default function WorkspacePage() {
                       void handleRemoveSectionTextAnnotation(section, annotationId);
                     }}
                     className="playbook-reader-shadow-host"
+                    viewerTheme={globalTheme}
                   />
                 ) : (
                   <div className="playbook-reader-empty">문서 본문을 불러오지 못했습니다.</div>
@@ -4695,6 +4825,7 @@ export default function WorkspacePage() {
                         void openViewerPreview(viewerPath, preview.title, undefined, viewerPageMode);
                       }}
                       className="playbook-reader-shadow-host"
+                      viewerTheme={globalTheme}
                     />
                   ) : (
                     <div className="doc-section">
@@ -4787,6 +4918,7 @@ export default function WorkspacePage() {
                       void openEvidenceDrawerPath(evidenceDrawer.title, viewerPath);
                     }}
                     className="playbook-reader-shadow-host evidence-drawer-reader"
+                    viewerTheme={globalTheme}
                   />
                 )}
               </div>

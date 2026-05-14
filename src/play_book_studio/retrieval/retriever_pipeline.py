@@ -23,6 +23,7 @@ from .query import (
 )
 from .scoring import fuse_ranked_hits
 from .trace import build_retrieval_trace, duration_ms as _duration_ms, emit_trace_event as _emit_trace_event
+from .topology_expansion import expand_hits_with_topology
 
 DERIVED_RUNTIME_SOURCE_TYPES = frozenset(
     {
@@ -368,6 +369,23 @@ def execute_retrieval_pipeline(
         context=context,
     )
     hybrid_hits = _filter_latest_only_hits(retriever, hybrid_hits)
+    reservoir_output_k = max(fusion_output_k, min(effective_candidate_k, 50))
+    hybrid_reservoir_hits = fuse_ranked_hits(
+        plan.rewritten_query,
+        {
+            "bm25": bm25_hits,
+            "vector": vector_hits,
+        },
+        context=context,
+        top_k=reservoir_output_k,
+    )
+    hybrid_reservoir_hits = _preserve_uploaded_customer_pack_candidate(
+        plan.rewritten_query,
+        hybrid_hits=hybrid_reservoir_hits,
+        overlay_hits=overlay_bm25_hits,
+        context=context,
+    )
+    hybrid_reservoir_hits = _filter_latest_only_hits(retriever, hybrid_reservoir_hits)
     timings_ms["fusion"] = _duration_ms(fusion_started_at)
     top_hit = hybrid_hits[0] if hybrid_hits else None
     top_detail = (
@@ -447,10 +465,31 @@ def execute_retrieval_pipeline(
         context=context,
     )
     graph_enriched_hits = _filter_latest_only_hits(retriever, graph_enriched_hits)
+    topology_started_at = time.perf_counter()
+    topology_enriched_hits, topology_trace = expand_hits_with_topology(
+        database_url=str(getattr(retriever.settings, "database_url", "") or ""),
+        query=plan.rewritten_query,
+        hits=graph_enriched_hits,
+        reservoir_hits=hybrid_reservoir_hits,
+    )
+    timings_ms["topology_expansion"] = _duration_ms(topology_started_at)
+    _emit_trace_event(
+        trace_callback,
+        step="topology_expand",
+        label="Topology 지식망 확장" if topology_trace.get("used") else "Topology 지식망 확장 생략",
+        status="done",
+        detail=(
+            f"{topology_trace.get('matched_hit_count', 0)}개 근거 hit 확장"
+            if topology_trace.get("used")
+            else str(topology_trace.get("skip_reason") or "matched topology 없음")
+        ),
+        duration_ms=timings_ms["topology_expansion"],
+        meta=topology_trace,
+    )
     hits, reranker_trace = apply_retrieval_postprocess(
         retriever,
         query=plan.rewritten_query,
-        hybrid_hits=graph_enriched_hits,
+        hybrid_hits=topology_enriched_hits,
         context=context,
         top_k=top_k,
         trace_callback=trace_callback,
@@ -464,6 +503,7 @@ def execute_retrieval_pipeline(
         vector_hits=vector_hits,
         hybrid_hits=hybrid_hits,
         graph_trace=graph_trace,
+        topology_trace=topology_trace,
         reranked_hits=hits,
         reranker_trace=reranker_trace,
         decomposed_queries=plan.decomposed_queries,

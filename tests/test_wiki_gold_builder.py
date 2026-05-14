@@ -4,9 +4,11 @@ from pathlib import Path
 
 from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
 from play_book_studio.wiki_gold_builder import (
+    build_gold_build_run,
     build_official_materialize_gold_run,
     gold_build_contract_from_blockers,
     prepare_upload_gold_build_candidate,
+    with_index_verification,
 )
 
 
@@ -65,6 +67,76 @@ def test_upload_gold_build_routes_english_content_to_repair_writer(tmp_path: Pat
     assert "한국어 운영 문서체" in prepared.run["repair_actions"][0]["summary"]
 
 
+def test_upload_gold_build_allows_korean_technical_docs_with_commands(tmp_path: Path) -> None:
+    parsed, chunks = _parse_markdown(
+        tmp_path,
+        "ci-runbook.md",
+        "\n\n".join(
+            [
+                "# CI 장애 대응",
+                "파이프라인 실패 시 먼저 최근 실행 이력과 이벤트를 확인합니다.",
+                "## 증상 확인",
+                "빌드 로그에서 실패한 태스크와 네임스페이스를 확인합니다.",
+                "## 실행 명령",
+                "```bash\noc get pods -n ci\nkubectl describe pod build-runner\n```",
+                "## 복구 기준",
+                "재시도 후 동일 오류가 반복되면 이미지 풀 정책과 시크릿을 점검합니다.",
+            ]
+        ),
+    )
+
+    prepared = prepare_upload_gold_build_candidate(
+        parsed,
+        chunks,
+        source_scope="user_upload",
+        index_result={"candidate_count": len(chunks), "indexed_count": len(chunks)},
+    )
+
+    diagnostic_codes = [item["code"] for item in prepared.run["diagnostics"]]
+    assert "mixed_ko_content" not in diagnostic_codes
+    assert prepared.run["status"] == "gold"
+    assert prepared.run["repair_actions"] == []
+
+
+def test_gold_build_run_requires_index_evidence_for_gold() -> None:
+    run = build_gold_build_run(
+        run_id="run-1",
+        source_kind="upload",
+        source_scope="user_upload",
+        title="업로드 문서",
+        diagnostics=[],
+        repair_actions=[],
+        dry_run=False,
+        index_result=None,
+        metrics={"section_count": 1, "chunk_count": 3},
+    )
+
+    assert run["status"] == "building_gold"
+    assert run["final_grade"] == "Gold Build Repair"
+    assert run["qdrant_index"] == {}
+    reindex = next(stage for stage in run["stage_results"] if stage["stage"] == "reindex")
+    assert reindex["status"] == "pending"
+
+
+def test_gold_build_run_rejects_incomplete_index_evidence() -> None:
+    run = build_gold_build_run(
+        run_id="run-1",
+        source_kind="upload",
+        source_scope="user_upload",
+        title="업로드 문서",
+        diagnostics=[],
+        repair_actions=[],
+        dry_run=False,
+        index_result={"candidate_count": 3, "indexed_count": 2},
+        metrics={"section_count": 1, "chunk_count": 3},
+    )
+
+    assert run["status"] == "building_gold"
+    reindex = next(stage for stage in run["stage_results"] if stage["stage"] == "reindex")
+    assert reindex["status"] == "fail"
+    assert "2/3" in reindex["detail"]
+
+
 def test_gold_contract_blockers_become_repair_queue_actions() -> None:
     run = gold_build_contract_from_blockers(
         ["zero_sections", "missing_source_provenance"],
@@ -104,3 +176,27 @@ def test_official_materialize_gold_run_promotes_after_smoke() -> None:
         "anchor_metadata_rebuild",
     }
     assert all(action["status"] == "applied" for action in run["repair_actions"])
+
+
+def test_index_verification_marks_embedding_failure_as_repair_work() -> None:
+    run = gold_build_contract_from_blockers(
+        [],
+        title="업로드 문서",
+        metrics={"section_count": 1, "chunk_count": 3},
+    )
+
+    updated = with_index_verification(
+        run,
+        index_result={
+            "collection": "openshift_docs",
+            "candidate_count": 3,
+            "indexed_count": 0,
+            "status": "deferred",
+            "error": "Failed to fetch embeddings",
+        },
+    )
+
+    assert updated["status"] == "repairing"
+    assert updated["diagnostics"][0]["code"] == "index_gap"
+    assert updated["diagnostics"][0]["summary"] == "Qdrant 색인이 완료되지 않았습니다."
+    assert "error=Failed to fetch embeddings" in updated["diagnostics"][0]["evidence"]

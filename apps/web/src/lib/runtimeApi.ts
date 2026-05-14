@@ -207,8 +207,33 @@ export interface UploadIngestPersistedSummary {
 
 export interface UploadIngestIndexSummary {
   collection: string;
+  source_scope?: string;
+  document_source_id?: string;
   candidate_count: number;
   indexed_count: number;
+  status?: 'deferred' | string;
+  retryable?: boolean;
+  error?: string;
+}
+
+export interface UploadPipelineSummary {
+  overall_status: 'pending' | 'running' | 'completed' | 'deferred' | 'failed' | string;
+  stages: Record<string, 'pending' | 'running' | 'completed' | 'deferred' | 'failed' | string>;
+  missing_stages?: string[];
+}
+
+export interface DocumentQualitySnapshot {
+  snapshot_id?: string;
+  document_source_id?: string;
+  parsed_document_id?: string;
+  schema_version?: string;
+  state: 'gold_ready' | 'needs_repair' | 'blocked' | string;
+  score?: number;
+  checks?: Array<Record<string, unknown>>;
+  blockers?: Array<Record<string, unknown>>;
+  warnings?: Array<Record<string, unknown>>;
+  metadata?: Record<string, unknown>;
+  error?: string;
 }
 
 export interface UploadIngestResponse {
@@ -227,11 +252,116 @@ export interface UploadIngestResponse {
   persisted?: UploadIngestPersistedSummary;
   index?: UploadIngestIndexSummary;
   gold_build_run?: GoldBuildRun;
+  topology?: DocumentTopology | Record<string, unknown>;
+  quality?: DocumentQualitySnapshot;
+  pipeline_summary?: UploadPipelineSummary;
   repository_id?: string;
   owner_user_id?: string;
   visibility?: string;
   source_scope?: string;
 }
+
+export type UploadIngestStreamEvent =
+  | {
+    type: 'event';
+    stage: string;
+    event?: string;
+    pipeline_stage?: string;
+    status?: 'pending' | 'running' | 'completed' | 'deferred' | 'failed' | string;
+    run_id?: string;
+    event_id?: string;
+    occurred_at?: string;
+    document_source_id?: string;
+    parsed_document_id?: string;
+    data: Record<string, unknown>;
+    payload?: Record<string, unknown>;
+    evidence?: Record<string, unknown>;
+  }
+  | {
+    type: 'result';
+    stage: string;
+    event?: string;
+    pipeline_stage?: string;
+    status?: string;
+    run_id?: string;
+    event_id?: string;
+    occurred_at?: string;
+    payload: UploadIngestResponse;
+  }
+  | {
+    type: 'error';
+    stage: string;
+    event?: string;
+    pipeline_stage?: string;
+    status?: string;
+    run_id?: string;
+    event_id?: string;
+    occurred_at?: string;
+    error: string;
+    data?: Record<string, unknown>;
+    payload?: Record<string, unknown>;
+  };
+
+export interface UploadIndexRetryResponse {
+  ok: boolean;
+  source_scope: string;
+  document_source_id: string;
+  index: UploadIngestIndexSummary;
+  topology?: DocumentTopology | Record<string, unknown>;
+  updated_documents: Array<{
+    document_source_id: string;
+    filename: string;
+    chunk_count: number;
+    indexed_chunk_count: number;
+    gold_build_run?: GoldBuildRun;
+  }>;
+  pending_documents: Array<{
+    document_source_id: string;
+    filename: string;
+    chunk_count: number;
+    indexed_chunk_count: number;
+    gold_build_run?: GoldBuildRun;
+  }>;
+}
+
+export interface UploadCodeBlockRepairResponse {
+  ok: boolean;
+  dry_run: boolean;
+  repair_status: string;
+  document_source_id: string;
+  parsed_document_id: string;
+  source_scope?: string;
+  filename?: string;
+  changed_block_count: number;
+  diff_summary: Array<{
+    language?: string;
+    start_line?: number;
+    end_line?: number;
+    line_count?: number;
+    preview?: string[];
+    reason?: string;
+  }>;
+  quality?: DocumentQualitySnapshot | null;
+  topology?: DocumentTopology | Record<string, unknown> | null;
+  pipeline_summary?: UploadPipelineSummary;
+  gold_build_run?: GoldBuildRun;
+  index?: UploadIngestIndexSummary;
+  qdrant_cleanup?: Record<string, unknown>;
+  events?: UploadIngestStreamEvent[];
+  warnings?: string[];
+}
+
+type UploadIngestOptions = {
+  dryRun?: boolean;
+  index?: boolean;
+  createdBy?: string;
+  repositoryId?: string;
+  repositorySlug?: string;
+  repositoryTitle?: string;
+  repositoryKind?: string;
+  visibility?: string;
+  sourceScope?: string;
+};
 
 export interface DocumentRepositoryDocument {
   document_source_id: string;
@@ -293,6 +423,122 @@ export interface DocumentReaderChunk {
   metadata: Record<string, unknown>;
 }
 
+export interface DocumentReaderAsset {
+  asset_id: string;
+  asset_type: string;
+  mime_type: string;
+  storage_key: string;
+  sha256: string;
+  filename: string;
+  width?: number | null;
+  height?: number | null;
+  page_number?: number | null;
+  caption_text?: string;
+  ocr_text?: string;
+  qwen_description?: string;
+  qwen_model?: string;
+  data_url?: string;
+  available?: boolean;
+  byte_size?: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface DocumentTopologyEvidence {
+  document_source_id?: string;
+  parsed_document_id?: string;
+  chunk_id?: string;
+  asset_id?: string;
+  page_number?: number;
+  field?: string;
+  quote?: string;
+}
+
+export interface DocumentTopologyNode {
+  id: string;
+  kind: string;
+  label: string;
+  role: string;
+  status: string;
+  evidence: DocumentTopologyEvidence[];
+  metadata: Record<string, unknown>;
+}
+
+export interface DocumentTopologyEdge {
+  id: string;
+  source: string;
+  target: string;
+  relation: string;
+  label: string;
+  confidence: number;
+  evidence: DocumentTopologyEvidence[];
+  metadata: Record<string, unknown>;
+}
+
+export interface DocumentTopologySummary {
+  state?: string;
+  partial?: boolean;
+  node_count?: number;
+  edge_count?: number;
+  node_kind_counts?: Record<string, number>;
+  edge_relation_counts?: Record<string, number>;
+  chunk_count?: number;
+  asset_count?: number;
+  described_asset_count?: number;
+  missing_asset_description_count?: number;
+  concept_count?: number;
+  command_count?: number;
+  raw_concept_mentions?: number;
+  raw_command_mentions?: number;
+  blockers?: string[];
+}
+
+export interface DocumentTopology {
+  snapshot_id?: string;
+  schema_version: string;
+  document_source_id: string;
+  document_version_id?: string;
+  parsed_document_id: string;
+  source_fingerprint?: string;
+  input_fingerprint?: string;
+  state?: string;
+  partial?: boolean;
+  node_count?: number;
+  edge_count?: number;
+  blockers?: string[];
+  metadata?: Record<string, unknown>;
+  summary: DocumentTopologySummary;
+  nodes: DocumentTopologyNode[];
+  edges: DocumentTopologyEdge[];
+}
+
+export interface DocumentTopologyScopeDocument {
+  document_source_id: string;
+  parsed_document_id: string;
+  state: string;
+  summary: DocumentTopologySummary;
+  updated_at?: string;
+}
+
+export interface DocumentTopologyScopeResponse {
+  database: 'postgres' | 'disabled' | string;
+  schema_version: string;
+  source_scope: string;
+  document_count: number;
+  snapshot_count: number;
+  ready_count: number;
+  needs_review_count: number;
+  node_count: number;
+  edge_count: number;
+  asset_count: number;
+  described_asset_count: number;
+  missing_asset_description_count: number;
+  image_description_coverage: number;
+  concept_count: number;
+  command_count: number;
+  blockers: Array<{ message: string; count: number }>;
+  documents: DocumentTopologyScopeDocument[];
+}
+
 export interface DocumentReaderDocument {
   document_source_id: string;
   parsed_document_id: string;
@@ -314,7 +560,9 @@ export interface DocumentReaderDocument {
   limit: number;
   offset: number;
   has_more: boolean;
+  assets: DocumentReaderAsset[];
   chunks: DocumentReaderChunk[];
+  topology?: DocumentTopology;
 }
 
 export interface DocumentReaderResponse {
@@ -1394,6 +1642,24 @@ export interface DbChatMessagesResponse {
   messages: DbChatMessage[];
 }
 
+let runtimeIdentityUser = '';
+
+export function setRuntimeIdentityUser(user: string | null | undefined): void {
+  runtimeIdentityUser = String(user || '').trim();
+}
+
+export function applyRuntimeIdentityHeader(headers: Headers): Headers {
+  if (
+    runtimeIdentityUser
+    && !headers.has('X-Forwarded-User')
+    && !headers.has('X-Remote-User')
+    && !headers.has('X-User')
+  ) {
+    headers.set('X-User', runtimeIdentityUser);
+  }
+  return headers;
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers ?? {});
   const hasBody = init?.body !== undefined && init?.body !== null;
@@ -1402,9 +1668,9 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set('Content-Type', 'application/json');
   }
   const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
-    credentials: 'include',
-    headers,
     ...init,
+    credentials: 'include',
+    headers: applyRuntimeIdentityHeader(headers),
   });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -1424,9 +1690,9 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 async function requestResponse(path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers ?? {});
   const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
-    credentials: 'include',
-    headers,
     ...init,
+    credentials: 'include',
+    headers: applyRuntimeIdentityHeader(headers),
   });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -1750,12 +2016,11 @@ export async function sendChatStream(
   },
   onEvent: (event: ChatStreamEvent) => void,
 ): Promise<ChatResponse> {
+  const headers = applyRuntimeIdentityHeader(new Headers({ 'Content-Type': 'application/json' }));
   const response = await fetch(`${RUNTIME_ORIGIN}/api/chat/stream`, {
     method: 'POST',
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       query: payload.query,
       session_id: payload.sessionId,
@@ -1864,18 +2129,15 @@ export async function loadCustomerPackCapturedPreview(
 
 export async function uploadDocumentIngestion(
   file: File,
-  options: {
-    dryRun?: boolean;
-    index?: boolean;
-    createdBy?: string;
-    repositoryId?: string;
-    repositorySlug?: string;
-    repositoryTitle?: string;
-    repositoryKind?: string;
-    visibility?: string;
-    sourceScope?: string;
-  } = {},
+  options: UploadIngestOptions = {},
 ): Promise<UploadIngestResponse> {
+  return requestJson<UploadIngestResponse>('/api/uploads/ingest', {
+    method: 'POST',
+    body: buildUploadIngestFormData(file, options),
+  });
+}
+
+function buildUploadIngestFormData(file: File, options: UploadIngestOptions): FormData {
   const payload = new FormData();
   payload.append('file_name', file.name);
   payload.append('file', file, file.name);
@@ -1902,14 +2164,182 @@ export async function uploadDocumentIngestion(
   if (options.sourceScope) {
     payload.append('source_scope', options.sourceScope);
   }
-  return requestJson<UploadIngestResponse>('/api/uploads/ingest', {
+  return payload;
+}
+
+export async function uploadDocumentIngestionStream(
+  file: File,
+  options: UploadIngestOptions = {},
+  onEvent: (event: UploadIngestStreamEvent) => void,
+): Promise<UploadIngestResponse> {
+  const headers = applyRuntimeIdentityHeader(new Headers());
+  const response = await fetch(`${RUNTIME_ORIGIN}/api/uploads/ingest-stream`, {
     method: 'POST',
-    body: payload,
+    credentials: 'include',
+    headers,
+    body: buildUploadIngestFormData(file, options),
   });
+  if (!response.ok || !response.body) {
+    let message = `${response.status} ${response.statusText}`;
+    try {
+      const payload = (await response.json()) as { error?: string };
+      if (payload.error) {
+        message = payload.error;
+      }
+    } catch {
+      // Keep default HTTP message.
+    }
+    throw new Error(message);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let resultPayload: UploadIngestResponse | null = null;
+
+  const handleLine = (rawLine: string) => {
+    const line = rawLine.trim();
+    if (!line) {
+      return;
+    }
+    const event = JSON.parse(line) as UploadIngestStreamEvent;
+    onEvent(event);
+    if (event.type === 'error') {
+      throw new Error(event.error || '업로드 스트림 오류');
+    }
+    if (event.type === 'result') {
+      resultPayload = event.payload;
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+    let newlineIndex = buffer.indexOf('\n');
+    while (newlineIndex >= 0) {
+      const line = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + 1);
+      handleLine(line);
+      newlineIndex = buffer.indexOf('\n');
+    }
+
+    if (done) {
+      break;
+    }
+  }
+
+  if (buffer.trim()) {
+    handleLine(buffer);
+  }
+
+  if (!resultPayload) {
+    throw new Error('업로드 스트림이 최종 결과 없이 종료되었습니다.');
+  }
+  return resultPayload;
+}
+
+export async function retryUploadDocumentIndex(payload: {
+  documentSourceId?: string;
+  sourceScope?: string;
+  chunkCount?: number;
+  indexRetryAttempts?: number;
+}): Promise<UploadIndexRetryResponse> {
+  return requestJson<UploadIndexRetryResponse>('/api/uploads/index-retry', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_source_id: payload.documentSourceId ?? '',
+      source_scope: payload.sourceScope ?? 'user_upload',
+      chunk_count: payload.chunkCount ?? 100,
+      index_retry_attempts: payload.indexRetryAttempts ?? 3,
+    }),
+  });
+}
+
+export async function retryUploadDocumentTopology(payload: {
+  documentSourceId: string;
+  parsedDocumentId?: string;
+}): Promise<{
+  ok: boolean;
+  document_source_id: string;
+  parsed_document_id: string;
+  topology?: DocumentTopology | Record<string, unknown>;
+  topology_status?: Record<string, unknown>;
+  quality?: DocumentQualitySnapshot;
+  gold_build_run?: GoldBuildRun;
+}> {
+  return requestJson('/api/uploads/topology-retry', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_source_id: payload.documentSourceId,
+      parsed_document_id: payload.parsedDocumentId ?? '',
+    }),
+  });
+}
+
+export async function recheckUploadDocumentQuality(payload: {
+  documentSourceId: string;
+  parsedDocumentId?: string;
+}): Promise<{
+  ok: boolean;
+  document_source_id: string;
+  parsed_document_id: string;
+  quality?: DocumentQualitySnapshot;
+  gold_build_run?: GoldBuildRun;
+}> {
+  return requestJson('/api/uploads/quality-recheck', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_source_id: payload.documentSourceId,
+      parsed_document_id: payload.parsedDocumentId ?? '',
+    }),
+  });
+}
+
+export async function repairUploadCodeBlocks(payload: {
+  documentSourceId: string;
+  parsedDocumentId?: string;
+  dryRun?: boolean;
+}): Promise<UploadCodeBlockRepairResponse> {
+  return requestJson('/api/uploads/repair-code-blocks', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_source_id: payload.documentSourceId,
+      parsed_document_id: payload.parsedDocumentId ?? '',
+      dry_run: payload.dryRun ?? true,
+    }),
+  });
+}
+
+export async function loadUploadPipelineStatus(params: {
+  documentSourceId?: string;
+  parsedDocumentId?: string;
+  runId?: string;
+}): Promise<{
+  ok: boolean;
+  document_source_id: string;
+  parsed_document_id: string;
+  run_id: string;
+  events: UploadIngestStreamEvent[];
+  pipeline_summary: UploadPipelineSummary;
+  quality?: DocumentQualitySnapshot | null;
+}> {
+  const query = new URLSearchParams();
+  if (params.documentSourceId) query.set('document_source_id', params.documentSourceId);
+  if (params.parsedDocumentId) query.set('parsed_document_id', params.parsedDocumentId);
+  if (params.runId) query.set('run_id', params.runId);
+  return requestJson(`/api/uploads/pipeline-status?${query.toString()}`);
 }
 
 export async function loadDocumentRepositories(): Promise<DocumentRepositoriesResponse> {
   return requestJson<DocumentRepositoriesResponse>('/api/repositories/documents');
+}
+
+export async function loadDocumentTopology(scope: 'official' | 'customer' | 'uploads' | string, limit = 200): Promise<DocumentTopologyScopeResponse> {
+  const query = new URLSearchParams();
+  query.set('scope', scope);
+  query.set('limit', String(limit));
+  return requestJson<DocumentTopologyScopeResponse>(`/api/repositories/topology?${query.toString()}`);
 }
 
 export async function loadDocumentReader(params: {

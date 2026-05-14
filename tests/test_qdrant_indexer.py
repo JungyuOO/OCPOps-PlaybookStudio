@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from play_book_studio.cli import build_parser
 from play_book_studio.db.qdrant_indexer import (
     QdrantChunkCandidate,
     backfill_existing_qdrant_index_entries,
+    delete_qdrant_points,
     fetch_existing_qdrant_point_ids,
+    load_qdrant_chunk_candidates,
     overwrite_qdrant_payloads,
     qdrant_candidate_from_row,
     qdrant_payload_from_row,
@@ -99,6 +103,20 @@ def _chunk_row():
     }
 
 
+def test_load_qdrant_chunk_candidates_rejects_invalid_document_source_id():
+    connection = FakeConnection()
+
+    with pytest.raises(ValueError, match="document_source_id must be a valid UUID"):
+        load_qdrant_chunk_candidates(
+            connection,
+            collection="openshift_docs",
+            source_scope="user_upload",
+            document_source_id="not-a-uuid",
+        )
+
+    assert connection.cursor_obj.calls == []
+
+
 def test_qdrant_payload_from_row_matches_vector_retriever_contract():
     payload = qdrant_payload_from_row(_chunk_row())
 
@@ -123,6 +141,29 @@ def test_qdrant_payload_from_row_matches_vector_retriever_contract():
     assert payload["owner_user_id"] == "admin"
     assert payload["source_scope"] == "user_upload"
     assert payload["asset_ids"] == ["asset-1"]
+
+
+def test_delete_qdrant_points_batches_delete_requests(monkeypatch):
+    calls = []
+
+    def fake_post(url, json, timeout):
+        calls.append((url, json, timeout))
+        return FakeResponse({"result": {"status": "ok"}})
+
+    monkeypatch.setattr("play_book_studio.db.qdrant_indexer.requests.post", fake_post)
+
+    result = delete_qdrant_points(
+        SettingsStub(),
+        collection="openshift_docs",
+        point_ids=("point-1", "point-2", "point-1"),
+        batch_size=1,
+    )
+
+    assert result["requested_count"] == 2
+    assert result["deleted_count"] == 2
+    assert calls[0][0] == "http://qdrant/collections/openshift_docs/points/delete?wait=true"
+    assert calls[0][1] == {"points": ["point-1"]}
+    assert calls[1][1] == {"points": ["point-2"]}
 
 
 def test_qdrant_payload_from_row_preserves_official_gold_metadata():

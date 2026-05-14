@@ -1873,6 +1873,10 @@ def assemble_context(
                 operator_names=hit.operator_names,
                 verification_hints=hit.verification_hints,
                 asset_ids=hit.asset_ids,
+                topology_node_ids=hit.topology_node_ids,
+                topology_edge_ids=hit.topology_edge_ids,
+                topology_relations=hit.topology_relations,
+                topology_evidence=hit.topology_evidence,
                 learning=hit.learning,
             )
         )
@@ -1891,6 +1895,10 @@ def assemble_context(
             prompt_lines.append("verification_hints:")
             for hint in citation.verification_hints[:3]:
                 prompt_lines.append(f"- {hint}")
+        if citation.topology_relations:
+            prompt_lines.append("topology_relations:")
+            for relation in citation.topology_relations[:4]:
+                prompt_lines.append(f"- {relation}")
         learning_refs = citation.learning.get("refs") if isinstance(citation.learning, dict) else {}
         if isinstance(learning_refs, dict) and learning_refs.get("next_refs"):
             prompt_lines.append("learning_next_refs:")

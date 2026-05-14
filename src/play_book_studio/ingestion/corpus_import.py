@@ -10,6 +10,7 @@ from typing import Any
 from play_book_studio.db.document_repository import persist_parsed_upload_document
 from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
 from play_book_studio.config.corpus_paths import OFFICIAL_IMPORTED_GOLD_DIR, STUDY_DOCS_DIR
+from play_book_studio.ingestion.asset_storage import remove_stored_asset_files, store_parsed_asset_files
 from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
 from play_book_studio.ingestion.learning_metadata import attach_learning_metadata, build_learning_document_index
 from play_book_studio.ingestion.vision import build_qwen_image_describer
@@ -163,22 +164,31 @@ def import_corpus_documents(
                 corpus_kind=corpus_kind,
                 document_index=document_index,
             )
-            persisted = persist_parsed_upload_document(
-                connection,
-                parsed,
-                chunks,
-                tenant_slug=tenant_slug,
-                tenant_name=tenant_name,
-                workspace_slug=workspace_slug,
-                workspace_name=workspace_name,
-                storage_key=(profile.storage_prefix / relative_path).as_posix(),
-                created_by="",
-                repository_slug=profile.repository_slug,
-                repository_title=profile.repository_title,
-                repository_kind=profile.repository_kind,
-                visibility=profile.visibility,
-                source_scope=profile.source_scope,
+            stored_asset_files = (
+                store_parsed_asset_files(settings.object_storage_dir, parsed)
+                if settings is not None
+                else ()
             )
+            try:
+                persisted = persist_parsed_upload_document(
+                    connection,
+                    parsed,
+                    chunks,
+                    tenant_slug=tenant_slug,
+                    tenant_name=tenant_name,
+                    workspace_slug=workspace_slug,
+                    workspace_name=workspace_name,
+                    storage_key=(profile.storage_prefix / relative_path).as_posix(),
+                    created_by="",
+                    repository_slug=profile.repository_slug,
+                    repository_title=profile.repository_title,
+                    repository_kind=profile.repository_kind,
+                    visibility=profile.visibility,
+                    source_scope=profile.source_scope,
+                )
+            except Exception:
+                remove_stored_asset_files(stored_asset_files)
+                raise
             imported.append(
                 {
                     "relative_path": relative_path,
@@ -187,6 +197,7 @@ def import_corpus_documents(
                     "document_source_id": persisted.document_source_id,
                     "chunk_count": len(persisted.chunk_ids),
                     "asset_count": len(persisted.asset_ids),
+                    "asset_file_count": len(stored_asset_files),
                     "warnings": list(parsed.warnings),
                 }
             )

@@ -3301,6 +3301,12 @@
   background: rgba(255, 123, 114, 0.1);
 }
 
+.ingestion-status-banner--index_deferred,
+.ingestion-status-banner--gold_build {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(245, 158, 11, 0.1);
+}
+
 .cluster-signals-card {
   gap: 12px;
 }
@@ -6475,6 +6481,34 @@
 
 .evidence-drawer-reader {
   min-height: 100%;
+}
+
+[data-theme='light'] .evidence-drawer-scrim {
+  background: rgba(15, 23, 42, 0.18);
+}
+
+[data-theme='light'] .evidence-drawer {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 26px 70px rgba(15, 23, 42, 0.18);
+}
+
+[data-theme='light'] .evidence-drawer-header {
+  border-bottom-color: rgba(15, 23, 42, 0.1);
+}
+
+[data-theme='light'] .evidence-drawer-header h3 {
+  color: #0f172a;
+}
+
+[data-theme='light'] .evidence-drawer-header p {
+  color: #475569;
+}
+
+[data-theme='light'] .evidence-drawer-close {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(15, 23, 42, 0.04);
+  color: #0f172a;
 }
 
 .cluster-yaml-modal-layer {

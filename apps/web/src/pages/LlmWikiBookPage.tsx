@@ -11,6 +11,7 @@ import {
   Type,
 } from 'lucide-react';
 import { ROUTES, buildSharedLandingHref } from '../routing/routes';
+import { useGlobalTheme } from '../lib/globalTheme';
 import type {
   CustomerPackDraft,
   ViewerPageMode,
@@ -106,6 +107,7 @@ const LLMWIKIBOOK_INK_STYLES: WikiInkStyle[] = [
 
 export default function LlmWikiBookPage() {
   const autoOpenedRef = useRef(false);
+  const { globalTheme } = useGlobalTheme();
 
   const [manualBooks, setManualBooks] = useState<WorkspaceManualBook[]>([]);
   const [drafts, setDrafts] = useState<CustomerPackDraft[]>([]);
@@ -1072,6 +1074,7 @@ export default function LlmWikiBookPage() {
       <LlmWikiBookReaderPane
         viewerDocument={preview.kind === 'viewer' || preview.kind === 'draft' ? preview.viewerDocument : undefined}
         viewerPath={currentViewerPath}
+        viewerTheme={globalTheme}
         emptyState={readerEmptyState}
         toolbar={null}
         annotationEnabled={interactionMode === 'studio' && annotationEnabled}
@@ -1433,6 +1436,7 @@ export default function LlmWikiBookPage() {
       sidecarOpen={sidecarOpen}
       leftRailCollapsed={leftRailCollapsed}
       rightRailCollapsed={rightRailCollapsed}
+      theme={globalTheme}
     />
   );
 }

@@ -22,6 +22,25 @@
   color: var(--llmwikibook-copy);
 }
 
+.llmwikibook-shell[data-theme='dark'] {
+  --llmwikibook-ink: #e5eef8;
+  --llmwikibook-title: #f8fafc;
+  --llmwikibook-copy: #d7dee8;
+  --llmwikibook-copy-muted: #94a3b8;
+  --llmwikibook-accent: #67e8f9;
+  --llmwikibook-accent-soft: rgba(103, 232, 249, 0.12);
+  --llmwikibook-border: rgba(148, 163, 184, 0.16);
+  --llmwikibook-border-strong: rgba(148, 163, 184, 0.24);
+  --llmwikibook-paper: rgba(15, 23, 42, 0.78);
+  --llmwikibook-paper-strong: rgba(15, 23, 42, 0.9);
+  --llmwikibook-panel: rgba(15, 23, 42, 0.72);
+  --llmwikibook-panel-muted: rgba(15, 23, 42, 0.58);
+  --llmwikibook-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+  background:
+    linear-gradient(180deg, rgba(10, 14, 22, 0.96), rgba(15, 23, 42, 0.98)),
+    #0b1120;
+}
+
 .llmwikibook-shell.is-sidecar-open {
   --llmwikibook-sidecar-width: 19.75rem;
 }
@@ -79,6 +98,11 @@
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.9), rgba(248, 250, 252, 0.75));
   box-shadow: none;
   color: var(--llmwikibook-title);
+}
+
+.llmwikibook-shell[data-theme='dark'] .llmwikibook-topbar {
+  border-bottom-color: rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(10, 14, 22, 0.92), rgba(10, 14, 22, 0.74));
 }
 
 .llmwikibook-topbar__leading {

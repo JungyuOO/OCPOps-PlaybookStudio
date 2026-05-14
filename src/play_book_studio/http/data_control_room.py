@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from functools import lru_cache
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -200,6 +201,38 @@ def _database_official_docs_fingerprint(database_url: str) -> tuple[tuple[str, b
     )
 
 
+def _database_corpus_status_fingerprint(database_url: str, collection: str) -> tuple[tuple[str, bool, int, int], ...]:
+    normalized_url = str(database_url or "").strip()
+    if not normalized_url:
+        return ()
+    try:
+        status = build_corpus_status(database_url=normalized_url, collection=str(collection or "").strip())
+    except Exception:  # noqa: BLE001
+        return (("postgres:corpus_status:fingerprint_unavailable", False, 0, 0),)
+    if not isinstance(status, dict) or status.get("database") in {"disabled", "error"}:
+        return (("postgres:corpus_status:unavailable", False, 0, 0),)
+    fingerprint_payload = {
+        "source_counts": status.get("source_counts") if isinstance(status.get("source_counts"), dict) else {},
+        "chunk_counts": status.get("chunk_counts") if isinstance(status.get("chunk_counts"), dict) else {},
+        "total_sources": int(status.get("total_sources") or 0),
+        "total_chunks": int(status.get("total_chunks") or 0),
+        "qdrant_index_entries": int(status.get("qdrant_index_entries") or 0),
+        "missing_qdrant_index_entries": int(status.get("missing_qdrant_index_entries") or 0),
+        "qdrant_index_parity": bool(status.get("qdrant_index_parity")),
+    }
+    digest = hashlib.sha256(
+        json.dumps(fingerprint_payload, sort_keys=True, ensure_ascii=True).encode("utf-8")
+    ).hexdigest()[:16]
+    return (
+        (
+            f"postgres:corpus_status:{digest}",
+            True,
+            int(fingerprint_payload["qdrant_index_entries"]),
+            int(fingerprint_payload["total_chunks"]),
+        ),
+    )
+
+
 def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, int, int], ...]:
     settings = load_settings(root)
     gate_path = root / "reports" / "build_logs" / "foundry_runs" / "profiles" / "morning_gate" / "latest.json"
@@ -231,9 +264,11 @@ def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, i
     if not database_url:
         watched_paths.insert(1, settings.source_manifest_path)
         return tuple(_path_fingerprint(path) for path in watched_paths)
+    qdrant_collection = str(getattr(settings, "qdrant_collection", "") or "").strip()
     return (
         *(_path_fingerprint(path) for path in watched_paths),
         *_database_official_docs_fingerprint(database_url),
+        *_database_corpus_status_fingerprint(database_url, qdrant_collection),
     )
 
 
@@ -334,6 +369,24 @@ CERTIFICATION_BLOCKER_RUNBOOK: dict[str, dict[str, str]] = {
         "fix_path": "RAGAS dataset dry-run으로 입력을 확인하고 judge 설정 후 full run을 실행합니다.",
         "verification_command": "python -m play_book_studio.cli ragas --dry-run",
     },
+    "missing_retrieval_eval_report": {
+        "owner": "retrieval-quality",
+        "root_cause": "검색 품질 평가 리포트가 없어 질문이 기대 문서로 연결되는지 검증할 수 없습니다.",
+        "fix_path": "retrieval 평가 케이스와 실행 산출물을 복구한 뒤 hit@3 기준을 다시 확인합니다.",
+        "verification_command": "python -m play_book_studio.cli retrieval-eval",
+    },
+    "missing_answer_eval_report": {
+        "owner": "answer-quality",
+        "root_cause": "답변 품질 평가 리포트가 없어 답변 정확도와 citation 품질을 검증할 수 없습니다.",
+        "fix_path": "answer 평가 케이스와 judge 산출물을 복구한 뒤 pass rate/citation 기준을 다시 확인합니다.",
+        "verification_command": "python -m play_book_studio.cli eval",
+    },
+    "missing_runtime_report": {
+        "owner": "runtime-health",
+        "root_cause": "런타임 상태 리포트가 없어 DB, Qdrant, Reader 산출물이 현재 운영 상태인지 확인할 수 없습니다.",
+        "fix_path": "runtime health 리포트를 재생성하고 Postgres/Qdrant/reader smoke 결과를 확인합니다.",
+        "verification_command": "python -m play_book_studio.cli runtime",
+    },
     "gold_recovery_items_present": {
         "owner": "gold-recovery",
         "root_cause": "Gold 계약을 통과하지 못한 문서가 Recovery Queue에 남아 있습니다.",
@@ -356,6 +409,12 @@ CERTIFICATION_BLOCKER_RUNBOOK: dict[str, dict[str, str]] = {
         "owner": "answer-quality",
         "root_cause": "answer 평가 케이스 수가 제품 기준 20개보다 적습니다.",
         "fix_path": "answer_eval_cases.jsonl에 no-answer, follow-up, ops 절차 케이스를 보강합니다.",
+        "verification_command": "python -m play_book_studio.cli eval",
+    },
+    "answer_pass_rate_below_threshold": {
+        "owner": "answer-quality",
+        "root_cause": "답변 judge 통과율이 제품 기준 95%보다 낮습니다.",
+        "fix_path": "실패 케이스의 근거 문서, citation, no-answer 처리, 답변 포맷을 보정한 뒤 재평가합니다.",
         "verification_command": "python -m play_book_studio.cli eval",
     },
     "citation_precision_below_threshold": {
@@ -587,7 +646,7 @@ def _build_certification_contract(
         },
         "gold_contract": {
             "rule": "Gold is a build result, not a rejection badge: diagnose blockers, repair structure/Korean/readability/citation, rebuild and reindex, verify reader smoke, then promote. Repair-limited candidates remain in Gold Build Repair Queue with next actions.",
-            "qdrant_parity_source": "runtime_health.db_corpus.qdrant_index_parity and runtime_health.qdrant_live points/indexed vectors",
+            "qdrant_parity_source": "runtime_health.db_corpus.qdrant_index_parity",
         },
     }
 
