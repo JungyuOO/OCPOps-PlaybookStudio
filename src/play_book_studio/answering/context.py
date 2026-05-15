@@ -58,7 +58,10 @@ AUTH_CAN_I_QUERY_RE = re.compile(
 
 
 def _normalize_excerpt(text: str) -> str:
-    return SPACE_RE.sub(" ", strip_internal_markup(text))
+    cleaned = strip_internal_markup(text)
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 
 def _trim_command_candidate(value: str) -> str:
@@ -66,6 +69,10 @@ def _trim_command_candidate(value: str) -> str:
     for marker in (
         " [/CODE]",
         " [CODE",
+        " 출력 예 ",
+        " 출력예 ",
+        " 결과 ",
+        " NAME ",
         " Procedure ",
         " Example ",
         " Note ",
@@ -73,6 +80,7 @@ def _trim_command_candidate(value: str) -> str:
         " Verification ",
         " You ",
         " If ",
+        " Then ",
         " The ",
     ):
         marker_index = command.find(marker)
@@ -158,10 +166,12 @@ def _commands_from_excerpt(excerpt: str) -> tuple[str, ...]:
 
 def _citation_cli_commands(hit: RetrievalHit, excerpt: str) -> tuple[str, ...]:
     extracted = list(_commands_from_excerpt(excerpt))
+    excerpt_search_text = SPACE_RE.sub(" ", strip_internal_markup(excerpt)).casefold()
     existing = [
-        sanitize_cli_command(command)
+        sanitized
         for command in hit.cli_commands
-        if sanitize_cli_command(command)
+        if (sanitized := sanitize_cli_command(command))
+        and (not extracted or sanitized.casefold() in excerpt_search_text)
     ]
     merged: list[str] = []
     seen: set[str] = set()
@@ -1995,7 +2005,7 @@ def assemble_context(
                 semantic_role=hit.semantic_role,
                 source_collection=hit.source_collection,
                 block_kinds=hit.block_kinds,
-                cli_commands=_citation_cli_commands(hit, hit.text),
+                cli_commands=_citation_cli_commands(hit, citation_excerpt),
                 error_strings=hit.error_strings,
                 k8s_objects=hit.k8s_objects,
                 operator_names=hit.operator_names,

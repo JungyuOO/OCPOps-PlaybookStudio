@@ -48,8 +48,6 @@ def _vector_subquery_runtime(
         payload["embedding_query_index"] = int(runtime.get("embedding_query_index") or 0)
     if runtime.get("correction_notes"):
         payload["correction_notes"] = list(runtime.get("correction_notes") or [])
-    if runtime.get("rank_signals_summary"):
-        payload["rank_signals_summary"] = dict(runtime.get("rank_signals_summary") or {})
     return payload
 
 
@@ -197,8 +195,9 @@ def search_vector_candidates(
         vector_hit_sets: list[list[RetrievalHit]] = []
         vector_subqueries: list[dict[str, object]] = []
         seen_embedding_queries: set[str] = set()
+        query_signal_llm_client = getattr(retriever, "query_signal_llm_client", None)
         for subquery in rewritten_queries:
-            query_plan = build_query_signal_plan(subquery)
+            query_plan = build_query_signal_plan(subquery, llm_client=query_signal_llm_client)
             metadata_filter = query_plan.metadata_filter or None
             for embedding_query_index, vector_query in enumerate(query_plan.embedding_queries, start=1):
                 if vector_query in seen_embedding_queries:
@@ -214,11 +213,6 @@ def search_vector_candidates(
                     "normalized_query": query_plan.normalized_query,
                     "embedding_query_index": embedding_query_index,
                     "correction_notes": [item.to_dict() for item in query_plan.correction_notes],
-                    "rank_signals_summary": {
-                        key: list(value)
-                        for key, value in query_plan.rank_signals.items()
-                        if value
-                    },
                 }
                 if retriever.vector_retriever is not None:
                     if hasattr(retriever.vector_retriever, "search_with_trace"):
@@ -237,11 +231,6 @@ def search_vector_candidates(
                         runtime["normalized_query"] = query_plan.normalized_query
                         runtime["embedding_query_index"] = embedding_query_index
                         runtime["correction_notes"] = [item.to_dict() for item in query_plan.correction_notes]
-                        runtime["rank_signals_summary"] = {
-                            key: list(value)
-                            for key, value in query_plan.rank_signals.items()
-                            if value
-                        }
                         if not official_hits and metadata_filter:
                             official_hits, fallback_runtime = retriever.vector_retriever.search_with_trace(
                                 vector_query,
@@ -256,11 +245,6 @@ def search_vector_candidates(
                                 "normalized_query": query_plan.normalized_query,
                                 "embedding_query_index": embedding_query_index,
                                 "correction_notes": [item.to_dict() for item in query_plan.correction_notes],
-                                "rank_signals_summary": {
-                                    key: list(value)
-                                    for key, value in query_plan.rank_signals.items()
-                                    if value
-                                },
                             }
                     else:
                         official_hits = retriever.vector_retriever.search(
@@ -276,11 +260,6 @@ def search_vector_candidates(
                             "normalized_query": query_plan.normalized_query,
                             "embedding_query_index": embedding_query_index,
                             "correction_notes": [item.to_dict() for item in query_plan.correction_notes],
-                            "rank_signals_summary": {
-                                key: list(value)
-                                for key, value in query_plan.rank_signals.items()
-                                if value
-                            },
                         }
                 official_hits = filter_hits_by_session_scope(official_hits, context=context)
                 private_hits, private_runtime = search_selected_customer_pack_private_vectors(

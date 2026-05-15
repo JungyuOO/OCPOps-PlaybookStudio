@@ -7,6 +7,7 @@ answer the user and it does not call a separate intent-agent service.
 from __future__ import annotations
 
 import re
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -37,7 +38,6 @@ class QuerySignalPlan:
     confidence: dict[str, float]
     embedding_queries: tuple[str, ...]
     metadata_filter: dict[str, Any]
-    rank_signals: dict[str, tuple[str, ...]]
 
     @property
     def vector_query(self) -> str:
@@ -53,7 +53,6 @@ class QuerySignalPlan:
             "confidence": dict(self.confidence),
             "embedding_queries": list(self.embedding_queries),
             "metadata_filter": self.metadata_filter,
-            "rank_signals": {key: list(value) for key, value in self.rank_signals.items()},
             "vector_query": self.vector_query,
         }
 
@@ -71,8 +70,112 @@ _NORMALIZATION_RULES: tuple[tuple[str, str, str], ...] = (
     (r"\bimage\s+pull\s+back\s+off\b", "ImagePullBackOff", "error_alias"),
 )
 
+_ALLOWED_DOMAINS = {
+    "install",
+    "storage",
+    "networking",
+    "security",
+    "monitoring",
+    "troubleshooting",
+    "upgrade",
+    "operators",
+    "logging",
+    "registry",
+    "ui_tooling",
+    "architecture",
+    "release_notes",
+    "node_ops",
+    "backup_restore",
+    "etcd",
+}
+_ALLOWED_PLATFORMS = {"bare_metal", "agent_based", "any_platform", "none"}
+_SEARCH_SIGNAL_KEYS = (
+    "objects",
+    "error_states",
+    "intent_labels",
+    "answer_shapes",
+    "command_families",
+    "primary_topics",
+    "cluster_phase",
+    "execution_target",
+    "commands",
+    "secondary_topics",
+    "components",
+)
+_ALLOWED_INTENT_LABELS = {
+    "explain_concept",
+    "check_status",
+    "verify_result",
+    "troubleshoot",
+    "configure_resource",
+    "create_resource",
+    "update_resource",
+    "delete_resource",
+    "backup",
+    "restore",
+    "install",
+    "upgrade",
+    "compare_options",
+    "find_document",
+    "command_lookup",
+    "summarize",
+    "list_prerequisites",
+    "identify_execution_target",
+    "explain_warning",
+    "next_steps",
+}
+_ALLOWED_ANSWER_SHAPES = {
+    "short_explanation",
+    "step_by_step",
+    "command",
+    "checklist",
+    "yaml_example",
+    "decision_guide",
+    "warning",
+    "troubleshooting_flow",
+    "document_link",
+}
+_ALLOWED_COMMAND_FAMILIES = {
+    "oc_get",
+    "oc_describe",
+    "oc_logs",
+    "oc_debug",
+    "oc_apply",
+    "oc_create",
+    "oc_delete",
+    "oc_adm",
+    "oc_project",
+    "oc_explain",
+    "kubectl_get",
+    "kubectl_describe",
+    "etcdctl",
+    "cluster_backup",
+}
+
 
 def build_query_signal_plan(
+    query: str,
+    *,
+    ocp_version: str = "4.20",
+    locale: str = "ko",
+    llm_client: Any | None = None,
+) -> QuerySignalPlan:
+    fallback = _build_rule_based_query_signal_plan(query, ocp_version=ocp_version, locale=locale)
+    if llm_client is None:
+        return fallback
+    try:
+        return _build_llm_query_signal_plan(
+            raw_query=fallback.raw_query,
+            fallback=fallback,
+            llm_client=llm_client,
+            ocp_version=ocp_version,
+            locale=locale,
+        )
+    except Exception:  # noqa: BLE001
+        return fallback
+
+
+def _build_rule_based_query_signal_plan(
     query: str,
     *,
     ocp_version: str = "4.20",
@@ -97,7 +200,6 @@ def build_query_signal_plan(
         key: tuple(dict.fromkeys(item for item in values if str(item or "").strip()))
         for key, values in search_signals.items()
     }
-    rank_signals = _rank_signals(classification, normalized_signals)
     embedding_queries = _embedding_queries(
         raw_query=raw_query,
         normalized_query=normalized_query,
@@ -120,8 +222,269 @@ def build_query_signal_plan(
         confidence=confidence,
         embedding_queries=embedding_queries,
         metadata_filter=metadata_filter,
-        rank_signals=rank_signals,
     )
+
+
+def _build_llm_query_signal_plan(
+    *,
+    raw_query: str,
+    fallback: QuerySignalPlan,
+    llm_client: Any,
+    ocp_version: str,
+    locale: str,
+) -> QuerySignalPlan:
+    content = llm_client.generate(
+        _query_signal_messages(raw_query=raw_query, ocp_version=ocp_version, locale=locale),
+        max_tokens=900,
+    )
+    payload = _extract_json_object(content)
+    return _validated_llm_plan(
+        raw_query=raw_query,
+        payload=payload,
+        fallback=fallback,
+        ocp_version=ocp_version,
+        locale=locale,
+    )
+
+
+def _query_signal_messages(*, raw_query: str, ocp_version: str, locale: str) -> list[dict[str, str]]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You extract retrieval signals for an OpenShift RAG pipeline. "
+                "Return only one JSON object. Do not answer the user. "
+                "Normalize typos and aliases, classify the question, extract search signals, "
+                "and create 2-3 embedding search queries. "
+                "Use only allowed concise labels. Do not invent platform or commands when uncertain."
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "query": raw_query,
+                    "fixed_context": {"ocp_version": ocp_version, "locale": locale},
+                    "domain_policy": (
+                        "classification.domain is the document/search area for metadata filtering, "
+                        "not the user's intent. If a troubleshooting question has a clear target object, "
+                        "prefer the object-specific domain and put troubleshooting in intent_labels. "
+                        "Examples: Node NotReady -> domain=node_ops with intent_labels=[troubleshoot, check_status]; "
+                        "PVC Pending -> domain=storage with intent_labels=[troubleshoot, check_status]; "
+                        "ImagePullBackOff -> domain=registry with intent_labels=[troubleshoot, check_status]."
+                    ),
+                    "allowed_domains": sorted(_ALLOWED_DOMAINS),
+                    "allowed_platforms": sorted(_ALLOWED_PLATFORMS),
+                    "allowed_intent_labels": sorted(_ALLOWED_INTENT_LABELS),
+                    "allowed_answer_shapes": sorted(_ALLOWED_ANSWER_SHAPES),
+                    "allowed_command_families": sorted(_ALLOWED_COMMAND_FAMILIES),
+                    "required_json_shape": {
+                        "normalized_query": "string",
+                        "correction_notes": [{"type": "typo|alias|spacing|object_alias|error_alias", "from": "string", "to": "string"}],
+                        "classification": {
+                            "domain": "allowed domain or empty string",
+                            "book_slug_candidates": ["string"],
+                            "domain_filter_values": ["optional allowed domains when one query should scope multiple document areas"],
+                            "platform": "allowed platform",
+                            "ocp_version": ocp_version,
+                            "locale": locale,
+                        },
+                        "search_signals": {key: ["string"] for key in _SEARCH_SIGNAL_KEYS},
+                        "confidence": {"domain": 0.0, "objects": 0.0, "commands": 0.0},
+                        "embedding_queries": ["2-3 short retrieval queries, max 300 chars each"],
+                    },
+                },
+                ensure_ascii=False,
+            ),
+        },
+    ]
+
+
+def _extract_json_object(content: str) -> dict[str, Any]:
+    text = str(content or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        payload = json.loads(text[start : end + 1])
+    if not isinstance(payload, dict):
+        raise ValueError("query signal LLM response must be a JSON object")
+    return payload
+
+
+def _validated_llm_plan(
+    *,
+    raw_query: str,
+    payload: dict[str, Any],
+    fallback: QuerySignalPlan,
+    ocp_version: str,
+    locale: str,
+) -> QuerySignalPlan:
+    normalized_query = _clean_text(payload.get("normalized_query"), fallback.normalized_query, max_chars=500)
+    correction_notes = _validated_corrections(payload.get("correction_notes"))
+    classification = _validated_classification(
+        payload.get("classification"),
+        fallback=fallback.classification,
+        ocp_version=ocp_version,
+        locale=locale,
+    )
+    search_signals = _validated_search_signals(payload.get("search_signals"), fallback.search_signals)
+    confidence = _validated_confidence(payload.get("confidence"), fallback.confidence)
+    _apply_domain_specific_enrichment(
+        normalized_query=normalized_query,
+        classification=classification,
+        search_signals=search_signals,
+        confidence=confidence,
+    )
+    normalized_signals = {
+        key: tuple(dict.fromkeys(item for item in values if str(item or "").strip()))
+        for key, values in search_signals.items()
+    }
+    embedding_queries = _validated_embedding_queries(
+        payload.get("embedding_queries"),
+        fallback=fallback.embedding_queries,
+        normalized_query=normalized_query,
+    )
+    metadata_filter = _metadata_filter(
+        classification=classification,
+        confidence=confidence,
+        ocp_version=ocp_version,
+        locale=locale,
+    )
+    return QuerySignalPlan(
+        raw_query=raw_query,
+        normalized_query=normalized_query,
+        correction_notes=correction_notes,
+        classification=classification,
+        search_signals=normalized_signals,
+        confidence=confidence,
+        embedding_queries=embedding_queries,
+        metadata_filter=metadata_filter,
+    )
+
+
+def _clean_text(value: Any, default: str = "", *, max_chars: int = 300) -> str:
+    cleaned = " ".join(str(value or "").split())
+    if not cleaned:
+        cleaned = default
+    return cleaned[:max_chars].strip()
+
+
+def _validated_corrections(value: Any) -> tuple[QueryCorrection, ...]:
+    if not isinstance(value, list):
+        return ()
+    corrections: list[QueryCorrection] = []
+    for item in value[:8]:
+        if not isinstance(item, dict):
+            continue
+        correction_type = _clean_text(item.get("type"), "normalization", max_chars=40)
+        source = _clean_text(item.get("from") or item.get("source"), max_chars=160)
+        replacement = _clean_text(item.get("to") or item.get("replacement"), max_chars=160)
+        if source and replacement and source != replacement:
+            corrections.append(QueryCorrection(correction_type, source, replacement))
+    return tuple(corrections)
+
+
+def _validated_classification(
+    value: Any,
+    *,
+    fallback: dict[str, Any],
+    ocp_version: str,
+    locale: str,
+) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+    domain = _clean_text(source.get("domain"), str(fallback.get("domain") or ""), max_chars=40)
+    if domain not in _ALLOWED_DOMAINS:
+        domain = str(fallback.get("domain") or "") if str(fallback.get("domain") or "") in _ALLOWED_DOMAINS else ""
+    platform = _clean_text(source.get("platform"), str(fallback.get("platform") or "any_platform"), max_chars=40)
+    if platform not in _ALLOWED_PLATFORMS:
+        platform = "any_platform"
+    return {
+        "domain": domain,
+        "domain_filter_values": _domain_filter_values(
+            source.get("domain_filter_values"),
+            fallback.get("domain_filter_values"),
+            domain=domain,
+        ),
+        "book_slug_candidates": _string_tuple(source.get("book_slug_candidates"), fallback.get("book_slug_candidates")),
+        "ocp_version": ocp_version,
+        "locale": locale,
+        "platform": platform,
+    }
+
+
+def _domain_filter_values(value: Any, fallback: Any, *, domain: str) -> tuple[str, ...]:
+    raw_values = _string_tuple(value, fallback, max_items=4, max_chars=40)
+    values = tuple(item for item in raw_values if item in _ALLOWED_DOMAINS)
+    if values:
+        return values
+    return (domain,) if domain in _ALLOWED_DOMAINS else ()
+
+
+def _validated_search_signals(value: Any, fallback: dict[str, tuple[str, ...]]) -> dict[str, list[str]]:
+    source = value if isinstance(value, dict) else {}
+    result: dict[str, list[str]] = {}
+    for key in _SEARCH_SIGNAL_KEYS:
+        values = list(_string_tuple(source.get(key), fallback.get(key, ()), max_items=12, max_chars=120))
+        if key == "intent_labels":
+            values = [item for item in values if item in _ALLOWED_INTENT_LABELS]
+        elif key == "answer_shapes":
+            values = [item for item in values if item in _ALLOWED_ANSWER_SHAPES]
+        elif key == "command_families":
+            values = [item for item in values if item in _ALLOWED_COMMAND_FAMILIES]
+        result[key] = values
+    return result
+
+
+def _validated_confidence(value: Any, fallback: dict[str, float]) -> dict[str, float]:
+    source = value if isinstance(value, dict) else {}
+    result = dict(fallback)
+    for key, raw in source.items():
+        if not isinstance(key, str):
+            continue
+        try:
+            score = float(raw)
+        except (TypeError, ValueError):
+            continue
+        result[key] = min(1.0, max(0.0, score))
+    return result
+
+
+def _validated_embedding_queries(
+    value: Any,
+    *,
+    fallback: tuple[str, ...],
+    normalized_query: str,
+) -> tuple[str, ...]:
+    queries = _string_tuple(value, (), max_items=3, max_chars=300)
+    if not queries:
+        queries = fallback
+    if not queries:
+        queries = (normalized_query,)
+    return tuple(dict.fromkeys(query for query in queries if query))[:3]
+
+
+def _string_tuple(
+    value: Any,
+    default: Any = (),
+    *,
+    max_items: int = 8,
+    max_chars: int = 80,
+) -> tuple[str, ...]:
+    raw_items = value if isinstance(value, list | tuple) else default
+    items: list[str] = []
+    if isinstance(raw_items, list | tuple):
+        for item in raw_items:
+            cleaned = _clean_text(item, max_chars=max_chars)
+            if cleaned:
+                items.append(cleaned)
+    return tuple(dict.fromkeys(items))[:max_items]
 
 
 def _normalize_query(query: str) -> tuple[str, tuple[QueryCorrection, ...]]:
@@ -170,6 +533,40 @@ def _apply_domain_specific_enrichment(
         _append(command_families, "oc_get", "oc_describe")
         confidence["commands"] = max(confidence.get("commands", 0.0), 0.86)
 
+    has_vsphere_storage = (
+        any(token in lowered for token in ("vsphere", "vmware"))
+        and (
+            any(token in lowered for token in ("pvc", "pv", "volume", "storage", "provision"))
+            or any(token in normalized_query for token in ("볼륨", "스토리지", "프로비저닝"))
+        )
+    )
+    if has_vsphere_storage:
+        classification["domain"] = "storage"
+        classification["book_slug_candidates"] = _tuple_append(
+            classification.get("book_slug_candidates", ()),
+            "storage",
+        )
+        _append(objects, "PV", "PVC", "StorageClass")
+        _append(
+            primary_topics,
+            "VMware vSphere",
+            "vSphere volume provisioning",
+            "VMware vSphere CSI Driver",
+        )
+        _append(secondary_topics, "VMDK", "thin-csi", "storage provisioning")
+        _append(components, "vSphere CSI Driver", "CSI Driver", "StorageClass")
+        _append(intent_labels, "configure_resource", "create_resource", "command_lookup")
+        _append(answer_shapes, "step_by_step", "command")
+        _append(command_families, "oc_create", "oc_get")
+        if "동적" in normalized_query or "dynamic" in lowered:
+            _append(primary_topics, "dynamic provisioning")
+            _append(secondary_topics, "thin StorageClass", "PersistentVolumeClaim")
+        elif "정적" in normalized_query or "static" in lowered or "연결" in normalized_query:
+            _append(primary_topics, "static provisioning")
+            _append(secondary_topics, "PersistentVolume", "PersistentVolumeClaim")
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.94)
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.93)
+
     if "etcd" in lowered and ("백업" in normalized_query or "backup" in lowered):
         classification["domain"] = "etcd"
         classification["book_slug_candidates"] = _tuple_append(
@@ -209,6 +606,7 @@ def _apply_domain_specific_enrichment(
 
     if "notready" in lowered and "node" in lowered:
         classification["domain"] = "node_ops"
+        classification["domain_filter_values"] = ("node_ops", "troubleshooting")
         classification["book_slug_candidates"] = _tuple_append(
             classification.get("book_slug_candidates", ()),
             "nodes",
@@ -225,6 +623,11 @@ def _apply_domain_specific_enrichment(
         confidence["domain"] = max(confidence.get("domain", 0.0), 0.91)
         confidence["objects"] = max(confidence.get("objects", 0.0), 0.94)
         confidence["error_states"] = max(confidence.get("error_states", 0.0), 0.95)
+
+    if classification.get("domain") == "troubleshooting" and "imagepullbackoff" in lowered:
+        classification["domain"] = "registry"
+        classification["domain_filter_values"] = ("registry", "troubleshooting")
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.88)
 
     if classification.get("domain") == "install":
         classification["platform"] = "any_platform"
@@ -269,29 +672,29 @@ def _metadata_filter(
         {"key": "chunk.navigation_only", "match": {"value": False}},
     ]
     domain = str(classification.get("domain") or "").strip()
-    if domain and confidence.get("domain", 0.0) >= 0.85:
+    domain_filter_values = tuple(
+        dict.fromkeys(
+            item
+            for item in (
+                classification.get("domain_filter_values")
+                if isinstance(classification.get("domain_filter_values"), list | tuple)
+                else ()
+            )
+            if str(item or "").strip() in _ALLOWED_DOMAINS
+        )
+    )
+    if domain and confidence.get("domain", 0.0) >= 0.85 and len(domain_filter_values) <= 1:
         must.append({"key": "classification.domain", "match": {"value": domain}})
     platform = str(classification.get("platform") or "").strip()
     if platform and platform != "any_platform" and confidence.get("platform", 0.0) >= 0.9:
         must.append({"key": "classification.platform", "match": {"value": platform}})
-    return {"must": must}
-
-
-def _rank_signals(
-    classification: dict[str, Any],
-    search_signals: dict[str, tuple[str, ...]],
-) -> dict[str, tuple[str, ...]]:
-    return {
-        "book_slug_candidates": tuple(classification.get("book_slug_candidates") or ()),
-        "objects": search_signals.get("objects", ()),
-        "commands": search_signals.get("commands", ()),
-        "command_families": search_signals.get("command_families", ()),
-        "error_states": search_signals.get("error_states", ()),
-        "intent_labels": search_signals.get("intent_labels", ()),
-        "answer_shapes": search_signals.get("answer_shapes", ()),
-        "cluster_phase": search_signals.get("cluster_phase", ()),
-        "execution_target": search_signals.get("execution_target", ()),
-    }
+    metadata_filter: dict[str, Any] = {"must": must}
+    if domain and confidence.get("domain", 0.0) >= 0.85 and len(domain_filter_values) > 1:
+        metadata_filter["should"] = [
+            {"key": "classification.domain", "match": {"value": item}}
+            for item in domain_filter_values
+        ]
+    return metadata_filter
 
 
 def _embedding_queries(
@@ -364,6 +767,12 @@ def _english_terms(
         _append(terms, "PersistentVolumeClaim", "PVC", "volume binding", "storage provisioning")
     if "storageclass" in object_set or "storageclass" in topic_set:
         _append(terms, "StorageClass", "dynamic provisioning")
+    if any("vsphere" in item for item in (*object_set, *topic_set)):
+        _append(terms, "VMware vSphere", "vSphere CSI Driver", "VMDK", "thin-csi")
+        if "dynamic provisioning" in topic_set:
+            _append(terms, "PersistentVolumeClaim", "StorageClass", "dynamic provisioning")
+        if "static provisioning" in topic_set:
+            _append(terms, "PersistentVolume", "PersistentVolumeClaim", "static provisioning")
     if "etcd" in object_set or "etcd" in topic_set:
         _append(terms, "etcd backup", "control plane node", "cluster-backup.sh")
     if "pod" in object_set and "imagepullbackoff" in error_set:

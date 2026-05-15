@@ -125,6 +125,100 @@ def test_intent_profile_prefers_matching_command_over_generic_cli_command() -> N
     assert "intent_profile_command_mismatch_penalty" in hits[1].component_scores
 
 
+def test_vsphere_dynamic_storage_query_prefers_vsphere_pvc_chunk_over_azure() -> None:
+    azure_hit = _hit(
+        "azure-file",
+        text="Azure File 정적 프로비저닝 절차입니다. oc create -f azure-file-pv.yaml",
+        cli_commands=("oc create -f azure-file-pv.yaml",),
+        k8s_objects=("PV", "PVC"),
+        chunk_type="procedure",
+        book_slug="storage",
+        section="Azure File의 정적 프로비저닝",
+        raw_score=0.34,
+    )
+    vsphere_hit = _hit(
+        "vsphere-pvc",
+        text=(
+            "CLI를 사용하여 VMware vSphere 볼륨을 동적으로 프로비저닝합니다. "
+            "기본 StorageClass thin을 사용하고 pvc.yaml 파일을 만든 후 oc create -f pvc.yaml 명령을 실행합니다."
+        ),
+        cli_commands=("oc create -f pvc.yaml",),
+        k8s_objects=("PVC", "StorageClass"),
+        chunk_type="procedure",
+        book_slug="storage",
+        section="CLI를 사용하여 VMware vSphere 볼륨을 동적으로 프로비저닝",
+        raw_score=0.22,
+    )
+
+    hits = fuse_ranked_hits(
+        "vSphere에서 PVC로 볼륨을 동적 프로비저닝하려면 어떻게 해?",
+        {"bm25": [azure_hit, vsphere_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "vsphere-pvc"
+    assert hits[0].component_scores["vsphere_storage_match_boost"] == 2.2
+    assert hits[0].component_scores["vsphere_dynamic_provisioning_boost"] == 1.65
+    assert "vsphere_storage_cloud_mismatch_penalty" in hits[1].component_scores
+
+
+def test_vsphere_static_storage_query_prefers_static_pv_pvc_chunk() -> None:
+    dynamic_hit = _hit(
+        "vsphere-dynamic",
+        text="VMware vSphere 볼륨을 동적으로 프로비저닝합니다. pvc.yaml 파일과 thin-csi StorageClass를 사용합니다.",
+        cli_commands=("oc create -f pvc.yaml",),
+        k8s_objects=("PVC", "StorageClass"),
+        chunk_type="procedure",
+        book_slug="storage",
+        raw_score=0.34,
+    )
+    static_hit = _hit(
+        "vsphere-static",
+        text=(
+            "정적으로 프로비저닝 VMware vSphere 볼륨 절차입니다. "
+            "pv1.yaml 및 pvc1.yaml 파일을 만들고 oc create -f pv1.yaml, oc create -f pvc1.yaml 명령을 실행합니다."
+        ),
+        cli_commands=("oc create -f pv1.yaml", "oc create -f pvc1.yaml"),
+        k8s_objects=("PV", "PVC"),
+        chunk_type="procedure",
+        book_slug="storage",
+        raw_score=0.24,
+    )
+
+    hits = fuse_ranked_hits(
+        "vSphere 볼륨을 정적으로 연결하려면 어떤 리소스를 만들어야 해?",
+        {"bm25": [dynamic_hit, static_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "vsphere-static"
+    assert hits[0].component_scores["vsphere_static_provisioning_boost"] == 1.72
+    assert "vsphere_static_dynamic_mismatch_penalty" in hits[1].component_scores
+
+
+def test_vsphere_storage_citation_does_not_trigger_low_confidence_clarification() -> None:
+    citation = Citation(
+        index=1,
+        chunk_id="vsphere-pvc",
+        book_slug="storage",
+        section="CLI를 사용하여 VMware vSphere 볼륨을 동적으로 프로비저닝",
+        anchor="vsphere-pvc",
+        source_url="",
+        viewer_path="/docs/storage#vsphere-pvc",
+        excerpt="VMware vSphere PersistentVolumeClaim을 pvc.yaml로 정의하고 oc create -f pvc.yaml 명령을 실행합니다.",
+        cli_commands=("oc create -f pvc.yaml",),
+        k8s_objects=("PVC", "StorageClass"),
+    )
+
+    assert not _is_low_confidence_retrieval(
+        query="vSphere에서 PVC로 볼륨을 동적 프로비저닝하려면 어떻게 해?",
+        citations=[citation],
+        selected_hits=[{"fused_score": 0.01, "pre_rerank_fused_score": 0.01, "vector_score": 0.01}],
+    )
+
+
 def test_v014_structured_signals_boost_matching_pvc_pending_troubleshooting_chunk() -> None:
     concept_hit = _hit(
         "storage-concept",
@@ -151,9 +245,9 @@ def test_v014_structured_signals_boost_matching_pvc_pending_troubleshooting_chun
     )
 
     assert hits[0].chunk_id == "pvc-pending"
-    assert hits[0].component_scores["v014_object_signal_boost"] == 1.08
-    assert hits[0].component_scores["v014_error_state_signal_boost"] == 1.12
-    assert hits[0].component_scores["v014_answer_shape_chunk_boost"] == 1.05
+    assert "v014_object_signal_boost" not in hits[0].component_scores
+    assert "v014_error_state_signal_boost" not in hits[0].component_scores
+    assert "v014_answer_shape_chunk_boost" not in hits[0].component_scores
 
 
 def test_command_context_selects_cli_profile_commands_instead_of_clarifying() -> None:

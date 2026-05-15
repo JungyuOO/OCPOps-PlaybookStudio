@@ -59,6 +59,8 @@ _NAMESPACE_CREATE_RE = re.compile(
 )
 _PVC_RE = re.compile(r"(?<![a-z0-9])PVC(?![a-z0-9])|persistent\s*volume\s*claim|퍼시스턴트\s*볼륨\s*클레임", re.IGNORECASE)
 _PV_RE = re.compile(r"(?<![a-z0-9])PV(?![a-z0-9])|persistent\s*volume(?!\s*claim)|퍼시스턴트\s*볼륨", re.IGNORECASE)
+_VSPHERE_RE = re.compile(r"vsphere|vmware", re.IGNORECASE)
+_STORAGE_VOLUME_RE = re.compile(r"볼륨|volume|스토리지|storage|프로비저닝|provision", re.IGNORECASE)
 _POD_RE = re.compile(r"(?<![a-z0-9])pods?(?![a-z0-9])|파드", re.IGNORECASE)
 _ROUTE_RE = re.compile(r"(?<![a-z0-9])routes?(?![a-z0-9])|라우트", re.IGNORECASE)
 _ETCD_RE = re.compile(r"\betcd\b", re.IGNORECASE)
@@ -335,6 +337,16 @@ def understand_query_signals(
         _append_unique(primary_topics, "Persistent Volume")
         _append_unique(domains, "storage")
         _append_unique(book_slug_candidates, "storage")
+    if _VSPHERE_RE.search(raw_query) and _STORAGE_VOLUME_RE.search(raw_query):
+        _append_unique(domains, "storage")
+        _append_unique(book_slug_candidates, "storage")
+        _append_unique(primary_topics, "VMware vSphere")
+        _append_unique(primary_topics, "vSphere volume provisioning")
+        _append_unique(objects, "PV")
+        if "pvc" in raw_query.lower() or "클레임" in raw_query:
+            _append_unique(objects, "PVC")
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.93)
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.88)
     if _POD_RE.search(raw_query):
         _append_unique(objects, "Pod")
         _append_unique(primary_topics, "Pod")

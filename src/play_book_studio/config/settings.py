@@ -127,11 +127,12 @@ class Settings(SettingsPathMixin):
     reranker_base_url: str = ""
     reranker_api_key: str = ""
     reranker_model: str = "dragonkue/bge-reranker-v2-m3-ko"
-    reranker_top_n: int = 12
-    reranker_batch_size: int = 8
-    reranker_max_parallel_requests: int = 4
+    reranker_top_n: int = 5
+    reranker_candidate_k: int = 5
+    reranker_batch_size: int = 1
+    reranker_max_parallel_requests: int = 5
     reranker_device: str = "auto"
-    reranker_timeout_seconds: float = 10.0
+    reranker_timeout_seconds: float = 60.0
     graph_runtime_mode: str = "auto"
     graph_endpoint: str = ""
     graph_api_key: str = ""
@@ -345,20 +346,18 @@ def load_settings(root_dir: str | Path) -> Settings:
         llm_max_tokens=int(effective_env.get("LLM_MAX_TOKENS", "1100")),
         reranker_enabled=effective_env.get("RERANKER_ENABLED", "false").lower()
         in {"1", "true", "yes", "on"},
-        reranker_base_url=effective_env.get(
-            "RERANKER_BASE_URL",
-            effective_env.get("EMBEDDING_BASE_URL", ""),
-        ).strip().rstrip("/"),
+        reranker_base_url=effective_env.get("RERANKER_BASE_URL", "").strip().rstrip("/"),
         reranker_api_key=effective_env.get(
             "RERANKER_API_KEY",
             effective_env.get("EMBEDDING_API_KEY", ""),
         ).strip(),
         reranker_model=effective_env.get("RERANKER_MODEL", "dragonkue/bge-reranker-v2-m3-ko").strip(),
-        reranker_top_n=int(effective_env.get("RERANKER_TOP_N", "12")),
-        reranker_batch_size=int(effective_env.get("RERANKER_BATCH_SIZE", "8")),
-        reranker_max_parallel_requests=int(effective_env.get("RERANKER_MAX_PARALLEL_REQUESTS", "4")),
+        reranker_top_n=int(effective_env.get("RERANKER_TOP_N", "5")),
+        reranker_candidate_k=int(effective_env.get("RERANKER_CANDIDATE_K", "5")),
+        reranker_batch_size=int(effective_env.get("RERANKER_BATCH_SIZE", "1")),
+        reranker_max_parallel_requests=int(effective_env.get("RERANKER_MAX_PARALLEL_REQUESTS", "5")),
         reranker_device=effective_env.get("RERANKER_DEVICE", "auto").strip(),
-        reranker_timeout_seconds=float(effective_env.get("RERANKER_TIMEOUT_SECONDS", "10")),
+        reranker_timeout_seconds=float(effective_env.get("RERANKER_TIMEOUT_SECONDS", "60")),
         graph_runtime_mode=effective_env.get("GRAPH_RUNTIME_MODE", "auto").strip().lower() or "auto",
         graph_endpoint=effective_env.get("GRAPH_ENDPOINT", "").strip().rstrip("/"),
         graph_api_key=effective_env.get("GRAPH_API_KEY", "").strip(),

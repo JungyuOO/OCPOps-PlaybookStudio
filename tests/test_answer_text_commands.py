@@ -1,8 +1,10 @@
 from play_book_studio.answering.answer_text_commands import (
+    align_answer_to_grounded_commands,
     build_grounded_command_guide_answer,
     shape_crash_loop_troubleshooting,
     strip_ungrounded_code_blocks,
 )
+from play_book_studio.answering.answer_text_formatting import _shape_command_lookup_answer
 from play_book_studio.answering.citations import finalize_citations
 from play_book_studio.answering.models import Citation
 
@@ -327,6 +329,30 @@ def test_project_view_role_answer_stays_namespace_scoped() -> None:
     assert "cluster-admin" not in answer
 
 
+def test_rbac_alignment_does_not_synthesize_namespace_admin_examples() -> None:
+    citation = Citation(
+        index=1,
+        chunk_id="auth--local-rolebinding",
+        book_slug="authentication_and_authorization",
+        section="로컬 역할 바인딩",
+        anchor="local-rolebinding",
+        source_url="",
+        viewer_path="/docs/ocp/4.20/ko/authentication_and_authorization/index.html#local-rolebinding",
+        excerpt="Use oc adm policy add-role-to-user admin <user> -n <project> for a local role binding.",
+        cli_commands=("oc adm policy add-role-to-user admin <user> -n <project>",),
+    )
+    original = "답변: 검색된 공식 문서 근거를 기준으로 답변합니다 [1]."
+
+    answer = align_answer_to_grounded_commands(
+        original,
+        query="alice 사용자에게 joe 프로젝트 admin 권한 주는 명령 알려줘",
+        citations=[citation],
+    )
+
+    assert answer == original
+    assert "oc adm policy add-role-to-user admin alice -n joe" not in answer
+
+
 def test_route_timeout_answer_mentions_route_object() -> None:
     citation = Citation(
         index=1,
@@ -415,6 +441,25 @@ def test_pvc_pending_answer_mentions_storageclass() -> None:
     assert answer is not None
     assert "PVC가 Pending" in answer
     assert "oc get storageclass" in answer
+
+
+def test_command_lookup_strips_numbered_explanation_from_command() -> None:
+    citation = Citation(
+        index=1,
+        chunk_id="storage--pvc-command",
+        book_slug="storage",
+        section="PVC 상태 확인",
+        anchor="pvc",
+        source_url="",
+        viewer_path="/docs/ocp/4.20/ko/storage/index.html#pvc",
+        excerpt="$ oc get pvc <pvc-name>\n\n1. PVC의 이름입니다.\n\n출력 예\nNAME STATUS",
+        cli_commands=("oc get pvc <pvc-name> 1. PVC의 이름입니다",),
+    )
+
+    answer = _shape_command_lookup_answer("PVC 상태 확인 명령 알려줘", [citation])
+
+    assert "oc get pvc <pvc-name>\n" in answer
+    assert "PVC의 이름입니다" not in answer
 
 
 def test_finalizer_answer_mentions_metadata_finalizers() -> None:

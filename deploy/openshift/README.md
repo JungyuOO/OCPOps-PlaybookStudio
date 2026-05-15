@@ -105,7 +105,7 @@ docker run -d \
 ```
 
 OpenShift sends one candidate per reranker request and allows up to four
-parallel requests through `RERANKER_MAX_PARALLEL_REQUESTS=4`. Keep the Docker
+parallel requests through `RERANKER_MAX_PARALLEL_REQUESTS=5`. Keep the Docker
 client batch size at `1` unless the host-side latency and memory profile have
 been measured again.
 

@@ -39,6 +39,7 @@ reports/multiturn/
 reports/technical_notes/
 reports/execution_harness/**/chrome-headless-profile*/
 validation_report.json
+validation/
 tmp_customer_pack_live/
 #
 # local source mirrors for rebuild/materialization are intentionally unmanaged

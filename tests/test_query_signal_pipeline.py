@@ -1,4 +1,19 @@
+import json
+
 from play_book_studio.retrieval.query_signal_pipeline import build_query_signal_plan
+
+
+class FakeSignalLlm:
+    def __init__(self, payload: dict | None = None, *, error: Exception | None = None) -> None:
+        self.payload = payload or {}
+        self.error = error
+        self.calls: list[dict] = []
+
+    def generate(self, messages, *, max_tokens=None):
+        self.calls.append({"messages": messages, "max_tokens": max_tokens})
+        if self.error is not None:
+            raise self.error
+        return json.dumps(self.payload, ensure_ascii=False)
 
 
 def _filter_keys(plan) -> set[str]:
@@ -33,6 +48,33 @@ def test_v015_query_signal_plan_extracts_etcd_backup_execution_target() -> None:
     assert "oc debug node/<control-plane-node>" in plan.search_signals["commands"]
     assert any("cluster-backup.sh" in query for query in plan.embedding_queries)
     assert "classification.book_slug" not in _filter_keys(plan)
+
+
+def test_v015_query_signal_plan_expands_vsphere_dynamic_storage() -> None:
+    plan = build_query_signal_plan("vSphere에서 PVC로 볼륨을 동적 프로비저닝하려면 어떻게 해?")
+
+    assert plan.classification["domain"] == "storage"
+    assert "storage" in plan.classification["book_slug_candidates"]
+    assert "PVC" in plan.search_signals["objects"]
+    assert "StorageClass" in plan.search_signals["objects"]
+    assert "VMware vSphere" in plan.search_signals["primary_topics"]
+    assert "dynamic provisioning" in plan.search_signals["primary_topics"]
+    assert "oc_create" in plan.search_signals["command_families"]
+    assert "oc create -f pvc.yaml" not in plan.search_signals["commands"]
+    assert any("thin-csi" in query for query in plan.embedding_queries)
+
+
+def test_v015_query_signal_plan_expands_vsphere_static_storage() -> None:
+    plan = build_query_signal_plan("vSphere 볼륨을 정적으로 연결하려면 어떤 리소스를 만들어야 해?")
+
+    assert plan.classification["domain"] == "storage"
+    assert "PV" in plan.search_signals["objects"]
+    assert "PVC" in plan.search_signals["objects"]
+    assert "static provisioning" in plan.search_signals["primary_topics"]
+    assert "oc_create" in plan.search_signals["command_families"]
+    assert "oc create -f pv1.yaml" not in plan.search_signals["commands"]
+    assert "oc create -f pvc1.yaml" not in plan.search_signals["commands"]
+    assert any("static provisioning" in query for query in plan.embedding_queries)
 
 
 def test_v015_query_signal_plan_expands_install_compare_question() -> None:
@@ -71,3 +113,128 @@ def test_v015_query_signal_plan_normalizes_node_notready_alias() -> None:
     assert "oc get nodes" in plan.search_signals["commands"]
     assert "oc describe node" in plan.search_signals["commands"]
     assert any("kubelet" in query for query in plan.embedding_queries)
+    assert {"key": "classification.domain", "match": {"value": "node_ops"}} not in plan.metadata_filter["must"]
+    assert plan.metadata_filter["should"] == [
+        {"key": "classification.domain", "match": {"value": "node_ops"}},
+        {"key": "classification.domain", "match": {"value": "troubleshooting"}},
+    ]
+
+
+def test_v015_query_signal_plan_uses_llm_one_shot_for_normalization_and_expansion() -> None:
+    llm = FakeSignalLlm(
+        {
+            "normalized_query": "PVC가 Pending 상태인데 무엇을 확인해야 하나요?",
+            "correction_notes": [
+                {"type": "typo", "from": "Peding", "to": "Pending"},
+            ],
+            "classification": {
+                "domain": "storage",
+                "book_slug_candidates": ["storage"],
+                "platform": "any_platform",
+                "ocp_version": "4.20",
+                "locale": "ko",
+            },
+            "search_signals": {
+                "objects": ["PVC", "PV", "StorageClass"],
+                "error_states": ["Pending"],
+                "intent_labels": ["troubleshoot", "check_status", "command_lookup"],
+                "answer_shapes": ["checklist", "command", "troubleshooting_flow"],
+                "command_families": ["oc_get", "oc_describe"],
+                "primary_topics": ["PVC", "PersistentVolumeClaim"],
+                "secondary_topics": ["volume binding"],
+                "components": ["CSI Driver"],
+                "cluster_phase": ["incident", "day2"],
+                "execution_target": ["cluster_admin_cli"],
+                "commands": ["oc get pvc", "oc describe pvc"],
+            },
+            "confidence": {"domain": 0.95, "objects": 0.96, "commands": 0.91},
+            "embedding_queries": [
+                "PVC Pending 상태 확인 StorageClass PV Pod 이벤트",
+                "oc get pvc oc describe pvc Pending volume binding troubleshooting",
+                "PersistentVolumeClaim Pending storage provisioning StorageClass dynamic provisioning",
+            ],
+        }
+    )
+
+    plan = build_query_signal_plan("PVC가 Peding인데 뭐 확인해야 해?", llm_client=llm)
+
+    assert llm.calls
+    assert llm.calls[0]["max_tokens"] == 900
+    assert plan.normalized_query == "PVC가 Pending 상태인데 무엇을 확인해야 하나요?"
+    assert plan.correction_notes[0].type == "typo"
+    assert plan.embedding_queries[0] == "PVC Pending 상태 확인 StorageClass PV Pod 이벤트"
+    assert {"key": "classification.domain", "match": {"value": "storage"}} in plan.metadata_filter["must"]
+
+
+def test_v015_query_signal_plan_sanitizes_llm_output_before_filtering() -> None:
+    llm = FakeSignalLlm(
+        {
+            "normalized_query": "PVC 질문",
+            "classification": {
+                "domain": "made_up_domain",
+                "book_slug_candidates": ["storage"],
+                "platform": "unknown_platform",
+            },
+            "search_signals": {
+                "intent_labels": ["troubleshoot", "unsafe_new_label"],
+                "answer_shapes": ["command", "novel_shape"],
+                "command_families": ["oc_get", "shell_everything"],
+            },
+            "confidence": {"domain": 1.0},
+            "embedding_queries": ["PVC Pending"],
+        }
+    )
+
+    plan = build_query_signal_plan("PVC가 Pending인데 뭐 확인해야 해?", llm_client=llm)
+
+    assert plan.classification["domain"] == "storage"
+    assert plan.classification["platform"] == "any_platform"
+    assert "unsafe_new_label" not in plan.search_signals["intent_labels"]
+    assert "novel_shape" not in plan.search_signals["answer_shapes"]
+    assert "shell_everything" not in plan.search_signals["command_families"]
+    assert {"key": "classification.domain", "match": {"value": "storage"}} in plan.metadata_filter["must"]
+
+
+def test_v015_query_signal_plan_maps_troubleshooting_domain_to_object_area() -> None:
+    llm = FakeSignalLlm(
+        {
+            "normalized_query": "Node가 NotReady 상태일 때 무엇을 먼저 확인해야 하나요?",
+            "classification": {
+                "domain": "troubleshooting",
+                "book_slug_candidates": ["troubleshooting_nodes"],
+                "platform": "any_platform",
+            },
+            "search_signals": {
+                "objects": ["Node"],
+                "error_states": ["NotReady"],
+                "intent_labels": ["troubleshoot", "check_status"],
+                "answer_shapes": ["troubleshooting_flow", "command", "checklist"],
+                "command_families": ["oc_get", "oc_describe"],
+                "commands": ["oc get nodes", "oc describe node"],
+            },
+            "confidence": {"domain": 1.0, "objects": 1.0},
+            "embedding_queries": ["OpenShift node NotReady troubleshooting steps"],
+        }
+    )
+
+    plan = build_query_signal_plan("노드가 노트레디면 처음에 뭐 봐야 함?", llm_client=llm)
+
+    assert plan.classification["domain"] == "node_ops"
+    assert "troubleshoot" in plan.search_signals["intent_labels"]
+    assert "check_status" in plan.search_signals["intent_labels"]
+    assert {"key": "classification.domain", "match": {"value": "node_ops"}} not in plan.metadata_filter["must"]
+    assert plan.metadata_filter["should"] == [
+        {"key": "classification.domain", "match": {"value": "node_ops"}},
+        {"key": "classification.domain", "match": {"value": "troubleshooting"}},
+    ]
+
+
+def test_v015_query_signal_plan_falls_back_when_llm_fails() -> None:
+    plan = build_query_signal_plan(
+        "노드가 노트레디면 처음에 뭐 봐야 함?",
+        llm_client=FakeSignalLlm(error=RuntimeError("llm unavailable")),
+    )
+
+    assert "Node" in plan.normalized_query
+    assert plan.classification["domain"] == "node_ops"
+    assert "oc get nodes" in plan.search_signals["commands"]

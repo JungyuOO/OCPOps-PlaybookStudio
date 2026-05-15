@@ -1397,6 +1397,8 @@ def maybe_rerank_hits(
     timings_ms: dict[str, float],
 ) -> tuple[list[RetrievalHit], dict[str, Any]]:
     hits = hybrid_hits[:top_k]
+    configured_candidate_k = int(getattr(retriever.settings, "reranker_candidate_k", top_k) or top_k)
+    candidate_budget = min(len(hybrid_hits), max(top_k, configured_candidate_k)) if hybrid_hits else 0
     reranker_trace: dict[str, Any] = {
         "enabled": retriever.reranker is not None,
         "applied": False,
@@ -1409,24 +1411,13 @@ def maybe_rerank_hits(
         "top1_after": _top_book_slug(hits),
         "top1_changed": False,
         "rebalance_reasons": [],
-        "decision_reason": "",
-        "candidate_budget": getattr(retriever.reranker, "top_n", 0),
+        "decision_reason": "model_required_when_configured",
+        "candidate_budget": candidate_budget,
     }
     if retriever.reranker is None or not hybrid_hits:
         return hits, reranker_trace
     try:
-        apply_model, decision_reason = _should_apply_reranker_model(
-            query,
-            hybrid_hits=hybrid_hits,
-        )
-        reranker_trace["decision_reason"] = decision_reason
-        candidate_budget = _rerank_candidate_budget(
-            query,
-            top_k=top_k,
-            reranker_top_n=getattr(retriever.reranker, "top_n", 0),
-        )
-        if candidate_budget is not None:
-            reranker_trace["candidate_budget"] = candidate_budget
+        apply_model = True
         rerank_started_at = time.perf_counter()
         if apply_model:
             _emit_trace_event(
@@ -1449,13 +1440,7 @@ def maybe_rerank_hits(
             reranked_hits = _prime_hits_for_rebalance(hybrid_hits)
             reranker_trace["top1_after_model"] = reranker_trace["top1_before"]
             reranker_trace["mode"] = "heuristic_only"
-        reranked_hits, rebalance_reasons = _apply_rebalance_rules(
-            retriever,
-            query=query,
-            hybrid_hits=hybrid_hits,
-            reranked_hits=reranked_hits,
-            context=context,
-        )
+        rebalance_reasons: list[str] = []
         timings_ms["rerank"] = _duration_ms(rerank_started_at)
         hits = reranked_hits[:top_k]
         reranker_trace["top1_after"] = _top_book_slug(hits)
@@ -1501,29 +1486,17 @@ def maybe_rerank_hits(
         )
     except Exception as exc:  # noqa: BLE001
         reranker_trace["error"] = str(exc)
-        reranked_hits = _prime_hits_for_rebalance(hybrid_hits)
-        try:
-            reranked_hits, rebalance_reasons = _apply_rebalance_rules(
-                retriever,
-                query=query,
-                hybrid_hits=hybrid_hits,
-                reranked_hits=reranked_hits,
-                context=context,
-            )
-        except Exception as fallback_exc:  # noqa: BLE001
-            rebalance_reasons = []
-            reranker_trace["fallback_error"] = str(fallback_exc)
-        hits = reranked_hits[:top_k]
+        hits = hybrid_hits[:top_k]
         reranker_trace.update(
             {
-                "applied": bool(rebalance_reasons),
+                "applied": False,
                 "mode": "error_fallback",
                 "top1_after_model": reranker_trace["top1_before"],
                 "top1_after": _top_book_slug(hits),
                 "top1_changed": reranker_trace["top1_before"] != _top_book_slug(hits),
                 "candidate_count": len(hybrid_hits),
-                "reranked_count": len(hybrid_hits),
-                "rebalance_reasons": rebalance_reasons,
+                "reranked_count": 0,
+                "rebalance_reasons": [],
             }
         )
         _emit_trace_event(

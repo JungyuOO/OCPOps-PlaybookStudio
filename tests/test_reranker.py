@@ -29,9 +29,10 @@ def _settings(**overrides: Any) -> Settings:
         "root_dir": Path("."),
         "reranker_enabled": True,
         "embedding_base_url": "http://tei.internal/v1",
-        "reranker_base_url": "",
+        "reranker_base_url": "http://reranker.internal",
         "reranker_model": "dragonkue/bge-reranker-v2-m3-ko",
         "reranker_timeout_seconds": 3,
+        "reranker_batch_size": 8,
         "reranker_max_parallel_requests": 4,
     }
     defaults.update(overrides)
@@ -60,7 +61,7 @@ def _hit(chunk_id: str, *, score: float, book_slug: str = "networking") -> Retri
     )
 
 
-def test_remote_bge_reranker_uses_embedding_base_url_and_reorders(monkeypatch):
+def test_remote_bge_reranker_uses_reranker_base_url_and_reorders(monkeypatch):
     calls: list[dict[str, Any]] = []
 
     def fake_post(url: str, **kwargs: Any) -> _Response:
@@ -81,7 +82,7 @@ def test_remote_bge_reranker_uses_embedding_base_url_and_reorders(monkeypatch):
     reranked = reranker.rerank("Route timeout 어디서 확인해?", hits, top_k=2)
 
     assert [hit.chunk_id for hit in reranked] == ["right", "wrong"]
-    assert calls[0]["url"] == "http://tei.internal/rerank"
+    assert calls[0]["url"] == "http://reranker.internal/rerank"
     assert calls[0]["json"]["model"] == "dragonkue/bge-reranker-v2-m3-ko"
     assert calls[0]["json"]["texts"]
     assert reranked[0].component_scores["pre_rerank_fused_score"] == 0.4
@@ -169,6 +170,7 @@ def test_maybe_rerank_hits_falls_back_to_hybrid_on_reranker_error():
 
     class Retriever:
         reranker = FailingReranker()
+        settings = _settings(reranker_candidate_k=5)
 
     trace_events: list[dict[str, Any]] = []
     timings_ms: dict[str, float] = {}
@@ -194,6 +196,41 @@ def test_maybe_rerank_hits_falls_back_to_hybrid_on_reranker_error():
     assert trace_events[-1]["step"] == "rerank"
 
 
+def test_maybe_rerank_hits_uses_configured_candidate_budget():
+    class CapturingReranker:
+        model_name = "capturing-reranker"
+        top_n = 5
+
+        def __init__(self) -> None:
+            self.top_n_override = 0
+
+        def rerank(self, query: str, hits: list[RetrievalHit], **kwargs: Any) -> list[RetrievalHit]:
+            del query
+            self.top_n_override = int(kwargs["top_n_override"])
+            return list(reversed(hits[: self.top_n_override])) + hits[self.top_n_override :]
+
+    class Retriever:
+        reranker = CapturingReranker()
+        settings = _settings(reranker_candidate_k=5)
+
+    hybrid_hits = [_hit(str(index), score=1.0 - index / 10) for index in range(10)]
+
+    hits, trace = maybe_rerank_hits(
+        Retriever(),
+        query="PVC Pending",
+        hybrid_hits=hybrid_hits,
+        context=None,
+        top_k=5,
+        trace_callback=lambda _event: None,
+        timings_ms={},
+    )
+
+    assert Retriever.reranker.top_n_override == 5
+    assert trace["candidate_budget"] == 5
+    assert trace["reranked_count"] == 5
+    assert [hit.chunk_id for hit in hits] == ["4", "3", "2", "1", "0"]
+
+
 def test_rerank_document_includes_metadata_context():
     document = _build_rerank_document(_hit("route-timeout", score=0.5))
 
@@ -201,6 +238,17 @@ def test_rerank_document_includes_metadata_context():
     assert "Chapter: Networking" in document
     assert "Path: Networking > Routes > Ingress > Route timeouts" in document
     assert "Commands: oc annotate route" in document
+    assert "Content:" in document
+
+
+def test_rerank_document_truncates_long_content():
+    hit = _hit("long", score=0.5)
+    hit.text = " ".join(["content"] * 1000)
+
+    document = _build_rerank_document(hit)
+
+    assert len(document) < 2400
+    assert "Book: networking" in document
     assert "Content:" in document
 
 

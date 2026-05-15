@@ -298,9 +298,9 @@ def handle_chat(
             answer_query,
             mode=mode,
             context=request_context,
-            top_k=8,
-            candidate_k=20,
-            max_context_chunks=6,
+            top_k=5,
+            candidate_k=10,
+            max_context_chunks=5,
         )
         server_timings_ms["answerer_runtime"] = (time.perf_counter() - answer_started_at) * 1000
         answer_log_started_at = time.perf_counter()
@@ -459,9 +459,9 @@ def handle_chat_stream(
             answer_query,
             mode=mode,
             context=request_context,
-            top_k=8,
-            candidate_k=20,
-            max_context_chunks=6,
+            top_k=5,
+            candidate_k=10,
+            max_context_chunks=5,
             trace_callback=emit_trace,
         )
         server_timings_ms["answerer_runtime"] = (time.perf_counter() - answer_started_at) * 1000

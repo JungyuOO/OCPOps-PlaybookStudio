@@ -43,8 +43,8 @@ def _read_jsonl(path: Path) -> list[dict]:
 
 
 def _add_runtime_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--top-k", type=int, default=8)
-    parser.add_argument("--candidate-k", type=int, default=20)
+    parser.add_argument("--top-k", type=int, default=5)
+    parser.add_argument("--candidate-k", type=int, default=10)
     parser.add_argument("--max-context-chunks", type=int, default=6)
 
 
