@@ -190,6 +190,30 @@ def test_qdrant_payload_from_row_preserves_official_gold_metadata():
     assert payload["k8s_objects"] == ["Route", "Service"]
     assert payload["visibility"] == "global_shared"
     assert payload["source_scope"] == "official_docs"
+    assert payload["id"] == payload["chunk_id"]
+    assert payload["document_id"] == payload["document_source_id"]
+    assert payload["source"] == {
+        "corpus_scope": "official_docs",
+        "doc_type": "official_doc",
+        "source_lane": "official_ko",
+        "visibility": "global_shared",
+        "review_status": "approved",
+        "citation_eligible": True,
+        "enabled_for_chat": True,
+    }
+    assert payload["classification"]["domain"] == "architecture"
+    assert payload["classification"]["book_slug"] == "architecture"
+    assert payload["classification"]["ocp_version"] == "4.20"
+    assert payload["classification"]["locale"] == "ko"
+    assert payload["chunk"]["chunk_type"] == "document"
+    assert payload["chunk"]["title"] == "Architecture"
+    assert payload["chunk"]["section_path"] == ["Architecture"]
+    assert payload["chunk"]["viewer_path"] == "/docs/ocp/4.20/ko/architecture/index.html#routes"
+    assert payload["search_signals"]["commands"] == ["oc get routes"]
+    assert payload["search_signals"]["command_families"] == ["oc_get"]
+    assert payload["search_signals"]["objects"] == ["Route", "Service"]
+    assert payload["text"] == "Architecture\nRouter sends traffic."
+    assert payload["text_fields"]["embedding_text"] == "Architecture\nRouter sends traffic."
 
 
 def test_qdrant_payload_from_row_preserves_learning_metadata_refs():
@@ -252,6 +276,7 @@ def test_record_qdrant_index_entries_upserts_payload_hashes():
         "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "bge",
         "hash",
+        1,
     )
 
 

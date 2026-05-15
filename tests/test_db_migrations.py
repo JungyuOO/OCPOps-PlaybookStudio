@@ -23,6 +23,7 @@ def test_list_migrations_includes_ingestion_foundation():
         "0006_course_runtime_assets",
         "0007_course_runtime_manifest",
         "0008_chunk_runtime_enrichment",
+        "0009_qdrant_payload_contract",
     ]
     assert all(len(migration.checksum) == 64 for migration in migrations)
     assert "document_chunks" in migrations[1].sql
@@ -37,8 +38,9 @@ def test_list_migrations_includes_ingestion_foundation():
     assert "course_chunks" in migrations[5].sql
     assert "course_assets" in migrations[6].sql
     assert "course_manifests" in migrations[7].sql
-    assert "navigation_only" in migrations[-1].sql
-    assert "starter_question_candidates" in migrations[-1].sql
+    assert "navigation_only" in migrations[8].sql
+    assert "payload_version" in migrations[9].sql
+    assert "starter_question_candidates" in migrations[8].sql
 
 
 def test_db_migrate_parser_accepts_dry_run_args():
