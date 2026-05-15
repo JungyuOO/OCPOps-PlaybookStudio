@@ -1,7 +1,7 @@
 from play_book_studio.retrieval.book_adjustments import query_book_adjustments
 from play_book_studio.retrieval.models import SessionContext
 from play_book_studio.retrieval.query import normalize_query
-from play_book_studio.retrieval.query_understanding import understand_query
+from play_book_studio.retrieval.query_understanding import understand_query, understand_query_signals
 
 
 def test_ocp_install_query_expands_to_openshift_installation_terms() -> None:
@@ -73,3 +73,45 @@ def test_v012_beginner_intents_expand_operational_terms() -> None:
 
     assert "pod_resource_inspection" in pod_usage.intents
     assert "oc adm top pods" in pod_usage.retrieval_terms
+
+
+def test_v014_query_signals_extract_pvc_pending_retrieval_contract() -> None:
+    signals = understand_query_signals("PVC가 Pending인데 뭐 확인해야 해?")
+
+    assert signals.classification["domain"] == "storage"
+    assert signals.classification["book_slug_candidates"] == ("storage",)
+    assert signals.search_signals["objects"] == ("PVC",)
+    assert signals.search_signals["error_states"] == ("Pending",)
+    assert "troubleshoot" in signals.search_signals["intent_labels"]
+    assert "check_status" in signals.search_signals["intent_labels"]
+    assert "checklist" in signals.search_signals["answer_shapes"]
+    assert "command" in signals.search_signals["answer_shapes"]
+    assert "oc_get" in signals.search_signals["command_families"]
+    assert "oc_describe" in signals.search_signals["command_families"]
+    assert {"key": "classification.domain", "match": {"value": "storage"}} in signals.metadata_filter["must"]
+    assert "PVC Pending" in signals.vector_query
+    assert "oc_describe" in signals.vector_query
+
+
+def test_v014_query_signals_extract_etcd_execution_target_without_book_hard_filter() -> None:
+    signals = understand_query_signals("etcd 백업은 어느 노드에서 실행해?")
+
+    assert signals.classification["domain"] == "etcd"
+    assert signals.classification["book_slug_candidates"] == ("etcd",)
+    assert "backup" in signals.search_signals["intent_labels"]
+    assert "identify_execution_target" in signals.search_signals["intent_labels"]
+    assert signals.search_signals["execution_target"] == ("control_plane_node",)
+    assert {"key": "classification.domain", "match": {"value": "etcd"}} in signals.metadata_filter["must"]
+    assert not any(item["key"] == "classification.book_slug" for item in signals.metadata_filter["must"])
+
+
+def test_v014_query_signals_extract_install_compare_shape() -> None:
+    signals = understand_query_signals("UPI랑 agent-based 설치 차이 알려줘")
+
+    assert signals.classification["domain"] == "install"
+    assert "installing_on_any_platform" in signals.classification["book_slug_candidates"]
+    assert "installation_overview" in signals.classification["book_slug_candidates"]
+    assert "install" in signals.search_signals["intent_labels"]
+    assert "compare_options" in signals.search_signals["intent_labels"]
+    assert signals.search_signals["answer_shapes"] == ("decision_guide",)
+    assert {"key": "classification.domain", "match": {"value": "install"}} in signals.metadata_filter["must"]

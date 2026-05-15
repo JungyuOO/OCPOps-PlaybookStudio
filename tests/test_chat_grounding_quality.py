@@ -27,6 +27,8 @@ def _hit(
     *,
     text: str,
     cli_commands: tuple[str, ...] = (),
+    error_strings: tuple[str, ...] = (),
+    k8s_objects: tuple[str, ...] = (),
     chunk_type: str = "reference",
     book_slug: str = "test-book",
     section: str = "Test Section",
@@ -46,6 +48,8 @@ def _hit(
         fused_score=raw_score,
         chunk_type=chunk_type,
         cli_commands=cli_commands,
+        error_strings=error_strings,
+        k8s_objects=k8s_objects,
     )
 
 
@@ -199,6 +203,37 @@ def test_intent_profile_prefers_matching_command_over_generic_cli_command() -> N
     assert hits[0].chunk_id == "namespace-list"
     assert hits[0].component_scores["intent_profile_primary_command_boost"] == 1.42
     assert "intent_profile_command_mismatch_penalty" in hits[1].component_scores
+
+
+def test_v014_structured_signals_boost_matching_pvc_pending_troubleshooting_chunk() -> None:
+    concept_hit = _hit(
+        "storage-concept",
+        text="Persistent storage concepts describe volume binding and provisioning.",
+        book_slug="storage",
+        raw_score=0.31,
+    )
+    troubleshooting_hit = _hit(
+        "pvc-pending",
+        text="PVC Pending 상태에서는 PVC 이벤트와 StorageClass 바인딩 상태를 확인합니다.",
+        cli_commands=("oc get pvc", "oc describe pvc <pvc-name> -n <namespace>",),
+        error_strings=("Pending",),
+        k8s_objects=("PVC", "StorageClass"),
+        chunk_type="troubleshooting",
+        book_slug="storage",
+        raw_score=0.29,
+    )
+
+    hits = fuse_ranked_hits(
+        "PVC가 Pending이면 뭐부터 확인해야 해?",
+        {"bm25": [concept_hit, troubleshooting_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "pvc-pending"
+    assert hits[0].component_scores["v014_object_signal_boost"] == 1.08
+    assert hits[0].component_scores["v014_error_state_signal_boost"] == 1.12
+    assert hits[0].component_scores["v014_answer_shape_chunk_boost"] == 1.05
 
 
 def test_command_context_selects_cli_profile_commands_instead_of_clarifying() -> None:

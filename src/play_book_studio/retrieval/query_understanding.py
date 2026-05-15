@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 
 _OPENSHIFT_RE = re.compile(r"(?<![a-z0-9])ocp(?![a-z0-9])|openshift|오픈\s*시프트|오픈시프트", re.IGNORECASE)
@@ -56,6 +57,58 @@ _NAMESPACE_CREATE_RE = re.compile(
     r"|(?:create|new|make|만들|만드|생성|추가).*(?:namespace|namespaces|project|projects|네임스페이스|프로젝트)",
     re.IGNORECASE,
 )
+_PVC_RE = re.compile(r"(?<![a-z0-9])PVC(?![a-z0-9])|persistent\s*volume\s*claim|퍼시스턴트\s*볼륨\s*클레임", re.IGNORECASE)
+_PV_RE = re.compile(r"(?<![a-z0-9])PV(?![a-z0-9])|persistent\s*volume(?!\s*claim)|퍼시스턴트\s*볼륨", re.IGNORECASE)
+_POD_RE = re.compile(r"(?<![a-z0-9])pods?(?![a-z0-9])|파드", re.IGNORECASE)
+_ROUTE_RE = re.compile(r"(?<![a-z0-9])routes?(?![a-z0-9])|라우트", re.IGNORECASE)
+_ETCD_RE = re.compile(r"\betcd\b", re.IGNORECASE)
+_MCO_RE = re.compile(r"machine\s*config\s*operator|\bMCO\b|머신\s*구성\s*오퍼레이터", re.IGNORECASE)
+_RBAC_RE = re.compile(r"\brbac\b|rolebinding|clusterrolebinding|권한|롤바인딩", re.IGNORECASE)
+_PENDING_RE = re.compile(r"(?<![a-z0-9])Pending(?![a-z0-9])|펜딩|대기", re.IGNORECASE)
+_IMAGE_PULL_RE = re.compile(r"ImagePullBackOff|ErrImagePull|이미지.*풀|이미지.*가져", re.IGNORECASE)
+_NOT_READY_RE = re.compile(r"\bNotReady\b|not\s*ready|준비.*안|레디.*안", re.IGNORECASE)
+_BACKUP_RE = re.compile(r"backup|백업|스냅샷|snapshot", re.IGNORECASE)
+_RESTORE_RE = re.compile(r"restore|복구|복원", re.IGNORECASE)
+_COMPARE_RE = re.compile(r"차이|비교|compare|versus|vs\.?", re.IGNORECASE)
+_EXECUTION_TARGET_RE = re.compile(r"어느\s*노드|어디서\s*실행|실행\s*위치|where.*run|which.*node", re.IGNORECASE)
+_UPI_RE = re.compile(r"(?<![a-z0-9])UPI(?![a-z0-9])|user[- ]provisioned|사용자.*인프라", re.IGNORECASE)
+_AGENT_BASED_RE = re.compile(r"agent[- ]based|에이전트", re.IGNORECASE)
+_YAML_RE = re.compile(r"yaml|매니페스트|manifest", re.IGNORECASE)
+
+INTENT_LABELS: tuple[str, ...] = (
+    "explain_concept",
+    "check_status",
+    "verify_result",
+    "troubleshoot",
+    "configure_resource",
+    "create_resource",
+    "update_resource",
+    "delete_resource",
+    "backup",
+    "restore",
+    "install",
+    "upgrade",
+    "compare_options",
+    "find_document",
+    "command_lookup",
+    "summarize",
+    "list_prerequisites",
+    "identify_execution_target",
+    "explain_warning",
+    "next_steps",
+)
+
+ANSWER_SHAPES: tuple[str, ...] = (
+    "short_explanation",
+    "step_by_step",
+    "command",
+    "checklist",
+    "yaml_example",
+    "decision_guide",
+    "warning",
+    "troubleshooting_flow",
+    "document_link",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +119,28 @@ class QueryUnderstanding:
 
     def has_intent(self, intent: str) -> bool:
         return intent in self.intents
+
+
+@dataclass(frozen=True, slots=True)
+class StructuredQuerySignals:
+    raw_query: str
+    normalized_query: str
+    classification: dict[str, Any]
+    search_signals: dict[str, tuple[str, ...]]
+    confidence: dict[str, float]
+    metadata_filter: dict[str, Any]
+    vector_query: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "raw_query": self.raw_query,
+            "normalized_query": self.normalized_query,
+            "classification": dict(self.classification),
+            "search_signals": {key: list(value) for key, value in self.search_signals.items()},
+            "confidence": dict(self.confidence),
+            "metadata_filter": self.metadata_filter,
+            "vector_query": self.vector_query,
+        }
 
 
 def understand_query(query: str) -> QueryUnderstanding:
@@ -221,6 +296,179 @@ def understand_query(query: str) -> QueryUnderstanding:
     )
 
 
+def understand_query_signals(
+    query: str,
+    *,
+    ocp_version: str = "4.20",
+    locale: str = "ko",
+) -> StructuredQuerySignals:
+    raw_query = " ".join(str(query or "").split())
+    legacy = understand_query(raw_query)
+    domains: list[str] = []
+    book_slug_candidates: list[str] = []
+    objects: list[str] = []
+    error_states: list[str] = []
+    intent_labels: list[str] = []
+    answer_shapes: list[str] = []
+    command_families: list[str] = []
+    primary_topics: list[str] = []
+    cluster_phase: list[str] = []
+    execution_target: list[str] = []
+    confidence: dict[str, float] = {}
+
+    def add_intent(value: str) -> None:
+        if value in INTENT_LABELS:
+            _append_unique(intent_labels, value)
+
+    def add_shape(value: str) -> None:
+        if value in ANSWER_SHAPES:
+            _append_unique(answer_shapes, value)
+
+    if _PVC_RE.search(raw_query):
+        _append_unique(objects, "PVC")
+        _append_unique(primary_topics, "PVC")
+        _append_unique(domains, "storage")
+        _append_unique(book_slug_candidates, "storage")
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.95)
+    if _PV_RE.search(raw_query):
+        _append_unique(objects, "PV")
+        _append_unique(primary_topics, "Persistent Volume")
+        _append_unique(domains, "storage")
+        _append_unique(book_slug_candidates, "storage")
+    if _POD_RE.search(raw_query):
+        _append_unique(objects, "Pod")
+        _append_unique(primary_topics, "Pod")
+    if _ROUTE_RE.search(raw_query):
+        _append_unique(objects, "Route")
+        _append_unique(primary_topics, "Route")
+        _append_unique(domains, "networking")
+    if _ETCD_RE.search(raw_query):
+        _append_unique(objects, "etcd")
+        _append_unique(primary_topics, "etcd")
+        _append_unique(domains, "etcd")
+        _append_unique(book_slug_candidates, "etcd")
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.92)
+    if _MCO_RE.search(raw_query):
+        _append_unique(primary_topics, "Machine Config Operator")
+        _append_unique(domains, "node_ops")
+        _append_unique(book_slug_candidates, "machine_configuration")
+    if _RBAC_RE.search(raw_query):
+        _append_unique(domains, "security")
+        _append_unique(book_slug_candidates, "authentication_and_authorization")
+
+    if _PENDING_RE.search(raw_query):
+        _append_unique(error_states, "Pending")
+    if _IMAGE_PULL_RE.search(raw_query):
+        _append_unique(error_states, "ImagePullBackOff")
+    if _NOT_READY_RE.search(raw_query):
+        _append_unique(error_states, "NotReady")
+    if error_states:
+        confidence["error_states"] = 0.93
+        add_intent("troubleshoot")
+        add_shape("troubleshooting_flow")
+        _append_unique(cluster_phase, "incident")
+
+    command_requested = "command_lookup" in legacy.intents or bool(_COMMAND_KO_RE.search(raw_query))
+    if command_requested:
+        add_intent("command_lookup")
+        add_shape("command")
+        _append_unique(command_families, "oc_get")
+        if error_states or _TROUBLE_KO_RE.search(raw_query):
+            _append_unique(command_families, "oc_describe")
+    if _TROUBLE_KO_RE.search(raw_query) or error_states:
+        add_intent("troubleshoot")
+        add_shape("checklist")
+        _append_unique(cluster_phase, "day2")
+    if "확인" in raw_query or "check" in raw_query.lower():
+        add_intent("check_status")
+        add_shape("checklist")
+        _append_unique(command_families, "oc_get")
+        if error_states:
+            _append_unique(command_families, "oc_describe")
+    if _BACKUP_RE.search(raw_query):
+        add_intent("backup")
+        _append_unique(cluster_phase, "day2")
+        _append_unique(cluster_phase, "recovery")
+    if _RESTORE_RE.search(raw_query):
+        add_intent("restore")
+        _append_unique(cluster_phase, "recovery")
+    if _INSTALL_KO_RE.search(raw_query) or _UPI_RE.search(raw_query) or _AGENT_BASED_RE.search(raw_query):
+        add_intent("install")
+        _append_unique(domains, "install")
+        _append_unique(cluster_phase, "pre_install")
+        if _UPI_RE.search(raw_query):
+            _append_unique(book_slug_candidates, "installing_on_any_platform")
+        if _AGENT_BASED_RE.search(raw_query):
+            _append_unique(book_slug_candidates, "installation_overview")
+    if _COMPARE_RE.search(raw_query):
+        add_intent("compare_options")
+        add_shape("decision_guide")
+    if _EXECUTION_TARGET_RE.search(raw_query):
+        add_intent("identify_execution_target")
+        add_shape("short_explanation")
+        if _ETCD_RE.search(raw_query):
+            _append_unique(execution_target, "control_plane_node")
+    if _YAML_RE.search(raw_query):
+        add_shape("yaml_example")
+        add_intent("create_resource")
+
+    if not intent_labels:
+        add_intent("explain_concept")
+        add_shape("short_explanation")
+
+    if not answer_shapes:
+        add_shape("short_explanation")
+
+    domain = _first_domain(domains)
+    if domain and "domain" not in confidence:
+        confidence["domain"] = 0.91 if domain in {"storage", "install", "security", "node_ops"} else 0.82
+    if book_slug_candidates:
+        confidence["book_slug_candidates"] = 0.72
+    if intent_labels:
+        confidence["intent_labels"] = 0.88
+    if answer_shapes:
+        confidence["answer_shapes"] = 0.84
+    if command_families:
+        confidence["command_families"] = 0.73
+
+    classification: dict[str, Any] = {
+        "domain": domain,
+        "book_slug_candidates": tuple(book_slug_candidates),
+        "ocp_version": ocp_version,
+        "locale": locale,
+    }
+    search_signals: dict[str, tuple[str, ...]] = {
+        "objects": tuple(objects),
+        "error_states": tuple(error_states),
+        "intent_labels": tuple(intent_labels),
+        "answer_shapes": tuple(answer_shapes),
+        "command_families": tuple(command_families),
+        "primary_topics": tuple(primary_topics),
+        "cluster_phase": tuple(cluster_phase),
+        "execution_target": tuple(execution_target),
+    }
+    normalized_query = raw_query
+    vector_terms = [
+        raw_query,
+        *primary_topics,
+        *objects,
+        *error_states,
+        *command_families,
+        *legacy.retrieval_terms,
+    ]
+    vector_query = " ".join(dict.fromkeys(term for term in vector_terms if term))
+    metadata_filter = _metadata_filter_for_signals(classification, confidence)
+    return StructuredQuerySignals(
+        raw_query=raw_query,
+        normalized_query=normalized_query,
+        classification=classification,
+        search_signals=search_signals,
+        confidence=confidence,
+        metadata_filter=metadata_filter,
+        vector_query=vector_query,
+    )
+
+
 def _append_terms(target: list[str], values: list[str]) -> None:
     for value in values:
         cleaned = " ".join(str(value or "").split())
@@ -228,9 +476,61 @@ def _append_terms(target: list[str], values: list[str]) -> None:
             target.append(cleaned)
 
 
+def _append_unique(target: list[str], value: str) -> None:
+    cleaned = " ".join(str(value or "").split())
+    if cleaned and cleaned not in target:
+        target.append(cleaned)
+
+
+def _first_domain(domains: list[str]) -> str:
+    for preferred in (
+        "etcd",
+        "backup_restore",
+        "storage",
+        "install",
+        "security",
+        "networking",
+        "node_ops",
+        "monitoring",
+        "operators",
+    ):
+        if preferred in domains:
+            return preferred
+    return domains[0] if domains else ""
+
+
+def _metadata_filter_for_signals(
+    classification: dict[str, Any],
+    confidence: dict[str, float],
+) -> dict[str, Any]:
+    must: list[dict[str, Any]] = [
+        {"key": "source.enabled_for_chat", "match": {"value": True}},
+        {"key": "source.review_status", "match": {"value": "approved"}},
+        {"key": "source.citation_eligible", "match": {"value": True}},
+        {"key": "classification.locale", "match": {"value": classification.get("locale", "ko")}},
+        {
+            "key": "classification.ocp_version",
+            "match": {"value": classification.get("ocp_version", "4.20")},
+        },
+        {"key": "chunk.navigation_only", "match": {"value": False}},
+    ]
+    domain = str(classification.get("domain") or "")
+    if domain and confidence.get("domain", 0.0) >= 0.85:
+        must.append({"key": "classification.domain", "match": {"value": domain}})
+    return {"must": must}
+
+
 def has_beginner_troubleshooting_intent(query: str) -> bool:
     understanding = understand_query(query)
     return understanding.has_intent("troubleshooting") or understanding.has_intent("secret_config_troubleshooting")
 
 
-__all__ = ["QueryUnderstanding", "has_beginner_troubleshooting_intent", "understand_query"]
+__all__ = [
+    "ANSWER_SHAPES",
+    "INTENT_LABELS",
+    "QueryUnderstanding",
+    "StructuredQuerySignals",
+    "has_beginner_troubleshooting_intent",
+    "understand_query",
+    "understand_query_signals",
+]

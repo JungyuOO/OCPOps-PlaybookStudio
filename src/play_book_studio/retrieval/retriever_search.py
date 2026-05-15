@@ -11,6 +11,7 @@ from .intake_overlay import (
     search_selected_customer_pack_private_vectors,
 )
 from .models import RetrievalHit
+from .query_understanding import understand_query_signals
 from .ranking import (
     rrf_merge_hit_lists as _rrf_merge_hit_lists,
     rrf_merge_named_hit_lists as _rrf_merge_named_hit_lists,
@@ -33,6 +34,14 @@ def _vector_subquery_runtime(
     }
     if isinstance(runtime.get("hydration"), dict):
         payload["hydration"] = dict(runtime["hydration"])
+    if runtime.get("metadata_filter_applied"):
+        payload["metadata_filter_applied"] = True
+        if isinstance(runtime.get("metadata_filter"), dict):
+            payload["metadata_filter"] = dict(runtime["metadata_filter"])
+    if runtime.get("metadata_filter_fallback"):
+        payload["metadata_filter_fallback"] = True
+    if runtime.get("vector_query") and str(runtime.get("vector_query")) != query:
+        payload["vector_query"] = str(runtime["vector_query"])
     return payload
 
 
@@ -180,32 +189,60 @@ def search_vector_candidates(
         vector_hit_sets: list[list[RetrievalHit]] = []
         vector_subqueries: list[dict[str, object]] = []
         for subquery in rewritten_queries:
+            query_signals = understand_query_signals(subquery)
+            vector_query = query_signals.vector_query or subquery
+            metadata_filter = query_signals.metadata_filter or None
             official_hits: list[RetrievalHit] = []
             runtime = {
                 "endpoint_used": "",
                 "attempted_endpoints": [],
                 "hit_count": 0,
                 "top_score": None,
+                "vector_query": vector_query,
             }
             if retriever.vector_retriever is not None:
                 if hasattr(retriever.vector_retriever, "search_with_trace"):
-                    official_hits, runtime = retriever.vector_retriever.search_with_trace(
-                        subquery,
+                    try:
+                        official_hits, runtime = retriever.vector_retriever.search_with_trace(
+                            vector_query,
+                            top_k=effective_candidate_k,
+                            query_filter=metadata_filter,
+                        )
+                    except TypeError:
+                        official_hits, runtime = retriever.vector_retriever.search_with_trace(
+                            vector_query,
+                            top_k=effective_candidate_k,
+                        )
+                    runtime["vector_query"] = vector_query
+                    if not official_hits and metadata_filter:
+                        official_hits, fallback_runtime = retriever.vector_retriever.search_with_trace(
+                            vector_query,
+                            top_k=effective_candidate_k,
+                        )
+                        runtime = {
+                            **fallback_runtime,
+                            "metadata_filter_applied": True,
+                            "metadata_filter": metadata_filter,
+                            "metadata_filter_fallback": True,
+                            "vector_query": vector_query,
+                        }
+                else:
+                    official_hits = retriever.vector_retriever.search(
+                        vector_query,
                         top_k=effective_candidate_k,
                     )
-                else:
-                    official_hits = retriever.vector_retriever.search(subquery, top_k=effective_candidate_k)
                     runtime = {
                         "endpoint_used": "",
                         "attempted_endpoints": [],
                         "hit_count": len(official_hits),
                         "top_score": float(official_hits[0].raw_score) if official_hits else None,
+                        "vector_query": vector_query,
                     }
             official_hits = filter_hits_by_session_scope(official_hits, context=context)
             private_hits, private_runtime = search_selected_customer_pack_private_vectors(
                 retriever.settings,
                 context=context,
-                query=subquery,
+                query=vector_query,
                 top_k=effective_candidate_k,
             )
             private_hits = filter_hits_by_session_scope(private_hits, context=context)

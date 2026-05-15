@@ -24,6 +24,7 @@ def test_list_migrations_includes_ingestion_foundation():
         "0007_course_runtime_manifest",
         "0008_chunk_runtime_enrichment",
         "0008_document_topology_snapshots",
+        "0009_qdrant_payload_contract",
         "0009_upload_pipeline_events_quality_snapshots",
     ]
     assert all(len(migration.checksum) == 64 for migration in migrations)
@@ -41,10 +42,12 @@ def test_list_migrations_includes_ingestion_foundation():
     assert "course_manifests" in migrations[7].sql
     assert "navigation_only" in migrations[8].sql
     assert "starter_question_candidates" in migrations[8].sql
-    assert "document_topology_snapshots" in migrations[-2].sql
-    assert "input_fingerprint" in migrations[-2].sql
-    assert "upload_pipeline_events" in migrations[-1].sql
-    assert "document_quality_snapshots" in migrations[-1].sql
+    migration_sql = {migration.version: migration.sql for migration in migrations}
+    assert "document_topology_snapshots" in migration_sql["0008_document_topology_snapshots"]
+    assert "input_fingerprint" in migration_sql["0008_document_topology_snapshots"]
+    assert "payload_version" in migration_sql["0009_qdrant_payload_contract"]
+    assert "upload_pipeline_events" in migration_sql["0009_upload_pipeline_events_quality_snapshots"]
+    assert "document_quality_snapshots" in migration_sql["0009_upload_pipeline_events_quality_snapshots"]
 
 
 def test_db_migrate_parser_accepts_dry_run_args():
