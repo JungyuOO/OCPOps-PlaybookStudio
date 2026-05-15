@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 .env
 .env_server
+SERVER_OS_MIGRATION_PLAN.md
+storage-recovery-*/
 .pytest_cache/
 .pytest-tmp/
 .pytest-tmp-*/
