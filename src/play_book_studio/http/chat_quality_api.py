@@ -85,50 +85,8 @@ def build_chat_quality_query_insights(root_dir: Path, query: str = "") -> dict[s
     }
 
 
-def build_corpus_handoff_report_response(root_dir: Path, query: str = "", *, owner_user_id: str = "") -> dict[str, Any]:
-    del query
-    settings = load_settings(root_dir)
-    database_url = settings.database_url.strip()
-    if not database_url:
-        return {
-            "schema": "corpus_handoff_report_v1",
-            "ready": False,
-            "reason": "database_url_unconfigured",
-            "scopes": {},
-            "golden_questions": [],
-            "known_blockers": [],
-        }
-
-    try:
-        import psycopg
-
-        from play_book_studio.db.corpus_handoff import build_corpus_handoff_report
-
-        with psycopg.connect(database_url) as connection:
-            report = build_corpus_handoff_report(connection, owner_user_id=owner_user_id)
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "schema": "corpus_handoff_report_v1",
-            "ready": False,
-            "reason": type(exc).__name__,
-            "scopes": {},
-            "golden_questions": [],
-            "known_blockers": [{"kind": "report_error", "summary": str(exc)}],
-        }
-    return {"ready": True, **report}
-
-
 def handle_chat_quality_query_insights(handler: Any, query: str, *, root_dir: Path) -> None:
     handler._send_json(build_chat_quality_query_insights(root_dir, query))
 
 
-def handle_corpus_handoff_report(handler: Any, query: str, *, root_dir: Path, owner_user_id: str = "") -> None:
-    handler._send_json(build_corpus_handoff_report_response(root_dir, query, owner_user_id=owner_user_id))
-
-
-__all__ = [
-    "build_chat_quality_query_insights",
-    "build_corpus_handoff_report_response",
-    "handle_chat_quality_query_insights",
-    "handle_corpus_handoff_report",
-]
+__all__ = ["build_chat_quality_query_insights", "handle_chat_quality_query_insights"]

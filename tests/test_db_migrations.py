@@ -23,10 +23,7 @@ def test_list_migrations_includes_ingestion_foundation():
         "0006_course_runtime_assets",
         "0007_course_runtime_manifest",
         "0008_chunk_runtime_enrichment",
-        "0008_document_topology_snapshots",
         "0009_qdrant_payload_contract",
-        "0009_upload_pipeline_events_quality_snapshots",
-        "0010_chat_feedback_metadata_spine",
     ]
     assert all(len(migration.checksum) == 64 for migration in migrations)
     assert "document_chunks" in migrations[1].sql
@@ -42,14 +39,8 @@ def test_list_migrations_includes_ingestion_foundation():
     assert "course_assets" in migrations[6].sql
     assert "course_manifests" in migrations[7].sql
     assert "navigation_only" in migrations[8].sql
+    assert "payload_version" in migrations[9].sql
     assert "starter_question_candidates" in migrations[8].sql
-    migration_sql = {migration.version: migration.sql for migration in migrations}
-    assert "document_topology_snapshots" in migration_sql["0008_document_topology_snapshots"]
-    assert "input_fingerprint" in migration_sql["0008_document_topology_snapshots"]
-    assert "payload_version" in migration_sql["0009_qdrant_payload_contract"]
-    assert "upload_pipeline_events" in migration_sql["0009_upload_pipeline_events_quality_snapshots"]
-    assert "document_quality_snapshots" in migration_sql["0009_upload_pipeline_events_quality_snapshots"]
-    assert "chat_feedback_issues" in migration_sql["0010_chat_feedback_metadata_spine"]
 
 
 def test_db_migrate_parser_accepts_dry_run_args():

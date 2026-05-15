@@ -83,7 +83,7 @@ describe('WorkspaceTracePanel explain mode', () => {
     expect(html).toContain('Explain');
     expect(html).toContain('질문 분류');
     expect(html).toContain('검색 전략');
-    expect(html).toContain('Graph / BGE 후처리');
+    expect(html).toContain('Graph / Rerank');
     expect(html).toContain('최종 근거');
     expect(html).not.toContain('Citations · 근거');
     expect(html).not.toContain('Retrieval · 검색');

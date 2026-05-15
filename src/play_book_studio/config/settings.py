@@ -105,7 +105,6 @@ class Settings(SettingsPathMixin):
     embedding_api_key: str = ""
     embedding_batch_size: int = 32
     embedding_timeout_seconds: float = 8
-    embedding_verify_ssl: bool = True
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = DEFAULT_CORE_PACK.qdrant_collection
     qdrant_vector_size: int = 1024
@@ -302,14 +301,6 @@ def load_settings(root_dir: str | Path) -> Settings:
     root_path = Path(root_dir)
     effective_env = load_effective_env(root_path)
 
-    embedding_base_url = effective_env.get("EMBEDDING_BASE_URL", "").strip().rstrip("/")
-    embedding_verify_ssl_raw = effective_env.get("EMBEDDING_VERIFY_SSL", "").strip().lower()
-    embedding_verify_ssl = (
-        embedding_verify_ssl_raw in {"1", "true", "yes", "on"}
-        if embedding_verify_ssl_raw
-        else not embedding_base_url.lower().startswith("http://")
-    )
-
     return Settings(
         root_dir=root_path,
         artifacts_dir_override=effective_env.get("ARTIFACTS_DIR", "").strip(),
@@ -326,13 +317,12 @@ def load_settings(root_dir: str | Path) -> Settings:
         docs_language=effective_env.get("DOCS_LANGUAGE", DEFAULT_DOCS_LANGUAGE).strip(),
         book_url_template_str=effective_env.get("BOOK_URL_TEMPLATE", DEFAULT_BOOK_URL_TEMPLATE),
         viewer_path_template_str=effective_env.get("VIEWER_PATH_TEMPLATE", DEFAULT_VIEWER_PATH_TEMPLATE),
-        embedding_base_url=embedding_base_url,
+        embedding_base_url=effective_env.get("EMBEDDING_BASE_URL", "").strip().rstrip("/"),
         embedding_model=effective_env.get("EMBEDDING_MODEL", "dragonkue/bge-m3-ko"),
         embedding_device=effective_env.get("EMBEDDING_DEVICE", "auto").strip(),
         embedding_api_key=effective_env.get("EMBEDDING_API_KEY", "").strip(),
         embedding_batch_size=int(effective_env.get("EMBEDDING_BATCH_SIZE", "32")),
         embedding_timeout_seconds=float(effective_env.get("EMBEDDING_TIMEOUT_SECONDS", "8")),
-        embedding_verify_ssl=embedding_verify_ssl,
         qdrant_url=effective_env.get("QDRANT_URL", "http://localhost:6333").rstrip("/"),
         qdrant_collection=effective_env.get("QDRANT_COLLECTION", DEFAULT_CORE_PACK.qdrant_collection),
         qdrant_vector_size=int(effective_env.get("QDRANT_VECTOR_SIZE", "1024")),

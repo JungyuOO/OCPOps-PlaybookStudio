@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from play_book_studio.config.corpus_paths import resolve_wiki_runtime_books_path, wiki_runtime_books_dir_candidates
 from play_book_studio.config.settings import load_settings
 from play_book_studio.runtime_catalog_registry import official_runtime_book_entry
 
@@ -258,7 +257,7 @@ def _wiki_relation_items(relation: dict[str, Any], key: str) -> list[dict[str, s
 
 
 def _runtime_markdown_path_from_manifest(root_dir: Path, manifest_filename: str, slug: str) -> Path | None:
-    manifest_path = resolve_wiki_runtime_books_path(root_dir, manifest_filename)
+    manifest_path = root_dir / "data" / "wiki_runtime_books" / manifest_filename
     if not manifest_path.exists() or not manifest_path.is_file():
         return None
     try:
@@ -275,18 +274,14 @@ def _runtime_markdown_path_candidates(root_dir: Path, recorded_path: str) -> tup
         return ()
     candidates: list[Path] = [Path(normalized)]
     normalized_slash = normalized.replace("\\", "/")
-    markers = ("corpus/data/wiki_runtime_books/", "data/wiki_runtime_books/")
+    marker = "corpus/data/wiki_runtime_books/"
     relative_tail = ""
-    for marker in markers:
-        if marker in normalized_slash:
-            relative_tail = normalized_slash.split(marker, 1)[1].strip("/")
-            break
-        if normalized_slash.startswith(marker):
-            relative_tail = normalized_slash[len(marker):].strip("/")
-            break
+    if marker in normalized_slash:
+        relative_tail = normalized_slash.split(marker, 1)[1].strip("/")
+    elif normalized_slash.startswith(marker):
+        relative_tail = normalized_slash[len(marker):].strip("/")
     if relative_tail:
-        for runtime_dir in wiki_runtime_books_dir_candidates(root_dir):
-            candidates.append(runtime_dir / Path(relative_tail))
+        candidates.append(root_dir / "data" / "wiki_runtime_books" / Path(relative_tail))
     unique: list[Path] = []
     seen: set[Path] = set()
     for candidate in candidates:

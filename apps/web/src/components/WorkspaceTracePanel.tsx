@@ -537,7 +537,7 @@ export default function WorkspaceTracePanel({
             </article>
 
             <article className="wtp-explain-card">
-              <div className="wtp-explain-card-title">Graph / BGE 후처리</div>
+              <div className="wtp-explain-card-title">Graph / Rerank</div>
               <p className="wtp-explain-card-body">{explain.decisionBody}</p>
             </article>
 
@@ -670,7 +670,7 @@ export default function WorkspaceTracePanel({
               )}
             </article>
 
-            {/* Retrieval & postprocess */}
+            {/* Retrieval & Reranker */}
             <article className="wtp-card">
               <div className="wtp-card-header">
                 <span className="wtp-card-title">Retrieval · 검색</span>
@@ -682,7 +682,7 @@ export default function WorkspaceTracePanel({
                 <span>BM25 <strong>{asNumber(asRecord(metrics.bm25).count) ?? 0}</strong></span>
                 <span>Vector <strong>{asNumber(asRecord(metrics.vector).count) ?? 0}</strong></span>
                 <span>Hybrid <strong>{asNumber(asRecord(metrics.hybrid).count) ?? 0}</strong></span>
-                <span>Post <strong>{asNumber(asRecord(metrics.reranked).count) ?? 0}</strong></span>
+                <span>Reranked <strong>{asNumber(asRecord(metrics.reranked).count) ?? 0}</strong></span>
               </div>
               {reranker.applied ? (
                 <div className="wtp-rerank">
@@ -705,7 +705,7 @@ export default function WorkspaceTracePanel({
                   ) : null}
                 </div>
               ) : (
-                <p>BGE 검색 후처리 순서 변경 없음.</p>
+                <p>리랭커 비활성 또는 미적용.</p>
               )}
             </article>
 

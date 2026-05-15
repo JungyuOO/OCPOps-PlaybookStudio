@@ -21,7 +21,6 @@ class EmbeddingClient:
         self.device = settings.embedding_device
         self.api_key = settings.embedding_api_key
         self.batch_size = settings.embedding_batch_size
-        self.verify_ssl = settings.embedding_verify_ssl
         # Query-time vector retrieval should fail fast when the embedding runtime
         # is unavailable so the chatbot can fall back to BM25 without hanging.
         self.timeout = settings.embedding_timeout_seconds
@@ -82,7 +81,6 @@ class EmbeddingClient:
                     json={"model": model_name, "input": batch},
                     headers=self._headers(),
                     timeout=self.timeout,
-                    verify=self.verify_ssl,
                 )
                 response.raise_for_status()
                 payload = response.json()
@@ -93,9 +91,8 @@ class EmbeddingClient:
                 return [list(map(float, vector)) for vector in vectors]
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
-        detail = f": {last_error}" if last_error else ""
         raise RuntimeError(
-            f"Failed to fetch embeddings from {self.base_url} using model '{self.model}'{detail}"
+            f"Failed to fetch embeddings from {self.base_url} using model '{self.model}'"
         ) from last_error
 
     def embed_texts(

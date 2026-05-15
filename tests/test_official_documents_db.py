@@ -42,16 +42,12 @@ def test_load_official_manifest_entries_shapes_db_rows() -> None:
                 "official_docs",
                 "global_shared",
                 {
-                    "book_slug": "machine_configuration",
                     "source_lane": "official_ko",
                     "topic_path": ["Operations"],
                     "section_family": ["Machine config"],
                 },
                 42,
                 12,
-                40,
-                8,
-                2,
             )
         ]
     )
@@ -80,52 +76,10 @@ def test_load_official_manifest_entries_shapes_db_rows() -> None:
             "source_relative_paths": [],
             "chunk_count": 42,
             "section_count": 12,
-            "body_language_guess": "ko",
-            "language_quality": "ko",
-            "hangul_chunk_count": 40,
-            "latin_chunk_count": 8,
-            "latin_only_chunk_count": 2,
-            "hangul_chunk_ratio": 0.9524,
-            "latin_only_chunk_ratio": 0.0476,
             "metadata": {
-                "book_slug": "machine_configuration",
                 "source_lane": "official_ko",
                 "topic_path": ["Operations"],
                 "section_family": ["Machine config"],
-                "body_language_guess": "ko",
-                "language_quality": "ko",
-                "hangul_chunk_count": 40,
-                "latin_chunk_count": 8,
-                "latin_only_chunk_count": 2,
-                "hangul_chunk_ratio": 0.9524,
-                "latin_only_chunk_ratio": 0.0476,
             },
         }
     ]
-
-
-def test_load_official_manifest_entries_skips_rows_without_metadata_book_slug() -> None:
-    connection = _Connection(
-        [
-            (
-                None,
-                "Filename fallback must not publish",
-                "/playbooks/wiki-runtime/active/file_only/index.html",
-                "",
-                "",
-                "official",
-                "official_docs",
-                "global_shared",
-                {},
-                3,
-                1,
-                0,
-                3,
-                3,
-            )
-        ]
-    )
-
-    entries = load_official_manifest_entries(connection)
-
-    assert entries == []

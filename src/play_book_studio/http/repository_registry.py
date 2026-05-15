@@ -65,26 +65,6 @@ def _rewrite_github_query(query: str) -> str:
         base_clause = normalized
     return f"{base_clause} in:name,description,readme archived:false"
 
-def _rewrite_github_issue_query(query: str, *, official_scope: bool = True) -> str:
-    normalized = _normalize_query(query)
-    if not normalized:
-        raise ValueError("query가 필요합니다.")
-    cleanup_terms = (
-        "org:openshift",
-        "issue OR pull request",
-        "issue or pull request",
-        "pull request",
-    )
-    normalized_lower = normalized.lower()
-    for term in cleanup_terms:
-        normalized_lower = normalized_lower.replace(term.lower(), " ")
-    cleaned = _normalize_query(normalized_lower) or normalized
-    base_clause = f"\"{cleaned}\"" if " " in cleaned else cleaned
-    qualifiers = ["archived:false"]
-    if official_scope and not any(token in cleaned for token in ("repo:", "org:", "user:")):
-        qualifiers.append("org:openshift")
-    return " ".join([base_clause, *qualifiers])
-
 def _favorites_path(root_dir: Path) -> Path:
     settings = load_settings(root_dir)
     github_dir = settings.artifacts_dir / "github"
@@ -385,80 +365,6 @@ def search_github_repositories(root_dir: Path, *, query: str, limit: int = 12) -
         "results": results,
     }
 
-def _github_issue_repository_full_name(item: dict[str, Any]) -> str:
-    repository_url = str(item.get("repository_url") or "").strip().rstrip("/")
-    marker = "/repos/"
-    if marker in repository_url:
-        return repository_url.split(marker, 1)[1]
-    html_url = str(item.get("html_url") or "").strip()
-    if "github.com/" in html_url:
-        path = html_url.split("github.com/", 1)[1].split("/issues/", 1)[0].split("/pull/", 1)[0]
-        return path.strip("/")
-    return ""
-
-def _github_issue_result(item: dict[str, Any]) -> dict[str, Any]:
-    repository_full_name = _github_issue_repository_full_name(item)
-    labels = item.get("labels") if isinstance(item.get("labels"), list) else []
-    is_pull_request = isinstance(item.get("pull_request"), dict)
-    return {
-        "id": item.get("id"),
-        "number": int(item.get("number") or 0),
-        "title": str(item.get("title") or ""),
-        "html_url": str(item.get("html_url") or ""),
-        "state": str(item.get("state") or ""),
-        "repository_full_name": repository_full_name,
-        "user_login": str(((item.get("user") or {}).get("login")) or ""),
-        "labels": [str(label.get("name") or "") for label in labels if isinstance(label, dict) and str(label.get("name") or "").strip()],
-        "comments": int(item.get("comments") or 0),
-        "updated_at": str(item.get("updated_at") or ""),
-        "created_at": str(item.get("created_at") or ""),
-        "score": float(item.get("score") or 0),
-        "is_pull_request": is_pull_request,
-        "kind": "pull_request" if is_pull_request else "issue",
-    }
-
-def search_github_issues_prs(
-    root_dir: Path,
-    *,
-    query: str,
-    limit: int = 10,
-    official_scope: bool = True,
-) -> dict[str, Any]:
-    normalized_query = _normalize_query(query)
-    if not normalized_query:
-        raise ValueError("query가 필요합니다.")
-    limit = max(1, min(20, int(limit)))
-    github_query = _rewrite_github_issue_query(normalized_query, official_scope=official_scope)
-    headers, auth_mode = _github_headers(root_dir)
-    response = requests.get(
-        f"{_GITHUB_API_BASE_URL}/search/issues",
-        headers=headers,
-        params={
-            "q": github_query,
-            "per_page": limit,
-            "sort": "updated",
-            "order": "desc",
-        },
-        timeout=20,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    items = payload.get("items") if isinstance(payload, dict) else []
-    if not isinstance(items, list):
-        items = []
-    results = [
-        _github_issue_result(item)
-        for item in items[:limit]
-        if isinstance(item, dict) and str(item.get("html_url") or "").strip()
-    ]
-    return {
-        "query": normalized_query,
-        "rewritten_query": github_query,
-        "count": len(results),
-        "auth_mode": auth_mode,
-        "results": results,
-    }
-
 def _favorite_record(payload: dict[str, Any], *, category: str) -> dict[str, Any]:
     full_name = str(payload.get("full_name") or "").strip()
     if not full_name:
@@ -523,11 +429,4 @@ def remove_repository_favorite(root_dir: Path, payload: dict[str, Any]) -> dict[
     _save_favorites_document(root_dir, document)
     return list_repository_favorites(root_dir)
 
-__all__ = [
-    "REPOSITORY_CATEGORIES",
-    "list_repository_favorites",
-    "remove_repository_favorite",
-    "save_repository_favorites",
-    "search_github_issues_prs",
-    "search_github_repositories",
-]
+__all__ = ["REPOSITORY_CATEGORIES", "list_repository_favorites", "remove_repository_favorite", "save_repository_favorites", "search_github_repositories"]

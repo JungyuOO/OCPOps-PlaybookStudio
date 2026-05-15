@@ -15,7 +15,6 @@ export interface LlmWikiBookShellProps {
   leftRailCollapsed?: boolean;
   rightRailCollapsed?: boolean;
   fullBleedStage?: boolean;
-  theme?: 'dark' | 'light';
 }
 
 export function LlmWikiBookShell({
@@ -30,7 +29,6 @@ export function LlmWikiBookShell({
   leftRailCollapsed = false,
   rightRailCollapsed = false,
   fullBleedStage = false,
-  theme = 'light',
 }: LlmWikiBookShellProps) {
   return (
     <div
@@ -43,7 +41,6 @@ export function LlmWikiBookShell({
         className,
       )}
       data-mode={mode}
-      data-theme={theme}
     >
       <div className="llmwikibook-shell__frame">
         {topBar ? <div className="llmwikibook-shell__topbar">{topBar}</div> : null}

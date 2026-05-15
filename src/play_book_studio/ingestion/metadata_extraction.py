@@ -12,12 +12,12 @@ ERROR_TOKEN_RE = re.compile(
     r"\b(?:[A-Z][A-Za-z0-9]+(?:BackOff|Error|Failed|CrashLoop|NotReady|Timeout|Denied)|ImagePullBackOff|CrashLoopBackOff|FailedScheduling|ErrImagePull|Evicted|OOMKilled|Pending|Terminating|NotReady)\b"
 )
 K8S_OBJECT_RE = re.compile(
-    r"\b(?:Pod|Pods|Deployment|Deployments|DeploymentConfig|Service|Route|Ingress|Node|Nodes|Namespace|Project|ConfigMap|Secret|MachineConfigPool|MachineConfig|ClusterVersion|StatefulSet|DaemonSet|ReplicaSet|PVC|PV|Job|CronJob|SecurityContextConstraints|SCC|Role|Roles|RoleBinding|RoleBindings|ClusterRole|ClusterRoles|ClusterRoleBinding|ClusterRoleBindings|ServiceAccount|ServiceAccounts|NetworkPolicy|NetworkPolicies|ImageStream|BuildConfig)\b"
+    r"\b(?:Pod|Pods|Deployment|Deployments|DeploymentConfig|Service|Route|Ingress|Node|Nodes|Namespace|Project|ConfigMap|Secret|MachineConfigPool|MachineConfig|ClusterVersion|StatefulSet|DaemonSet|ReplicaSet|PVC|PV|Job|CronJob)\b"
 )
 OPERATOR_NAME_RE = re.compile(
     r"\b(?:[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\s+Operator|Operator Lifecycle Manager|OLM|Machine Config Operator|Cluster Version Operator)\b"
 )
-CLI_COMMAND_RE = re.compile(r"(?m)^\s*(?:[$#][ \t]*)?(?:oc|kubectl|helm|curl|podman|docker)[ \t]+[^\n]+$")
+CLI_COMMAND_RE = re.compile(r"(?m)^\s*(?:[$#]\s*)?(?:oc|kubectl)\s+[^\n]+$")
 VERIFICATION_PREFIX_RE = re.compile(
     r"^(확인|검증|점검|verify|validation|check)(?:\s*[:：-])?\s*",
     re.IGNORECASE,
@@ -55,8 +55,8 @@ def _normalize_cli_command(text: str) -> str:
     return normalized.strip()
 
 
-def extract_text_metadata(text: str) -> SectionMetadata:
-    text = text or ""
+def extract_section_metadata(section: NormalizedSection) -> SectionMetadata:
+    text = section.text or ""
     cli_command_candidates = [
         _normalize_cli_command(match.group(0))
         for match in CLI_COMMAND_RE.finditer(text)
@@ -90,7 +90,3 @@ def extract_text_metadata(text: str) -> SectionMetadata:
         operator_names=operator_names,
         verification_hints=verification_hints,
     )
-
-
-def extract_section_metadata(section: NormalizedSection) -> SectionMetadata:
-    return extract_text_metadata(section.text or "")

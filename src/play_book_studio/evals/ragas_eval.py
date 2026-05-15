@@ -10,28 +10,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-try:  # Optional eval-only dependencies. Dry-run dataset generation must work without them.
-    from langchain_openai import OpenAIEmbeddings
-    from openai import OpenAI
-    from ragas import evaluate
-    from ragas.dataset_schema import EvaluationDataset
-    from ragas.llms import llm_factory
-    from ragas.metrics.collections import (
-        answer_relevancy,
-        context_precision,
-        context_recall,
-        faithfulness,
-    )
-except (ImportError, ModuleNotFoundError):  # pragma: no cover - exercised in runtime containers without eval extras
-    OpenAIEmbeddings = None  # type: ignore[assignment]
-    OpenAI = None  # type: ignore[assignment]
-    evaluate = None  # type: ignore[assignment]
-    EvaluationDataset = None  # type: ignore[assignment]
-    llm_factory = None  # type: ignore[assignment]
-    answer_relevancy = None  # type: ignore[assignment]
-    context_precision = None  # type: ignore[assignment]
-    context_recall = None  # type: ignore[assignment]
-    faithfulness = None  # type: ignore[assignment]
+from langchain_openai import OpenAIEmbeddings
+from openai import OpenAI
+from ragas import evaluate
+from ragas.dataset_schema import EvaluationDataset
+from ragas.llms import llm_factory
+from ragas.metrics.collections import (
+    answer_relevancy,
+    context_precision,
+    context_recall,
+    faithfulness,
+)
 
 from play_book_studio.answering.answerer import ChatAnswerer
 from play_book_studio.answering.models import AnswerResult
@@ -154,8 +143,6 @@ def load_openai_judge_config_from_env(env: dict[str, str] | None = None) -> Open
 
 
 def build_openai_ragas_runtime(config: OpenAIJudgeConfig):
-    if OpenAI is None or OpenAIEmbeddings is None or llm_factory is None:
-        raise RuntimeError("RAGAS judge dependencies are not installed; install the eval extras before full RAGAS runs")
     client = OpenAI(api_key=config.api_key, base_url=config.base_url)
     llm = llm_factory(config.judge_model, provider="openai", client=client)
     embeddings = OpenAIEmbeddings(
@@ -167,8 +154,6 @@ def build_openai_ragas_runtime(config: OpenAIJudgeConfig):
 
 
 def build_default_ragas_metrics(llm, embeddings):
-    if any(metric is None for metric in (faithfulness, answer_relevancy, context_precision, context_recall)):
-        raise RuntimeError("RAGAS metrics are not installed; install the eval extras before full RAGAS runs")
     metrics = [
         deepcopy(faithfulness),
         deepcopy(answer_relevancy),
@@ -246,8 +231,6 @@ def build_ragas_case_row(
 
 
 def build_ragas_dataset(rows: list[dict[str, Any]], *, name: str = "ocp-rag-eval") -> EvaluationDataset:
-    if EvaluationDataset is None:
-        raise RuntimeError("RAGAS dataset dependencies are not installed; install the eval extras before full RAGAS runs")
     return EvaluationDataset.from_list(rows, name=name)
 
 
@@ -307,8 +290,6 @@ def evaluate_cases_with_ragas(
     dataset = build_ragas_dataset(rows, name=experiment_name)
     llm, embeddings = build_openai_ragas_runtime(judge_config)
     metrics = build_default_ragas_metrics(llm, embeddings)
-    if evaluate is None:
-        raise RuntimeError("RAGAS evaluator is not installed; install the eval extras before full RAGAS runs")
     result = evaluate(
         dataset,
         metrics=metrics,

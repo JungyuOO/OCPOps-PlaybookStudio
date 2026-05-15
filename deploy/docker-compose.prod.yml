@@ -146,11 +146,11 @@ services:
     profiles:
       - seed
     build:
-      context: ..
+      context: .
       dockerfile: deploy/Dockerfile
       target: app
     env_file:
-      - ${APP_ENV_FILE:-../.env.production}
+      - ${APP_ENV_FILE:-.env.production}
     environment:
       PYTHONPATH: /app/src
       DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
@@ -169,10 +169,9 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ../corpus:/app/corpus:ro
-      - ../artifacts:/app/artifacts
-      - ../storage:/app/storage
-      - ../reports:/app/reports
+      - app_artifacts:/app/artifacts
+      - app_storage:/app/storage
+      - app_reports:/app/reports
       - app_tmp:/app/tmp
     command: ["python", "-m", "play_book_studio.cli", "kmsc-course-import", "--root-dir", "/app", "--course-dir", "${KMSC_COURSE_SOURCE_DIR:-/app/corpus/sources/kmsc/parsed-preview/course_pbs}", "--index", "--collection", "${QDRANT_COLLECTION:-openshift_docs}"]
     restart: "no"
