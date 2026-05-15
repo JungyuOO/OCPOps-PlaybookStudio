@@ -48,6 +48,9 @@ RUN chmod +x /app/scripts/*.sh
 RUN pip install --no-cache-dir --no-deps -e .
 
 COPY --from=frontend-build /app/apps/web/dist /app/apps/web/dist
+RUN mkdir -p /app/data /app/artifacts /app/storage /app/reports /app/tmp \
+    && chgrp -R 0 /app \
+    && chmod -R g=u /app
 
 EXPOSE 8765 8770
 
