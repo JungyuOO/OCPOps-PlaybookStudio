@@ -54,7 +54,7 @@ OCP_LEARNING_ADVICE_RE = re.compile(
     re.IGNORECASE,
 )
 TECHNICAL_HINT_RE = re.compile(
-    r"(오픈\s*시프트|오픈시프트|openshift|(?<![a-z0-9])ocp(?![a-z0-9])|kubernetes|쿠버네티스|oc\s|pod|deployment|route|ingress|operator|etcd|rbac|namespace|네임스페이스|이름공간|yaml|pipeline|tekton|prometheus|alertmanager|node|노드|cluster|클러스터|image|images|registry|레지스트리|이미지|저장소)",
+    r"(오픈\s*시프트|오픈시프트|openshift|(?<![a-z0-9])ocp(?![a-z0-9])|kubernetes|쿠버네티스|oc\s|pod|deployment|route|ingress|operator|etcd|rbac|namespace|네임스페이스|이름공간|yaml|pipeline|tekton|prometheus|alertmanager|node|노드|cluster|클러스터|image|images|registry|레지스트리|이미지|저장소|(?<![a-z0-9])pvc(?![a-z0-9])|(?<![a-z0-9])pv(?![a-z0-9])|persistent\s*volume|storageclass|storage\s*class|스토리지|볼륨|pending|imagepullbackoff|notready|crashloopbackoff)",
     re.IGNORECASE,
 )
 STRUCTURED_QUERY_RE = re.compile(r"[/<>=:\d]")
