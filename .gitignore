@@ -51,6 +51,7 @@ tmp_customer_pack_live/
 env
 .claude/
 .internal/
+kugnus_only/
 materialization
 reports/eval_reports/
 reports/tmp_repo_hygiene_audit.json
