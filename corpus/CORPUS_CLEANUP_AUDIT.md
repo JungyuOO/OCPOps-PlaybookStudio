@@ -75,12 +75,28 @@ Path: `corpus/sources/official/imported-gold`
 이 규칙은 파일을 지금 삭제하기 위한 것이 아니다.
 J의 backend/retrieval 작업과 충돌하지 않게, 먼저 읽기 경로를 한 곳으로 모은 뒤 물리 삭제/이동을 별도 단계로 판단하기 위한 안전장치다.
 
+## Legacy Path Classification
+
+| Path / pattern | Current class | Reason | Action |
+| --- | --- | --- | --- |
+| `corpus/sources/official/imported-gold/gold_corpus_ko/**` | active seed | 공식 문서 retrieval seed. J의 query signal/retrieval 검증 입력으로도 쓰임. | 유지 |
+| `corpus/sources/official/imported-gold/gold_manualbook_ko/playbook_documents.jsonl` | active seed | book 단위 canonical JSONL 후보. | 유지 |
+| `corpus/sources/official/imported-gold/gold_manualbook_ko/playbooks/**` | fallback sidecar | JSONL과 1:1이지만 viewer/data room fallback이 아직 존재. | 참조 0개 전까지 유지 |
+| `corpus/sources/official/imported-gold/silver_ko/translation_drafts/**` | processing seed/cache | 번역 draft와 cache. 재생성 비용/시간 절감을 위해 보존. | 완료 코퍼스와 구분 표시 |
+| `corpus/data/wiki_assets/**` | sidecar evidence | wiki viewer 이미지/evidence 산출물. | 유지 |
+| `corpus/data/wiki_relations/**` | sidecar relation | figure/entity/section relation 산출물. | 유지 |
+| `corpus/data/wiki_runtime_books/**` | sidecar manifest | wiki runtime book manifest 산출물. | 유지 |
+| root `data/**` | local legacy runtime artifact | Git tracked 파일 없음. `load_settings()` 등이 로컬에서 만들 수 있음. | `.gitignore`로 제외 |
+| `data/gold_*` | compatibility fallback | 현재 실물 없음. resolver가 old runtime 호환을 위해 fallback만 유지. | 물리 삭제 대상 없음 |
+| tests under `data/gold_*` | test-only fallback | legacy fallback이 깨지지 않는지 검증. | 유지 |
+| `data/course_pbs/assets/*` in course manifests/tests | legacy asset reference | KMSC package 내부 asset resolver가 `corpus/sources/kmsc/.../assets`로 보정하는 호환 입력. | 별도 asset path normalization 단계에서 처리 |
+
 ## Current Gap
 
 - 공식 문서에는 KMSC처럼 `assets/ + manifests/ + chunks`가 한 package boundary에 깔끔하게 보이지 않는다.
 - translation cache가 corpus source 아래에 있어 J 입장에서는 완료 코퍼스와 중간 산출물을 헷갈릴 수 있다.
 - `data/wiki_*`는 sidecar인데 이름만 보면 runtime truth처럼 보일 수 있다.
-- 일부 코드가 root `data/gold_manualbook_ko/playbooks` legacy 경로도 참조한다.
+- root `data/gold_*` 실물은 없지만, old runtime 호환 fallback 계약은 resolver에 남아 있다.
 
 ## Next Actions
 

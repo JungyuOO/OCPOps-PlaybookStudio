@@ -21,6 +21,7 @@ apps/web/node_modules/
 artifacts/
 storage/*
 !storage/.gitignore
+/data/
 /archive/
 /_quarantine/
 corpus/data/bronze/raw_html/
