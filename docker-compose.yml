@@ -132,7 +132,24 @@ services:
     volumes:
       - ./src:/app/src
       - ./corpus:/app/corpus
-    command: ["python", "-m", "play_book_studio.cli", "official-gold-import", "--root-dir", "/app", "--chunks-path", "/app/corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl", "--enrich-runtime-metadata", "--index", "--index-limit", "${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}", "--refresh-qdrant-payloads", "--refresh-limit", "${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}"]
+    command:
+      - bash
+      - -lc
+      - >
+        python -m play_book_studio.cli official-gold-import
+        --root-dir /app
+        --chunks-path /app/corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl
+        --enrich-runtime-metadata
+        --embedding-chunks-path /app/tmp/official_corpus_v014/embedding_chunks.jsonl
+        --text-layers-path /app/tmp/official_corpus_v014/text_layers.jsonl
+        &&
+        python -m play_book_studio.cli official-embedding-qdrant-upsert
+        --root-dir /app
+        --chunks-path /app/corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl
+        --embedding-chunks-path /app/tmp/official_corpus_v014/embedding_chunks.jsonl
+        --collection ${QDRANT_COLLECTION:-openshift_docs}
+        --delete-skipped
+        --sync-db
     restart: "no"
 
   qdrant-seed:

@@ -180,7 +180,7 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
     child_chunk_ids = _json_list(row.get("child_chunk_ids"))
     starter_question_candidates = _string_list(row.get("starter_question_candidates"))
     followup_question_candidates = _string_list(row.get("followup_question_candidates"))
-    chunk_metadata = _json_dict(row.get("chunk_metadata"))
+    chunk_metadata = _qdrant_safe_metadata(_json_dict(row.get("chunk_metadata")))
     parsed_metadata = _json_dict(row.get("parsed_metadata"))
     source_metadata = _json_dict(row.get("source_metadata"))
     title = str(row.get("document_title") or row.get("filename") or "Uploaded document")
@@ -222,7 +222,9 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
         or f"/uploads/documents/{document_source_id}/chunks/{chunk_id}"
     )
     learning_metadata = _learning_metadata(chunk_metadata, parsed_metadata, source_metadata)
+    payload_text = _payload_text_from_row(row)
     legacy_payload = {
+        "payload_version": QDRANT_PAYLOAD_VERSION,
         "chunk_id": chunk_id,
         "book_slug": book_slug,
         "chapter": chapter,
@@ -231,7 +233,7 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "anchor": str(chunk_metadata.get("anchor") or row.get("source_anchor") or row.get("chunk_key") or chunk_id),
         "source_url": source_url,
         "viewer_path": viewer_path,
-        "text": str(row.get("embedding_text") or row.get("markdown") or ""),
+        "text": payload_text,
         "markdown": str(row.get("markdown") or ""),
         "filename": filename,
         "document_format": document_format,
@@ -325,7 +327,7 @@ def _search_json_payload_from_legacy(payload: dict[str, Any], *, row: dict[str, 
         or payload.get("text")
         or ""
     )
-    embedding_text = str(row.get("embedding_text") or payload.get("text") or "")
+    embedding_text = _payload_text_from_row(row) or str(payload.get("text") or "")
     commands = _string_list(search_signals.get("commands")) or _string_list(payload.get("cli_commands"))
     objects = _string_list(search_signals.get("objects")) or _string_list(payload.get("k8s_objects"))
     operators = _string_list(search_signals.get("operators")) or _string_list(payload.get("operator_names"))
@@ -802,6 +804,12 @@ def _json_list(value: Any) -> list[Any]:
     return []
 
 
+def _payload_text_from_row(row: dict[str, Any]) -> str:
+    if "embedding_text" in row and row.get("embedding_text") is not None:
+        return str(row.get("embedding_text") or "")
+    return str(row.get("markdown") or "")
+
+
 def _json_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -812,6 +820,17 @@ def _json_dict(value: Any) -> dict[str, Any]:
             return {}
         return loaded if isinstance(loaded, dict) else {}
     return {}
+
+
+def _qdrant_safe_metadata(value: dict[str, Any]) -> dict[str, Any]:
+    metadata = dict(value or {})
+    metadata.pop("raw_text", None)
+    text_layers = metadata.get("text_layers")
+    if isinstance(text_layers, dict):
+        safe_layers = dict(text_layers)
+        safe_layers.pop("raw_text", None)
+        metadata["text_layers"] = safe_layers
+    return metadata
 
 
 def _string_list(value: Any) -> list[str]:
