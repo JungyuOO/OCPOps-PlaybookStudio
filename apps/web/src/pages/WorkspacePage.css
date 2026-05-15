@@ -2949,6 +2949,104 @@
   background: rgba(0, 209, 255, 0.12);
 }
 
+.chat-feedback-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.chat-feedback-toggle,
+.chat-feedback-controls button {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.46);
+  color: rgba(226, 232, 240, 0.9);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.chat-feedback-toggle:hover,
+.chat-feedback-controls button:hover {
+  border-color: rgba(34, 211, 238, 0.55);
+  color: #e0faff;
+}
+
+.chat-feedback-controls button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.chat-feedback-status {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chat-feedback-status--saved {
+  color: #34d399;
+}
+
+.chat-feedback-status--error {
+  color: #fca5a5;
+}
+
+.chat-feedback-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.chat-feedback-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.chat-feedback-controls select,
+.chat-feedback-panel textarea {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.48);
+  color: rgba(226, 232, 240, 0.95);
+  font: inherit;
+}
+
+.chat-feedback-controls select {
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.chat-feedback-panel textarea {
+  resize: vertical;
+  padding: 9px 10px;
+  line-height: 1.45;
+}
+
+[data-theme='light'] .chat-feedback-toggle,
+[data-theme='light'] .chat-feedback-controls button {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #334155;
+}
+
+[data-theme='light'] .chat-feedback-panel {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+[data-theme='light'] .chat-feedback-controls select,
+[data-theme='light'] .chat-feedback-panel textarea {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #0f172a;
+}
 
 .chat-input-wrapper {
   padding: 24px 0;

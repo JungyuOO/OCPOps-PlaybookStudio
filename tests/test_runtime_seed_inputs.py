@@ -7,6 +7,11 @@ from types import SimpleNamespace
 import play_book_studio.http.presenters_runtime as presenters_runtime
 import play_book_studio.http.runtime_report as runtime_report
 from play_book_studio.config.packs import GLOBAL_SOURCE_CATALOG_NAME
+from play_book_studio.config.corpus_paths import (
+    resolve_wiki_assets_dir,
+    resolve_wiki_relations_dir,
+    resolve_wiki_runtime_books_path,
+)
 from play_book_studio.config.settings import load_settings
 from play_book_studio.runtime_truth_freeze import runtime_truth_paths
 
@@ -145,3 +150,35 @@ def test_seed_manifest_defaults_use_consolidated_corpus_paths() -> None:
     assert paths.source_first_manifest_path == (
         root / "corpus" / "manifests" / "official" / "ocp420_source_first_full_rebuild_manifest.json"
     )
+
+
+def test_wiki_runtime_books_resolver_prefers_corpus_sidecar_with_legacy_fallback() -> None:
+    root = _workspace("wiki_runtime_resolver")
+    legacy_dir = root / "data" / "wiki_runtime_books"
+    legacy_dir.mkdir(parents=True)
+
+    assert resolve_wiki_runtime_books_path(root, "active_manifest.json") == legacy_dir / "active_manifest.json"
+
+    corpus_dir = root / "corpus" / "data" / "wiki_runtime_books"
+    corpus_dir.mkdir(parents=True)
+
+    assert resolve_wiki_runtime_books_path(root, "active_manifest.json") == corpus_dir / "active_manifest.json"
+
+
+def test_wiki_sidecar_resolvers_prefer_corpus_dirs_with_legacy_fallback() -> None:
+    root = _workspace("wiki_sidecar_resolvers")
+    legacy_assets = root / "data" / "wiki_assets"
+    legacy_relations = root / "data" / "wiki_relations"
+    legacy_assets.mkdir(parents=True)
+    legacy_relations.mkdir(parents=True)
+
+    assert resolve_wiki_assets_dir(root) == legacy_assets
+    assert resolve_wiki_relations_dir(root) == legacy_relations
+
+    corpus_assets = root / "corpus" / "data" / "wiki_assets"
+    corpus_relations = root / "corpus" / "data" / "wiki_relations"
+    corpus_assets.mkdir(parents=True)
+    corpus_relations.mkdir(parents=True)
+
+    assert resolve_wiki_assets_dir(root) == corpus_assets
+    assert resolve_wiki_relations_dir(root) == corpus_relations

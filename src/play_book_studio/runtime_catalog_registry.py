@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import resolve_wiki_runtime_books_path
 from play_book_studio.config.settings import Settings, load_settings
 from play_book_studio.config.validation import read_jsonl
 from play_book_studio.source_provenance import source_provenance_payload
@@ -38,7 +39,7 @@ def _docs_viewer_path(settings: Settings, slug: str) -> str:
 
 
 def _active_manifest_path(root_dir: Path) -> Path:
-    return root_dir / "data" / "wiki_runtime_books" / "active_manifest.json"
+    return resolve_wiki_runtime_books_path(root_dir, "active_manifest.json")
 
 
 def _is_customer_or_private_payload(payload: dict[str, Any], *, source_metadata: dict[str, Any] | None = None) -> bool:

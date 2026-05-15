@@ -84,6 +84,9 @@ class RetrievalHit:
     trust_score: float = 1.0
     parsed_artifact_id: str = ""
     semantic_role: str = "unknown"
+    topic: str = ""
+    metadata_confidence: str = ""
+    answerable_questions: tuple[str, ...] = field(default_factory=tuple)
     block_kinds: tuple[str, ...] = field(default_factory=tuple)
     cli_commands: tuple[str, ...] = field(default_factory=tuple)
     error_strings: tuple[str, ...] = field(default_factory=tuple)

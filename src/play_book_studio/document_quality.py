@@ -167,6 +167,17 @@ def build_document_quality_snapshot(
         evidence=[f"topology_status={topology_status}"],
     )
 
+    answerability = _answerability_status(chunks)
+    _append_check(
+        checks,
+        "answerability_metadata",
+        "질문 응답 메타",
+        "pass" if answerability["status"] == "pass" else "fail",
+        "repair_required",
+        answerability["summary"],
+        evidence=answerability["evidence"],
+    )
+
     failed = [check for check in checks if check["status"] == "fail"]
     warnings = [check for check in checks if check["status"] == "warn"]
     if not chunks:
@@ -191,6 +202,7 @@ def build_document_quality_snapshot(
             "chunk_count": len(chunks),
             "asset_count": len(assets),
             "topology_status": topology_status,
+            "answerability": answerability,
             "gold_build_status": str((gold_build_run or {}).get("status") or ""),
         },
     }
@@ -371,6 +383,56 @@ def _topology_status(topology: dict[str, Any] | None) -> str:
     if str(topology.get("status") or "").lower() in {"deferred", "failed"}:
         return str(topology.get("status")).lower()
     return state or storage or "missing"
+
+
+def _answerability_status(chunks: list[dict[str, Any]]) -> dict[str, Any]:
+    if not chunks:
+        return {
+            "status": "fail",
+            "summary": "chunk가 없어 질문 응답 가능성을 평가할 수 없습니다.",
+            "evidence": ["chunk_count=0"],
+        }
+    low_confidence = 0
+    answerable = 0
+    role_known = 0
+    evidence: list[str] = []
+    for chunk in chunks:
+        metadata = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
+        confidence = str(metadata.get("metadata_confidence") or "").strip().lower()
+        role = str(metadata.get("semantic_role") or "").strip().lower()
+        questions = metadata.get("answerable_questions") if isinstance(metadata.get("answerable_questions"), list) else []
+        if confidence in {"", "low"}:
+            low_confidence += 1
+        if role and role != "unknown":
+            role_known += 1
+        if any(str(item or "").strip() for item in questions):
+            answerable += 1
+    total = len(chunks)
+    low_ratio = low_confidence / max(total, 1)
+    answerable_ratio = answerable / max(total, 1)
+    role_ratio = role_known / max(total, 1)
+    evidence.extend(
+        [
+            f"chunks={total}",
+            f"low_confidence={low_confidence}",
+            f"answerable_questions={answerable}",
+            f"known_roles={role_known}",
+        ]
+    )
+    if low_ratio > 0.5 or answerable_ratio < 0.5 or role_ratio < 0.6:
+        return {
+            "status": "fail",
+            "summary": (
+                "질문 응답용 메타가 부족합니다. "
+                f"answerable {answerable}/{total}, role {role_known}/{total}, low confidence {low_confidence}/{total}"
+            ),
+            "evidence": evidence,
+        }
+    return {
+        "status": "pass",
+        "summary": f"질문 응답용 메타 확보: answerable {answerable}/{total}, role {role_known}/{total}",
+        "evidence": evidence,
+    }
 
 
 def _quality_blocking_message(quality: dict[str, Any]) -> str:

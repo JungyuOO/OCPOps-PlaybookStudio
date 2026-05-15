@@ -1647,6 +1647,51 @@ export interface DbChatMessagesResponse {
   messages: DbChatMessage[];
 }
 
+export type ChatFeedbackIssueType =
+  | 'wrong_answer'
+  | 'missing_grounding'
+  | 'wrong_citation'
+  | 'hallucination'
+  | 'version_mismatch'
+  | 'incomplete_answer';
+
+export interface ChatFeedbackSaveResponse {
+  saved: boolean;
+  feedback_id: string;
+  status: string;
+  gap_type: string;
+  created_at: string;
+}
+
+export interface ChatFeedbackIssue {
+  feedback_id: string;
+  status: string;
+  issue_type: string;
+  severity: string;
+  gap_type: string;
+  user_query: string;
+  assistant_answer: string;
+  user_comment: string;
+  expected_answer: string;
+  cited_chunk_ids: string[];
+  cited_asset_ids: string[];
+  citations: Record<string, unknown>[];
+  retrieval_trace: Record<string, unknown>;
+  pipeline_trace: Record<string, unknown>;
+  qwen_draft: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatFeedbackQueueResponse {
+  schema: string;
+  ready: boolean;
+  count: number;
+  issues: ChatFeedbackIssue[];
+  reason?: string;
+}
+
 let runtimeIdentityUser = '';
 
 export function setRuntimeIdentityUser(user: string | null | undefined): void {
@@ -2426,6 +2471,52 @@ export async function loadDbChatMessages(sessionId: string): Promise<DbChatMessa
   return requestJson<DbChatMessagesResponse>(
     `/api/chat-history/messages?client_session_id=${encodeURIComponent(sessionId)}`,
   );
+}
+
+export async function saveChatFeedback(payload: {
+  sessionId: string;
+  userQuery: string;
+  assistantAnswer: string;
+  issueType: ChatFeedbackIssueType;
+  userComment?: string;
+  expectedAnswer?: string;
+  citations?: Record<string, unknown>[];
+  retrievalTrace?: Record<string, unknown>;
+  pipelineTrace?: Record<string, unknown>;
+  responseKind?: string;
+  routeKind?: string;
+  activeRepositoryId?: string;
+  activeDocumentId?: string;
+}): Promise<ChatFeedbackSaveResponse> {
+  return requestJson<ChatFeedbackSaveResponse>('/api/chat/feedback', {
+    method: 'POST',
+    body: JSON.stringify({
+      session_id: payload.sessionId,
+      user_query: payload.userQuery,
+      assistant_answer: payload.assistantAnswer,
+      issue_type: payload.issueType,
+      user_comment: payload.userComment ?? '',
+      expected_answer: payload.expectedAnswer ?? '',
+      citations: payload.citations ?? [],
+      retrieval_trace: payload.retrievalTrace ?? {},
+      pipeline_trace: payload.pipelineTrace ?? {},
+      response_kind: payload.responseKind ?? '',
+      route_kind: payload.routeKind ?? '',
+      active_repository_id: payload.activeRepositoryId ?? '',
+      active_document_id: payload.activeDocumentId ?? '',
+    }),
+  });
+}
+
+export async function loadChatFeedbackQueue(limit = 50): Promise<ChatFeedbackQueueResponse> {
+  return requestJson<ChatFeedbackQueueResponse>(`/api/chat/feedback-queue?limit=${encodeURIComponent(String(limit))}`);
+}
+
+export async function draftChatFeedbackRemediation(feedbackId: string): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>(`/api/chat/feedback/${encodeURIComponent(feedbackId)}/draft-remediation`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
 }
 
 export async function archiveDbChatSession(sessionId: string): Promise<void> {

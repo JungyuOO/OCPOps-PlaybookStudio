@@ -14,6 +14,11 @@ def _document(markdown: str, *, chunks: list[dict] | None = None) -> dict:
                 "markdown": markdown,
                 "token_count": max(1, len(markdown.split())),
                 "asset_ids": ["asset-1"],
+                "metadata": {
+                    "metadata_confidence": "high",
+                    "semantic_role": "command",
+                    "answerable_questions": ["oc get pods 결과는 어떻게 확인하나요?"],
+                },
             }
         ],
         "assets": [

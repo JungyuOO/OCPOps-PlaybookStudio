@@ -10,6 +10,11 @@ from typing import Any
 
 import yaml
 
+from play_book_studio.config.corpus_paths import (
+    resolve_wiki_relations_dir,
+    resolve_wiki_runtime_books_dir,
+    resolve_wiki_runtime_books_path,
+)
 from play_book_studio.config.settings import load_settings
 from play_book_studio.db.official_documents import load_official_manifest_entries
 from play_book_studio.runtime_catalog_registry import official_runtime_books
@@ -750,7 +755,7 @@ def _build_approved_wiki_runtime_book_bucket(
     approved_manifest_entries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     settings = load_settings(root)
-    manifest_path = root / "data" / "wiki_runtime_books" / "active_manifest.json"
+    manifest_path = resolve_wiki_runtime_books_path(root, "active_manifest.json")
     blocked_slugs = _translation_runtime_blocked_slugs(translation_lane_report)
     books: list[dict[str, Any]] = []
     runtime_paths: list[Path] = []
@@ -1067,9 +1072,9 @@ def _build_approved_wiki_runtime_book_bucket(
         )
     if runtime_paths:
         parents = {str(path.parent) for path in runtime_paths}
-        selected_dir = sorted(parents)[0] if len(parents) == 1 else str((root / "data" / "wiki_runtime_books").resolve())
+        selected_dir = sorted(parents)[0] if len(parents) == 1 else str(resolve_wiki_runtime_books_dir(root).resolve())
     else:
-        selected_dir = str((root / "data" / "wiki_runtime_books").resolve())
+        selected_dir = str(resolve_wiki_runtime_books_dir(root).resolve())
     return {
         "selected_dir": selected_dir,
         "books": books,
@@ -1083,7 +1088,8 @@ def _build_approved_wiki_runtime_book_bucket(
 
 
 def _build_navigation_backlog_bucket(root: Path) -> dict[str, Any]:
-    asset_path = root / "data" / "wiki_relations" / "navigation_backlog.json"
+    relations_dir = resolve_wiki_relations_dir(root)
+    asset_path = relations_dir / "navigation_backlog.json"
     asset = _safe_read_json(asset_path)
     entries = asset.get("entries") if isinstance(asset.get("entries"), list) else []
     books: list[dict[str, Any]] = []
@@ -1110,7 +1116,7 @@ def _build_navigation_backlog_bucket(root: Path) -> dict[str, Any]:
             }
         )
     return {
-        "selected_dir": str((root / "data" / "wiki_relations").resolve()),
+        "selected_dir": str(relations_dir.resolve()),
         "books": books,
         "manifest_path": str(asset_path.resolve()),
     }

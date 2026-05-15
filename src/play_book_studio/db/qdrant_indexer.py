@@ -268,6 +268,9 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
             or ""
         ),
         "semantic_role": str(chunk_metadata.get("semantic_role") or "uploaded_document"),
+        "topic": str(chunk_metadata.get("topic") or source_metadata.get("topic") or ""),
+        "metadata_confidence": str(chunk_metadata.get("metadata_confidence") or source_metadata.get("metadata_confidence") or ""),
+        "answerable_questions": _string_list(chunk_metadata.get("answerable_questions")),
         "block_kinds": _string_list(chunk_metadata.get("block_kinds")) or [str(row.get("chunk_type") or "document")],
         "section_path": section_path,
         "section_number": str(row.get("section_number") or ""),

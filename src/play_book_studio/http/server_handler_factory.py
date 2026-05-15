@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
-from play_book_studio.config.corpus_paths import CORPUS_DATA_DIR
+from play_book_studio.config.corpus_paths import resolve_wiki_assets_dir
 from play_book_studio.http.server_chat import (
     handle_chat as _handle_chat_request,
     handle_chat_stream as _handle_chat_stream_request,
@@ -47,8 +47,14 @@ from play_book_studio.http.chat_history_api import (
     handle_chat_history_messages as _handle_chat_history_messages_request,
     handle_chat_history_sessions as _handle_chat_history_sessions_request,
 )
+from play_book_studio.http.chat_feedback_api import (
+    handle_chat_feedback_draft as _handle_chat_feedback_draft_request,
+    handle_chat_feedback_queue as _handle_chat_feedback_queue_request,
+    handle_chat_feedback_save as _handle_chat_feedback_save_request,
+)
 from play_book_studio.http.chat_quality_api import (
     handle_chat_quality_query_insights as _handle_chat_quality_query_insights_request,
+    handle_corpus_handoff_report as _handle_corpus_handoff_report_request,
 )
 from play_book_studio.http.learning_api import (
     handle_learning_command_results as _handle_learning_command_results_request,
@@ -184,7 +190,7 @@ def _build_handler(
                     return
             if request_path.startswith("/playbooks/wiki-assets/"):
                 relative = request_path.removeprefix("/playbooks/wiki-assets/").strip("/")
-                assets_root = (root_dir / CORPUS_DATA_DIR / "wiki_assets").resolve()
+                assets_root = resolve_wiki_assets_dir(root_dir).resolve()
                 asset_path = (assets_root / relative).resolve()
                 if asset_path.is_file() and (asset_path == assets_root or assets_root in asset_path.parents):
                     content_type = mimetypes.guess_type(str(asset_path))[0] or "application/octet-stream"
@@ -209,6 +215,14 @@ def _build_handler(
             if request_path == "/api/chat-quality/query-insights":
                 _handle_chat_quality_query_insights_request(self, parsed_request.query, root_dir=root_dir)
                 return
+            if request_path == "/api/corpus/handoff-report":
+                _handle_corpus_handoff_report_request(
+                    self,
+                    parsed_request.query,
+                    root_dir=root_dir,
+                    owner_user_id=self._session_owner().owner_hash,
+                )
+                return
             if request_path == "/api/learning-paths":
                 _handle_learning_paths_request(self, parsed_request.query, root_dir=root_dir)
                 return
@@ -232,6 +246,9 @@ def _build_handler(
                 return
             if request_path == "/api/chat-history/messages":
                 self._handle_chat_history_messages(parsed_request.query)
+                return
+            if request_path == "/api/chat/feedback-queue":
+                self._handle_chat_feedback_queue(parsed_request.query)
                 return
             if request_path == "/api/debug/session":
                 self._handle_debug_session(parsed_request.query)
@@ -336,6 +353,13 @@ def _build_handler(
                 return
             if parsed_request.path == "/api/chat-history/archive":
                 self._handle_chat_history_archive(payload)
+                return
+            if parsed_request.path == "/api/chat/feedback":
+                self._handle_chat_feedback_save(payload)
+                return
+            if parsed_request.path.startswith("/api/chat/feedback/") and parsed_request.path.endswith("/draft-remediation"):
+                feedback_id = parsed_request.path.removeprefix("/api/chat/feedback/").removesuffix("/draft-remediation").strip("/")
+                self._handle_chat_feedback_draft(feedback_id)
                 return
             if parsed_request.path == "/api/sessions/delete":
                 self._handle_session_delete(payload)
@@ -643,6 +667,27 @@ def _build_handler(
             _handle_chat_history_archive_request(
                 self,
                 payload,
+                root_dir=root_dir,
+                owner_user_id=self._session_owner().owner_hash,
+            )
+        def _handle_chat_feedback_save(self, payload: dict[str, Any]) -> None:
+            _handle_chat_feedback_save_request(
+                self,
+                payload,
+                root_dir=root_dir,
+                owner_user_id=self._session_owner().owner_hash,
+            )
+        def _handle_chat_feedback_queue(self, query: str) -> None:
+            _handle_chat_feedback_queue_request(
+                self,
+                query,
+                root_dir=root_dir,
+                owner_user_id=self._session_owner().owner_hash,
+            )
+        def _handle_chat_feedback_draft(self, feedback_id: str) -> None:
+            _handle_chat_feedback_draft_request(
+                self,
+                feedback_id,
                 root_dir=root_dir,
                 owner_user_id=self._session_owner().owner_hash,
             )

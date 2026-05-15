@@ -234,6 +234,17 @@ def build_parser() -> argparse.ArgumentParser:
     db_qdrant_refresh_parser.add_argument("--limit", type=int, default=1000)
     db_qdrant_refresh_parser.add_argument("--batch-size", type=int, default=256)
 
+    metadata_spine_parser = subparsers.add_parser(
+        "metadata-spine-backfill",
+        help="Backfill deterministic answer-ready metadata onto existing document chunks",
+    )
+    metadata_spine_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    metadata_spine_parser.add_argument("--database-url", default="")
+    metadata_spine_parser.add_argument("--source-scope", default="")
+    metadata_spine_parser.add_argument("--limit", type=int, default=0)
+    metadata_spine_parser.add_argument("--dry-run", action="store_true")
+    metadata_spine_parser.add_argument("--force", action="store_true")
+
     db_corpus_status_parser = subparsers.add_parser(
         "db-corpus-status",
         help="Report PostgreSQL corpus and qdrant_index_entries readiness",
@@ -980,6 +991,30 @@ def _run_db_qdrant_refresh_payloads(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_metadata_spine_backfill(args: argparse.Namespace) -> int:
+    from play_book_studio.db.metadata_spine_backfill import backfill_metadata_spine
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        result = backfill_metadata_spine(
+            connection,
+            source_scope=args.source_scope,
+            limit=args.limit,
+            dry_run=bool(args.dry_run),
+            force=bool(args.force),
+        )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _run_db_corpus_status(args: argparse.Namespace) -> int:
     from play_book_studio.db.corpus_status import build_corpus_status
 
@@ -1417,6 +1452,8 @@ def main() -> int:
         return _run_db_qdrant_backfill(args)
     if args.command == "db-qdrant-refresh-payloads":
         return _run_db_qdrant_refresh_payloads(args)
+    if args.command == "metadata-spine-backfill":
+        return _run_metadata_spine_backfill(args)
     if args.command == "db-corpus-status":
         return _run_db_corpus_status(args)
     if args.command == "course-runtime-status":

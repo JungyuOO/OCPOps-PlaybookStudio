@@ -6,6 +6,8 @@ import time
 from functools import lru_cache
 from pathlib import Path
 
+from play_book_studio.config.corpus_paths import resolve_wiki_runtime_books_path
+
 from .intake_overlay import has_active_customer_pack_selection
 from .models import RetrievalHit, RetrievalResult, SessionContext
 from .retriever_plan import build_retrieval_plan
@@ -126,7 +128,7 @@ def _active_runtime_slug_set(manifest_path: str) -> frozenset[str]:
 
 
 def _active_runtime_manifest_path(retriever) -> Path:
-    return retriever.settings.root_dir / "data" / "wiki_runtime_books" / "active_manifest.json"
+    return resolve_wiki_runtime_books_path(retriever.settings.root_dir, "active_manifest.json")
 
 
 def _is_latest_only_hit(hit: RetrievalHit, *, active_slugs: frozenset[str]) -> bool:

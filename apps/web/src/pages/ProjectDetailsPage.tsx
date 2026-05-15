@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Book, ShieldCheck, Layers, MessageSquare, PlaySquare } from 'lucide-react';
 import gsap from 'gsap';
 import { buildSharedLandingHref } from '../routing/routes';
+import { useGlobalTheme } from '../lib/globalTheme';
 import './ProjectDetailsPage.css';
 
 export default function ProjectDetailsPage() {
   const containerRef = useRef<HTMLDivElement>(null);
+  useGlobalTheme();
 
   useEffect(() => {
     // Basic entrance animation for the page

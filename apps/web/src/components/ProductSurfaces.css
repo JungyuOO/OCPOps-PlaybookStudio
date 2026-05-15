@@ -6,6 +6,18 @@
   z-index: 10;
 }
 
+[data-theme='light'] .surfaces-container {
+  background: var(--landing-surfaces-bg, var(--bg-color));
+}
+
+[data-theme='light'] .surfaces-header h2 {
+  color: var(--landing-ink, #102235);
+}
+
+[data-theme='light'] .surfaces-header p {
+  color: var(--landing-ink-muted, #426073);
+}
+
 .surfaces-header {
   text-align: center;
   margin-bottom: 8rem;
@@ -76,4 +88,29 @@
   pointer-events: none;
   z-index: 1;
   filter: blur(40px);
+}
+
+[data-theme='light'] .surface-card {
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.88), rgba(235, 250, 249, 0.78)),
+    #ffffff;
+  border-color: var(--landing-border, rgba(19, 58, 82, 0.14));
+  color: var(--landing-ink, #102235);
+  box-shadow: var(--landing-shadow-soft, 0 18px 44px rgba(23, 55, 78, 0.11));
+}
+
+[data-theme='light'] .surface-card:hover {
+  border-color: var(--landing-border-strong, rgba(0, 122, 153, 0.28));
+}
+
+[data-theme='light'] .surface-card h3 {
+  color: var(--landing-ink, #102235);
+}
+
+[data-theme='light'] .surface-card p {
+  color: var(--landing-ink-muted, #426073);
+}
+
+[data-theme='light'] .glow-orb {
+  background: radial-gradient(circle closest-side, rgba(0, 122, 153, 0.16), transparent);
 }

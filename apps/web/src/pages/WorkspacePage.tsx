@@ -81,10 +81,12 @@ import {
   normalizeCustomerPackDraft,
   removeWikiOverlay,
   saveRepositorySourceRequest,
+  saveChatFeedback,
   saveWikiOverlay,
   sendChatStream,
   setRuntimeIdentityUser,
   toRuntimeUrl,
+  type ChatFeedbackIssueType,
   type UploadIngestStreamEvent,
   uploadDocumentIngestionStream,
 } from '../lib/runtimeApi';
@@ -158,6 +160,33 @@ const WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY = 'workspace.activeDocumentTit
 const WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY = 'workspace.activeCategoryKey';
 const WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY = 'workspace.activeCategoryLabel';
 const WORKSPACE_INGESTION_STATUS_STORAGE_KEY = 'workspace.ingestionStatus';
+
+const CHAT_FEEDBACK_TYPES: Array<{ value: ChatFeedbackIssueType; label: string }> = [
+  { value: 'wrong_answer', label: '잘못된 답변' },
+  { value: 'missing_grounding', label: '근거 없음' },
+  { value: 'wrong_citation', label: '엉뚱한 문서 참조' },
+  { value: 'hallucination', label: '할루시네이션' },
+  { value: 'version_mismatch', label: '버전/환경 불일치' },
+  { value: 'incomplete_answer', label: '답변 부족' },
+];
+
+interface ChatFeedbackDraft {
+  issueType: ChatFeedbackIssueType;
+  comment: string;
+  expectedAnswer: string;
+  status: 'idle' | 'saving' | 'saved' | 'error';
+  message: string;
+}
+
+function defaultChatFeedbackDraft(): ChatFeedbackDraft {
+  return {
+    issueType: 'wrong_answer',
+    comment: '',
+    expectedAnswer: '',
+    status: 'idle',
+    message: '',
+  };
+}
 
 function workspaceMetadataRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -1255,6 +1284,8 @@ export default function WorkspacePage() {
   const [documentRepositories, setDocumentRepositories] = useState<DocumentRepository[]>([]);
   const [isBootstrapLoading, setIsBootstrapLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [feedbackOpenByMessage, setFeedbackOpenByMessage] = useState<Record<string, boolean>>({});
+  const [feedbackDraftByMessage, setFeedbackDraftByMessage] = useState<Record<string, ChatFeedbackDraft>>({});
   const [query, setQuery] = useState('');
   const [sessionId, setSessionId] = useState(() => makeId('ID'));
   const [testMode, setTestMode] = useState(false);
@@ -2074,6 +2105,8 @@ export default function WorkspacePage() {
             citations,
             responseKind: typeof metadata.response_kind === 'string' ? metadata.response_kind : undefined,
             rewrittenQuery: typeof metadata.rewritten_query === 'string' ? metadata.rewritten_query : undefined,
+            retrievalTrace: workspaceMetadataRecord(metadata.retrieval_trace),
+            pipelineTrace: workspaceMetadataRecord(metadata.pipeline_trace),
           };
         }));
         return;
@@ -3525,6 +3558,7 @@ export default function WorkspacePage() {
           routeKind: messageRouteKind,
           learningIndex: resolvedLearningIndex,
           rewrittenQuery: response.rewritten_query,
+          sourceQuery: trimmed,
           retrievalTrace: response.retrieval_trace,
           pipelineTrace: response.pipeline_trace,
           traceEvents: response.pipeline_trace?.events ?? (testMode ? activeTestTrace?.events ?? [] : []),
@@ -3610,6 +3644,69 @@ export default function WorkspacePage() {
       console.warn('[source-request] save failed:', error);
     }
     navigate(`/playbook-library?scope=official&lane=tools&q=${encodeURIComponent(repositoryQuery)}#book-factory`);
+  }
+
+  function feedbackDraftForMessage(messageId: string): ChatFeedbackDraft {
+    return feedbackDraftByMessage[messageId] ?? defaultChatFeedbackDraft();
+  }
+
+  function updateFeedbackDraft(messageId: string, patch: Partial<ChatFeedbackDraft>): void {
+    setFeedbackDraftByMessage((current) => ({
+      ...current,
+      [messageId]: {
+        ...(current[messageId] ?? defaultChatFeedbackDraft()),
+        ...patch,
+      },
+    }));
+  }
+
+  function userQueryForAssistant(message: Message): string {
+    if (message.sourceQuery?.trim()) {
+      return message.sourceQuery.trim();
+    }
+    const index = messages.findIndex((item) => item.id === message.id);
+    for (let i = index - 1; i >= 0; i -= 1) {
+      if (messages[i]?.role === 'user' && messages[i]?.content.trim()) {
+        return messages[i].content.trim();
+      }
+    }
+    return '';
+  }
+
+  async function handleSaveChatFeedback(message: Message): Promise<void> {
+    const draft = feedbackDraftForMessage(message.id);
+    const userQuery = userQueryForAssistant(message);
+    if (!userQuery) {
+      updateFeedbackDraft(message.id, { status: 'error', message: '연결된 질문을 찾지 못했습니다.' });
+      return;
+    }
+    updateFeedbackDraft(message.id, { status: 'saving', message: '문제 저장 중' });
+    try {
+      const response = await saveChatFeedback({
+        sessionId,
+        userQuery,
+        assistantAnswer: message.content,
+        issueType: draft.issueType,
+        userComment: draft.comment,
+        expectedAnswer: draft.expectedAnswer,
+        citations: (message.citations ?? []) as unknown as Record<string, unknown>[],
+        retrievalTrace: message.retrievalTrace,
+        pipelineTrace: message.pipelineTrace,
+        responseKind: message.responseKind,
+        routeKind: message.routeKind,
+        activeRepositoryId: activeRepository?.repository_id,
+        activeDocumentId,
+      });
+      updateFeedbackDraft(message.id, {
+        status: 'saved',
+        message: `저장됨 · ${response.gap_type || 'unclassified'}`,
+      });
+    } catch (error) {
+      updateFeedbackDraft(message.id, {
+        status: 'error',
+        message: error instanceof Error ? error.message : '문제 저장 실패',
+      });
+    }
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
@@ -4633,6 +4730,69 @@ export default function WorkspacePage() {
                                 return Boolean(target && overlayExists('check', target.ref));
                               }}
                             />
+                            <div className="chat-feedback-strip">
+                              <button
+                                type="button"
+                                className="chat-feedback-toggle"
+                                onClick={() => {
+                                  setFeedbackOpenByMessage((current) => ({
+                                    ...current,
+                                    [message.id]: !current[message.id],
+                                  }));
+                                }}
+                              >
+                                문제 저장
+                              </button>
+                              {feedbackDraftForMessage(message.id).status === 'saved' && (
+                                <span className="chat-feedback-status chat-feedback-status--saved">
+                                  {feedbackDraftForMessage(message.id).message}
+                                </span>
+                              )}
+                              {feedbackDraftForMessage(message.id).status === 'error' && (
+                                <span className="chat-feedback-status chat-feedback-status--error">
+                                  {feedbackDraftForMessage(message.id).message}
+                                </span>
+                              )}
+                            </div>
+                            {feedbackOpenByMessage[message.id] && (
+                              <div className="chat-feedback-panel">
+                                <div className="chat-feedback-controls">
+                                  <select
+                                    value={feedbackDraftForMessage(message.id).issueType}
+                                    onChange={(event) => {
+                                      updateFeedbackDraft(message.id, { issueType: event.target.value as ChatFeedbackIssueType });
+                                    }}
+                                  >
+                                    {CHAT_FEEDBACK_TYPES.map((item) => (
+                                      <option key={item.value} value={item.value}>{item.label}</option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() => { void handleSaveChatFeedback(message); }}
+                                    disabled={feedbackDraftForMessage(message.id).status === 'saving'}
+                                  >
+                                    {feedbackDraftForMessage(message.id).status === 'saving' ? '저장 중' : '저장'}
+                                  </button>
+                                </div>
+                                <textarea
+                                  value={feedbackDraftForMessage(message.id).comment}
+                                  onChange={(event) => {
+                                    updateFeedbackDraft(message.id, { comment: event.target.value });
+                                  }}
+                                  placeholder="무엇이 틀렸는지 짧게 적어주세요."
+                                  rows={2}
+                                />
+                                <textarea
+                                  value={feedbackDraftForMessage(message.id).expectedAnswer}
+                                  onChange={(event) => {
+                                    updateFeedbackDraft(message.id, { expectedAnswer: event.target.value });
+                                  }}
+                                  placeholder="기대 답변이나 확인해야 할 방향이 있으면 적어주세요."
+                                  rows={2}
+                                />
+                              </div>
+                            )}
                             {(isCourseMode || message.routeKind === 'course') && message.artifacts?.length ? (
                               <CourseChatArtifacts
                                 artifacts={message.artifacts}

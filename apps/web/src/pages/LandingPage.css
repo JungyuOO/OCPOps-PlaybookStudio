@@ -1,3 +1,30 @@
+.app-container {
+  background: var(--bg-color);
+}
+
+[data-theme='light'] .app-container {
+  --landing-ink: #102235;
+  --landing-ink-muted: #426073;
+  --landing-ink-dim: #6a8193;
+  --landing-cyan: #007a99;
+  --landing-purple: #5b2bd6;
+  --landing-teal: #0f9f8f;
+  --landing-border: rgba(19, 58, 82, 0.14);
+  --landing-border-strong: rgba(0, 122, 153, 0.28);
+  --landing-shadow: 0 24px 70px rgba(23, 55, 78, 0.16);
+  --landing-shadow-soft: 0 18px 44px rgba(23, 55, 78, 0.11);
+  --landing-surface: rgba(255, 255, 255, 0.72);
+  --landing-surface-strong: rgba(255, 255, 255, 0.9);
+  --landing-hero-bg:
+    linear-gradient(140deg, rgba(232, 250, 250, 0.95) 0%, rgba(246, 249, 255, 0.9) 44%, rgba(238, 242, 255, 0.94) 100%);
+  --landing-pipeline-bg:
+    linear-gradient(180deg, #eaf8f7 0%, #f4f7ff 52%, #ecf6fb 100%);
+  --landing-surfaces-bg:
+    linear-gradient(180deg, #f5f8ff 0%, #e9f6f4 100%);
+  --landing-footer-bg:
+    linear-gradient(180deg, #eaf6fb 0%, #f8fafc 100%);
+}
+
 .landing-theme-controls {
   position: fixed;
   top: 24px;
@@ -27,14 +54,14 @@
 }
 
 [data-theme='light'] .landing-theme-toggle-btn {
-  border-color: rgba(15, 23, 42, 0.12);
-  background: rgba(255, 255, 255, 0.86);
-  color: #334155;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  border-color: var(--landing-border);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--landing-ink);
+  box-shadow: 0 12px 30px rgba(23, 55, 78, 0.13);
 }
 
 [data-theme='light'] .landing-theme-toggle-btn:hover {
-  border-color: rgba(0, 122, 153, 0.26);
-  background: rgba(231, 248, 252, 0.94);
-  color: var(--accent-cyan);
+  border-color: var(--landing-border-strong);
+  background: rgba(228, 248, 250, 0.94);
+  color: var(--landing-cyan);
 }

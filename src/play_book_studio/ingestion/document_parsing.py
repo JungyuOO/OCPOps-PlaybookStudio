@@ -19,6 +19,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Literal
 
+from .metadata_spine import build_chunk_metadata_spine
+
 
 DocumentFormat = Literal[
     "md",
@@ -383,6 +385,25 @@ def build_document_chunks(
             if section_context and section_context not in stripped_markdown
             else stripped_markdown
         )
+        block_kinds = tuple(dict.fromkeys(block.block_type for block in current if block.block_type))
+        metadata = {
+            "filename": parsed.filename,
+            "document_format": parsed.document_format,
+            "page_start": min(page_numbers) if page_numbers else None,
+            "page_end": max(page_numbers) if page_numbers else None,
+            "chunk_char_count": len(markdown),
+            "block_count": len(current),
+        }
+        metadata.update(
+            build_chunk_metadata_spine(
+                embedding_text,
+                section_path=section_path,
+                filename=parsed.filename,
+                source_scope=str(parsed.metadata.get("source_scope") or "user_upload"),
+                block_kinds=block_kinds,
+                existing_metadata=metadata,
+            )
+        )
         chunks.append(
             DocumentChunk(
                 chunk_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{chunk_key}:{markdown}")),
@@ -397,14 +418,7 @@ def build_document_chunks(
                 toc_path=section_block.toc_path if section_block else (),
                 asset_ids=asset_ids,
                 block_ordinals=block_ordinals,
-                metadata={
-                    "filename": parsed.filename,
-                    "document_format": parsed.document_format,
-                    "page_start": min(page_numbers) if page_numbers else None,
-                    "page_end": max(page_numbers) if page_numbers else None,
-                    "chunk_char_count": len(markdown),
-                    "block_count": len(current),
-                },
+                metadata=metadata,
             )
         )
         ordinal += 1

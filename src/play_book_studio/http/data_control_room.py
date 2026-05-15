@@ -23,6 +23,7 @@ from play_book_studio.http.data_control_room_buckets import (
     _safe_read_json,
 )
 from play_book_studio.config.settings import load_settings
+from play_book_studio.config.corpus_paths import wiki_relations_dir_candidates, wiki_runtime_books_dir_candidates
 from play_book_studio.db.corpus_status import build_corpus_status
 from play_book_studio.db.official_documents import load_official_manifest_entries
 from play_book_studio.intake import CustomerPackDraftStore
@@ -247,8 +248,8 @@ def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, i
         settings.chunks_path,
         settings.customer_pack_books_dir,
         settings.customer_pack_corpus_dir,
-        root / "data" / "wiki_runtime_books",
-        root / "data" / "wiki_relations",
+        *wiki_runtime_books_dir_candidates(root),
+        *wiki_relations_dir_candidates(root),
         root / "data" / "gold_candidate_books" / "full_rebuild_manifest.json",
         root / "PRODUCT_GATE_SCORECARD.yaml",
         root / "reports" / "build_logs" / "product_rehearsal_report.json",

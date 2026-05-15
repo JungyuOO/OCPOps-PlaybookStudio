@@ -22,6 +22,15 @@ KMSC_SOURCES_DIR = CORPUS_SOURCES_DIR / "kmsc"
 OFFICIAL_SOURCES_DIR = CORPUS_SOURCES_DIR / "official"
 OFFICIAL_IMPORTED_GOLD_DIR = OFFICIAL_SOURCES_DIR / "imported-gold"
 
+WIKI_ASSETS_DIR = CORPUS_DATA_DIR / "wiki_assets"
+WIKI_RELATIONS_DIR = CORPUS_DATA_DIR / "wiki_relations"
+WIKI_RUNTIME_BOOKS_DIR = CORPUS_DATA_DIR / "wiki_runtime_books"
+
+LEGACY_ROOT_DATA_DIR = Path("data")
+LEGACY_WIKI_ASSETS_DIR = LEGACY_ROOT_DATA_DIR / "wiki_assets"
+LEGACY_WIKI_RELATIONS_DIR = LEGACY_ROOT_DATA_DIR / "wiki_relations"
+LEGACY_WIKI_RUNTIME_BOOKS_DIR = LEGACY_ROOT_DATA_DIR / "wiki_runtime_books"
+
 COURSE_PBS_DIR = KMSC_SOURCES_DIR / "parsed-preview" / "course_pbs"
 COURSE_PBS_MANIFESTS_DIR = COURSE_PBS_DIR / "manifests"
 COURSE_PBS_ASSETS_DIR = COURSE_PBS_DIR / "assets"
@@ -74,3 +83,77 @@ COURSE_QA_REPORT_PATH = COURSE_PBS_MANIFESTS_DIR / "course_qa_report.json"
 OPS_LEARNING_ANCHOR_AUDIT_PATH = COURSE_PBS_MANIFESTS_DIR / "ops_learning_anchor_audit_v1.json"
 OPS_LEARNING_GUIDES_PATH = COURSE_PBS_MANIFESTS_DIR / "ops_learning_guides_v1.json"
 OPS_LEARNING_CHUNKS_PATH = COURSE_PBS_MANIFESTS_DIR / "ops_learning_chunks_v1.jsonl"
+
+
+def _dedupe_paths(paths: list[Path]) -> tuple[Path, ...]:
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        key = path.resolve()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return tuple(unique)
+
+
+def wiki_runtime_books_dir_candidates(root_dir: Path) -> tuple[Path, ...]:
+    """Return corpus-first wiki runtime sidecar candidates.
+
+    `corpus/data/wiki_runtime_books` is the documented seed/sidecar location.
+    Older viewer/runtime helpers used root-level `data/wiki_runtime_books`; keep
+    it as a compatibility fallback until those generated paths disappear.
+    """
+
+    root = Path(root_dir)
+    return _dedupe_paths(
+        [
+            root / WIKI_RUNTIME_BOOKS_DIR,
+            root / LEGACY_WIKI_RUNTIME_BOOKS_DIR,
+        ]
+    )
+
+
+def resolve_wiki_runtime_books_dir(root_dir: Path) -> Path:
+    for candidate in wiki_runtime_books_dir_candidates(root_dir):
+        if candidate.exists():
+            return candidate
+    return Path(root_dir) / WIKI_RUNTIME_BOOKS_DIR
+
+
+def resolve_wiki_runtime_books_path(root_dir: Path, *parts: str | Path) -> Path:
+    return resolve_wiki_runtime_books_dir(root_dir).joinpath(*parts)
+
+
+def wiki_relations_dir_candidates(root_dir: Path) -> tuple[Path, ...]:
+    root = Path(root_dir)
+    return _dedupe_paths(
+        [
+            root / WIKI_RELATIONS_DIR,
+            root / LEGACY_WIKI_RELATIONS_DIR,
+        ]
+    )
+
+
+def resolve_wiki_relations_dir(root_dir: Path) -> Path:
+    for candidate in wiki_relations_dir_candidates(root_dir):
+        if candidate.exists():
+            return candidate
+    return Path(root_dir) / WIKI_RELATIONS_DIR
+
+
+def wiki_assets_dir_candidates(root_dir: Path) -> tuple[Path, ...]:
+    root = Path(root_dir)
+    return _dedupe_paths(
+        [
+            root / WIKI_ASSETS_DIR,
+            root / LEGACY_WIKI_ASSETS_DIR,
+        ]
+    )
+
+
+def resolve_wiki_assets_dir(root_dir: Path) -> Path:
+    for candidate in wiki_assets_dir_candidates(root_dir):
+        if candidate.exists():
+            return candidate
+    return Path(root_dir) / WIKI_ASSETS_DIR
