@@ -7,6 +7,10 @@ from typing import Any
 
 import requests
 
+from play_book_studio.config.corpus_paths import (
+    resolve_official_gold_chunks_path,
+    resolve_official_manualbook_playbooks_dir,
+)
 from play_book_studio.config.settings import load_settings
 from play_book_studio.ingestion.embedding import EmbeddingClient
 
@@ -150,7 +154,7 @@ def _topic_books_for_text(text: str, stage_id: str) -> set[str]:
 
 
 def _iter_official_corpus_chunks(root_dir: Path) -> list[dict[str, Any]]:
-    path = root_dir / "data" / "gold_corpus_ko" / "chunks.jsonl"
+    path = resolve_official_gold_chunks_path(root_dir)
     if not path.exists():
         return []
     rows: list[dict[str, Any]] = []
@@ -186,7 +190,7 @@ def _iter_official_sections(root_dir: Path) -> list[dict[str, Any]]:
     if corpus_rows:
         return corpus_rows
     rows: list[dict[str, Any]] = []
-    playbooks_dir = root_dir / "data" / "gold_manualbook_ko" / "playbooks"
+    playbooks_dir = resolve_official_manualbook_playbooks_dir(root_dir)
     for path in sorted(playbooks_dir.glob("*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
         title = str(payload.get("title") or path.stem)

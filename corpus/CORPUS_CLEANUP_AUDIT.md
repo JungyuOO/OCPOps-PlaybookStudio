@@ -63,6 +63,18 @@ Path: `corpus/sources/official/imported-gold`
 5. 코드 참조를 `corpus_paths.py` 또는 settings resolver로 모은다.
 6. 참조가 0개인 legacy 파일만 삭제한다.
 
+## Resolver Contract
+
+2026-05-15 기준으로 공식 문서 seed 경로는 `play_book_studio.config.corpus_paths`에서 우선순위를 고정한다.
+
+우선순위:
+
+1. `corpus/sources/official/imported-gold/**`
+2. legacy fallback `data/gold_*`
+
+이 규칙은 파일을 지금 삭제하기 위한 것이 아니다.
+J의 backend/retrieval 작업과 충돌하지 않게, 먼저 읽기 경로를 한 곳으로 모은 뒤 물리 삭제/이동을 별도 단계로 판단하기 위한 안전장치다.
+
 ## Current Gap
 
 - 공식 문서에는 KMSC처럼 `assets/ + manifests/ + chunks`가 한 package boundary에 깔끔하게 보이지 않는다.

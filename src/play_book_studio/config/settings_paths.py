@@ -10,6 +10,10 @@ from .corpus_paths import (
     OFFICIAL_GOLD_MANUALBOOK_DIR,
     OFFICIAL_MANIFESTS_DIR,
     OFFICIAL_SILVER_KO_DIR,
+    official_gold_bm25_candidates,
+    official_gold_chunks_candidates,
+    official_manualbook_documents_candidates,
+    official_manualbook_playbook_dir_candidates,
 )
 from .packs import GLOBAL_SOURCE_CATALOG_NAME
 
@@ -222,58 +226,78 @@ class SettingsPathMixin:
     @property
     def chunks_path(self) -> Path:
         return self._prefer_existing_file(
-            self.official_lane_repo_wide_dir / "chunks.jsonl",
-            self.gold_corpus_ko_dir / "chunks.jsonl",
+            *official_gold_chunks_candidates(
+                self.root_dir,
+                self.official_lane_repo_wide_dir / "chunks.jsonl",
+            ),
         )
 
     @property
     def bm25_corpus_path(self) -> Path:
         return self._prefer_existing_file(
-            self.official_lane_repo_wide_dir / "bm25_corpus.jsonl",
-            self.gold_corpus_ko_dir / "bm25_corpus.jsonl",
+            *official_gold_bm25_candidates(
+                self.root_dir,
+                self.official_lane_repo_wide_dir / "bm25_corpus.jsonl",
+            ),
         )
 
     @property
     def retrieval_chunks_path(self) -> Path:
         return self._prefer_existing_file(
-            self.gold_corpus_ko_dir / "chunks.jsonl",
-            self.official_lane_repo_wide_dir / "chunks.jsonl",
+            *official_gold_chunks_candidates(
+                self.root_dir,
+                self.gold_corpus_ko_dir / "chunks.jsonl",
+                self.official_lane_repo_wide_dir / "chunks.jsonl",
+            ),
         )
 
     @property
     def retrieval_bm25_corpus_path(self) -> Path:
         return self._prefer_existing_file(
-            self.gold_corpus_ko_dir / "bm25_corpus.jsonl",
-            self.official_lane_repo_wide_dir / "bm25_corpus.jsonl",
+            *official_gold_bm25_candidates(
+                self.root_dir,
+                self.gold_corpus_ko_dir / "bm25_corpus.jsonl",
+                self.official_lane_repo_wide_dir / "bm25_corpus.jsonl",
+            ),
         )
 
     @property
     def playbook_documents_path(self) -> Path:
         return self._prefer_existing_file(
-            self.official_lane_repo_wide_dir / "playbook_documents.jsonl",
-            self.gold_manualbook_ko_dir / "playbook_documents.jsonl",
+            *official_manualbook_documents_candidates(
+                self.root_dir,
+                self.official_lane_repo_wide_dir / "playbook_documents.jsonl",
+            ),
         )
 
     @property
     def retrieval_playbook_documents_path(self) -> Path:
         return self._prefer_existing_file(
-            self.gold_manualbook_ko_dir / "playbook_documents.jsonl",
-            self.official_lane_repo_wide_dir / "playbook_documents.jsonl",
+            *official_manualbook_documents_candidates(
+                self.root_dir,
+                self.gold_manualbook_ko_dir / "playbook_documents.jsonl",
+                self.official_lane_repo_wide_dir / "playbook_documents.jsonl",
+            ),
         )
 
     @property
     def playbook_books_dir(self) -> Path:
         return self._prefer_nonempty_dir(
-            self.official_lane_repo_wide_dir / "playbooks",
-            self.gold_manualbook_ko_dir / "playbooks",
+            *official_manualbook_playbook_dir_candidates(
+                self.root_dir,
+                self.official_lane_repo_wide_dir / "playbooks",
+            ),
         )
 
     @property
     def playbook_book_dirs(self) -> tuple[Path, ...]:
         return self._unique_paths(
             self.playbook_books_dir,
-            self.gold_manualbook_ko_dir / "playbooks",
-            self.official_lane_repo_wide_dir / "playbooks",
+            *official_manualbook_playbook_dir_candidates(
+                self.root_dir,
+                self.gold_manualbook_ko_dir / "playbooks",
+                self.official_lane_repo_wide_dir / "playbooks",
+            ),
         )
 
     @property
