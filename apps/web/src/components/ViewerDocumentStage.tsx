@@ -19,18 +19,6 @@ const VIEWER_READER_POLISH = `
     color: #0f172a;
     min-width: 0;
     max-width: 100%;
-    --pbs-reader-card-bg: rgba(255, 255, 255, 0.96);
-    --pbs-reader-border: rgba(15, 23, 42, 0.12);
-    --pbs-reader-text: #0f172a;
-    --pbs-reader-dim: #64748b;
-  }
-
-  :host([data-viewer-theme="obsidian"]) {
-    color: #e5eef8;
-    --pbs-reader-card-bg: rgba(15, 23, 42, 0.82);
-    --pbs-reader-border: rgba(148, 163, 184, 0.18);
-    --pbs-reader-text: #f8fafc;
-    --pbs-reader-dim: #94a3b8;
   }
 
   .viewer-root {
@@ -575,7 +563,6 @@ export default function ViewerDocumentStage({
   onRemoveTextAnnotation,
   className,
   surfaceVariant = 'default',
-  viewerTheme,
 }: {
   viewerDocument: ViewerDocumentPayload;
   currentViewerPath?: string;
@@ -597,7 +584,6 @@ export default function ViewerDocumentStage({
   ) => void;
   className?: string;
   surfaceVariant?: 'default' | 'editorial';
-  viewerTheme?: 'dark' | 'light';
 }) {
   const shellRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -632,10 +618,7 @@ export default function ViewerDocumentStage({
     if (!host) {
       return;
     }
-    const resolvedViewerTheme = viewerTheme
-      ?? (document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
     host.dataset.viewerVariant = surfaceVariant;
-    host.dataset.viewerTheme = resolvedViewerTheme === 'light' ? 'paper' : 'obsidian';
     const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
     shadowRootRef.current = root;
     root.replaceChildren();
@@ -885,7 +868,7 @@ export default function ViewerDocumentStage({
       wrapperRef.current = null;
       root.removeEventListener('click', handleClick);
     };
-  }, [surfaceVariant, viewerDocument.bodyClassName, viewerDocument.html, inlineStylesKey, viewerTheme]);
+  }, [surfaceVariant, viewerDocument.bodyClassName, viewerDocument.html, inlineStylesKey]);
 
   useEffect(() => {
     const host = hostRef.current;

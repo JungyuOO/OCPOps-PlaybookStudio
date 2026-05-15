@@ -2,7 +2,7 @@ import type { DataControlRoomResponse, LibraryBook } from './runtimeApi';
 
 type WorkspaceSourceRoom = Pick<
   DataControlRoomResponse,
-  'approved_wiki_runtime_books'
+  'known_books' | 'manualbooks' | 'approved_wiki_runtime_books' | 'gold_books'
 >;
 
 function dedupeBooks(books: readonly LibraryBook[]): LibraryBook[] {
@@ -17,15 +17,6 @@ function dedupeBooks(books: readonly LibraryBook[]): LibraryBook[] {
     items.push(book);
   }
   return items;
-}
-
-function isRuntimeReadableBook(book: LibraryBook): boolean {
-  return (
-    book.runtime_readable === true
-    && Boolean((book.viewer_path || '').trim())
-    && book.certified_gold === true
-    && String(book.gold_contract_status || '').trim() === 'gold_certified'
-  );
 }
 
 function gradeRank(grade: string | undefined): number {
@@ -44,7 +35,11 @@ export function resolveWorkspaceSourceBooks(room: WorkspaceSourceRoom | null | u
     return [];
   }
 
-  const preferredBooks = (room.approved_wiki_runtime_books?.books ?? []).filter(isRuntimeReadableBook);
+  const preferredBooks = room.approved_wiki_runtime_books?.books?.length
+    ? room.approved_wiki_runtime_books.books
+    : room.manualbooks?.books?.length
+      ? room.manualbooks.books
+      : room.gold_books ?? [];
 
   return dedupeBooks(preferredBooks).sort((left, right) => {
     const gradeDelta = gradeRank(left.grade) - gradeRank(right.grade);

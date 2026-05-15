@@ -26,19 +26,11 @@ from play_book_studio.http.ops_console_api import (
     handle_ops_console_put as _handle_ops_console_put_request,
 )
 from play_book_studio.http.upload_api import (
-    handle_upload_code_block_repair as _handle_upload_code_block_repair_request,
-    handle_upload_index_retry as _handle_upload_index_retry_request,
     handle_upload_ingest as _handle_upload_ingest_request,
-    handle_upload_ingest_stream as _handle_upload_ingest_stream_request,
-    handle_upload_page_stub_repair as _handle_upload_page_stub_repair_request,
-    handle_upload_pipeline_status as _handle_upload_pipeline_status_request,
-    handle_upload_quality_recheck as _handle_upload_quality_recheck_request,
-    handle_upload_topology_retry as _handle_upload_topology_retry_request,
 )
 from play_book_studio.http.repository_api import (
     handle_document_reader as _handle_document_reader_request,
     handle_document_repositories as _handle_document_repositories_request,
-    handle_document_topology as _handle_document_topology_request,
 )
 from play_book_studio.http.document_status_api import handle_document_status as _handle_document_status_request
 from play_book_studio.http.signals_api import handle_signals as _handle_signals_request
@@ -47,14 +39,8 @@ from play_book_studio.http.chat_history_api import (
     handle_chat_history_messages as _handle_chat_history_messages_request,
     handle_chat_history_sessions as _handle_chat_history_sessions_request,
 )
-from play_book_studio.http.chat_feedback_api import (
-    handle_chat_feedback_draft as _handle_chat_feedback_draft_request,
-    handle_chat_feedback_queue as _handle_chat_feedback_queue_request,
-    handle_chat_feedback_save as _handle_chat_feedback_save_request,
-)
 from play_book_studio.http.chat_quality_api import (
     handle_chat_quality_query_insights as _handle_chat_quality_query_insights_request,
-    handle_corpus_handoff_report as _handle_corpus_handoff_report_request,
 )
 from play_book_studio.http.learning_api import (
     handle_learning_command_results as _handle_learning_command_results_request,
@@ -215,14 +201,6 @@ def _build_handler(
             if request_path == "/api/chat-quality/query-insights":
                 _handle_chat_quality_query_insights_request(self, parsed_request.query, root_dir=root_dir)
                 return
-            if request_path == "/api/corpus/handoff-report":
-                _handle_corpus_handoff_report_request(
-                    self,
-                    parsed_request.query,
-                    root_dir=root_dir,
-                    owner_user_id=self._session_owner().owner_hash,
-                )
-                return
             if request_path == "/api/learning-paths":
                 _handle_learning_paths_request(self, parsed_request.query, root_dir=root_dir)
                 return
@@ -246,9 +224,6 @@ def _build_handler(
                 return
             if request_path == "/api/chat-history/messages":
                 self._handle_chat_history_messages(parsed_request.query)
-                return
-            if request_path == "/api/chat/feedback-queue":
-                self._handle_chat_feedback_queue(parsed_request.query)
                 return
             if request_path == "/api/debug/session":
                 self._handle_debug_session(parsed_request.query)
@@ -288,12 +263,6 @@ def _build_handler(
                 return
             if request_path == "/api/repositories/document-reader":
                 self._handle_document_reader(parsed_request.query)
-                return
-            if request_path == "/api/repositories/topology":
-                self._handle_document_topology(parsed_request.query)
-                return
-            if request_path == "/api/uploads/pipeline-status":
-                self._handle_upload_pipeline_status(parsed_request.query)
                 return
             if request_path == "/api/documents/ingest-status":
                 self._handle_document_status(parsed_request.query)
@@ -354,13 +323,6 @@ def _build_handler(
             if parsed_request.path == "/api/chat-history/archive":
                 self._handle_chat_history_archive(payload)
                 return
-            if parsed_request.path == "/api/chat/feedback":
-                self._handle_chat_feedback_save(payload)
-                return
-            if parsed_request.path.startswith("/api/chat/feedback/") and parsed_request.path.endswith("/draft-remediation"):
-                feedback_id = parsed_request.path.removeprefix("/api/chat/feedback/").removesuffix("/draft-remediation").strip("/")
-                self._handle_chat_feedback_draft(feedback_id)
-                return
             if parsed_request.path == "/api/sessions/delete":
                 self._handle_session_delete(payload)
                 return
@@ -373,26 +335,8 @@ def _build_handler(
             if parsed_request.path == "/api/customer-packs/drafts":
                 self._handle_customer_pack_draft_create(payload)
                 return
-            if parsed_request.path == "/api/uploads/ingest-stream":
-                self._handle_upload_ingest_stream(payload)
-                return
             if parsed_request.path == "/api/uploads/ingest":
                 self._handle_upload_ingest(payload)
-                return
-            if parsed_request.path == "/api/uploads/index-retry":
-                self._handle_upload_index_retry(payload)
-                return
-            if parsed_request.path == "/api/uploads/topology-retry":
-                self._handle_upload_topology_retry(payload)
-                return
-            if parsed_request.path == "/api/uploads/quality-recheck":
-                self._handle_upload_quality_recheck(payload)
-                return
-            if parsed_request.path == "/api/uploads/repair-code-blocks":
-                self._handle_upload_code_block_repair(payload)
-                return
-            if parsed_request.path == "/api/uploads/repair-page-stubs":
-                self._handle_upload_page_stub_repair(payload)
                 return
             if parsed_request.path == "/api/customer-packs/ingest":
                 self._handle_customer_pack_ingest(payload)
@@ -514,14 +458,6 @@ def _build_handler(
 
         def _handle_document_reader(self, query: str) -> None:
             _handle_document_reader_request(
-                self,
-                query,
-                root_dir=root_dir,
-                owner_user_id=self._session_owner().owner_hash,
-            )
-
-        def _handle_document_topology(self, query: str) -> None:
-            _handle_document_topology_request(
                 self,
                 query,
                 root_dir=root_dir,
@@ -670,28 +606,6 @@ def _build_handler(
                 root_dir=root_dir,
                 owner_user_id=self._session_owner().owner_hash,
             )
-        def _handle_chat_feedback_save(self, payload: dict[str, Any]) -> None:
-            _handle_chat_feedback_save_request(
-                self,
-                payload,
-                root_dir=root_dir,
-                owner_user_id=self._session_owner().owner_hash,
-            )
-        def _handle_chat_feedback_queue(self, query: str) -> None:
-            _handle_chat_feedback_queue_request(
-                self,
-                query,
-                root_dir=root_dir,
-                owner_user_id=self._session_owner().owner_hash,
-            )
-        def _handle_chat_feedback_draft(self, feedback_id: str) -> None:
-            _handle_chat_feedback_draft_request(
-                self,
-                feedback_id,
-                root_dir=root_dir,
-                owner_user_id=self._session_owner().owner_hash,
-            )
-
         def _handle_debug_session(self, query: str) -> None:
             _handle_debug_session_request(
                 self,
@@ -726,37 +640,6 @@ def _build_handler(
             owner = self._session_owner()
             payload["created_by"] = owner.owner_hash
             _handle_upload_ingest_request(self, payload, root_dir=root_dir)
-        def _handle_upload_ingest_stream(self, payload: dict[str, Any]) -> None:
-            owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
-            _handle_upload_ingest_stream_request(self, payload, root_dir=root_dir)
-        def _handle_upload_index_retry(self, payload: dict[str, Any]) -> None:
-            owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
-            _handle_upload_index_retry_request(self, payload, root_dir=root_dir)
-        def _handle_upload_topology_retry(self, payload: dict[str, Any]) -> None:
-            owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
-            _handle_upload_topology_retry_request(self, payload, root_dir=root_dir)
-        def _handle_upload_quality_recheck(self, payload: dict[str, Any]) -> None:
-            owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
-            _handle_upload_quality_recheck_request(self, payload, root_dir=root_dir)
-        def _handle_upload_code_block_repair(self, payload: dict[str, Any]) -> None:
-            owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
-            _handle_upload_code_block_repair_request(self, payload, root_dir=root_dir)
-        def _handle_upload_page_stub_repair(self, payload: dict[str, Any]) -> None:
-            owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
-            _handle_upload_page_stub_repair_request(self, payload, root_dir=root_dir)
-        def _handle_upload_pipeline_status(self, query: str) -> None:
-            _handle_upload_pipeline_status_request(
-                self,
-                query,
-                root_dir=root_dir,
-                owner_user_id=self._session_owner().owner_hash,
-            )
         def _handle_repository_favorites_save(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_save_request(self, payload, root_dir=root_dir)
         def _handle_repository_favorites_remove(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_remove_request(self, payload, root_dir=root_dir)
         def _handle_repository_official_materialize(self, payload: dict[str, Any]) -> None:

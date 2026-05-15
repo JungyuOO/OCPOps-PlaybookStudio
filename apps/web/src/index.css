@@ -39,21 +39,21 @@
 
 [data-theme='light'] {
   /* --- Semantic Palette (Light Mode Override) --- */
-  --pbs-bg-main: #fafafa;
-  --pbs-bg-surface: #f5f5f7;
+  --pbs-bg-main: #fcfcfd;
+  --pbs-bg-surface: #f2f2f7;
   --pbs-bg-panel: rgba(255, 255, 255, 0.9);
   --pbs-bg-card: rgba(0, 0, 0, 0.02);
 
-  --pbs-text-main: #0f172a;
-  --pbs-text-muted: #475569;
-  --pbs-text-dim: #64748b;
+  --pbs-text-main: #141416;
+  --pbs-text-muted: #666675;
+  --pbs-text-dim: #9ca3af;
 
-  --pbs-accent-cyan: #007a99;
-  --pbs-accent-purple: #5b2bd6;
-  --pbs-accent-glow: rgba(0, 122, 153, 0.14);
+  --pbs-accent-cyan: #00a3cc;
+  --pbs-accent-purple: #7236ff;
+  --pbs-accent-glow: rgba(0, 163, 204, 0.2);
 
   --pbs-glass-bg: rgba(255, 255, 255, 0.75);
-  --pbs-glass-border: rgba(15, 23, 42, 0.12);
+  --pbs-glass-border: rgba(0, 0, 0, 0.08);
 }
 
 * {

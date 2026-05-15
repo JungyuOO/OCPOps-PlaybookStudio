@@ -67,7 +67,6 @@ import {
   loadDbChatMessages,
   loadDocumentIngestStatus,
   loadDocumentRepositories,
-  loadUploadPipelineStatus,
   loadSignals,
   loadWikiOverlaySignals,
   loadWikiOverlays,
@@ -80,15 +79,10 @@ import {
   normalizeViewerPath,
   normalizeCustomerPackDraft,
   removeWikiOverlay,
-  saveRepositorySourceRequest,
-  saveChatFeedback,
   saveWikiOverlay,
   sendChatStream,
-  setRuntimeIdentityUser,
   toRuntimeUrl,
-  type ChatFeedbackIssueType,
-  type UploadIngestStreamEvent,
-  uploadDocumentIngestionStream,
+  uploadDocumentIngestion,
 } from '../lib/runtimeApi';
 import {
   loadOcpStatus,
@@ -112,13 +106,6 @@ import {
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../routing/routes';
 import { sendCourseChatStream } from '../lib/courseApi';
-import {
-  clusterConnectionStatusLabel,
-  clusterProfileName,
-  normalizeClusterConnectionStatus,
-  type ClusterConnectionStatus,
-} from '../lib/clusterProfile';
-import { useGlobalTheme } from '../lib/globalTheme';
 import { loadStoredVisionMode, type VisionMode } from '../lib/wikiVision';
 import { resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';
 import WorkspaceTracePanel from '../components/WorkspaceTracePanel';
@@ -161,33 +148,6 @@ const WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY = 'workspace.activeCategoryKey';
 const WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY = 'workspace.activeCategoryLabel';
 const WORKSPACE_INGESTION_STATUS_STORAGE_KEY = 'workspace.ingestionStatus';
 
-const CHAT_FEEDBACK_TYPES: Array<{ value: ChatFeedbackIssueType; label: string }> = [
-  { value: 'wrong_answer', label: '잘못된 답변' },
-  { value: 'missing_grounding', label: '근거 없음' },
-  { value: 'wrong_citation', label: '엉뚱한 문서 참조' },
-  { value: 'hallucination', label: '할루시네이션' },
-  { value: 'version_mismatch', label: '버전/환경 불일치' },
-  { value: 'incomplete_answer', label: '답변 부족' },
-];
-
-interface ChatFeedbackDraft {
-  issueType: ChatFeedbackIssueType;
-  comment: string;
-  expectedAnswer: string;
-  status: 'idle' | 'saving' | 'saved' | 'error';
-  message: string;
-}
-
-function defaultChatFeedbackDraft(): ChatFeedbackDraft {
-  return {
-    issueType: 'wrong_answer',
-    comment: '',
-    expectedAnswer: '',
-    status: 'idle',
-    message: '',
-  };
-}
-
 function workspaceMetadataRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -215,58 +175,6 @@ function loadStoredIngestionStatus(): IngestionStatusBanner | null {
   } catch {
     return null;
   }
-}
-
-function ingestionBannerFromPipelineStatus(
-  payload: Awaited<ReturnType<typeof loadUploadPipelineStatus>>,
-  current: IngestionStatusBanner,
-): IngestionStatusBanner {
-  const stages = payload.pipeline_summary?.stages ?? {};
-  const overall = String(payload.pipeline_summary?.overall_status || '');
-  const latestServerEvent = [...(payload.events ?? [])]
-    .reverse()
-    .find((event) => event.type === 'event' && event.occurred_at);
-  const blockerCount = payload.quality?.blockers?.length ?? 0;
-  const updatedAt = latestServerEvent?.occurred_at || current.updatedAt || new Date().toISOString();
-  let status: IngestionStatusBanner['status'] = 'indexing';
-  let message = '서버 이벤트 원장을 확인 중입니다.';
-  if (overall === 'failed' || Object.values(stages).includes('failed')) {
-    status = 'failed';
-    message = '서버 이벤트 원장에 실패 단계가 기록되었습니다.';
-  } else if (overall === 'completed') {
-    status = 'ready';
-    message = '업로드 파이프라인이 완료되었습니다.';
-  } else if (stages.topology === 'deferred' || stages.judge === 'deferred' || payload.quality?.state === 'needs_repair') {
-    status = 'gold_build';
-    message = blockerCount > 0
-      ? `문서는 저장됐고 품질/지식망 보류 항목 ${blockerCount}개가 남았습니다.`
-      : '문서는 저장됐고 품질/지식망 판정이 보류되었습니다.';
-  } else if (stages.gold === 'completed') {
-    status = 'indexing';
-    message = '검색 인덱스 생성이 완료됐고 다음 판정을 기다립니다.';
-  } else if (stages.gold === 'running') {
-    status = 'indexing';
-    message = 'Qdrant 검색 인덱스를 생성 중입니다.';
-  } else if (stages.silver === 'completed') {
-    status = 'saved';
-    message = '문서가 DB에 저장되었습니다.';
-  } else if (stages.silver === 'running') {
-    status = 'saving';
-    message = '문서와 chunk를 DB에 저장 중입니다.';
-  } else if (stages.bronze === 'completed') {
-    status = 'parsing';
-    message = '원본 파일을 저장했고 파싱 이벤트를 기다립니다.';
-  } else if (stages.bronze === 'running') {
-    status = 'recognizing';
-    message = '파일을 서버가 수신했습니다.';
-  }
-  return {
-    ...current,
-    status,
-    message,
-    documentSourceId: payload.document_source_id || current.documentSourceId,
-    updatedAt,
-  };
 }
 
 function citationEvidenceTitle(citation: ChatCitation): string {
@@ -335,6 +243,7 @@ function opsChatResponseToChatResponse(response: OpsChatResponse, sessionId: str
 type LeftPanelMode = 'history' | 'outline' | 'signals';
 type RightPanelMode = 'viewer' | 'terminal';
 type WorkspaceChatMode = 'document' | 'live_cluster';
+type ClusterConnectionStatus = 'not_connected' | 'connecting' | 'connected' | 'error';
 type SignalsFavoriteFilter = 'favorites' | 'edited';
 const CLUSTER_RESOURCE_OPTIONS = ['pods', 'deployments', 'services', 'routes', 'events'] as const;
 type ClusterResourceKind = typeof CLUSTER_RESOURCE_OPTIONS[number];
@@ -357,17 +266,7 @@ interface RecentTerminalAction {
 }
 
 interface IngestionStatusBanner {
-  status:
-    | 'recognizing'
-    | 'parsing'
-    | 'saving'
-    | 'saved'
-    | 'embedding'
-    | 'indexing'
-    | 'index_deferred'
-    | 'gold_build'
-    | 'ready'
-    | 'failed';
+  status: 'recognizing' | 'parsing' | 'embedding' | 'indexing' | 'ready' | 'failed';
   message: string;
   filename?: string;
   repositoryId?: string;
@@ -867,7 +766,7 @@ function NoAnswerAcquisitionCard({
   onConfirm,
 }: {
   acquisition: NonNullable<Message['acquisition']>;
-  onConfirm: (acquisition: NonNullable<Message['acquisition']>) => void;
+  onConfirm: () => void;
 }) {
   const [checked, setChecked] = useState(true);
 
@@ -887,12 +786,28 @@ function NoAnswerAcquisitionCard({
         type="button"
         className="suggested-query-chip acquisition-confirm-btn"
         disabled={!checked}
-        onClick={() => onConfirm(acquisition)}
+        onClick={() => onConfirm()}
       >
         {acquisition.confirm_label}
       </button>
     </div>
   );
+}
+
+const FALLBACK_CLUSTER_USER_LABEL = 'Undefined';
+
+function normalizeClusterConnectionStatus(connection?: OcpConnection | null): ClusterConnectionStatus {
+  const status = connection?.status?.toLowerCase().trim();
+  if (!connection || !status || status === 'disconnected' || status === 'not_connected') {
+    return 'not_connected';
+  }
+  if (status === 'connected' || status === 'ready' || status === 'active') {
+    return 'connected';
+  }
+  if (status === 'connecting' || status === 'pending' || status === 'testing') {
+    return 'connecting';
+  }
+  return 'error';
 }
 
 function detectClusterSignal(command: string): Omit<ClusterSignalEvent, 'id' | 'timestamp' | 'status'> | null {
@@ -1284,8 +1199,6 @@ export default function WorkspacePage() {
   const [documentRepositories, setDocumentRepositories] = useState<DocumentRepository[]>([]);
   const [isBootstrapLoading, setIsBootstrapLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [feedbackOpenByMessage, setFeedbackOpenByMessage] = useState<Record<string, boolean>>({});
-  const [feedbackDraftByMessage, setFeedbackDraftByMessage] = useState<Record<string, ChatFeedbackDraft>>({});
   const [query, setQuery] = useState('');
   const [sessionId, setSessionId] = useState(() => makeId('ID'));
   const [testMode, setTestMode] = useState(false);
@@ -1382,7 +1295,10 @@ export default function WorkspacePage() {
   const [viewerActiveSection, setViewerActiveSection] = useState<ViewerActiveSection | null>(null);
   const [signalsFavoriteFilter, setSignalsFavoriteFilter] = useState<SignalsFavoriteFilter>('favorites');
 
-  const { globalTheme, toggleGlobalTheme } = useGlobalTheme();
+  const [globalTheme, setGlobalTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window === 'undefined') return 'dark';
+    return (window.localStorage.getItem('pbs.globalTheme') as 'dark' | 'light') || 'dark';
+  });
   const [opsWorkspaceId, setOpsWorkspaceId] = useState(() => {
     if (typeof window === 'undefined') {
       return 'ws_default';
@@ -1471,28 +1387,22 @@ export default function WorkspacePage() {
     [footerConnections, opsConnectionId],
   );
   const footerProfileName = useMemo(() => {
-    return clusterProfileName(activeFooterConnection);
+    const username = activeFooterConnection?.username_hint?.trim();
+    const displayName = activeFooterConnection?.display_name?.trim();
+    return username || displayName || FALLBACK_CLUSTER_USER_LABEL;
   }, [activeFooterConnection]);
   const wikiOverlayUserId = footerProfileName;
   const isClusterConnected = clusterConnectionStatus === 'connected';
   const isTerminalConnected = terminalConnectionState === 'connected';
   const isLiveClusterAvailable = isClusterConnected && isTerminalConnected;
-  const clusterStatusLabel = clusterConnectionStatusLabel(clusterConnectionStatus);
-
-  useEffect(() => {
-    const identity = activeFooterConnection
-      ? (
-        activeFooterConnection.username_hint?.trim()
-        || activeFooterConnection.display_name?.trim()
-        || activeFooterConnection.connection_id
-      )
-      : '';
-    setRuntimeIdentityUser(identity || null);
-  }, [
-    activeFooterConnection?.connection_id,
-    activeFooterConnection?.display_name,
-    activeFooterConnection?.username_hint,
-  ]);
+  const clusterStatusLabel =
+    clusterConnectionStatus === 'connected'
+      ? 'Connected'
+      : clusterConnectionStatus === 'connecting'
+        ? 'Connecting'
+        : clusterConnectionStatus === 'error'
+          ? 'Error'
+          : 'Not connected';
 
   const refreshFooterProfile = useCallback(async () => {
     setIsFooterProfileLoading(true);
@@ -1798,20 +1708,9 @@ export default function WorkspacePage() {
     let cancelled = false;
     const refreshStatus = async () => {
       try {
-        if (ingestionStatusBanner.documentSourceId) {
-          const payload = await loadUploadPipelineStatus({
-            documentSourceId: ingestionStatusBanner.documentSourceId,
-          });
-          if (cancelled) {
-            return;
-          }
-          const nextBanner = ingestionBannerFromPipelineStatus(payload, ingestionStatusBanner);
-          setIngestionStatusBanner(nextBanner);
-          window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
-          return;
-        }
         const payload = await loadDocumentIngestStatus({
           repositoryId: ingestionStatusBanner.repositoryId,
+          documentSourceId: ingestionStatusBanner.documentSourceId,
         });
         const latest = payload.latest;
         if (!latest || cancelled) {
@@ -2105,8 +2004,6 @@ export default function WorkspacePage() {
             citations,
             responseKind: typeof metadata.response_kind === 'string' ? metadata.response_kind : undefined,
             rewrittenQuery: typeof metadata.rewritten_query === 'string' ? metadata.rewritten_query : undefined,
-            retrievalTrace: workspaceMetadataRecord(metadata.retrieval_trace),
-            pipelineTrace: workspaceMetadataRecord(metadata.pipeline_trace),
           };
         }));
         return;
@@ -2319,9 +2216,6 @@ export default function WorkspacePage() {
         setDocumentRepositories(repositoryPayload.repositories ?? []);
       } catch (error) {
         console.error(error);
-        if (!cancelled) {
-          setManualBooks([]);
-        }
       } finally {
         if (!cancelled) {
           setIsBootstrapLoading(false);
@@ -2709,6 +2603,16 @@ export default function WorkspacePage() {
   useEffect(() => {
     setQuickNavOpen(false);
   }, [currentViewerPath, viewerPageMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    document.documentElement.setAttribute('data-theme', globalTheme);
+    window.localStorage.setItem('pbs.globalTheme', globalTheme);
+  }, [globalTheme]);
+
+  const handleToggleGlobalTheme = useCallback(() => {
+    setGlobalTheme((current) => (current === 'dark' ? 'light' : 'dark'));
+  }, []);
 
   useEffect(() => {
     if (!quickNavOpen) {
@@ -3184,112 +3088,37 @@ export default function WorkspacePage() {
       return;
     }
 
-    const publishBanner = (banner: IngestionStatusBanner) => {
-      setIngestionStatusBanner(banner);
-      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(banner));
-    };
-    const bannerFromStreamEvent = (streamEvent: UploadIngestStreamEvent): IngestionStatusBanner | null => {
-      if (streamEvent.type !== 'event') {
-        return null;
-      }
-      const data = streamEvent.data ?? streamEvent.payload ?? {};
-      const eventName = streamEvent.event || streamEvent.stage;
-      const repositoryId = String(data.repository_id || activeRepository?.repository_id || '');
-      const documentSourceId = String(data.document_source_id || '');
-      const base = {
-        filename: file.name,
-        repositoryId,
-        documentSourceId,
-        updatedAt: streamEvent.occurred_at || new Date().toISOString(),
-      };
-      switch (eventName) {
-        case 'received':
-          return { ...base, status: 'recognizing', message: '파일을 서버가 수신했습니다.' };
-        case 'source_stored':
-          return { ...base, status: 'recognizing', message: '원본 파일을 저장했습니다.' };
-        case 'parse_start':
-          return { ...base, status: 'parsing', message: '문서 파싱을 시작했습니다.' };
-        case 'parsed':
-          return { ...base, status: 'parsing', message: '문서 구조를 읽었습니다.' };
-        case 'chunk_start':
-          return { ...base, status: 'parsing', message: '문서 조각 생성을 시작했습니다.' };
-        case 'chunked':
-          return { ...base, status: 'parsing', message: '문서 조각을 만들었습니다.' };
-        case 'persist_start':
-        case 'persisting':
-          return { ...base, status: 'saving', message: '문서와 chunk를 DB에 저장 중입니다.' };
-        case 'persisted':
-          return { ...base, status: 'saved', message: '문서가 DB에 저장되었습니다.' };
-        case 'index_start':
-        case 'indexing':
-          return { ...base, status: 'indexing', message: 'Qdrant 검색 인덱스를 생성 중입니다.' };
-        case 'indexed':
-          return { ...base, status: 'indexing', message: '검색 인덱스 생성이 완료되었습니다.' };
-        case 'index_deferred':
-          return {
-            ...base,
-            status: 'index_deferred',
-            message: '문서는 저장됐고 색인은 보류되었습니다.',
-          };
-        case 'gold_build':
-        case 'judge_start':
-        case 'judge_completed':
-          return { ...base, status: 'gold_build', message: 'Gold/Judge 상태를 확인했습니다.' };
-        case 'topology_start':
-        case 'topology_ready':
-        case 'topology_deferred':
-        case 'topology_failed':
-          return { ...base, status: 'gold_build', message: '지식망 스냅샷 상태를 확인했습니다.' };
-        default:
-          return null;
-      }
-    };
-
     try {
-      publishBanner({
-        status: 'recognizing',
+      setIngestionStatusBanner({
+        status: 'parsing',
         message: '문서 파싱중입니다.',
         filename: file.name,
         updatedAt: new Date().toISOString(),
       });
-      const uploaded = await uploadDocumentIngestionStream(file, {
+      const uploaded = await uploadDocumentIngestion(file, {
         index: true,
         repositoryId: activeRepository?.repository_id,
-        sourceScope: 'user_upload',
-      }, (streamEvent) => {
-        const nextBanner = bannerFromStreamEvent(streamEvent);
-        if (nextBanner) {
-          publishBanner(nextBanner);
-          if (streamEvent.type === 'event' && (streamEvent.event || streamEvent.stage) === 'persisted') {
-            void loadDocumentRepositories()
-              .then((repositoryPayload) => setDocumentRepositories(repositoryPayload.repositories ?? []))
-              .catch((repositoryError) => console.error(repositoryError));
-          }
-        }
-        if (streamEvent.type === 'error') {
-          publishBanner({
-            status: 'failed',
-            message: streamEvent.error || '업로드 스트림 오류',
-            filename: file.name,
-            updatedAt: new Date().toISOString(),
-          });
-        }
       });
       const repositoryPayload = await loadDocumentRepositories().catch(() => ({ repositories: [] }));
       const repositoryId = uploaded.repository_id || uploaded.persisted?.repository_id || activeRepository?.repository_id || '';
+      const documentSourceId = uploaded.persisted?.document_source_id || '';
       setDocumentRepositories(repositoryPayload.repositories ?? []);
       if (repositoryId) {
         setActiveSourceId(`repository:${repositoryId}`);
       }
+      const nextBanner: IngestionStatusBanner = {
+        status: 'ready',
+        message: '문서 준비가 완료되었습니다.',
+        filename: uploaded.filename || file.name,
+        repositoryId,
+        documentSourceId,
+        updatedAt: new Date().toISOString(),
+      };
+      setIngestionStatusBanner(nextBanner);
+      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
       setPreview({ kind: 'empty' });
     } catch (error) {
       console.error(error);
-      publishBanner({
-        status: 'failed',
-        message: error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.',
-        filename: file.name,
-        updatedAt: new Date().toISOString(),
-      });
       window.alert(error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.');
     } finally {
       if (fileInputRef.current) {
@@ -3558,7 +3387,6 @@ export default function WorkspacePage() {
           routeKind: messageRouteKind,
           learningIndex: resolvedLearningIndex,
           rewrittenQuery: response.rewritten_query,
-          sourceQuery: trimmed,
           retrievalTrace: response.retrieval_trace,
           pipelineTrace: response.pipeline_trace,
           traceEvents: response.pipeline_trace?.events ?? (testMode ? activeTestTrace?.events ?? [] : []),
@@ -3622,91 +3450,8 @@ export default function WorkspacePage() {
     }
   }
 
-  async function handleAcquisitionConfirm(
-    acquisition: NonNullable<Message['acquisition']>,
-    message?: Message,
-  ): Promise<void> {
-    const repositoryQuery = acquisition.repository_query.trim();
-    if (!repositoryQuery) {
-      navigate('/playbook-library?scope=official&lane=tools#book-factory');
-      return;
-    }
-    try {
-      await saveRepositorySourceRequest({
-        query: repositoryQuery,
-        responseKind: message?.responseKind ?? 'no_answer',
-        failureReason: 'chat_answer_needs_source_enrichment',
-        sourceRequestOrigin: 'workspace_chat_acquisition',
-        warnings: ['사용자가 채팅 답변에서 자료 보강 요청을 눌렀습니다.'],
-        sessionId,
-      });
-    } catch (error) {
-      console.warn('[source-request] save failed:', error);
-    }
-    navigate(`/playbook-library?scope=official&lane=tools&q=${encodeURIComponent(repositoryQuery)}#book-factory`);
-  }
-
-  function feedbackDraftForMessage(messageId: string): ChatFeedbackDraft {
-    return feedbackDraftByMessage[messageId] ?? defaultChatFeedbackDraft();
-  }
-
-  function updateFeedbackDraft(messageId: string, patch: Partial<ChatFeedbackDraft>): void {
-    setFeedbackDraftByMessage((current) => ({
-      ...current,
-      [messageId]: {
-        ...(current[messageId] ?? defaultChatFeedbackDraft()),
-        ...patch,
-      },
-    }));
-  }
-
-  function userQueryForAssistant(message: Message): string {
-    if (message.sourceQuery?.trim()) {
-      return message.sourceQuery.trim();
-    }
-    const index = messages.findIndex((item) => item.id === message.id);
-    for (let i = index - 1; i >= 0; i -= 1) {
-      if (messages[i]?.role === 'user' && messages[i]?.content.trim()) {
-        return messages[i].content.trim();
-      }
-    }
-    return '';
-  }
-
-  async function handleSaveChatFeedback(message: Message): Promise<void> {
-    const draft = feedbackDraftForMessage(message.id);
-    const userQuery = userQueryForAssistant(message);
-    if (!userQuery) {
-      updateFeedbackDraft(message.id, { status: 'error', message: '연결된 질문을 찾지 못했습니다.' });
-      return;
-    }
-    updateFeedbackDraft(message.id, { status: 'saving', message: '문제 저장 중' });
-    try {
-      const response = await saveChatFeedback({
-        sessionId,
-        userQuery,
-        assistantAnswer: message.content,
-        issueType: draft.issueType,
-        userComment: draft.comment,
-        expectedAnswer: draft.expectedAnswer,
-        citations: (message.citations ?? []) as unknown as Record<string, unknown>[],
-        retrievalTrace: message.retrievalTrace,
-        pipelineTrace: message.pipelineTrace,
-        responseKind: message.responseKind,
-        routeKind: message.routeKind,
-        activeRepositoryId: activeRepository?.repository_id,
-        activeDocumentId,
-      });
-      updateFeedbackDraft(message.id, {
-        status: 'saved',
-        message: `저장됨 · ${response.gap_type || 'unclassified'}`,
-      });
-    } catch (error) {
-      updateFeedbackDraft(message.id, {
-        status: 'error',
-        message: error instanceof Error ? error.message : '문제 저장 실패',
-      });
-    }
+  function handleAcquisitionConfirm(): void {
+    navigate('/playbook-library?view=repository');
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
@@ -4028,11 +3773,7 @@ export default function WorkspacePage() {
         globalTheme={globalTheme}
         onOpenDashboard={() => setDashboardOpen(true)}
         onOpenLibrary={() => navigate('/playbook-library')}
-        onToggleGlobalTheme={toggleGlobalTheme}
-        profileName={footerProfileName}
-        profileStatus={clusterConnectionStatus}
-        profileStatusLabel={clusterStatusLabel}
-        isProfileLoading={isFooterProfileLoading}
+        onToggleGlobalTheme={handleToggleGlobalTheme}
       />
 
       <main className="workspace-content">
@@ -4555,6 +4296,27 @@ export default function WorkspacePage() {
                 </div>
               )}
 
+              <div className="user-profile-section">
+                <div className="profile-container profile-container-ops">
+                  <div className="profile-avatar profile-avatar-ops">
+                    <Cpu size={18} />
+                    <div className={`status-dot-online ${isClusterConnected ? '' : 'status-dot-idle'}`}></div>
+                  </div>
+                  <div className="profile-ops-summary">
+                    <button
+                      className={`profile-ops-name-btn ${activeFooterConnection ? '' : 'is-undefined'}`}
+                      type="button"
+                      onClick={() => setDashboardOpen(true)}
+                      title={activeFooterConnection ? 'Open cluster dashboard' : 'Cluster is not connected'}
+                    >
+                      {isFooterProfileLoading ? 'Syncing' : footerProfileName}
+                    </button>
+                    <span className={`profile-cluster-status profile-cluster-status--${clusterConnectionStatus}`}>
+                      {clusterStatusLabel}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </Panel>
 
@@ -4730,69 +4492,6 @@ export default function WorkspacePage() {
                                 return Boolean(target && overlayExists('check', target.ref));
                               }}
                             />
-                            <div className="chat-feedback-strip">
-                              <button
-                                type="button"
-                                className="chat-feedback-toggle"
-                                onClick={() => {
-                                  setFeedbackOpenByMessage((current) => ({
-                                    ...current,
-                                    [message.id]: !current[message.id],
-                                  }));
-                                }}
-                              >
-                                문제 저장
-                              </button>
-                              {feedbackDraftForMessage(message.id).status === 'saved' && (
-                                <span className="chat-feedback-status chat-feedback-status--saved">
-                                  {feedbackDraftForMessage(message.id).message}
-                                </span>
-                              )}
-                              {feedbackDraftForMessage(message.id).status === 'error' && (
-                                <span className="chat-feedback-status chat-feedback-status--error">
-                                  {feedbackDraftForMessage(message.id).message}
-                                </span>
-                              )}
-                            </div>
-                            {feedbackOpenByMessage[message.id] && (
-                              <div className="chat-feedback-panel">
-                                <div className="chat-feedback-controls">
-                                  <select
-                                    value={feedbackDraftForMessage(message.id).issueType}
-                                    onChange={(event) => {
-                                      updateFeedbackDraft(message.id, { issueType: event.target.value as ChatFeedbackIssueType });
-                                    }}
-                                  >
-                                    {CHAT_FEEDBACK_TYPES.map((item) => (
-                                      <option key={item.value} value={item.value}>{item.label}</option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    type="button"
-                                    onClick={() => { void handleSaveChatFeedback(message); }}
-                                    disabled={feedbackDraftForMessage(message.id).status === 'saving'}
-                                  >
-                                    {feedbackDraftForMessage(message.id).status === 'saving' ? '저장 중' : '저장'}
-                                  </button>
-                                </div>
-                                <textarea
-                                  value={feedbackDraftForMessage(message.id).comment}
-                                  onChange={(event) => {
-                                    updateFeedbackDraft(message.id, { comment: event.target.value });
-                                  }}
-                                  placeholder="무엇이 틀렸는지 짧게 적어주세요."
-                                  rows={2}
-                                />
-                                <textarea
-                                  value={feedbackDraftForMessage(message.id).expectedAnswer}
-                                  onChange={(event) => {
-                                    updateFeedbackDraft(message.id, { expectedAnswer: event.target.value });
-                                  }}
-                                  placeholder="기대 답변이나 확인해야 할 방향이 있으면 적어주세요."
-                                  rows={2}
-                                />
-                              </div>
-                            )}
                             {(isCourseMode || message.routeKind === 'course') && message.artifacts?.length ? (
                               <CourseChatArtifacts
                                 artifacts={message.artifacts}
@@ -4904,7 +4603,7 @@ export default function WorkspacePage() {
                       {message.role === 'assistant' && message.acquisition && (
                         <NoAnswerAcquisitionCard
                           acquisition={message.acquisition}
-                          onConfirm={(acquisition) => { void handleAcquisitionConfirm(acquisition, message); }}
+                          onConfirm={handleAcquisitionConfirm}
                         />
                       )}
                     </div>
@@ -5211,7 +4910,6 @@ export default function WorkspacePage() {
                       void handleRemoveSectionTextAnnotation(section, annotationId);
                     }}
                     className="playbook-reader-shadow-host"
-                    viewerTheme={globalTheme}
                   />
                 ) : (
                   <div className="playbook-reader-empty">문서 본문을 불러오지 못했습니다.</div>
@@ -5265,7 +4963,6 @@ export default function WorkspacePage() {
                         void openViewerPreview(viewerPath, preview.title, undefined, viewerPageMode);
                       }}
                       className="playbook-reader-shadow-host"
-                      viewerTheme={globalTheme}
                     />
                   ) : (
                     <div className="doc-section">
@@ -5358,7 +5055,6 @@ export default function WorkspacePage() {
                       void openEvidenceDrawerPath(evidenceDrawer.title, viewerPath);
                     }}
                     className="playbook-reader-shadow-host evidence-drawer-reader"
-                    viewerTheme={globalTheme}
                   />
                 )}
               </div>

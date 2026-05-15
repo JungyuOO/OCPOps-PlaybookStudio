@@ -37,7 +37,7 @@ Checked from `/api/data-control-room`, `/api/repositories/official-catalog`, `/a
 
 ## PostgreSQL Baseline
 
-Source: `document_sources`, `parsed_documents`, `document_chunks`, `qdrant_index_entries`, `document_assets`, `document_quality_snapshots`.
+Source: `document_sources`, `parsed_documents`, `document_chunks`, `qdrant_index_entries`, `document_assets`.
 
 | source_scope | sources | parsed_docs | chunks | indexed_chunks | assets |
 | --- | ---: | ---: | ---: | ---: | ---: |

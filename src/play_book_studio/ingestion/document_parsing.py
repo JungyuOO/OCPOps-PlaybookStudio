@@ -19,9 +19,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Literal
 
-from .metadata_spine import build_chunk_metadata_spine
-
-
 DocumentFormat = Literal[
     "md",
     "txt",
@@ -385,7 +382,6 @@ def build_document_chunks(
             if section_context and section_context not in stripped_markdown
             else stripped_markdown
         )
-        block_kinds = tuple(dict.fromkeys(block.block_type for block in current if block.block_type))
         metadata = {
             "filename": parsed.filename,
             "document_format": parsed.document_format,
@@ -394,16 +390,6 @@ def build_document_chunks(
             "chunk_char_count": len(markdown),
             "block_count": len(current),
         }
-        metadata.update(
-            build_chunk_metadata_spine(
-                embedding_text,
-                section_path=section_path,
-                filename=parsed.filename,
-                source_scope=str(parsed.metadata.get("source_scope") or "user_upload"),
-                block_kinds=block_kinds,
-                existing_metadata=metadata,
-            )
-        )
         chunks.append(
             DocumentChunk(
                 chunk_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{chunk_key}:{markdown}")),
