@@ -79,11 +79,23 @@ class VectorRetriever:
         self.request_timeout_seconds = max(float(self.settings.request_timeout_seconds), 1.0)
         self.database_url = settings.database_url.strip()
 
-    def search(self, query: str, top_k: int) -> list[RetrievalHit]:
-        hits, _runtime = self.search_with_trace(query, top_k)
+    def search(
+        self,
+        query: str,
+        top_k: int,
+        *,
+        query_filter: dict[str, Any] | None = None,
+    ) -> list[RetrievalHit]:
+        hits, _runtime = self.search_with_trace(query, top_k, query_filter=query_filter)
         return hits
 
-    def search_with_trace(self, query: str, top_k: int) -> tuple[list[RetrievalHit], dict[str, Any]]:
+    def search_with_trace(
+        self,
+        query: str,
+        top_k: int,
+        *,
+        query_filter: dict[str, Any] | None = None,
+    ) -> tuple[list[RetrievalHit], dict[str, Any]]:
         vector = self.embedding_client.embed_texts([query])[0]
         payloads = [
             (
@@ -105,6 +117,9 @@ class VectorRetriever:
                 },
             ),
         ]
+        if query_filter:
+            for _url, payload in payloads:
+                payload["filter"] = query_filter
 
         last_error = "vector search failed"
         attempted_endpoints: list[str] = []
@@ -145,6 +160,8 @@ class VectorRetriever:
                     "hit_count": len(hits),
                     "top_score": float(points[0].get("score", 0.0)) if points else None,
                     "hydration": hydration,
+                    "metadata_filter_applied": bool(query_filter),
+                    "metadata_filter": query_filter or {},
                 },
             )
 
