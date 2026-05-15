@@ -93,7 +93,7 @@ describe('workspaceExplain', () => {
     expect(explain.rewriteBody).toContain('`개요`, `플랫폼`');
     expect(explain.searchBody).toContain('BM25와 Vector를 함께 사용했고, 상위 후보는 두 신호를 함께 받았다.');
     expect(explain.decisionBody).toContain('graph expand는 생략됐다.');
-    expect(explain.decisionBody).toContain('rerank는 미적용됐다.');
+    expect(explain.decisionBody).toContain('BGE 검색 후처리는 순서 변경 없이 끝났다.');
     expect(explain.evidenceBody).toContain('architecture / OpenShift 아키텍처 개요');
     expect(explain.evidenceItems[0]?.reason).toContain('BM25와 Vector가 함께 지지한 상위 근거였다.');
     expect(explain.stages.map((stage) => stage.title)).toEqual([
@@ -168,7 +168,7 @@ describe('workspaceExplain', () => {
     expect(explain.decisionBody).toContain('local fallback으로 관계를 보강했다.');
     expect(explain.decisionBody).toContain('bounded local fallback으로 내려갔다.');
     expect(explain.decisionBody).toContain('대용량 sidecar 전체 로드는 피하고 compact 또는 bounded 경로만 사용했다.');
-    expect(explain.decisionBody).toContain('rerank는 semantic model을 적용했다.');
+    expect(explain.decisionBody).toContain('BGE 검색 후처리는 의미 점수 기반 정렬을 적용했다.');
     expect(explain.decisionBody).toContain('상위 1개 후보는 이 단계에서 다시 정렬됐다.');
     expect(explain.evidenceItems[0]?.reason).toContain('Vector 쪽 의미 검색이 주도한 상위 근거였다.');
     expect(explain.decisionBody).not.toContain('fallback_reason');

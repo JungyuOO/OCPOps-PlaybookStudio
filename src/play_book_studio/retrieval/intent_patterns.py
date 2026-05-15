@@ -62,7 +62,9 @@ NODE_RE = re.compile(r"(노드|node|worker)", re.IGNORECASE)
 DRAIN_RE = re.compile(r"(drain|비워|비우|evacuate|점검 때문에 비워)", re.IGNORECASE)
 TOP_RE = re.compile(r"(\btop\b|사용량|cpu|메모리|memory)", re.IGNORECASE)
 HOSTED_CONTROL_PLANE_RE = re.compile(
-    r"(hosted control plane|hosted cluster|호스팅된 컨트롤 플레인|호스트된 컨트롤 플레인|호스팅 제어 평면|제어 평면|hypershift|oadp|velero)",
+    r"(hosted control plane|hosted cluster|hosted control planes|\bhcp\b|"
+    r"호스팅(?:된)?\s*컨트롤\s*플레인|호스트(?:된)?\s*컨트롤\s*플레인|"
+    r"호스팅\s*제어\s*평면|제어\s*평면|hypershift|oadp|velero)",
     re.IGNORECASE,
 )
 PROJECT_TERMINATING_RE = re.compile(

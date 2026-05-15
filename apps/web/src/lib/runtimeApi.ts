@@ -11,6 +11,51 @@ export interface LibraryBookSourceOption {
   is_current?: boolean;
 }
 
+export interface GoldBuildDiagnostic {
+  code: string;
+  severity: 'blocking' | 'warning' | string;
+  summary: string;
+  evidence?: string[];
+}
+
+export interface GoldBuildRepairAction {
+  id: string;
+  diagnostic: string;
+  status: 'applied' | 'queued' | 'provider_required' | 'manual_required' | 'verified' | 'not_needed' | string;
+  title: string;
+  summary: string;
+  evidence?: string[];
+  next_action?: string;
+}
+
+export interface GoldBuildStageResult {
+  stage: string;
+  status: 'pass' | 'pending' | 'fail' | string;
+  detail: string;
+}
+
+export interface GoldBuildRun {
+  schema: string;
+  run_id: string;
+  status: 'auto_candidate' | 'building_gold' | 'repairing' | 'needs_manual_repair' | 'gold' | string;
+  final_grade: string;
+  source_kind: string;
+  source_scope: string;
+  title: string;
+  policy: string;
+  diagnostics: GoldBuildDiagnostic[];
+  repair_attempts: number;
+  repair_actions: GoldBuildRepairAction[];
+  stage_results: GoldBuildStageResult[];
+  current_stage: string;
+  metrics: Record<string, unknown>;
+  gold_evidence: string[];
+  manual_repair_needed: boolean;
+  reader_path?: string;
+  qdrant_index?: Record<string, unknown>;
+  quality_snapshot?: DocumentQualitySnapshot;
+}
+
 export interface LibraryBook {
   book_slug: string;
   title: string;
@@ -41,6 +86,44 @@ export interface LibraryBook {
   command_chunk_count?: number;
   error_chunk_count?: number;
   materialized?: boolean;
+  runtime_readable?: boolean;
+  runtime_gate?: string;
+  runtime_readiness?: string;
+  source_grade?: string;
+  certified_gold?: boolean;
+  gold_contract_status?: 'gold_certified' | 'gold_recovery' | string;
+  gold_contract_blockers?: string[];
+  gold_contract_warnings?: string[];
+  gold_recovery_group?: string;
+  gold_recovery_action?: string;
+  gold_recovery_blocking_check?: string;
+  gold_recovery_rerun_command?: string;
+  effective_grade?: string;
+  gold_build_run?: GoldBuildRun;
+  gold_build_status?: string;
+  gold_build_stage?: string;
+  repair_loop_status?: string;
+  repair_actions?: GoldBuildRepairAction[];
+  gold_evidence?: string[];
+  gold_contract_checks?: Record<string, boolean>;
+  language_gate_status?: 'pass' | 'warning' | 'fail' | 'unknown' | string;
+  language_gate_reason?: string;
+  language_quality?: string;
+  body_language_guess?: string;
+  content_status?: string;
+  hangul_chunk_ratio?: number;
+  latin_only_chunk_ratio?: number;
+  hangul_chunk_count?: number;
+  latin_chunk_count?: number;
+  latin_only_chunk_count?: number;
+  viewer_smoke_status?: 'pass' | 'fail' | 'skipped' | string;
+  viewer_smoke_reason?: string;
+  viewer_smoke_warning?: string;
+  viewer_smoke_error?: string;
+  viewer_smoke_path?: string;
+  viewer_smoke_body_length?: number;
+  viewer_smoke_heading_count?: number;
+  viewer_smoke_title_present?: boolean;
   chunk_scope?: 'runtime' | 'customer_pack' | string;
   delete_target_kind?: string;
   delete_target_id?: string;
@@ -53,10 +136,20 @@ export interface LibraryBook {
   chunk_type_breakdown?: Record<string, number>;
 }
 
+export interface HiddenLibraryBook extends LibraryBook {
+  hidden_reason: string;
+}
+
 export interface LibraryBucket {
   selected_dir?: string;
   selected_path?: string;
   books: LibraryBook[];
+  hidden_books?: HiddenLibraryBook[];
+  hidden_count?: number;
+  recovery_books?: HiddenLibraryBook[];
+  recovery_count?: number;
+  manifest_path?: string;
+  surface_policy?: string;
 }
 
 export interface CorpusChunkRow {
@@ -115,8 +208,33 @@ export interface UploadIngestPersistedSummary {
 
 export interface UploadIngestIndexSummary {
   collection: string;
+  source_scope?: string;
+  document_source_id?: string;
   candidate_count: number;
   indexed_count: number;
+  status?: 'deferred' | string;
+  retryable?: boolean;
+  error?: string;
+}
+
+export interface UploadPipelineSummary {
+  overall_status: 'pending' | 'running' | 'completed' | 'deferred' | 'failed' | string;
+  stages: Record<string, 'pending' | 'running' | 'completed' | 'deferred' | 'failed' | string>;
+  missing_stages?: string[];
+}
+
+export interface DocumentQualitySnapshot {
+  snapshot_id?: string;
+  document_source_id?: string;
+  parsed_document_id?: string;
+  schema_version?: string;
+  state: 'gold_ready' | 'needs_repair' | 'blocked' | string;
+  score?: number;
+  checks?: Array<Record<string, unknown>>;
+  blockers?: Array<Record<string, unknown>>;
+  warnings?: Array<Record<string, unknown>>;
+  metadata?: Record<string, unknown>;
+  error?: string;
 }
 
 export interface UploadIngestResponse {
@@ -134,11 +252,121 @@ export interface UploadIngestResponse {
   sections: string[][];
   persisted?: UploadIngestPersistedSummary;
   index?: UploadIngestIndexSummary;
+  gold_build_run?: GoldBuildRun;
+  topology?: DocumentTopology | Record<string, unknown>;
+  quality?: DocumentQualitySnapshot;
+  pipeline_summary?: UploadPipelineSummary;
   repository_id?: string;
   owner_user_id?: string;
   visibility?: string;
   source_scope?: string;
 }
+
+export type UploadIngestStreamEvent =
+  | {
+    type: 'event';
+    stage: string;
+    event?: string;
+    pipeline_stage?: string;
+    status?: 'pending' | 'running' | 'completed' | 'deferred' | 'failed' | string;
+    run_id?: string;
+    event_id?: string;
+    occurred_at?: string;
+    document_source_id?: string;
+    parsed_document_id?: string;
+    data: Record<string, unknown>;
+    payload?: Record<string, unknown>;
+    evidence?: Record<string, unknown>;
+  }
+  | {
+    type: 'result';
+    stage: string;
+    event?: string;
+    pipeline_stage?: string;
+    status?: string;
+    run_id?: string;
+    event_id?: string;
+    occurred_at?: string;
+    payload: UploadIngestResponse;
+  }
+  | {
+    type: 'error';
+    stage: string;
+    event?: string;
+    pipeline_stage?: string;
+    status?: string;
+    run_id?: string;
+    event_id?: string;
+    occurred_at?: string;
+    error: string;
+    data?: Record<string, unknown>;
+    payload?: Record<string, unknown>;
+  };
+
+export interface UploadIndexRetryResponse {
+  ok: boolean;
+  source_scope: string;
+  document_source_id: string;
+  index: UploadIngestIndexSummary;
+  topology?: DocumentTopology | Record<string, unknown>;
+  updated_documents: Array<{
+    document_source_id: string;
+    filename: string;
+    chunk_count: number;
+    indexed_chunk_count: number;
+    gold_build_run?: GoldBuildRun;
+  }>;
+  pending_documents: Array<{
+    document_source_id: string;
+    filename: string;
+    chunk_count: number;
+    indexed_chunk_count: number;
+    gold_build_run?: GoldBuildRun;
+  }>;
+}
+
+export interface UploadCodeBlockRepairResponse {
+  ok: boolean;
+  dry_run: boolean;
+  repair_status: string;
+  document_source_id: string;
+  parsed_document_id: string;
+  source_scope?: string;
+  filename?: string;
+  repair_kind?: 'code_block' | 'page_stub' | string;
+  changed_block_count: number;
+  diff_summary: Array<{
+    repair_kind?: string;
+    language?: string;
+    page_number?: number;
+    start_line?: number;
+    end_line?: number;
+    line_count?: number;
+    preview?: string[];
+    reason?: string;
+  }>;
+  quality?: DocumentQualitySnapshot | null;
+  topology?: DocumentTopology | Record<string, unknown> | null;
+  pipeline_summary?: UploadPipelineSummary;
+  gold_build_run?: GoldBuildRun;
+  index?: UploadIngestIndexSummary;
+  qdrant_cleanup?: Record<string, unknown>;
+  events?: UploadIngestStreamEvent[];
+  warnings?: string[];
+}
+
+type UploadIngestOptions = {
+  dryRun?: boolean;
+  index?: boolean;
+  autoRepair?: boolean;
+  createdBy?: string;
+  repositoryId?: string;
+  repositorySlug?: string;
+  repositoryTitle?: string;
+  repositoryKind?: string;
+  visibility?: string;
+  sourceScope?: string;
+};
 
 export interface DocumentRepositoryDocument {
   document_source_id: string;
@@ -150,6 +378,7 @@ export interface DocumentRepositoryDocument {
   source_scope: string;
   visibility: string;
   metadata: Record<string, unknown>;
+  gold_build_run?: GoldBuildRun;
   parse_status: string;
   chunk_count: number;
   indexed_chunk_count: number;
@@ -178,6 +407,210 @@ export interface DocumentRepositoriesResponse {
   owner_user_id?: string;
   count: number;
   repositories: DocumentRepository[];
+}
+
+export interface DocumentReaderChunk {
+  chunk_id: string;
+  chunk_key: string;
+  ordinal: number;
+  chunk_type: string;
+  markdown: string;
+  text: string;
+  token_count: number;
+  page_start?: number | null;
+  page_end?: number | null;
+  section_path: string[];
+  section_number: string;
+  heading_title: string;
+  source_anchor: string;
+  toc_path: string[];
+  asset_ids: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface DocumentReaderAsset {
+  asset_id: string;
+  asset_type: string;
+  mime_type: string;
+  storage_key: string;
+  sha256: string;
+  filename: string;
+  width?: number | null;
+  height?: number | null;
+  page_number?: number | null;
+  caption_text?: string;
+  ocr_text?: string;
+  qwen_description?: string;
+  qwen_model?: string;
+  data_url?: string;
+  available?: boolean;
+  byte_size?: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface DocumentTopologyEvidence {
+  document_source_id?: string;
+  parsed_document_id?: string;
+  chunk_id?: string;
+  asset_id?: string;
+  page_number?: number;
+  field?: string;
+  quote?: string;
+}
+
+export interface DocumentTopologyNode {
+  id: string;
+  kind: string;
+  label: string;
+  role: string;
+  status: string;
+  evidence: DocumentTopologyEvidence[];
+  metadata: Record<string, unknown>;
+}
+
+export interface DocumentTopologyEdge {
+  id: string;
+  source: string;
+  target: string;
+  relation: string;
+  label: string;
+  confidence: number;
+  evidence: DocumentTopologyEvidence[];
+  metadata: Record<string, unknown>;
+}
+
+export interface DocumentTopologySummary {
+  state?: string;
+  partial?: boolean;
+  node_count?: number;
+  edge_count?: number;
+  node_kind_counts?: Record<string, number>;
+  edge_relation_counts?: Record<string, number>;
+  chunk_count?: number;
+  asset_count?: number;
+  described_asset_count?: number;
+  missing_asset_description_count?: number;
+  concept_count?: number;
+  command_count?: number;
+  raw_concept_mentions?: number;
+  raw_command_mentions?: number;
+  blockers?: string[];
+}
+
+export interface DocumentTopology {
+  snapshot_id?: string;
+  schema_version: string;
+  document_source_id: string;
+  document_version_id?: string;
+  parsed_document_id: string;
+  source_fingerprint?: string;
+  input_fingerprint?: string;
+  state?: string;
+  partial?: boolean;
+  node_count?: number;
+  edge_count?: number;
+  blockers?: string[];
+  metadata?: Record<string, unknown>;
+  summary: DocumentTopologySummary;
+  nodes: DocumentTopologyNode[];
+  edges: DocumentTopologyEdge[];
+}
+
+export interface DocumentTopologyScopeDocument {
+  document_source_id: string;
+  parsed_document_id: string;
+  state: string;
+  summary: DocumentTopologySummary;
+  updated_at?: string;
+}
+
+export interface DocumentTopologyScopeResponse {
+  database: 'postgres' | 'disabled' | string;
+  schema_version: string;
+  source_scope: string;
+  document_count: number;
+  snapshot_count: number;
+  ready_count: number;
+  needs_review_count: number;
+  node_count: number;
+  edge_count: number;
+  asset_count: number;
+  described_asset_count: number;
+  missing_asset_description_count: number;
+  image_description_coverage: number;
+  concept_count: number;
+  command_count: number;
+  blockers: Array<{ message: string; count: number }>;
+  documents: DocumentTopologyScopeDocument[];
+}
+
+export interface DocumentReaderDocument {
+  document_source_id: string;
+  parsed_document_id: string;
+  title: string;
+  filename: string;
+  source_kind: string;
+  mime_type: string;
+  source_scope: string;
+  visibility: string;
+  metadata: Record<string, unknown>;
+  markdown: string;
+  markdown_total_chars?: number;
+  markdown_truncated?: boolean;
+  parsed_metadata: Record<string, unknown>;
+  outline: unknown[];
+  created_at: string;
+  updated_at: string;
+  total_chunks: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  assets: DocumentReaderAsset[];
+  chunks: DocumentReaderChunk[];
+  topology?: DocumentTopology;
+}
+
+export interface DocumentReaderResponse {
+  database: 'postgres' | 'disabled' | string;
+  document: DocumentReaderDocument | null;
+}
+
+export interface RuntimeDbCorpusStatus {
+  database?: string;
+  collection?: string;
+  source_counts?: Record<string, number>;
+  chunk_counts?: Record<string, number>;
+  total_sources?: number;
+  total_chunks?: number;
+  qdrant_index_entries?: number;
+  missing_qdrant_index_entries?: number;
+  qdrant_index_parity?: boolean;
+  ready?: boolean;
+}
+
+export interface RuntimeQdrantLiveStatus {
+  url?: string;
+  collection?: string;
+  status?: string;
+  points_count?: number | null;
+  indexed_vectors_count?: number | null;
+  segments_count?: number | null;
+  optimizer_status?: string | null;
+  ready?: boolean;
+  error?: string;
+}
+
+export interface RuntimeHealthResponse {
+  ok: boolean;
+  runtime?: {
+    config_fingerprint?: string;
+    ocp_version?: string;
+    docs_language?: string;
+    qdrant_collection?: string;
+    database_runtime?: boolean;
+    db_corpus?: RuntimeDbCorpusStatus;
+    qdrant_live?: RuntimeQdrantLiveStatus;
+  } & Record<string, unknown>;
 }
 
 export interface BuyerPacket {
@@ -238,6 +671,15 @@ export interface DataControlRoomSummary {
   user_library_book_count?: number;
   user_library_corpus_book_count?: number;
   user_library_corpus_chunk_count?: number;
+  official_corpus_chunk_count?: number;
+  customer_corpus_chunk_count?: number;
+  total_repository_chunk_count?: number;
+  qdrant_index_entry_count?: number;
+  missing_qdrant_index_entry_count?: number;
+  qdrant_index_parity?: boolean;
+  db_official_document_count?: number;
+  db_customer_document_count?: number;
+  db_total_document_count?: number;
   gold_candidate_book_count?: number;
   approved_wiki_runtime_book_count?: number;
   wiki_navigation_backlog_count?: number;
@@ -250,6 +692,37 @@ export interface DataControlRoomSummary {
   derived_playbook_count: number;
   playable_asset_count: number;
   answer_pass_rate: number;
+  gate_status?: string;
+  certification_status?: string;
+  certification_blocker_count?: number;
+  gold_recovery_count?: number;
+  release_blocking?: boolean;
+  retrieval_hit_at_1?: number | null;
+  citation_precision?: number | null;
+  ragas_faithfulness?: number | null;
+  canonical_grade_source?: string;
+}
+
+export interface DataControlRoomCertification {
+  status: string;
+  label: string;
+  release_blocking: boolean;
+  blockers: string[];
+  blocker_details?: Array<{
+    blocker: string;
+    owner: string;
+    root_cause: string;
+    fix_path: string;
+    verification_command: string;
+  }>;
+  warnings: string[];
+  gold_certified_count: number;
+  gold_recovery_count: number;
+  required_reports?: Record<string, { exists: boolean; path: string }>;
+  gold_contract?: {
+    rule?: string;
+    qdrant_parity_source?: string;
+  };
 }
 
 export interface DataControlRoomResponse {
@@ -278,6 +751,16 @@ export interface DataControlRoomResponse {
     critical_scenario_pass_rate: number | null;
     blockers: string[];
   };
+  certification?: DataControlRoomCertification;
+  canonical_grade_source?: {
+    name: string;
+    path: string;
+    exists: boolean;
+    rule: string;
+    summary?: Record<string, unknown>;
+  };
+  recent_report_paths?: Record<string, { path: string; exists: boolean; mtime?: string; size_bytes?: number }>;
+  reports?: Record<string, unknown>;
   known_books: LibraryBook[];
   gold_books: LibraryBook[];
   corpus: LibraryBucket;
@@ -756,6 +1239,7 @@ export interface OfficialSourceMaterializeResponse {
     source_meta_ready: boolean;
     viewer_path: string;
   };
+  gold_build_run?: GoldBuildRun;
   report_path: string;
 }
 
@@ -775,6 +1259,198 @@ export interface RepositorySearchResponse {
   categories: RepositoryCategory[];
   results: RepositorySearchResult[];
   official_candidates?: OfficialSourceCandidate[];
+}
+
+export type SourceDiscoveryLane =
+  | 'official_manual'
+  | 'official_source_repo'
+  | 'official_issue_pr'
+  | 'community_troubleshooting'
+  | 'vendor_kb'
+  | 'unsafe_unverified'
+  | string;
+
+export interface SourceDiscoverySearchQuery {
+  query: string;
+  lane: SourceDiscoveryLane;
+  purpose: string;
+  expected_evidence: string;
+}
+
+export interface SourceDiscoveryPlan {
+  schema: string;
+  source_request_id: string;
+  question: string;
+  failed_answer: string;
+  response_kind: string;
+  need_type: string;
+  reason: string;
+  allowed_lanes: SourceDiscoveryLane[];
+  search_queries: SourceDiscoverySearchQuery[];
+  risk_level: 'low' | 'medium' | 'high' | string;
+  gold_policy: string;
+  requires_human_review: boolean;
+  evidence: string[];
+  lane_policies?: Array<Record<string, unknown>>;
+}
+
+export interface GithubIssuePrResult {
+  id: number;
+  number: number;
+  title: string;
+  html_url: string;
+  state: string;
+  repository_full_name: string;
+  user_login: string;
+  labels: string[];
+  comments: number;
+  updated_at: string;
+  created_at: string;
+  score: number;
+  is_pull_request: boolean;
+  kind: 'issue' | 'pull_request' | string;
+}
+
+export interface SourceDiscoveryLaneResult {
+  lane: SourceDiscoveryLane;
+  label: string;
+  provider: string;
+  query: string;
+  status: 'ok' | 'error' | 'not_configured' | 'blocked' | string;
+  count: number;
+  items: Record<string, unknown>[];
+  message: string;
+  error: string;
+  trust_level: string;
+  gold_policy: string;
+  requires_human_review: boolean;
+  filtered_count?: number;
+  trust_note?: string;
+}
+
+export interface SourceDiscoverySearchResponse {
+  success: boolean;
+  planner_mode: string;
+  llm_planner_enabled: boolean;
+  plan: SourceDiscoveryPlan;
+  lane_results: SourceDiscoveryLaneResult[];
+  totals: {
+    lane_count: number;
+    official_candidates: number;
+    github_repositories: number;
+    github_issues_prs: number;
+  };
+  auth_mode: 'token' | 'public';
+  official_candidates: OfficialSourceCandidate[];
+  github_repository_results: RepositorySearchResult[];
+  github_issue_pr_results: GithubIssuePrResult[];
+}
+
+export interface SourceDiscoveryVerificationRecord {
+  schema: string;
+  candidate_id: string;
+  lane: SourceDiscoveryLane;
+  provider: string;
+  title: string;
+  source_url: string;
+  source_ref: string;
+  query: string;
+  source_request_query: string;
+  candidate_kind: string;
+  trust_level: string;
+  grade: 'bronze' | string;
+  verification_status: 'needs_verification' | string;
+  gold_policy: string;
+  citation_eligible: boolean;
+  can_promote_to_gold: boolean;
+  requires_human_review: boolean;
+  required_checks: Array<{ id: string; label: string; description: string }>;
+  promotion_blockers: string[];
+  created_at: string;
+  updated_at: string;
+  raw_candidate: Record<string, unknown>;
+}
+
+export interface SourceDiscoveryVerificationQueueResponse {
+  schema: string;
+  count: number;
+  items: SourceDiscoveryVerificationRecord[];
+  path: string;
+}
+
+export interface SourceDiscoveryVerificationSaveResponse extends SourceDiscoveryVerificationQueueResponse {
+  saved: boolean;
+  deduplicated: boolean;
+  item: SourceDiscoveryVerificationRecord;
+}
+
+export interface SourceDiscoveryJudgeNextAction {
+  action_id: string;
+  label: string;
+  description: string;
+  severity: 'info' | 'warning' | 'critical' | string;
+  query: string;
+  lane?: string;
+}
+
+export interface SourceDiscoveryJudgeReport {
+  schema: string;
+  judge_id: string;
+  created_at: string;
+  question: string;
+  before_answer: string;
+  after_answer: string;
+  overall_verdict: 'pass' | 'needs_review' | 'needs_replay' | 'fail' | string;
+  pass_fail: 'pass' | 'pending' | 'fail' | string;
+  answer_delta: {
+    before_answer_present: boolean;
+    after_answer_present: boolean;
+    before_length: number;
+    after_length: number;
+    after_has_citation_marker: boolean;
+    improvement_signal: boolean;
+    verdict: string;
+  };
+  citation_coverage: {
+    verdict: string;
+    citation_count: number;
+    official_citation_count: number;
+    citation_eligible_count: number;
+    non_eligible_citation_count: number;
+    has_citation_markers: boolean;
+  };
+  source_trust: {
+    verdict: string;
+    official_cross_check: boolean;
+    claimed_official_cross_check?: boolean;
+    community_only_risk: boolean;
+    needs_verification_count: number;
+    blocked_candidate_count: number;
+    unsafe_citation_count: number;
+    review_required_lanes: string[];
+  };
+  remaining_gap: string[];
+  next_actions?: SourceDiscoveryJudgeNextAction[];
+  evidence: {
+    citations: Record<string, unknown>[];
+    source_candidates: Record<string, unknown>[];
+    verification_records: SourceDiscoveryVerificationRecord[];
+  };
+  path?: string;
+}
+
+export interface SourceDiscoveryJudgeReportsResponse {
+  schema: string;
+  count: number;
+  items: SourceDiscoveryJudgeReport[];
+  path: string;
+}
+
+export interface SourceDiscoveryJudgeReplayResponse {
+  schema: string;
+  question: string;
+  replay: ChatResponse;
+  judge_report: SourceDiscoveryJudgeReport;
 }
 
 export interface RepositoryFavorite extends Omit<RepositorySearchResult, 'is_favorite' | 'favorite_category' | 'archived' | 'ranking_score'> {
@@ -834,16 +1510,28 @@ export interface DocumentIngestStatusResponse {
 }
 
 export interface RepositoryUnansweredItem {
+  source_request_id?: string;
   query: string;
   rewritten_query: string;
   timestamp: string;
   response_kind: string;
+  failure_reason?: string;
+  source_request_origin?: string;
+  status?: string;
+  gold_build_status?: string;
+  gold_build_next_action?: string;
+  gold_build_pipeline?: string;
   warnings: string[];
 }
 
 export interface RepositoryUnansweredResponse {
   count: number;
   items: RepositoryUnansweredItem[];
+}
+
+export interface RepositorySourceRequestResponse extends RepositoryUnansweredResponse {
+  success: boolean;
+  item: RepositoryUnansweredItem;
 }
 
 export interface SourceMetaResponse {
@@ -959,6 +1647,69 @@ export interface DbChatMessagesResponse {
   messages: DbChatMessage[];
 }
 
+export type ChatFeedbackIssueType =
+  | 'wrong_answer'
+  | 'missing_grounding'
+  | 'wrong_citation'
+  | 'hallucination'
+  | 'version_mismatch'
+  | 'incomplete_answer';
+
+export interface ChatFeedbackSaveResponse {
+  saved: boolean;
+  feedback_id: string;
+  status: string;
+  gap_type: string;
+  created_at: string;
+}
+
+export interface ChatFeedbackIssue {
+  feedback_id: string;
+  status: string;
+  issue_type: string;
+  severity: string;
+  gap_type: string;
+  user_query: string;
+  assistant_answer: string;
+  user_comment: string;
+  expected_answer: string;
+  cited_chunk_ids: string[];
+  cited_asset_ids: string[];
+  citations: Record<string, unknown>[];
+  retrieval_trace: Record<string, unknown>;
+  pipeline_trace: Record<string, unknown>;
+  qwen_draft: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatFeedbackQueueResponse {
+  schema: string;
+  ready: boolean;
+  count: number;
+  issues: ChatFeedbackIssue[];
+  reason?: string;
+}
+
+let runtimeIdentityUser = '';
+
+export function setRuntimeIdentityUser(user: string | null | undefined): void {
+  runtimeIdentityUser = String(user || '').trim();
+}
+
+export function applyRuntimeIdentityHeader(headers: Headers): Headers {
+  if (
+    runtimeIdentityUser
+    && !headers.has('X-Forwarded-User')
+    && !headers.has('X-Remote-User')
+    && !headers.has('X-User')
+  ) {
+    headers.set('X-User', runtimeIdentityUser);
+  }
+  return headers;
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers ?? {});
   const hasBody = init?.body !== undefined && init?.body !== null;
@@ -967,9 +1718,9 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set('Content-Type', 'application/json');
   }
   const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
-    credentials: 'include',
-    headers,
     ...init,
+    credentials: 'include',
+    headers: applyRuntimeIdentityHeader(headers),
   });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -989,9 +1740,9 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 async function requestResponse(path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers ?? {});
   const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
-    credentials: 'include',
-    headers,
     ...init,
+    credentials: 'include',
+    headers: applyRuntimeIdentityHeader(headers),
   });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -1082,6 +1833,93 @@ export async function searchRepositories(query: string, limit = 12): Promise<Rep
   return requestJson<RepositorySearchResponse>(`/api/repositories/search?${params.toString()}`);
 }
 
+export async function searchSourceDiscovery(query: string, limit = 8): Promise<SourceDiscoverySearchResponse> {
+  return requestJson<SourceDiscoverySearchResponse>('/api/repositories/source-discovery/search', {
+    method: 'POST',
+    body: JSON.stringify({
+      query,
+      limit,
+      include_community: true,
+      response_kind: 'source_discovery',
+    }),
+  });
+}
+
+export async function loadSourceDiscoveryVerificationQueue(limit = 50): Promise<SourceDiscoveryVerificationQueueResponse> {
+  return requestJson<SourceDiscoveryVerificationQueueResponse>(
+    `/api/repositories/source-discovery/verification-queue?limit=${encodeURIComponent(String(limit))}`,
+  );
+}
+
+export async function saveSourceDiscoveryVerificationCandidate(payload: {
+  lane: SourceDiscoveryLane;
+  provider: string;
+  query: string;
+  sourceRequestQuery?: string;
+  candidate?: Record<string, unknown>;
+}): Promise<SourceDiscoveryVerificationSaveResponse> {
+  return requestJson<SourceDiscoveryVerificationSaveResponse>('/api/repositories/source-discovery/verification-queue', {
+    method: 'POST',
+    body: JSON.stringify({
+      lane: payload.lane,
+      provider: payload.provider,
+      query: payload.query,
+      source_request_query: payload.sourceRequestQuery ?? '',
+      candidate: payload.candidate ?? {},
+    }),
+  });
+}
+
+export async function loadSourceDiscoveryJudgeReports(limit = 20): Promise<SourceDiscoveryJudgeReportsResponse> {
+  return requestJson<SourceDiscoveryJudgeReportsResponse>(
+    `/api/repositories/source-discovery/judge?limit=${encodeURIComponent(String(limit))}`,
+  );
+}
+
+export async function runSourceDiscoveryJudge(payload: {
+  question: string;
+  beforeAnswer?: string;
+  afterAnswer?: string;
+  citations?: Record<string, unknown>[];
+  sourceCandidates?: Record<string, unknown>[];
+  verificationRecords?: SourceDiscoveryVerificationRecord[];
+  includeVerificationQueue?: boolean;
+  officialCrossCheck?: boolean;
+}): Promise<SourceDiscoveryJudgeReport> {
+  return requestJson<SourceDiscoveryJudgeReport>('/api/repositories/source-discovery/judge', {
+    method: 'POST',
+    body: JSON.stringify({
+      question: payload.question,
+      before_answer: payload.beforeAnswer ?? '',
+      after_answer: payload.afterAnswer ?? '',
+      citations: payload.citations ?? [],
+      source_candidates: payload.sourceCandidates ?? [],
+      verification_records: payload.verificationRecords ?? [],
+      include_verification_queue: payload.includeVerificationQueue ?? true,
+      official_cross_check: payload.officialCrossCheck ?? false,
+    }),
+  });
+}
+
+export async function runSourceDiscoveryJudgeReplay(payload: {
+  question: string;
+  beforeAnswer?: string;
+  sourceCandidates?: Record<string, unknown>[];
+  verificationRecords?: SourceDiscoveryVerificationRecord[];
+  includeVerificationQueue?: boolean;
+}): Promise<SourceDiscoveryJudgeReplayResponse> {
+  return requestJson<SourceDiscoveryJudgeReplayResponse>('/api/repositories/source-discovery/judge/replay', {
+    method: 'POST',
+    body: JSON.stringify({
+      question: payload.question,
+      before_answer: payload.beforeAnswer ?? '',
+      source_candidates: payload.sourceCandidates ?? [],
+      verification_records: payload.verificationRecords ?? [],
+      include_verification_queue: payload.includeVerificationQueue ?? true,
+    }),
+  });
+}
+
 export async function loadOfficialSourceCatalog(): Promise<OfficialSourceCatalogResponse> {
   return requestJson<OfficialSourceCatalogResponse>('/api/repositories/official-catalog');
 }
@@ -1105,6 +1943,29 @@ export async function loadRepositoryFavorites(): Promise<RepositoryFavoritesResp
 
 export async function loadRepositoryUnanswered(limit = 20): Promise<RepositoryUnansweredResponse> {
   return requestJson<RepositoryUnansweredResponse>(`/api/repositories/unanswered?limit=${encodeURIComponent(String(limit))}`);
+}
+
+export async function saveRepositorySourceRequest(payload: {
+  query: string;
+  rewrittenQuery?: string;
+  responseKind?: string;
+  failureReason?: string;
+  sourceRequestOrigin?: string;
+  warnings?: string[];
+  sessionId?: string;
+}): Promise<RepositorySourceRequestResponse> {
+  return requestJson<RepositorySourceRequestResponse>('/api/repositories/source-request', {
+    method: 'POST',
+    body: JSON.stringify({
+      query: payload.query,
+      rewritten_query: payload.rewrittenQuery ?? '',
+      response_kind: payload.responseKind ?? 'manual_source_request',
+      failure_reason: payload.failureReason ?? 'user_requested_source_enrichment',
+      source_request_origin: payload.sourceRequestOrigin ?? 'chat_acquisition',
+      warnings: payload.warnings ?? [],
+      session_id: payload.sessionId ?? '',
+    }),
+  });
 }
 
 export async function saveRepositoryFavorites(
@@ -1205,12 +2066,11 @@ export async function sendChatStream(
   },
   onEvent: (event: ChatStreamEvent) => void,
 ): Promise<ChatResponse> {
+  const headers = applyRuntimeIdentityHeader(new Headers({ 'Content-Type': 'application/json' }));
   const response = await fetch(`${RUNTIME_ORIGIN}/api/chat/stream`, {
     method: 'POST',
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       query: payload.query,
       session_id: payload.sessionId,
@@ -1319,23 +2179,21 @@ export async function loadCustomerPackCapturedPreview(
 
 export async function uploadDocumentIngestion(
   file: File,
-  options: {
-    dryRun?: boolean;
-    index?: boolean;
-    createdBy?: string;
-    repositoryId?: string;
-    repositorySlug?: string;
-    repositoryTitle?: string;
-    repositoryKind?: string;
-    visibility?: string;
-    sourceScope?: string;
-  } = {},
+  options: UploadIngestOptions = {},
 ): Promise<UploadIngestResponse> {
+  return requestJson<UploadIngestResponse>('/api/uploads/ingest', {
+    method: 'POST',
+    body: buildUploadIngestFormData(file, options),
+  });
+}
+
+function buildUploadIngestFormData(file: File, options: UploadIngestOptions): FormData {
   const payload = new FormData();
   payload.append('file_name', file.name);
   payload.append('file', file, file.name);
   payload.append('dry_run', String(Boolean(options.dryRun)));
   payload.append('index', String(options.index ?? true));
+  payload.append('auto_repair', String(Boolean(options.autoRepair)));
   if (options.createdBy) {
     payload.append('created_by', options.createdBy);
   }
@@ -1357,14 +2215,215 @@ export async function uploadDocumentIngestion(
   if (options.sourceScope) {
     payload.append('source_scope', options.sourceScope);
   }
-  return requestJson<UploadIngestResponse>('/api/uploads/ingest', {
+  return payload;
+}
+
+export async function uploadDocumentIngestionStream(
+  file: File,
+  options: UploadIngestOptions = {},
+  onEvent: (event: UploadIngestStreamEvent) => void,
+): Promise<UploadIngestResponse> {
+  const headers = applyRuntimeIdentityHeader(new Headers());
+  const response = await fetch(`${RUNTIME_ORIGIN}/api/uploads/ingest-stream`, {
     method: 'POST',
-    body: payload,
+    credentials: 'include',
+    headers,
+    body: buildUploadIngestFormData(file, options),
   });
+  if (!response.ok || !response.body) {
+    let message = `${response.status} ${response.statusText}`;
+    try {
+      const payload = (await response.json()) as { error?: string };
+      if (payload.error) {
+        message = payload.error;
+      }
+    } catch {
+      // Keep default HTTP message.
+    }
+    throw new Error(message);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let resultPayload: UploadIngestResponse | null = null;
+
+  const handleLine = (rawLine: string) => {
+    const line = rawLine.trim();
+    if (!line) {
+      return;
+    }
+    const event = JSON.parse(line) as UploadIngestStreamEvent;
+    onEvent(event);
+    if (event.type === 'error') {
+      throw new Error(event.error || '업로드 스트림 오류');
+    }
+    if (event.type === 'result') {
+      resultPayload = event.payload;
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+    let newlineIndex = buffer.indexOf('\n');
+    while (newlineIndex >= 0) {
+      const line = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + 1);
+      handleLine(line);
+      newlineIndex = buffer.indexOf('\n');
+    }
+
+    if (done) {
+      break;
+    }
+  }
+
+  if (buffer.trim()) {
+    handleLine(buffer);
+  }
+
+  if (!resultPayload) {
+    throw new Error('업로드 스트림이 최종 결과 없이 종료되었습니다.');
+  }
+  return resultPayload;
+}
+
+export async function retryUploadDocumentIndex(payload: {
+  documentSourceId?: string;
+  sourceScope?: string;
+  chunkCount?: number;
+  indexRetryAttempts?: number;
+}): Promise<UploadIndexRetryResponse> {
+  return requestJson<UploadIndexRetryResponse>('/api/uploads/index-retry', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_source_id: payload.documentSourceId ?? '',
+      source_scope: payload.sourceScope ?? 'user_upload',
+      chunk_count: payload.chunkCount ?? 100,
+      index_retry_attempts: payload.indexRetryAttempts ?? 3,
+    }),
+  });
+}
+
+export async function retryUploadDocumentTopology(payload: {
+  documentSourceId: string;
+  parsedDocumentId?: string;
+}): Promise<{
+  ok: boolean;
+  document_source_id: string;
+  parsed_document_id: string;
+  topology?: DocumentTopology | Record<string, unknown>;
+  topology_status?: Record<string, unknown>;
+  quality?: DocumentQualitySnapshot;
+  gold_build_run?: GoldBuildRun;
+}> {
+  return requestJson('/api/uploads/topology-retry', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_source_id: payload.documentSourceId,
+      parsed_document_id: payload.parsedDocumentId ?? '',
+    }),
+  });
+}
+
+export async function recheckUploadDocumentQuality(payload: {
+  documentSourceId: string;
+  parsedDocumentId?: string;
+}): Promise<{
+  ok: boolean;
+  document_source_id: string;
+  parsed_document_id: string;
+  quality?: DocumentQualitySnapshot;
+  gold_build_run?: GoldBuildRun;
+}> {
+  return requestJson('/api/uploads/quality-recheck', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_source_id: payload.documentSourceId,
+      parsed_document_id: payload.parsedDocumentId ?? '',
+    }),
+  });
+}
+
+export async function repairUploadCodeBlocks(payload: {
+  documentSourceId: string;
+  parsedDocumentId?: string;
+  dryRun?: boolean;
+}): Promise<UploadCodeBlockRepairResponse> {
+  return requestJson('/api/uploads/repair-code-blocks', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_source_id: payload.documentSourceId,
+      parsed_document_id: payload.parsedDocumentId ?? '',
+      dry_run: payload.dryRun ?? true,
+    }),
+  });
+}
+
+export async function repairUploadPageStubs(payload: {
+  documentSourceId: string;
+  parsedDocumentId?: string;
+  dryRun?: boolean;
+}): Promise<UploadCodeBlockRepairResponse> {
+  return requestJson('/api/uploads/repair-page-stubs', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_source_id: payload.documentSourceId,
+      parsed_document_id: payload.parsedDocumentId ?? '',
+      dry_run: payload.dryRun ?? true,
+    }),
+  });
+}
+
+export async function loadUploadPipelineStatus(params: {
+  documentSourceId?: string;
+  parsedDocumentId?: string;
+  runId?: string;
+}): Promise<{
+  ok: boolean;
+  document_source_id: string;
+  parsed_document_id: string;
+  run_id: string;
+  events: UploadIngestStreamEvent[];
+  pipeline_summary: UploadPipelineSummary;
+  quality?: DocumentQualitySnapshot | null;
+}> {
+  const query = new URLSearchParams();
+  if (params.documentSourceId) query.set('document_source_id', params.documentSourceId);
+  if (params.parsedDocumentId) query.set('parsed_document_id', params.parsedDocumentId);
+  if (params.runId) query.set('run_id', params.runId);
+  return requestJson(`/api/uploads/pipeline-status?${query.toString()}`);
 }
 
 export async function loadDocumentRepositories(): Promise<DocumentRepositoriesResponse> {
   return requestJson<DocumentRepositoriesResponse>('/api/repositories/documents');
+}
+
+export async function loadDocumentTopology(scope: 'official' | 'customer' | 'uploads' | string, limit = 200): Promise<DocumentTopologyScopeResponse> {
+  const query = new URLSearchParams();
+  query.set('scope', scope);
+  query.set('limit', String(limit));
+  return requestJson<DocumentTopologyScopeResponse>(`/api/repositories/topology?${query.toString()}`);
+}
+
+export async function loadDocumentReader(params: {
+  documentSourceId?: string;
+  parsedDocumentId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<DocumentReaderResponse> {
+  const query = new URLSearchParams();
+  if (params.documentSourceId) query.set('document_source_id', params.documentSourceId);
+  if (params.parsedDocumentId) query.set('parsed_document_id', params.parsedDocumentId);
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.offset) query.set('offset', String(params.offset));
+  return requestJson<DocumentReaderResponse>(`/api/repositories/document-reader?${query.toString()}`);
+}
+
+export async function loadRuntimeHealth(): Promise<RuntimeHealthResponse> {
+  return requestJson<RuntimeHealthResponse>('/api/health');
 }
 
 export async function loadDocumentIngestStatus(params: {
@@ -1412,6 +2471,52 @@ export async function loadDbChatMessages(sessionId: string): Promise<DbChatMessa
   return requestJson<DbChatMessagesResponse>(
     `/api/chat-history/messages?client_session_id=${encodeURIComponent(sessionId)}`,
   );
+}
+
+export async function saveChatFeedback(payload: {
+  sessionId: string;
+  userQuery: string;
+  assistantAnswer: string;
+  issueType: ChatFeedbackIssueType;
+  userComment?: string;
+  expectedAnswer?: string;
+  citations?: Record<string, unknown>[];
+  retrievalTrace?: Record<string, unknown>;
+  pipelineTrace?: Record<string, unknown>;
+  responseKind?: string;
+  routeKind?: string;
+  activeRepositoryId?: string;
+  activeDocumentId?: string;
+}): Promise<ChatFeedbackSaveResponse> {
+  return requestJson<ChatFeedbackSaveResponse>('/api/chat/feedback', {
+    method: 'POST',
+    body: JSON.stringify({
+      session_id: payload.sessionId,
+      user_query: payload.userQuery,
+      assistant_answer: payload.assistantAnswer,
+      issue_type: payload.issueType,
+      user_comment: payload.userComment ?? '',
+      expected_answer: payload.expectedAnswer ?? '',
+      citations: payload.citations ?? [],
+      retrieval_trace: payload.retrievalTrace ?? {},
+      pipeline_trace: payload.pipelineTrace ?? {},
+      response_kind: payload.responseKind ?? '',
+      route_kind: payload.routeKind ?? '',
+      active_repository_id: payload.activeRepositoryId ?? '',
+      active_document_id: payload.activeDocumentId ?? '',
+    }),
+  });
+}
+
+export async function loadChatFeedbackQueue(limit = 50): Promise<ChatFeedbackQueueResponse> {
+  return requestJson<ChatFeedbackQueueResponse>(`/api/chat/feedback-queue?limit=${encodeURIComponent(String(limit))}`);
+}
+
+export async function draftChatFeedbackRemediation(feedbackId: string): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>(`/api/chat/feedback/${encodeURIComponent(feedbackId)}/draft-remediation`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
 }
 
 export async function archiveDbChatSession(sessionId: string): Promise<void> {

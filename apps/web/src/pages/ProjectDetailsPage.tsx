@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Book, ShieldCheck, Layers, MessageSquare, PlaySquare } from 'lucide-react';
 import gsap from 'gsap';
 import { buildSharedLandingHref } from '../routing/routes';
+import { useGlobalTheme } from '../lib/globalTheme';
 import './ProjectDetailsPage.css';
 
 export default function ProjectDetailsPage() {
   const containerRef = useRef<HTMLDivElement>(null);
+  useGlobalTheme();
 
   useEffect(() => {
     // Basic entrance animation for the page
@@ -98,8 +100,8 @@ export default function ProjectDetailsPage() {
             </div>
             <div className="algo-card glass-panel">
               <div className="algo-icon"><PlaySquare size={20} /></div>
-              <h4>Cross-Encoder Reranking</h4>
-              <p>추출된 근거들을 다시 한번 정밀 채점하여 가장 품질이 높은 단락만을 답변 생성에 사용합니다.</p>
+              <h4>BGE 기반 근거 정렬</h4>
+              <p>BGE 의미 검색과 제품 규칙을 함께 사용해 질문에 맞는 근거 단락을 답변 생성에 사용합니다.</p>
             </div>
           </div>
         </section>

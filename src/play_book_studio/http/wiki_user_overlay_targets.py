@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from play_book_studio.config.corpus_paths import resolve_wiki_runtime_books_path
 from play_book_studio.config.settings import load_settings
 
 from .wiki_relations import load_wiki_relation_assets
@@ -57,7 +58,7 @@ def _canonical_figure_ref(book_slug: str, asset_name: str) -> str:
 
 
 def _active_runtime_entries(root_dir: Path) -> list[dict[str, Any]]:
-    path = root_dir / "data" / "wiki_runtime_books" / "active_manifest.json"
+    path = resolve_wiki_runtime_books_path(root_dir, "active_manifest.json")
     if not path.exists():
         return []
     try:

@@ -29,9 +29,23 @@ def _is_approved_ko(entry: dict[str, Any]) -> bool:
     return False
 
 
+def _is_approved_review(entry: dict[str, Any]) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    for key in ("approval_status", "review_status", "approval_state"):
+        if _normalized(entry.get(key)).lower() == "approved":
+            return True
+    return False
+
+
 def official_runtime_grade(entry: dict[str, Any]) -> str:
-    if _is_approved_ko(entry):
+    explicit_grade = _normalized(entry.get("grade")).lower()
+    if explicit_grade == "gold":
         return "Gold"
+    if explicit_grade == "silver":
+        return "Silver"
+    if explicit_grade == "bronze":
+        return "Bronze"
     source_type = _normalized(entry.get("source_type"))
     if source_type in {
         "topic_playbook",
@@ -41,6 +55,10 @@ def official_runtime_grade(entry: dict[str, Any]) -> str:
         "synthesized_playbook",
     }:
         return "Bronze"
+    if _is_approved_ko(entry) and _is_approved_review(entry):
+        return "Gold"
+    if _is_approved_ko(entry):
+        return "Silver"
     return "Silver"
 
 
@@ -50,17 +68,6 @@ def official_runtime_truth_payload(*, settings: Settings, manifest_entry: dict[s
     publication_state = _normalized(manifest_entry.get("publication_state"))
     parser_backend = _normalized(manifest_entry.get("parser_backend"))
     source_lane = _normalized(manifest_entry.get("source_lane"))
-    if _is_approved_ko(manifest_entry):
-        runtime_truth_label = f"{pack_label} Gold Playbook" if pack_label else "Gold Playbook"
-        return {
-            "source_lane": source_lane,
-            "approval_state": approval_state or "approved",
-            "publication_state": publication_state or "active",
-            "parser_backend": parser_backend,
-            "boundary_truth": "official_gold_playbook_runtime",
-            "runtime_truth_label": runtime_truth_label,
-            "boundary_badge": "Gold Playbook",
-        }
     if _is_source_first_candidate(manifest_entry):
         runtime_truth_label = f"{pack_label} Source-First Candidate" if pack_label else "Source-First Candidate"
         return {
@@ -71,6 +78,17 @@ def official_runtime_truth_payload(*, settings: Settings, manifest_entry: dict[s
             "boundary_truth": "official_candidate_runtime",
             "runtime_truth_label": runtime_truth_label,
             "boundary_badge": "Source-First Candidate",
+        }
+    if official_runtime_grade(manifest_entry) == "Gold":
+        runtime_truth_label = f"{pack_label} Gold Playbook" if pack_label else "Gold Playbook"
+        return {
+            "source_lane": source_lane,
+            "approval_state": approval_state or "approved",
+            "publication_state": publication_state or "active",
+            "parser_backend": parser_backend,
+            "boundary_truth": "official_gold_playbook_runtime",
+            "runtime_truth_label": runtime_truth_label,
+            "boundary_badge": "Gold Playbook",
         }
     runtime_truth_label = f"{pack_label} Source-First Candidate" if pack_label else "Source-First Candidate"
     return {

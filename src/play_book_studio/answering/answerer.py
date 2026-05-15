@@ -92,6 +92,7 @@ def _looks_like_missing_coverage_answer(answer: str) -> bool:
 
 
 _CONFIDENCE_TOKEN_RE = re.compile(r"[0-9A-Za-z가-힣][0-9A-Za-z가-힣_-]*")
+_LATIN_WITH_KOREAN_JOSA_RE = re.compile(r"^([0-9a-z][0-9a-z_-]*)(?:은|는|이|가|을|를|와|과|로|으로|에|에서|의|도|만|랑)$")
 _CONFIDENCE_STOPWORDS = {
     "어떻게",
     "어떤",
@@ -118,10 +119,46 @@ def _confidence_tokens(*texts: str) -> set[str]:
     for text in texts:
         for token in _CONFIDENCE_TOKEN_RE.findall(str(text or "").lower()):
             normalized = token.strip("-_ ")
+            josa_match = _LATIN_WITH_KOREAN_JOSA_RE.match(normalized)
+            if josa_match:
+                normalized = josa_match.group(1)
             if len(normalized) < 2 or normalized in _CONFIDENCE_STOPWORDS:
                 continue
             tokens.add(normalized)
     return tokens
+
+
+def _follow_up_enriched_query(
+    *,
+    query: str,
+    rewritten_query: str,
+    context: SessionContext | None,
+) -> str:
+    if not has_follow_up_reference(query):
+        return query
+    if not rewritten_query or rewritten_query == query:
+        return query
+    has_session_topic = bool(
+        str(getattr(context, "current_topic", "") or "").strip()
+        or list(getattr(context, "open_entities", []) or [])
+        or str(getattr(context, "user_goal", "") or "").strip()
+    )
+    if not has_session_topic:
+        return query
+    return f"{query} {rewritten_query}"
+
+
+def _low_confidence_query_input(
+    *,
+    query: str,
+    rewritten_query: str,
+    context: SessionContext | None,
+) -> str:
+    return _follow_up_enriched_query(
+        query=query,
+        rewritten_query=rewritten_query,
+        context=context,
+    )
 
 
 def _selected_hit_score(selected_hits: list[dict] | None, key: str) -> float:
@@ -951,9 +988,14 @@ class ChatAnswerer:
                 "status": "running",
             }
         )
+        context_query = _follow_up_enriched_query(
+            query=query,
+            rewritten_query=retrieval.rewritten_query,
+            context=context,
+        )
         context_bundle = assemble_context(
             retrieval.hits,
-            query=query,
+            query=context_query,
             session_context=context,
             root_dir=self.settings.root_dir,
             max_chunks=max_context_chunks,
@@ -1119,7 +1161,11 @@ class ChatAnswerer:
             )
 
         if _is_low_confidence_retrieval(
-            query=query,
+            query=_low_confidence_query_input(
+                query=query,
+                rewritten_query=retrieval.rewritten_query,
+                context=context,
+            ),
             citations=context_bundle.citations,
             selected_hits=selected_hits,
         ):

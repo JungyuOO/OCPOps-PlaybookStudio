@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import zipfile
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 
 from play_book_studio.ingestion.document_parsing import (
+    _render_pdf_pages_as_image_assets,
     build_document_chunks,
     detect_document_format,
     parse_upload_document,
@@ -155,6 +157,18 @@ def test_markdown_sections_store_toc_metadata_outside_body_text():
     assert "1.1 Network check" not in chunks[-1].markdown
 
 
+def test_page_heading_is_not_split_into_standalone_stub_chunk():
+    source = _case_dir("page_heading_chunk") / "report.md"
+    body = " ".join(["본문"] * 120)
+    source.write_text("# Report\n\n<!-- page: 6 -->\n## Page 6\n\n" + body, encoding="utf-8")
+
+    parsed = parse_upload_document(source)
+    chunks = build_document_chunks(parsed, max_chars=80, overlap_blocks=0)
+
+    assert all(chunk.markdown.strip() != "## Page 6" for chunk in chunks)
+    assert any("## Page 6" in chunk.markdown and "본문" in chunk.markdown for chunk in chunks)
+
+
 def test_parse_image_document_keeps_asset_and_description():
     image_path = _case_dir("image_asset") / "diagram.png"
     image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
@@ -172,6 +186,56 @@ def test_parse_image_document_keeps_asset_and_description():
     assert parsed.blocks[0].block_type == "image"
     assert parsed.blocks[0].asset_ids == (parsed.assets[0].asset_id,)
     assert "OpenShift topology image" in parsed.markdown
+
+
+def test_pdf_default_pipeline_extracts_embedded_page_images():
+    fitz = pytest.importorskip("fitz")
+    image_module = pytest.importorskip("PIL.Image")
+    pdf_path = _case_dir("pdf_image_asset") / "runbook.pdf"
+
+    image_buffer = BytesIO()
+    image_module.new("RGB", (80, 40), color=(200, 30, 30)).save(image_buffer, format="PNG")
+
+    document = fitz.open()
+    page = document.new_page(width=320, height=240)
+    page.insert_text((36, 36), "CI image evidence")
+    page.insert_image(fitz.Rect(36, 60, 196, 140), stream=image_buffer.getvalue())
+    document.save(pdf_path)
+    document.close()
+
+    parsed = parse_upload_document(pdf_path)
+    chunks = build_document_chunks(parsed, max_chars=300, overlap_blocks=0)
+
+    assert parsed.document_format == "pdf"
+    assert parsed.metadata["pdf_text_extractor"] == "pymupdf"
+    assert parsed.metadata["pdf_image_count"] == 1
+    assert len(parsed.assets) == 1
+    assert parsed.assets[0].content
+    assert parsed.assets[0].mime_type.startswith("image/")
+    assert parsed.assets[0].page_number == 1
+    assert f"asset://{parsed.assets[0].asset_id}" in parsed.markdown
+    assert any(block.block_type == "image" for block in parsed.blocks)
+    assert any(parsed.assets[0].asset_id in chunk.asset_ids for chunk in chunks)
+
+
+def test_pdf_page_render_fallback_preserves_visual_page_when_fitz_is_unavailable():
+    fitz = pytest.importorskip("fitz")
+    pytest.importorskip("pypdfium2")
+    pdf_path = _case_dir("pdf_page_render_fallback") / "runbook.pdf"
+
+    document = fitz.open()
+    page = document.new_page(width=160, height=120)
+    page.insert_text((24, 40), "visual page")
+    document.save(pdf_path)
+    document.close()
+
+    assets, warnings = _render_pdf_pages_as_image_assets(pdf_path, source_sha256="source-sha")
+
+    assert warnings[0] == "pdf_page_render_fallback_used"
+    assert len(assets) == 1
+    assert assets[0].mime_type == "image/png"
+    assert assets[0].content.startswith(b"\x89PNG")
+    assert assets[0].metadata["pdf_rendered_page"] is True
 
 
 def test_converter_formats_use_injected_markdown_adapter():

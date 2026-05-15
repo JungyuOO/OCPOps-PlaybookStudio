@@ -7,6 +7,18 @@
   flex-direction: column;
 }
 
+[data-theme='light'] .pipeline-wrapper {
+  background: var(--landing-pipeline-bg, var(--bg-color));
+}
+
+[data-theme='light'] .pipeline-wrapper .pipeline-header h2 {
+  color: var(--landing-ink, #102235);
+}
+
+[data-theme='light'] .pipeline-wrapper .pipeline-header p {
+  color: var(--landing-ink-muted, #426073);
+}
+
 .pipeline-wrapper .pipeline-header {
   padding: 8rem 10vw 2rem 10vw;
   z-index: 10;
@@ -42,6 +54,14 @@
   pointer-events: none;
   /* pipeline-track-container is z-index:2, so nerve-path(1) is behind it */
   will-change: transform;
+}
+
+[data-theme='light'] .pipeline-wrapper .nerve-path {
+  background: rgba(0, 122, 153, 0.14);
+}
+
+[data-theme='light'] .pipeline-wrapper .nerve-progress {
+  box-shadow: 0 0 18px rgba(0, 122, 153, 0.36), 0 0 34px rgba(91, 43, 214, 0.2);
 }
 
 .pipeline-wrapper .nerve-progress {
@@ -122,6 +142,14 @@
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
+[data-theme='light'] .pipeline-wrapper .step-card {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.96), rgba(232, 249, 248, 0.9)),
+    #ffffff;
+  border-color: var(--landing-border-strong, rgba(0, 122, 153, 0.28));
+  box-shadow: var(--landing-shadow, 0 24px 70px rgba(23, 55, 78, 0.16)), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
 /* Border Scan Beam Effect */
 .pipeline-wrapper .step-card::after {
   content: '';
@@ -151,6 +179,18 @@
     0 0 28px rgba(0, 209, 255, 0.55),
     0 0 60px rgba(140, 82, 255, 0.35),
     inset 0 0 30px rgba(0, 209, 255, 0.12);
+}
+
+[data-theme='light'] .pipeline-wrapper .step-card.active-glow {
+  background:
+    linear-gradient(155deg, rgba(231, 251, 249, 0.98), rgba(242, 238, 255, 0.96)),
+    #ffffff;
+  border-color: rgba(0, 122, 153, 0.58);
+  box-shadow:
+    0 0 0 1px rgba(0, 122, 153, 0.25),
+    0 22px 56px rgba(0, 122, 153, 0.22),
+    0 0 52px rgba(91, 43, 214, 0.14),
+    inset 0 0 34px rgba(0, 122, 153, 0.08);
 }
 
 .pipeline-wrapper .step-card.active-glow::after {
@@ -192,6 +232,10 @@
   transition: color 0.6s, opacity 0.6s, text-shadow 0.6s;
 }
 
+[data-theme='light'] .pipeline-wrapper .step-number.text-dim {
+  color: rgba(0, 122, 153, 0.62);
+}
+
 .pipeline-wrapper .step-card.active-glow .step-number {
   color: var(--accent-cyan, #00d1ff);
   opacity: 1;
@@ -206,11 +250,24 @@
   line-height: 1.2;
 }
 
+[data-theme='light'] .pipeline-wrapper .step-title {
+  color: var(--landing-ink, #102235);
+}
+
 .pipeline-wrapper .step-desc {
   font-size: 1.1rem;
   color: var(--text-muted);
   line-height: 1.6;
   max-width: 100%;
+}
+
+[data-theme='light'] .pipeline-wrapper .step-desc {
+  color: var(--landing-ink-muted, #426073);
+}
+
+[data-theme='light'] .pipeline-wrapper .highlight-card {
+  border-color: rgba(91, 43, 214, 0.28);
+  box-shadow: var(--landing-shadow-soft, 0 18px 44px rgba(23, 55, 78, 0.11)), inset 0 0 38px rgba(91, 43, 214, 0.08);
 }
 
 .pipeline-wrapper .highlight-card {

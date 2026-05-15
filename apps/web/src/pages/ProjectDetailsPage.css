@@ -6,6 +6,22 @@
   position: relative;
 }
 
+[data-theme='light'] .details-page-wrapper {
+  --details-ink: #102235;
+  --details-ink-muted: #486579;
+  --details-ink-dim: #74899a;
+  --details-cyan: #007a99;
+  --details-purple: #5b2bd6;
+  --details-border: rgba(20, 66, 88, 0.14);
+  --details-border-strong: rgba(0, 122, 153, 0.26);
+  --details-panel: rgba(255, 255, 255, 0.76);
+  --details-panel-strong: rgba(255, 255, 255, 0.92);
+  --details-shadow: 0 22px 60px rgba(23, 55, 78, 0.13);
+  background:
+    linear-gradient(135deg, #eef9f8 0%, #f8fbff 42%, #eef1ff 100%);
+  color: var(--details-ink);
+}
+
 /* Sidebar Styling */
 .details-sidebar {
   width: 320px;
@@ -22,6 +38,14 @@
   border-bottom: none;
   background: rgba(13, 13, 15, 0.8);
   z-index: 10;
+}
+
+[data-theme='light'] .details-sidebar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(232, 248, 248, 0.82)),
+    #ffffff;
+  border-right-color: var(--details-border);
+  box-shadow: 14px 0 48px rgba(23, 55, 78, 0.08);
 }
 
 .sidebar-header {
@@ -41,6 +65,14 @@
 
 .back-link:hover {
   color: var(--pbs-accent-cyan);
+}
+
+[data-theme='light'] .back-link {
+  color: var(--details-ink-muted);
+}
+
+[data-theme='light'] .back-link:hover {
+  color: var(--details-cyan);
 }
 
 .sidebar-title {
@@ -86,6 +118,14 @@
   transform: translateX(10px);
 }
 
+[data-theme='light'] .sidebar-menu a {
+  color: var(--details-ink-dim);
+}
+
+[data-theme='light'] .sidebar-menu a:hover {
+  color: var(--details-purple);
+}
+
 /* Main Content Styling */
 .details-content {
   flex: 1;
@@ -103,11 +143,19 @@
   letter-spacing: -0.03em;
 }
 
+[data-theme='light'] .detail-section h1 {
+  color: var(--details-ink);
+}
+
 .detail-section h2 {
   font-size: 2.2rem;
   margin-bottom: 1.5rem;
   letter-spacing: -0.02em;
   color: #fff;
+}
+
+[data-theme='light'] .detail-section h2 {
+  color: var(--details-ink);
 }
 
 .lead-text {
@@ -124,6 +172,11 @@
   margin-bottom: 2rem;
 }
 
+[data-theme='light'] .lead-text,
+[data-theme='light'] .detail-section p {
+  color: var(--details-ink-muted);
+}
+
 .status-banner {
   display: flex;
   align-items: center;
@@ -136,12 +189,29 @@
   font-size: 1.1rem;
 }
 
+[data-theme='light'] .status-banner {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(232, 249, 248, 0.72)),
+    #ffffff;
+  border-color: var(--details-border-strong);
+  box-shadow: 0 16px 40px rgba(23, 55, 78, 0.09);
+}
+
 .status-label {
   color: var(--pbs-text-dim);
 }
 
+[data-theme='light'] .status-label {
+  color: var(--details-ink-dim);
+}
+
 .status-value {
   font-weight: 700;
+}
+
+[data-theme='light'] .status-value,
+[data-theme='light'] .text-white {
+  color: var(--details-ink);
 }
 
 .ms-auto {
@@ -176,6 +246,20 @@
   margin-bottom: 0;
 }
 
+[data-theme='light'] .glass-panel,
+[data-theme='light'] .asset-card,
+[data-theme='light'] .pipeline-card,
+[data-theme='light'] .algo-card,
+[data-theme='light'] .roadmap-container {
+  background: var(--details-panel);
+  border-color: var(--details-border);
+  box-shadow: var(--details-shadow);
+}
+
+[data-theme='light'] .asset-card {
+  background: var(--details-panel-strong);
+}
+
 /* Trace Path */
 .trace-path {
   display: flex;
@@ -189,6 +273,10 @@
   margin-top: 2rem;
 }
 
+[data-theme='light'] .trace-path {
+  background: var(--details-panel-strong);
+}
+
 .arrow {
   color: var(--pbs-text-dim);
 }
@@ -196,6 +284,11 @@
 .glow-cyan { color: var(--pbs-accent-cyan); text-shadow: 0 0 10px rgba(0,209,255,0.5); }
 .glow-purple { color: var(--pbs-accent-purple); text-shadow: 0 0 10px rgba(140,82,255,0.5); }
 .glow-white { color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+
+[data-theme='light'] .glow-white {
+  color: var(--details-ink);
+  text-shadow: none;
+}
 
 /* Feature List */
 .feature-list {
@@ -214,6 +307,15 @@
   display: inline-block;
   width: 250px;
   color: #fff;
+}
+
+[data-theme='light'] .feature-list li {
+  border-bottom-color: var(--details-border);
+  color: var(--details-ink-muted);
+}
+
+[data-theme='light'] .feature-list strong {
+  color: var(--details-ink);
 }
 
 /* Pipeline Steps Grid */
@@ -251,10 +353,37 @@
   color: #fff;
 }
 
+[data-theme='light'] .pipeline-card h3 {
+  color: var(--details-ink);
+}
+
+[data-theme='light'] .step-tag.bronze {
+  background: rgba(177, 92, 30, 0.12);
+  color: #9a4f1d;
+  border-color: rgba(154, 79, 29, 0.32);
+}
+
+[data-theme='light'] .step-tag.silver {
+  background: rgba(71, 85, 105, 0.1);
+  color: #475569;
+  border-color: rgba(71, 85, 105, 0.24);
+}
+
+[data-theme='light'] .step-tag.gold {
+  background: rgba(181, 121, 0, 0.13);
+  color: #9a6700;
+  border-color: rgba(154, 103, 0, 0.3);
+}
+
 .gate-banner {
   margin-top: 3rem;
   border-color: var(--pbs-accent-purple);
   background: rgba(140, 82, 255, 0.05);
+}
+
+[data-theme='light'] .gate-banner {
+  border-color: rgba(91, 43, 214, 0.28);
+  background: rgba(243, 239, 255, 0.82);
 }
 
 /* Algo Flow Container */
@@ -288,6 +417,15 @@
   color: #fff;
 }
 
+[data-theme='light'] .algo-icon {
+  background: rgba(0, 122, 153, 0.1);
+  color: var(--details-cyan);
+}
+
+[data-theme='light'] .algo-card h4 {
+  color: var(--details-ink);
+}
+
 /* Strategy Grid */
 .strategy-grid {
   display: grid;
@@ -302,10 +440,20 @@
   background: rgba(255,255,255,0.02);
 }
 
+[data-theme='light'] .strategy-card {
+  background: var(--details-panel-strong);
+  border-left-color: var(--details-cyan);
+  box-shadow: 0 16px 38px rgba(23, 55, 78, 0.08);
+}
+
 .strategy-card h3 {
   font-size: 1.4rem;
   margin-bottom: 1rem;
   color: #fff;
+}
+
+[data-theme='light'] .strategy-card h3 {
+  color: var(--details-ink);
 }
 
 /* Roadmap Container */
@@ -324,6 +472,23 @@
 .roadmap-column:first-child {
   border-right: 1px solid var(--glass-border);
   background: rgba(255,255,255,0.01);
+}
+
+[data-theme='light'] .roadmap-column:first-child {
+  border-right-color: var(--details-border);
+  background: rgba(234, 248, 247, 0.58);
+}
+
+[data-theme='light'] .roadmap-list li {
+  color: var(--details-ink-muted);
+}
+
+[data-theme='light'] .roadmap-list.done li::before {
+  color: var(--details-cyan);
+}
+
+[data-theme='light'] .roadmap-list.pending li::before {
+  color: var(--details-purple);
 }
 
 .roadmap-list {

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from play_book_studio.answering.context import assemble_context
-from play_book_studio.answering.answerer import _is_low_confidence_retrieval
+from play_book_studio.answering.answerer import (
+    _follow_up_enriched_query,
+    _is_low_confidence_retrieval,
+)
 from play_book_studio.answering.answer_text_commands import build_grounded_command_guide_answer
 from play_book_studio.answering.answer_text_commands import build_grounded_status_answer
 from play_book_studio.answering.answer_text_commands import strip_ungrounded_code_blocks
@@ -93,6 +96,83 @@ def test_command_lookup_boosts_command_bearing_chunks() -> None:
 
     assert hits[0].chunk_id == "command"
     assert "command_intent_cli_commands_boost" in hits[0].component_scores
+
+
+def test_route_ingress_compare_preserves_cross_book_citations() -> None:
+    networking_hit = _hit(
+        "route-overview",
+        text="Ingress 및 Route 오브젝트를 사용하여 애플리케이션을 외부에 노출할 수 있습니다.",
+        book_slug="networking_overview",
+        section="1.3.1. Ingress 및 Route 오브젝트를 사용하여 애플리케이션 노출",
+        raw_score=0.1406,
+    )
+    ingress_hit = _hit(
+        "ingress-route",
+        text="Route는 OpenShift 라우터를 통해 서비스를 노출하고 Ingress 오브젝트는 경로를 생성할 수 있습니다.",
+        book_slug="ingress_and_load_balancing",
+        section="1.1.4. Ingress 오브젝트를 통해 경로 생성",
+        raw_score=0.139,
+    )
+
+    bundle = assemble_context(
+        [networking_hit, ingress_hit],
+        query="Route와 Ingress 차이가 뭐야?",
+        max_chunks=4,
+    )
+
+    assert {citation.book_slug for citation in bundle.citations} == {
+        "networking_overview",
+        "ingress_and_load_balancing",
+    }
+
+
+def test_follow_up_context_assembly_uses_rewritten_registry_topic() -> None:
+    query = "아까 말한 이미지 저장소는?"
+    rewritten_query = (
+        "OCP 4.20 | 주제 외부 이미지 레지스트리 구성 | "
+        "엔터티 registry, image registry | 아까 말한 이미지 저장소는?"
+    )
+    context_query = _follow_up_enriched_query(
+        query=query,
+        rewritten_query=rewritten_query,
+        context=SessionContext(
+            mode="ops",
+            current_topic="외부 이미지 레지스트리 구성",
+            open_entities=["registry", "image registry"],
+            ocp_version="4.20",
+        ),
+    )
+    security_hit = _hit(
+        "security-registry",
+        text="OpenShift Container Registry는 서명 및 보안 정책과 함께 사용할 수 있습니다.",
+        book_slug="security_and_compliance",
+        section="OpenShift Container Registry",
+        raw_score=0.1472,
+    )
+    registry_hit = _hit(
+        "registry-overview",
+        text="OpenShift Container Platform은 내부 통합 컨테이너 이미지 레지스트리를 제공합니다.",
+        book_slug="registry",
+        section="1장. {product-registry} 개요",
+        raw_score=0.0143,
+    )
+    images_hit = _hit(
+        "images-registry-config",
+        text="이미지 레지스트리 미러 및 image registry 구성을 관리합니다.",
+        book_slug="images",
+        section="이미지 레지스트리 구성",
+        raw_score=0.0138,
+    )
+
+    bundle = assemble_context(
+        [security_hit, registry_hit, images_hit],
+        query=context_query,
+        max_chunks=4,
+    )
+
+    cited_books = {citation.book_slug for citation in bundle.citations}
+    assert cited_books & {"registry", "images"}
+    assert "security_and_compliance" not in cited_books
 
 
 def test_intent_profile_prefers_matching_command_over_generic_cli_command() -> None:

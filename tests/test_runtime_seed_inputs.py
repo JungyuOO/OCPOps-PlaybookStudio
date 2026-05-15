@@ -7,6 +7,11 @@ from types import SimpleNamespace
 import play_book_studio.http.presenters_runtime as presenters_runtime
 import play_book_studio.http.runtime_report as runtime_report
 from play_book_studio.config.packs import GLOBAL_SOURCE_CATALOG_NAME
+from play_book_studio.config.corpus_paths import (
+    resolve_wiki_assets_dir,
+    resolve_wiki_relations_dir,
+    resolve_wiki_runtime_books_path,
+)
 from play_book_studio.config.settings import load_settings
 from play_book_studio.runtime_truth_freeze import runtime_truth_paths
 
@@ -57,6 +62,46 @@ def test_health_payload_marks_seed_inputs_not_required_in_database_runtime(monke
     assert runtime["seed_inputs"]["source_manifest_path"]
 
 
+def test_health_payload_reports_qdrant_live_errors(monkeypatch) -> None:
+    root = _workspace("health_qdrant_error")
+    (root / ".env").write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql://unit-test",
+                "QDRANT_URL=http://qdrant.example",
+                "QDRANT_COLLECTION=openshift_docs",
+                "ARTIFACTS_DIR=artifacts",
+                "LLM_ENDPOINT=http://llm.example/v1",
+                "LLM_MODEL=Qwen/Qwen3.5-9B",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(presenters_runtime, "build_corpus_status", lambda **_kwargs: {"ready": True})
+    monkeypatch.setattr(presenters_runtime, "build_course_runtime_status", lambda **_kwargs: {"ready": True})
+    monkeypatch.setattr(
+        presenters_runtime,
+        "graph_sidecar_compact_artifact_status",
+        lambda _settings: {"ready": True},
+    )
+    monkeypatch.setattr(
+        presenters_runtime,
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("bad qdrant url")),
+    )
+    answerer = SimpleNamespace(
+        settings=load_settings(root),
+        llm_client=SimpleNamespace(runtime_metadata=lambda: {}),
+    )
+
+    payload = presenters_runtime._build_health_payload(answerer)
+    qdrant_live = payload["runtime"]["qdrant_live"]
+
+    assert qdrant_live["status"] == "error"
+    assert qdrant_live["ready"] is False
+    assert "bad qdrant url" in qdrant_live["error"]
+
+
 def test_runtime_report_marks_legacy_files_as_seed_inputs_in_database_runtime(monkeypatch) -> None:
     root = _workspace("runtime_report")
     (root / ".env").write_text(
@@ -105,3 +150,35 @@ def test_seed_manifest_defaults_use_consolidated_corpus_paths() -> None:
     assert paths.source_first_manifest_path == (
         root / "corpus" / "manifests" / "official" / "ocp420_source_first_full_rebuild_manifest.json"
     )
+
+
+def test_wiki_runtime_books_resolver_prefers_corpus_sidecar_with_legacy_fallback() -> None:
+    root = _workspace("wiki_runtime_resolver")
+    legacy_dir = root / "data" / "wiki_runtime_books"
+    legacy_dir.mkdir(parents=True)
+
+    assert resolve_wiki_runtime_books_path(root, "active_manifest.json") == legacy_dir / "active_manifest.json"
+
+    corpus_dir = root / "corpus" / "data" / "wiki_runtime_books"
+    corpus_dir.mkdir(parents=True)
+
+    assert resolve_wiki_runtime_books_path(root, "active_manifest.json") == corpus_dir / "active_manifest.json"
+
+
+def test_wiki_sidecar_resolvers_prefer_corpus_dirs_with_legacy_fallback() -> None:
+    root = _workspace("wiki_sidecar_resolvers")
+    legacy_assets = root / "data" / "wiki_assets"
+    legacy_relations = root / "data" / "wiki_relations"
+    legacy_assets.mkdir(parents=True)
+    legacy_relations.mkdir(parents=True)
+
+    assert resolve_wiki_assets_dir(root) == legacy_assets
+    assert resolve_wiki_relations_dir(root) == legacy_relations
+
+    corpus_assets = root / "corpus" / "data" / "wiki_assets"
+    corpus_relations = root / "corpus" / "data" / "wiki_relations"
+    corpus_assets.mkdir(parents=True)
+    corpus_relations.mkdir(parents=True)
+
+    assert resolve_wiki_assets_dir(root) == corpus_assets
+    assert resolve_wiki_relations_dir(root) == corpus_relations

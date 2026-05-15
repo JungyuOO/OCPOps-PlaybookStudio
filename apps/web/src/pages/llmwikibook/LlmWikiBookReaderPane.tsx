@@ -14,6 +14,7 @@ export interface LlmWikiBookReaderPaneProps {
   className?: string;
   viewerDocument?: ViewerDocumentPayload;
   viewerPath?: string;
+  viewerTheme?: 'dark' | 'light';
   emptyState?: ReactNode;
   toolbar?: ReactNode;
   annotationEnabled: boolean;
@@ -41,6 +42,7 @@ export function LlmWikiBookReaderPane({
   className,
   viewerDocument,
   viewerPath,
+  viewerTheme,
   emptyState,
   toolbar,
   annotationEnabled,
@@ -186,6 +188,7 @@ export function LlmWikiBookReaderPane({
           <ViewerDocumentStage
             viewerDocument={viewerDocument}
             currentViewerPath={viewerPath}
+            viewerTheme={viewerTheme}
             onNavigateViewerPath={onNavigateViewerPath}
             onActiveSectionChange={onActiveSectionChange}
             textAnnotationsByAnchor={textAnnotationsByAnchor}

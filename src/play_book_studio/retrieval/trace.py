@@ -82,6 +82,7 @@ def build_retrieval_trace(
     vector_hits: list[RetrievalHit],
     hybrid_hits: list[RetrievalHit],
     graph_trace: dict[str, Any],
+    topology_trace: dict[str, Any],
     reranked_hits: list[RetrievalHit],
     reranker_trace: dict[str, Any],
     decomposed_queries: list[str],
@@ -114,6 +115,7 @@ def build_retrieval_trace(
         "vector": [hit.to_dict() for hit in vector_hits[: min(candidate_k, 10)]],
         "hybrid": [hit.to_dict() for hit in hybrid_hits[: min(fusion_output_k, 5)]],
         "graph": graph_trace,
+        "topology_expansion": topology_trace or {"enabled": False, "used": False, "skip_reason": "not_run"},
         "reranked": [hit.to_dict() for hit in reranked_hits[: min(top_k, 5)]],
         "reranker": reranker_trace,
         "metrics": {

@@ -58,10 +58,12 @@ services:
       - "${TERMINAL_WS_PORT:-8770}:8770"
     volumes:
       - ./src:/app/src
+      - ./db:/app/db
       - ./artifacts:/app/artifacts
       - ./corpus:/app/corpus
       - ./reports:/app/reports
       - ./tmp:/app/tmp
+      - object_storage:/app/storage
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=5)"]
       interval: 15s
@@ -83,6 +85,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./db:/app/db
     command: ["python", "-m", "play_book_studio.cli", "db-migrate", "--root-dir", "/app"]
     restart: "no"
 
@@ -184,3 +189,5 @@ volumes:
     name: ${POSTGRES_VOLUME_NAME:-ocp-rag-chatbot_postgres_storage}
   qdrant_storage:
     name: ${QDRANT_VOLUME_NAME:-ocp-rag-chatbot_qdrant_storage}
+  object_storage:
+    name: ${OBJECT_STORAGE_VOLUME_NAME:-ocpops-playbookstudio_object_storage}

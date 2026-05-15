@@ -10,7 +10,7 @@ from play_book_studio.config.settings import Settings
 
 
 PDF_FALLBACK_BACKEND_ENV = "PBS_CUSTOMER_PACK_PDF_FALLBACK_BACKEND"
-REMOTE_OCR_FALLBACK_BACKENDS = {"surya"}
+REMOTE_OCR_FALLBACK_BACKENDS: set[str] = set()
 PDF_DEGRADED_QUALITY_FLAGS = {
     "no_sections",
     "too_many_page_summary_sections",
@@ -67,10 +67,6 @@ def requested_pdf_fallback_backend(*, settings: Settings | None = None) -> str:
     configured = str(os.environ.get(PDF_FALLBACK_BACKEND_ENV) or "").strip().lower()
     if configured:
         return configured
-    if settings is not None and str(settings.surya_ocr_endpoint or "").strip():
-        return "surya"
-    if str(os.environ.get("SURYA_OCR") or "").strip():
-        return "surya"
     return ""
 
 
@@ -154,14 +150,6 @@ def attempt_optional_image_markdown_fallback(
 
 def _resolve_adapter(backend: str, *, source_type: str) -> Callable[..., str] | None:
     target_map = {
-        ("surya", "pdf"): (
-            "play_book_studio.intake.normalization.surya_adapter",
-            "extract_pdf_markdown_with_surya",
-        ),
-        ("surya", "image"): (
-            "play_book_studio.intake.normalization.surya_adapter",
-            "extract_image_markdown_with_surya",
-        ),
         ("marker", "pdf"): (
             "play_book_studio.intake.normalization.marker_adapter",
             "extract_pdf_markdown_with_marker",

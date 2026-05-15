@@ -11,12 +11,15 @@ running one-shot seed services.
 - `deploy/docker-compose.prod.yml` - production compose file.
 - `.env.production.example` - copy to `.env.production` and fill secrets.
 - `artifacts/`, `storage/`, and `reports/` - mounted read-write for runtime output.
-- `corpus/` - mounted read-only into seed/import services.
+- `corpus/` - copied into the app image for seed/import defaults and used by
+  seed/import services as read-only input.
 - PostgreSQL volume - defaults to `ocpops_playbookstudio_postgres_data`.
 - Qdrant volume - defaults to `ocp-rag-chatbot_qdrant_storage`.
 
-The app image does not copy `corpus/`. Keep this
-directories on the server only when you need to run seed/import services.
+The app image currently copies `corpus/` to `/app/corpus` so seed jobs have a
+stable default path. It is not writable runtime data and it is not the product
+source of truth after import. Runtime answers should come from PostgreSQL,
+Qdrant, and mounted runtime storage.
 
 ## First Run
 
@@ -196,4 +199,3 @@ docker compose -f docker-compose.image.yml --env-file .env ps
   `.env.production`, keep `PLAYBOOKSTUDIO_PUBLIC_URL=http://192.168.119.23:8080`,
   and replace only secrets such as `POSTGRES_PASSWORD`, `DATABASE_URL`, and
   `OCP_API_TOKEN`.
-

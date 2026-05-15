@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
+from urllib.request import urlopen
 
 from play_book_studio.answering.answerer import ChatAnswerer
 from play_book_studio.config.settings import Settings, load_settings
@@ -25,6 +28,7 @@ def _llm_runtime_signature(settings: Settings) -> tuple[Any, ...]:
         settings.embedding_api_key,
         settings.embedding_batch_size,
         settings.embedding_timeout_seconds,
+        settings.embedding_verify_ssl,
         settings.reranker_enabled,
         settings.reranker_base_url,
         settings.reranker_api_key,
@@ -51,6 +55,36 @@ def _llm_runtime_signature(settings: Settings) -> tuple[Any, ...]:
 def _runtime_fingerprint(settings: Settings) -> str:
     raw = "|".join(str(item) for item in _llm_runtime_signature(settings))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def _qdrant_collection_runtime_status(settings: Settings) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "url": settings.qdrant_url,
+        "collection": settings.qdrant_collection,
+        "status": "unknown",
+        "points_count": None,
+        "indexed_vectors_count": None,
+        "ready": False,
+    }
+    if not settings.qdrant_url.strip() or not settings.qdrant_collection.strip():
+        payload["status"] = "disabled"
+        return payload
+    try:
+        url = f"{settings.qdrant_url.rstrip('/')}/collections/{settings.qdrant_collection}"
+        with urlopen(url, timeout=5) as response:  # noqa: S310 - configured internal runtime URL
+            body = json.loads(response.read().decode("utf-8"))
+        result = body.get("result") if isinstance(body, dict) else {}
+        if isinstance(result, dict):
+            payload["status"] = str(result.get("status") or "unknown")
+            payload["points_count"] = result.get("points_count")
+            payload["indexed_vectors_count"] = result.get("indexed_vectors_count")
+            payload["segments_count"] = result.get("segments_count")
+            payload["optimizer_status"] = result.get("optimizer_status")
+            payload["ready"] = payload["status"] == "green" and payload["points_count"] is not None
+    except (OSError, URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
+        payload["status"] = "error"
+        payload["error"] = str(exc)
+    return payload
 
 
 def _refresh_answerer_llm_settings(
@@ -107,6 +141,7 @@ def _build_health_payload(answerer: ChatAnswerer) -> dict[str, Any]:
             "embedding_base_url": settings.embedding_base_url,
             "embedding_model": settings.embedding_model,
             "embedding_device": settings.embedding_device,
+            "embedding_verify_ssl": settings.embedding_verify_ssl,
             "reranker_enabled": bool(settings.reranker_enabled),
             "reranker_base_url": settings.reranker_base_url,
             "reranker_model": settings.reranker_model,
@@ -133,6 +168,7 @@ def _build_health_payload(answerer: ChatAnswerer) -> dict[str, Any]:
                 database_url=settings.database_url,
                 collection=settings.qdrant_collection,
             ),
+            "qdrant_live": _qdrant_collection_runtime_status(settings),
             "course_runtime": build_course_runtime_status(
                 database_url=settings.database_url,
             ),
