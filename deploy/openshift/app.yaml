@@ -44,6 +44,8 @@ spec:
             - name: DATABASE_URL
               value: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
           volumeMounts:
+            - name: app-data
+              mountPath: /app/data
             - name: app-storage
               mountPath: /app/storage
             - name: app-artifacts
@@ -61,6 +63,8 @@ spec:
             timeoutSeconds: 10
             failureThreshold: 8
       volumes:
+        - name: app-data
+          emptyDir: {}
         - name: app-storage
           persistentVolumeClaim:
             claimName: app-storage
