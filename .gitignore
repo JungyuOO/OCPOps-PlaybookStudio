@@ -88,6 +88,7 @@ __pycache__
 output/*
 corpus/sources/kmsc/raw/*
 corpus/sources/kmsc/parsed-preview/course_pbs/*
+!corpus/sources/kmsc/parsed-preview/course_pbs/README.md
 !corpus/sources/kmsc/parsed-preview/course_pbs/assets/
 !corpus/sources/kmsc/parsed-preview/course_pbs/assets/**
 !corpus/sources/kmsc/parsed-preview/course_pbs/manifests/
