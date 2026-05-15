@@ -11,7 +11,7 @@ from .intake_overlay import (
     search_selected_customer_pack_private_vectors,
 )
 from .models import RetrievalHit
-from .query_understanding import understand_query_signals
+from .query_signal_pipeline import build_query_signal_plan
 from .ranking import (
     rrf_merge_hit_lists as _rrf_merge_hit_lists,
     rrf_merge_named_hit_lists as _rrf_merge_named_hit_lists,
@@ -42,6 +42,14 @@ def _vector_subquery_runtime(
         payload["metadata_filter_fallback"] = True
     if runtime.get("vector_query") and str(runtime.get("vector_query")) != query:
         payload["vector_query"] = str(runtime["vector_query"])
+    if runtime.get("normalized_query"):
+        payload["normalized_query"] = str(runtime["normalized_query"])
+    if runtime.get("embedding_query_index") is not None:
+        payload["embedding_query_index"] = int(runtime.get("embedding_query_index") or 0)
+    if runtime.get("correction_notes"):
+        payload["correction_notes"] = list(runtime.get("correction_notes") or [])
+    if runtime.get("rank_signals_summary"):
+        payload["rank_signals_summary"] = dict(runtime.get("rank_signals_summary") or {})
     return payload
 
 
@@ -188,82 +196,119 @@ def search_vector_candidates(
         vector_started_at = time.perf_counter()
         vector_hit_sets: list[list[RetrievalHit]] = []
         vector_subqueries: list[dict[str, object]] = []
+        seen_embedding_queries: set[str] = set()
         for subquery in rewritten_queries:
-            query_signals = understand_query_signals(subquery)
-            vector_query = query_signals.vector_query or subquery
-            metadata_filter = query_signals.metadata_filter or None
-            official_hits: list[RetrievalHit] = []
-            runtime = {
-                "endpoint_used": "",
-                "attempted_endpoints": [],
-                "hit_count": 0,
-                "top_score": None,
-                "vector_query": vector_query,
-            }
-            if retriever.vector_retriever is not None:
-                if hasattr(retriever.vector_retriever, "search_with_trace"):
-                    try:
-                        official_hits, runtime = retriever.vector_retriever.search_with_trace(
-                            vector_query,
-                            top_k=effective_candidate_k,
-                            query_filter=metadata_filter,
-                        )
-                    except TypeError:
-                        official_hits, runtime = retriever.vector_retriever.search_with_trace(
-                            vector_query,
-                            top_k=effective_candidate_k,
-                        )
-                    runtime["vector_query"] = vector_query
-                    if not official_hits and metadata_filter:
-                        official_hits, fallback_runtime = retriever.vector_retriever.search_with_trace(
+            query_plan = build_query_signal_plan(subquery)
+            metadata_filter = query_plan.metadata_filter or None
+            for embedding_query_index, vector_query in enumerate(query_plan.embedding_queries, start=1):
+                if vector_query in seen_embedding_queries:
+                    continue
+                seen_embedding_queries.add(vector_query)
+                official_hits: list[RetrievalHit] = []
+                runtime = {
+                    "endpoint_used": "",
+                    "attempted_endpoints": [],
+                    "hit_count": 0,
+                    "top_score": None,
+                    "vector_query": vector_query,
+                    "normalized_query": query_plan.normalized_query,
+                    "embedding_query_index": embedding_query_index,
+                    "correction_notes": [item.to_dict() for item in query_plan.correction_notes],
+                    "rank_signals_summary": {
+                        key: list(value)
+                        for key, value in query_plan.rank_signals.items()
+                        if value
+                    },
+                }
+                if retriever.vector_retriever is not None:
+                    if hasattr(retriever.vector_retriever, "search_with_trace"):
+                        try:
+                            official_hits, runtime = retriever.vector_retriever.search_with_trace(
+                                vector_query,
+                                top_k=effective_candidate_k,
+                                query_filter=metadata_filter,
+                            )
+                        except TypeError:
+                            official_hits, runtime = retriever.vector_retriever.search_with_trace(
+                                vector_query,
+                                top_k=effective_candidate_k,
+                            )
+                        runtime["vector_query"] = vector_query
+                        runtime["normalized_query"] = query_plan.normalized_query
+                        runtime["embedding_query_index"] = embedding_query_index
+                        runtime["correction_notes"] = [item.to_dict() for item in query_plan.correction_notes]
+                        runtime["rank_signals_summary"] = {
+                            key: list(value)
+                            for key, value in query_plan.rank_signals.items()
+                            if value
+                        }
+                        if not official_hits and metadata_filter:
+                            official_hits, fallback_runtime = retriever.vector_retriever.search_with_trace(
+                                vector_query,
+                                top_k=effective_candidate_k,
+                            )
+                            runtime = {
+                                **fallback_runtime,
+                                "metadata_filter_applied": True,
+                                "metadata_filter": metadata_filter,
+                                "metadata_filter_fallback": True,
+                                "vector_query": vector_query,
+                                "normalized_query": query_plan.normalized_query,
+                                "embedding_query_index": embedding_query_index,
+                                "correction_notes": [item.to_dict() for item in query_plan.correction_notes],
+                                "rank_signals_summary": {
+                                    key: list(value)
+                                    for key, value in query_plan.rank_signals.items()
+                                    if value
+                                },
+                            }
+                    else:
+                        official_hits = retriever.vector_retriever.search(
                             vector_query,
                             top_k=effective_candidate_k,
                         )
                         runtime = {
-                            **fallback_runtime,
-                            "metadata_filter_applied": True,
-                            "metadata_filter": metadata_filter,
-                            "metadata_filter_fallback": True,
+                            "endpoint_used": "",
+                            "attempted_endpoints": [],
+                            "hit_count": len(official_hits),
+                            "top_score": float(official_hits[0].raw_score) if official_hits else None,
                             "vector_query": vector_query,
+                            "normalized_query": query_plan.normalized_query,
+                            "embedding_query_index": embedding_query_index,
+                            "correction_notes": [item.to_dict() for item in query_plan.correction_notes],
+                            "rank_signals_summary": {
+                                key: list(value)
+                                for key, value in query_plan.rank_signals.items()
+                                if value
+                            },
                         }
-                else:
-                    official_hits = retriever.vector_retriever.search(
-                        vector_query,
-                        top_k=effective_candidate_k,
-                    )
-                    runtime = {
-                        "endpoint_used": "",
-                        "attempted_endpoints": [],
-                        "hit_count": len(official_hits),
-                        "top_score": float(official_hits[0].raw_score) if official_hits else None,
-                        "vector_query": vector_query,
-                    }
-            official_hits = filter_hits_by_session_scope(official_hits, context=context)
-            private_hits, private_runtime = search_selected_customer_pack_private_vectors(
-                retriever.settings,
-                context=context,
-                query=vector_query,
-                top_k=effective_candidate_k,
-            )
-            private_hits = filter_hits_by_session_scope(private_hits, context=context)
-            merged_hits = (
-                _rrf_merge_named_hit_lists(
-                    {
-                        "vector": official_hits,
-                        "private_vector": private_hits,
-                    },
-                    source_name="vector",
+                official_hits = filter_hits_by_session_scope(official_hits, context=context)
+                private_hits, private_runtime = search_selected_customer_pack_private_vectors(
+                    retriever.settings,
+                    context=context,
+                    query=vector_query,
                     top_k=effective_candidate_k,
-                    weights={"vector": 1.0, "private_vector": 1.15},
                 )
-                if official_hits and private_hits
-                else (private_hits or official_hits)
-            )
-            vector_hit_sets.append(merged_hits)
-            runtime_payload = _vector_subquery_runtime(query=subquery, runtime=runtime)
-            runtime_payload["private_vector_status"] = str(private_runtime.get("status", ""))
-            runtime_payload["private_hit_count"] = int(private_runtime.get("hit_count", 0) or 0)
-            vector_subqueries.append(runtime_payload)
+                private_hits = filter_hits_by_session_scope(private_hits, context=context)
+                merged_hits = (
+                    _rrf_merge_named_hit_lists(
+                        {
+                            "vector": official_hits,
+                            "private_vector": private_hits,
+                        },
+                        source_name="vector",
+                        top_k=effective_candidate_k,
+                        weights={"vector": 1.0, "private_vector": 1.15},
+                    )
+                    if official_hits and private_hits
+                    else (private_hits or official_hits)
+                )
+                vector_hit_sets.append(merged_hits)
+                runtime_payload = _vector_subquery_runtime(query=vector_query, runtime=runtime)
+                runtime_payload["source_query"] = subquery
+                runtime_payload["private_vector_status"] = str(private_runtime.get("status", ""))
+                runtime_payload["private_hit_count"] = int(private_runtime.get("hit_count", 0) or 0)
+                vector_subqueries.append(runtime_payload)
         vector_hits = _rrf_merge_hit_lists(
             vector_hit_sets,
             source_name="vector",
