@@ -19,3 +19,7 @@ def test_postinstall_ambiguity_asks_what_to_do_first() -> None:
 
 def test_observability_comparison_is_not_treated_as_ambiguous() -> None:
     assert route_non_rag("Monitoring, Logging, Observability를 운영 관점에서 구분해서 설명해줘") is None
+
+
+def test_short_operational_status_question_is_not_smalltalk() -> None:
+    assert route_non_rag("PVC가 Pending인데 뭐 확인해야 해?") is None
