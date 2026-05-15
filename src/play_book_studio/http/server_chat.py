@@ -236,24 +236,6 @@ def _persist_chat_turn_to_db(
                 citations=[item for item in response_payload.get("citations") or [] if isinstance(item, dict)],
                 metadata={
                     "session_revision": int(getattr(session, "revision", 0) or 0),
-                    "assistant_metadata": {
-                        "retrieval_trace": response_payload.get("retrieval_trace") if isinstance(response_payload.get("retrieval_trace"), dict) else {},
-                        "pipeline_trace": response_payload.get("pipeline_trace") if isinstance(response_payload.get("pipeline_trace"), dict) else {},
-                        "selected_chunk_ids": [
-                            str(item.get("chunk_id") or "").strip()
-                            for item in (
-                                ((response_payload.get("pipeline_trace") or {}).get("selection") or {}).get("selected_hits") or []
-                                if isinstance(response_payload.get("pipeline_trace"), dict)
-                                else []
-                            )
-                            if isinstance(item, dict) and str(item.get("chunk_id") or "").strip()
-                        ],
-                        "reranker_result": (
-                            (response_payload.get("retrieval_trace") or {}).get("reranker")
-                            if isinstance(response_payload.get("retrieval_trace"), dict)
-                            else {}
-                        ),
-                    },
                 },
             )
     except Exception as exc:  # noqa: BLE001

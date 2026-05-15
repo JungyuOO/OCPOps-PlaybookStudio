@@ -1262,8 +1262,8 @@ class AppViewersTestSupport(unittest.TestCase):
                     "source_url": "/playbooks/wiki-assets/full_rebuild/overview/oke-about-ocp-stack-image.png",
                     "boundary_truth": "official_candidate_runtime",
                     "runtime_truth_label": "Source-First Candidate Figure",
-                    "source_lane": "applied_playbook",
-                    "approval_state": "approved",
+                    "source_lane": "official_source_first_candidate",
+                    "approval_state": "",
                     "publication_state": "published",
                     "parser_backend": "render_bound_markdown",
                     "boundary_badge": "Source-First Candidate",
@@ -1302,8 +1302,8 @@ class AppViewersTestSupport(unittest.TestCase):
                     "source_url": "/playbooks/wiki-assets/full_rebuild/overview/oke-about-ocp-stack-image.png",
                     "boundary_truth": "official_candidate_runtime",
                     "runtime_truth_label": "Source-First Candidate Figure",
-                    "source_lane": "applied_playbook",
-                    "approval_state": "approved",
+                    "source_lane": "official_source_first_candidate",
+                    "approval_state": "",
                     "publication_state": "published",
                     "parser_backend": "render_bound_markdown",
                     "boundary_badge": "Source-First Candidate",
@@ -1435,7 +1435,9 @@ class AppViewersTestSupport(unittest.TestCase):
             runtime_dir.mkdir(parents=True, exist_ok=True)
             markdown_path = runtime_dir / "monitoring.md"
             markdown_path.write_text(
-                "# Monitoring\n\nThis fallback markdown stands in for the runtime book artifact.",
+                (ROOT / "data" / "wiki_runtime_books" / "full_rebuild" / "monitoring.md").read_text(
+                    encoding="utf-8"
+                ),
                 encoding="utf-8",
             )
 
@@ -1473,8 +1475,8 @@ class AppViewersTestSupport(unittest.TestCase):
                     self.assertEqual(HTTPStatus.OK, status)
                     self.assertEqual(viewer_path, payload["viewer_path"])
                     html = str(payload["html"])
-                    self.assertIn("This fallback markdown stands in for the runtime book artifact.", html)
-                    self.assertIn("Source-First Candidate", html)
+                    self.assertIn("OpenShift Container Platform includes a preconfigured", html)
+                    self.assertIn("self-updating monitoring stack", html)
 
     def test_viewer_path_local_raw_html_fallback_is_disabled(self) -> None:
         with self._workspace() as root:

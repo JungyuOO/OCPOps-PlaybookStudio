@@ -42,7 +42,6 @@ export interface Message {
   routeKind?: 'official' | 'learning' | 'course';
   learningIndex?: number;
   rewrittenQuery?: string;
-  sourceQuery?: string;
   activeCitationIndex?: number;
   retrievalTrace?: Record<string, unknown>;
   pipelineTrace?: Record<string, unknown>;

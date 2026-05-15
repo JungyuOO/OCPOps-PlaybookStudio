@@ -103,12 +103,8 @@ def build_qwen_image_describer(settings: Settings) -> ImageDescriber | None:
 
 
 def load_asset_image_bytes(document_path: Path, asset: DocumentAsset) -> bytes:
-    if asset.content:
-        return bytes(asset.content)
     source_member = str(asset.metadata.get("source_member") or "").strip()
     if source_member:
-        if source_member.startswith("pdf:"):
-            return b""
         try:
             with zipfile.ZipFile(document_path) as archive:
                 return archive.read(source_member)

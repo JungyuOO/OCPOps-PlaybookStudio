@@ -14,12 +14,9 @@ import uuid
 import zipfile
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field, replace
-from io import BytesIO
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
-
-from .metadata_spine import build_chunk_metadata_spine
 
 
 DocumentFormat = Literal[
@@ -59,12 +56,9 @@ class DocumentAsset:
     ocr_text: str = ""
     page_number: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    content: bytes = field(default=b"", repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
-        payload = asdict(self)
-        payload.pop("content", None)
-        return payload
+        return asdict(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,34 +286,6 @@ def parse_upload_document(
     )
 
 
-def rebuild_parsed_document_from_markdown(
-    parsed: ParsedUploadDocument,
-    markdown: str,
-    *,
-    metadata: dict[str, Any] | None = None,
-    warnings: tuple[str, ...] | None = None,
-) -> ParsedUploadDocument:
-    """Rebuild blocks for an existing parsed document while preserving assets."""
-
-    next_markdown = str(markdown or "")
-    next_metadata = {**dict(parsed.metadata), **dict(metadata or {})}
-    next_warnings = warnings if warnings is not None else parsed.warnings
-    blocks = tuple(
-        _markdown_to_blocks(
-            next_markdown,
-            assets=parsed.assets,
-            document_id=parsed.document_id,
-        )
-    )
-    return replace(
-        parsed,
-        markdown=next_markdown,
-        blocks=blocks,
-        warnings=tuple(next_warnings),
-        metadata=next_metadata,
-    )
-
-
 def _detect_zip_document_format(path: Path, suffix: str) -> DocumentFormat:
     try:
         with zipfile.ZipFile(path) as archive:
@@ -385,25 +351,6 @@ def build_document_chunks(
             if section_context and section_context not in stripped_markdown
             else stripped_markdown
         )
-        block_kinds = tuple(dict.fromkeys(block.block_type for block in current if block.block_type))
-        metadata = {
-            "filename": parsed.filename,
-            "document_format": parsed.document_format,
-            "page_start": min(page_numbers) if page_numbers else None,
-            "page_end": max(page_numbers) if page_numbers else None,
-            "chunk_char_count": len(markdown),
-            "block_count": len(current),
-        }
-        metadata.update(
-            build_chunk_metadata_spine(
-                embedding_text,
-                section_path=section_path,
-                filename=parsed.filename,
-                source_scope=str(parsed.metadata.get("source_scope") or "user_upload"),
-                block_kinds=block_kinds,
-                existing_metadata=metadata,
-            )
-        )
         chunks.append(
             DocumentChunk(
                 chunk_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{chunk_key}:{markdown}")),
@@ -418,7 +365,14 @@ def build_document_chunks(
                 toc_path=section_block.toc_path if section_block else (),
                 asset_ids=asset_ids,
                 block_ordinals=block_ordinals,
-                metadata=metadata,
+                metadata={
+                    "filename": parsed.filename,
+                    "document_format": parsed.document_format,
+                    "page_start": min(page_numbers) if page_numbers else None,
+                    "page_end": max(page_numbers) if page_numbers else None,
+                    "chunk_char_count": len(markdown),
+                    "block_count": len(current),
+                },
             )
         )
         ordinal += 1
@@ -428,11 +382,6 @@ def build_document_chunks(
             current = current[-overlap_blocks:]
         current_chars = sum(len(block.markdown) for block in current)
 
-    def is_page_heading_only(block: DocumentBlock) -> bool:
-        if block.block_type != "heading":
-            return False
-        return bool(re.match(r"^Page\s+\d+$", str(block.heading_title or block.text or "").strip(), re.I))
-
     for block in parsed.blocks:
         if block.block_type == "heading":
             flush()
@@ -440,9 +389,7 @@ def build_document_chunks(
             current_chars = len(block.markdown)
             continue
         block_chars = len(block.markdown)
-        if current and current_chars + block_chars > max_chars and not (
-            len(current) == 1 and is_page_heading_only(current[0])
-        ):
+        if current and current_chars + block_chars > max_chars:
             flush()
         current.append(block)
         current_chars += block_chars
@@ -498,7 +445,6 @@ def _image_asset(path: Path, *, sha256: str, mime_type: str) -> DocumentAsset:
         mime_type=mime_type,
         sha256=sha256,
         storage_key=f"uploads/assets/{asset_id}{path.suffix.lower()}",
-        content=path.read_bytes(),
     )
 
 
@@ -517,17 +463,17 @@ def _describe_asset(path: Path, asset: DocumentAsset, *, image_describer: ImageD
         metadata = {**dict(asset.metadata), "qwen_error": str(exc), "qwen_status": "failed"}
         if qwen_model:
             metadata.setdefault("qwen_model", qwen_model)
-        return replace(asset, metadata=metadata)
+        return DocumentAsset(**{**asset.to_dict(), "metadata": metadata})
     if not description:
         metadata = {**dict(asset.metadata), "qwen_status": "empty"}
         if qwen_model:
             metadata.setdefault("qwen_model", qwen_model)
-        return replace(asset, metadata=metadata)
+        return DocumentAsset(**{**asset.to_dict(), "metadata": metadata})
     metadata = {**dict(asset.metadata)}
     metadata.setdefault("qwen_status", "described")
     if qwen_model:
         metadata.setdefault("qwen_model", qwen_model)
-    return replace(asset, description=description, metadata=metadata)
+    return DocumentAsset(**{**asset.to_dict(), "description": description, "metadata": metadata})
 
 
 def _append_asset_descriptions(markdown: str, assets: list[DocumentAsset]) -> str:
@@ -746,224 +692,27 @@ def _convert_pptx_to_markdown(path: Path) -> ConvertedMarkdown:
 
 
 def _convert_pdf_to_markdown(path: Path) -> ConvertedMarkdown:
-    source_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
-    pdf_assets, pdf_asset_warnings = _extract_pdf_image_assets(path, source_sha256=source_sha256)
-    assets_by_page: dict[int, list[DocumentAsset]] = {}
-    for asset in pdf_assets:
-        assets_by_page.setdefault(int(asset.page_number or 0), []).append(asset)
-    page_texts, text_warnings, text_metadata = _extract_pdf_page_texts(path)
-    lines = [f"# {path.stem}"]
-    for page_index, text in enumerate(page_texts, start=1):
-        page_assets = assets_by_page.get(page_index, [])
-        if text:
-            lines.extend(["", f"<!-- page: {page_index} -->", f"## Page {page_index}", "", text])
-        elif page_assets:
-            lines.extend(["", f"<!-- page: {page_index} -->", f"## Page {page_index}"])
-        for asset in page_assets:
-            lines.extend(["", _image_markdown(asset)])
-    markdown = "\n".join(lines).strip()
-    if markdown == f"# {path.stem}":
-        converted = _convert_with_markitdown(path)
-        if pdf_assets:
-            converted = _append_pdf_assets_to_markdown(converted, pdf_assets)
-        return ConvertedMarkdown(
-            markdown=converted,
-            assets=tuple(pdf_assets),
-            warnings=("pdf_used_markitdown_fallback", *text_warnings, *pdf_asset_warnings),
-            metadata={"pdf_image_count": len(pdf_assets), **text_metadata},
-        )
-    return ConvertedMarkdown(
-        markdown=markdown,
-        assets=tuple(pdf_assets),
-        warnings=(*text_warnings, *pdf_asset_warnings),
-        metadata={"pdf_image_count": len(pdf_assets), **text_metadata},
-    )
-
-
-def _extract_pdf_page_texts(path: Path) -> tuple[list[str], tuple[str, ...], dict[str, Any]]:
-    """Extract PDF text with the least destructive local extractor available."""
-
-    warnings: list[str] = []
-    try:
-        import fitz  # type: ignore[import-untyped]
-    except Exception:  # noqa: BLE001
-        fitz = None  # type: ignore[assignment]
-    if fitz is not None:
-        try:
-            document = fitz.open(str(path))
-            try:
-                pages = [
-                    _normalize_pdf_page_text(str(document.load_page(index).get_text("text") or ""))
-                    for index in range(len(document))
-                ]
-                if any(text.strip() for text in pages):
-                    return (
-                        pages,
-                        tuple(warnings),
-                        {"page_count": len(document), "pdf_text_extractor": "pymupdf"},
-                    )
-                warnings.append("pdf_text_pymupdf_empty")
-            finally:
-                document.close()
-        except Exception as exc:  # noqa: BLE001
-            warnings.append(f"pdf_text_pymupdf_failed:{exc}")
-
     try:
         from pypdf import PdfReader
-    except Exception as exc:  # noqa: BLE001
-        return [], (*warnings, f"pdf_text_pypdf_unavailable:{exc}"), {"pdf_text_extractor": "none"}
-
-    try:
-        reader = PdfReader(str(path))
-        pages = [_normalize_pdf_page_text(str(page.extract_text() or "")) for page in reader.pages]
-    except Exception as exc:  # noqa: BLE001
-        return [], (*warnings, f"pdf_text_pypdf_failed:{exc}"), {"pdf_text_extractor": "none"}
-    return (
-        pages,
-        (*warnings, "pdf_text_used_pypdf_fallback") if warnings else ("pdf_text_used_pypdf",),
-        {"page_count": len(reader.pages), "pdf_text_extractor": "pypdf"},
-    )
-
-
-def _normalize_pdf_page_text(text: str) -> str:
-    return str(text or "").replace("\x00", "").strip()
-
-
-def _append_pdf_assets_to_markdown(markdown: str, assets: tuple[DocumentAsset, ...]) -> str:
-    if not assets:
-        return markdown
-    lines = [markdown.strip(), "", "## 원본 이미지"]
-    for asset in assets:
-        page_label = f"page {asset.page_number}" if asset.page_number else "pdf"
-        lines.extend(["", f"<!-- {page_label} -->", _image_markdown(asset)])
-    return "\n".join(part for part in lines if part is not None).strip()
-
-
-def _extract_pdf_image_assets(path: Path, *, source_sha256: str) -> tuple[tuple[DocumentAsset, ...], tuple[str, ...]]:
-    try:
-        import fitz  # type: ignore[import-untyped]
     except Exception:  # noqa: BLE001
-        rendered, render_warnings = _render_pdf_pages_as_image_assets(path, source_sha256=source_sha256)
-        return rendered, ("pdf_image_extraction_unavailable", *render_warnings)
+        return ConvertedMarkdown(
+            markdown=_convert_with_markitdown(path),
+            warnings=("pdf_used_markitdown_fallback",),
+        )
 
-    assets: list[DocumentAsset] = []
-    warnings: list[str] = []
-    try:
-        document = fitz.open(str(path))
-    except Exception as exc:  # noqa: BLE001
-        rendered, render_warnings = _render_pdf_pages_as_image_assets(path, source_sha256=source_sha256)
-        return rendered, (f"pdf_image_extraction_failed:{exc}", *render_warnings)
-    try:
-        seen: set[tuple[int, int, str]] = set()
-        for page_index in range(len(document)):
-            page_number = page_index + 1
-            page = document.load_page(page_index)
-            for image_index, image in enumerate(page.get_images(full=True), start=1):
-                xref = int(image[0])
-                try:
-                    extracted = document.extract_image(xref)
-                except Exception as exc:  # noqa: BLE001
-                    warnings.append(f"pdf_image_extract_failed:page={page_number}:xref={xref}:{exc}")
-                    continue
-                content = bytes(extracted.get("image") or b"")
-                if not content:
-                    continue
-                sha256 = hashlib.sha256(content).hexdigest()
-                key = (page_number, xref, sha256)
-                if key in seen:
-                    continue
-                seen.add(key)
-                ext = str(extracted.get("ext") or "png").strip().lstrip(".").lower() or "png"
-                if ext == "jpeg":
-                    ext = "jpg"
-                filename = f"page-{page_number:03d}-image-{image_index:02d}.{ext}"
-                asset = _blob_asset(
-                    path,
-                    media_name=f"pdf/{filename}",
-                    content=content,
-                    source_sha256=source_sha256,
-                    page_number=page_number,
-                )
-                assets.append(
-                    replace(
-                        asset,
-                        filename=filename,
-                        metadata={
-                            **dict(asset.metadata),
-                            "source_member": f"pdf:xref:{xref}",
-                            "pdf_xref": xref,
-                            "image_index": image_index,
-                            "width": int(extracted.get("width") or image[2] or 0),
-                            "height": int(extracted.get("height") or image[3] or 0),
-                        },
-                    )
-                )
-    finally:
-        document.close()
-    return tuple(assets), tuple(warnings)
-
-
-def _render_pdf_pages_as_image_assets(path: Path, *, source_sha256: str) -> tuple[tuple[DocumentAsset, ...], tuple[str, ...]]:
-    try:
-        import pypdfium2 as pdfium  # type: ignore[import-untyped]
-    except Exception:  # noqa: BLE001
-        return (), ("pdf_page_render_fallback_unavailable",)
-
-    assets: list[DocumentAsset] = []
-    warnings: list[str] = ["pdf_page_render_fallback_used"]
-    try:
-        document = pdfium.PdfDocument(str(path))
-    except Exception as exc:  # noqa: BLE001
-        return (), (f"pdf_page_render_fallback_failed:{exc}",)
-    try:
-        for page_index in range(len(document)):
-            page_number = page_index + 1
-            page = None
-            bitmap = None
-            try:
-                page = document[page_index]
-                bitmap = page.render(scale=1.5)
-                image = bitmap.to_pil()
-                buffer = BytesIO()
-                image.save(buffer, format="PNG")
-                content = buffer.getvalue()
-                filename = f"page-{page_number:03d}.png"
-                asset = _blob_asset(
-                    path,
-                    media_name=f"pdf/rendered/{filename}",
-                    content=content,
-                    source_sha256=source_sha256,
-                    page_number=page_number,
-                )
-                assets.append(
-                    replace(
-                        asset,
-                        filename=filename,
-                        metadata={
-                            **dict(asset.metadata),
-                            "source_member": f"pdf:rendered:page:{page_number}",
-                            "pdf_rendered_page": True,
-                            "width": int(image.size[0] or 0),
-                            "height": int(image.size[1] or 0),
-                        },
-                    )
-                )
-            except Exception as exc:  # noqa: BLE001
-                warnings.append(f"pdf_page_render_failed:page={page_number}:{exc}")
-            finally:
-                for closable_name in ("bitmap", "page"):
-                    closable = locals().get(closable_name)
-                    close = getattr(closable, "close", None)
-                    if callable(close):
-                        try:
-                            close()
-                        except Exception:  # noqa: BLE001
-                            pass
-    finally:
-        close = getattr(document, "close", None)
-        if callable(close):
-            close()
-    return tuple(assets), tuple(warnings)
+    reader = PdfReader(str(path))
+    lines = [f"# {path.stem}"]
+    for page_index, page in enumerate(reader.pages, start=1):
+        text = str(page.extract_text() or "").strip()
+        if text:
+            lines.extend(["", f"<!-- page: {page_index} -->", f"## Page {page_index}", "", text])
+    markdown = "\n".join(lines).strip()
+    if markdown == f"# {path.stem}":
+        return ConvertedMarkdown(
+            markdown=_convert_with_markitdown(path),
+            warnings=("pdf_used_markitdown_fallback",),
+        )
+    return ConvertedMarkdown(markdown=markdown)
 
 
 def _convert_with_markitdown(path: Path) -> str:
@@ -1091,7 +840,6 @@ def _blob_asset(
         storage_key=f"uploads/assets/{asset_id}{Path(filename).suffix.lower()}",
         page_number=page_number,
         metadata={"source_member": media_name},
-        content=content,
     )
 
 
@@ -1137,5 +885,4 @@ __all__ = [
     "build_document_chunks",
     "detect_document_format",
     "parse_upload_document",
-    "rebuild_parsed_document_from_markdown",
 ]

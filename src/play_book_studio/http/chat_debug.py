@@ -70,7 +70,7 @@ def build_turn_stages(result: AnswerResult) -> list[dict[str, Any]]:
     )
     reranker_value = "미적용"
     if reranker.get("enabled"):
-        reranker_value = "적용됨" if reranker.get("applied") else "활성 상태지만 순서 변경 없음"
+        reranker_value = "적용됨" if reranker.get("applied") else "활성 상태지만 미적용"
 
     return [
         {
@@ -90,8 +90,8 @@ def build_turn_stages(result: AnswerResult) -> list[dict[str, Any]]:
             "top_hits": compact_stage_hits(hybrid_metrics.get("top_hits")),
         },
         {
-            "step": "retrieval_postprocess",
-            "label": "BGE 검색 후처리",
+            "step": "query_reranking",
+            "label": "쿼리 리랭킹",
             "value": reranker_value,
             "enabled": bool(reranker.get("enabled", False)),
             "applied": bool(reranker.get("applied", False)),
@@ -162,8 +162,8 @@ def build_turn_diagnosis(result: AnswerResult) -> dict[str, Any]:
     if bool(reranker.get("enabled", False)) and not bool(reranker.get("applied", False)):
         if severity == "ok":
             severity = "watch"
-            summary = "주의: BGE 검색 후처리는 실행됐지만 이번 턴에는 순서 변경이 없었습니다."
-        signals.append("검색 후처리 순서 변경 없음")
+            summary = "주의: reranker는 켜져 있지만 이번 턴에는 적용되지 않았습니다."
+        signals.append("reranker 미적용")
 
     if bool(llm_runtime.get("last_fallback_used", False)):
         if severity != "risk":
@@ -210,7 +210,7 @@ def _format_turn_markdown(payload: dict[str, Any], diagnosis: dict[str, Any]) ->
         f"- diagnosis_summary: {diagnosis.get('summary') or ''}",
         f"- total_ms: {timings.get('total', '')}",
         f"- retrieval_candidates: {hybrid.get('count', 0) if isinstance(hybrid, dict) else 0}",
-        f"- postprocess_applied: {bool(reranker.get('applied', False))}",
+        f"- reranker_applied: {bool(reranker.get('applied', False))}",
         f"- llm_provider: {llm_runtime.get('last_provider') or llm_runtime.get('preferred_provider') or 'skipped'}",
         f"- llm_fallback_used: {bool(llm_runtime.get('last_fallback_used', False))}",
         f"- citation_count: {len(citations)}",

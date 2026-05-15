@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,29 +25,14 @@ class QdrantChunkCandidate:
     payload_version: int = QDRANT_PAYLOAD_VERSION
 
 
-def _uuid_or_empty(value: str) -> str:
-    text = str(value or "").strip()
-    if not text:
-        return ""
-    try:
-        return str(uuid.UUID(text))
-    except ValueError:
-        return ""
-
-
 def load_qdrant_chunk_candidates(
     connection,
     *,
     collection: str,
     source_scope: str = "",
-    document_source_id: str = "",
     limit: int = 100,
 ) -> tuple[QdrantChunkCandidate, ...]:
     scope = source_scope.strip()
-    raw_source_id = str(document_source_id or "").strip()
-    source_id = _uuid_or_empty(document_source_id)
-    if raw_source_id and not source_id:
-        raise ValueError("document_source_id must be a valid UUID")
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -94,11 +78,10 @@ def load_qdrant_chunk_candidates(
                 ON q.chunk_id = c.id AND q.collection = %s
             WHERE q.chunk_id IS NULL
                 AND (%s = '' OR c.source_scope = %s)
-                AND (%s = '' OR ds.id = %s::uuid)
             ORDER BY c.created_at ASC, c.ordinal ASC
             LIMIT %s
             """,
-            (collection, scope, scope, source_id, source_id or None, int(limit)),
+            (collection, scope, scope, int(limit)),
         )
         rows = cursor.fetchall()
         columns = [item.name for item in cursor.description]
@@ -268,9 +251,6 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
             or ""
         ),
         "semantic_role": str(chunk_metadata.get("semantic_role") or "uploaded_document"),
-        "topic": str(chunk_metadata.get("topic") or source_metadata.get("topic") or ""),
-        "metadata_confidence": str(chunk_metadata.get("metadata_confidence") or source_metadata.get("metadata_confidence") or ""),
-        "answerable_questions": _string_list(chunk_metadata.get("answerable_questions")),
         "block_kinds": _string_list(chunk_metadata.get("block_kinds")) or [str(row.get("chunk_type") or "document")],
         "section_path": section_path,
         "section_number": str(row.get("section_number") or ""),
@@ -525,7 +505,6 @@ def index_pending_document_chunks(
     *,
     collection: str | None = None,
     source_scope: str = "",
-    document_source_id: str = "",
     limit: int = 100,
     embedding_client: EmbeddingClient | None = None,
 ) -> dict[str, Any]:
@@ -534,14 +513,12 @@ def index_pending_document_chunks(
         connection,
         collection=target_collection,
         source_scope=source_scope,
-        document_source_id=document_source_id,
         limit=limit,
     )
     if not candidates:
         return {
             "collection": target_collection,
             "source_scope": source_scope.strip(),
-            "document_source_id": _uuid_or_empty(document_source_id),
             "candidate_count": 0,
             "indexed_count": 0,
         }
@@ -559,7 +536,6 @@ def index_pending_document_chunks(
     return {
         "collection": target_collection,
         "source_scope": source_scope.strip(),
-        "document_source_id": _uuid_or_empty(document_source_id),
         "candidate_count": len(candidates),
         "indexed_count": len(candidates),
     }
@@ -706,38 +682,6 @@ def fetch_existing_qdrant_point_ids(
     return {str(point.get("id")) for point in result if isinstance(point, dict) and point.get("id")}
 
 
-def delete_qdrant_points(
-    settings: Settings,
-    *,
-    collection: str,
-    point_ids: list[str] | tuple[str, ...],
-    batch_size: int = 128,
-) -> dict[str, Any]:
-    unique_point_ids = [point_id for point_id in dict.fromkeys(str(item) for item in point_ids) if point_id]
-    if not unique_point_ids:
-        return {
-            "collection": collection,
-            "requested_count": 0,
-            "deleted_count": 0,
-        }
-    effective_batch_size = max(1, int(batch_size or 128))
-    deleted_count = 0
-    for start in range(0, len(unique_point_ids), effective_batch_size):
-        batch = unique_point_ids[start : start + effective_batch_size]
-        response = requests.post(
-            f"{settings.qdrant_url}/collections/{collection}/points/delete?wait=true",
-            json={"points": batch},
-            timeout=max(settings.request_timeout_seconds, 60),
-        )
-        response.raise_for_status()
-        deleted_count += len(batch)
-    return {
-        "collection": collection,
-        "requested_count": len(unique_point_ids),
-        "deleted_count": deleted_count,
-    }
-
-
 def ensure_qdrant_collection(settings: Settings, collection: str) -> None:
     url = f"{settings.qdrant_url}/collections/{collection}"
     response = requests.get(url, timeout=settings.request_timeout_seconds)
@@ -878,7 +822,6 @@ __all__ = [
     "QdrantChunkCandidate",
     "QDRANT_PAYLOAD_VERSION",
     "backfill_existing_qdrant_index_entries",
-    "delete_qdrant_points",
     "fetch_existing_qdrant_point_ids",
     "index_pending_document_chunks",
     "load_qdrant_chunk_candidates",

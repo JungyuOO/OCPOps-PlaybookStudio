@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
-from play_book_studio.config.corpus_paths import resolve_wiki_assets_dir
+from play_book_studio.config.corpus_paths import CORPUS_DATA_DIR
 from play_book_studio.http.server_chat import (
     handle_chat as _handle_chat_request,
     handle_chat_stream as _handle_chat_stream_request,
@@ -25,21 +25,8 @@ from play_book_studio.http.ops_console_api import (
     handle_ops_console_post as _handle_ops_console_post_request,
     handle_ops_console_put as _handle_ops_console_put_request,
 )
-from play_book_studio.http.upload_api import (
-    handle_upload_code_block_repair as _handle_upload_code_block_repair_request,
-    handle_upload_index_retry as _handle_upload_index_retry_request,
-    handle_upload_ingest as _handle_upload_ingest_request,
-    handle_upload_ingest_stream as _handle_upload_ingest_stream_request,
-    handle_upload_page_stub_repair as _handle_upload_page_stub_repair_request,
-    handle_upload_pipeline_status as _handle_upload_pipeline_status_request,
-    handle_upload_quality_recheck as _handle_upload_quality_recheck_request,
-    handle_upload_topology_retry as _handle_upload_topology_retry_request,
-)
-from play_book_studio.http.repository_api import (
-    handle_document_reader as _handle_document_reader_request,
-    handle_document_repositories as _handle_document_repositories_request,
-    handle_document_topology as _handle_document_topology_request,
-)
+from play_book_studio.http.upload_api import handle_upload_ingest as _handle_upload_ingest_request
+from play_book_studio.http.repository_api import handle_document_repositories as _handle_document_repositories_request
 from play_book_studio.http.document_status_api import handle_document_status as _handle_document_status_request
 from play_book_studio.http.signals_api import handle_signals as _handle_signals_request
 from play_book_studio.http.chat_history_api import (
@@ -47,14 +34,8 @@ from play_book_studio.http.chat_history_api import (
     handle_chat_history_messages as _handle_chat_history_messages_request,
     handle_chat_history_sessions as _handle_chat_history_sessions_request,
 )
-from play_book_studio.http.chat_feedback_api import (
-    handle_chat_feedback_draft as _handle_chat_feedback_draft_request,
-    handle_chat_feedback_queue as _handle_chat_feedback_queue_request,
-    handle_chat_feedback_save as _handle_chat_feedback_save_request,
-)
 from play_book_studio.http.chat_quality_api import (
     handle_chat_quality_query_insights as _handle_chat_quality_query_insights_request,
-    handle_corpus_handoff_report as _handle_corpus_handoff_report_request,
 )
 from play_book_studio.http.learning_api import (
     handle_learning_command_results as _handle_learning_command_results_request,
@@ -87,14 +68,6 @@ from play_book_studio.http.server_routes import (
     handle_repository_official_catalog_request as _handle_repository_official_catalog_request,
     handle_repository_official_materialize_request as _handle_repository_official_materialize_request,
     handle_repository_search as _handle_repository_search_request,
-    handle_repository_source_discovery_judge_reports as _handle_repository_source_discovery_judge_reports_request,
-    handle_repository_source_discovery_judge_replay as _handle_repository_source_discovery_judge_replay_request,
-    handle_repository_source_discovery_judge_save as _handle_repository_source_discovery_judge_save_request,
-    handle_repository_source_discovery_plan as _handle_repository_source_discovery_plan_request,
-    handle_repository_source_discovery_search as _handle_repository_source_discovery_search_request,
-    handle_repository_source_discovery_verification_queue as _handle_repository_source_discovery_verification_queue_request,
-    handle_repository_source_discovery_verification_save as _handle_repository_source_discovery_verification_save_request,
-    handle_repository_source_request_save as _handle_repository_source_request_save_request,
     handle_repository_unanswered as _handle_repository_unanswered_request,
     handle_runtime_figures as _handle_runtime_figures_request,
     handle_source_meta as _handle_source_meta_request,
@@ -105,6 +78,8 @@ from play_book_studio.http.server_routes import (
     handle_wiki_user_overlays as _handle_wiki_user_overlays_request,
 )
 from play_book_studio.http.server_support import (
+    DATA_CONTROL_ROOM_CACHE_TTL_SECONDS,
+    _TimedValueCache,
     _build_chat_payload,
     _resolve_frontend_asset,
 )
@@ -137,6 +112,7 @@ def _build_handler(
     # 실제로 연결하는 구간이다.
     answerer_lock = threading.Lock()
     current_llm_signature = _llm_runtime_signature(answerer.settings)
+    data_control_room_cache = _TimedValueCache(DATA_CONTROL_ROOM_CACHE_TTL_SECONDS)
 
     def current_answerer() -> ChatAnswerer:
         nonlocal answerer, current_llm_signature
@@ -190,7 +166,7 @@ def _build_handler(
                     return
             if request_path.startswith("/playbooks/wiki-assets/"):
                 relative = request_path.removeprefix("/playbooks/wiki-assets/").strip("/")
-                assets_root = resolve_wiki_assets_dir(root_dir).resolve()
+                assets_root = (root_dir / CORPUS_DATA_DIR / "wiki_assets").resolve()
                 asset_path = (assets_root / relative).resolve()
                 if asset_path.is_file() and (asset_path == assets_root or assets_root in asset_path.parents):
                     content_type = mimetypes.guess_type(str(asset_path))[0] or "application/octet-stream"
@@ -214,14 +190,6 @@ def _build_handler(
                 return
             if request_path == "/api/chat-quality/query-insights":
                 _handle_chat_quality_query_insights_request(self, parsed_request.query, root_dir=root_dir)
-                return
-            if request_path == "/api/corpus/handoff-report":
-                _handle_corpus_handoff_report_request(
-                    self,
-                    parsed_request.query,
-                    root_dir=root_dir,
-                    owner_user_id=self._session_owner().owner_hash,
-                )
                 return
             if request_path == "/api/learning-paths":
                 _handle_learning_paths_request(self, parsed_request.query, root_dir=root_dir)
@@ -247,9 +215,6 @@ def _build_handler(
             if request_path == "/api/chat-history/messages":
                 self._handle_chat_history_messages(parsed_request.query)
                 return
-            if request_path == "/api/chat/feedback-queue":
-                self._handle_chat_feedback_queue(parsed_request.query)
-                return
             if request_path == "/api/debug/session":
                 self._handle_debug_session(parsed_request.query)
                 return
@@ -274,26 +239,11 @@ def _build_handler(
             if request_path == "/api/repositories/unanswered":
                 self._handle_repository_unanswered(parsed_request.query)
                 return
-            if request_path == "/api/repositories/source-discovery/verification-queue":
-                self._handle_repository_source_discovery_verification_queue(parsed_request.query)
-                return
-            if request_path == "/api/repositories/source-discovery/judge":
-                self._handle_repository_source_discovery_judge_reports(parsed_request.query)
-                return
             if request_path == "/api/repositories/favorites":
                 self._handle_repository_favorites(parsed_request.query)
                 return
             if request_path == "/api/repositories/documents":
                 self._handle_document_repositories(parsed_request.query)
-                return
-            if request_path == "/api/repositories/document-reader":
-                self._handle_document_reader(parsed_request.query)
-                return
-            if request_path == "/api/repositories/topology":
-                self._handle_document_topology(parsed_request.query)
-                return
-            if request_path == "/api/uploads/pipeline-status":
-                self._handle_upload_pipeline_status(parsed_request.query)
                 return
             if request_path == "/api/documents/ingest-status":
                 self._handle_document_status(parsed_request.query)
@@ -354,13 +304,6 @@ def _build_handler(
             if parsed_request.path == "/api/chat-history/archive":
                 self._handle_chat_history_archive(payload)
                 return
-            if parsed_request.path == "/api/chat/feedback":
-                self._handle_chat_feedback_save(payload)
-                return
-            if parsed_request.path.startswith("/api/chat/feedback/") and parsed_request.path.endswith("/draft-remediation"):
-                feedback_id = parsed_request.path.removeprefix("/api/chat/feedback/").removesuffix("/draft-remediation").strip("/")
-                self._handle_chat_feedback_draft(feedback_id)
-                return
             if parsed_request.path == "/api/sessions/delete":
                 self._handle_session_delete(payload)
                 return
@@ -373,26 +316,8 @@ def _build_handler(
             if parsed_request.path == "/api/customer-packs/drafts":
                 self._handle_customer_pack_draft_create(payload)
                 return
-            if parsed_request.path == "/api/uploads/ingest-stream":
-                self._handle_upload_ingest_stream(payload)
-                return
             if parsed_request.path == "/api/uploads/ingest":
                 self._handle_upload_ingest(payload)
-                return
-            if parsed_request.path == "/api/uploads/index-retry":
-                self._handle_upload_index_retry(payload)
-                return
-            if parsed_request.path == "/api/uploads/topology-retry":
-                self._handle_upload_topology_retry(payload)
-                return
-            if parsed_request.path == "/api/uploads/quality-recheck":
-                self._handle_upload_quality_recheck(payload)
-                return
-            if parsed_request.path == "/api/uploads/repair-code-blocks":
-                self._handle_upload_code_block_repair(payload)
-                return
-            if parsed_request.path == "/api/uploads/repair-page-stubs":
-                self._handle_upload_page_stub_repair(payload)
                 return
             if parsed_request.path == "/api/customer-packs/ingest":
                 self._handle_customer_pack_ingest(payload)
@@ -414,24 +339,6 @@ def _build_handler(
                 return
             if parsed_request.path == "/api/repositories/official-materialize":
                 self._handle_repository_official_materialize(payload)
-                return
-            if parsed_request.path == "/api/repositories/source-request":
-                self._handle_repository_source_request_save(payload)
-                return
-            if parsed_request.path == "/api/repositories/source-discovery/plan":
-                self._handle_repository_source_discovery_plan(payload)
-                return
-            if parsed_request.path == "/api/repositories/source-discovery/search":
-                self._handle_repository_source_discovery_search(payload)
-                return
-            if parsed_request.path == "/api/repositories/source-discovery/verification-queue":
-                self._handle_repository_source_discovery_verification_save(payload)
-                return
-            if parsed_request.path == "/api/repositories/source-discovery/judge/replay":
-                self._handle_repository_source_discovery_judge_replay(payload)
-                return
-            if parsed_request.path == "/api/repositories/source-discovery/judge":
-                self._handle_repository_source_discovery_judge_save(payload)
                 return
             if parsed_request.path == "/api/wiki-overlays":
                 self._handle_wiki_user_overlay_save(payload)
@@ -512,22 +419,6 @@ def _build_handler(
                 owner_user_id=self._session_owner().owner_hash,
             )
 
-        def _handle_document_reader(self, query: str) -> None:
-            _handle_document_reader_request(
-                self,
-                query,
-                root_dir=root_dir,
-                owner_user_id=self._session_owner().owner_hash,
-            )
-
-        def _handle_document_topology(self, query: str) -> None:
-            _handle_document_topology_request(
-                self,
-                query,
-                root_dir=root_dir,
-                owner_user_id=self._session_owner().owner_hash,
-            )
-
         def _handle_document_status(self, query: str) -> None:
             _handle_document_status_request(
                 self,
@@ -547,59 +438,6 @@ def _build_handler(
                 self,
                 query,
                 root_dir=root_dir,
-            )
-
-        def _handle_repository_source_discovery_plan(self, payload: dict[str, Any]) -> None:
-            _handle_repository_source_discovery_plan_request(
-                self,
-                payload,
-                root_dir=root_dir,
-            )
-
-        def _handle_repository_source_discovery_search(self, payload: dict[str, Any]) -> None:
-            _handle_repository_source_discovery_search_request(
-                self,
-                payload,
-                root_dir=root_dir,
-            )
-
-        def _handle_repository_source_discovery_verification_queue(self, query: str) -> None:
-            _handle_repository_source_discovery_verification_queue_request(
-                self,
-                query,
-                root_dir=root_dir,
-            )
-
-        def _handle_repository_source_discovery_verification_save(self, payload: dict[str, Any]) -> None:
-            _handle_repository_source_discovery_verification_save_request(
-                self,
-                payload,
-                root_dir=root_dir,
-            )
-
-        def _handle_repository_source_discovery_judge_reports(self, query: str) -> None:
-            _handle_repository_source_discovery_judge_reports_request(
-                self,
-                query,
-                root_dir=root_dir,
-            )
-
-        def _handle_repository_source_discovery_judge_save(self, payload: dict[str, Any]) -> None:
-            _handle_repository_source_discovery_judge_save_request(
-                self,
-                payload,
-                root_dir=root_dir,
-            )
-
-        def _handle_repository_source_discovery_judge_replay(self, payload: dict[str, Any]) -> None:
-            _handle_repository_source_discovery_judge_replay_request(
-                self,
-                payload,
-                root_dir=root_dir,
-                current_answerer=current_answerer,
-                context_with_request_overrides=_context_with_request_overrides,
-                build_chat_payload=_build_chat_payload,
-                owner_user_id=self._session_owner().owner_hash,
             )
 
         def _handle_repository_official_catalog(self, query: str) -> None:
@@ -625,11 +463,17 @@ def _build_handler(
 
         def _handle_data_control_room(self, query: str) -> None:
             del query
-            _handle_data_control_room_request(
+            cached_payload = data_control_room_cache.get("payload")
+            if isinstance(cached_payload, dict):
+                self._send_json(cached_payload)
+                return
+            payload = _handle_data_control_room_request(
                 self,
                 "",
                 root_dir=root_dir,
             )
+            if payload is not None:
+                data_control_room_cache.set("payload", payload)
 
         def _handle_buyer_packet(self, query: str) -> None:
             _handle_buyer_packet_request(
@@ -670,27 +514,6 @@ def _build_handler(
                 root_dir=root_dir,
                 owner_user_id=self._session_owner().owner_hash,
             )
-        def _handle_chat_feedback_save(self, payload: dict[str, Any]) -> None:
-            _handle_chat_feedback_save_request(
-                self,
-                payload,
-                root_dir=root_dir,
-                owner_user_id=self._session_owner().owner_hash,
-            )
-        def _handle_chat_feedback_queue(self, query: str) -> None:
-            _handle_chat_feedback_queue_request(
-                self,
-                query,
-                root_dir=root_dir,
-                owner_user_id=self._session_owner().owner_hash,
-            )
-        def _handle_chat_feedback_draft(self, feedback_id: str) -> None:
-            _handle_chat_feedback_draft_request(
-                self,
-                feedback_id,
-                root_dir=root_dir,
-                owner_user_id=self._session_owner().owner_hash,
-            )
 
         def _handle_debug_session(self, query: str) -> None:
             _handle_debug_session_request(
@@ -714,55 +537,30 @@ def _build_handler(
         def _handle_customer_pack_book(self, query: str) -> None: _handle_customer_pack_book_request(self, query, root_dir=root_dir)
         def _handle_customer_pack_draft_create(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_draft_create_request(self, payload, root_dir=root_dir)
+            data_control_room_cache.set("payload", None)
         def _handle_customer_pack_ingest(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_ingest_request(self, payload, root_dir=root_dir)
+            data_control_room_cache.set("payload", None)
         def _handle_customer_pack_capture(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_capture_request(self, payload, root_dir=root_dir)
+            data_control_room_cache.set("payload", None)
         def _handle_customer_pack_normalize(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_normalize_request(self, payload, root_dir=root_dir)
+            data_control_room_cache.set("payload", None)
         def _handle_customer_pack_delete_draft(self, payload: dict[str, Any]) -> None:
             _handle_customer_pack_delete_draft_request(self, payload, root_dir=root_dir)
+            data_control_room_cache.set("payload", None)
         def _handle_upload_ingest(self, payload: dict[str, Any]) -> None:
             owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
+            payload.setdefault("created_by", owner.owner_hash)
             _handle_upload_ingest_request(self, payload, root_dir=root_dir)
-        def _handle_upload_ingest_stream(self, payload: dict[str, Any]) -> None:
-            owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
-            _handle_upload_ingest_stream_request(self, payload, root_dir=root_dir)
-        def _handle_upload_index_retry(self, payload: dict[str, Any]) -> None:
-            owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
-            _handle_upload_index_retry_request(self, payload, root_dir=root_dir)
-        def _handle_upload_topology_retry(self, payload: dict[str, Any]) -> None:
-            owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
-            _handle_upload_topology_retry_request(self, payload, root_dir=root_dir)
-        def _handle_upload_quality_recheck(self, payload: dict[str, Any]) -> None:
-            owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
-            _handle_upload_quality_recheck_request(self, payload, root_dir=root_dir)
-        def _handle_upload_code_block_repair(self, payload: dict[str, Any]) -> None:
-            owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
-            _handle_upload_code_block_repair_request(self, payload, root_dir=root_dir)
-        def _handle_upload_page_stub_repair(self, payload: dict[str, Any]) -> None:
-            owner = self._session_owner()
-            payload["created_by"] = owner.owner_hash
-            _handle_upload_page_stub_repair_request(self, payload, root_dir=root_dir)
-        def _handle_upload_pipeline_status(self, query: str) -> None:
-            _handle_upload_pipeline_status_request(
-                self,
-                query,
-                root_dir=root_dir,
-                owner_user_id=self._session_owner().owner_hash,
-            )
+            data_control_room_cache.set("payload", None)
         def _handle_repository_favorites_save(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_save_request(self, payload, root_dir=root_dir)
         def _handle_repository_favorites_remove(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_remove_request(self, payload, root_dir=root_dir)
         def _handle_repository_official_materialize(self, payload: dict[str, Any]) -> None:
-            _handle_repository_official_materialize_request(self, payload, root_dir=root_dir)
-        def _handle_repository_source_request_save(self, payload: dict[str, Any]) -> None:
-            _handle_repository_source_request_save_request(self, payload, root_dir=root_dir)
+            result = _handle_repository_official_materialize_request(self, payload, root_dir=root_dir)
+            if result is not None:
+                data_control_room_cache.set("payload", None)
         def _handle_wiki_user_overlay_save(self, payload: dict[str, Any]) -> None: _handle_wiki_user_overlay_save_request(self, payload, root_dir=root_dir)
         def _handle_wiki_user_overlay_remove(self, payload: dict[str, Any]) -> None: _handle_wiki_user_overlay_remove_request(self, payload, root_dir=root_dir)
 

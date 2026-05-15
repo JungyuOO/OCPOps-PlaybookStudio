@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-import uuid
-from datetime import datetime
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
@@ -25,10 +23,8 @@ from play_book_studio.http.repository_registry import (
     list_repository_favorites as _list_repository_favorites,
     remove_repository_favorite as _remove_repository_favorite,
     save_repository_favorites as _save_repository_favorites,
-    search_github_issues_prs as _search_github_issues_prs,
     search_github_repositories as _search_github_repositories,
 )
-from play_book_studio.http.sessions import ChatSession, RUNTIME_CHAT_MODE
 from play_book_studio.http.server_routes_viewer import (
     _viewer_source_meta as _viewer_source_meta_payload,
     resolve_viewer_html as _resolve_viewer_html,
@@ -62,25 +58,6 @@ from play_book_studio.ingestion.translation_draft_generation import (
     generate_translation_drafts,
 )
 from play_book_studio.ingestion.translation_gold_promotion import promote_translation_gold
-from play_book_studio.retrieval.book_adjustments import query_book_adjustments
-from play_book_studio.retrieval.models import SessionContext
-from play_book_studio.retrieval.query_terms import normalize_query
-from play_book_studio.wiki_gold_builder import build_official_materialize_gold_run
-from play_book_studio.source_discovery import (
-    SOURCE_LANE_COMMUNITY_TROUBLESHOOTING,
-    SOURCE_LANE_OFFICIAL_ISSUE_PR,
-    SOURCE_LANE_OFFICIAL_MANUAL,
-    SOURCE_LANE_OFFICIAL_SOURCE_REPO,
-    SOURCE_LANE_UNSAFE_UNVERIFIED,
-    SOURCE_LANE_VENDOR_KB,
-    build_source_discovery_plan_from_payload,
-    build_source_discovery_plan_response,
-    list_source_discovery_judge_reports,
-    list_verification_queue,
-    save_source_discovery_judge_report,
-    save_verification_candidate,
-    source_lane_policy,
-)
 
 
 _QUERY_TOKEN_RE = re.compile(r"[^\w가-힣]+", re.UNICODE)
@@ -230,63 +207,6 @@ def _candidate_match_score(query: str, entry: dict[str, Any]) -> int:
     return score
 
 
-_TROUBLESHOOTING_QUERY_TERMS = (
-    "troubleshoot",
-    "troubleshooting",
-    "debug",
-    "error",
-    "failure",
-    "failed",
-    "timeout",
-    "crashloopbackoff",
-    "imagepullbackoff",
-    "장애",
-    "오류",
-    "에러",
-    "실패",
-    "복구",
-    "원인",
-    "해결",
-    "문제",
-)
-
-
-def _candidate_domain_adjustment(query: str, entry: dict[str, Any]) -> int:
-    normalized_query = normalize_query(query)
-    if not normalized_query or not any(term in normalized_query for term in _TROUBLESHOOTING_QUERY_TERMS):
-        return 0
-    slug = str(entry.get("book_slug") or "").strip().lower()
-    slug_label = slug.replace("_", " ").replace("-", " ")
-    title = str(entry.get("title") or "").strip().lower()
-    source_relative_path = _first_nonempty(entry.get("source_relative_path"), *(entry.get("source_relative_paths") or [])).lower()
-    haystack = " ".join([slug, slug_label, title, source_relative_path])
-    if "validation_and_troubleshooting" in slug or "troubleshoot" in haystack or "문제 해결" in haystack:
-        return 90
-    if slug == "support" or "지원" in title or "/support" in source_relative_path:
-        return 45
-    if "image" in normalized_query and ("image" in haystack or "이미지" in haystack):
-        return 35
-    if "route" in normalized_query and ("route" in haystack or "라우트" in haystack or "ingress" in haystack):
-        return 30
-    return 0
-
-
-def _candidate_book_adjustment_scores(query: str) -> dict[str, int]:
-    normalized_query = normalize_query(query)
-    if not normalized_query:
-        return {}
-    try:
-        boosts, _penalties = query_book_adjustments(normalized_query, context=SessionContext())
-    except Exception:  # noqa: BLE001
-        return {}
-    scores: dict[str, int] = {}
-    for slug, boost in boosts.items():
-        if boost < 1.5:
-            continue
-        scores[str(slug)] = int(min(96, max(12, round((float(boost) - 1.0) * 60))))
-    return scores
-
-
 def _official_candidate_manifest_paths(root_dir: Path, settings: Any) -> tuple[Path, ...]:
     manifest_dir = settings.manifest_dir
     prefix = settings.active_pack.manifest_prefix
@@ -330,112 +250,148 @@ def _official_db_entries_by_slug(settings: Any) -> dict[str, dict[str, Any]]:
     }
 
 
-def _is_empty_official_value(value: Any) -> bool:
-    return value is None or value == "" or value == [] or value == {}
+def _search_official_source_candidates(root_dir: Path, *, query: str, limit: int = 8) -> list[dict[str, Any]]:
+    settings = load_settings(root_dir)
+    if str(getattr(settings, "database_url", "") or "").strip():
+        approved_entries_by_slug = _official_db_entries_by_slug(settings)
+        ranked: list[tuple[int, str, dict[str, Any]]] = []
+        for slug, entry in approved_entries_by_slug.items():
+            score = _candidate_match_score(query, entry)
+            if score > 0:
+                ranked.append((score, slug, entry))
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        rows: list[dict[str, Any]] = []
+        for score, slug, entry in ranked[: max(1, min(limit, 12))]:
+            source_payload = _official_candidate_source_payload(entry, settings)
+            rows.append(
+                {
+                    "book_slug": slug,
+                    "title": str(entry.get("title") or slug),
+                    "viewer_path": str(entry.get("viewer_path") or settings.viewer_path_template.format(slug=slug)),
+                    "source_relative_path": _first_nonempty(
+                        entry.get("source_relative_path"),
+                        *(entry.get("source_relative_paths") or []),
+                    ),
+                    "source_repo": str(entry.get("source_repo") or "").strip(),
+                    "source_kind": str(entry.get("source_kind") or "").strip(),
+                    "status_kind": "live",
+                    "status_label": "available_in_postgres",
+                    "match_score": score,
+                    **source_payload,
+                }
+            )
+        return rows
 
-
-def _merge_official_candidate_entry(primary: dict[str, Any], fallback: dict[str, Any] | None = None) -> dict[str, Any]:
-    merged = dict(fallback or {})
-    for key, value in primary.items():
-        if _is_empty_official_value(value) and key in merged:
-            continue
-        merged[key] = value
-    return merged
-
-
-def _official_candidate_entries_by_slug(root_dir: Path, settings: Any) -> dict[str, dict[str, Any]]:
-    rows: dict[str, dict[str, Any]] = {}
+    approved_entries_by_slug = _manifest_entry_by_slug(settings.source_manifest_path)
+    approved_slugs = set(approved_entries_by_slug)
+    ranked: list[tuple[int, str, dict[str, Any]]] = []
+    seen_slugs: set[str] = set()
     for path in _official_candidate_manifest_paths(root_dir, settings):
         for entry in _manifest_entries(path):
             slug = str(entry.get("book_slug") or "").strip()
-            if slug and slug not in rows:
-                rows[slug] = entry
-    return rows
-
-
-def _official_source_candidate_row(
-    *,
-    slug: str,
-    entry: dict[str, Any],
-    settings: Any,
-    status_kind: str,
-    status_label: str,
-    match_score: int,
-) -> dict[str, Any]:
-    source_payload = _official_candidate_source_payload(entry, settings)
-    return {
-        "book_slug": slug,
-        "title": str(entry.get("title") or slug),
-        "viewer_path": str(entry.get("viewer_path") or settings.viewer_path_template.format(slug=slug)),
-        "source_relative_path": _first_nonempty(
-            entry.get("source_relative_path"),
-            *(entry.get("source_relative_paths") or []),
-        ),
-        "source_repo": str(entry.get("source_repo") or "").strip(),
-        "source_kind": str(entry.get("source_kind") or "").strip(),
-        "status_kind": status_kind,
-        "status_label": status_label,
-        "match_score": match_score,
-        **source_payload,
-    }
-
-
-def _search_official_source_candidates(root_dir: Path, *, query: str, limit: int = 8) -> list[dict[str, Any]]:
-    settings = load_settings(root_dir)
-    db_entries_by_slug = _official_db_entries_by_slug(settings) if str(getattr(settings, "database_url", "") or "").strip() else {}
-    manifest_entries_by_slug = _official_candidate_entries_by_slug(root_dir, settings)
-    live_entries_by_slug = db_entries_by_slug or _manifest_entry_by_slug(settings.source_manifest_path)
-    adjustment_scores = _candidate_book_adjustment_scores(query)
-    ranked: list[tuple[int, str, dict[str, Any]]] = []
-    for slug in sorted(set(manifest_entries_by_slug) | set(live_entries_by_slug)):
-        live_entry = live_entries_by_slug.get(slug)
-        manifest_entry = manifest_entries_by_slug.get(slug)
-        entry = _merge_official_candidate_entry(live_entry or {}, manifest_entry) if live_entry else dict(manifest_entry or {})
-        score = _candidate_match_score(query, entry) + adjustment_scores.get(slug, 0) + _candidate_domain_adjustment(query, entry)
-        if score > 0:
+            if not slug or slug in seen_slugs:
+                continue
+            score = _candidate_match_score(query, entry)
+            if score <= 0:
+                continue
+            seen_slugs.add(slug)
             ranked.append((score, slug, entry))
     ranked.sort(key=lambda item: (-item[0], item[1]))
     rows: list[dict[str, Any]] = []
     for score, slug, entry in ranked[: max(1, min(limit, 12))]:
-        is_live = slug in live_entries_by_slug
+        display_entry = approved_entries_by_slug.get(slug) if slug in approved_slugs else None
+        source_payload = _official_candidate_source_payload(display_entry or entry, settings)
         rows.append(
-            _official_source_candidate_row(
-                slug=slug,
-                entry=entry,
-                settings=settings,
-                status_kind="live" if is_live else "candidate",
-                status_label="available_in_postgres" if slug in db_entries_by_slug else "이미 Library에 있음" if is_live else "생산 후보",
-                match_score=score,
-            )
+            {
+                "book_slug": slug,
+                "title": str((display_entry or entry).get("title") or slug),
+                "viewer_path": str((display_entry or entry).get("viewer_path") or settings.viewer_path_template.format(slug=slug)),
+                "source_relative_path": _first_nonempty(
+                    (display_entry or entry).get("source_relative_path"),
+                    *((display_entry or entry).get("source_relative_paths") or []),
+                ),
+                "source_repo": str((display_entry or entry).get("source_repo") or "").strip(),
+                "source_kind": str((display_entry or entry).get("source_kind") or "").strip(),
+                "status_kind": "live" if slug in approved_slugs else "candidate",
+                "status_label": "이미 Library에 있음" if slug in approved_slugs else "생산 후보",
+                "match_score": score,
+                **source_payload,
+            }
         )
     return rows
 
 
 def _list_official_source_catalog(root_dir: Path) -> dict[str, Any]:
     settings = load_settings(root_dir)
-    db_entries_by_slug = _official_db_entries_by_slug(settings) if str(getattr(settings, "database_url", "") or "").strip() else {}
-    manifest_entries_by_slug = _official_candidate_entries_by_slug(root_dir, settings)
-    live_entries_by_slug = db_entries_by_slug or _manifest_entry_by_slug(settings.source_manifest_path)
-    rows: list[dict[str, Any]] = []
-    for slug in sorted(set(manifest_entries_by_slug) | set(live_entries_by_slug)):
-        live_entry = live_entries_by_slug.get(slug)
-        manifest_entry = manifest_entries_by_slug.get(slug)
-        resolved_entry = _merge_official_candidate_entry(live_entry or {}, manifest_entry) if live_entry else dict(manifest_entry or {})
-        is_live = slug in live_entries_by_slug
-        rows.append(
-            _official_source_candidate_row(
-                slug=slug,
-                entry=resolved_entry,
-                settings=settings,
-                status_kind="live" if is_live else "candidate",
-                status_label="available_in_postgres" if slug in db_entries_by_slug else "이미 Library에 있음" if is_live else "아직 없음",
-                match_score=0,
+    db_entries = _official_db_entries(settings)
+    if db_entries:
+        rows: list[dict[str, Any]] = []
+        for entry in db_entries:
+            slug = str(entry.get("book_slug") or "").strip()
+            if not slug:
+                continue
+            source_payload = _official_candidate_source_payload(entry, settings)
+            rows.append(
+                {
+                    "book_slug": slug,
+                    "title": str(entry.get("title") or slug),
+                    "viewer_path": str(entry.get("viewer_path") or settings.viewer_path_template.format(slug=slug)),
+                    "source_relative_path": _first_nonempty(
+                        entry.get("source_relative_path"),
+                        *(entry.get("source_relative_paths") or []),
+                    ),
+                    "source_repo": str(entry.get("source_repo") or "").strip(),
+                    "source_kind": str(entry.get("source_kind") or "").strip(),
+                    "status_kind": "live",
+                    "status_label": "available_in_postgres",
+                    "match_score": 0,
+                    **source_payload,
+                }
             )
+        rows.sort(key=lambda item: (str(item.get("title") or "").lower(), str(item.get("book_slug") or "").lower()))
+        return {
+            "source": "postgres.official_docs",
+            "total_count": len(rows),
+            "live_count": len(rows),
+            "candidate_count": 0,
+            "rows": rows,
+        }
+
+    manifest_paths = _official_candidate_manifest_paths(root_dir, settings)
+    source_truth_path = manifest_paths[0] if manifest_paths else None
+    approved_entries_by_slug = _manifest_entry_by_slug(settings.source_manifest_path)
+    approved_slugs = set(approved_entries_by_slug)
+    rows: list[dict[str, Any]] = []
+    seen_slugs: set[str] = set()
+    for entry in _manifest_entries(source_truth_path):
+        slug = str(entry.get("book_slug") or "").strip()
+        if not slug or slug in seen_slugs:
+            continue
+        seen_slugs.add(slug)
+        display_entry = approved_entries_by_slug.get(slug) if slug in approved_slugs else None
+        resolved_entry = display_entry or entry
+        source_payload = _official_candidate_source_payload(resolved_entry, settings)
+        rows.append(
+            {
+                "book_slug": slug,
+                "title": str(resolved_entry.get("title") or slug),
+                "viewer_path": str(resolved_entry.get("viewer_path") or settings.viewer_path_template.format(slug=slug)),
+                "source_relative_path": _first_nonempty(
+                    resolved_entry.get("source_relative_path"),
+                    *(resolved_entry.get("source_relative_paths") or []),
+                ),
+                "source_repo": str(resolved_entry.get("source_repo") or "").strip(),
+                "source_kind": str(resolved_entry.get("source_kind") or "").strip(),
+                "status_kind": "live" if slug in approved_slugs else "candidate",
+                "status_label": "이미 Library에 있음" if slug in approved_slugs else "아직 없음",
+                "match_score": 0,
+                **source_payload,
+            }
         )
     rows.sort(key=lambda item: (str(item.get("status_kind") or "") != "live", str(item.get("title") or "").lower(), str(item.get("book_slug") or "").lower()))
     live_count = sum(1 for row in rows if str(row.get("status_kind") or "") == "live")
     return {
-        "source": "postgres_and_candidate_manifests" if db_entries_by_slug else "ocp_4_20_all_runtime_catalog",
+        "source": "ocp_4_20_all_runtime_catalog",
         "total_count": len(rows),
         "live_count": live_count,
         "candidate_count": max(len(rows) - live_count, 0),
@@ -606,7 +562,6 @@ def _materialize_official_source(root_dir: Path, *, slug: str, source_basis: str
         "gold_summary": promotion_report.get("summary", {}),
         "smoke": smoke,
     }
-    report["gold_build_run"] = build_official_materialize_gold_run(report)
     report_path = _official_materialize_report_path(root_dir, slug=slug, source_basis=source_basis)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -620,18 +575,7 @@ def _list_unanswered_questions(root_dir: Path, *, limit: int = 20) -> dict[str, 
     if not target.exists():
         return {"count": 0, "items": []}
     rows: list[dict[str, Any]] = []
-    row_by_query: dict[str, dict[str, Any]] = {}
-
-    def merge_unanswered_row(existing: dict[str, Any], older: dict[str, Any]) -> None:
-        for key in ("source_request_id", "rewritten_query", "failure_reason", "source_request_origin", "status", "gold_build_status", "gold_build_next_action", "gold_build_pipeline"):
-            if not str(existing.get(key) or "").strip() and str(older.get(key) or "").strip():
-                existing[key] = older[key]
-        existing_warnings = [str(item) for item in (existing.get("warnings") or []) if str(item).strip()]
-        for warning in [str(item) for item in (older.get("warnings") or []) if str(item).strip()]:
-            if warning not in existing_warnings:
-                existing_warnings.append(warning)
-        existing["warnings"] = existing_warnings
-
+    seen_queries: set[str] = set()
     for line in reversed(target.read_text(encoding="utf-8").splitlines()):
         line = line.strip()
         if not line:
@@ -643,63 +587,21 @@ def _list_unanswered_questions(root_dir: Path, *, limit: int = 20) -> dict[str, 
         if str(payload.get("record_kind") or "") != "unanswered_question":
             continue
         query = str(payload.get("query") or "").strip()
-        if not query:
+        if not query or query in seen_queries:
             continue
-        row = {
-            "source_request_id": str(payload.get("source_request_id") or uuid.uuid5(uuid.NAMESPACE_URL, query).hex),
-            "query": query,
-            "rewritten_query": str(payload.get("rewritten_query") or "").strip(),
-            "timestamp": str(payload.get("timestamp") or "").strip(),
-            "response_kind": str(payload.get("response_kind") or "").strip(),
-            "failure_reason": str(payload.get("failure_reason") or "").strip(),
-            "source_request_origin": str(payload.get("source_request_origin") or "").strip(),
-            "status": str(payload.get("status") or "queued").strip() or "queued",
-            "gold_build_status": str(payload.get("gold_build_status") or "queued_for_source_discovery").strip(),
-            "gold_build_next_action": str(payload.get("gold_build_next_action") or "원천소스 찾기 후 공식 후보를 Gold Build로 materialize").strip(),
-            "gold_build_pipeline": str(payload.get("gold_build_pipeline") or "source_request -> source_discovery -> source_materialize -> gold_build").strip(),
-            "warnings": [str(item) for item in (payload.get("warnings") or []) if str(item).strip()],
-        }
-        existing = row_by_query.get(query)
-        if existing is not None:
-            merge_unanswered_row(existing, row)
-            continue
+        seen_queries.add(query)
+        rows.append(
+            {
+                "query": query,
+                "rewritten_query": str(payload.get("rewritten_query") or "").strip(),
+                "timestamp": str(payload.get("timestamp") or "").strip(),
+                "response_kind": str(payload.get("response_kind") or "").strip(),
+                "warnings": [str(item) for item in (payload.get("warnings") or []) if str(item).strip()],
+            }
+        )
         if len(rows) >= max(1, limit):
-            continue
-        rows.append(row)
-        row_by_query[query] = row
+            break
     return {"count": len(rows), "items": rows}
-
-
-def _save_repository_source_request(root_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
-    query = str(payload.get("query") or payload.get("repository_query") or "").strip()
-    if not query:
-        raise ValueError("query가 필요합니다.")
-    warnings = payload.get("warnings")
-    warning_rows = [str(item) for item in warnings if str(item).strip()] if isinstance(warnings, list) else []
-    timestamp = datetime.now().isoformat(timespec="seconds")
-    source_request_id = str(payload.get("source_request_id") or uuid.uuid5(uuid.NAMESPACE_URL, f"{query}:{timestamp}").hex)
-    record = {
-        "record_kind": "unanswered_question",
-        "source_request_id": source_request_id,
-        "timestamp": timestamp,
-        "session_id": str(payload.get("session_id") or "").strip(),
-        "query": query,
-        "rewritten_query": str(payload.get("rewritten_query") or query).strip(),
-        "response_kind": str(payload.get("response_kind") or "manual_source_request").strip() or "manual_source_request",
-        "failure_reason": str(payload.get("failure_reason") or "user_requested_source_enrichment").strip(),
-        "source_request_origin": str(payload.get("source_request_origin") or "chat_acquisition").strip(),
-        "status": str(payload.get("status") or "queued").strip() or "queued",
-        "gold_build_status": "queued_for_source_discovery",
-        "gold_build_next_action": "원천소스 찾기 후 공식 후보를 Gold Build로 materialize",
-        "gold_build_pipeline": "source_request -> source_discovery -> source_materialize -> gold_build",
-        "warnings": warning_rows,
-    }
-    settings = load_settings(root_dir)
-    target = settings.unanswered_questions_path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-    return record
 
 
 def handle_sessions_list(handler: Any, query: str, *, store: Any) -> None:
@@ -952,401 +854,6 @@ def handle_repository_unanswered(handler: Any, query: str, *, root_dir: Path) ->
     handler._send_json(_list_unanswered_questions(root_dir, limit=limit))
 
 
-def handle_repository_source_request_save(handler: Any, payload: dict[str, Any], *, root_dir: Path) -> None:
-    try:
-        item = _save_repository_source_request(root_dir, payload)
-    except ValueError as exc:
-        handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-        return
-    except Exception as exc:  # noqa: BLE001
-        handler._send_json({"error": f"source request 저장 중 오류가 발생했습니다: {exc}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
-        return
-    rows = _list_unanswered_questions(root_dir, limit=20)
-    handler._send_json({"success": True, "item": item, **rows}, HTTPStatus.CREATED)
-
-
-def handle_repository_source_discovery_plan(handler: Any, payload: dict[str, Any], *, root_dir: Path) -> None:
-    del root_dir
-    try:
-        response = build_source_discovery_plan_response(payload)
-    except ValueError as exc:
-        handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-        return
-    except Exception as exc:  # noqa: BLE001
-        handler._send_json(
-            {"error": f"source discovery plan 구성 중 오류가 발생했습니다: {exc}"},
-            HTTPStatus.INTERNAL_SERVER_ERROR,
-        )
-        return
-    handler._send_json(response)
-
-
-def _source_discovery_lane_result(
-    *,
-    lane: str,
-    provider: str,
-    query: str,
-    status: str,
-    items: list[dict[str, Any]] | None = None,
-    message: str = "",
-    error: str = "",
-    filtered_count: int = 0,
-    trust_note: str = "",
-) -> dict[str, Any]:
-    policy = source_lane_policy(lane)
-    return {
-        "lane": lane,
-        "label": str(policy.get("label") or lane),
-        "provider": provider,
-        "query": query,
-        "status": status,
-        "count": len(items or []),
-        "items": items or [],
-        "message": message,
-        "error": error,
-        "trust_level": str(policy.get("trust_level") or ""),
-        "gold_policy": str(policy.get("default_gold_policy") or ""),
-        "requires_human_review": bool(policy.get("requires_human_review", False)),
-        "filtered_count": max(0, int(filtered_count or 0)),
-        "trust_note": trust_note,
-    }
-
-
-_OFFICIAL_GITHUB_SOURCE_OWNERS = frozenset({"openshift"})
-
-
-def _is_official_github_source_repository(item: dict[str, Any]) -> bool:
-    owner = str(item.get("owner_login") or "").strip().lower()
-    full_name = str(item.get("full_name") or "").strip().lower()
-    if not owner and "/" in full_name:
-        owner = full_name.split("/", 1)[0]
-    return owner in _OFFICIAL_GITHUB_SOURCE_OWNERS
-
-
-def _build_repository_source_discovery_search(root_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
-    plan = build_source_discovery_plan_from_payload(payload)
-    limit = int(payload.get("limit") or 8)
-    limit = max(1, min(12, limit))
-    lane_results: list[dict[str, Any]] = []
-    auth_modes: set[str] = set()
-    official_candidates: list[dict[str, Any]] = []
-    github_repository_results: list[dict[str, Any]] = []
-    github_issue_pr_results: list[dict[str, Any]] = []
-
-    for query in plan.search_queries:
-        lane = query.lane
-        if lane == SOURCE_LANE_OFFICIAL_MANUAL:
-            try:
-                items = _search_official_source_candidates(root_dir, query=query.query, limit=limit)
-                official_candidates.extend(items)
-                lane_results.append(
-                    _source_discovery_lane_result(
-                        lane=lane,
-                        provider="official_catalog",
-                        query=query.query,
-                        status="ok",
-                        items=items,
-                    )
-                )
-            except Exception as exc:  # noqa: BLE001
-                lane_results.append(
-                    _source_discovery_lane_result(
-                        lane=lane,
-                        provider="official_catalog",
-                        query=query.query,
-                        status="error",
-                        error=str(exc),
-                    )
-                )
-        elif lane == SOURCE_LANE_OFFICIAL_SOURCE_REPO:
-            try:
-                payload_repo = _search_github_repositories(root_dir, query=query.query, limit=limit)
-                raw_items = [dict(item) for item in payload_repo.get("results") or [] if isinstance(item, dict)]
-                items = [item for item in raw_items if _is_official_github_source_repository(item)]
-                filtered_count = len(raw_items) - len(items)
-                for item in items:
-                    item["source_trust_label"] = "official_org"
-                    item["suggested_category"] = "Official Source Repo"
-                auth_modes.add(str(payload_repo.get("auth_mode") or "public"))
-                github_repository_results.extend(items)
-                lane_results.append(
-                    _source_discovery_lane_result(
-                        lane=lane,
-                        provider="github_repositories",
-                        query=str(payload_repo.get("rewritten_query") or query.query),
-                        status="ok",
-                        items=items,
-                        message=(
-                            f"비공식/데모 repo {filtered_count}건은 official_source_repo lane에서 제외했습니다."
-                            if filtered_count
-                            else ""
-                        ),
-                        filtered_count=filtered_count,
-                        trust_note="openshift GitHub org 소속 repo만 official source로 표시합니다.",
-                    )
-                )
-            except Exception as exc:  # noqa: BLE001
-                lane_results.append(
-                    _source_discovery_lane_result(
-                        lane=lane,
-                        provider="github_repositories",
-                        query=query.query,
-                        status="error",
-                        error=str(exc),
-                    )
-                )
-        elif lane == SOURCE_LANE_OFFICIAL_ISSUE_PR:
-            try:
-                payload_issue = _search_github_issues_prs(root_dir, query=query.query, limit=limit, official_scope=True)
-                items = [dict(item) for item in payload_issue.get("results") or [] if isinstance(item, dict)]
-                auth_modes.add(str(payload_issue.get("auth_mode") or "public"))
-                github_issue_pr_results.extend(items)
-                lane_results.append(
-                    _source_discovery_lane_result(
-                        lane=lane,
-                        provider="github_issues_prs",
-                        query=str(payload_issue.get("rewritten_query") or query.query),
-                        status="ok",
-                        items=items,
-                    )
-                )
-            except Exception as exc:  # noqa: BLE001
-                lane_results.append(
-                    _source_discovery_lane_result(
-                        lane=lane,
-                        provider="github_issues_prs",
-                        query=query.query,
-                        status="error",
-                        error=str(exc),
-                    )
-                )
-        elif lane in {SOURCE_LANE_COMMUNITY_TROUBLESHOOTING, SOURCE_LANE_VENDOR_KB}:
-            lane_results.append(
-                _source_discovery_lane_result(
-                    lane=lane,
-                    provider="external_search_pending",
-                    query=query.query,
-                    status="not_configured",
-                    message="외부 web/provider 연결 전까지 이 lane은 Bronze 후보 수동 검증 큐로만 표시합니다.",
-                )
-            )
-        elif lane == SOURCE_LANE_UNSAFE_UNVERIFIED:
-            lane_results.append(
-                _source_discovery_lane_result(
-                    lane=lane,
-                    provider="manual_review",
-                    query=query.query,
-                    status="blocked",
-                    message="출처 불명 자료는 자동 검색/승격하지 않고 사람 검토 대상으로만 남깁니다.",
-                )
-            )
-
-    return {
-        "success": True,
-        "planner_mode": "deterministic_contract_v1",
-        "llm_planner_enabled": False,
-        "plan": plan.to_dict(),
-        "lane_results": lane_results,
-        "totals": {
-            "lane_count": len(lane_results),
-            "official_candidates": len(official_candidates),
-            "github_repositories": len(github_repository_results),
-            "github_issues_prs": len(github_issue_pr_results),
-        },
-        "auth_mode": "token" if "token" in auth_modes else "public",
-        "official_candidates": official_candidates,
-        "github_repository_results": github_repository_results,
-        "github_issue_pr_results": github_issue_pr_results,
-    }
-
-
-def handle_repository_source_discovery_search(handler: Any, payload: dict[str, Any], *, root_dir: Path) -> None:
-    try:
-        response = _build_repository_source_discovery_search(root_dir, payload)
-    except ValueError as exc:
-        handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-        return
-    except Exception as exc:  # noqa: BLE001
-        handler._send_json(
-            {"error": f"source discovery search 구성 중 오류가 발생했습니다: {exc}"},
-            HTTPStatus.INTERNAL_SERVER_ERROR,
-        )
-        return
-    handler._send_json(response)
-
-
-def handle_repository_source_discovery_verification_queue(handler: Any, query: str, *, root_dir: Path) -> None:
-    params = parse_qs(query, keep_blank_values=False)
-    limit_raw = str((params.get("limit") or ["50"])[0]).strip()
-    try:
-        limit = int(limit_raw or "50")
-    except ValueError:
-        handler._send_json({"error": "limit는 정수여야 합니다."}, HTTPStatus.BAD_REQUEST)
-        return
-    handler._send_json(list_verification_queue(root_dir, limit=limit))
-
-
-def handle_repository_source_discovery_verification_save(handler: Any, payload: dict[str, Any], *, root_dir: Path) -> None:
-    try:
-        response = save_verification_candidate(root_dir, payload)
-    except ValueError as exc:
-        handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-        return
-    except Exception as exc:  # noqa: BLE001
-        handler._send_json(
-            {"error": f"source verification queue 저장 중 오류가 발생했습니다: {exc}"},
-            HTTPStatus.INTERNAL_SERVER_ERROR,
-        )
-        return
-    handler._send_json(response, HTTPStatus.CREATED if response.get("saved") else HTTPStatus.OK)
-
-
-def handle_repository_source_discovery_judge_reports(handler: Any, query: str, *, root_dir: Path) -> None:
-    params = parse_qs(query, keep_blank_values=False)
-    limit_raw = str((params.get("limit") or ["20"])[0]).strip()
-    try:
-        limit = int(limit_raw or "20")
-    except ValueError:
-        handler._send_json({"error": "limit는 정수여야 합니다."}, HTTPStatus.BAD_REQUEST)
-        return
-    handler._send_json(list_source_discovery_judge_reports(root_dir, limit=limit))
-
-
-def _clean_judge_scope_text(value: Any) -> str:
-    return " ".join(str(value or "").strip().split()).casefold()
-
-
-def _verification_record_matches_judge_scope(record: dict[str, Any], *, question: str, candidate_ids: set[str]) -> bool:
-    candidate_id = str(record.get("candidate_id") or "").strip()
-    if candidate_id and candidate_id in candidate_ids:
-        return True
-    if not question:
-        return False
-    record_queries = [
-        _clean_judge_scope_text(record.get("source_request_query")),
-        _clean_judge_scope_text(record.get("query")),
-    ]
-    return any(query and (query == question or query in question or question in query) for query in record_queries)
-
-
-def _scoped_judge_verification_records(root_dir: Path, payload: dict[str, Any]) -> list[dict[str, Any]]:
-    payload_records = [dict(item) for item in (payload.get("verification_records") or []) if isinstance(item, dict)]
-    if payload_records:
-        return payload_records
-
-    question = _clean_judge_scope_text(payload.get("question") or payload.get("query"))
-    candidate_ids = {
-        str(item.get("candidate_id") or "").strip()
-        for item in (payload.get("source_candidates") or [])
-        if isinstance(item, dict) and str(item.get("candidate_id") or "").strip()
-    }
-    queue_records = [
-        dict(item)
-        for item in (list_verification_queue(root_dir, limit=50).get("items") or [])
-        if isinstance(item, dict)
-    ]
-    return [
-        record
-        for record in queue_records
-        if _verification_record_matches_judge_scope(record, question=question, candidate_ids=candidate_ids)
-    ]
-
-
-def build_repository_source_discovery_judge_report(root_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
-    verification_records = []
-    if bool(payload.get("include_verification_queue", True)):
-        verification_records = _scoped_judge_verification_records(root_dir, payload)
-    return save_source_discovery_judge_report(root_dir, payload, verification_records=verification_records)
-
-
-def handle_repository_source_discovery_judge_save(handler: Any, payload: dict[str, Any], *, root_dir: Path) -> None:
-    try:
-        response = build_repository_source_discovery_judge_report(root_dir, payload)
-    except ValueError as exc:
-        handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-        return
-    except Exception as exc:  # noqa: BLE001
-        handler._send_json(
-            {"error": f"source discovery judge 실행 중 오류가 발생했습니다: {exc}"},
-            HTTPStatus.INTERNAL_SERVER_ERROR,
-        )
-        return
-    handler._send_json(response, HTTPStatus.CREATED)
-
-
-def handle_repository_source_discovery_judge_replay(
-    handler: Any,
-    payload: dict[str, Any],
-    *,
-    root_dir: Path,
-    current_answerer: Any,
-    context_with_request_overrides: Any,
-    build_chat_payload: Any,
-    owner_user_id: str = "",
-) -> None:
-    question = str(payload.get("question") or payload.get("query") or "").strip()
-    if not question:
-        handler._send_json({"error": "question이 필요합니다."}, HTTPStatus.BAD_REQUEST)
-        return
-    try:
-        active_answerer = current_answerer()
-        session = ChatSession(session_id=f"source-judge-replay-{uuid.uuid4().hex}", mode=RUNTIME_CHAT_MODE)
-        scoped_payload = dict(payload)
-        if owner_user_id:
-            scoped_payload["owner_user_id"] = owner_user_id
-        request_context = context_with_request_overrides(
-            session.context,
-            payload=scoped_payload,
-            mode=RUNTIME_CHAT_MODE,
-            default_ocp_version=active_answerer.settings.ocp_version,
-        )
-        session.context = request_context
-        result = active_answerer.answer(
-            question,
-            mode=RUNTIME_CHAT_MODE,
-            context=request_context,
-            top_k=8,
-            candidate_k=20,
-            max_context_chunks=6,
-        )
-        replay_payload = build_chat_payload(
-            root_dir=root_dir,
-            answerer=active_answerer,
-            session=session,
-            result=result,
-        )
-        judge_payload = dict(payload)
-        judge_payload["question"] = question
-        judge_payload["before_answer"] = str(payload.get("before_answer") or "")
-        judge_payload["after_answer"] = str(replay_payload.get("answer") or "")
-        judge_payload["citations"] = [
-            dict(item)
-            for item in (replay_payload.get("citations") or [])
-            if isinstance(item, dict)
-        ]
-        judge_payload["include_verification_queue"] = bool(payload.get("include_verification_queue", True))
-        report = build_repository_source_discovery_judge_report(root_dir, judge_payload)
-    except ValueError as exc:
-        handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-        return
-    except Exception as exc:  # noqa: BLE001
-        handler._send_json(
-            {"error": f"source discovery judge replay 중 오류가 발생했습니다: {exc}"},
-            HTTPStatus.INTERNAL_SERVER_ERROR,
-        )
-        return
-
-    handler._send_json(
-        {
-            "schema": "source_discovery_judge_replay_v1",
-            "question": question,
-            "replay": replay_payload,
-            "judge_report": report,
-        },
-        HTTPStatus.CREATED,
-    )
-
-
 def handle_repository_favorites(handler: Any, query: str, *, root_dir: Path) -> None:
     del query
     handler._send_json(_list_repository_favorites(root_dir))
@@ -1418,14 +925,6 @@ __all__ = [
     "handle_repository_favorites_save",
     "handle_repository_official_materialize",
     "handle_repository_search",
-    "handle_repository_source_discovery_plan",
-    "handle_repository_source_discovery_search",
-    "handle_repository_source_discovery_judge_reports",
-    "handle_repository_source_discovery_judge_replay",
-    "handle_repository_source_discovery_judge_save",
-    "handle_repository_source_discovery_verification_queue",
-    "handle_repository_source_discovery_verification_save",
-    "handle_repository_source_request_save",
     "handle_repository_unanswered",
     "handle_session_delete",
     "handle_session_load",

@@ -2,7 +2,6 @@
 __pycache__/
 *.py[cod]
 .env
-.env_server
 .pytest_cache/
 .pytest-tmp/
 .pytest-tmp-*/
@@ -49,7 +48,6 @@ tmp_customer_pack_live/
 env
 .claude/
 .internal/
-kugnus_only/
 materialization
 reports/eval_reports/
 reports/tmp_repo_hygiene_audit.json
@@ -87,7 +85,6 @@ __pycache__
 output/*
 corpus/sources/kmsc/raw/*
 corpus/sources/kmsc/parsed-preview/course_pbs/*
-!corpus/sources/kmsc/parsed-preview/course_pbs/README.md
 !corpus/sources/kmsc/parsed-preview/course_pbs/assets/
 !corpus/sources/kmsc/parsed-preview/course_pbs/assets/**
 !corpus/sources/kmsc/parsed-preview/course_pbs/manifests/

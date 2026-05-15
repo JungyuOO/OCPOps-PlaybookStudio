@@ -1545,26 +1545,3 @@ def maybe_rerank_hits(
             },
         )
     return hits, reranker_trace
-
-
-def apply_retrieval_postprocess(
-    retriever,
-    *,
-    query: str,
-    hybrid_hits: list[RetrievalHit],
-    context: SessionContext | None,
-    top_k: int,
-    trace_callback,
-    timings_ms: dict[str, float],
-) -> tuple[list[RetrievalHit], dict[str, Any]]:
-    """Backward-compatible entry point for pipelines that add pre-rerank enrichment."""
-
-    return maybe_rerank_hits(
-        retriever,
-        query=query,
-        hybrid_hits=hybrid_hits,
-        context=context,
-        top_k=top_k,
-        trace_callback=trace_callback,
-        timings_ms=timings_ms,
-    )

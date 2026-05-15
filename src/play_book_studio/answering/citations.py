@@ -203,9 +203,6 @@ def summarize_selected_citations(citations, retrieval_hits) -> list[dict[str, st
             for key in ("bm25_score", "bm25_rank", "vector_score", "vector_rank"):
                 if key in hit.component_scores:
                     summary[key] = round(float(hit.component_scores[key]), 4)
-            if hit.topology_edge_ids:
-                summary["topology_edge_count"] = len(hit.topology_edge_ids)
-                summary["topology_relations"] = ", ".join(hit.topology_relations[:4])
         summaries.append(summary)
     return summaries
 

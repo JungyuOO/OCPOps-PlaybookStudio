@@ -31,10 +31,6 @@ class Citation:
     operator_names: tuple[str, ...] = field(default_factory=tuple)
     verification_hints: tuple[str, ...] = field(default_factory=tuple)
     asset_ids: tuple[str, ...] = field(default_factory=tuple)
-    topology_node_ids: tuple[str, ...] = field(default_factory=tuple)
-    topology_edge_ids: tuple[str, ...] = field(default_factory=tuple)
-    topology_relations: tuple[str, ...] = field(default_factory=tuple)
-    topology_evidence: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     learning: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

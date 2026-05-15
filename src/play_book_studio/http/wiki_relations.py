@@ -4,11 +4,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from play_book_studio.config.corpus_paths import resolve_wiki_relations_dir
+from play_book_studio.config.corpus_paths import CORPUS_DATA_DIR
 
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
-WIKI_RELATIONS_DIR = resolve_wiki_relations_dir(ROOT_DIR)
+WIKI_RELATIONS_DIR = ROOT_DIR / CORPUS_DATA_DIR / "wiki_relations"
 
 
 def _load_json_asset(name: str) -> dict[str, Any]:

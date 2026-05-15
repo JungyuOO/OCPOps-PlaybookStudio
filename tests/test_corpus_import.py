@@ -9,7 +9,6 @@ from play_book_studio.ingestion.corpus_import import (
     import_corpus_documents,
     iter_corpus_source_files,
 )
-from play_book_studio.ingestion.document_parsing import DocumentAsset, ParsedUploadDocument
 
 TEST_TMP = Path(__file__).resolve().parents[1] / "tmp" / "corpus_import_tests"
 
@@ -185,64 +184,6 @@ def test_import_corpus_documents_adds_learning_refs(monkeypatch):
     assert second_parsed.metadata["learning"]["prerequisite_refs"][0]["book_slug"] == "01-overview"
     assert first_parsed.metadata["category_key"] == "wiki"
     assert second_parsed.metadata["category_key"] == "install"
-
-
-def test_import_corpus_documents_writes_asset_files_when_settings_are_available(monkeypatch):
-    source_dir = _case_dir("asset_files_v2")
-    source = source_dir / "visual.pdf"
-    source.write_bytes(b"%PDF-1.7\nstub")
-    storage_dir = TEST_TMP / "asset_files_storage"
-    asset = DocumentAsset(
-        asset_id="asset-1",
-        asset_type="image",
-        filename="page-001.png",
-        mime_type="image/png",
-        sha256="asset-sha",
-        storage_key="uploads/assets/asset-1.png",
-        content=b"\x89PNG\r\n\x1a\nasset",
-    )
-    parsed = ParsedUploadDocument(
-        document_id="doc-1",
-        filename="visual.pdf",
-        document_format="pdf",
-        mime_type="application/pdf",
-        sha256="source-sha",
-        markdown=f"![page-001.png](asset://{asset.asset_id})",
-        assets=(asset,),
-        metadata={"byte_size": 12},
-    )
-    calls = []
-
-    def fake_persist(connection, parsed_document, chunks, **kwargs):
-        calls.append((connection, parsed_document, chunks, kwargs))
-        return Stored()
-
-    monkeypatch.setattr(corpus_import, "parse_upload_document", lambda *_args, **_kwargs: parsed)
-    monkeypatch.setattr(corpus_import, "persist_parsed_upload_document", fake_persist)
-
-    result = import_corpus_documents(
-        FakeConnection(),
-        source_dir=source_dir,
-        corpus_kind="study_docs",
-        chunk_max_chars=200,
-        chunk_overlap_blocks=0,
-        settings=type(
-            "Settings",
-            (),
-            {
-                "object_storage_dir": storage_dir,
-                "llm_endpoint": "",
-                "llm_model": "",
-                "request_timeout_seconds": 1,
-                "request_retries": 1,
-                "request_backoff_seconds": 0,
-            },
-        )(),
-    )
-
-    assert result["imported_count"] == 1
-    assert result["imported"][0]["asset_file_count"] == 1
-    assert (storage_dir / asset.storage_key).read_bytes() == asset.content
 
 
 def test_import_corpus_documents_skips_exact_duplicate_sources(monkeypatch):
