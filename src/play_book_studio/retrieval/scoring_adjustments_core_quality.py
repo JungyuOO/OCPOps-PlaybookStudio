@@ -133,9 +133,21 @@ def _apply_build_security_adjustments(hit: RetrievalHit, *, query: str) -> None:
         _apply_factor(hit, "v016_build_input_oauth_penalty", 0.28)
 
 
+def _apply_route_policy_adjustments(hit: RetrievalHit, *, query: str) -> None:
+    lowered_query = query.lower()
+    if not ("route" in lowered_query and ("허용" in query or "정책" in query or "admission" in lowered_query)):
+        return
+    text = _hit_text(hit)
+    if _has_any(text, ("routeadmission", "namespaceownership", "internamespaceallowed", "ingresscontroller")):
+        _apply_factor(hit, "v016_route_admission_policy_boost", 2.0)
+    if _has_any(text, ("oc expose", "create route")) and not _has_any(text, ("routeadmission", "namespaceownership")):
+        _apply_factor(hit, "v016_route_expose_policy_mismatch_penalty", 0.35)
+
+
 def apply_quality_core_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
     query = signals.query
     _apply_platform_registry_storage_adjustments(hit, query=query)
     _apply_etcd_adjustments(hit, query=query)
     _apply_insights_adjustments(hit, query=query)
     _apply_build_security_adjustments(hit, query=query)
+    _apply_route_policy_adjustments(hit, query=query)

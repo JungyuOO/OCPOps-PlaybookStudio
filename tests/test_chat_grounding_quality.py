@@ -1318,3 +1318,34 @@ def test_v016_build_input_security_penalizes_oauth_chunks() -> None:
     assert hits[0].chunk_id == "build-secret"
     assert hits[0].component_scores["v016_build_input_security_boost"] == 1.8
     assert "v016_build_input_oauth_penalty" in hits[1].component_scores
+
+
+def test_v016_route_admission_policy_penalizes_expose_route_chunks() -> None:
+    expose_hit = _hit(
+        "route-expose",
+        text="Expose a service as a route with oc expose service nodejs-ex and verify with oc get route.",
+        cli_commands=("oc expose service nodejs-ex", "oc get route"),
+        book_slug="networking",
+        raw_score=0.4,
+    )
+    admission_hit = _hit(
+        "route-admission",
+        text="Configure routeAdmission namespaceOwnership InterNamespaceAllowed on the default IngressController.",
+        cli_commands=(
+            "oc -n openshift-ingress-operator patch ingresscontroller/default --patch '{\"spec\":{\"routeAdmission\":{\"namespaceOwnership\":\"InterNamespaceAllowed\"}}}' --type=merge",
+        ),
+        book_slug="ingress",
+        section="Route admission policy",
+        raw_score=0.25,
+    )
+
+    hits = fuse_ranked_hits(
+        "Route 허용 정책은 어떻게 설정해?",
+        {"bm25": [expose_hit, admission_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "route-admission"
+    assert hits[0].component_scores["v016_route_admission_policy_boost"] == 2.0
+    assert "v016_route_expose_policy_mismatch_penalty" in hits[1].component_scores

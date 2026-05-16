@@ -11,6 +11,8 @@ def test_validation_operational_questions_are_not_smalltalk_or_clarification() -
         "PDB가 설정되어 있는지는 어떻게 확인해?",
         "HPA 스케일링 정책은 어디서 수정해?",
         "Local Storage Operator를 제거할 때 어떤 리소스부터 정리해야 해?",
+        "Vertical Pod Autoscaler Operator는 어떻게 설치해?",
+        "도메인별 HSTS 정책은 어떻게 적용해?",
     ]
 
     for query in queries:
@@ -32,6 +34,8 @@ def test_validation_operational_questions_are_not_smalltalk_or_clarification() -
     ]
     assert _should_force_clarification(hits, query="PDB에서 비정상 Pod 정책을 적용하려면 어떻게 해?") is False
     assert _should_force_clarification(hits, query="Local Storage Operator를 제거할 때 어떤 리소스부터 정리해야 해?") is False
+    assert _should_force_clarification(hits, query="Vertical Pod Autoscaler Operator를 제거하려면 어떻게 해?") is False
+    assert _should_force_clarification(hits, query="도메인별 HSTS 정책은 어떻게 적용해?") is False
     assert not _is_low_confidence_retrieval(
         query="PDB가 설정되어 있는지는 어떻게 확인해?",
         citations=[
@@ -55,9 +59,18 @@ def test_validation_operational_questions_have_specific_intent_profiles() -> Non
     pdb_check = build_intent_profile("PDB가 설정되어 있는지는 어떻게 확인해?")
     pdb_apply = build_intent_profile("PDB에서 비정상 Pod 정책을 적용하려면 어떻게 해?")
     hpa_edit = build_intent_profile("HPA 스케일링 정책은 어디서 수정해?")
+    vpa_install = build_intent_profile("Vertical Pod Autoscaler Operator는 어떻게 설치해?")
+    vpa_remove = build_intent_profile("Vertical Pod Autoscaler Operator를 제거하려면 어떻게 해?")
+    hsts = build_intent_profile("도메인별 HSTS 정책은 어떻게 적용해?")
+    route_admission = build_intent_profile("Route 허용 정책은 어떻게 설정해?")
 
     assert local_storage.target_object == "local-storage-operator"
     assert "oc delete localvolume --all --all-namespaces" in local_storage.primary_commands
     assert pdb_check.primary_commands[0] == "oc get poddisruptionbudget --all-namespaces"
     assert pdb_apply.primary_commands == ("oc create -f pod-disruption-budget.yaml",)
     assert hpa_edit.primary_commands == ("oc edit hpa <hpa-name> -n <namespace>",)
+    assert vpa_install.primary_commands == ("oc get all -n openshift-vertical-pod-autoscaler",)
+    assert "oc delete namespace openshift-vertical-pod-autoscaler" in vpa_remove.primary_commands
+    assert "oc edit ingresses.config.openshift.io/cluster" in hsts.primary_commands
+    assert route_admission.target_object == "route-admission"
+    assert route_admission.primary_commands[0].startswith("oc -n openshift-ingress-operator patch")

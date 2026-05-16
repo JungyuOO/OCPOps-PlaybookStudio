@@ -349,6 +349,23 @@ def build_intent_profile(query: str) -> IntentProfile:
             reasons=("route timeout troubleshooting",),
         )
 
+    if _contains_any(text, ("route", "routes", "라우트")) and _contains_any(
+        text, ("admission", "namespaceownership", "allowed", "허용", "정책", "policy")
+    ):
+        return _profile(
+            intent="operation_command",
+            target_object="route-admission",
+            task="namespace-ownership-policy",
+            needs_command=True,
+            primary_commands=(
+                "oc -n openshift-ingress-operator patch ingresscontroller/default --patch '{\"spec\":{\"routeAdmission\":{\"namespaceOwnership\":\"InterNamespaceAllowed\"}}}' --type=merge",
+            ),
+            evidence_terms=("routeAdmission", "namespaceOwnership", "InterNamespaceAllowed", "IngressController"),
+            query_terms=("route admission policy", "namespace ownership route policy", "InterNamespaceAllowed"),
+            confidence=0.86,
+            reasons=("route admission namespace ownership command request",),
+        )
+
     if _contains_any(text, ("allowedregistries", "allowed registries")) or (
         _contains_any(text, ("registry", "레지스트리")) and _contains_any(text, ("allowed", "허용", "제한", "limit"))
     ):
@@ -457,6 +474,48 @@ def build_intent_profile(query: str) -> IntentProfile:
             query_terms=("horizontal pod autoscaler metrics", "autoscaling target", "scale out not working"),
             confidence=0.84,
             reasons=("horizontal pod autoscaler troubleshooting",),
+        )
+
+    if _contains_any(text, ("vertical pod autoscaler", "verticalpodautoscaler", "vpa")):
+        if _contains_any(text, ("remove", "delete", "uninstall", "제거", "삭제")):
+            return _profile(
+                intent="operation_command",
+                target_object="verticalpodautoscaler",
+                task="remove-operator",
+                needs_command=True,
+                primary_commands=(
+                    "oc delete vpa <vpa-name>",
+                    "oc delete crd verticalpodautoscalercheckpoints.autoscaling.k8s.io",
+                    "oc delete namespace openshift-vertical-pod-autoscaler",
+                ),
+                evidence_terms=("Vertical Pod Autoscaler Operator", "VPA", "openshift-vertical-pod-autoscaler"),
+                query_terms=("remove vertical pod autoscaler operator", "delete vpa custom resources"),
+                confidence=0.86,
+                reasons=("vertical pod autoscaler operator removal command request",),
+            )
+        return _profile(
+            intent="operation_command",
+            target_object="verticalpodautoscaler",
+            task="install-operator",
+            needs_command=True,
+            primary_commands=("oc get all -n openshift-vertical-pod-autoscaler",),
+            evidence_terms=("Vertical Pod Autoscaler Operator", "VPA", "openshift-vertical-pod-autoscaler"),
+            query_terms=("install vertical pod autoscaler operator", "verify vertical pod autoscaler namespace"),
+            confidence=0.84,
+            reasons=("vertical pod autoscaler operator install command request",),
+        )
+
+    if _contains_any(text, ("hsts", "http strict transport security", "strict transport security")):
+        return _profile(
+            intent="operation_command",
+            target_object="hsts",
+            task="domain-policy",
+            needs_command=True,
+            primary_commands=("oc create route", "oc expose route", "oc edit ingresses.config.openshift.io/cluster"),
+            evidence_terms=("HSTS", "HTTP Strict Transport Security", "Ingress", "Route"),
+            query_terms=("domain hsts policy", "route hsts policy", "ingress hsts"),
+            confidence=0.84,
+            reasons=("domain hsts policy command request",),
         )
 
     if _has_resource_policy_intent(text, "imagepullbackoff", "errimagepull", "pull secret"):

@@ -80,8 +80,8 @@ OCP_OPERATIONAL_PHRASE_RE = re.compile(
     re.IGNORECASE,
 )
 V016_OPERATIONAL_OVERRIDE_RE = re.compile(
-    r"(?<![a-z0-9])(?:pdb|poddisruptionbudget|hpa|horizontalpodautoscaler|localvolume|localvolumeset|localvolumediscovery)(?![a-z0-9])|"
-    r"Local\s*Storage\s*Operator|로컬\s*스토리지|중단\s*예산|스케일링\s*정책",
+    r"(?<![a-z0-9])(?:pdb|poddisruptionbudget|hpa|horizontalpodautoscaler|vpa|verticalpodautoscaler|hsts|localvolume|localvolumeset|localvolumediscovery)(?![a-z0-9])|"
+    r"Local\s*Storage\s*Operator|Vertical\s*Pod\s*Autoscaler\s*Operator|로컬\s*스토리지|중단\s*예산|스케일링\s*정책|도메인별\s*HSTS",
     re.IGNORECASE,
 )
 STRUCTURED_QUERY_RE = re.compile(r"[/<>=:\d]")
