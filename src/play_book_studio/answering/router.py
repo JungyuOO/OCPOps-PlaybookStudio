@@ -79,6 +79,11 @@ OCP_OPERATIONAL_PHRASE_RE = re.compile(
     r"Pod\s*목록|클러스터\s*이벤트|클러스터\s*진단|pull\s*secret|원격\s*상태\s*보고",
     re.IGNORECASE,
 )
+V016_OPERATIONAL_OVERRIDE_RE = re.compile(
+    r"(?<![a-z0-9])(?:pdb|poddisruptionbudget|hpa|horizontalpodautoscaler|localvolume|localvolumeset|localvolumediscovery)(?![a-z0-9])|"
+    r"Local\s*Storage\s*Operator|로컬\s*스토리지|중단\s*예산|스케일링\s*정책",
+    re.IGNORECASE,
+)
 STRUCTURED_QUERY_RE = re.compile(r"[/<>=:\d]")
 OBSERVABILITY_COMPARE_RE = re.compile(
     r"(monitoring|모니터링).*(logging|로깅).*(observability|관측|옵저버빌리티).*(구분|차이|설명|비교)"
@@ -115,6 +120,8 @@ def _looks_like_light_smalltalk(query: str) -> bool:
     normalized = (query or "").strip()
     if not normalized:
         return False
+    if V016_OPERATIONAL_OVERRIDE_RE.search(normalized):
+        return False
     if TECHNICAL_HINT_RE.search(normalized):
         return False
     if STRUCTURED_QUERY_RE.search(normalized):
@@ -131,6 +138,8 @@ def _looks_like_ocp_operational_question(query: str) -> bool:
     normalized = (query or "").strip()
     if not normalized:
         return False
+    if V016_OPERATIONAL_OVERRIDE_RE.search(normalized):
+        return True
     if OCP_OPERATIONAL_PHRASE_RE.search(normalized):
         return True
     return bool(OCP_OPERATIONAL_ENTITY_RE.search(normalized) and OCP_OPERATIONAL_ACTION_RE.search(normalized))

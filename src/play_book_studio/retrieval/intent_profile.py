@@ -390,13 +390,44 @@ def build_intent_profile(query: str) -> IntentProfile:
             reasons=("security context constraints troubleshooting",),
         )
 
+    if _contains_any(text, ("local storage operator", "localvolume", "localvolumeset", "localvolumediscovery", "로컬 스토리지")) and _contains_any(
+        text, ("remove", "delete", "uninstall", "cleanup", "제거", "삭제", "정리")
+    ):
+        return _profile(
+            intent="operation_command",
+            target_object="local-storage-operator",
+            task="cleanup-before-removal",
+            needs_command=True,
+            primary_commands=(
+                "oc delete localvolume --all --all-namespaces",
+                "oc delete localvolumeset --all --all-namespaces",
+                "oc delete localvolumediscovery --all --all-namespaces",
+            ),
+            evidence_terms=("Local Storage Operator", "LocalVolume", "LocalVolumeSet", "LocalVolumeDiscovery"),
+            query_terms=("local storage operator removal", "delete local storage custom resources"),
+            confidence=0.86,
+            reasons=("local storage operator cleanup command request",),
+        )
+
     if _contains_any(text, ("poddisruptionbudget", "pod disruption budget", "pdb")):
+        if _contains_any(text, ("apply", "create", "set", "policy", "정책", "적용", "생성")):
+            return _profile(
+                intent="operation_command",
+                target_object="poddisruptionbudget",
+                task="apply-policy",
+                needs_command=True,
+                primary_commands=("oc create -f pod-disruption-budget.yaml",),
+                evidence_terms=("PodDisruptionBudget", "PDB", "unhealthyPodEvictionPolicy", "pod-disruption-budget.yaml"),
+                query_terms=("apply pod disruption budget policy", "unhealthy pod eviction policy"),
+                confidence=0.84,
+                reasons=("pod disruption budget policy apply command request",),
+            )
         return _profile(
             intent="troubleshooting",
             target_object="poddisruptionbudget",
             task="drain-or-availability-blocked",
             needs_command=True,
-            primary_commands=("oc get pdb -n <namespace>", "oc describe pdb <pdb-name> -n <namespace>"),
+            primary_commands=("oc get poddisruptionbudget --all-namespaces", "oc get pdb -n <namespace>", "oc describe pdb <pdb-name> -n <namespace>"),
             evidence_terms=("PodDisruptionBudget", "PDB", "Allowed disruptions", "minAvailable", "maxUnavailable"),
             query_terms=("pod disruption budget", "node drain blocked", "application availability during disruption"),
             confidence=0.84,
@@ -404,6 +435,18 @@ def build_intent_profile(query: str) -> IntentProfile:
         )
 
     if _contains_any(text, ("horizontalpodautoscaler", "horizontal pod autoscaler", "hpa")):
+        if _contains_any(text, ("edit", "modify", "change", "policy", "수정", "변경", "정책")):
+            return _profile(
+                intent="operation_command",
+                target_object="horizontalpodautoscaler",
+                task="edit-policy",
+                needs_command=True,
+                primary_commands=("oc edit hpa <hpa-name> -n <namespace>",),
+                evidence_terms=("HorizontalPodAutoscaler", "HPA", "behavior", "scaleDown", "scaleUp"),
+                query_terms=("edit hpa scaling policy", "horizontal pod autoscaler behavior"),
+                confidence=0.86,
+                reasons=("horizontal pod autoscaler policy edit command request",),
+            )
         return _profile(
             intent="troubleshooting",
             target_object="horizontalpodautoscaler",

@@ -52,6 +52,11 @@ OCP_OPERATIONAL_CLARIFICATION_BYPASS_RE = re.compile(
     r"현재\s*프로젝트\s*상태|지원되는\s*API\s*리소스",
     re.IGNORECASE,
 )
+V016_OPERATIONAL_CLARIFICATION_BYPASS_RE = re.compile(
+    r"(?<![a-z0-9])(?:pdb|poddisruptionbudget|hpa|horizontalpodautoscaler|localvolume|localvolumeset|localvolumediscovery)(?![a-z0-9])|"
+    r"Local\s*Storage\s*Operator|로컬\s*스토리지|중단\s*예산|스케일링\s*정책",
+    re.IGNORECASE,
+)
 MAX_PROMPT_CLI_COMMANDS = 4
 OC_LOGIN_QUERY_RE = re.compile(
     r"(?:\boc\s+login|로그인|login).*(?:token|토큰|server|서버|url|api)"
@@ -931,6 +936,8 @@ def _should_force_clarification(
     query: str = "",
 ) -> bool:
     normalized = query or ""
+    if V016_OPERATIONAL_CLARIFICATION_BYPASS_RE.search(normalized):
+        return False
     if OCP_OPERATIONAL_CLARIFICATION_BYPASS_RE.search(normalized):
         return False
     if has_follow_up_reference(normalized):
