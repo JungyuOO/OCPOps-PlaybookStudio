@@ -4,8 +4,10 @@ import json
 
 from play_book_studio.evals.validation_real_loop import (
     build_validation_report,
+    evaluate_answer_quality,
     load_blind_question_cases,
     load_gold_answer_cases,
+    reanalyze_existing_output,
     write_real_loop,
 )
 
@@ -68,6 +70,110 @@ def test_gold_answers_load_only_for_compare_phase(tmp_path):
     assert report["summary"]["total"] == 1
     assert report["summary"]["passed"] == 1
     assert "answer" not in report["results"][0]
+
+
+def test_v016_quality_evaluator_flags_smalltalk_for_ocp_question() -> None:
+    quality = evaluate_answer_quality(
+        question="새 프로젝트는 어떻게 만들어?",
+        expected="새 프로젝트는 `oc new-project <project>` 명령으로 생성합니다.",
+        actual="답변: 반갑습니다. 저는 OCP PlayBook 챗봇입니다.",
+        response_kind="smalltalk",
+        service_status="ok",
+    )
+
+    assert quality["verdict"] == "fail"
+    assert "smalltalk_route" in quality["failure_reasons"]
+    assert "missing_command_family" in quality["failure_reasons"]
+
+
+def test_v016_quality_evaluator_passes_matching_command_family() -> None:
+    quality = evaluate_answer_quality(
+        question="Pod 로그는 어떻게 확인해?",
+        expected="Pod 로그는 `oc logs pod/<pod_name> -n <namespace>` 명령으로 확인합니다.",
+        actual="답변: 아래 명령으로 Pod 로그를 확인합니다.\n\n```bash\noc logs pod/my-app -n demo\n```",
+        response_kind="rag",
+        service_status="ok",
+    )
+
+    assert quality["verdict"] == "pass"
+    assert quality["matched_command_families"] == ["oc_logs"]
+
+
+def test_v016_validation_report_includes_quality_summary() -> None:
+    report = build_validation_report(
+        [
+            {
+                "case_id": "ocp_cases:0001",
+                "source_file": "validation/ocp_cases.json",
+                "source_index": 0,
+                "question": "현재 선택된 프로젝트는 어떻게 확인해?",
+                "question_sha256_16": "hash",
+                "status": "ok",
+                "response_kind": "smalltalk",
+                "answer": "답변: 반갑습니다. 저는 OCP PlayBook 챗봇입니다.",
+            }
+        ],
+        {
+            "ocp_cases:0001": type(
+                "Gold",
+                (),
+                {"case_id": "ocp_cases:0001", "answer": "현재 프로젝트는 `oc project` 명령으로 확인합니다."},
+            )()
+        },
+    )
+
+    assert report["summary"]["quality_failed"] == 1
+    assert report["summary"]["failure_reason_counts"]["smalltalk_route"] == 1
+    assert report["results"][0]["quality"]["verdict"] == "fail"
+
+
+def test_v016_reanalyze_existing_output_rebuilds_quality_without_service(tmp_path):
+    target = tmp_path / "validation" / "ocp_cases.json"
+    output = tmp_path / "validation" / "real_loop.json"
+    target.parent.mkdir()
+    target.write_text(
+        json.dumps(
+            [{"Question": "새 프로젝트는 어떻게 만들어?", "answer": "새 프로젝트는 `oc new-project demo`로 만듭니다."}],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    output.write_text(
+        json.dumps(
+            {
+                "summary": {"question_count": 1, "service_result_count": 1, "pending_count": 0},
+                "service_results": [
+                    {
+                        "case_id": "ocp_cases:0001",
+                        "source_file": "validation/ocp_cases.json",
+                        "source_index": 0,
+                        "question": "새 프로젝트는 어떻게 만들어?",
+                        "question_sha256_16": "hash",
+                        "status": "ok",
+                        "response_kind": "smalltalk",
+                        "answer": "답변: 반갑습니다. 저는 OCP PlayBook 챗봇입니다.",
+                    }
+                ],
+                "validation": {"summary": {}},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = reanalyze_existing_output(
+        tmp_path,
+        pattern="validation/ocp_*.json",
+        output_path=output,
+    )
+
+    assert payload["summary"]["partial"] is False
+    assert payload["validation"]["summary"]["quality_failed"] == 1
+    assert payload["validation"]["results"][0]["quality"]["failure_reasons"] == [
+        "smalltalk_route",
+        "missing_command_family",
+        "weak_topic_overlap",
+    ]
 
 
 def test_write_real_loop_shape_can_skip_service(tmp_path):

@@ -28,6 +28,9 @@ TOKEN_RE = re.compile(r"[A-Za-z0-9_.:/-]+|[가-힣]+")
 COMMAND_RE = re.compile(
     r"(?m)^\s*((?:oc|kubectl|openshift-install|journalctl|systemctl|helm|curl)\b[^\n`]*)"
 )
+INLINE_COMMAND_RE = re.compile(
+    r"`((?:oc|kubectl|openshift-install|journalctl|systemctl|helm|curl)\b[^`]*)`"
+)
 CITATION_RE = re.compile(r"\[\d+\]")
 CODE_FENCE_RE = re.compile(r"```[^\n`]*\n|```")
 
@@ -270,7 +273,62 @@ def _tokens(text: str) -> set[str]:
 
 
 def _commands(text: str) -> set[str]:
-    return {" ".join(match.group(1).lower().split()) for match in COMMAND_RE.finditer(text)}
+    commands = {" ".join(match.group(1).lower().split()) for match in COMMAND_RE.finditer(text)}
+    commands.update(" ".join(match.group(1).lower().split()) for match in INLINE_COMMAND_RE.finditer(text))
+    return {command for command in commands if command}
+
+
+def _command_family(command: str) -> str:
+    lowered = " ".join(command.lower().split())
+    if lowered.startswith("oc adm certificate approve"):
+        return "oc_adm_certificate_approve"
+    if lowered.startswith("oc adm must-gather"):
+        return "oc_adm_must_gather"
+    if lowered.startswith("oc adm upgrade"):
+        return "oc_adm_upgrade"
+    if lowered.startswith("oc new-project"):
+        return "oc_new_project"
+    if lowered.startswith("oc new-app"):
+        return "oc_new_app"
+    if lowered.startswith("oc api-resources"):
+        return "oc_api_resources"
+    if lowered.startswith("oc project"):
+        return "oc_project"
+    if lowered.startswith("oc status"):
+        return "oc_status"
+    if lowered.startswith("oc logs"):
+        return "oc_logs"
+    if lowered.startswith("oc get"):
+        return "oc_get"
+    if lowered.startswith("oc describe"):
+        return "oc_describe"
+    if lowered.startswith("oc create"):
+        return "oc_create"
+    if lowered.startswith("oc delete"):
+        return "oc_delete"
+    if lowered.startswith("oc patch"):
+        return "oc_patch"
+    if lowered.startswith("oc edit"):
+        return "oc_edit"
+    if lowered.startswith("oc label"):
+        return "oc_label"
+    if lowered.startswith("oc debug"):
+        return "oc_debug"
+    if lowered.startswith("oc image extract"):
+        return "oc_image_extract"
+    if lowered.startswith("oc import-image"):
+        return "oc_import_image"
+    if lowered.startswith("oc tag"):
+        return "oc_tag"
+    if lowered.startswith("kubectl"):
+        return "kubectl"
+    if lowered.startswith("ccoctl"):
+        return "ccoctl"
+    return "_".join(lowered.split()[:2]) if lowered else ""
+
+
+def _command_families(commands: set[str]) -> set[str]:
+    return {family for command in commands if (family := _command_family(command))}
 
 
 def _f1(expected: set[str], actual: set[str]) -> float:
@@ -326,6 +384,67 @@ def compare_answer_similarity(expected: str, actual: str) -> dict[str, Any]:
     }
 
 
+def evaluate_answer_quality(
+    *,
+    question: str,
+    expected: str,
+    actual: str,
+    response_kind: str,
+    service_status: str = "",
+) -> dict[str, Any]:
+    expected_commands = _commands(expected)
+    actual_commands = _commands(actual)
+    expected_families = _command_families(expected_commands)
+    actual_families = _command_families(actual_commands)
+    question_tokens = _tokens(question)
+    expected_tokens = _tokens(expected)
+    actual_tokens = _tokens(actual)
+    expected_topic_overlap = _f1(expected_tokens, actual_tokens)
+    missing_families = sorted(expected_families - actual_families)
+    matched_families = sorted(expected_families & actual_families)
+    reasons: list[str] = []
+
+    if service_status and service_status != "ok":
+        reasons.append("service_error")
+    if response_kind == "smalltalk" and question_tokens:
+        reasons.append("smalltalk_route")
+    if response_kind == "no_answer":
+        reasons.append("no_answer")
+    if response_kind == "clarification":
+        reasons.append("clarification_route")
+    if response_kind == "error":
+        reasons.append("answer_error")
+    if not actual.strip():
+        reasons.append("empty_answer")
+    if expected_families and missing_families:
+        reasons.append("missing_command_family")
+    if expected_families and actual_families and not matched_families:
+        reasons.append("command_drift")
+    if expected_topic_overlap < 0.18 and actual.strip():
+        reasons.append("weak_topic_overlap")
+
+    if not reasons:
+        verdict = "pass"
+    elif set(reasons) <= {"missing_command_family", "weak_topic_overlap"} and actual.strip():
+        verdict = "partial"
+    else:
+        verdict = "fail"
+
+    return {
+        "verdict": verdict,
+        "failure_reasons": reasons,
+        "expected_commands": sorted(expected_commands),
+        "actual_commands": sorted(actual_commands),
+        "expected_command_families": sorted(expected_families),
+        "actual_command_families": sorted(actual_families),
+        "matched_command_families": matched_families,
+        "missing_command_families": missing_families,
+        "metrics": {
+            "topic_token_f1": round(expected_topic_overlap, 4),
+        },
+    }
+
+
 def build_validation_report(
     service_results: list[dict[str, Any]],
     gold_answers: dict[str, GoldAnswerCase],
@@ -341,8 +460,19 @@ def build_validation_report(
                 "verdict": "missing_gold",
                 "metrics": {},
             }
+            quality = {
+                "verdict": "missing_gold",
+                "failure_reasons": ["missing_gold"],
+            }
         else:
             similarity = compare_answer_similarity(gold.answer, actual)
+            quality = evaluate_answer_quality(
+                question=str(result.get("question") or ""),
+                expected=gold.answer,
+                actual=actual,
+                response_kind=str(result.get("response_kind") or ""),
+                service_status=str(result.get("status") or ""),
+            )
         rows.append(
             {
                 "case_id": case_id,
@@ -354,10 +484,18 @@ def build_validation_report(
                 "service_status": result.get("status"),
                 "response_kind": result.get("response_kind"),
                 "similarity": similarity,
+                "quality": quality,
             }
         )
     compared = [row for row in rows if row["expected_answer_present"]]
     pass_count = sum(1 for row in compared if row["similarity"].get("verdict") == "pass")
+    quality_pass_count = sum(1 for row in compared if row["quality"].get("verdict") == "pass")
+    quality_partial_count = sum(1 for row in compared if row["quality"].get("verdict") == "partial")
+    quality_fail_count = sum(1 for row in compared if row["quality"].get("verdict") == "fail")
+    failure_reason_counts: dict[str, int] = {}
+    for row in compared:
+        for reason in row["quality"].get("failure_reasons") or []:
+            failure_reason_counts[str(reason)] = failure_reason_counts.get(str(reason), 0) + 1
     answered_count = sum(1 for row in rows if row["actual_answer_present"])
     avg_score = (
         sum(float(row["similarity"].get("score") or 0.0) for row in compared) / len(compared)
@@ -375,6 +513,11 @@ def build_validation_report(
             "answer_present_rate": round(answered_count / len(rows), 4) if rows else 0.0,
             "similarity_pass_rate": round(pass_count / len(compared), 4) if compared else 0.0,
             "avg_similarity_score": round(avg_score, 4),
+            "quality_passed": quality_pass_count,
+            "quality_partial": quality_partial_count,
+            "quality_failed": quality_fail_count,
+            "quality_pass_rate": round(quality_pass_count / len(compared), 4) if compared else 0.0,
+            "failure_reason_counts": failure_reason_counts,
         },
         "results": rows,
     }
@@ -500,6 +643,31 @@ def write_real_loop(
     return payload
 
 
+def reanalyze_existing_output(
+    root_dir: Path,
+    *,
+    pattern: str,
+    output_path: Path,
+) -> dict[str, Any]:
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Unsupported output JSON shape: {output_path}")
+    service_results = payload.get("service_results")
+    if not isinstance(service_results, list):
+        raise ValueError(f"Missing service_results in {output_path}")
+    typed_results = [row for row in service_results if isinstance(row, dict)]
+    gold_answers = load_gold_answer_cases(root_dir, pattern)
+    payload["validation"] = build_validation_report(typed_results, gold_answers)
+    payload.setdefault("summary", {})
+    if isinstance(payload["summary"], dict):
+        payload["summary"]["service_result_count"] = len(typed_results)
+        payload["summary"]["pending_count"] = 0
+        payload["summary"]["batch_pending_count"] = 0
+        payload["summary"]["partial"] = False
+    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return payload
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run validation/ocp_*.json questions through /api/chat.")
     parser.add_argument("--root-dir", default=".", help="Repository root. Defaults to current directory.")
@@ -528,6 +696,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only verify file loading/report shape without calling the service.",
     )
+    parser.add_argument(
+        "--reanalyze-existing",
+        action="store_true",
+        help="Do not call the service; rebuild validation metrics for the existing output file.",
+    )
     parser.add_argument("--resume", action="store_true", help="Keep completed rows in the output file and run only missing cases.")
     return parser.parse_args()
 
@@ -539,6 +712,22 @@ def main() -> int:
     output = Path(args.output)
     if not output.is_absolute():
         output = root_dir / output
+    if bool(args.reanalyze_existing):
+        payload = reanalyze_existing_output(root_dir, pattern=str(args.pattern), output_path=output)
+        summary = payload.get("validation", {}).get("summary", {})
+        print(
+            json.dumps(
+                {
+                    "output": str(output),
+                    "question_count": payload.get("summary", {}).get("question_count"),
+                    "service_result_count": payload.get("summary", {}).get("service_result_count"),
+                    "validation": summary,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
     payload = write_real_loop(
         root_dir,
         pattern=str(args.pattern),

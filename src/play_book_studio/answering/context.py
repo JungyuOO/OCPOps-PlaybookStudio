@@ -45,6 +45,13 @@ from .sanitize import sanitize_cli_command, sanitize_section_label, strip_intern
 SPACE_RE = re.compile(r"\s+")
 SECTION_PREFIX_RE = re.compile(r"^\d+(?:\.\d+)*\.?\s*")
 INTRO_RECOMMENDATION_COUNT_RE = re.compile(r"(\d+\s*개|세\s*개|3\s*개|목록|리스트|top\s*\d+)", re.IGNORECASE)
+OCP_OPERATIONAL_CLARIFICATION_BYPASS_RE = re.compile(
+    r"클러스터\s*이벤트|클러스터\s*진단|진단\s*데이터|Node\s*Feature\s*Discovery|"
+    r"\bNFD\b|Insights\s*Operator|원격\s*상태\s*보고|pull\s*secret|제거\s*예정\s*API|"
+    r"네트워크\s*지터|CSR\s*승인|새\s*프로젝트|새\s*애플리케이션|현재\s*선택된\s*프로젝트|"
+    r"현재\s*프로젝트\s*상태|지원되는\s*API\s*리소스",
+    re.IGNORECASE,
+)
 MAX_PROMPT_CLI_COMMANDS = 4
 OC_LOGIN_QUERY_RE = re.compile(
     r"(?:\boc\s+login|로그인|login).*(?:token|토큰|server|서버|url|api)"
@@ -924,6 +931,8 @@ def _should_force_clarification(
     query: str = "",
 ) -> bool:
     normalized = query or ""
+    if OCP_OPERATIONAL_CLARIFICATION_BYPASS_RE.search(normalized):
+        return False
     if has_follow_up_reference(normalized):
         return False
     if any(
