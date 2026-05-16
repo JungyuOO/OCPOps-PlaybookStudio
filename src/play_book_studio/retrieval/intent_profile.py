@@ -111,6 +111,89 @@ def build_intent_profile(query: str) -> IntentProfile:
     lowered = text.lower()
     command_request = has_command_request(text)
 
+    if _contains_any(text, ("csr", "certificate signing request", "인증서 서명 요청")) and _contains_any(
+        text, ("approve", "approval", "승인")
+    ):
+        return _profile(
+            intent="operation_command",
+            target_object="csr",
+            task="approve",
+            needs_command=True,
+            primary_commands=("oc get csr", "oc adm certificate approve <csr-name>"),
+            evidence_terms=("CertificateSigningRequest", "CSR", "Approved", "oc adm certificate approve"),
+            query_terms=("approve pending csr", "certificate signing request approval"),
+            confidence=0.86,
+            reasons=("csr approval command request",),
+        )
+
+    if _contains_any(text, ("api-resource", "api-resources", "api resource", "api resources", "api 리소스")):
+        return _profile(
+            intent="command_lookup",
+            target_object="api-resource",
+            task="list",
+            needs_command=True,
+            primary_commands=("oc api-resources",),
+            evidence_terms=("APIResource", "api-resources", "namespaced", "verbs"),
+            query_terms=("supported API resources", "list api resources"),
+            confidence=0.84,
+            reasons=("api resources list command request",),
+        )
+
+    if _contains_any(text, ("application", "app", "애플리케이션", "앱")) and _contains_any(
+        text, ("create", "new", "make", "deploy", "생성", "만들", "배포")
+    ):
+        return _profile(
+            intent="operation_command",
+            target_object="application",
+            task="create",
+            needs_command=True,
+            primary_commands=("oc new-app <image-or-template>",),
+            evidence_terms=("new application", "oc new-app", "ImageStream", "template"),
+            query_terms=("create application from image", "deploy application"),
+            confidence=0.84,
+            reasons=("application creation command request",),
+        )
+
+    if _contains_any(text, ("namespace", "namespaces", "project", "projects", "네임스페이스", "프로젝트")) and not (
+        _contains_any(text, ("can-i", "can i", "rbac", "권한")) or _has_pod_delete_permission_intent(text)
+    ):
+        if _contains_any(text, ("create", "new", "make", "생성", "만들", "추가", "새 ")):
+            return _profile(
+                intent="operation_command",
+                target_object="namespace",
+                task="create",
+                needs_command=True,
+                primary_commands=("oc new-project <project-name>", "oc create namespace <namespace-name>"),
+                evidence_terms=("Namespace", "Project", "oc new-project", "oc create namespace"),
+                query_terms=("create project namespace", "new OpenShift project"),
+                confidence=0.86,
+                reasons=("namespace project creation command request",),
+            )
+        if _contains_any(text, ("list", "목록", "전체", "조회")):
+            return _profile(
+                intent="command_lookup",
+                target_object="namespace",
+                task="list",
+                needs_command=True,
+                primary_commands=("oc get namespaces", "oc get projects"),
+                evidence_terms=("namespace", "project", "list"),
+                query_terms=("project list", "namespace list"),
+                confidence=0.86,
+                reasons=("namespace list command request",),
+            )
+        if _contains_any(text, ("current", "selected", "active", "현재", "선택", "보고 있")):
+            return _profile(
+                intent="command_lookup",
+                target_object="namespace",
+                task="current-context",
+                needs_command=True,
+                primary_commands=("oc project", "oc config view"),
+                evidence_terms=("current project", "selected project", "CLI profile", "current-context"),
+                query_terms=("view current project", "current namespace context"),
+                confidence=0.84,
+                reasons=("namespace current context command request",),
+            )
+
     if _has_oc_login_connection_intent(text):
         return _profile(
             intent="command_lookup",
