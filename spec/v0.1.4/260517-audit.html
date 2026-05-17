@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>260517 Audit</title>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --paper: #ffffff;
+      --ink: #1d2733;
+      --muted: #667085;
+      --line: #d9e0ea;
+      --brand: #1769aa;
+      --ok: #087443;
+      --warn: #b54708;
+      --code-bg: #eef2f7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Malgun Gothic", Arial, sans-serif;
+      line-height: 1.62;
+    }
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 36px 24px 64px;
+    }
+    header {
+      border-bottom: 2px solid var(--line);
+      margin-bottom: 24px;
+      padding-bottom: 18px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 32px 0 12px;
+      padding-left: 10px;
+      border-left: 5px solid var(--brand);
+      font-size: 21px;
+    }
+    p { margin: 8px 0; }
+    .subtitle { color: var(--muted); }
+    .callout {
+      background: #eef7ff;
+      border-left: 5px solid var(--brand);
+      border-radius: 0 8px 8px 0;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+    .ok {
+      background: #ecfdf3;
+      border-left-color: var(--ok);
+    }
+    .warn {
+      background: #fff7e6;
+      border-left-color: var(--warn);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      margin: 14px 0 20px;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #eef4fb;
+      font-weight: 700;
+    }
+    tr:last-child td { border-bottom: 0; }
+    code {
+      background: var(--code-bg);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: .95em;
+    }
+    pre {
+      overflow-x: auto;
+      background: #111827;
+      color: #f9fafb;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    ul { padding-left: 22px; }
+    @media (max-width: 760px) {
+      main { padding: 24px 14px 48px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>260517 Audit</h1>
+      <p class="subtitle">v0.1.4 official corpus / text layer / Qdrant / BM25 전체 점검 요약</p>
+    </header>
+
+    <section class="callout ok">
+      <strong>결론:</strong>
+      청킹/임베딩 텍스트 계층, Qdrant payload, BM25 tokenization, compose seed refresh 경로는 v0.1.4 계약에 맞게 보강했다.
+      실제 챗봇 답변 품질 평가는 별도 질문셋으로 확인해야 한다.
+    </section>
+
+    <h2>현재 기준</h2>
+    <table>
+      <tbody>
+        <tr><th>branch</th><td><code>feat/corpus_embedding_text_s</code></td></tr>
+        <tr><th>head</th><td><code>0c3f8a8 fix: align bm25 and qdrant refresh with text layers</code></td></tr>
+        <tr><th>base corpus</th><td><code>corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl</code></td></tr>
+        <tr><th>Qdrant collection</th><td><code>openshift_docs</code></td></tr>
+        <tr><th>contract docs</th><td><code>db-corpus-schema.md</code>, <code>db-parsing-schema.md</code>, <code>planner.md</code></td></tr>
+      </tbody>
+    </table>
+
+    <h2>완료로 말할 수 있는 범위</h2>
+    <ul>
+      <li><code>text</code> / <code>normalized_text</code> / <code>embedding_text</code> 역할 분리.</li>
+      <li>검색 계층에서 base64-like output 제거.</li>
+      <li>Qdrant official payload 전체 scan 통과.</li>
+      <li>BM25가 <code>normalized_text</code>를 우선 토큰화하도록 수정.</li>
+      <li>compose seed stale refresh가 vector까지 재업서트하도록 수정.</li>
+    </ul>
+
+    <h2>아직 별도 검증 범위</h2>
+    <ul>
+      <li>챗봇 top-k 근거와 최종 답변 품질.</li>
+      <li>metadata/rank policy 적용 후 검색 품질.</li>
+      <li>새 chunk size 기반 rechunk 정책.</li>
+      <li>반복 표 chunk의 ranking/table handling.</li>
+    </ul>
+
+    <h2>전체 검사 결과</h2>
+    <table>
+      <thead>
+        <tr><th>검사</th><th>결과</th><th>판단</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>official source chunks</td><td>27,907</td><td>기준 원천 row 수</td></tr>
+        <tr><td>text layer rows</td><td>27,907</td><td>전체 row에 text layer metadata 존재</td></tr>
+        <tr><td>embedding candidates</td><td>25,882</td><td>empty/duplicate/contained overlap 제외 후 Qdrant 대상</td></tr>
+        <tr><td>Qdrant official points</td><td>25,882</td><td>embedding candidate와 일치</td></tr>
+        <tr><td>DB official embedding nonempty</td><td>25,882</td><td>Qdrant 대상과 일치</td></tr>
+        <tr><td>DB official index entries</td><td>25,882</td><td>Qdrant 대상과 일치</td></tr>
+        <tr><td>DB <code>embedding_text</code> Tk9 hit</td><td>0</td><td>base64-like output 제거</td></tr>
+        <tr><td>DB <code>normalized_text</code> Tk9 hit</td><td>0</td><td>base64-like output 제거</td></tr>
+        <tr><td>Qdrant <code>embedding_base64_like</code></td><td>0</td><td>전체 scan 통과</td></tr>
+        <tr><td>Qdrant <code>embedding_marker</code></td><td>0</td><td>마커 미포함</td></tr>
+        <tr><td>Qdrant <code>embedding_newline</code></td><td>0</td><td>flat embedding text 유지</td></tr>
+        <tr><td>Qdrant raw_text leak</td><td>0</td><td>raw 원문 payload 유출 없음</td></tr>
+      </tbody>
+    </table>
+
+    <h2>헷갈리기 쉬운 부분</h2>
+    <section class="callout warn">
+      <p><code>embedding_chunks.jsonl</code> 전체 줄을 <code>rg Tk9ERUlQ</code>로 검색하면 6건이 나온다.</p>
+      <p>이것은 표시용 <code>text</code>가 원문 코드블록을 보존하기 때문에 정상이다. 검색/임베딩 검수는 field 단위로 봐야 한다.</p>
+    </section>
+    <table>
+      <tbody>
+        <tr><th>whole line</th><td>6</td></tr>
+        <tr><th><code>text</code></th><td>6</td></tr>
+        <tr><th><code>normalized_text</code></th><td>0</td></tr>
+        <tr><th><code>embedding_text</code></th><td>0</td></tr>
+      </tbody>
+    </table>
+
+    <h2>추가 수정 파일</h2>
+    <table>
+      <thead>
+        <tr><th>파일</th><th>내용</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>official_gold_import.py</code></td><td>padding 있는/없는 base64-like token을 검색 계층에서 제거.</td></tr>
+        <tr><td><code>official_embedding_qdrant.py</code></td><td>Qdrant candidate 품질 게이트에 <code>base64_like</code> 추가.</td></tr>
+        <tr><td><code>qdrant_indexer.py</code></td><td>stale Qdrant refresh 시 vector까지 재업서트.</td></tr>
+        <tr><td><code>bm25.py</code></td><td>BM25 index text를 <code>normalized_text</code> 우선으로 변경.</td></tr>
+        <tr><td><code>tests/*</code></td><td>text layer, Qdrant refresh, BM25 계약 테스트 보강.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>검증</h2>
+    <pre>PASS test_write_official_embedding_chunks_creates_clean_embedding_projection
+PASS test_write_official_embedding_chunks_removes_encoded_output_only_from_search_layers
+PASS test_write_official_text_layers_exports_four_layer_contract
+PASS test_build_official_embedding_qdrant_candidates_uses_clean_text_without_raw_payload
+PASS test_qdrant_payload_from_row_matches_vector_retriever_contract
+PASS test_qdrant_payload_from_row_preserves_official_gold_metadata
+PASS test_qdrant_candidate_from_row_hashes_stable_payload
+PASS test_refresh_stale_qdrant_payloads_updates_existing_candidates
+PASS test_bm25_index_uses_normalized_text_for_matching_but_returns_display_text</pre>
+
+    <p>로컬 venv에는 <code>pytest</code>가 없어 pytest runner는 실행하지 못했고, 관련 테스트 함수는 직접 호출로 통과시켰다.</p>
+  </main>
+</body>
+</html>
