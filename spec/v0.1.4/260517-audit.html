@@ -216,6 +216,39 @@
     </table>
     <p>이 변경은 "BM25 파일을 없앨지"의 문제가 아니라, runtime BM25가 어떤 텍스트 계층을 검색 대상으로 삼을지에 대한 정리다.</p>
 
+    <h3>1-1. bm25_corpus.jsonl 상태 정리</h3>
+    <p>질문 대상 파일: <code>corpus/sources/official/imported-gold/gold_corpus_ko/bm25_corpus.jsonl</code></p>
+    <table>
+      <tbody>
+        <tr>
+          <th>DB 기반 현재 runtime</th>
+          <td>필수 파일이 아니다. <code>settings.database_url</code>이 있으면 <code>BM25Index.from_postgres()</code>를 사용한다.</td>
+        </tr>
+        <tr>
+          <th>이번 수정 후 BM25 검색 대상</th>
+          <td>Postgres row에서 만들어진 payload의 <code>text_fields.normalized_text</code> / <code>normalized_text</code>를 우선 토큰화한다.</td>
+        </tr>
+        <tr>
+          <th>jsonl fallback</th>
+          <td>DB URL이 없을 때는 <code>BM25Index.from_jsonl(settings.retrieval_bm25_corpus_path)</code> 경로가 아직 살아 있다. 이 경우 <code>bm25_corpus.jsonl</code>이 fallback seed 역할을 할 수 있다.</td>
+        </tr>
+        <tr>
+          <th>지금 바로 삭제 가능 여부</th>
+          <td>코드/설정/테스트에서 fallback 경로를 제거하기 전에는 "완전히 삭제 가능"이라고 단정하지 않는 것이 안전하다.</td>
+        </tr>
+        <tr>
+          <th>정리 방향</th>
+          <td>DB 기반 runtime을 표준으로 확정한다면, 별도 회의 후 <code>bm25_corpus.jsonl</code>을 legacy/fallback artifact로 명시하거나 생성/참조 제거 작업을 진행할 수 있다.</td>
+        </tr>
+      </tbody>
+    </table>
+    <section class="callout">
+      <strong>정확한 표현:</strong>
+      현재 DB 기반 runtime에서는 <code>bm25_corpus.jsonl</code>이 주 검색 입력이 아니며,
+      BM25는 DB row의 <code>normalized_text</code>를 우선 토큰화하도록 수정됐다.
+      다만 DB-less fallback 경로가 남아 있으므로 파일 삭제는 별도 정리 작업으로 다룬다.
+    </section>
+
     <h3>2. compose seed stale refresh가 vector까지 재업서트하도록 바꾼 이유</h3>
     <table>
       <tbody>
