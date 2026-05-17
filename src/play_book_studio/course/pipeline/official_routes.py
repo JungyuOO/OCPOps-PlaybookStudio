@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import resolve_official_gold_chunks_path
+
 
 STAGE_OFFICIAL_BOOKS = {
     "architecture": [
@@ -48,7 +50,7 @@ STAGE_OFFICIAL_BOOKS = {
 
 
 def _official_corpus_rows(root_dir: Path) -> list[dict[str, Any]]:
-    path = root_dir / "data" / "gold_corpus_ko" / "chunks.jsonl"
+    path = resolve_official_gold_chunks_path(root_dir)
     if not path.exists():
         return []
     rows: list[dict[str, Any]] = []

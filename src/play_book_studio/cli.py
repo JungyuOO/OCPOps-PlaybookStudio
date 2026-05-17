@@ -20,6 +20,8 @@ from play_book_studio.config.corpus_paths import (
     COURSE_QA_REJECTED_CASES_PATH,
     COURSE_QA_REPORT_PATH,
     OFFICIAL_GOLD_CHUNKS_PATH,
+    OFFICIAL_GOLD_EMBEDDING_CHUNKS_PATH,
+    OFFICIAL_GOLD_TEXT_LAYERS_PATH,
     OPS_LEARNING_ANCHOR_AUDIT_PATH,
     OPS_LEARNING_CHUNKS_PATH,
     OPS_LEARNING_GUIDES_PATH,
@@ -274,7 +276,44 @@ def build_parser() -> argparse.ArgumentParser:
     official_gold_import_parser.add_argument("--refresh-batch-size", type=int, default=256)
     official_gold_import_parser.add_argument("--enrich-runtime-metadata", action="store_true")
     official_gold_import_parser.add_argument("--bm25-path", type=Path, default=None)
+    official_gold_import_parser.add_argument(
+        "--embedding-chunks-path",
+        type=Path,
+        default=None,
+        help=(
+            "Write embedding-only official chunks JSONL without changing source chunks. "
+            f"Recommended path: {OFFICIAL_GOLD_EMBEDDING_CHUNKS_PATH.as_posix()}"
+        ),
+    )
+    official_gold_import_parser.add_argument(
+        "--text-layers-path",
+        type=Path,
+        default=None,
+        help=(
+            "Write reviewable official text layers JSONL with raw_text, markdown, "
+            "normalized_text, and embedding_text. "
+            f"Recommended path: {OFFICIAL_GOLD_TEXT_LAYERS_PATH.as_posix()}"
+        ),
+    )
     official_gold_import_parser.add_argument("--dry-run", action="store_true")
+
+    official_embedding_qdrant_parser = subparsers.add_parser(
+        "official-embedding-qdrant-upsert",
+        help="Embed official embedding-only chunks and upsert them to Qdrant",
+    )
+    official_embedding_qdrant_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    official_embedding_qdrant_parser.add_argument("--chunks-path", type=Path, default=OFFICIAL_GOLD_CHUNKS_PATH)
+    official_embedding_qdrant_parser.add_argument(
+        "--embedding-chunks-path",
+        type=Path,
+        default=OFFICIAL_GOLD_EMBEDDING_CHUNKS_PATH,
+    )
+    official_embedding_qdrant_parser.add_argument("--collection", default="")
+    official_embedding_qdrant_parser.add_argument("--limit", type=int, default=0)
+    official_embedding_qdrant_parser.add_argument("--delete-skipped", action="store_true")
+    official_embedding_qdrant_parser.add_argument("--sync-db", action="store_true")
+    official_embedding_qdrant_parser.add_argument("--database-url", default="")
+    official_embedding_qdrant_parser.add_argument("--dry-run", action="store_true")
 
     learning_seed_parser = subparsers.add_parser(
         "learning-seed-import",
@@ -1003,6 +1042,8 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
     from play_book_studio.ingestion.official_gold_import import (
         build_official_gold_import_plan,
         import_official_gold_chunks,
+        write_official_embedding_chunks,
+        write_official_text_layers,
     )
 
     root_dir = args.root_dir.resolve()
@@ -1010,6 +1051,16 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
     if not chunks_path.is_absolute():
         chunks_path = root_dir / chunks_path
     chunks_path = chunks_path.resolve()
+    embedding_chunks_path = args.embedding_chunks_path
+    if embedding_chunks_path is not None and not embedding_chunks_path.is_absolute():
+        embedding_chunks_path = root_dir / embedding_chunks_path
+    if embedding_chunks_path is not None:
+        embedding_chunks_path = embedding_chunks_path.resolve()
+    text_layers_path = args.text_layers_path
+    if text_layers_path is not None and not text_layers_path.is_absolute():
+        text_layers_path = root_dir / text_layers_path
+    if text_layers_path is not None:
+        text_layers_path = text_layers_path.resolve()
     bm25_path = args.bm25_path
     if bm25_path is not None and not bm25_path.is_absolute():
         bm25_path = root_dir / bm25_path
@@ -1028,6 +1079,18 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
         )
     if args.dry_run:
         payload = build_official_gold_import_plan(chunks_path, limit=args.limit)
+        if embedding_chunks_path is not None:
+            payload["embedding_chunks"] = write_official_embedding_chunks(
+                chunks_path,
+                embedding_chunks_path,
+                limit=args.limit,
+            )
+        if text_layers_path is not None:
+            payload["text_layers"] = write_official_text_layers(
+                chunks_path,
+                text_layers_path,
+                limit=args.limit,
+            )
         if enrich_report is not None:
             payload["official_gold_enrichment"] = enrich_report
         print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -1052,6 +1115,18 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
             limit=args.limit,
         )
         payload = result.to_dict()
+        if embedding_chunks_path is not None:
+            payload["embedding_chunks"] = write_official_embedding_chunks(
+                chunks_path,
+                embedding_chunks_path,
+                limit=args.limit,
+            )
+        if text_layers_path is not None:
+            payload["text_layers"] = write_official_text_layers(
+                chunks_path,
+                text_layers_path,
+                limit=args.limit,
+            )
         if enrich_report is not None:
             payload["official_gold_enrichment"] = enrich_report
         if args.index:
@@ -1077,6 +1152,72 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
                 limit=refresh_limit,
                 batch_size=args.refresh_batch_size,
             )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_official_embedding_qdrant_upsert(args: argparse.Namespace) -> int:
+    from play_book_studio.ingestion.official_embedding_qdrant import (
+        record_official_embedding_qdrant_index_entries,
+        sync_official_embedding_chunks_to_database,
+        upsert_official_embedding_chunks_to_qdrant,
+    )
+
+    root_dir = args.root_dir.resolve()
+    chunks_path = args.chunks_path
+    if not chunks_path.is_absolute():
+        chunks_path = root_dir / chunks_path
+    chunks_path = chunks_path.resolve()
+    embedding_chunks_path = args.embedding_chunks_path
+    if not embedding_chunks_path.is_absolute():
+        embedding_chunks_path = root_dir / embedding_chunks_path
+    embedding_chunks_path = embedding_chunks_path.resolve()
+    settings = load_settings(root_dir)
+
+    def _progress(stage: str, completed: int, total: int) -> None:
+        print(f"[official-embedding-qdrant-upsert] {stage}: {completed}/{total}", flush=True)
+
+    db_sync_payload = None
+    index_entries_payload = None
+    database_url = (args.database_url or settings.database_url).strip()
+    if args.sync_db and not args.dry_run:
+        if not database_url:
+            print("DATABASE_URL is required for --sync-db. Set it in .env or pass --database-url.")
+            return 1
+        import psycopg
+
+        with psycopg.connect(database_url) as connection:
+            db_sync_payload = sync_official_embedding_chunks_to_database(
+                connection,
+                chunks_path=chunks_path,
+                embedding_chunks_path=embedding_chunks_path,
+            )
+
+    payload = upsert_official_embedding_chunks_to_qdrant(
+        settings,
+        chunks_path=chunks_path,
+        embedding_chunks_path=embedding_chunks_path,
+        collection=args.collection.strip() or None,
+        limit=args.limit,
+        delete_skipped=bool(args.delete_skipped),
+        dry_run=bool(args.dry_run),
+        progress_callback=None if args.dry_run else _progress,
+    )
+    if args.sync_db:
+        if args.dry_run:
+            payload["db_sync"] = {"dry_run": True, "status": "skipped"}
+        else:
+            payload["db_sync"] = db_sync_payload
+            with psycopg.connect(database_url) as connection:
+                index_entries_payload = record_official_embedding_qdrant_index_entries(
+                    connection,
+                    settings,
+                    chunks_path=chunks_path,
+                    embedding_chunks_path=embedding_chunks_path,
+                    collection=payload["collection"],
+                    limit=args.limit,
+                )
+            payload["qdrant_index_entries"] = index_entries_payload
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
@@ -1414,6 +1555,8 @@ def main() -> int:
         return _run_course_runtime_status(args)
     if args.command == "official-gold-import":
         return _run_official_gold_import(args)
+    if args.command == "official-embedding-qdrant-upsert":
+        return _run_official_embedding_qdrant_upsert(args)
     if args.command == "learning-seed-import":
         return _run_learning_seed_import(args)
     if args.command == "course-chunk-import":

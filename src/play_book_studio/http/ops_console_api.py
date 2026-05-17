@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode
 
+from play_book_studio.config.corpus_paths import (
+    resolve_official_manualbook_playbooks_dir,
+    resolve_official_manualbook_root_dir,
+)
 from play_book_studio.cluster.workspace_provisioner import (
     delete_user_workspace,
     get_user_workspace_status,
@@ -1501,7 +1505,7 @@ def _store_recommendations(root_dir: Path, state: dict[str, Any], workspace_id: 
 
 
 def _document_root(root_dir: Path) -> Path:
-    return root_dir / "data" / "gold_manualbook_ko" / "playbooks"
+    return resolve_official_manualbook_playbooks_dir(root_dir)
 
 
 def _json_dict(value: Any) -> dict[str, Any]:
@@ -1729,7 +1733,7 @@ def _document_summary_payload(root_dir: Path, workspace_id: str) -> dict[str, An
     return {
         "workspace_id": workspace_id,
         "source_root": str(_document_root(root_dir)),
-        "extract_root": str(root_dir / "data" / "gold_manualbook_ko"),
+        "extract_root": str(resolve_official_manualbook_root_dir(root_dir)),
         "corpus_files": int(summary.get("known_book_count") or len(rows)),
         "manifest_entries": int(summary.get("known_book_count") or len(rows)),
         "extracted_artifacts": int(summary.get("manualbook_count") or len(rows)),
