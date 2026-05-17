@@ -25,7 +25,7 @@ ul{margin-top:6px}
 <tr><td>작업 시작 기준</td><td><code>dev</code> 반영 후 새로 판 테스트 브랜치</td></tr>
 <tr><td>현재 head</td><td><code>4dd9fe5</code> 기준 미커밋 변경분</td></tr>
 <tr><td>이번 범위</td><td>평가셋 expected 기준 정리, 재발 방지 테스트 추가, retrieval-only 결과 재검수</td></tr>
-<tr><td>이번에 하지 않은 것</td><td>Qdrant/DB 재적재, corpus/embedding chunk 재수정, query rewrite/ranking/reranker 수정, answer LLM 품질 평가</td></tr>
+<tr><td>이번에 하지 않은 것</td><td>Qdrant/DB 재적재, corpus/embedding chunk 재수정, query rewrite/ranking/reranker 추가 수정, answer LLM 품질 평가</td></tr>
 </table>
 
 <h2>2. 왜 이 작업을 했나</h2>
@@ -91,6 +91,7 @@ ul{margin-top:6px}
 <tr><td>테스트</td><td><span class="pass">9 passed</span></td><td><code>test_eval_manifest_contract</code>, <code>test_chunk_quality_audit</code>, <code>test_answer_quality_v012_beginner</code> 통과.</td></tr>
 <tr><td>diff hygiene</td><td><span class="pass">통과</span></td><td><code>git diff --check</code> 경고 없음.</td></tr>
 <tr><td>retrieval-only 재실행</td><td><span class="pass">실행 성공</span></td><td>30건 기준 <code>hit@1=0.7000</code>, <code>hit@3=0.8000</code>, <code>hit@5=0.8667</code>.</td></tr>
+<tr><td>query rewrite 적용 여부</td><td><span class="pass">브랜치 포함 확인</span></td><td>현재 브랜치에는 <code>f29a88e Keep retrieval rewrites domain-scoped</code> 변경분이 포함되어 있습니다. 다만 이번 30건은 단독 질문형이라 세션 context가 없어 <code>rewrite_applied=0/30</code>, <code>rewrite_reason=no_context</code>로 기록됐습니다.</td></tr>
 </table>
 
 <h2>6. 남은 4건은 무엇인가</h2>
@@ -109,16 +110,17 @@ ul{margin-top:6px}
 <table>
 <tr><th>질문</th><th>답변</th></tr>
 <tr><td>이번 브랜치에서 코퍼스나 Qdrant를 다시 고쳤나요?</td><td>아니요. 이번 범위는 평가셋 계약 정리와 검수입니다. DB/Qdrant 재적재, embedding chunk 수정은 하지 않았습니다.</td></tr>
+<tr><td>query rewrite 변경분은 현재 브랜치에 있나요?</td><td>네. 현재 브랜치에는 dev에서 들어온 query signal/rewrite 계열 변경분이 이미 포함되어 있습니다. 다만 이번 단독 질문형 retrieval 평가는 context가 없어서 명시적 follow-up rewrite는 적용되지 않았고, 결과에는 <code>rewrite_applied=false</code>, <code>rewrite_reason=no_context</code>로 남았습니다.</td></tr>
 <tr><td><code>applications</code>를 왜 없앴나요?</td><td>주제 자체를 부정한 것이 아니라, 현재 active official embedding book set에는 <code>applications</code>라는 book_slug가 없기 때문입니다. 평가 expected는 현재 검색기가 실제로 맞힐 수 있는 active book 기준이어야 합니다.</td></tr>
 <tr><td>그럼 retrieval miss 4건은 평가셋 탓인가요?</td><td>전부 평가셋 탓으로 보지 않았습니다. 정답 청크 존재 여부를 확인했고, 대부분은 “정답은 있지만 top-k로 못 올라오는 문제” 또는 “허용할 expected 범위가 겹치는 문제”로 분리했습니다.</td></tr>
 <tr><td>이번 작업으로 챗봇 답변 품질까지 검증됐나요?</td><td>아니요. answer LLM, reranker, UI 답변 문장은 이번 범위에서 제외했습니다. J 요청대로 retrieval source와 top chunk 근거 중심으로만 봤습니다.</td></tr>
-<tr><td>다음에 무엇을 보면 되나요?</td><td>J의 query rewrite 수정분을 받은 뒤, 같은 30건으로 retrieval-only를 다시 돌려 전후 비교하면 됩니다. 그래도 남는 케이스만 expected 기준 조정 또는 검색 순위 조정으로 나누면 됩니다.</td></tr>
+<tr><td>다음에 무엇을 보면 되나요?</td><td>현재 포함된 query signal/rewrite 기준으로도 남는 4건을 봐야 합니다. 특히 단독 질문에서 rewrite가 적용되지 않는 구조가 맞는지, 아니면 metadata/section/title 신호나 검색 순위 조정으로 풀 문제인지 나눠서 보면 됩니다.</td></tr>
 </table>
 
 <h2>8. 다음 액션 제안</h2>
 <ol>
 <li>현재 변경분을 리뷰받습니다.</li>
-<li>J의 query rewrite 변경분을 받은 뒤 동일 30건으로 retrieval-only 전후 비교를 실행합니다.</li>
+<li>현재 브랜치에 포함된 query signal/rewrite 변경 기준으로 남은 4건을 다시 분해합니다.</li>
 <li>남은 miss는 <span class="pill">expected 기준</span> <span class="pill">검색 순위</span> <span class="pill">데이터 누락</span> <span class="pill">청크 오염</span> 중 하나로 계속 분리합니다.</li>
 <li>이번 계약 테스트는 유지해서, inactive expected가 다시 들어오는 것을 막습니다.</li>
 </ol>
