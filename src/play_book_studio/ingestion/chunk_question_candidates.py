@@ -14,6 +14,12 @@ from typing import Any
 
 SPACE_RE = re.compile(r"\s+")
 COMMAND_RE = re.compile(r"\b(?:oc|kubectl|openshift-install|etcdctl)\s+[^\n`]+", re.IGNORECASE)
+INTERNAL_CHUNK_KIND_RE = re.compile(r"\b[a-z][a-z0-9]*(?:_[a-z0-9]+)*(?:_detail|_summary)\b", re.IGNORECASE)
+INTERNAL_QUESTION_RE = re.compile(
+    r"\bchunk(?:_kind)?|청크|"
+    r"\b[a-z][a-z0-9]*(?:_[a-z0-9]+)*(?:_detail|_summary)\b",
+    re.IGNORECASE,
+)
 
 
 SYSTEM_PROMPT = """너는 OpenShift 공식 문서 청크를 보고 채팅 첫 화면에 보여줄 한국어 질문을 만드는 편집자다.
@@ -112,6 +118,8 @@ def _clean_questions(values: Any, *, limit: int) -> list[str]:
     seen: set[str] = set()
     for value in values:
         question = SPACE_RE.sub(" ", str(value or "").strip())
+        if INTERNAL_QUESTION_RE.search(question):
+            continue
         if not question or "�" in question:
             continue
         if not question.endswith("?"):
@@ -127,7 +135,15 @@ def _clean_questions(values: Any, *, limit: int) -> list[str]:
 
 
 def _clean_text(value: str) -> str:
-    return SPACE_RE.sub(" ", value).strip()
+    lines: list[str] = []
+    for line in str(value or "").splitlines():
+        cleaned = SPACE_RE.sub(" ", line).strip()
+        if not cleaned:
+            continue
+        if INTERNAL_CHUNK_KIND_RE.search(cleaned) and ("청크" in cleaned or "chunk" in cleaned.lower()):
+            continue
+        lines.append(cleaned)
+    return SPACE_RE.sub(" ", " ".join(lines)).strip()
 
 
 def _commands(chunk: dict[str, Any], text: str) -> list[str]:

@@ -17,12 +17,15 @@ class _FakeTokenCounter:
 
 
 class _FakeQuestionLlm:
-    def __init__(self) -> None:
+    def __init__(self, response: str | None = None) -> None:
         self.messages: list[list[dict[str, str]]] = []
+        self.response = response
 
     def generate(self, messages, *, max_tokens=None):  # noqa: ANN001
         del max_tokens
         self.messages.append(messages)
+        if self.response is not None:
+            return self.response
         return (
             '{"starter_question_candidates":["Pod 상태는 어디서 먼저 확인하면 될까요?",'
             '"Pod 문제를 좁히려면 어떤 명령부터 보면 될까요?"],'
@@ -138,3 +141,25 @@ def test_chunk_question_candidates_without_llm_do_not_template_questions() -> No
     )
 
     assert candidates == {"starter_question_candidates": [], "followup_question_candidates": []}
+
+
+def test_chunk_question_candidates_filter_internal_chunk_kind_questions() -> None:
+    llm = _FakeQuestionLlm(
+        '{"starter_question_candidates":["perf_slide_detail 청크에 어떤 내용이 들어있어?",'
+        '"성능 테스트 목표와 환경 차이는 어디서 먼저 확인하면 될까요?"],'
+        '"followup_question_candidates":["chunk_kind는 뭐야?",'
+        '"TPS 목표와 반복 테스트 조건은 어떻게 이어서 보면 될까요?"]}'
+    )
+
+    candidates = build_chunk_question_candidates(
+        {
+            "heading": "성능 테스트 목표 및 방법론",
+            "text": "perf_test 단계의 perf_slide_detail 청크.\n평균 TPS 10% 향상을 확인합니다.",
+        },
+        llm_client=llm,
+    )
+    prompt_text = "\n".join(message["content"] for message in llm.messages[0])
+
+    assert "perf_slide_detail 청크" not in prompt_text
+    assert candidates["starter_question_candidates"] == ["성능 테스트 목표와 환경 차이는 어디서 먼저 확인하면 될까요?"]
+    assert candidates["followup_question_candidates"] == ["TPS 목표와 반복 테스트 조건은 어떻게 이어서 보면 될까요?"]

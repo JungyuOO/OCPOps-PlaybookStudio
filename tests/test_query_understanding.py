@@ -117,6 +117,21 @@ def test_v014_query_signals_extract_pvc_pending_retrieval_contract() -> None:
     assert "oc_describe" in signals.vector_query
 
 
+def test_query_signals_extract_korean_static_provisioning_storage_contract() -> None:
+    signals = understand_query_signals("정적 프로비저닝 기준으로 다음 확인 단계는 뭐야?")
+
+    assert signals.classification["domain"] == "storage"
+    assert signals.classification["book_slug_candidates"] == ("storage",)
+    assert "PV" in signals.search_signals["objects"]
+    assert "PVC" in signals.search_signals["objects"]
+    assert "StorageClass" in signals.search_signals["objects"]
+    assert "static provisioning" in signals.search_signals["primary_topics"]
+    assert "check_status" in signals.search_signals["intent_labels"]
+    assert {"key": "classification.domain", "match": {"value": "storage"}} in signals.metadata_filter["must"]
+    assert "static provisioning" in signals.vector_query
+    assert "PersistentVolumeClaim" in signals.vector_query
+
+
 def test_v014_query_signals_extract_etcd_execution_target_without_book_hard_filter() -> None:
     signals = understand_query_signals("etcd 백업은 어느 노드에서 실행해?")
 
