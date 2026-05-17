@@ -78,6 +78,33 @@ _DOMAIN_BOOK_SLUGS = {
 }
 
 
+_PROVIDER_TERMS = {
+    "azure": ("azure", "azure file", "azure disk", "microsoft azure"),
+    "vsphere": ("vsphere", "vmware"),
+    "rhosp": ("rhosp", "openstack", "red hat openstack"),
+    "aws": ("aws", "amazon", "ebs", "efs"),
+    "gcp": ("gcp", "google cloud"),
+}
+
+
+def _query_provider_signals(query: str) -> set[str]:
+    lowered = (query or "").lower()
+    return {
+        provider
+        for provider, terms in _PROVIDER_TERMS.items()
+        if any(term in lowered for term in terms)
+    }
+
+
+def _hit_provider_signals(hit: RetrievalHit) -> set[str]:
+    text = _hit_search_text(hit)
+    return {
+        provider
+        for provider, terms in _PROVIDER_TERMS.items()
+        if any(term in text for term in terms)
+    }
+
+
 def _hit_matches_query_domain(hit: RetrievalHit, *, signals: ScoreSignals) -> bool:
     classification = signals.structured_query_signals.classification
     domain = str(classification.get("domain") or "").strip()
@@ -89,6 +116,20 @@ def _hit_matches_query_domain(hit: RetrievalHit, *, signals: ScoreSignals) -> bo
     allowed_books = set(book_candidates)
     allowed_books.update(_DOMAIN_BOOK_SLUGS.get(domain, set()))
     return not allowed_books or hit.book_slug in allowed_books
+
+
+def _apply_provider_scope_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
+    query_providers = _query_provider_signals(signals.query)
+    hit_providers = _hit_provider_signals(hit)
+    if not hit_providers:
+        return
+    if query_providers & hit_providers:
+        hit.fused_score *= 1.08
+        hit.component_scores["provider_signal_match_boost"] = 1.08
+        return
+    if not query_providers:
+        hit.fused_score *= 0.72
+        hit.component_scores["provider_specific_without_query_penalty"] = 0.72
 
 
 def _apply_intent_profile_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
@@ -218,6 +259,8 @@ def apply_hit_adjustments(
         if _query_matches_hit_object(signals.query, hit):
             hit.fused_score *= 1.12
             hit.component_scores["command_intent_object_match_boost"] = 1.12
+
+    _apply_provider_scope_adjustments(hit, signals=signals)
 
     _apply_intent_profile_adjustments(hit, signals=signals)
 
