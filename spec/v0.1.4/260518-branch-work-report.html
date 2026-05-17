@@ -106,7 +106,39 @@ ul{margin-top:6px}
 <tr><td><code>postinstall-cluster-status</code></td><td><code>postinstallation_configuration</code> 정답 후보가 있고, <code>validation_and_troubleshooting</code>도 일부 맞는 절차를 포함</td><td>expected 허용 범위 협의 필요</td></tr>
 </table>
 
-<h2>7. 의아할 수 있는 지점 정리</h2>
+<h2>7. 남은 4건 조치 유형</h2>
+<div class="note">
+아래 표는 “다음에 무엇을 고쳐야 하는가”를 기준으로 다시 정리한 것입니다. 네 케이스 모두 정답 후보 청크가 Qdrant에 존재하므로, 현재 단계에서는 데이터 누락이나 청크 오염으로 보지 않았습니다.
+</div>
+<table>
+<tr><th>case</th><th>조치 유형</th><th>근거</th><th>다음 확인</th></tr>
+<tr>
+<td><code>file-integrity-log</code></td>
+<td><span class="pill">keyword/BM25</span> <span class="pill">hybrid ranking</span></td>
+<td>정답 청크 <code>50446a40...</code>가 Qdrant에 있고 <code>integritylog</code>, <code>base64 d</code>, <code>gunzip</code> 신호도 남아 있습니다. 하지만 top5에는 catalog/operator/test 성격 청크가 먼저 올라옵니다.</td>
+<td>희귀 키워드가 BM25/hybrid에서 충분히 힘을 받는지 확인합니다. 이 케이스는 expected 보정보다 검색 순위 쪽 조치가 우선입니다.</td>
+</tr>
+<tr>
+<td><code>web-console-overview</code></td>
+<td><span class="pill">metadata/title/section</span></td>
+<td>정답 청크 <code>0faa0453...</code>, <code>5c40fd91...</code>가 Qdrant에 있고 웹 콘솔의 워크로드/메트릭/상태 확인 설명이 있습니다. 그러나 질문이 “어떤 문서에서 설명해?” 형태라 본문 유사도만으로는 support/update 문서가 먼저 잡힙니다.</td>
+<td>문서명, book_slug, section_path, title 신호를 검색 점수에 어떻게 반영할지 확인합니다. 이 케이스는 metadata 활용 쪽 조치가 우선입니다.</td>
+</tr>
+<tr>
+<td><code>architecture-control-plane</code></td>
+<td><span class="pill">expected 기준</span> <span class="pill">ranking 후보</span></td>
+<td>architecture 정답 청크 <code>1fa5a26c...</code>, <code>c8f38728...</code>가 Qdrant에 있습니다. 동시에 top5의 <code>nodes</code> 청크도 컨트롤 플레인 노드 역할을 일부 설명합니다.</td>
+<td>개념 설명 질문에서 <code>nodes</code>를 허용할지 먼저 기준을 맞춥니다. 허용하지 않기로 하면 architecture 청크가 밀린 ranking 문제로 분류합니다.</td>
+</tr>
+<tr>
+<td><code>postinstall-cluster-status</code></td>
+<td><span class="pill">expected 기준</span> <span class="pill">ranking 후보</span></td>
+<td>postinstallation 정답 청크 <code>943b0346...</code>, <code>60382fdc...</code>가 Qdrant에 있고 <code>oc get nodes</code>, <code>oc get ClusterOperators</code> 근거가 있습니다. 다만 top1의 <code>validation_and_troubleshooting</code>도 노드 상태 확인 절차를 일부 포함합니다.</td>
+<td><code>validation_and_troubleshooting</code>을 expected에 허용할지 먼저 협의합니다. 그 뒤에도 postinstallation 직접 명령 청크가 밀리면 ranking 문제로 봅니다.</td>
+</tr>
+</table>
+
+<h2>8. 의아할 수 있는 지점 정리</h2>
 <table>
 <tr><th>질문</th><th>답변</th></tr>
 <tr><td>이번 브랜치에서 코퍼스나 Qdrant를 다시 고쳤나요?</td><td>아니요. 이번 범위는 평가셋 계약 정리와 검수입니다. DB/Qdrant 재적재, embedding chunk 수정은 하지 않았습니다.</td></tr>
@@ -117,11 +149,11 @@ ul{margin-top:6px}
 <tr><td>다음에 무엇을 보면 되나요?</td><td>현재 포함된 query signal/rewrite 기준으로도 남는 4건을 봐야 합니다. 특히 단독 질문에서 rewrite가 적용되지 않는 구조가 맞는지, 아니면 metadata/section/title 신호나 검색 순위 조정으로 풀 문제인지 나눠서 보면 됩니다.</td></tr>
 </table>
 
-<h2>8. 다음 액션 제안</h2>
+<h2>9. 다음 액션 제안</h2>
 <ol>
 <li>현재 변경분을 리뷰받습니다.</li>
-<li>현재 브랜치에 포함된 query signal/rewrite 변경 기준으로 남은 4건을 다시 분해합니다.</li>
-<li>남은 miss는 <span class="pill">expected 기준</span> <span class="pill">검색 순위</span> <span class="pill">데이터 누락</span> <span class="pill">청크 오염</span> 중 하나로 계속 분리합니다.</li>
+<li><code>file-integrity-log</code>와 <code>web-console-overview</code>는 검색 순위/metadata 신호 쪽으로 추가 확인합니다.</li>
+<li><code>architecture-control-plane</code>과 <code>postinstall-cluster-status</code>는 expected 허용 범위를 먼저 합의한 뒤 ranking 문제 여부를 판단합니다.</li>
 <li>이번 계약 테스트는 유지해서, inactive expected가 다시 들어오는 것을 막습니다.</li>
 </ol>
 
