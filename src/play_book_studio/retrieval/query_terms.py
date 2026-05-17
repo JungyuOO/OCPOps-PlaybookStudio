@@ -131,6 +131,57 @@ _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
     "condition",
 }
 
+_SERVICE_ROUTE_CONCEPT_MARKERS = (
+    "뭔지",
+    "무엇인지",
+    "개념",
+    "알고 싶",
+    "알고싶",
+    "이해",
+    "설명",
+    "먼저",
+    "부터",
+    "what is",
+    "explain",
+    "concept",
+    "overview",
+)
+
+_FAILURE_OR_DIAGNOSIS_MARKERS = (
+    "장애",
+    "오류",
+    "에러",
+    "안됨",
+    "안 돼",
+    "안되",
+    "실패",
+    "문제",
+    "trouble",
+    "fail",
+    "error",
+    "debug",
+    "diagnos",
+)
+
+_SERVICE_ROUTE_CONCEPT_BLOCKED_TERMS = {
+    "oc describe service",
+    "oc get endpoints",
+    "endpoint",
+    "endpoints",
+    "endpointslice",
+    "selector",
+    "targetport",
+    "ingress",
+    "tls",
+}
+
+_SERVICE_ROUTE_CONCEPT_BLOCKED_FRAGMENTS = (
+    "상태 확인",
+    "판단 기준",
+    "cli 명령어",
+    "troubleshooting",
+)
+
 
 def _filter_terms_for_korean_query(query: str, terms: list[str]) -> list[str]:
     lowered_query = (query or "").lower()
@@ -173,6 +224,7 @@ def normalize_query(query: str) -> str:
     append_operation_query_terms(normalized, terms)
     append_etcd_query_terms(normalized, terms)
     terms = _prune_terms_for_intent(normalized, terms)
+    terms = _prune_service_route_concept_terms(normalized, terms)
     terms = _prioritize_phrase_terms(terms)
     if _contains_hangul(normalized):
         terms = _filter_terms_for_korean_query(normalized, terms)
@@ -223,6 +275,33 @@ def _prune_terms_for_intent(query: str, terms: list[str]) -> list[str]:
             continue
         if any(fragment in lowered for fragment in allowed_fragments):
             pruned.append(cleaned)
+    return pruned
+
+
+def _is_service_route_concept_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    has_service = "service" in lowered or "서비스" in lowered
+    has_route = "route" in lowered or "라우트" in lowered or "경로" in lowered
+    has_concept_shape = any(marker in lowered for marker in _SERVICE_ROUTE_CONCEPT_MARKERS)
+    has_failure_shape = any(marker in lowered for marker in _FAILURE_OR_DIAGNOSIS_MARKERS)
+    return has_service and has_route and has_concept_shape and not has_failure_shape
+
+
+def _prune_service_route_concept_terms(query: str, terms: list[str]) -> list[str]:
+    if not _is_service_route_concept_query(query):
+        return terms
+
+    pruned: list[str] = []
+    for term in terms:
+        cleaned = _collapse_spaces(term)
+        if not cleaned:
+            continue
+        lowered = cleaned.lower()
+        if lowered in _SERVICE_ROUTE_CONCEPT_BLOCKED_TERMS:
+            continue
+        if any(fragment in lowered for fragment in _SERVICE_ROUTE_CONCEPT_BLOCKED_FRAGMENTS):
+            continue
+        pruned.append(cleaned)
     return pruned
 
 
