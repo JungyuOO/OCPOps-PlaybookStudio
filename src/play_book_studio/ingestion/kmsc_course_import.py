@@ -21,6 +21,13 @@ from play_book_studio.db.document_repository import (
 from play_book_studio.ingestion.chunk_question_candidates import build_chunk_question_candidates, has_current_question_candidates
 from play_book_studio.ingestion.kmsc_beginner_narrative import NARRATIVE_VERSION, build_beginner_narrative
 
+KMSC_STARTER_CHUNK_KINDS = {
+    "chapter_summary",
+    "design_summary",
+    "integration_scenario_summary",
+    "perf_section_summary",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class KmscCourseImportSummary:
@@ -520,11 +527,11 @@ def _source_anchor(row: dict[str, Any]) -> str:
 def _chunk_metadata(row: dict[str, Any], *, question_llm_client: Any | None = None) -> dict[str, Any]:
     metadata = dict(row)
     candidate_source = {**row, "text": _chunk_text(row)}
-    candidates = (
-        build_chunk_question_candidates(candidate_source, llm_client=question_llm_client)
-        if str(row.get("chunk_role") or "leaf") == "parent" or has_current_question_candidates(candidate_source)
-        else {"starter_question_candidates": [], "followup_question_candidates": []}
-    )
+    should_generate_candidates = _should_generate_kmsc_question_candidates(row, candidate_source)
+    if should_generate_candidates:
+        candidates = build_chunk_question_candidates(candidate_source, llm_client=question_llm_client)
+    else:
+        candidates = {"starter_question_candidates": [], "followup_question_candidates": []}
     metadata["source_scope"] = "study_docs"
     metadata["document_format"] = "kmsc_course_jsonl"
     metadata["book_slug"] = "kmsc-operations"
@@ -535,7 +542,26 @@ def _chunk_metadata(row: dict[str, Any], *, question_llm_client: Any | None = No
     metadata.setdefault("starter_question_candidates", candidates["starter_question_candidates"])
     metadata.setdefault("followup_question_candidates", candidates["followup_question_candidates"])
     metadata.setdefault("question_candidates_version", 2 if candidates["starter_question_candidates"] else 0)
+    if should_generate_candidates and not metadata["starter_question_candidates"] and not has_current_question_candidates(candidate_source):
+        metadata.setdefault(
+            "question_candidates_warning",
+            "llm_client_missing" if question_llm_client is None else "llm_generation_failed_or_empty",
+        )
     return metadata
+
+
+def _should_generate_kmsc_question_candidates(row: dict[str, Any], candidate_source: dict[str, Any]) -> bool:
+    if has_current_question_candidates(candidate_source):
+        return True
+    if str(row.get("chunk_role") or "").strip() == "parent":
+        return True
+    chunk_kind = str(row.get("chunk_kind") or "").strip()
+    if chunk_kind.startswith("test_case_") or chunk_kind.endswith("_detail"):
+        return False
+    child_chunk_ids = row.get("child_chunk_ids")
+    if isinstance(child_chunk_ids, list) and child_chunk_ids:
+        return True
+    return chunk_kind in KMSC_STARTER_CHUNK_KINDS
 
 
 __all__ = [
