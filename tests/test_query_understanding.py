@@ -68,6 +68,65 @@ def test_namespace_command_query_understanding_expands_project_commands() -> Non
     assert "projects" in normalized
 
 
+def test_file_integrity_log_query_keeps_extract_terms_without_operator_catalog_noise() -> None:
+    normalized = normalize_query("File Integrity Operator에서 integritylog를 확인하고 압축 로그를 해제하는 명령어는 뭐야?")
+
+    assert "integritylog" in normalized
+    assert "base64" in normalized
+    assert "gunzip" in normalized
+    assert "ClusterServiceVersion" not in normalized
+    assert "CatalogSource" not in normalized
+    assert "InstallPlan" not in normalized
+    assert "Subscription" not in normalized
+    assert "oc logs" not in normalized
+
+
+def test_postinstall_cluster_status_query_avoids_install_and_olm_noise() -> None:
+    normalized = normalize_query("OpenShift 설치 후 클러스터 Operator와 노드 상태를 확인하는 기본 절차는 뭐야?")
+
+    assert "oc get nodes" in normalized
+    assert "clusteroperators" in normalized
+    assert "Available" in normalized
+    assert "NotReady" in normalized
+    assert "Assisted Installer" not in normalized
+    assert "Agent-based" not in normalized
+    assert "openshift-install" not in normalized
+    assert "ClusterServiceVersion" not in normalized
+    assert "CatalogSource" not in normalized
+    assert "InstallPlan" not in normalized
+
+
+def test_web_console_doc_query_keeps_console_terms_without_cli_noise() -> None:
+    normalized = normalize_query("OpenShift 웹 콘솔에서 클러스터 상태와 워크로드를 확인하는 기능은 어떤 문서에서 설명해?")
+
+    assert "web console" in normalized.lower()
+    assert "workloads" in normalized
+    assert "Administrator perspective" in normalized
+    assert "Developer" in normalized
+    assert "oc CLI" not in normalized
+    assert "명령어" not in normalized
+
+
+def test_architecture_node_role_query_avoids_node_ops_noise() -> None:
+    normalized = normalize_query("OpenShift 아키텍처에서 컨트롤 플레인과 컴퓨팅 노드는 각각 어떤 역할을 해?")
+
+    assert "control plane" in normalized
+    assert "compute node" in normalized
+    assert "cluster architecture" in normalized
+    assert "oc get nodes" not in normalized
+    assert "oc debug" not in normalized
+    assert "NotReady" not in normalized
+
+
+def test_operator_csv_subscription_query_still_keeps_olm_terms() -> None:
+    normalized = normalize_query("Operator가 Degraded일 때 CSV와 Subscription 상태를 어떻게 확인해?")
+
+    assert "ClusterServiceVersion" in normalized
+    assert "Subscription" in normalized
+    assert "InstallPlan" in normalized
+    assert "CatalogSource" in normalized
+
+
 def test_v012_beginner_intents_expand_operational_terms() -> None:
     deployment = understand_query("보통 배포 yaml파일은 어케 작성하지")
     service = understand_query("Service쪽에서 계속 장애나는데 뭐가 원인일까?")

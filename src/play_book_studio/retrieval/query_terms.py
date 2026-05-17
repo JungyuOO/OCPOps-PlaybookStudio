@@ -110,6 +110,7 @@ _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
     "backup",
     "restore",
     "quorum",
+    "administrator perspective",
     "machineconfigpool",
     "clusteroperator",
     "clusteroperators",
@@ -121,14 +122,29 @@ _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
     "uncordon",
     "chroot",
     "chroot /host",
+    "control",
+    "control plane",
+    "cluster architecture",
+    "cluster status",
+    "console overview",
     "bootstrap-complete",
+    "compute",
+    "compute node",
     "configmap",
     "configmaps",
+    "developer perspective",
+    "gunzip",
+    "integritylog",
     "secret",
     "secrets",
     "troubleshooting",
     "events",
     "condition",
+    "perspective",
+    "plane",
+    "worker",
+    "worker node",
+    "workloads",
 }
 
 
@@ -182,6 +198,16 @@ def normalize_query(query: str) -> str:
 
 def _prune_terms_for_intent(query: str, terms: list[str]) -> list[str]:
     profile = build_intent_profile(query)
+    if _has_web_console_doc_intent(query):
+        return _prune_web_console_doc_terms(query, terms)
+    if _has_architecture_node_role_intent(query):
+        return _prune_architecture_node_role_terms(query, terms)
+    if _has_file_integrity_log_extract_intent(query):
+        return _prune_file_integrity_log_terms(query, terms)
+    if _has_postinstall_cluster_status_intent(query):
+        return _prune_postinstall_cluster_status_terms(query, terms)
+    if _has_clusteroperator_status_intent(query):
+        return _prune_clusteroperator_status_terms(query, terms)
     if profile.target_object != "route-http-headers":
         return terms
 
@@ -224,6 +250,225 @@ def _prune_terms_for_intent(query: str, terms: list[str]) -> list[str]:
         if any(fragment in lowered for fragment in allowed_fragments):
             pruned.append(cleaned)
     return pruned
+
+
+def _has_file_integrity_log_extract_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    return (
+        ("integritylog" in lowered or "file integrity operator" in lowered)
+        and any(token in query for token in ("로그", "압축", "해제", "확인", "명령"))
+    )
+
+
+def _has_web_console_doc_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    return (
+        any(token in query for token in ("웹 콘솔", "콘솔"))
+        and any(token in lowered for token in ("문서", "설명", "기능", "workload", "workloads", "상태"))
+    )
+
+
+def _has_architecture_node_role_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    return (
+        any(token in query for token in ("아키텍처", "구조"))
+        and any(token in lowered for token in ("control plane", "컨트롤 플레인"))
+        and any(token in query for token in ("컴퓨팅 노드", "작업자 노드", "노드"))
+        and any(token in query for token in ("역할", "각각", "구성"))
+    )
+
+
+def _has_clusteroperator_status_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    compact = lowered.replace(" ", "")
+    return (
+        "clusteroperator" in compact
+        or "clusteroperators" in compact
+        or "cluster operator" in lowered
+        or "클러스터operator" in compact
+        or "클러스터오퍼레이터" in compact
+    ) and any(token in lowered for token in ("상태", "확인", "status", "degraded", "available", "progressing"))
+
+
+def _has_postinstall_cluster_status_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    return (
+        any(token in query for token in ("설치 후", "설치후"))
+        and any(token in lowered for token in ("clusteroperator", "cluster operator", "operator", "오퍼레이터"))
+        and any(token in query for token in ("노드", "node"))
+        and any(token in query for token in ("상태", "확인", "절차"))
+    )
+
+
+def _prune_web_console_doc_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "cli",
+        "oc",
+        "oc cli",
+        "oc get",
+        "oc describe",
+        "command",
+        "명령어",
+        "판단 기준",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "web console",
+            "OpenShift web console",
+            "웹 콘솔",
+            "Administrator perspective",
+            "Developer perspective",
+            "cluster status",
+            "workloads",
+            "console overview",
+        ]
+    )
+    return allowed_terms
+
+
+def _prune_architecture_node_role_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "debug",
+        "node /",
+        "notready",
+        "oc debug",
+        "oc describe node",
+        "oc get nodes",
+        "ready",
+        "troubleshooting",
+        "상태 확인",
+        "판단 기준",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "architecture",
+            "아키텍처",
+            "control plane",
+            "컨트롤 플레인",
+            "compute node",
+            "컴퓨팅 노드",
+            "worker node",
+            "cluster architecture",
+        ]
+    )
+    return allowed_terms
+
+
+def _prune_file_integrity_log_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "catalogsource",
+        "clusterserviceversion",
+        "installplan",
+        "lifecycle manager",
+        "olm",
+        "oc logs",
+        "operator /",
+        "operator framework",
+        "operators",
+        "pod-name",
+        "previous",
+        "subscription",
+        "운영",
+        "관리",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "File Integrity Operator",
+            "integritylog",
+            "base64 -d",
+            "gunzip",
+            "AIDE",
+        ]
+    )
+    return allowed_terms
+
+
+def _prune_clusteroperator_status_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = _olm_operator_fragments()
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "ClusterOperator",
+            "clusteroperators",
+            "oc get clusteroperators",
+            "Available Progressing Degraded",
+        ]
+    )
+    return allowed_terms
+
+
+def _prune_postinstall_cluster_status_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        *_olm_operator_fragments(),
+        "agent-based installer",
+        "assisted installer",
+        "debug",
+        "describe node",
+        "installing a cluster",
+        "installation methods",
+        "installation overview",
+        "kubeconfig",
+        "openshift-install",
+        "pull secret",
+        "single node openshift",
+        "sno",
+        "upi",
+        "ipi",
+        "클러스터 설치",
+        "설치 개요",
+        "설치 프로그램",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "ClusterOperator",
+            "ClusterOperators",
+            "clusteroperators",
+            "oc get clusteroperators",
+            "oc get ClusterOperators",
+            "Available Progressing Degraded",
+            "Node",
+            "oc get nodes",
+            "Ready NotReady",
+            "모든 노드가 준비",
+            "클러스터 Operator를 모두 사용할 수",
+            "postinstallation",
+            "cluster status",
+        ]
+    )
+    return allowed_terms
+
+
+def _olm_operator_fragments() -> tuple[str, ...]:
+    return (
+        "catalogsource",
+        "clusterserviceversion",
+        "installplan",
+        "operator /",
+        "operator framework",
+        "operator lifecycle manager",
+        "operators",
+        "subscription",
+        "oc get csv",
+        "oc get subscription",
+        "olm",
+    )
+
+
+def _filter_blocked_terms(terms: list[str], blocked_fragments: tuple[str, ...]) -> list[str]:
+    filtered: list[str] = []
+    for term in terms:
+        cleaned = _collapse_spaces(term)
+        if not cleaned:
+            continue
+        lowered = cleaned.lower()
+        if any(fragment in lowered for fragment in blocked_fragments):
+            continue
+        filtered.append(cleaned)
+    return filtered
 
 
 def _prioritize_phrase_terms(terms: list[str]) -> list[str]:

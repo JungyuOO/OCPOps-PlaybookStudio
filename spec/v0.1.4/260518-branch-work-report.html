@@ -170,7 +170,51 @@ ul{margin-top:6px}
 </tr>
 </table>
 
-<h2>9. 의아할 수 있는 지점 정리</h2>
+<h2>9. Query signal 보정 및 최신 재검증</h2>
+<div class="note">
+위 4건을 그대로 두지 않고, 먼저 “검색 문장에 붙는 보조어가 질문 의도를 흐리는지”를 확인했습니다. 그 결과 <code>file-integrity</code>, <code>web-console</code>, <code>architecture</code> 3건은 데이터가 없어서가 아니라 query signal 확장이 방해해서 밀린 케이스로 확인되어, 검색 입력 보정과 회귀 테스트를 추가했습니다.
+</div>
+<table>
+<tr><th>보정 대상</th><th>원래 문제</th><th>적용한 규칙</th><th>최신 결과</th></tr>
+<tr>
+<td><code>file-integrity-log</code></td>
+<td><code>integritylog</code>, <code>gunzip</code> 같은 희귀 정답 키워드가 있는데도 <code>oc logs</code>, OLM, CatalogSource, InstallPlan 같은 일반 Operator 설치/카탈로그 단어가 붙었습니다.</td>
+<td><code>integritylog</code>, <code>base64 -d</code>, <code>gunzip</code>, <code>AIDE</code>는 유지하고, 일반 OLM/catalog 계열 확장어는 제거했습니다.</td>
+<td><span class="pass">해결</span><br>top1이 <code>security_and_compliance</code> 정답 청크로 올라왔습니다.</td>
+</tr>
+<tr>
+<td><code>web-console-overview</code></td>
+<td>“확인”이라는 표현 때문에 CLI/상태확인 쪽 신호가 붙어 support/update 문서가 먼저 올라왔습니다.</td>
+<td><code>web console</code>, <code>workloads</code>, <code>Administrator/Developer perspective</code>, <code>cluster status</code>를 유지하고 CLI/명령어 신호는 제거했습니다.</td>
+<td><span class="pass">해결</span><br>top1~top5가 모두 <code>web_console</code>로 바뀌었습니다.</td>
+</tr>
+<tr>
+<td><code>architecture-control-plane</code></td>
+<td>“노드”라는 단어 때문에 <code>oc get nodes</code>, <code>oc debug</code>, NotReady 같은 운영 확인 신호가 붙어 support/nodes 쪽으로 끌렸습니다.</td>
+<td><code>control plane</code>, <code>compute node</code>, <code>worker node</code>, <code>cluster architecture</code> 신호를 유지하고 node ops 신호는 제거했습니다.</td>
+<td><span class="pass">해결</span><br>top1~top4가 <code>architecture</code>, top5가 <code>overview</code>로 바뀌었습니다.</td>
+</tr>
+<tr>
+<td><code>postinstall-cluster-status</code></td>
+<td>정답 후보 <code>postinstallation_configuration</code> 청크는 있지만, top-k는 <code>nodes</code>, <code>validation_and_troubleshooting</code>을 먼저 가져옵니다.</td>
+<td>설치 방법/OLM/debug 신호를 줄이고 <code>ClusterOperators</code>, <code>oc get nodes</code>, <code>Ready/NotReady</code> 신호를 보강했습니다.</td>
+<td><span class="miss">남음</span><br>top1 <code>nodes</code>, top2 <code>validation_and_troubleshooting</code>. 실제 절차 일부는 맞지만 expected와 어긋나므로 기준 협의가 필요합니다.</td>
+</tr>
+</table>
+<h3>최신 재검증 수치</h3>
+<table>
+<tr><th>항목</th><th>이전 보고 기준</th><th>query signal 보정 후</th><th>해석</th></tr>
+<tr><td>book_slug hit@1</td><td>0.7000</td><td><span class="pass">0.8000</span></td><td>top1 직접성이 좋아졌습니다.</td></tr>
+<tr><td>book_slug hit@3</td><td>0.8000</td><td><span class="pass">0.9000</span></td><td>상위 3개 안에 기대 문서가 들어오는 비율이 올랐습니다.</td></tr>
+<tr><td>book_slug hit@5</td><td>0.8667, 26/30</td><td><span class="pass">0.9667, 29/30</span></td><td>남은 miss는 4건에서 1건으로 줄었습니다.</td></tr>
+<tr><td>정제 경고</td><td>0건</td><td><span class="pass">0건</span></td><td><code>embedding_text</code>/<code>normalized_text</code> 오염 경고는 늘지 않았습니다.</td></tr>
+<tr><td>추가 테스트</td><td>-</td><td><span class="pass">31 passed</span></td><td><code>test_query_understanding</code>, <code>test_concept_synonym_expansion</code>, <code>test_query_signal_pipeline</code> 통과.</td></tr>
+</table>
+<div class="warn">
+남은 1건은 “정답 데이터가 없다”로 보지 않습니다. <code>postinstallation_configuration</code>에는 <code>oc get nodes</code>, <code>oc get ClusterOperators</code>가 함께 들어간 정답 후보가 있습니다. 다만 현재 검색 결과의 top1/top2도 노드 상태 확인 절차로는 유효하므로, 이 케이스는 expected에 <code>nodes</code>, <code>validation_and_troubleshooting</code>을 허용할지 먼저 맞춘 뒤 ranking 조정 여부를 결정하는 것이 안전합니다.
+</div>
+
+<h2>10. 의아할 수 있는 지점 정리</h2>
 <table>
 <tr><th>질문</th><th>답변</th></tr>
 <tr><td>이번 브랜치에서 코퍼스나 Qdrant를 다시 고쳤나요?</td><td>아니요. 이번 범위는 평가셋 계약 정리와 검수입니다. DB/Qdrant 재적재, embedding chunk 수정은 하지 않았습니다.</td></tr>
@@ -181,13 +225,12 @@ ul{margin-top:6px}
 <tr><td>다음에 무엇을 보면 되나요?</td><td>현재 포함된 query signal/rewrite 기준으로도 남는 4건을 봐야 합니다. 특히 단독 질문에서 rewrite가 적용되지 않는 구조가 맞는지, 아니면 metadata/section/title 신호나 검색 순위 조정으로 풀 문제인지 나눠서 보면 됩니다.</td></tr>
 </table>
 
-<h2>10. 다음 액션 제안</h2>
+<h2>11. 다음 액션 제안</h2>
 <ol>
-<li>현재 변경분을 리뷰받습니다.</li>
-<li><code>file-integrity-log</code>는 희귀 키워드가 있을 때 generic operator/OLM 확장어를 줄이거나 raw query lane을 보존하는 방향을 검토합니다.</li>
-<li><code>web-console-overview</code>는 문서명/section/title 신호를 검색 점수에 반영하는 방향을 검토합니다.</li>
-<li><code>architecture-control-plane</code>과 <code>postinstall-cluster-status</code>는 expected 허용 범위를 먼저 합의한 뒤 ranking 문제 여부를 판단합니다.</li>
-<li>이번 계약 테스트는 유지해서, inactive expected가 다시 들어오는 것을 막습니다.</li>
+<li>이번 query signal 보정 내용을 리뷰받습니다. 코퍼스/DB/Qdrant를 바꾼 것이 아니라 검색 입력 보조어를 조정한 변경입니다.</li>
+<li><code>postinstall-cluster-status</code>는 expected 기준을 먼저 합의합니다. <code>nodes</code>, <code>validation_and_troubleshooting</code>을 허용하면 현재 결과는 의미상 통과에 가깝고, 허용하지 않으면 postinstallation 직접 청크를 올리는 ranking 조정이 필요합니다.</li>
+<li>이번에 추가한 query signal 회귀 테스트는 유지합니다. 같은 실수로 OLM/catalog, node ops, CLI 신호가 다시 과잉 주입되는 것을 막기 위함입니다.</li>
+<li>그 다음 단계에서 top chunk text 직접성 기준을 다시 봅니다. 현재 숫자는 좋아졌지만, 답변 품질 평가는 여전히 answer LLM/reranker 제외 상태입니다.</li>
 </ol>
 
 <h2>상세 문서</h2>
