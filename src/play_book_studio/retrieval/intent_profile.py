@@ -154,6 +154,47 @@ def build_intent_profile(query: str) -> IntentProfile:
             reasons=("application creation command request",),
         )
 
+    if _contains_any(text, ("kubeadmin",)) and _contains_any(text, ("remove", "delete", "제거", "삭제")):
+        return _profile(
+            intent="operation_command",
+            target_object="kubeadmin",
+            task="remove-user",
+            needs_command=True,
+            primary_commands=("oc delete secrets kubeadmin -n kube-system",),
+            evidence_terms=("kubeadmin", "kube-system", "Secret", "remove kubeadmin"),
+            query_terms=("remove kubeadmin user", "delete kubeadmin secret"),
+            confidence=0.86,
+            reasons=("kubeadmin removal command request",),
+        )
+
+    if _contains_any(text, ("prometheus",)) and _contains_any(text, ("auth", "authentication", "인증", "지표", "metrics")):
+        return _profile(
+            intent="operation_command",
+            target_object="prometheus",
+            task="authenticated-metrics",
+            needs_command=True,
+            primary_commands=("oc login",),
+            evidence_terms=("Prometheus", "authentication", "metrics", "oc login"),
+            query_terms=("prometheus authenticated metrics", "login before querying metrics"),
+            confidence=0.82,
+            reasons=("prometheus authenticated metrics first step",),
+        )
+
+    if _contains_any(text, ("operator catalog", "catalog build", "카탈로그")) and _contains_any(
+        text, ("build", "작업", "명령", "명령어")
+    ):
+        return _profile(
+            intent="operation_command",
+            target_object="operator-catalog",
+            task="build",
+            needs_command=True,
+            primary_commands=("oc adm catalog build",),
+            evidence_terms=("operator catalog", "catalog build", "oc adm catalog build"),
+            query_terms=("build operator catalog image", "operator catalog command"),
+            confidence=0.84,
+            reasons=("operator catalog build command request",),
+        )
+
     if _contains_any(text, ("namespace", "namespaces", "project", "projects", "네임스페이스", "프로젝트")) and not (
         _contains_any(text, ("can-i", "can i", "rbac", "권한")) or _has_pod_delete_permission_intent(text)
     ):

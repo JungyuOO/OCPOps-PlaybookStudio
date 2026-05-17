@@ -183,6 +183,8 @@ def route_non_rag(
                 "OpenShift 문서를 바탕으로 개념 설명, 운영 절차, 트러블슈팅을 실행 가이드 형태로 안내합니다."
             ),
         )
+    if ocp_operational_question or TECHNICAL_HINT_RE.search(normalized):
+        return None
     if CAPABILITY_RE.search(normalized):
         return RoutedResponse(
             route="meta",

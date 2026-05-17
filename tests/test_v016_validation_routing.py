@@ -63,6 +63,9 @@ def test_validation_operational_questions_have_specific_intent_profiles() -> Non
     vpa_remove = build_intent_profile("Vertical Pod Autoscaler Operator를 제거하려면 어떻게 해?")
     hsts = build_intent_profile("도메인별 HSTS 정책은 어떻게 적용해?")
     route_admission = build_intent_profile("Route 허용 정책은 어떻게 설정해?")
+    kubeadmin = build_intent_profile("kubeadmin 사용자를 제거하려면 어떻게 해?")
+    prometheus = build_intent_profile("Prometheus 인증 지표를 보려면 먼저 무엇을 해야 해?")
+    catalog = build_intent_profile("Operator 카탈로그 관련 작업에는 어떤 명령어가 사용돼?")
 
     assert local_storage.target_object == "local-storage-operator"
     assert "oc delete localvolume --all --all-namespaces" in local_storage.primary_commands
@@ -74,3 +77,17 @@ def test_validation_operational_questions_have_specific_intent_profiles() -> Non
     assert "oc edit ingresses.config.openshift.io/cluster" in hsts.primary_commands
     assert route_admission.target_object == "route-admission"
     assert route_admission.primary_commands[0].startswith("oc -n openshift-ingress-operator patch")
+    assert kubeadmin.primary_commands == ("oc delete secrets kubeadmin -n kube-system",)
+    assert prometheus.primary_commands == ("oc login",)
+    assert catalog.primary_commands == ("oc adm catalog build",)
+
+
+def test_route_and_ingress_questions_bypass_non_rag_router() -> None:
+    queries = [
+        "How do I configure Route admission policy?",
+        "How do I find the OAuth server route host for token requests?",
+        "How do I check Ingress endpoints in a dual-stack cluster?",
+    ]
+
+    for query in queries:
+        assert route_non_rag(query) is None, query
