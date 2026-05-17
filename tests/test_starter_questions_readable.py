@@ -30,7 +30,7 @@ def test_starter_group_labels_are_readable_korean() -> None:
 def test_official_faq_questions_are_composed_as_beginner_language() -> None:
     question = _official_faq_query(_rule("troubleshooting"), "검증 및 문제 해결")
 
-    assert question == "문제 해결이 안 될 때 어디부터 확인하면 돼?"
+    assert question == "문제 해결이 안 될 때 먼저 어디를 확인하면 좋을까요?"
     assert "What should" not in question
     assert "문서를 기준으로" not in question
     assert "Day-2" not in question
@@ -41,11 +41,14 @@ def test_official_faq_questions_are_composed_as_beginner_language() -> None:
 def test_learning_questions_are_beginner_natural_language() -> None:
     day2 = _beginner_learning_question(_rule("day2"), "Postinstallation configuration")
     networking = _beginner_learning_question(_rule("networking"), "Networking overview")
+    service_route = _beginner_learning_question(_rule("networking"), "Service route")
 
-    assert day2 == "설치 후 작업은 무엇부터 이어서 진행하면 돼?"
-    assert networking == "앱 접속 경로는 뭔지부터 알고 싶은데 어디서 확인하면 돼?"
+    assert day2 == "설치 후 작업은 무엇부터 이어서 진행하면 좋을까요?"
+    assert networking == "앱 접속 경로를 먼저 이해하고 싶은데, 어디를 보면 될까요?"
+    assert service_route == "Service와 Route 연결 구조를 먼저 이해하고 싶은데, 어디를 보면 될까요?"
     assert "Day-2" not in day2
     assert "Networking overview" not in networking
+    assert all("뭔지부터" not in question for question in (day2, networking, service_route))
 
 
 def test_operations_chunk_question_uses_chunk_context_without_fixed_query_variant() -> None:
@@ -58,7 +61,7 @@ def test_operations_chunk_question_uses_chunk_context_without_fixed_query_varian
         }
     )
 
-    assert question == "성능 테스트 결과를 받으면 목표와 조건은 어떻게 먼저 확인해?"
+    assert question == "성능 테스트 결과를 받으면 목표와 조건을 어떻게 먼저 확인하면 좋을까요?"
     assert "성능 테스트는 어떤 목표와 조건부터 확인해야 해?" not in question
     assert "성능 목표와 조건 먼저 보기에서" not in question
 
@@ -72,7 +75,7 @@ def test_operations_chunk_question_does_not_expose_chunk_title_suffix() -> None:
         }
     )
 
-    assert question == "노드 상태는 처음에 어디서 확인하면 돼?"
+    assert question == "노드 상태를 먼저 확인하려면 어디를 보면 될까요?"
     assert "검증부터 보기" not in question
 
 
@@ -85,7 +88,7 @@ def test_operations_chunk_question_cleans_generic_section_suffix() -> None:
         }
     )
 
-    assert question == "사업 범위와 추진 배경은 처음에 무엇부터 확인하면 돼?"
+    assert question == "사업 범위와 추진 배경을 처음 확인할 때 어디를 보면 좋을까요?"
     assert "보기" not in question
 
 

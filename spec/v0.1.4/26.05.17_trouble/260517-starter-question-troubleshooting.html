@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>260517 첫 화면 추천 질문 문구 개선 트러블슈팅</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d7dce5;
+      --panel: #f7f9fc;
+      --brand: #155eef;
+      --good: #078254;
+      --warn: #a15c00;
+      --bad: #b42318;
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Noto Sans KR", Arial, sans-serif;
+      color: var(--ink);
+      background: #fff;
+      line-height: 1.62;
+    }
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 40px 28px 72px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 34px 0 14px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      font-size: 21px;
+    }
+    h3 {
+      margin: 22px 0 10px;
+      font-size: 17px;
+    }
+    p {
+      margin: 8px 0;
+    }
+    code {
+      font-family: Consolas, "Cascadia Mono", monospace;
+      background: #eef2f7;
+      padding: 2px 5px;
+      border-radius: 5px;
+    }
+    .meta,
+    .note {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 22px 0;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 16px;
+      background: var(--panel);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--brand);
+      font-size: 14px;
+    }
+    .evidence {
+      margin: 18px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .evidence img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      background: #f2f4f7;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 22px;
+      table-layout: fixed;
+    }
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+      font-size: 14px;
+    }
+    th {
+      background: #eef4ff;
+      text-align: left;
+    }
+    .ok {
+      color: var(--good);
+      font-weight: 700;
+    }
+    .warn {
+      color: var(--warn);
+      font-weight: 700;
+    }
+    .bad {
+      color: var(--bad);
+      font-weight: 700;
+    }
+    .list {
+      padding-left: 20px;
+    }
+    .list li {
+      margin: 6px 0;
+    }
+    .command {
+      white-space: pre-wrap;
+      border: 1px solid var(--line);
+      background: #101828;
+      color: #f2f4f7;
+      border-radius: 8px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 13px;
+    }
+    @media (max-width: 860px) {
+      main {
+        padding: 28px 18px 56px;
+      }
+      .summary {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>첫 화면 추천 질문 문구 개선 트러블슈팅</h1>
+    <p class="meta">작성일: 2026-05-17 / Branch: <code>feat/corpus_embedding_test_S_v.2</code> / Head: <code>c175055</code></p>
+
+    <section class="summary">
+      <div class="card">
+        <strong>문제</strong>
+        첫 화면 추천 질문의 한국어가 어색해 실제 운영자가 누르고 싶은 질문처럼 보이지 않았다.
+      </div>
+      <div class="card">
+        <strong>원인</strong>
+        answer LLM 문제가 아니라 starter question API의 후보 질문/템플릿 문구 문제였다.
+      </div>
+      <div class="card">
+        <strong>수정</strong>
+        표시 직전 보정과 청크 후보 생성 템플릿을 함께 수정했다.
+      </div>
+      <div class="card">
+        <strong>검증</strong>
+        관련 테스트 18건 통과, seed 4개 스모크에서 금지 표현 0건 확인.
+      </div>
+    </section>
+
+    <h2>1. 접수된 화면과 피드백</h2>
+    <p>아래 화면은 페이지 첫 화면에 노출되는 시작 질문 카드다. 피드백은 “메인 질문들의 한글이 어색하다”는 내용이었다.</p>
+    <div class="evidence">
+      <img src="첫화면 질문.png" alt="첫 화면 추천 질문 피드백 캡처">
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>기존 문구</th>
+          <th>피드백 기준 개선 방향</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>Service와 Route 연결은 뭔지부터 알고 싶은데 어디서 확인하면 돼?</code></td>
+          <td><code>Service와 Route 연결 구조를 먼저 이해하고 싶은데, 어디를 보면 될까요?</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>2. 원인 판단</h2>
+    <p>첫 화면 질문은 프론트에서 문장을 직접 하드코딩하거나 answer LLM이 즉석 생성하는 구조가 아니었다.</p>
+    <ul class="list">
+      <li>프론트는 <code>apps/web/src/pages/WorkspacePage.tsx</code>에서 API가 내려준 <code>item.question</code>을 그대로 렌더링한다.</li>
+      <li>API 라우트는 <code>/api/studio/starter-questions</code>이고, <code>server_handler_factory.py</code>에서 <code>starter_questions.py</code>로 연결된다.</li>
+      <li><code>starter_questions.py</code>는 DB의 <code>document_chunks.starter_question_candidates</code>, official manifest, learning manifest를 읽어 질문을 구성한다.</li>
+      <li>청크 후보 질문은 <code>chunk_question_candidates.py</code>에서 생성되므로, 재적재/재생성 시 어색한 후보가 다시 들어갈 수 있었다.</li>
+    </ul>
+    <p class="note">따라서 이번 수정은 프론트 UI 수정이 아니라 “후보 질문 생성 + 표시 직전 문구 보정”을 함께 잡는 방향으로 진행했다.</p>
+
+    <h2>3. 수정 정책</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>질문 유형</th>
+          <th>적용 문구 정책</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>개념 학습형</td>
+          <td><code>Service와 Route 연결 구조를 먼저 이해하고 싶은데, 어디를 보면 될까요?</code></td>
+        </tr>
+        <tr>
+          <td>상태 확인형</td>
+          <td><code>노드 상태를 먼저 확인하려면 어디를 보면 될까요?</code></td>
+        </tr>
+        <tr>
+          <td>명령어 확인형</td>
+          <td><code>Node 확인에 먼저 사용할 명령어는 무엇인가요?</code></td>
+        </tr>
+        <tr>
+          <td>문제 해결형</td>
+          <td><code>Service 문제가 생겼을 때 원인을 어디서부터 좁히면 좋을까요?</code></td>
+        </tr>
+        <tr>
+          <td>작성/구성형</td>
+          <td><code>FRRConfiguration CRD 구성의 기본 구조는 어떻게 잡으면 될까요?</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>금지 표현은 <code>뭔지부터</code>, <code>어디서 확인하면 돼</code>, <code>처음에는 무엇부터</code>, <code>어떤 명령어부터 쓰면 돼</code>로 두고, starter question 샘플에서는 0건이 되도록 확인했다.</p>
+
+    <h2>4. 변경 내용</h2>
+    <ul class="list">
+      <li><code>starter_questions.py</code>: <code>_starter_question</code>에서 표시 직전 문구 보정 함수를 적용했다. 기존 DB 후보 질문이 어색해도 화면에 나가기 전에 자연스럽게 바뀐다.</li>
+      <li><code>starter_questions.py</code>: <code>_compose_beginner_question</code> 템플릿을 정중하고 명확한 질문형으로 수정했다.</li>
+      <li><code>chunk_question_candidates.py</code>: 청크에서 생성되는 starter/follow-up 후보 질문 템플릿도 같은 말투 기준으로 수정했다.</li>
+      <li>테스트: 기존 말투를 고정하던 기대값을 새 정책 기준으로 바꾸고, 금지 표현이 들어오지 않는지 확인했다.</li>
+    </ul>
+
+    <h2>5. Before / After 예시</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Before</th>
+          <th>After</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>앱 접속 경로는 뭔지부터 알고 싶은데 어디서 확인하면 돼?</code></td>
+          <td><code>앱 접속 경로를 먼저 이해하고 싶은데, 어디를 보면 될까요?</code></td>
+        </tr>
+        <tr>
+          <td><code>Service와 Route 연결은 뭔지부터 알고 싶은데 어디서 확인하면 돼?</code></td>
+          <td><code>Service와 Route 연결 구조를 먼저 이해하고 싶은데, 어디를 보면 될까요?</code></td>
+        </tr>
+        <tr>
+          <td><code>Node 확인하려면 어떤 명령어부터 쓰면 돼?</code></td>
+          <td><code>Node 확인에 먼저 사용할 명령어는 무엇인가요?</code></td>
+        </tr>
+        <tr>
+          <td><code>Pod가 안 뜨면 처음에 어디부터 확인하면 돼?</code></td>
+          <td><code>Pod가 안 뜰 때 원인을 어디서부터 좁히면 좋을까요?</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>6. 검증 결과</h2>
+    <h3>단위 테스트</h3>
+    <div class="command">.\.venv\Scripts\python.exe -m pytest tests\test_starter_questions_readable.py tests\test_starter_questions.py tests\test_chunk_runtime_enrichment.py</div>
+    <p class="ok">결과: 18 passed</p>
+
+    <h3>Starter question 스모크</h3>
+    <p>아래 seed 기준으로 <code>build_studio_starter_questions</code>를 직접 호출해 화면용 payload를 확인했다.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Seed</th>
+          <th>샘플 질문</th>
+          <th>금지 표현</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>stable</code></td>
+          <td><code>Service와 Route 연결 구조를 먼저 이해하고 싶은데, 어디를 보면 될까요?</code></td>
+          <td class="ok">0건</td>
+        </tr>
+        <tr>
+          <td><code>alice</code></td>
+          <td><code>문제 해결이 안 될 때 먼저 어디를 확인하면 좋을까요?</code></td>
+          <td class="ok">0건</td>
+        </tr>
+        <tr>
+          <td><code>bob</code></td>
+          <td><code>노드 상태를 먼저 확인하려면 어디를 보면 될까요?</code></td>
+          <td class="ok">0건</td>
+        </tr>
+        <tr>
+          <td><code>studio-live-smoke</code></td>
+          <td><code>PVC와 볼륨을 먼저 이해하고 싶은데, 어디를 보면 될까요?</code></td>
+          <td class="ok">0건</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>7. 남은 확인사항</h2>
+    <ul class="list">
+      <li>현재 수정은 문구 생성/보정 로직 기준으로 검증했다. 실제 브라우저 첫 화면은 dev server를 띄운 뒤 같은 seed/session에서 한 번 더 육안 확인하면 좋다.</li>
+      <li>DB에 저장된 기존 후보 질문 원문은 이번 작업에서 직접 수정하지 않았다. 대신 표시 직전 보정으로 화면 노출 문구를 개선했다.</li>
+      <li>향후 corpus를 재적재하면 <code>chunk_question_candidates.py</code>의 개선된 후보 템플릿이 반영된다.</li>
+      <li>RAG 검색, Qdrant 적재, answer LLM, reranker 품질은 이번 문구 개선 범위가 아니므로 별도 테스트 결과와 섞지 않는다.</li>
+    </ul>
+  </main>
+</body>
+</html>

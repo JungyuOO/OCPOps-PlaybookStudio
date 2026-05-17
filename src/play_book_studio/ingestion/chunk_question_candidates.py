@@ -24,18 +24,18 @@ def build_chunk_question_candidates(chunk: dict[str, Any]) -> dict[str, list[str
     starter: list[str] = []
     followup: list[str] = []
     if commands:
-        starter.append(f"{subject} 확인하려면 어떤 명령어부터 쓰면 돼?")
-        followup.append(f"{commands[0]} 결과에서 뭘 보면 돼?")
-        followup.append(f"{subject} 명령 결과가 이상하면 다음에 어디를 확인해?")
+        starter.append(f"{subject} 확인에 먼저 사용할 명령어는 무엇인가요?")
+        followup.append(f"{commands[0]} 결과에서 무엇을 보면 좋을까요?")
+        followup.append(f"{subject} 명령 결과가 이상하면 다음에는 어디를 확인하면 좋을까요?")
     else:
-        starter.append(f"{subject} 처음에는 무엇부터 확인하면 돼?")
-        followup.append(f"{subject} 다음 단계는 어떻게 이어가면 돼?")
+        starter.append(f"{subject}{_object_particle(subject)} 처음 확인할 때 어디를 보면 좋을까요?")
+        followup.append(f"{subject} 다음 단계는 어떻게 이어가면 좋을까요?")
     if _looks_like_troubleshooting(text):
-        starter.insert(0, f"{subject} 문제가 생기면 원인을 어디서부터 좁히면 돼?")
-        followup.append(f"{subject} 상태가 계속 나쁘면 로그와 이벤트는 어떻게 봐?")
+        starter.insert(0, f"{subject} 문제가 생겼을 때 원인을 어디서부터 좁히면 좋을까요?")
+        followup.append(f"{subject} 상태가 계속 나쁘면 로그와 이벤트는 어떻게 보면 좋을까요?")
     if _looks_like_authoring(text):
-        starter.insert(0, f"{subject} 작성할 때 기본 구조는 어떻게 넣으면 돼?")
-        followup.append(f"{subject} 적용한 뒤 정상 여부는 어떻게 확인해?")
+        starter.insert(0, f"{subject}의 기본 구조는 어떻게 잡으면 될까요?")
+        followup.append(f"{subject} 적용 후 정상 여부는 어떻게 확인하면 좋을까요?")
 
     return {
         "starter_question_candidates": _dedupe(starter)[:3],
@@ -122,6 +122,21 @@ def _dedupe(values: list[str]) -> list[str]:
         seen.add(key)
         result.append(cleaned)
     return result
+
+
+def _has_final_consonant(text: str) -> bool:
+    stripped = str(text or "").strip()
+    if not stripped:
+        return False
+    char = stripped[-1]
+    code = ord(char)
+    if 0xAC00 <= code <= 0xD7A3:
+        return (code - 0xAC00) % 28 != 0
+    return False
+
+
+def _object_particle(text: str) -> str:
+    return "을" if _has_final_consonant(text) else "를"
 
 
 __all__ = ["build_chunk_question_candidates"]

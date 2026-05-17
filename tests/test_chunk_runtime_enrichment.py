@@ -97,3 +97,7 @@ def test_chunk_question_candidates_are_derived_from_chunk_content() -> None:
     assert starter
     assert any("Deployment" in question or "Deployment YAML" in question for question in starter)
     assert any("oc apply -f deployment.yaml" in question for question in followup)
+    all_questions = starter + followup
+    assert all("처음에는 무엇부터" not in question for question in all_questions)
+    assert all("어떤 명령어부터 쓰면 돼" not in question for question in all_questions)
+    assert all("어디서 확인하면 돼" not in question for question in all_questions)

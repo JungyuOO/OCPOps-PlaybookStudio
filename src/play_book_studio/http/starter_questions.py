@@ -116,6 +116,7 @@ def _starter_question(
     learning_step_id: str = "",
     lab_task_id: str = "",
 ) -> dict[str, Any]:
+    question = _polish_starter_question(question)
     payload: dict[str, Any] = {
         "lane": lane,
         "question": question,
@@ -222,7 +223,7 @@ def _official_faq_questions_from_db(database_url: str) -> list[dict[str, Any]]:
     return [
         _starter_question(
             lane="faq",
-            question="OpenShift 문제를 공식 문서 기준으로 진단할 때 어떤 문서와 확인 명령부터 보면 돼?",
+            question="OpenShift 문제를 공식 문서 기준으로 진단할 때, 어떤 문서와 확인 명령을 먼저 보면 좋을까요?",
             route_kind="official",
             source="postgres.official_docs",
         )
@@ -622,6 +623,70 @@ def _clean_subject_title(title: str) -> str:
     return cleaned or _clean_title(title)
 
 
+def _concept_subject(subject: str) -> str:
+    if subject == "Service와 Route 연결":
+        return "Service와 Route 연결 구조"
+    return subject
+
+
+def _polish_starter_question(question: str) -> str:
+    cleaned = re.sub(r"\s+", " ", str(question or "").strip())
+    if not cleaned:
+        return ""
+
+    match = re.fullmatch(r"(.+?)(?:은|는) 뭔지부터 알고 싶은데 어디서 확인하면 돼\?", cleaned)
+    if match:
+        subject = _concept_subject(match.group(1).strip())
+        return f"{subject}{_object_particle(subject)} 먼저 이해하고 싶은데, 어디를 보면 될까요?"
+
+    match = re.fullmatch(r"(.+?) 확인하려면 어떤 명령어부터 쓰면 돼\?", cleaned)
+    if match:
+        subject = match.group(1).strip()
+        return f"{subject} 확인에 먼저 사용할 명령어는 무엇인가요?"
+
+    match = re.fullmatch(r"(.+?) 처음에는 무엇부터 확인하면 돼\?", cleaned)
+    if match:
+        subject = match.group(1).strip()
+        return f"{subject}{_object_particle(subject)} 처음 확인할 때 어디를 보면 좋을까요?"
+
+    match = re.fullmatch(r"(.+?)(?:은|는) 처음에 무엇부터 확인하면 돼\?", cleaned)
+    if match:
+        subject = match.group(1).strip()
+        return f"{subject}{_object_particle(subject)} 처음 확인할 때 어디를 보면 좋을까요?"
+
+    match = re.fullmatch(r"(.+?)(?:은|는) 처음에 어디서 확인하면 돼\?", cleaned)
+    if match:
+        subject = match.group(1).strip()
+        return f"{subject}{_object_particle(subject)} 먼저 확인하려면 어디를 보면 될까요?"
+
+    match = re.fullmatch(r"(.+?)(?:이|가) 정상인지 처음에 어디서 확인하면 돼\?", cleaned)
+    if match:
+        subject = match.group(1).strip()
+        return f"{subject}{_subject_particle(subject)} 정상인지 먼저 확인하려면 어디를 보면 될까요?"
+
+    match = re.fullmatch(r"(.+?)(?:이|가) 안 뜨면(?: 처음에)? 어디부터 확인하면 돼\?", cleaned)
+    if match:
+        subject = match.group(1).strip()
+        return f"{subject}{_subject_particle(subject)} 안 뜰 때 원인을 어디서부터 좁히면 좋을까요?"
+
+    match = re.fullmatch(r"(.+?)(?:이|가) 안 될 때 어디부터 확인하면 돼\?", cleaned)
+    if match:
+        subject = match.group(1).strip()
+        return f"{subject}{_subject_particle(subject)} 안 될 때 먼저 어디를 확인하면 좋을까요?"
+
+    match = re.fullmatch(r"(.+?) 문제가 생기면 원인을 어디서부터 좁히면 돼\?", cleaned)
+    if match:
+        subject = match.group(1).strip()
+        return f"{subject} 문제가 생겼을 때 원인을 어디서부터 좁히면 좋을까요?"
+
+    match = re.fullmatch(r"(.+?) 작성할 때 기본 구조는 어떻게 넣으면 돼\?", cleaned)
+    if match:
+        subject = match.group(1).strip()
+        return f"{subject}의 기본 구조는 어떻게 잡으면 될까요?"
+
+    return cleaned
+
+
 def _compose_beginner_question(
     *,
     lane: str,
@@ -637,23 +702,26 @@ def _compose_beginner_question(
 
     if topic == "install":
         if "bootstrap" in text or "검증" in text or "validation" in text:
-            return f"{subject}{_subject_particle(subject)} 정상인지 처음에 어디서 확인하면 돼?"
-        return f"{subject_topic} 어떤 순서로 시작하면 돼?"
+            return f"{subject}{_subject_particle(subject)} 정상인지 먼저 확인하려면 어디를 보면 될까요?"
+        return f"{subject_topic} 어떤 순서로 시작하면 좋을까요?"
     if topic in {"namespace", "pod", "node", "network", "config", "storage", "observability", "security"}:
         if lane == "learning":
-            return f"{subject_topic} 뭔지부터 알고 싶은데 어디서 확인하면 돼?"
-        return f"{subject_topic} 처음에 어디서 확인하면 돼?"
+            if topic in {"pod", "node", "observability", "security"}:
+                return f"{subject}{_object_particle(subject)} 먼저 확인하려면 어디를 보면 될까요?"
+            concept = _concept_subject(subject)
+            return f"{concept}{_object_particle(concept)} 먼저 이해하고 싶은데, 어디를 보면 될까요?"
+        return f"{subject}{_object_particle(subject)} 먼저 확인하려면 어디를 보면 될까요?"
     if topic == "performance":
-        return f"{subject}{_object_particle(subject)} 받으면 목표와 조건은 어떻게 먼저 확인해?"
+        return f"{subject}{_object_particle(subject)} 받으면 목표와 조건을 어떻게 먼저 확인하면 좋을까요?"
     if topic == "deploy":
-        return f"{subject_topic} 처음에 어떤 순서로 진행하면 돼?"
+        return f"{subject_topic} 어떤 순서로 진행하면 좋을까요?"
     if topic == "postinstall" or "postinstall" in text or "post-install" in text or "post installation" in text or "day-2" in text or "day 2" in text:
-        return f"{subject_topic} 무엇부터 이어서 진행하면 돼?"
+        return f"{subject_topic} 무엇부터 이어서 진행하면 좋을까요?"
     if topic == "troubleshooting" or "troubleshoot" in text or "failure" in text or "problem" in text or "장애" in text or "문제" in text:
-        return f"{subject}{_subject_particle(subject)} 안 될 때 어디부터 확인하면 돼?"
+        return f"{subject}{_subject_particle(subject)} 안 될 때 먼저 어디를 확인하면 좋을까요?"
     if lane == "learning":
-        return f"{subject_topic} 처음에 어떤 순서로 배우면 돼?"
-    return f"{subject_topic} 처음에 무엇부터 확인하면 돼?"
+        return f"{subject}{_object_particle(subject)} 처음 배울 때 어떤 순서로 보면 좋을까요?"
+    return f"{subject}{_object_particle(subject)} 처음 확인할 때 어디를 보면 좋을까요?"
 
 
 def _has_final_consonant(text: str) -> bool:
