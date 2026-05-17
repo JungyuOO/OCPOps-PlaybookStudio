@@ -7,33 +7,17 @@ from typing import Any
 
 from play_book_studio.retrieval import SessionContext
 
-from .answer_text import (
-    align_answer_to_grounded_commands,
+from .answer_text_commands import strip_ungrounded_code_blocks
+from .answer_text_formatting import (
     ensure_korean_product_terms,
-    guard_first_step_grounding,
     normalize_answer_markup_blocks,
     normalize_answer_text,
     restore_readable_paragraphs,
     reshape_ops_answer_text,
-    strip_ungrounded_code_blocks,
-    shape_actionable_ops_answer,
-    shape_beginner_grounded_answer,
-    shape_rbac_follow_up_answer,
-    shape_certificate_monitor_answer,
-    shape_crash_loop_troubleshooting,
-    shape_etcd_backup_answer,
-    shape_project_termination_answer,
-    shape_pod_lifecycle_explainer,
-    shape_pod_pending_troubleshooting,
     strip_intro_offtopic_noise,
     strip_structured_key_extra_guidance,
     strip_weak_additional_guidance,
     trim_productization_noise,
-)
-from .citations import (
-    finalize_citations,
-    inject_single_citation,
-    select_fallback_citations,
 )
 from .models import AnswerResult
 
@@ -79,77 +63,12 @@ def generate_grounded_answer_text(
 
     post_process_started_at = time.perf_counter()
     answer_text = reshape_ops_answer_text(
-        normalize_answer_text(
-            normalize_answer_markup_blocks(raw_answer_text)
-        ),
+        normalize_answer_text(normalize_answer_markup_blocks(raw_answer_text)),
         mode=mode,
     )
     answer_text = ensure_korean_product_terms(answer_text, query=query)
-    answer_text = shape_beginner_grounded_answer(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = align_answer_to_grounded_commands(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = shape_rbac_follow_up_answer(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = shape_etcd_backup_answer(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = shape_project_termination_answer(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = shape_certificate_monitor_answer(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = shape_actionable_ops_answer(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = guard_first_step_grounding(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = shape_pod_lifecycle_explainer(
-        answer_text,
-        query=query,
-        mode=mode,
-        citations=citations,
-    )
-    answer_text = shape_pod_pending_troubleshooting(
-        answer_text,
-        query=query,
-        mode=mode,
-        citations=citations,
-    )
-    answer_text = shape_crash_loop_troubleshooting(
-        answer_text,
-        query=query,
-        mode=mode,
-        citations=citations,
-    )
     answer_text = strip_ungrounded_code_blocks(
         answer_text,
-        citations=citations,
-    )
-    answer_text = shape_beginner_grounded_answer(
-        answer_text,
-        query=query,
         citations=citations,
     )
     answer_text = strip_weak_additional_guidance(
@@ -196,41 +115,6 @@ def generate_grounded_answer_text(
         "llm_provider_round_trip": provider_round_trip_ms,
         "llm_post_process": post_process_ms,
     }
-
-
-def finalize_deployment_scaling_answer(
-    answer_text: str,
-    citations: list[dict],
-) -> tuple[str, list[dict], list[int]]:
-    answer_text, final_citations, cited_indices = finalize_citations(
-        answer_text,
-        citations,
-    )
-    if not cited_indices and citations:
-        final_citations = select_fallback_citations(citations, limit=1)
-        answer_text = inject_single_citation(answer_text, citation_index=1)
-        answer_text, final_citations, cited_indices = finalize_citations(
-            answer_text,
-            final_citations,
-        )
-    guarded_answer_text = strip_ungrounded_code_blocks(
-        answer_text,
-        citations=final_citations or citations,
-    )
-    if guarded_answer_text != answer_text:
-        answer_text = guarded_answer_text
-        answer_text, final_citations, cited_indices = finalize_citations(
-            answer_text,
-            final_citations or citations,
-        )
-        if not cited_indices and (final_citations or citations):
-            final_citations = final_citations or select_fallback_citations(citations, limit=1)
-            answer_text = inject_single_citation(answer_text, citation_index=1)
-            answer_text, final_citations, cited_indices = finalize_citations(
-                answer_text,
-                final_citations,
-            )
-    return answer_text, final_citations, cited_indices
 
 
 def build_answer_result(

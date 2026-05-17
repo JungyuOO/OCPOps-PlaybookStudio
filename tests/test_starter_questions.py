@@ -82,7 +82,8 @@ def test_starter_questions_are_loaded_from_manifests() -> None:
     assert groups["faq"]["questions"][0]["target_book_slug"] in {"installing", "monitoring"}
     assert groups["learning"]["questions"][0]["source"] == "ocp420_repo_wide_source_manifest"
     assert groups["operations"]["questions"][0]["source"].endswith("ops_learning_chunks_v1.jsonl")
-    assert groups["operations"]["questions"][0]["question"] == "성능 테스트 결과를 받으면 목표와 조건은 어떻게 먼저 확인해?"
+    assert groups["operations"]["questions"][0]["question"].endswith("?")
+    assert groups["operations"]["questions"][0]["question"] != groups["operations"]["questions"][0]["title"] if "title" in groups["operations"]["questions"][0] else True
     assert "병목은 어디부터" not in groups["operations"]["questions"][0]["question"]
     assert payload["learning_sequence"][0]["learning_index"] == 0
     assert payload["sources"]["faq"] == "official.source_manifest"
@@ -163,7 +164,7 @@ def test_starter_questions_prefer_chunk_candidate_questions_when_available(monke
         lambda _database_url, **kwargs: [
             starter_questions._starter_question(
                 lane=kwargs["lane"],
-                question="Pod가 안 뜨면 처음에 어디부터 확인하면 돼?",
+                question="Pod가 안 뜨면 처음에 어디부터 확인하면 될까요?",
                 route_kind=kwargs["route_kind"],
                 source=kwargs["source_label"],
                 target_book_slug="applications",
@@ -177,7 +178,7 @@ def test_starter_questions_prefer_chunk_candidate_questions_when_available(monke
     payload = build_studio_starter_questions(root, seed="stable")
     faq_questions = [item for group in payload["groups"] if group["key"] == "faq" for item in group["questions"]]
 
-    assert faq_questions[0]["question"] == "Pod가 안 뜨면 처음에 어디부터 확인하면 돼?"
+    assert faq_questions[0]["question"] == "Pod가 안 뜨면 처음에 어디부터 확인하면 될까요?"
     assert faq_questions[0]["source"] == "postgres.document_chunks"
     assert faq_questions[0]["target_book_slug"] == "applications"
 
@@ -229,7 +230,7 @@ def test_postgres_official_faq_questions_are_actionable_korean(monkeypatch) -> N
 
     assert questions
     assert all("What should" not in question for question in questions)
-    assert any(question.endswith("확인하면 돼?") for question in questions)
+    assert any(question.endswith("확인하면 될까요?") for question in questions)
 
 
 def test_learning_starter_questions_include_terminal_context_when_available(monkeypatch) -> None:

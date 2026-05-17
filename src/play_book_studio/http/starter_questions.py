@@ -55,6 +55,57 @@ LEARNING_TARGET_BOOK_SLUGS: dict[str, str] = {
     "troubleshooting": "validation_and_troubleshooting",
 }
 
+STARTER_QUESTION_COPY: dict[str, dict[str, str]] = {
+    "official": {
+        "install": "OCP 설치는 어떤 순서로 시작하면 될까요?",
+        "postinstall": "설치 후 작업은 무엇부터 이어서 진행하면 될까요?",
+        "namespace": "namespace는 처음에 어디를 보면 될까요?",
+        "pod": "Pod 상태는 처음에 어디를 보면 될까요?",
+        "node": "노드 상태는 처음에 어디를 보면 될까요?",
+        "network": "Service와 Route 연결은 처음에 어디를 보면 될까요?",
+        "config": "설정 리소스는 처음에 어디를 보면 될까요?",
+        "storage": "PVC와 볼륨은 처음에 어디를 보면 될까요?",
+        "observability": "로그와 이벤트는 처음에 어디를 보면 될까요?",
+        "security": "권한 문제는 처음에 어디를 보면 될까요?",
+        "performance": "성능 결과에서 목표와 조건은 어디를 먼저 보면 될까요?",
+        "deploy": "앱 배포는 어떤 순서로 진행하면 될까요?",
+        "troubleshooting": "문제 해결은 어디부터 확인하면 될까요?",
+        "default": "공식 문서 기준으로 무엇부터 확인하면 될까요?",
+    },
+    "learning": {
+        "install": "OCP 설치 흐름은 어떤 순서로 배우면 될까요?",
+        "postinstall": "설치 후 작업은 무엇부터 이어서 진행하면 될까요?",
+        "namespace": "namespace 개념은 어디를 먼저 보면 될까요?",
+        "pod": "Pod 상태 구조는 어디를 먼저 보면 될까요?",
+        "node": "노드 상태 구조는 어디를 먼저 보면 될까요?",
+        "network": "Service와 Route 연결 구조를 먼저 이해하고 싶은데, 어디를 보면 될까요?",
+        "config": "ConfigMap과 Secret 기준을 먼저 이해하고 싶은데, 어디를 보면 될까요?",
+        "storage": "PVC와 볼륨 기준을 먼저 이해하고 싶은데, 어디를 보면 될까요?",
+        "observability": "로그와 이벤트 흐름은 어디를 먼저 보면 될까요?",
+        "security": "권한 구조를 먼저 이해하고 싶은데, 어디를 보면 될까요?",
+        "performance": "성능 결과에서 목표와 조건은 어디를 먼저 보면 될까요?",
+        "deploy": "앱 배포 흐름은 어떤 순서로 배우면 될까요?",
+        "troubleshooting": "문제 해결 흐름은 어디부터 보면 될까요?",
+        "default": "이 주제는 어떤 순서로 배우면 될까요?",
+    },
+    "operations": {
+        "install": "설치 관련 운영 절차는 무엇부터 확인하면 될까요?",
+        "postinstall": "설치 후 운영 작업은 무엇부터 이어서 보면 될까요?",
+        "namespace": "namespace 상태는 처음에 어디를 보면 될까요?",
+        "pod": "Pod 상태는 처음에 어디를 보면 될까요?",
+        "node": "노드 상태는 처음에 어디를 보면 될까요?",
+        "network": "Service와 Route 연결은 처음에 어디를 보면 될까요?",
+        "config": "설정 리소스는 처음에 어디를 보면 될까요?",
+        "storage": "PVC와 볼륨은 처음에 어디를 보면 될까요?",
+        "observability": "로그와 이벤트는 처음에 어디를 보면 될까요?",
+        "security": "권한 문제는 처음에 어디를 보면 될까요?",
+        "performance": "성능 결과에서 목표와 조건은 어디를 먼저 보면 될까요?",
+        "deploy": "배포 상태는 어떤 순서로 확인하면 될까요?",
+        "troubleshooting": "문제 해결은 어디부터 확인하면 될까요?",
+        "default": "실운영 문서에서 무엇부터 확인하면 될까요?",
+    },
+}
+
 
 def _safe_read_json(path: Path) -> dict[str, Any]:
     try:
@@ -552,76 +603,6 @@ def _starter_topic_terms(*parts: Any) -> str:
     return ""
 
 
-def _beginner_subject_from_context(
-    *,
-    topic: str,
-    title: str,
-    goal: str = "",
-    terms: list[str] | None = None,
-) -> str:
-    terms = terms or []
-    text = _context_text(title, goal, terms).lower()
-    if topic == "install":
-        if "bootstrap" in text:
-            return "설치 진행 상태"
-        return "OCP 설치"
-    if topic == "namespace":
-        return "namespace"
-    if topic == "pod":
-        return "Pod 상태"
-    if topic == "node":
-        return "노드 상태"
-    if topic == "network":
-        if "overview" in text or "개요" in text:
-            return "앱 접속 경로"
-        if "route" in text or "라우트" in text:
-            return "Service와 Route 연결"
-        return "앱 접속 경로"
-    if topic == "config":
-        if "secret" in text or "시크릿" in text:
-            return "Secret 설정"
-        return "ConfigMap 설정"
-    if topic == "performance":
-        return "성능 테스트 결과"
-    if topic == "deploy":
-        return "앱 배포"
-    if topic == "storage":
-        return "PVC와 볼륨"
-    if topic == "observability":
-        if "metric" in text or "메트릭" in text:
-            return "로그와 메트릭"
-        return "로그와 이벤트"
-    if topic == "security":
-        return "권한 문제"
-    if topic == "troubleshooting":
-        return "문제 해결"
-    if topic == "postinstall" or "postinstall" in text or "post-install" in text or "post installation" in text or "day-2" in text or "day 2" in text:
-        return "설치 후 작업"
-    cleaned_title = _clean_subject_title(title)
-    if cleaned_title and cleaned_title.lower() not in {"operations", "troubleshooting", "day-2", "day 2"}:
-        return cleaned_title
-    for term in terms:
-        cleaned = _clean_title(term)
-        if cleaned:
-            return cleaned
-    return "처음 해야 할 일"
-
-
-def _clean_subject_title(title: str) -> str:
-    cleaned = _clean_title(title)
-    for pattern in (
-        r"\s*결과\s*확인하기$",
-        r"\s*상태\s*검증부터\s*보기$",
-        r"\s*검증부터\s*보기$",
-        r"\s*먼저\s*보기$",
-        r"\s*부터\s*보기$",
-        r"\s*확인하기$",
-        r"\s*보기$",
-    ):
-        cleaned = re.sub(pattern, "", cleaned).strip()
-    return cleaned or _clean_title(title)
-
-
 def _compose_beginner_question(
     *,
     lane: str,
@@ -631,52 +612,16 @@ def _compose_beginner_question(
 ) -> str:
     terms = terms or []
     topic = _starter_topic_terms(title, goal, terms)
-    subject = _beginner_subject_from_context(topic=topic, title=title, goal=goal, terms=terms)
-    subject_topic = f"{subject}{_topic_particle(subject)}"
     text = _context_text(title, goal, terms).lower()
-
-    if topic == "install":
-        if "bootstrap" in text or "검증" in text or "validation" in text:
-            return f"{subject}{_subject_particle(subject)} 정상인지 처음에 어디서 확인하면 돼?"
-        return f"{subject_topic} 어떤 순서로 시작하면 돼?"
-    if topic in {"namespace", "pod", "node", "network", "config", "storage", "observability", "security"}:
-        if lane == "learning":
-            return f"{subject_topic} 뭔지부터 알고 싶은데 어디서 확인하면 돼?"
-        return f"{subject_topic} 처음에 어디서 확인하면 돼?"
-    if topic == "performance":
-        return f"{subject}{_object_particle(subject)} 받으면 목표와 조건은 어떻게 먼저 확인해?"
-    if topic == "deploy":
-        return f"{subject_topic} 처음에 어떤 순서로 진행하면 돼?"
+    if topic == "install" and ("bootstrap" in text or "검증" in text or "validation" in text):
+        return "설치 진행 상태는 처음에 어디를 보면 될까요?"
     if topic == "postinstall" or "postinstall" in text or "post-install" in text or "post installation" in text or "day-2" in text or "day 2" in text:
-        return f"{subject_topic} 무엇부터 이어서 진행하면 돼?"
+        topic = "postinstall"
     if topic == "troubleshooting" or "troubleshoot" in text or "failure" in text or "problem" in text or "장애" in text or "문제" in text:
-        return f"{subject}{_subject_particle(subject)} 안 될 때 어디부터 확인하면 돼?"
-    if lane == "learning":
-        return f"{subject_topic} 처음에 어떤 순서로 배우면 돼?"
-    return f"{subject_topic} 처음에 무엇부터 확인하면 돼?"
+        topic = "troubleshooting"
+    lane_copy = STARTER_QUESTION_COPY.get(lane) or STARTER_QUESTION_COPY["official"]
+    return lane_copy.get(topic) or lane_copy["default"]
 
-
-def _has_final_consonant(text: str) -> bool:
-    stripped = str(text or "").strip()
-    if not stripped:
-        return False
-    char = stripped[-1]
-    code = ord(char)
-    if 0xAC00 <= code <= 0xD7A3:
-        return (code - 0xAC00) % 28 != 0
-    return False
-
-
-def _topic_particle(text: str) -> str:
-    return "은" if _has_final_consonant(text) else "는"
-
-
-def _subject_particle(text: str) -> str:
-    return "이" if _has_final_consonant(text) else "가"
-
-
-def _object_particle(text: str) -> str:
-    return "을" if _has_final_consonant(text) else "를"
 
 def _operations_questions(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
     settings = load_settings(root_dir)

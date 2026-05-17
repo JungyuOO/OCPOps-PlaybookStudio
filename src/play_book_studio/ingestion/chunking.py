@@ -198,12 +198,16 @@ def _parent_text(children: list[ChunkRecord]) -> str:
     return "\n\n".join(parts)
 
 
-def _with_question_candidates(chunk: ChunkRecord) -> ChunkRecord:
+def _with_question_candidates(chunk: ChunkRecord, *, llm_client: object | None = None) -> ChunkRecord:
     payload = chunk.to_dict()
-    candidates = build_chunk_question_candidates(payload)
+    candidates = (
+        build_chunk_question_candidates(payload, llm_client=llm_client)
+        if chunk.chunk_role == "parent"
+        else {"starter_question_candidates": [], "followup_question_candidates": []}
+    )
     chunk.starter_question_candidates = tuple(candidates["starter_question_candidates"])
     chunk.followup_question_candidates = tuple(candidates["followup_question_candidates"])
-    chunk.question_candidates_version = 1
+    chunk.question_candidates_version = 2 if chunk.starter_question_candidates else 0
     return chunk
 
 
@@ -211,6 +215,7 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
     # chunking은 book slug별 정책을 따른다. 그래서 API/reference-heavy 문서와
     # 개념 설명 문서를 서로 다르게 쪼갤 수 있다.
     token_counter = TokenCounter(settings.embedding_model)
+    question_candidate_llm_client = getattr(settings, "question_candidate_llm_client", None)
     chunks: list[ChunkRecord] = []
 
     for section in sections:
@@ -300,7 +305,7 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
                     chunk_role="leaf",
                     navigation_only=_is_navigation_only(body, chunk_type),
                 )
-            section_chunks.append(_with_question_candidates(chunk))
+            section_chunks.append(_with_question_candidates(chunk, llm_client=question_candidate_llm_client))
             ordinal += 1
             if chunk_overlap <= 0:
                 current_blocks = []
@@ -406,6 +411,6 @@ def chunk_sections(sections: list[NormalizedSection], settings: Settings) -> lis
                 navigation_only=False,
             )
             chunks.extend(section_chunks)
-            chunks.append(_with_question_candidates(parent))
+            chunks.append(_with_question_candidates(parent, llm_client=question_candidate_llm_client))
 
     return chunks

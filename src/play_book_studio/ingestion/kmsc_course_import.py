@@ -18,7 +18,7 @@ from play_book_studio.db.document_repository import (
     _upsert_tenant,
     _upsert_workspace,
 )
-from play_book_studio.ingestion.chunk_question_candidates import build_chunk_question_candidates
+from play_book_studio.ingestion.chunk_question_candidates import build_chunk_question_candidates, has_current_question_candidates
 from play_book_studio.ingestion.kmsc_beginner_narrative import NARRATIVE_VERSION, build_beginner_narrative
 
 
@@ -67,6 +67,7 @@ def import_kmsc_course_chunks(
     connection,
     *,
     course_dir: Path,
+    question_llm_client: Any | None = None,
     tenant_slug: str = "public",
     tenant_name: str = "Public",
     workspace_slug: str = "default",
@@ -118,7 +119,13 @@ def import_kmsc_course_chunks(
                     rows=source_rows,
                 )
                 for ordinal, row in enumerate(source_rows):
-                    _upsert_chunk(cursor, parsed_document_id=parsed_document_id, row=row, ordinal=ordinal)
+                    _upsert_chunk(
+                        cursor,
+                        parsed_document_id=parsed_document_id,
+                        row=row,
+                        ordinal=ordinal,
+                        question_llm_client=question_llm_client,
+                    )
                     imported_chunk_count += 1
 
     return KmscCourseImportSummary(
@@ -361,10 +368,17 @@ def _upsert_parsed_document(
     return _fetch_id(cursor)
 
 
-def _upsert_chunk(cursor, *, parsed_document_id: str, row: dict[str, Any], ordinal: int) -> str:
+def _upsert_chunk(
+    cursor,
+    *,
+    parsed_document_id: str,
+    row: dict[str, Any],
+    ordinal: int,
+    question_llm_client: Any | None = None,
+) -> str:
     chunk_id = _chunk_uuid(row)
     chunk_text = _chunk_text(row)
-    metadata = _chunk_metadata(row)
+    metadata = _chunk_metadata(row, question_llm_client=question_llm_client)
     beginner_narrative = str(metadata.get("beginner_narrative") or "").strip()
     if beginner_narrative and not chunk_text.startswith(beginner_narrative):
         chunk_text = "\n".join(part for part in (beginner_narrative, chunk_text) if part.strip())
@@ -503,9 +517,14 @@ def _source_anchor(row: dict[str, Any]) -> str:
     return str(row.get("chunk_id") or "")
 
 
-def _chunk_metadata(row: dict[str, Any]) -> dict[str, Any]:
+def _chunk_metadata(row: dict[str, Any], *, question_llm_client: Any | None = None) -> dict[str, Any]:
     metadata = dict(row)
-    candidates = build_chunk_question_candidates({**row, "text": _chunk_text(row)})
+    candidate_source = {**row, "text": _chunk_text(row)}
+    candidates = (
+        build_chunk_question_candidates(candidate_source, llm_client=question_llm_client)
+        if str(row.get("chunk_role") or "leaf") == "parent" or has_current_question_candidates(candidate_source)
+        else {"starter_question_candidates": [], "followup_question_candidates": []}
+    )
     metadata["source_scope"] = "study_docs"
     metadata["document_format"] = "kmsc_course_jsonl"
     metadata["book_slug"] = "kmsc-operations"
@@ -515,7 +534,7 @@ def _chunk_metadata(row: dict[str, Any]) -> dict[str, Any]:
     metadata.setdefault("beginner_narrative_version", NARRATIVE_VERSION)
     metadata.setdefault("starter_question_candidates", candidates["starter_question_candidates"])
     metadata.setdefault("followup_question_candidates", candidates["followup_question_candidates"])
-    metadata.setdefault("question_candidates_version", 1 if candidates["starter_question_candidates"] else 0)
+    metadata.setdefault("question_candidates_version", 2 if candidates["starter_question_candidates"] else 0)
     return metadata
 
 

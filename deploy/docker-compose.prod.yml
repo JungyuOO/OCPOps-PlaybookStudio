@@ -151,6 +151,12 @@ services:
         --refresh-qdrant-payloads
         --refresh-limit ${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}
         --collection ${QDRANT_COLLECTION:-openshift_docs}
+        &&
+        python -m play_book_studio.cli kmsc-course-import
+        --root-dir /app
+        --course-dir ${KMSC_COURSE_SOURCE_DIR:-/app/corpus/sources/kmsc/parsed-preview/course_pbs}
+        --index
+        --collection ${QDRANT_COLLECTION:-openshift_docs}
     restart: "no"
 
   kmsc-corpus-seed:

@@ -52,6 +52,10 @@ _SERVICE_FAILURE_DIAGNOSIS_RE = re.compile(
     r"|(?:endpoint|route|selector).*(?:장애|오류|에러|안\s*됨|안됨|접속|연결|원인|trouble|fail|error)",
     re.IGNORECASE,
 )
+_CONCEPT_EXPLANATION_RE = re.compile(
+    r"뭔지|무엇인지|개념|알고\s*싶|이해|설명|부터|먼저|what\s+is|explain|concept|overview",
+    re.IGNORECASE,
+)
 _NAMESPACE_CREATE_RE = re.compile(
     r"(?:namespace|namespaces|project|projects|네임스페이스|프로젝트).*(?:create|new|make|만들|만드|생성|추가)"
     r"|(?:create|new|make|만들|만드|생성|추가).*(?:namespace|namespaces|project|projects|네임스페이스|프로젝트)",
@@ -165,7 +169,8 @@ def understand_query(query: str) -> QueryUnderstanding:
     namespace = bool(_NAMESPACE_RE.search(text) or _NAMESPACE_KO_RE.search(text))
     deployment_yaml = bool(_DEPLOYMENT_YAML_AUTHORING_RE.search(text))
     pod_resource = bool(_POD_RESOURCE_INSPECTION_RE.search(text))
-    service_failure = bool(_SERVICE_FAILURE_DIAGNOSIS_RE.search(text))
+    concept_explanation = bool(_CONCEPT_EXPLANATION_RE.search(text))
+    service_failure = bool(_SERVICE_FAILURE_DIAGNOSIS_RE.search(text)) and not concept_explanation
     namespace_create = bool(_NAMESPACE_CREATE_RE.search(text))
 
     if openshift:

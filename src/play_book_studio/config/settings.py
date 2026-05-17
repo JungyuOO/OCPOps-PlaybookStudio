@@ -10,6 +10,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from .packs import (
     APP_ID,
@@ -123,6 +124,7 @@ class Settings(SettingsPathMixin):
     llm_model: str = ""
     llm_temperature: float = 0.2
     llm_max_tokens: int = 1100
+    question_candidate_llm_client: Any | None = None
     reranker_enabled: bool = False
     reranker_base_url: str = ""
     reranker_api_key: str = ""

@@ -89,6 +89,16 @@ def test_v012_beginner_intents_expand_operational_terms() -> None:
     assert "oc adm top pods" in pod_usage.retrieval_terms
 
 
+def test_service_route_concept_question_does_not_become_failure_diagnosis() -> None:
+    understanding = understand_query("Service와 Route 연결은 뭔지부터 알고 싶은데 어디서 확인하면 돼?")
+    normalized = normalize_query("Service와 Route 연결은 뭔지부터 알고 싶은데 어디서 확인하면 돼?")
+
+    assert "service_failure_diagnosis" not in understanding.intents
+    assert understanding.answer_shape == "command_with_judgement"
+    assert "oc describe service" not in normalized
+    assert "oc get endpoints" not in normalized
+
+
 def test_v014_query_signals_extract_pvc_pending_retrieval_contract() -> None:
     signals = understand_query_signals("PVC가 Pending인데 뭐 확인해야 해?")
 

@@ -124,6 +124,28 @@ def test_low_confidence_guard_allows_beginner_secret_config_troubleshooting_grou
     )
 
 
+def test_low_confidence_guard_uses_korean_normalized_token_overlap() -> None:
+    assert not _is_low_confidence_retrieval(
+        query="정적 프로비저닝 기준으로 다음 확인 단계는 뭐야?",
+        citations=[
+            _citation(
+                book_slug="storage",
+                section="정적 프로비저닝",
+                excerpt="정적 프로비저닝에서는 PersistentVolume과 PersistentVolumeClaim을 확인합니다.",
+            )
+        ],
+        selected_hits=[
+            {
+                "section": "정적 프로비저닝",
+                "book_slug": "storage",
+                "fused_score": -4.0,
+                "pre_rerank_fused_score": 0.01,
+                "vector_score": 0.01,
+            }
+        ],
+    )
+
+
 def test_low_confidence_followups_use_retrieval_hits_without_overlap() -> None:
     session = ChatSession(session_id="s1", mode="ops")
     result = AnswerResult(

@@ -127,8 +127,10 @@ def append_operation_project_node_deployment_terms(normalized: str, terms: list[
                 "describe",
             ]
         )
-    if any(token in normalized for token in ("route", "라우트", "경로")) and any(
-        token in normalized for token in ("service", "서비스", "endpoint", "엔드포인트", "붙었", "backend")
+    if (
+        any(token in normalized for token in ("route", "라우트", "경로"))
+        and any(token in normalized for token in ("service", "서비스", "endpoint", "엔드포인트", "붙었", "backend"))
+        and not any(token in normalized.lower() for token in ("뭔지", "무엇인지", "개념", "알고 싶", "먼저", "부터", "what is", "explain"))
     ):
         terms.extend(
             [

@@ -48,6 +48,15 @@ from .qdrant_store import ensure_collection, upsert_chunks
 from play_book_studio.config.settings import HIGH_VALUE_SLUGS, Settings
 
 
+def _question_candidate_llm_client(settings: Settings):
+    try:
+        from play_book_studio.answering.llm import LLMClient
+
+        return LLMClient(settings)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -318,6 +327,7 @@ def run_ingestion_pipeline(
 
     log.stage = "chunk"
     # 4단계: section을 BM25/vector 양쪽에서 쓰는 chunk record로 나눈다.
+    settings.question_candidate_llm_client = settings.question_candidate_llm_client or _question_candidate_llm_client(settings)
     chunks: list[ChunkRecord] = chunk_sections(all_sections, settings)
     log.chunk_count = len(chunks)
     chunk_counts: dict[str, int] = {}

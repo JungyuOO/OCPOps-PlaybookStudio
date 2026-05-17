@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import math
-import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,14 +10,12 @@ from typing import Any
 
 from play_book_studio.db.qdrant_indexer import qdrant_payload_from_row
 
+from .korean_text import tokenize_normalized_text
 from .models import RetrievalHit
 
 
-TOKEN_RE = re.compile(r"[\uac00-\ud7a3]+|[A-Za-z0-9_.-]+")
-
-
 def tokenize_text(text: str) -> list[str]:
-    return [token.lower() for token in TOKEN_RE.findall(text or "")]
+    return tokenize_normalized_text(text)
 
 
 def _row_to_hit(row: dict, score: float) -> RetrievalHit:

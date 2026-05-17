@@ -1,34 +1,10 @@
-"""Answer text façade.
-
-실제 구현은 formatting/command shaping 모듈로 분리했다.
-기존 import 경로는 유지하되, 새 코드가 실제 구현을 담당한다.
-"""
+"""Answer text facade for formatting helpers and grounding guards."""
 
 from __future__ import annotations
 
 from play_book_studio.retrieval import SessionContext
 
-from .answer_text_commands import (
-    align_answer_to_grounded_commands,
-    build_first_step_grounded_answer,
-    build_deployment_scaling_answer,
-    build_grounded_command_guide_answer,
-    build_grounded_status_answer,
-    citation_marker,
-    deployment_scaling_signal,
-    extract_replica_counts,
-    guard_first_step_grounding,
-    has_grounded_deployment_scale_citation,
-    shape_actionable_ops_answer,
-    shape_certificate_monitor_answer,
-    shape_crash_loop_troubleshooting,
-    shape_etcd_backup_answer,
-    shape_pod_lifecycle_explainer,
-    shape_pod_pending_troubleshooting,
-    shape_project_termination_answer,
-    shape_rbac_follow_up_answer,
-    strip_ungrounded_code_blocks,
-)
+from .answer_text_commands import has_sufficient_command_grounding, strip_ungrounded_code_blocks
 from .answer_text_formatting import (
     ADJACENT_DUPLICATE_CITATION_RE,
     ACTIONABLE_GUIDE_QUERY_RE,
@@ -86,31 +62,14 @@ __all__ = [
     "TRAILING_CITATIONS_RE",
     "WEAK_GUIDE_TAIL_RE",
     "SessionContext",
-    "align_answer_to_grounded_commands",
-    "build_first_step_grounded_answer",
-    "build_deployment_scaling_answer",
-    "build_grounded_command_guide_answer",
-    "build_grounded_status_answer",
-    "citation_marker",
-    "deployment_scaling_signal",
     "ensure_korean_product_terms",
-    "extract_replica_counts",
-    "guard_first_step_grounding",
-    "has_grounded_deployment_scale_citation",
+    "has_sufficient_command_grounding",
     "normalize_answer_markup_blocks",
     "normalize_answer_text",
     "restore_readable_paragraphs",
     "reshape_ops_answer_text",
-    "shape_actionable_ops_answer",
     "shape_beginner_grounded_answer",
-    "shape_certificate_monitor_answer",
-    "shape_crash_loop_troubleshooting",
-    "shape_etcd_backup_answer",
     "shape_install_overview_answer",
-    "shape_pod_lifecycle_explainer",
-    "shape_pod_pending_troubleshooting",
-    "shape_project_termination_answer",
-    "shape_rbac_follow_up_answer",
     "strip_ungrounded_code_blocks",
     "strip_intro_offtopic_noise",
     "strip_structured_key_extra_guidance",
