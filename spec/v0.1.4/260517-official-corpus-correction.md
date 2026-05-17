@@ -43,6 +43,7 @@ Tk9ERUlQX0hJTlQ9MTkyLjAuMCxxxx==
 ```
 
 이 값은 source `chunks.jsonl`의 코드블록 출력 예시에 있던 값이다.
+추가 재검토 과정에서는 padding이 없는 `Tk9ERUlQX0hJTlQ9MTkyLjAuMC` 형태도 같은 계열의 encoded sample output으로 확인했다.
 
 문제:
 
@@ -71,10 +72,10 @@ Tk9ERUlQX0hJTlQ9MTkyLjAuMCxxxx==
 | --- | ---: |
 | source `chunks.jsonl` rows | 27,907 |
 | `text_layers.jsonl` rows | 27,907 |
-| `embedding_chunks.jsonl` rows | 25,910 |
-| skipped empty embedding | 89 |
+| `embedding_chunks.jsonl` rows | 25,882 |
+| skipped empty embedding | 118 |
 | skipped exact duplicate | 484 |
-| skipped contained overlap | 1,424 |
+| skipped contained overlap | 1,423 |
 
 ## 수정 내용
 
@@ -130,7 +131,7 @@ payload.text_fields.embedding_text   = vector input용 flat text
 
 변경:
 
-- `Tk9ERUlQX0hJTlQ9MTkyLjAuMCxxxx==`처럼 padding이 붙은 base64-like token을 embedding text 생성 단계에서 제거한다.
+- `Tk9ERUlQX0hJTlQ9MTkyLjAuMCxxxx==`처럼 padding이 붙은 base64-like token과 `Tk9ERUlQX0hJTlQ9MTkyLjAuMC`처럼 padding이 없는 base64-like token을 embedding text 생성 단계에서 제거한다.
 - `normalized_text`는 `embedding_text` 기반으로 생성되므로 동일하게 제거된다.
 - `text`, `markdown`, `raw_text`에는 원문 표시/보존 목적상 남긴다.
 
@@ -161,7 +162,7 @@ embedding_has_Tk9  : False
   - `payload.text`가 비어 있지 않은지
   - `text_fields.embedding_text`가 실제 candidate embedding input과 일치하는지
   - `raw_text`가 Qdrant payload에 유출되지 않는지
-  - `embedding_text`에 개행, 내부 marker, fenced code, URL, percent encoding, Arabic contamination이 없는지
+  - `embedding_text`에 개행, 내부 marker, fenced code, URL, percent encoding, Arabic contamination, base64-like token이 없는지
 
 ## 검증 결과
 
@@ -183,15 +184,15 @@ embedding_has_Tk9  : False
   "chunk_count": 27907,
   "embedding_chunks": {
     "input_chunk_count": 27907,
-    "embedding_chunk_count": 25910,
-    "skipped_empty_embedding_count": 89,
+    "embedding_chunk_count": 25882,
+    "skipped_empty_embedding_count": 118,
     "skipped_exact_duplicate_embedding_count": 484,
-    "skipped_contained_overlap_embedding_count": 1424
+    "skipped_contained_overlap_embedding_count": 1423
   },
   "text_layers": {
     "input_chunk_count": 27907,
     "text_layer_row_count": 27907,
-    "embedding_text_present_count": 27818
+    "embedding_text_present_count": 27789
   }
 }
 ```
@@ -212,9 +213,9 @@ embedding_has_Tk9  : False
 {
   "collection": "openshift_docs",
   "qdrant_url": "http://127.0.0.1:6335",
-  "candidate_count": 25910,
-  "target_embedding_point_count": 25910,
-  "skipped_source_point_count": 1997,
+  "candidate_count": 25882,
+  "target_embedding_point_count": 25882,
+  "skipped_source_point_count": 2025,
   "dry_run": true,
   "quality": {
     "empty_text": 0,
@@ -225,6 +226,7 @@ embedding_has_Tk9  : False
     "html_entity_angle": 0,
     "tab": 0,
     "arabic": 0,
+    "base64_like": 0,
     "embedding_not_flat": 0,
     "quote": 0,
     "raw_text_payload_keys": 0,
@@ -263,20 +265,20 @@ psycopg.OperationalError: failed to resolve host 'postgres'
 {
   "collection": "openshift_docs",
   "qdrant_url": "http://127.0.0.1:6335",
-  "candidate_count": 25910,
-  "target_embedding_point_count": 25910,
-  "skipped_source_point_count": 1997,
+  "candidate_count": 25882,
+  "target_embedding_point_count": 25882,
+  "skipped_source_point_count": 2025,
   "delete_skipped": true,
   "dry_run": false,
-  "upserted_count": 25910,
-  "deleted_skipped_count": 1997,
+  "upserted_count": 25882,
+  "deleted_skipped_count": 2025,
   "db_sync": {
-    "updated_embedding_text_count": 25910,
-    "suppressed_embedding_text_count": 1997
+    "updated_embedding_text_count": 25882,
+    "suppressed_embedding_text_count": 2025
   },
   "qdrant_index_entries": {
-    "recorded_index_entry_count": 25910,
-    "deleted_skipped_index_entry_count": 1997
+    "recorded_index_entry_count": 25882,
+    "deleted_skipped_index_entry_count": 2025
   }
 }
 ```
@@ -314,13 +316,56 @@ print(json.dumps(json.loads(urllib.request.urlopen(req, timeout=20).read().decod
 ```json
 {
   "result": {
-    "count": 25910
+    "count": 25882
   },
   "status": "ok"
 }
 ```
 
-### 5. J가 지적한 base64 sample chunk 확인
+### 5. DB text layer / index 상태 확인
+
+명령:
+
+```powershell
+@'
+import json, psycopg
+
+conn = psycopg.connect("postgresql://admin:admin123@127.0.0.1:5432/playbookstudio")
+queries = {
+    "official_chunks": "select count(*) from document_chunks where source_scope = 'official_docs'",
+    "official_embedding_nonempty": "select count(*) from document_chunks where source_scope = 'official_docs' and coalesce(embedding_text, '') <> ''",
+    "official_text_layers": "select count(*) from document_chunks where source_scope = 'official_docs' and metadata ? 'text_layers'",
+    "official_index_entries": "select count(*) from qdrant_index_entries q join document_chunks c on c.id = q.chunk_id where c.source_scope = 'official_docs' and q.collection = 'openshift_docs'",
+    "embedding_has_tk9": "select count(*) from document_chunks where source_scope = 'official_docs' and coalesce(embedding_text, '') like '%Tk9ERUlQ%'",
+    "normalized_has_tk9": "select count(*) from document_chunks where source_scope = 'official_docs' and coalesce(metadata->>'normalized_text', '') like '%Tk9ERUlQ%'",
+    "layer_embedding_has_tk9": "select count(*) from document_chunks where source_scope = 'official_docs' and coalesce(metadata->'text_layers'->>'embedding_text', '') like '%Tk9ERUlQ%'",
+    "layer_normalized_has_tk9": "select count(*) from document_chunks where source_scope = 'official_docs' and coalesce(metadata->'text_layers'->>'normalized_text', '') like '%Tk9ERUlQ%'",
+}
+result = {}
+with conn.cursor() as cur:
+    for key, sql in queries.items():
+        cur.execute(sql)
+        result[key] = cur.fetchone()[0]
+print(json.dumps(result, ensure_ascii=False, indent=2))
+'@ | .\.venv\Scripts\python.exe -
+```
+
+결과:
+
+```json
+{
+  "official_chunks": 27907,
+  "official_embedding_nonempty": 25882,
+  "official_text_layers": 27907,
+  "official_index_entries": 25882,
+  "embedding_has_tk9": 0,
+  "normalized_has_tk9": 0,
+  "layer_embedding_has_tk9": 0,
+  "layer_normalized_has_tk9": 0
+}
+```
+
+### 6. J가 지적한 base64 sample chunk 확인
 
 확인 대상:
 
@@ -396,8 +441,48 @@ embedding_has_Tk9  : False
 
 - `text`에는 코드블록 출력 예시가 남아 있으므로 `True`가 정상이다.
 - `normalized_text`와 `embedding_text`에서는 제거됐으므로 `False`가 정상이다.
+- 따라서 `embedding_chunks.jsonl` 전체 줄을 단순 `rg Tk9ERUlQ`로 검색하면 표시용 `text` 때문에 hit가 나올 수 있다. 검수는 JSON field 단위로 `normalized_text` / `embedding_text`를 따로 봐야 한다.
 
-### 6. Qdrant 전체 official docs payload scan
+field 단위 로컬 파일 scan:
+
+```powershell
+@'
+import json
+from pathlib import Path
+
+p = Path(r"corpus\sources\official\imported-gold\gold_corpus_ko\embeddings\embedding_chunks.jsonl")
+counts = {
+    "line_contains_tk9": 0,
+    "text_contains_tk9": 0,
+    "normalized_contains_tk9": 0,
+    "embedding_contains_tk9": 0,
+}
+for line in p.open(encoding="utf-8"):
+    if "Tk9ERUlQ" in line:
+        counts["line_contains_tk9"] += 1
+    row = json.loads(line)
+    if "Tk9ERUlQ" in str(row.get("text", "")):
+        counts["text_contains_tk9"] += 1
+    if "Tk9ERUlQ" in str(row.get("normalized_text", "")):
+        counts["normalized_contains_tk9"] += 1
+    if "Tk9ERUlQ" in str(row.get("embedding_text", "")):
+        counts["embedding_contains_tk9"] += 1
+print(json.dumps(counts, ensure_ascii=False, indent=2))
+'@ | .\.venv\Scripts\python.exe -
+```
+
+결과:
+
+```json
+{
+  "line_contains_tk9": 6,
+  "text_contains_tk9": 6,
+  "normalized_contains_tk9": 0,
+  "embedding_contains_tk9": 0
+}
+```
+
+### 7. Qdrant 전체 official docs payload scan
 
 명령:
 
@@ -417,12 +502,22 @@ body = {
 }
 
 url = "http://127.0.0.1:6335/collections/openshift_docs/points/scroll"
-base64_re = re.compile(r"(?<![A-Za-z0-9+/])(?:[A-Za-z0-9+/]{20,}={1,2})(?![A-Za-z0-9+/])")
+base64_re = re.compile(r"(?<![A-Za-z0-9+/])(?:[A-Za-z0-9+/]{20,}={0,2})(?![A-Za-z0-9+/])")
+
+def is_likely_base64_token(value):
+    token = str(value or "").rstrip("=")
+    return (
+        len(token) >= 20
+        and any(char.isupper() for char in token)
+        and any(char.islower() for char in token)
+        and any(char.isdigit() for char in token)
+    )
+
 counts = {
     "checked": 0,
     "embedding_newline": 0,
     "embedding_marker": 0,
-    "embedding_base64": 0,
+    "embedding_base64_like": 0,
     "normalized_newline": 0,
     "raw_text_leak": 0,
     "empty_payload_text": 0,
@@ -452,8 +547,8 @@ while True:
             counts["embedding_newline"] += 1
         if any(marker in embedding_text for marker in ("[CODE", "[/CODE]", "[TABLE", "[/TABLE]", "```")):
             counts["embedding_marker"] += 1
-        if base64_re.search(embedding_text):
-            counts["embedding_base64"] += 1
+        if any(is_likely_base64_token(match.group(0)) for match in base64_re.finditer(embedding_text)):
+            counts["embedding_base64_like"] += 1
         if "\n" in normalized_text or "\t" in normalized_text or "\r" in normalized_text:
             counts["normalized_newline"] += 1
         if "raw_text" in json.dumps(payload, ensure_ascii=False):
@@ -470,10 +565,10 @@ print(json.dumps(counts, ensure_ascii=False, indent=2))
 
 ```json
 {
-  "checked": 25910,
+  "checked": 25882,
   "embedding_newline": 0,
   "embedding_marker": 0,
-  "embedding_base64": 0,
+  "embedding_base64_like": 0,
   "normalized_newline": 0,
   "raw_text_leak": 0,
   "empty_payload_text": 0,
@@ -483,10 +578,10 @@ print(json.dumps(counts, ensure_ascii=False, indent=2))
 
 판단:
 
-- J가 지적한 base64-like output이 `embedding_text`에 남는 문제는 전체 official Qdrant payload 기준 0건으로 확인했다.
+- J가 지적한 base64-like output이 `embedding_text`에 남는 문제는 padding이 있는 형태와 없는 형태 모두 전체 official Qdrant payload 기준 0건으로 확인했다.
 - `payload.text`는 표시용이므로 코드블록과 개행이 남을 수 있다. 품질 검사는 `text_fields.embedding_text` 기준으로 수행했다.
 
-### 7. 코드/문서 검증
+### 8. 코드/문서 검증
 
 명령:
 
@@ -560,14 +655,14 @@ PASS test_qdrant_candidate_from_row_hashes_stable_payload
 ```text
 qdrant_url: http://127.0.0.1:6335
 collection: openshift_docs
-official_docs points: 25,910
+official_docs points: 25,882
 ```
 
 전체 official docs point scan 결과:
 
 | 항목 | 결과 |
 | --- | ---: |
-| checked official points | 25,910 |
+| checked official points | 25,882 |
 | `embedding_text` newline/tab | 0 |
 | `embedding_text` marker/fence | 0 |
 | `embedding_text` base64-like token | 0 |
@@ -622,15 +717,23 @@ feat/corpus_embedding_text_s
 
 ```text
 1278063 fix: separate official display and embedding text
+c1d2b64 docs: record official corpus correction evidence
 ```
 
-## 다음 작업자 참고
+## 참고
 
 이번 수정은 v0.1.4 계약에 맞게 official corpus의 텍스트 계층을 바로잡은 작업이다.
 
-다음 작업에서 추가로 판단하면 좋은 부분:
+이번 재점검에서 추가 확인한 부분:
+
+- padding 없는 base64-like token 4건이 DB 검색 계층에 남아 있던 것을 추가 발견했고, 필터와 Qdrant 품질 게이트를 확장했다.
+- 재생성/재적재 후 DB의 `document_chunks.embedding_text`, `metadata.text_layers.embedding_text`, `metadata.text_layers.normalized_text`에서 `Tk9ERUlQ` 계열 문자열 0건을 확인했다.
+- Qdrant official docs payload 전체 scan에서도 `embedding_base64_like=0`을 확인했다.
+
+아직 "완료"로 과하게 말하면 안 되는 부분:
 
 - 반복이 많은 표 chunk는 `normalized_text == embedding_text`가 될 수 있다. 이 자체는 오류가 아니지만, retrieval rank에서 낮게 보거나 metadata로 table 성격을 반영할 수 있다.
-- BM25 loader가 아직 별도 legacy `bm25_corpus.jsonl`을 본다면, 후속 작업에서 `normalized_text`를 읽도록 전환하는 것이 더 자연스럽다.
+- BM25 runtime loader는 후속 확인/수정이 필요하다. 현재 구조상 `normalized_text`를 항상 직접 토큰화한다고 단정하면 안 된다.
+- docker compose seed 경로가 기존 collection에 대해 payload만 refresh하고 vector를 재임베딩하지 않는 경로를 탈 수 있는지 추가 확인이 필요하다. 새 collection 또는 전체 re-upsert 경로에서는 문제가 작지만, 기존 collection 재사용 시 stale vector 리스크가 남을 수 있다.
 - 새 chunk size로 rechunk한 작업은 아니므로, 청크 크기 정책을 변경하려면 별도 회의와 산출물이 필요하다.
 - `text`/`markdown`에는 표시용 코드블록이 남는 것이 정상이다. 임베딩 품질 검사는 `text_fields.embedding_text` 기준으로 보는 것이 맞다.

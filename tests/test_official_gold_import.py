@@ -319,6 +319,7 @@ def test_write_official_embedding_chunks_removes_encoded_output_only_from_search
                     "[CODE language=\"shell-session\" caption=\"출력 예\"]\n"
                     "Tk9ERUlQX0hJTlQ9MTkyLjAuMCxxxx==\n"
                     "[/CODE]\n\n"
+                    "1. `encoded contents`를 예 `Tk9ERUlQX0hJTlQ9MTkyLjAuMC` 값으로 바꿉니다.\n\n"
                     "클러스터를 배포하기 전에 `master` 및 `worker` 역할에 대한 머신 구성 매니페스트를 생성합니다."
                 ),
             }
@@ -332,7 +333,10 @@ def test_write_official_embedding_chunks_removes_encoded_output_only_from_search
     assert "```shell" in row["text"]
     assert "Tk9ERUlQ" not in row["embedding_text"]
     assert "Tk9ERUlQ" not in row["normalized_text"]
-    assert row["embedding_text"] == "클러스터를 배포하기 전에 master 및 worker 역할에 대한 머신 구성 매니페스트를 생성합니다"
+    assert row["embedding_text"] == (
+        "1 encoded contents 를 예 값으로 바꿉니다 "
+        "클러스터를 배포하기 전에 master 및 worker 역할에 대한 머신 구성 매니페스트를 생성합니다"
+    )
 
 
 def test_write_official_text_layers_exports_four_layer_contract():

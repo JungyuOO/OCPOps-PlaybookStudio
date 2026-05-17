@@ -41,6 +41,7 @@ from play_book_studio.ingestion.official_gold_import import (
 
 
 ARABIC_RE = r"[\u0600-\u06ff]"
+BASE64_LIKE_RE = re.compile(r"(?<![A-Za-z0-9+/])(?:[A-Za-z0-9+/]{20,}={0,2})(?![A-Za-z0-9+/])")
 
 
 def build_official_embedding_qdrant_candidates(
@@ -471,6 +472,7 @@ def _candidate_quality_summary(candidates: tuple[QdrantChunkCandidate, ...]) -> 
         "html_entity_angle": 0,
         "tab": 0,
         "arabic": 0,
+        "base64_like": 0,
         "embedding_not_flat": 0,
         "quote": 0,
         "raw_text_payload_keys": 0,
@@ -501,6 +503,8 @@ def _candidate_quality_summary(candidates: tuple[QdrantChunkCandidate, ...]) -> 
             counts["tab"] += 1
         if re.search(ARABIC_RE, text):
             counts["arabic"] += 1
+        if any(_is_likely_base64_token(match.group(0)) for match in BASE64_LIKE_RE.finditer(text)):
+            counts["base64_like"] += 1
         if "\n" in text or "\r" in text or "\t" in text:
             counts["embedding_not_flat"] += 1
         if '"' in text or "'" in text:
@@ -514,6 +518,17 @@ def _candidate_quality_summary(candidates: tuple[QdrantChunkCandidate, ...]) -> 
         if "\n" in normalized_text or "\t" in normalized_text or "|" in normalized_text:
             counts["normalized_not_flat"] += 1
     return counts
+
+
+def _is_likely_base64_token(value: str) -> bool:
+    token = str(value or "").rstrip("=")
+    if len(token) < 20:
+        return False
+    return (
+        any(char.isupper() for char in token)
+        and any(char.islower() for char in token)
+        and any(char.isdigit() for char in token)
+    )
 
 
 def _validate_candidates(

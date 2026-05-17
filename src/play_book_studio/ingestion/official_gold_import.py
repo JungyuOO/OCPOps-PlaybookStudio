@@ -48,6 +48,7 @@ _EMBEDDING_HTML_ANCHOR_RE = re.compile(r"</?a\b[^>]*>", re.IGNORECASE)
 _EMBEDDING_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\((?:https?://|/docs/)[^)]+\)")
 _EMBEDDING_DOCS_URL_RE = re.compile(r"https?://docs\.redhat\.com/\S+|/docs/ocp/\S+", re.IGNORECASE)
 _EMBEDDING_BASE64_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9+/])(?:[A-Za-z0-9+/]{20,}={1,2})(?![A-Za-z0-9+/])")
+_EMBEDDING_BASE64_UNPADDED_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9+/])(?:[A-Za-z0-9+/]{20,})(?![A-Za-z0-9+/])")
 
 
 def _official_gold_storage_key(source_key: str = "") -> str:
@@ -392,7 +393,16 @@ def _keyword_normalized_chunk_text(row: dict[str, Any]) -> str:
 def _remove_embedding_encoded_noise(text: str) -> str:
     """Remove encoded sample payloads from search text while preserving source/display layers."""
 
-    return _EMBEDDING_BASE64_TOKEN_RE.sub(" ", str(text or ""))
+    cleaned = _EMBEDDING_BASE64_TOKEN_RE.sub(" ", str(text or ""))
+
+    def remove_likely_unpadded_base64(match: re.Match[str]) -> str:
+        value = match.group(0)
+        has_upper = any(char.isupper() for char in value)
+        has_lower = any(char.islower() for char in value)
+        has_digit = any(char.isdigit() for char in value)
+        return " " if has_upper and has_lower and has_digit else value
+
+    return _EMBEDDING_BASE64_UNPADDED_TOKEN_RE.sub(remove_likely_unpadded_base64, cleaned)
 
 
 def _flatten_keyword_text(text: str) -> str:
