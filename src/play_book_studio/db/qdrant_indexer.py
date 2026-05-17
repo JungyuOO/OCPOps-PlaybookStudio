@@ -327,7 +327,7 @@ def _search_json_payload_from_legacy(payload: dict[str, Any], *, row: dict[str, 
         or payload.get("text")
         or ""
     )
-    embedding_text = _payload_text_from_row(row) or str(payload.get("text") or "")
+    embedding_text = _payload_embedding_text_from_row(row) or str(payload.get("text") or "")
     commands = _string_list(search_signals.get("commands")) or _string_list(payload.get("cli_commands"))
     objects = _string_list(search_signals.get("objects")) or _string_list(payload.get("k8s_objects"))
     operators = _string_list(search_signals.get("operators")) or _string_list(payload.get("operator_names"))
@@ -805,8 +805,21 @@ def _json_list(value: Any) -> list[Any]:
 
 
 def _payload_text_from_row(row: dict[str, Any]) -> str:
+    markdown = str(row.get("markdown") or "").strip()
+    if markdown:
+        return markdown
+    text = str(row.get("text") or "").strip()
+    if text:
+        return text
+    return str(row.get("embedding_text") or "")
+
+
+def _payload_embedding_text_from_row(row: dict[str, Any]) -> str:
     if "embedding_text" in row and row.get("embedding_text") is not None:
         return str(row.get("embedding_text") or "")
+    text = str(row.get("text") or "").strip()
+    if text:
+        return text
     return str(row.get("markdown") or "")
 
 

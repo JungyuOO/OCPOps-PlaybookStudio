@@ -47,6 +47,7 @@ _EMBEDDING_ORPHAN_CLOSE_MARKER_RE = re.compile(r"(?<!\[)/(?:CODE|TABLE)\]", re.I
 _EMBEDDING_HTML_ANCHOR_RE = re.compile(r"</?a\b[^>]*>", re.IGNORECASE)
 _EMBEDDING_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\((?:https?://|/docs/)[^)]+\)")
 _EMBEDDING_DOCS_URL_RE = re.compile(r"https?://docs\.redhat\.com/\S+|/docs/ocp/\S+", re.IGNORECASE)
+_EMBEDDING_BASE64_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9+/])(?:[A-Za-z0-9+/]{20,}={1,2})(?![A-Za-z0-9+/])")
 
 
 def _official_gold_storage_key(source_key: str = "") -> str:
@@ -380,11 +381,18 @@ def _embedding_chunk_text(row: dict[str, Any]) -> str:
     text = _flatten_plain_text(_normalize_embedding_layout(text))
     for token, value in protected:
         text = text.replace(token, value)
+    text = _remove_embedding_encoded_noise(text)
     return re.sub(r"\s+", " ", text).strip()
 
 
 def _keyword_normalized_chunk_text(row: dict[str, Any]) -> str:
     return _flatten_keyword_text(_embedding_chunk_text(row))
+
+
+def _remove_embedding_encoded_noise(text: str) -> str:
+    """Remove encoded sample payloads from search text while preserving source/display layers."""
+
+    return _EMBEDDING_BASE64_TOKEN_RE.sub(" ", str(text or ""))
 
 
 def _flatten_keyword_text(text: str) -> str:
@@ -726,6 +734,7 @@ def _embedding_navigation_labels(row: dict[str, Any]) -> set[str]:
 
 
 def _embedding_chunk_export_row(row: dict[str, Any]) -> dict[str, Any]:
+    markdown = _normalized_chunk_text(row)
     embedding_text = _embedding_chunk_text(row)
     normalized_text = _keyword_normalized_chunk_text(row)
     section_path = _section_path(row)
@@ -764,7 +773,7 @@ def _embedding_chunk_export_row(row: dict[str, Any]) -> dict[str, Any]:
         "review_status": str(row.get("review_status") or ""),
         "normalized_text": normalized_text,
         "embedding_text": embedding_text,
-        "text": embedding_text,
+        "text": markdown,
         "token_count": len(embedding_text.split()),
     }
 

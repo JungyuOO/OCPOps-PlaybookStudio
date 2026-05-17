@@ -264,7 +264,10 @@ def test_write_official_embedding_chunks_creates_clean_embedding_projection():
 
     assert result["input_chunk_count"] == 1
     assert result["embedding_chunk_count"] == 1
-    assert row["text"] == row["embedding_text"]
+    assert row["text"] != row["embedding_text"]
+    assert row["text"].startswith("PVC가 Pending이면")
+    assert "```shell" in row["text"]
+    assert "$ oc describe pvc <pvc-name> -n <namespace>" in row["text"]
     assert row["embedding_text"] == (
         "PVC가 Pending이면 먼저 이벤트를 확인합니다 "
         "$ oc describe pvc <pvc-name> -n <namespace> 상태 의미 Pending 바인딩 실패"
@@ -289,6 +292,47 @@ def test_write_official_embedding_chunks_creates_clean_embedding_projection():
     assert "\n" not in row["embedding_text"]
     assert "\n" not in row["normalized_text"]
     assert "|" not in row["normalized_text"]
+
+
+def test_write_official_embedding_chunks_removes_encoded_output_only_from_search_layers():
+    chunks_path = TEST_TMP / "embedding-encoded-output-source.jsonl"
+    output_path = TEST_TMP / "embeddings" / "embedding_encoded_output_chunks.jsonl"
+    _write_jsonl(
+        chunks_path,
+        [
+            {
+                "chunk_id": "13131313-1313-1313-1313-131313131313",
+                "book_slug": "support",
+                "book_title": "지원",
+                "chapter": "7장. 문제 해결",
+                "section": "7.5.1.1. 선택 사항: 기본 노드 IP 선택 논리를 덮어 쓰기",
+                "section_path": [
+                    "7장. 문제 해결",
+                    "7.5. 네트워크 문제 해결",
+                    "7.5.1. 네트워크 인터페이스 선택 방법",
+                    "7.5.1.1. 선택 사항: 기본 노드 IP 선택 논리를 덮어 쓰기",
+                ],
+                "text": (
+                    "지원\n"
+                    "7장. 문제 해결 > 7.5. 네트워크 문제 해결 > 7.5.1. 네트워크 인터페이스 선택 방법 > "
+                    "7.5.1.1. 선택 사항: 기본 노드 IP 선택 논리를 덮어 쓰기\n\n"
+                    "[CODE language=\"shell-session\" caption=\"출력 예\"]\n"
+                    "Tk9ERUlQX0hJTlQ9MTkyLjAuMCxxxx==\n"
+                    "[/CODE]\n\n"
+                    "클러스터를 배포하기 전에 `master` 및 `worker` 역할에 대한 머신 구성 매니페스트를 생성합니다."
+                ),
+            }
+        ],
+    )
+
+    write_official_embedding_chunks(chunks_path, output_path)
+    row = json.loads(output_path.read_text(encoding="utf-8").strip())
+
+    assert "Tk9ERUlQ" in row["text"]
+    assert "```shell" in row["text"]
+    assert "Tk9ERUlQ" not in row["embedding_text"]
+    assert "Tk9ERUlQ" not in row["normalized_text"]
+    assert row["embedding_text"] == "클러스터를 배포하기 전에 master 및 worker 역할에 대한 머신 구성 매니페스트를 생성합니다"
 
 
 def test_write_official_text_layers_exports_four_layer_contract():
@@ -433,7 +477,13 @@ def test_build_official_embedding_qdrant_candidates_uses_clean_text_without_raw_
         "product": "openshift",
         "version": "4.20",
         "locale": "ko",
-        "text": "스토리지\n1장. 스토리지 > 1.1 PVC Pending\n\n$ oc describe pvc <pvc-name>",
+        "text": (
+            "스토리지\n"
+            "1장. 스토리지 > 1.1 PVC Pending\n\n"
+            "[CODE language=\"shell-session\"]\n"
+            "$ oc describe pvc <pvc-name>\n"
+            "[/CODE]"
+        ),
     }
     _write_jsonl(chunks_path, [source_row])
     write_official_embedding_chunks(chunks_path, embedding_path)
@@ -446,10 +496,11 @@ def test_build_official_embedding_qdrant_candidates_uses_clean_text_without_raw_
     assert len(candidates) == 1
     candidate = candidates[0]
     assert candidate.embedding_text == "$ oc describe pvc <pvc-name>"
-    assert candidate.payload["text"] == "$ oc describe pvc <pvc-name>"
+    assert "```shell" in candidate.payload["text"]
+    assert "$ oc describe pvc <pvc-name>" in candidate.payload["text"]
+    assert candidate.payload["markdown"] == candidate.payload["text"]
     assert candidate.payload["text_fields"]["embedding_text"] == "$ oc describe pvc <pvc-name>"
     assert candidate.payload["text_fields"]["normalized_text"] == "oc describe pvc pvc name"
-    assert candidate.payload["text"] == candidate.payload["text_fields"]["embedding_text"]
     assert candidate.payload["chunk_metadata"]["text_layers"]["embedding_text"] == "$ oc describe pvc <pvc-name>"
     assert candidate.payload["chunk_metadata"]["text_layers"]["normalized_text"] == "oc describe pvc pvc name"
     assert "raw_text" not in json.dumps(candidate.payload, ensure_ascii=False)

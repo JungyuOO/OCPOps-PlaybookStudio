@@ -474,7 +474,8 @@ def _candidate_quality_summary(candidates: tuple[QdrantChunkCandidate, ...]) -> 
         "embedding_not_flat": 0,
         "quote": 0,
         "raw_text_payload_keys": 0,
-        "payload_text_mismatch": 0,
+        "payload_text_empty": 0,
+        "payload_embedding_text_mismatch": 0,
         "normalized_not_flat": 0,
     }
     for candidate in candidates:
@@ -506,8 +507,10 @@ def _candidate_quality_summary(candidates: tuple[QdrantChunkCandidate, ...]) -> 
             counts["quote"] += 1
         if '"raw_text"' in payload_dump:
             counts["raw_text_payload_keys"] += 1
-        if payload_text != payload_embedding_text or payload_embedding_text != text:
-            counts["payload_text_mismatch"] += 1
+        if not payload_text.strip():
+            counts["payload_text_empty"] += 1
+        if payload_embedding_text != text:
+            counts["payload_embedding_text_mismatch"] += 1
         if "\n" in normalized_text or "\t" in normalized_text or "|" in normalized_text:
             counts["normalized_not_flat"] += 1
     return counts

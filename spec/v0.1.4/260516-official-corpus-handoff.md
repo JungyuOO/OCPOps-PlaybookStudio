@@ -79,7 +79,8 @@ v0.1.4 계약 중 official corpus의 청킹/임베딩 텍스트 계층 정리는
 `src/play_book_studio/db/qdrant_indexer.py`
 
 - Qdrant payload에 `payload_version=1` 추가.
-- `payload.text`를 `document_chunks.embedding_text` 기준으로 고정.
+- `payload.text`는 `document_chunks.markdown` 기준의 표시/답변용 본문으로 고정.
+- `text_fields.embedding_text`는 `document_chunks.embedding_text` 기준의 벡터 입력용 본문으로 분리.
 - `text_fields.embedding_text`, `text_fields.normalized_text` payload 계약 반영.
 - Qdrant payload의 `chunk_metadata`에서 `raw_text`와 `text_layers.raw_text`가 유출되지 않도록 필터링.
 
@@ -177,7 +178,8 @@ v0.1.4 계약 중 official corpus의 청킹/임베딩 텍스트 계층 정리는
 - Qdrant `openshift_docs`
   - official docs points: `25,910`
   - `payload_version=1`
-  - `payload.text == text_fields.embedding_text`
+  - `payload.text`: 표시/답변용 markdown
+  - `text_fields.embedding_text`: 벡터 입력용 flat text
   - `raw_text` payload 미포함
 - DB `qdrant_index_entries`
   - official index entries: `25,910`
@@ -247,7 +249,8 @@ compose seed 완료 판단 기준:
 | DB official `document_chunks` | `27,907` |
 | DB `metadata.text_layers` rows | `27,907` |
 | DB `qdrant_index_entries` official rows | `25,910` |
-| Qdrant `payload.text == text_fields.embedding_text` mismatch | `0` |
+| Qdrant `text_fields.embedding_text` mismatch | `0` |
+| Qdrant `payload.text` empty | `0` |
 | Qdrant `raw_text` payload 유출 | `0` |
 
 주의:
@@ -295,7 +298,8 @@ Qdrant official docs 전체 감사:
 | official docs points | 25,910 |
 | `payload_version != 1` | 0 |
 | `text_fields` 누락 | 0 |
-| `payload.text != text_fields.embedding_text` | 0 |
+| `text_fields.embedding_text` mismatch | 0 |
+| `payload.text` empty | 0 |
 | `raw_text` payload 유출 | 0 |
 | empty text | 0 |
 | newline/tab | 0 |

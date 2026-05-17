@@ -82,7 +82,8 @@ v0.1.4 협의 문서의 방향에 맞춰 official corpus의 청크 텍스트를 
 
 - `src/play_book_studio/db/qdrant_indexer.py`
   - Qdrant payload에서 `raw_text` 유출 방지.
-  - `payload.text == text_fields.embedding_text` 계약 유지.
+  - `payload.text`는 표시/답변용 `markdown`으로 유지.
+  - `text_fields.embedding_text`를 벡터 입력용 필드로 분리.
   - `text_fields.normalized_text`를 별도 BM25/keyword용 필드로 보존.
 
 - `src/play_book_studio/cli.py`
@@ -136,7 +137,8 @@ docker compose --profile seed run --rm official-corpus-seed
 - DB `metadata.text_layers` rows: `27,907`
 - official `qdrant_index_entries`: `25,910`
 - Qdrant payload raw text leak: `0`
-- Qdrant `payload.text != text_fields.embedding_text`: `0`
+- Qdrant `text_fields.embedding_text` mismatch: `0`
+- Qdrant `payload.text` empty: `0`
 
 주의:
 
@@ -171,7 +173,8 @@ Qdrant/DB 반영 결과:
 | Arabic character contamination | 0 |
 | quote / backslash contamination | 0 |
 | Qdrant payload raw_text key | 0 |
-| `payload.text` / `text_fields.embedding_text` mismatch | 0 |
+| `text_fields.embedding_text` mismatch | 0 |
+| Qdrant `payload.text` empty | 0 |
 | non-flat `normalized_text` | 0 |
 | Qdrant official points | 25,910 |
 | Qdrant `payload_version != 1` | 0 |
@@ -195,7 +198,8 @@ Qdrant/DB 반영 결과:
 
 샘플 확인:
 
-- `text == text_fields.embedding_text`: true
+- `payload.text`: 표시/답변용 markdown
+- `text_fields.embedding_text`: 벡터 입력용 flat text
 - `normalized_text == embedding_text`: false
 - `section_path`: 있음
 - `toc_path`: 있음
@@ -311,8 +315,10 @@ url=f'http://127.0.0.1:6335/collections/openshift_docs/points/{point_id}'
 payload=json.loads(urllib.request.urlopen(url, timeout=10).read().decode('utf-8'))['result']['payload']
 print(json.dumps({
   'chunk_id': payload.get('chunk_id'),
-  'text_equals_embedding': payload.get('text') == payload.get('text_fields',{}).get('embedding_text'),
+  'display_text_has_newline': '\n' in (payload.get('text') or ''),
+  'payload_embedding_matches_field': payload.get('text_fields',{}).get('embedding_text') is not None,
   'normalized_equals_embedding': payload.get('text_fields',{}).get('normalized_text') == payload.get('text_fields',{}).get('embedding_text'),
+  'display_text': payload.get('text'),
   'normalized_text': payload.get('text_fields',{}).get('normalized_text'),
   'embedding_text': payload.get('text_fields',{}).get('embedding_text'),
   'section_path': payload.get('section_path'),

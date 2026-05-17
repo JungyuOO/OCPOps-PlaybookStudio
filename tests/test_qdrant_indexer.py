@@ -118,7 +118,9 @@ def test_qdrant_payload_from_row_matches_vector_retriever_contract():
         "/uploads/documents/cccccccc-cccc-cccc-cccc-cccccccccccc/chunks/"
         "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
     )
-    assert payload["text"] == "Architecture\nRouter sends traffic."
+    assert payload["text"] == "# Architecture\n\nRouter sends traffic."
+    assert payload["markdown"] == "# Architecture\n\nRouter sends traffic."
+    assert payload["text_fields"]["embedding_text"] == "Architecture\nRouter sends traffic."
     assert payload["source_type"] == "uploaded_document"
     assert payload["source_collection"] == "uploads"
     assert payload["section_path"] == ["Architecture"]
@@ -212,7 +214,8 @@ def test_qdrant_payload_from_row_preserves_official_gold_metadata():
     assert payload["search_signals"]["commands"] == ["oc get routes"]
     assert payload["search_signals"]["command_families"] == ["oc_get"]
     assert payload["search_signals"]["objects"] == ["Route", "Service"]
-    assert payload["text"] == "Architecture\nRouter sends traffic."
+    assert payload["text"] == "# Architecture\n\nRouter sends traffic."
+    assert payload["markdown"] == "# Architecture\n\nRouter sends traffic."
     assert payload["text_fields"]["embedding_text"] == "Architecture\nRouter sends traffic."
 
 
