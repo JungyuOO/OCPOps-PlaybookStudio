@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>260517 Official Retrieval Source Check</title>
+<style>
+body{font-family:Arial,'Malgun Gothic',sans-serif;line-height:1.55;margin:32px;max-width:1180px;color:#172033}
+h1,h2{color:#0f3563} code,pre{background:#f5f7fb;border:1px solid #d8e0ef;border-radius:6px} pre{padding:12px;overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:13px} th,td{border:1px solid #d8e0ef;padding:8px;vertical-align:top} th{background:#edf3ff}
+.miss{color:#b42318;font-weight:700} .pass{color:#067647;font-weight:700} .note{background:#eef8f2;border-left:4px solid #12b76a;padding:12px;margin:16px 0}
+</style>
+</head>
+<body>
+<h1>260517 Official Retrieval Source Check</h1>
+<h2>이 문서의 목적</h2>
+<div class="note">
+이번 확인은 변경된 official corpus / embedding 데이터가 실제 검색 단계에서 기대한 근거 문서를 잘 가져오는지 보기 위한 작업입니다.<br><br>
+J님이 요청한 범위에 맞춰 답변 생성(answer LLM), reranker, UI 답변 문장은 평가하지 않았고, 검색 결과의 source만 확인했습니다. 즉 “챗봇이 최종 답변을 잘했는가”가 아니라 “검색기가 먼저 올바른 근거 문서를 찾았는가”를 본 결과입니다.<br><br>
+결과를 읽을 때는 전체 점수보다 두 가지를 보면 됩니다. 첫째, 기대 문서가 top5 안에 들어왔는지입니다. 둘째, 상위 근거의 <code>embedding_text</code> / <code>normalized_text</code>에 base64, 코드 마커, 표 마커 같은 정제 노이즈가 남아있는지입니다.
+</div>
+<h2>판단 원리</h2>
+<div class="note">
+이번 테스트는 RAG 전체 답변 품질을 본 것이 아니라, 검색 단계에서 근거 후보가 어디에서 오는지를 본 것입니다. 흐름을 단순화하면 <code>사용자 질문 → 질문 정규화/확장 → BM25 키워드 검색 + embedding vector 검색 → 결과 결합 → top-k 근거 반환</code> 순서입니다.<br><br>
+청크 정제 문제가 1차 원인이라면 보통 <code>embedding_text</code>에 base64, <code>[CODE]</code>, <code>[TABLE]</code>, markdown fence 같은 노이즈가 남거나, 목차/표 찌꺼기가 의미 본문처럼 검색되거나, 깨진 텍스트가 여러 질문에서 반복적으로 상위 노출되는 증상이 나타날 수 있습니다.<br><br>
+이번 확인에서는 실패 2건의 상위 근거에서 그런 정제 노이즈는 확인하지 못했습니다. 그래서 현재 증거 기준으로는 청크 오염만을 1차 원인으로 단정하기 어렵고, 질문 해석이나 기대 문서 기준도 함께 확인해야 한다고 보았습니다.<br><br>
+다만 이것이 “청크 영향이 전혀 없다”는 뜻은 아닙니다. 후속 확인이 필요하면 실패 질문의 원문 청크, <code>embedding_text</code>, <code>normalized_text</code>, 기대 문서 쪽 chunk 존재 여부, 질문 해석/메타정보 매칭 기준을 나란히 비교하는 방식이 좋겠습니다.
+</div>
+<h2>Summary</h2>
+<ul>
+<li>확인 범위: 변경된 official corpus / embedding 데이터의 retrieval source 결과만 확인했습니다.</li>
+<li>제외 범위: answer LLM 답변 생성, reranker 품질, UI 답변 문장은 이번 테스트에서 제외했습니다.</li>
+<li>실행 조건: reranker는 끄고(<code>RERANKER_ENABLED=false</code>), 로컬 DB(<code>127.0.0.1:5432</code>)와 Qdrant <code>openshift_docs</code> 기준으로 실행했습니다.</li>
+<li>전체 결과: 18개 질문 중 16개는 기대 문서가 top5 안에 포함됐고, 2개는 기대 문서 기준과 실제 검색 결과가 달랐습니다.</li>
+<li>지표 해석: hit@1=0.7222, hit@3=0.8889, hit@5=0.8889입니다. 즉 첫 번째 결과부터 맞은 케이스가 약 72%, 상위 5개 안에 기대 문서가 들어온 케이스가 약 89%입니다.</li>
+<li>reranker 확인: reranker를 끈 조건에서 실행했고, rerank로 top1이 바뀐 케이스는 0건입니다.</li>
+<li>source 확인: 상위 검색 결과 90개 중 89개는 official docs였고, 1개는 study docs였습니다.</li>
+<li>정제 상태 확인: 상위 근거의 <code>embedding_text</code> / <code>normalized_text</code>에서 base64, CODE/TABLE marker, markdown fence, anchor noise는 확인되지 않았습니다.</li>
+</ul>
+<h2>Command</h2>
+<pre>$env:RERANKER_ENABLED=&quot;false&quot;
+./.venv/Scripts/python.exe -m play_book_studio.cli retrieval-eval `
+  --cases corpus/manifests/eval/retrieval_eval_cases.jsonl `
+  --top-k 5 `
+  --candidate-k 10 `
+  --database-url postgresql://admin:admin123@127.0.0.1:5432/playbookstudio `
+  --output reports/retrieval/260517-official-source-check.json</pre>
+<h2>Case Results</h2>
+<table><thead><tr><th>id</th><th>status</th><th>query</th><th>expected</th><th>top5 book slugs</th></tr></thead><tbody>
+<tr><td>ops-001</td><td class="pass">PASS@1</td><td>etcd 백업은 어떻게 하나?</td><td>backup_and_restore, etcd, postinstallation_configuration</td><td>postinstallation_configuration &gt; etcd &gt; postinstallation_configuration &gt; etcd &gt; etcd</td></tr><tr><td>ops-002</td><td class="pass">PASS@1</td><td>클러스터 업데이트 전에 확인할 사항은?</td><td>updating_clusters, release_notes</td><td>release_notes &gt; updating_clusters &gt; updating_clusters &gt; updating_clusters &gt; updating_clusters</td></tr><tr><td>ops-003</td><td class="pass">PASS@1</td><td>이미지 레지스트리 저장소를 구성하려면?</td><td>registry, images</td><td>registry &gt; registry &gt; registry &gt; registry &gt; disconnected_environments</td></tr><tr><td>ops-004</td><td class="pass">PASS@1</td><td>Route와 Ingress 차이가 뭐야?</td><td>ingress_and_load_balancing, networking_overview</td><td>ingress_and_load_balancing &gt; ingress_and_load_balancing &gt; ingress_and_load_balancing &gt; ingress_and_load_balancing &gt; registry</td></tr><tr><td>ops-005</td><td class="pass">PASS@1</td><td>연결이 끊긴 환경에서 이미지 미러링은 어떻게 준비해?</td><td>disconnected_environments, images</td><td>disconnected_environments &gt; disconnected_environments &gt; disconnected_environments &gt; disconnected_environments &gt; disconnected_environments</td></tr><tr><td>ops-006</td><td class="pass">PASS@3</td><td>노드 드레이닝은 어떻게 동작해?</td><td>nodes, machine_management</td><td>support &gt; support &gt; nodes &gt; images &gt; support</td></tr><tr><td>ops-007</td><td class="pass">PASS@1</td><td>노드 CPU랑 메모리 사용량은 어떻게 확인해?</td><td>nodes, support</td><td>support &gt; support &gt; nodes &gt; nodes &gt; nodes</td></tr><tr><td>ops-008</td><td class="miss">MISS@5</td><td>API 서버 인증서 만료 여부는 어떻게 확인해?</td><td>cli_tools, security_and_compliance</td><td>support &gt; images &gt; support &gt; support &gt; kmsc-operations</td></tr><tr><td>learn-001</td><td class="pass">PASS@1</td><td>OpenShift 아키텍처를 처음 설명해줘</td><td>architecture, overview</td><td>architecture &gt; architecture &gt; architecture &gt; operators &gt; overview</td></tr><tr><td>learn-002</td><td class="pass">PASS@3</td><td>Operator가 뭐고 왜 필요한가?</td><td>operators, overview</td><td>disconnected_environments &gt; disconnected_environments &gt; operators &gt; operators &gt; postinstallation_configuration</td></tr><tr><td>learn-003</td><td class="pass">PASS@1</td><td>observability와 monitoring은 어떻게 달라?</td><td>observability_overview, monitoring</td><td>observability_overview &gt; observability_overview &gt; observability_overview &gt; observability_overview &gt; observability_overview</td></tr><tr><td>learn-004</td><td class="pass">PASS@1</td><td>Machine Config Operator는 뭐야?</td><td>machine_configuration, operators</td><td>machine_configuration &gt; machine_configuration &gt; postinstallation_configuration &gt; postinstallation_configuration &gt; installation_overview</td></tr><tr><td>follow-up-001</td><td class="pass">PASS@1</td><td>그거 복구는?</td><td>backup_and_restore, etcd, postinstallation_configuration</td><td>postinstallation_configuration &gt; nodes &gt; nodes &gt; security_and_compliance &gt; machine_configuration</td></tr><tr><td>follow-up-002</td><td class="pass">PASS@1</td><td>그 설정은 어디서 바꿔?</td><td>machine_configuration, updating_clusters, operators</td><td>updating_clusters &gt; updating_clusters &gt; updating_clusters &gt; updating_clusters &gt; updating_clusters</td></tr><tr><td>follow-up-003</td><td class="pass">PASS@3</td><td>아까 말한 이미지 저장소는?</td><td>registry, images</td><td>disconnected_environments &gt; disconnected_environments &gt; registry &gt; registry &gt; installation_overview</td></tr><tr><td>ambiguous-001</td><td class="miss">MISS@5</td><td>로그는 어디서 봐?</td><td>logging, monitoring, observability_overview</td><td>advanced_networking &gt; advanced_networking &gt; security_and_compliance &gt; security_and_compliance &gt; advanced_networking</td></tr><tr><td>ambiguous-002</td><td class="pass">PASS@1</td><td>설치 후에 뭘 먼저 해야 해?</td><td>postinstallation_configuration, installation_overview</td><td>installation_overview &gt; installation_overview &gt; installation_overview &gt; installation_overview &gt; installation_overview</td></tr><tr><td>ambiguous-003</td><td class="pass">PASS@1</td><td>보안 관련 기본 문서는 뭐가 중심이야?</td><td>security_and_compliance, authentication_and_authorization</td><td>security_and_compliance &gt; security_and_compliance &gt; security_and_compliance &gt; security_and_compliance &gt; security_and_compliance</td></tr>
+</tbody></table>
+<h2>기대 문서 확인이 필요한 2건</h2>
+<ul><li><strong>ops-008</strong> API 서버 인증서 만료 여부는 어떻게 확인해?<br>expected: cli_tools, security_and_compliance<br>actual top5: support &gt; images &gt; support &gt; support &gt; kmsc-operations<br>top1 section: support / 7.1.11. 작업자 노드 설치 문제 조사<br>note: 상위 근거의 <code>embedding_text</code> / <code>normalized_text</code>에서는 base64나 코드 마커 같은 정제 노이즈를 확인하지 못했습니다. 다만 기대 문서 기준과 실제 검색 결과가 달라서, 이 질문에서 우선 확인해야 할 문서 기준을 함께 맞춰보면 좋겠습니다.</li><li><strong>ambiguous-001</strong> 로그는 어디서 봐?<br>expected: logging, monitoring, observability_overview<br>actual top5: advanced_networking &gt; advanced_networking &gt; security_and_compliance &gt; security_and_compliance &gt; advanced_networking<br>top1 section: advanced_networking / 1.4. PodNetworkConnectivityCheck 오브젝트 필드<br>note: 상위 근거의 <code>embedding_text</code> / <code>normalized_text</code>에서는 base64나 코드 마커 같은 정제 노이즈를 확인하지 못했습니다. 질문 범위가 넓게 해석될 수 있어, 기대 문서 기준을 더 좁히는 편이 맞을지 또는 검색 결과를 조정하는 편이 맞을지 의견 부탁드립니다.</li></ul>
+<h2>청크 영향 가능성에 대한 판단</h2>
+<div class="note">
+이 2건에 대해 청크 영향 가능성을 완전히 배제하지는 않았습니다. 다만 이번 확인에서는 실패 케이스의 상위 근거에서 base64, 코드 마커, 표 마커, markdown fence 같은 정제 노이즈가 확인되지 않았습니다.<br><br>
+따라서 현재 증거만으로는 “청크 오염 때문에 실패했다”고 단정하기 어렵습니다. 후속 확인이 필요하다면 실패 케이스의 원문 청크, <code>embedding_text</code>, <code>normalized_text</code>, 질문 해석, 메타정보 매칭 기준을 함께 비교하는 방식이 좋겠습니다.<br><br>
+일부 케이스만 기대 문서와 어긋나는 것은 RAG 검색에서 충분히 발생할 수 있습니다. 검색 결과는 청크 품질뿐 아니라 질문의 구체성, embedding 유사도, BM25 키워드 매칭, metadata, source/book 분류 기준이 함께 작동한 결과이기 때문입니다.
+</div>
+<h2>Shareable Note</h2>
+<div class="note">변경 데이터 기준으로 검색 근거 문서만 확인했고 answer LLM/reranker는 제외했습니다. 전체 18건 중 top5 기준 16건은 기대 문서가 포함됐고, 2건은 기대 문서 기준과 실제 검색 결과가 달랐습니다. 상위 근거의 embedding/normalized text에서는 base64나 코드 마커 같은 정제 노이즈를 확인하지 못했습니다. 그래서 이 2건은 제가 임의로 수정하기보다, 질문 의도와 기대 문서 기준을 먼저 맞춰보면 좋겠다고 판단했습니다. 이 방향이 적절한지 의견 부탁드립니다.</div>
+</body></html>
