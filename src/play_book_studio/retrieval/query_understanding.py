@@ -10,6 +10,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .domain_lexicon import DOMAIN_LEXICONS, query_matches_domain, query_matches_dynamic_variant, query_matches_static_variant
+
 
 _OPENSHIFT_RE = re.compile(r"(?<![a-z0-9])ocp(?![a-z0-9])|openshift|오픈\s*시프트|오픈시프트", re.IGNORECASE)
 _INSTALL_RE = re.compile(r"설치|install|installation|installer|클러스터.*구축|구축.*클러스터", re.IGNORECASE)
@@ -356,6 +358,28 @@ def understand_query_signals(
         if "pvc" in raw_query.lower() or "클레임" in raw_query:
             _append_unique(objects, "PVC")
         confidence["domain"] = max(confidence.get("domain", 0.0), 0.93)
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.88)
+    if query_matches_domain(raw_query, "storage"):
+        storage_lexicon = DOMAIN_LEXICONS["storage"]
+        _append_unique(domains, storage_lexicon.domain)
+        for book_slug in storage_lexicon.book_slugs:
+            _append_unique(book_slug_candidates, book_slug)
+        had_objects = bool(objects)
+        if not had_objects:
+            for obj in storage_lexicon.objects:
+                _append_unique(objects, obj)
+                _append_unique(primary_topics, obj)
+            for topic in storage_lexicon.primary_topics:
+                _append_unique(primary_topics, topic)
+            for topic in storage_lexicon.secondary_topics:
+                _append_unique(primary_topics, topic)
+        if query_matches_static_variant(raw_query, "storage"):
+            _append_unique(primary_topics, "static provisioning")
+        if query_matches_dynamic_variant(raw_query, "storage"):
+            _append_unique(primary_topics, "dynamic provisioning")
+        for command_family in storage_lexicon.command_families:
+            _append_unique(command_families, command_family)
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.91)
         confidence["objects"] = max(confidence.get("objects", 0.0), 0.88)
     if _POD_RE.search(raw_query):
         _append_unique(objects, "Pod")

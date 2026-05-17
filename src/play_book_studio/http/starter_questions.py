@@ -426,6 +426,20 @@ def _clean_title(title: str) -> str:
 
 
 def _learning_questions(root_dir: Path) -> list[dict[str, Any]]:
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if database_url:
+        chunk_candidates = _chunk_candidate_questions_from_db(
+            database_url,
+            source_scope="official_docs",
+            lane="learning",
+            route_kind="official",
+            source_label="postgres.document_chunks",
+            limit=24,
+        )
+        if chunk_candidates:
+            return chunk_candidates
+
     entries = _manifest_entries(root_dir)
     terminal_contexts = _learning_terminal_contexts(root_dir)
     questions: list[dict[str, Any]] = []
@@ -440,7 +454,7 @@ def _learning_questions(root_dir: Path) -> list[dict[str, Any]]:
             _starter_question(
                 lane="learning",
                 question=question,
-                route_kind="learning",
+                route_kind="official",
                 source="ocp420_repo_wide_source_manifest",
                 learning_index=index,
                 category_key=rule.key,
@@ -631,7 +645,7 @@ def _operations_questions(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
             database_url,
             source_scope="study_docs",
             lane="operations",
-            route_kind="course",
+            route_kind="official",
             source_label="postgres.study_docs_chunks",
             limit=24,
         )
@@ -650,7 +664,7 @@ def _operations_questions(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
             _starter_question(
                 lane="operations",
                 question=question,
-                route_kind="course",
+                route_kind="official",
                 source=source_label,
                 category_key=str(chunk.get("stage_id") or ""),
                 category_label=str(chunk.get("course_title") or ""),

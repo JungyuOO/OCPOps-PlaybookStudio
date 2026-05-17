@@ -148,6 +148,7 @@ services:
         --root-dir /app
         --index
         --index-limit ${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}
+        --enrich-runtime-metadata
         --refresh-qdrant-payloads
         --refresh-limit ${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}
         --collection ${QDRANT_COLLECTION:-openshift_docs}

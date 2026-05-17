@@ -237,6 +237,16 @@ def apply_hit_adjustments(
         else:
             hit.fused_score *= 0.85
 
+    classification = signals.structured_query_signals.classification
+    domain = str(classification.get("domain") or "").strip()
+    if domain == "storage" and signals.structured_query_signals.confidence.get("domain", 0.0) >= 0.85:
+        if _hit_matches_query_domain(hit, signals=signals):
+            hit.fused_score *= 1.18
+            hit.component_scores["domain_match_boost"] = 1.18
+        else:
+            hit.fused_score *= 0.48
+            hit.component_scores["domain_mismatch_penalty"] = 0.48
+
     if is_reference_heavy_book_slug(hit.book_slug):
         if signals.concept_like_intent and not signals.doc_locator_intent and not signals.structured_query_terms:
             hit.fused_score *= 0.34

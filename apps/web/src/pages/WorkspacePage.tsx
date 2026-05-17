@@ -723,11 +723,6 @@ function primaryCitationTruth(citations?: ChatCitation[] | null): {
   };
 }
 
-function isCourseSourceLane(sourceLane?: string): boolean {
-  const normalized = String(sourceLane || '').trim().toLowerCase();
-  return normalized === 'course' || normalized === 'operations' || normalized === 'study_docs';
-}
-
 function scorePrimaryPlaybookCitation(citation: ChatCitation, index: number): number {
   const slug = String(citation.book_slug || '').trim().toLowerCase();
   const title = String(citation.book_title || citation.source_label || citation.section || '').trim().toLowerCase();
@@ -3181,7 +3176,7 @@ export default function WorkspacePage() {
     const resolvedLearningPathId = options.learningPathId ?? questionMeta?.learningPathId;
     const resolvedLearningStepId = options.learningStepId ?? questionMeta?.learningStepId;
     const resolvedLabTaskId = options.labTaskId ?? questionMeta?.labTaskId;
-    const shouldUseCourseMode = options.forceCourseMode || resolvedRouteKind === 'course' || isCourseMode;
+    const shouldUseCourseMode = options.forceCourseMode || isCourseMode;
     const shouldUseLiveClusterMode = !shouldUseCourseMode && currentMode === 'live_cluster' && isLiveClusterAvailable;
     const messageRouteKind: Message['routeKind'] = shouldUseCourseMode
       ? 'course'
@@ -4419,9 +4414,10 @@ export default function WorkspacePage() {
                                 type="button"
                                 className="welcome-question-card glass-panel"
                                 onClick={() => {
+                                  const starterRouteKind = item.routeKind || (item.lane === 'learning' ? 'learning' : 'official');
                                   void handleSend(item.question, {
-                                    forceCourseMode: item.lane === 'operations',
-                                    routeKind: item.routeKind || (item.lane === 'learning' ? 'learning' : item.lane === 'operations' ? 'course' : 'official'),
+                                    forceCourseMode: false,
+                                    routeKind: starterRouteKind,
                                     learningIndex: item.learningIndex,
                                     categoryKey: item.categoryKey,
                                     categoryLabel: item.categoryLabel,
@@ -4571,7 +4567,7 @@ export default function WorkspacePage() {
                                     ? learningQuestionByText.get(suggestedQuery.trim())
                                     : undefined;
                                   void handleSend(suggestedQuery, {
-                                    forceCourseMode: message.routeKind === 'course' || isCourseSourceLane(message.primarySourceLane),
+                                    forceCourseMode: false,
                                     routeKind: message.routeKind === 'learning' ? 'learning' : undefined,
                                     learningIndex: suggestedMeta?.learningIndex,
                                     categoryKey: suggestedMeta?.categoryKey,
