@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>260517 Official Corpus Correction</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --paper: #ffffff;
+      --ink: #18202a;
+      --muted: #667085;
+      --line: #d8dee8;
+      --brand: #1769aa;
+      --danger: #b42318;
+      --ok: #087443;
+      --warn: #b54708;
+      --code: #101828;
+      --code-bg: #eef2f7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Malgun Gothic", Arial, sans-serif;
+      line-height: 1.62;
+    }
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 36px 24px 64px;
+    }
+    header {
+      padding: 28px 0 20px;
+      border-bottom: 2px solid var(--line);
+      margin-bottom: 24px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 34px 0 14px;
+      font-size: 22px;
+      border-left: 5px solid var(--brand);
+      padding-left: 10px;
+    }
+    h3 {
+      margin: 22px 0 10px;
+      font-size: 17px;
+    }
+    p { margin: 8px 0; }
+    .subtitle {
+      color: var(--muted);
+      font-size: 15px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin: 18px 0;
+    }
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .label {
+      display: inline-block;
+      margin-bottom: 8px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+    .label.danger { color: var(--danger); background: #fee4e2; }
+    .label.ok { color: var(--ok); background: #d1fadf; }
+    .label.warn { color: var(--warn); background: #fef0c7; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 20px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #eef4fb;
+      font-weight: 700;
+    }
+    tr:last-child td { border-bottom: 0; }
+    code {
+      background: var(--code-bg);
+      color: var(--code);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 0.95em;
+    }
+    pre {
+      overflow-x: auto;
+      background: #111827;
+      color: #f9fafb;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      border: 1px solid #1f2937;
+    }
+    .callout {
+      border-left: 5px solid var(--brand);
+      background: #eef7ff;
+      padding: 14px 16px;
+      margin: 16px 0;
+      border-radius: 0 8px 8px 0;
+    }
+    .bad {
+      border-left-color: var(--danger);
+      background: #fff3f1;
+    }
+    .good {
+      border-left-color: var(--ok);
+      background: #ecfdf3;
+    }
+    .muted { color: var(--muted); }
+    .result {
+      font-weight: 700;
+      color: var(--ok);
+    }
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: 1fr; }
+      main { padding: 24px 14px 48px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Official Corpus Text Layer Correction</h1>
+      <p class="subtitle">작성일: 2026-05-17 / 대상: v0.1.4 official corpus, Qdrant payload, embedding projection</p>
+    </header>
+
+    <section class="callout">
+      <strong>한 줄 결론:</strong>
+      이전 작업에서는 표시용 <code>text</code>와 벡터용 <code>embedding_text</code>가 섞였고,
+      base64 출력 예시가 임베딩 입력에 들어갔다. 현재는 <code>text=표시용</code>,
+      <code>normalized_text=BM25용</code>, <code>embedding_text=벡터용</code>으로 분리했고,
+      J가 지적한 <code>Tk9ER...</code> 노이즈는 검색/임베딩 계층에서 제거했다.
+    </section>
+
+    <h2>무엇이 잘못됐나</h2>
+    <div class="grid">
+      <article class="card">
+        <span class="label danger">문제 1</span>
+        <h3>표시용 text가 embedding_text처럼 저장됨</h3>
+        <p><code>embedding_chunks.jsonl.text</code>와 Qdrant <code>payload.text</code>가 벡터 입력용 flat text로 들어갔다.</p>
+        <p class="muted">결과적으로 답변 화면에서 개행, 코드블록, 표 구조가 사라질 수 있었다.</p>
+      </article>
+      <article class="card">
+        <span class="label danger">문제 2</span>
+        <h3>base64 출력 예시가 임베딩에 포함됨</h3>
+        <p><code>Tk9ERUlQX0hJTlQ9MTkyLjAuMCxxxx==</code> 같은 코드블록 출력값이 <code>embedding_text</code>에 들어갔다.</p>
+        <p class="muted">원문 표시에는 필요할 수 있지만 의미 검색에는 노이즈다.</p>
+      </article>
+      <article class="card">
+        <span class="label warn">오해 가능</span>
+        <h3>청크 사이즈를 새로 준 작업은 아님</h3>
+        <p>기존 <code>chunks.jsonl</code>의 <code>chunk_id</code> 기준 projection 작업이었다.</p>
+        <p class="muted">row 수가 줄어든 이유는 empty/duplicate/contained overlap 제외 때문이다.</p>
+      </article>
+    </div>
+
+    <h2>정상 계약</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>필드</th>
+          <th>정상 역할</th>
+          <th>예상 형태</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>raw_text</code></td>
+          <td>원본 보존</td>
+          <td>지저분해도 원문 그대로 유지</td>
+        </tr>
+        <tr>
+          <td><code>text</code> / <code>markdown</code></td>
+          <td>사람과 챗봇 화면 표시용</td>
+          <td>개행, 코드블록, 표, 백틱 유지 가능</td>
+        </tr>
+        <tr>
+          <td><code>normalized_text</code></td>
+          <td>BM25/keyword 검색용</td>
+          <td>기호와 마크업을 많이 제거한 flat text</td>
+        </tr>
+        <tr>
+          <td><code>embedding_text</code></td>
+          <td>vector embedding 입력용</td>
+          <td>flat text. 마크업, URL, base64 출력 예시는 제거하되 명령어 의미 기호는 유지</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>무엇을 고쳤나</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>파일</th>
+          <th>수정 내용</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>src/play_book_studio/ingestion/official_gold_import.py</code></td>
+          <td>
+            <code>embedding_chunks.jsonl.text</code>를 표시용 markdown으로 저장하도록 수정.
+            <code>embedding_text</code>와 <code>normalized_text</code>에서는 base64-like token 제거.
+          </td>
+        </tr>
+        <tr>
+          <td><code>src/play_book_studio/db/qdrant_indexer.py</code></td>
+          <td>
+            Qdrant <code>payload.text</code>는 <code>markdown</code> 우선으로 채우고,
+            <code>text_fields.embedding_text</code>는 벡터용 필드로 분리.
+          </td>
+        </tr>
+        <tr>
+          <td><code>src/play_book_studio/ingestion/official_embedding_qdrant.py</code></td>
+          <td>
+            더 이상 <code>payload.text == text_fields.embedding_text</code>를 요구하지 않도록 품질 게이트 수정.
+            대신 embedding field mismatch, empty display text, raw_text leak 등을 검사.
+          </td>
+        </tr>
+        <tr>
+          <td><code>tests/test_official_gold_import.py</code>, <code>tests/test_qdrant_indexer.py</code></td>
+          <td>표시용 text와 embedding_text 분리, base64 출력 제거, Qdrant payload 계약을 테스트로 고정.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>핵심 샘플</h2>
+    <p>J가 지적한 base64-like output chunk:</p>
+    <pre>chunk_id: 98841828-a3c1-56f9-bdaf-eeaf9238c2db</pre>
+
+    <h3>정상 결과</h3>
+    <pre>text:
+출력 예
+```shell
+Tk9ERUlQX0hJTlQ9MTkyLjAuMCxxxx==
+```
+
+클러스터를 배포하기 전에 `master` 및 `worker` 역할에 대한 머신 구성 매니페스트를 생성하여 힌트를 활성화합니다.
+
+normalized_text:
+클러스터를 배포하기 전에 master 및 worker 역할에 대한 머신 구성 매니페스트를 생성하여 힌트를 활성화합니다
+
+embedding_text:
+클러스터를 배포하기 전에 master 및 worker 역할에 대한 머신 구성 매니페스트를 생성하여 힌트를 활성화합니다</pre>
+
+    <div class="callout good">
+      <strong>판단:</strong>
+      <code>text</code>에는 코드블록 출력 예시가 남는 것이 정상이다.
+      <code>normalized_text</code>와 <code>embedding_text</code>에서는
+      <code>Tk9ER...</code>가 제거되는 것이 정상이다.
+    </div>
+
+    <h2>검토 명령과 결과</h2>
+
+    <h3>1. artifact 재생성</h3>
+    <pre>.\.venv\Scripts\python.exe -m play_book_studio.cli official-gold-import `
+  --dry-run `
+  --embedding-chunks-path corpus\sources\official\imported-gold\gold_corpus_ko\embeddings\embedding_chunks.jsonl `
+  --text-layers-path corpus\sources\official\imported-gold\gold_corpus_ko\text-layers\text_layers.jsonl</pre>
+    <table>
+      <tbody>
+        <tr><th>source chunks</th><td>27,907</td></tr>
+        <tr><th>text_layers rows</th><td>27,907</td></tr>
+        <tr><th>embedding_chunks rows</th><td>25,910</td></tr>
+        <tr><th>skipped empty</th><td>89</td></tr>
+        <tr><th>skipped exact duplicate</th><td>484</td></tr>
+        <tr><th>skipped contained overlap</th><td>1,424</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2. Qdrant dry-run 품질 게이트</h3>
+    <pre>.\.venv\Scripts\python.exe -m play_book_studio.cli official-embedding-qdrant-upsert `
+  --dry-run `
+  --collection openshift_docs</pre>
+    <table>
+      <tbody>
+        <tr><th>candidate_count</th><td>25,910</td></tr>
+        <tr><th>empty_text</th><td>0</td></tr>
+        <tr><th>internal_marker_or_fence</th><td>0</td></tr>
+        <tr><th>html_anchor_or_docs_url</th><td>0</td></tr>
+        <tr><th>percent_encoded</th><td>0</td></tr>
+        <tr><th>arabic</th><td>0</td></tr>
+        <tr><th>embedding_not_flat</th><td>0</td></tr>
+        <tr><th>raw_text_payload_keys</th><td>0</td></tr>
+        <tr><th>payload_text_empty</th><td>0</td></tr>
+        <tr><th>payload_embedding_text_mismatch</th><td>0</td></tr>
+        <tr><th>normalized_not_flat</th><td>0</td></tr>
+      </tbody>
+    </table>
+
+    <h3>3. DB/Qdrant 반영</h3>
+    <pre>.\.venv\Scripts\python.exe -m play_book_studio.cli official-embedding-qdrant-upsert `
+  --collection openshift_docs `
+  --delete-skipped `
+  --sync-db `
+  --database-url postgresql://admin:admin123@127.0.0.1:5432/playbookstudio</pre>
+    <table>
+      <tbody>
+        <tr><th>upserted_count</th><td>25,910</td></tr>
+        <tr><th>deleted_skipped_count</th><td>1,997</td></tr>
+        <tr><th>updated_embedding_text_count</th><td>25,910</td></tr>
+        <tr><th>suppressed_embedding_text_count</th><td>1,997</td></tr>
+        <tr><th>recorded_index_entry_count</th><td>25,910</td></tr>
+      </tbody>
+    </table>
+
+    <h3>4. Qdrant official point count</h3>
+    <pre>@'
+import json, urllib.request
+
+body = {
+    "exact": True,
+    "filter": {
+        "must": [
+            {"key": "source.corpus_scope", "match": {"value": "official_docs"}}
+        ]
+    },
+}
+
+req = urllib.request.Request(
+    "http://127.0.0.1:6335/collections/openshift_docs/points/count",
+    data=json.dumps(body).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+
+print(json.dumps(json.loads(urllib.request.urlopen(req, timeout=20).read().decode("utf-8")), ensure_ascii=False, indent=2))
+'@ | .\.venv\Scripts\python.exe -</pre>
+    <p class="result">결과: official docs count = 25,910</p>
+
+    <h3>5. J 지적 chunk 직접 확인</h3>
+    <pre>$ids = @(
+  "98841828-a3c1-56f9-bdaf-eeaf9238c2db"
+)
+
+$body = @{
+  ids = $ids
+  with_payload = $true
+  with_vector = $false
+} | ConvertTo-Json -Depth 20
+
+$r = Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:6335/collections/openshift_docs/points" `
+  -ContentType "application/json" `
+  -Body $body
+
+$r.result | ForEach-Object {
+  $p = $_.payload
+  $f = $p.text_fields
+  "text_has_Tk9        : $($p.text -like '*Tk9ERUlQ*')"
+  "normalized_has_Tk9 : $($f.normalized_text -like '*Tk9ERUlQ*')"
+  "embedding_has_Tk9  : $($f.embedding_text -like '*Tk9ERUlQ*')"
+}</pre>
+    <table>
+      <tbody>
+        <tr><th>text_has_Tk9</th><td>True</td></tr>
+        <tr><th>normalized_has_Tk9</th><td>False</td></tr>
+        <tr><th>embedding_has_Tk9</th><td>False</td></tr>
+      </tbody>
+    </table>
+
+    <h3>6. 전체 Qdrant official docs scan</h3>
+    <pre>@'
+import json, re, urllib.request
+
+body = {
+    "limit": 2000,
+    "with_payload": True,
+    "with_vector": False,
+    "filter": {
+        "must": [
+            {"key": "source.corpus_scope", "match": {"value": "official_docs"}}
+        ]
+    },
+}
+
+url = "http://127.0.0.1:6335/collections/openshift_docs/points/scroll"
+base64_re = re.compile(r"(?&lt;![A-Za-z0-9+/])(?:[A-Za-z0-9+/]{20,}={1,2})(?![A-Za-z0-9+/])")
+counts = {
+    "checked": 0,
+    "embedding_newline": 0,
+    "embedding_marker": 0,
+    "embedding_base64": 0,
+    "normalized_newline": 0,
+    "raw_text_leak": 0,
+    "empty_payload_text": 0,
+    "payload_embedding_mismatch": 0,
+}
+
+offset = None
+while True:
+    if offset is not None:
+        body["offset"] = offset
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    data = json.loads(urllib.request.urlopen(req, timeout=60).read().decode("utf-8"))["result"]
+    for point in data.get("points", []):
+        payload = point.get("payload") or {}
+        fields = payload.get("text_fields") or {}
+        embedding_text = str(fields.get("embedding_text") or "")
+        normalized_text = str(fields.get("normalized_text") or "")
+        counts["checked"] += 1
+        if not str(payload.get("text") or "").strip():
+            counts["empty_payload_text"] += 1
+        if "\n" in embedding_text or "\t" in embedding_text or "\r" in embedding_text:
+            counts["embedding_newline"] += 1
+        if any(marker in embedding_text for marker in ("[CODE", "[/CODE]", "[TABLE", "[/TABLE]", "```")):
+            counts["embedding_marker"] += 1
+        if base64_re.search(embedding_text):
+            counts["embedding_base64"] += 1
+        if "\n" in normalized_text or "\t" in normalized_text or "\r" in normalized_text:
+            counts["normalized_newline"] += 1
+        if "raw_text" in json.dumps(payload, ensure_ascii=False):
+            counts["raw_text_leak"] += 1
+    offset = data.get("next_page_offset")
+    if not offset:
+        break
+
+print(json.dumps(counts, ensure_ascii=False, indent=2))
+'@ | .\.venv\Scripts\python.exe -</pre>
+    <table>
+      <tbody>
+        <tr><th>checked</th><td>25,910</td></tr>
+        <tr><th>embedding_newline</th><td>0</td></tr>
+        <tr><th>embedding_marker</th><td>0</td></tr>
+        <tr><th>embedding_base64</th><td>0</td></tr>
+        <tr><th>normalized_newline</th><td>0</td></tr>
+        <tr><th>raw_text_leak</th><td>0</td></tr>
+        <tr><th>empty_payload_text</th><td>0</td></tr>
+        <tr><th>payload_embedding_mismatch</th><td>0</td></tr>
+      </tbody>
+    </table>
+
+    <h2>검증/커밋 정보</h2>
+    <table>
+      <tbody>
+        <tr><th>branch</th><td><code>feat/corpus_embedding_text_s</code></td></tr>
+        <tr><th>commit</th><td><code>1278063 fix: separate official display and embedding text</code></td></tr>
+        <tr><th>compileall</th><td>통과</td></tr>
+        <tr><th>git diff --check</th><td>통과</td></tr>
+        <tr><th>pytest</th><td>로컬 venv에 pytest 미설치로 runner 실행 불가. 관련 테스트 함수 직접 호출 통과.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>다음 작업자 참고</h2>
+    <ul>
+      <li>반복이 많은 표 chunk는 <code>normalized_text == embedding_text</code>가 될 수 있다. 이는 명령어/코드가 없는 표 청크에서는 오류가 아닐 수 있다.</li>
+      <li>다만 반복 표는 rank에서 낮게 보거나 metadata로 table 성격을 반영하는 후속 개선 후보가 될 수 있다.</li>
+      <li>새 chunk size를 적용한 rechunk 작업은 아니다. chunk size 정책을 바꾸려면 별도 협의가 필요하다.</li>
+      <li><code>text</code>에는 코드블록과 개행이 남는 것이 정상이다. 임베딩 품질 검사는 <code>text_fields.embedding_text</code> 기준으로 본다.</li>
+    </ul>
+  </main>
+</body>
+</html>
