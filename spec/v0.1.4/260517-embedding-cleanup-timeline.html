@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>260517 청크/임베딩 정리 흐름</title>
+<style>
+body{font-family:Arial,'Malgun Gothic',sans-serif;line-height:1.62;margin:32px;max-width:1080px;color:#172033;background:#fbfcff}
+h1{font-size:30px;margin-bottom:8px;color:#0f3563} h2{margin-top:34px;color:#0f3563} h3{color:#184a7a}
+.lead{font-size:16px;color:#344054;margin-bottom:22px}
+.card{background:#fff;border:1px solid #d8e0ef;border-radius:10px;padding:18px;margin:16px 0;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.good{border-left:5px solid #12b76a}.warn{border-left:5px solid #f79009}.bad{border-left:5px solid #f04438}.info{border-left:5px solid #2e90fa}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.metric{background:#fff;border:1px solid #d8e0ef;border-radius:10px;padding:14px}
+.metric strong{display:block;font-size:22px;color:#0f3563}.muted{color:#667085;font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:13px;background:#fff} th,td{border:1px solid #d8e0ef;padding:9px;vertical-align:top} th{background:#edf3ff}
+code,pre{background:#f5f7fb;border:1px solid #d8e0ef;border-radius:6px} code{padding:1px 4px} pre{padding:12px;overflow:auto;white-space:pre-wrap}
+details{background:#fff;border:1px solid #d8e0ef;border-radius:8px;padding:10px 12px;margin:10px 0} summary{cursor:pointer;font-weight:700;color:#0f3563}
+.step{display:grid;grid-template-columns:70px 1fr;gap:14px;align-items:start;margin:14px 0}.badge{background:#0f3563;color:#fff;border-radius:999px;padding:6px 10px;text-align:center;font-weight:700}
+ul{padding-left:22px}.ok{color:#067647;font-weight:700}.hold{color:#b54708;font-weight:700}.no{color:#b42318;font-weight:700}
+</style>
+</head>
+<body>
+<h1>260517 청크/임베딩 정리 흐름</h1>
+<p class="lead">이 문서는 상세 로그가 아니라, 오늘 청크/임베딩 텍스트를 왜 다시 봤고, 무엇을 고쳤고, 결과가 어땠는지 빠르게 이해하기 위한 정리본입니다.</p>
+
+<div class="card good">
+<h2>먼저 이것만 보면 됩니다</h2>
+<ul>
+<li><strong>문제:</strong> <code>file-integrity</code> 주변 일부 embedding chunk에 base64 tail과 SHA성 꼬리 토큰이 남아 있었습니다.</li>
+<li><strong>수정:</strong> 원본 <code>chunks.jsonl</code>은 건드리지 않고, 검색용 projection과 생성 규칙을 정리했습니다.</li>
+<li><strong>반영:</strong> 로컬 DB/Qdrant에는 확인된 2개 청크만 재업서트하고, tail-only 1개 point만 삭제했습니다.</li>
+<li><strong>검증:</strong> 관련 단위 테스트 13개 통과, projection hard fail 0건, Qdrant 직접 조회 정상.</li>
+<li><strong>남은 일:</strong> 정답 청크가 있는데도 top-k로 못 올라오는 케이스는 J의 query rewrite 수정분과 함께 다시 비교해야 합니다.</li>
+</ul>
+</div>
+
+<h2>왜 이 문서를 따로 만들었나</h2>
+<div class="card info">
+기존 <a href="260517-official-data-validation.html">260517-official-data-validation.html</a>은 상세 검증 로그입니다. 계속 내용을 붙이다 보니 읽는 사람이 “그래서 어느 시점에 뭘 고쳤다는 거야?”를 바로 파악하기 어려워졌습니다.<br><br>
+그래서 이 문서는 <strong>청크/임베딩 텍스트 수정 흐름만</strong> 따로 떼어, 이해용 순서로 다시 정리했습니다.
+</div>
+
+<h2>현재 상태</h2>
+<div class="grid">
+<div class="metric"><strong>브랜치</strong><span>feat/corpus_embedding_test_S_v.2</span></div>
+<div class="metric"><strong>범위</strong><span>official corpus / embedding 품질</span></div>
+<div class="metric"><strong>HEAD</strong><span>e77a6b6 + working tree 변경</span></div>
+</div>
+<div class="card info">
+<strong>기준 브랜치 확인:</strong> 현재 브랜치는 <code>origin/dev</code>의 <code>c175055</code>를 merge-base로 두고 있습니다. <code>HEAD..origin/dev</code>는 비어 있고, <code>origin/dev..HEAD</code>에는 <code>e77a6b6</code> 한 개가 있습니다.<br><br>
+이 확인의 의미는 원인 단정이 아니라 <strong>현재 작업 기준점 확인</strong>입니다. 즉 예전 브랜치 잔상을 기준으로 보는 것이 아니라, dev 기준 새 브랜치에서 지금부터 데이터 품질 점검과 보정을 이어가면 된다는 뜻입니다.
+</div>
+<div class="card warn">
+<strong>중요:</strong> <code>corpus/sources/official/imported-gold/gold_corpus_ko/embeddings/embedding_chunks.jsonl</code>은 Git ignore 대상입니다. 그래서 로컬 파일만 고치면 전달성이 없습니다. 이번에는 같은 문제가 다시 생기지 않도록 생성 코드와 테스트도 함께 수정했습니다.
+</div>
+
+
+<h2>이번 retrieval 테스트 설계</h2>
+<div class="card info">
+<strong>이번 테스트는 챗봇 답변 평가가 아닙니다.</strong><br>
+목적은 변경된 official embedding 데이터가 질문에 맞는 근거 문서와 청크를 검색 단계에서 가져오는지 확인하는 것이었습니다. 그래서 answer LLM, reranker, UI 문장은 제외했습니다.
+</div>
+<div class="grid">
+<div class="metric"><strong>30건</strong><span>단독 질문형 데이터 검증 질문</span></div>
+<div class="metric"><strong>top5</strong><span>기대 book_slug가 들어오면 문서 기준 통과</span></div>
+<div class="metric"><strong>별도 확인</strong><span>top chunk 텍스트 직접성, 정제 노이즈</span></div>
+</div>
+<h3>질문지를 이렇게 만든 이유</h3>
+<ul>
+<li>사용자가 처음부터 물어볼 수 있는 <strong>단독 질문</strong>으로 만들었습니다. <code>그거</code>, <code>아까</code> 같은 멀티턴 표현은 제외했습니다.</li>
+<li>각 질문에는 <code>validation_focus</code>를 넣어 “무엇을 검증하려는 질문인지”를 적었습니다.</li>
+<li><code>expected_book_slugs</code>는 문서 단위 모범 매칭입니다. 예를 들어 etcd 백업 질문이면 <code>etcd</code>, <code>backup_and_restore</code>, <code>postinstallation_configuration</code>이 모범 범위입니다.</li>
+<li><code>expected_landing_terms</code>는 청크 안에 살아 있어야 하는 핵심 단어입니다. 이건 점수 계산의 정답표라기보다 사람이 top chunk를 읽을 때 보는 기준입니다.</li>
+</ul>
+<h3>통과 기준</h3>
+<table>
+<thead><tr><th>기준</th><th>의미</th><th>주의</th></tr></thead>
+<tbody>
+<tr><td><code>PASS@1 / PASS@3 / PASS@5</code></td><td>기대 book_slug가 top 1/3/5 안에 들어왔다는 뜻입니다.</td><td>문서 단위 통과일 뿐, 실제 청크가 직접 답변 근거인지까지 보장하지는 않습니다.</td></tr>
+<tr><td>top chunk 텍스트 적합성</td><td>상위 청크의 <code>text</code>, <code>embedding_text</code>, <code>normalized_text</code>가 질문에 직접 답할 수 있는지 사람이 읽어 판단합니다.</td><td>이번 작업에서 “book은 맞는데 청크가 약한” 케이스가 여기서 드러났습니다.</td></tr>
+<tr><td>정제 노이즈</td><td>상위 청크의 검색용 텍스트에 base64 dump, CODE/TABLE marker, markdown fence, Arabic 문자가 남았는지 봅니다.</td><td>top-k 노이즈 0건이어도 전체 projection에는 인접 오염이 있을 수 있어 별도 audit을 했습니다.</td></tr>
+</tbody>
+</table>
+<h3>이번 재검증 요약</h3>
+<table>
+<thead><tr><th>항목</th><th>결과</th><th>해석</th></tr></thead>
+<tbody>
+<tr><td>문서 기준</td><td>PASS@1 19건 / PASS@3 6건 / PASS@5 2건 / MISS@5 3건</td><td>30건 중 27건은 기대 문서가 top5 안에 들어왔습니다.</td></tr>
+<tr><td>공식 문서 범위</td><td>official-only hit@5 = 0.9000</td><td>study_docs 혼입을 분리해도 top5 문서 기준은 동일했습니다.</td></tr>
+<tr><td>정제 노이즈</td><td>top15 기준 0건</td><td>상위 검색 결과의 <code>embedding_text</code>/<code>normalized_text</code>에는 known noisy token이 없습니다.</td></tr>
+</tbody>
+</table>
+<details open>
+<summary>30건 질문별 모범 매칭과 실제 top5 보기</summary>
+<table>
+<thead><tr><th>질문</th><th>검증 의도</th><th>모범 매칭</th><th>실제 top5</th><th>판정</th></tr></thead>
+<tbody>
+<tr><td><code>official-data-etcd-backup-command-001</code><br>OpenShift 4.20에서 etcd 백업을 만들 때 실행하는 cluster-backup.sh 명령어는 뭐야?</td><td>etcd 백업 명령어 청크가 상위에 오는지 확인</td><td><strong>book:</strong> etcd, backup_and_restore, postinstallation_configuration<br><span class='muted'><strong>terms:</strong> cluster-backup.sh, snapshot, backup</span></td><td>postinstallation_configuration > kmsc-operations > etcd > kmsc-operations > nodes<br><span class='muted'>top1: postinstallation_configuration / 4.12.5. etcd 데이터 백업</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-etcd-restore-command-001</code><br>OpenShift 4.20에서 etcd 스냅샷으로 클러스터를 복원할 때 restore 스크립트와 절차는 어디에 있어?</td><td>etcd 복원 절차 청크가 백업 생성 청크와 구분되어 검색되는지 확인</td><td><strong>book:</strong> etcd, backup_and_restore, postinstallation_configuration<br><span class='muted'><strong>terms:</strong> restore, snapshot, recovery</span></td><td>etcd > postinstallation_configuration > backup_and_restore > postinstallation_configuration > postinstallation_configuration<br><span class='muted'>top1: etcd / 4.1.1. etcd 데이터 백업</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-registry-pvc-001</code><br>이미지 레지스트리 스토리지를 PVC로 설정하려면 configs.imageregistry/cluster에서 어떤 필드를 바꿔야 해?</td><td>registry PVC 설정 절차와 리소스명 보존 여부 확인</td><td><strong>book:</strong> registry, images<br><span class='muted'><strong>terms:</strong> configs.imageregistry/cluster, spec.storage.pvc, PVC</span></td><td>registry > storage > storage > storage > storage<br><span class='muted'>top1: registry / 3.6.3.1. 베어메탈 및 기타 수동 설치를 위한 레지스트리 스토리지 구성</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-registry-rwx-001</code><br>이미지 레지스트리를 복제본 두 개 이상으로 운영할 때 ReadWriteMany 스토리지가 필요한 이유는 뭐야?</td><td>ReadWriteOnce/ReadWriteMany 설명 청크가 표 찌꺼기 없이 검색되는지 확인</td><td><strong>book:</strong> registry, storage, images<br><span class='muted'><strong>terms:</strong> ReadWriteMany, ReadWriteOnce, registry</span></td><td>storage > storage > registry > registry > backup_and_restore<br><span class='muted'>top1: storage / 6.21.6. 정적 프로비저닝</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-pvc-pending-events-001</code><br>PVC가 Pending 상태일 때 PVC 이벤트와 바인딩 상태를 확인하는 절차는 어떻게 돼?</td><td>PVC Pending 문제 해결 청크가 상위에 오는지 확인</td><td><strong>book:</strong> storage, support, cli_tools<br><span class='muted'><strong>terms:</strong> PVC, Pending, events</span></td><td>storage > storage > storage > storage > nodes<br><span class='muted'>top1: storage / 5.4.5. 스토리지 프로비저닝</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-storageclass-default-001</code><br>PVC가 사용할 StorageClass와 기본 스토리지 클래스를 확인하려면 어떤 내용을 봐야 해?</td><td>StorageClass/PVC 용어가 정제 과정에서 훼손되지 않았는지 확인</td><td><strong>book:</strong> storage, cli_tools<br><span class='muted'><strong>terms:</strong> StorageClass, default, PVC</span></td><td>storage > storage > storage > storage > storage<br><span class='muted'>top1: storage / 6.21.5. 동적 프로비저닝</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-upgrade-precheck-001</code><br>클러스터 업데이트 전에 oc adm upgrade recommend로 사전 점검하는 절차는 어디에 설명돼 있어?</td><td>업데이트 사전 점검 명령어 청크 검색 확인</td><td><strong>book:</strong> updating_clusters, release_notes, cli_tools<br><span class='muted'><strong>terms:</strong> oc adm upgrade recommend, precheck, upgrade</span></td><td>release_notes > release_notes > cli_tools > updating_clusters > updating_clusters<br><span class='muted'>top1: release_notes / 1.3.17.1. oc adm upgrade recommend 명령 소개 (일반 가용성)</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-mcp-status-001</code><br>MachineConfigPool 업데이트 상태에서 UPDATED, UPDATING, DEGRADED 값을 확인하는 명령어는 뭐야?</td><td>MCP 상태 확인 명령어와 상태 컬럼 보존 여부 확인</td><td><strong>book:</strong> updating_clusters, machine_configuration, nodes<br><span class='muted'><strong>terms:</strong> oc get machineconfigpools, UPDATED, DEGRADED</span></td><td>machine_configuration > machine_configuration > nodes > nodes > postinstallation_configuration<br><span class='muted'>top1: machine_configuration / 1.5. Checking machine config pool status</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-mcp-maxunavailable-001</code><br>MachineConfigPool의 maxUnavailable 값은 어디서 설명하고 어떤 주의사항이 있어?</td><td>MCP 설정 필드 설명 청크가 상위에 오는지 확인</td><td><strong>book:</strong> updating_clusters, machine_configuration, postinstallation_configuration, nodes<br><span class='muted'><strong>terms:</strong> maxUnavailable, MachineConfigPool</span></td><td>machine_configuration > machine_configuration > nodes > nodes > postinstallation_configuration<br><span class='muted'>top1: machine_configuration / 8.4. Using Out-of-cluster image mode to apply a custom layered image</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-oc-mirror-imageset-001</code><br>연결이 끊긴 환경에서 oc-mirror 플러그인으로 ImageSetConfiguration을 사용해 이미지를 미러링하는 절차는 뭐야?</td><td>oc-mirror/YAML 예시 청크가 깨지지 않고 검색되는지 확인</td><td><strong>book:</strong> disconnected_environments, images<br><span class='muted'><strong>terms:</strong> oc-mirror, ImageSetConfiguration, mirror</span></td><td>disconnected_environments > disconnected_environments > disconnected_environments > disconnected_environments > disconnected_environments<br><span class='muted'>top1: disconnected_environments / 5.3.1. oc-mirror OpenShift CLI 플러그인 설치</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-idms-mirror-001</code><br>연결이 끊긴 클러스터에서 ImageDigestMirrorSet 또는 ImageContentSourcePolicy로 이미지 미러를 설정하는 방법은 어디에 있어?</td><td>이미지 미러 리소스명 보존 및 검색 확인</td><td><strong>book:</strong> disconnected_environments, images<br><span class='muted'><strong>terms:</strong> ImageDigestMirrorSet, ImageContentSourcePolicy, mirror</span></td><td>disconnected_environments > disconnected_environments > disconnected_environments > disconnected_environments > disconnected_environments<br><span class='muted'>top1: disconnected_environments / 11.4.5.2. 이미지 레지스트리 저장소 미러링을 위한 ICP( ImageContentSourcePolicy) 파일 변환</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-route-ingress-001</code><br>OpenShift Route와 Kubernetes Ingress의 관계와 차이를 설명하는 공식 문서는 어디야?</td><td>Route/Ingress 개념 청크가 YAML 생성 절차에만 치우치지 않는지 확인</td><td><strong>book:</strong> ingress_and_load_balancing, networking_overview<br><span class='muted'><strong>terms:</strong> Route, Ingress</span></td><td>ingress_and_load_balancing > ingress_and_load_balancing > ingress_and_load_balancing > ingress_and_load_balancing > ingress_and_load_balancing<br><span class='muted'>top1: ingress_and_load_balancing / 1.4.6. Ingress 오브젝트를 통해 기본 인증서를 사용하여 경로 생성</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-route-create-001</code><br>OpenShift에서 서비스를 외부로 노출하기 위해 Route를 생성하는 절차와 oc expose 명령어는 뭐야?</td><td>Route 생성 명령어 청크 검색 확인</td><td><strong>book:</strong> ingress_and_load_balancing, networking_overview, cli_tools<br><span class='muted'><strong>terms:</strong> oc expose, route, service</span></td><td>overview > ingress_and_load_balancing > ingress_and_load_balancing > ingress_and_load_balancing > ingress_and_load_balancing<br><span class='muted'>top1: overview / 6장. OpenShift Container Platform의 일반 용어집</span></td><td><span class="ok">PASS@3</span></td></tr><tr><td><code>official-data-pod-pending-scheduling-001</code><br>Pod가 Pending 상태일 때 스케줄링 실패 원인과 이벤트를 확인하는 절차는 어떻게 돼?</td><td>Pod Pending 문제 해결 청크 검색 확인</td><td><strong>book:</strong> nodes, support<br><span class='muted'><strong>terms:</strong> Pending, scheduling, events</span></td><td>support > support > support > support > support<br><span class='muted'>top1: support / 7.1.9. etcd 설치 문제 조사</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-node-resource-usage-001</code><br>노드의 CPU와 메모리 사용량을 확인하는 OpenShift 명령어와 문서는 어디야?</td><td>노드 리소스 사용량 확인 청크 검색 확인</td><td><strong>book:</strong> nodes, support, cli_tools<br><span class='muted'><strong>terms:</strong> CPU, memory, node</span></td><td>support > nodes > support > nodes > support<br><span class='muted'>top1: support / 7.2.1. 노드 상태, 리소스 사용량 및 구성 확인</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-node-drain-001</code><br>노드를 유지보수하기 전에 cordon과 drain을 수행하는 절차는 어떻게 돼?</td><td>노드 drain 절차 청크 검색 확인</td><td><strong>book:</strong> nodes, machine_management<br><span class='muted'><strong>terms:</strong> cordon, drain, node</span></td><td>support > nodes > nodes > support > nodes<br><span class='muted'>top1: support / 7.3.4. CRI-O 스토리지 정리</span></td><td><span class="ok">PASS@3</span></td></tr><tr><td><code>official-data-audit-node-logs-001</code><br>OpenShift 감사 로그를 oc adm node-logs 명령으로 확인하는 예시는 어디에 있어?</td><td>감사 로그 명령어 청크가 일반 로그/표 조각보다 위에 오는지 확인</td><td><strong>book:</strong> security_and_compliance, support, cli_tools<br><span class='muted'><strong>terms:</strong> oc adm node-logs, audit, log</span></td><td>support > support > support > support > kmsc-operations<br><span class='muted'>top1: support / 7.1.11. 작업자 노드 설치 문제 조사</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-file-integrity-log-001</code><br>File Integrity Operator에서 integritylog를 확인하고 압축 로그를 해제하는 명령어는 뭐야?</td><td>명령어의 base64 옵션은 보존하되 base64 덤프 값은 오염되지 않는지 확인</td><td><strong>book:</strong> security_and_compliance<br><span class='muted'><strong>terms:</strong> integritylog, base64, gunzip</span></td><td>security_and_compliance > security_and_compliance > disconnected_environments > disconnected_environments > installation_overview<br><span class='muted'>top1: security_and_compliance / 6.1. File Integrity Operator 개요</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-oidc-auth-001</code><br>외부 OIDC ID 공급자로 OpenShift 인증을 설정할 때 authentication.config/cluster를 수정하는 절차는 뭐야?</td><td>OIDC 인증 설정 리소스명 검색 확인</td><td><strong>book:</strong> authentication_and_authorization<br><span class='muted'><strong>terms:</strong> OIDC, authentication.config/cluster, identity provider</span></td><td>release_notes > release_notes > authentication_and_authorization > authentication_and_authorization > authentication_and_authorization<br><span class='muted'>top1: release_notes / 1.9.3. 확인된 문제</span></td><td><span class="ok">PASS@3</span></td></tr><tr><td><code>official-data-ldap-auth-001</code><br>LDAP ID 공급자를 OpenShift OAuth 인증에 추가하는 절차는 어디에 설명돼 있어?</td><td>LDAP/OAuth 인증 문서 검색 확인</td><td><strong>book:</strong> authentication_and_authorization<br><span class='muted'><strong>terms:</strong> LDAP, OAuth, identity provider</span></td><td>authentication_and_authorization > authentication_and_authorization > authentication_and_authorization > postinstallation_configuration > authentication_and_authorization<br><span class='muted'>top1: authentication_and_authorization / 6장. ID 공급자 구성 이해</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-web-console-overview-001</code><br>OpenShift 웹 콘솔에서 클러스터 상태와 워크로드를 확인하는 기능은 어떤 문서에서 설명해?</td><td>web_console 문서 검색 확인</td><td><strong>book:</strong> web_console, overview<br><span class='muted'><strong>terms:</strong> web console, workloads</span></td><td>support > updating_clusters > updating_clusters > support > support<br><span class='muted'>top1: support / 4.3.2. 원격 상태 보고를 활성화하려면 글로벌 클러스터 풀 시크릿 변경</span></td><td><span class="no">MISS@5</span></td></tr><tr><td><code>official-data-architecture-control-plane-001</code><br>OpenShift 아키텍처에서 컨트롤 플레인과 컴퓨팅 노드는 각각 어떤 역할을 해?</td><td>아키텍처 개념 청크 검색 확인</td><td><strong>book:</strong> architecture, overview<br><span class='muted'><strong>terms:</strong> control plane, compute node</span></td><td>machine_configuration > machine_configuration > support > support > support<br><span class='muted'>top1: machine_configuration / 2.6. Configuring journald settings</span></td><td><span class="no">MISS@5</span></td></tr><tr><td><code>official-data-operator-concept-001</code><br>OpenShift Operator가 애플리케이션을 설치하고 관리하는 방식은 공식 문서에서 어떻게 설명해?</td><td>Operator 개념 청크가 disconnected/카탈로그 절차에 과도하게 치우치지 않는지 확인</td><td><strong>book:</strong> operators, overview<br><span class='muted'><strong>terms:</strong> Operator, install, manage</span></td><td>operators > security_and_compliance > security_and_compliance > installation_overview > operators<br><span class='muted'>top1: operators / 2.4.3.1. OLM의 Operator 설치 및 업그레이드 워크플로</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-mco-concept-001</code><br>Machine Config Operator가 노드 설정과 머신 구성을 관리하는 방식은 어디에 설명돼 있어?</td><td>MCO 개념/관리 청크 검색 확인</td><td><strong>book:</strong> machine_configuration, operators<br><span class='muted'><strong>terms:</strong> Machine Config Operator, machine config</span></td><td>nodes > nodes > nodes > machine_configuration > machine_configuration<br><span class='muted'>top1: nodes / 6.13.1. 노드의 CPU 예약</span></td><td><span class="ok">PASS@5</span></td></tr><tr><td><code>official-data-project-namespace-001</code><br>OpenShift project와 Kubernetes namespace의 관계를 설명하는 공식 문서는 어디야?</td><td>project/namespace 개념 청크 검색 확인</td><td><strong>book:</strong> overview, cli_tools<br><span class='muted'><strong>terms:</strong> project, namespace</span></td><td>cli_tools > security_and_compliance > cli_tools > storage > kmsc-operations<br><span class='muted'>top1: cli_tools / 2.1.5.1. 프로젝트 생성</span></td><td><span class="ok">PASS@1</span></td></tr><tr><td><code>official-data-observability-monitoring-001</code><br>OpenShift observability와 monitoring 기능은 각각 어떤 목적으로 쓰이는지 설명해줘</td><td>observability/monitoring 소량 문서가 검색되는지 확인</td><td><strong>book:</strong> observability_overview, monitoring<br><span class='muted'><strong>terms:</strong> observability, monitoring</span></td><td>overview > architecture > overview > observability_overview > observability_overview<br><span class='muted'>top1: overview / 3.6. 클러스터 모니터링</span></td><td><span class="ok">PASS@5</span></td></tr><tr><td><code>official-data-install-bootstrap-log-001</code><br>OpenShift 설치 중 bootstrap 단계가 지연될 때 어떤 로그와 상태를 확인해야 해?</td><td>설치 troubleshooting 청크 검색 확인</td><td><strong>book:</strong> support, validation_and_troubleshooting, installation_overview<br><span class='muted'><strong>terms:</strong> bootstrap, log, install</span></td><td>postinstallation_configuration > postinstallation_configuration > installation_overview > installation_overview > installation_overview<br><span class='muted'>top1: postinstallation_configuration / 3.2.1. 클러스터 호환성 확인</span></td><td><span class="ok">PASS@3</span></td></tr><tr><td><code>official-data-postinstall-cluster-status-001</code><br>OpenShift 설치 후 클러스터 Operator와 노드 상태를 확인하는 기본 절차는 뭐야?</td><td>설치 후 상태 확인 청크 검색 확인</td><td><strong>book:</strong> postinstallation_configuration, installation_overview<br><span class='muted'><strong>terms:</strong> ClusterOperator, node, status</span></td><td>machine_management > machine_configuration > machine_configuration > machine_management > nodes<br><span class='muted'>top1: machine_management / 10.9.1. 클러스터에 컨트롤 플레인 노드 추가</span></td><td><span class="no">MISS@5</span></td></tr><tr><td><code>official-data-cli-project-namespace-001</code><br>oc CLI에서 현재 프로젝트와 namespace를 확인하거나 전환하는 명령어는 뭐야?</td><td>CLI project/namespace 명령어 청크 검색 확인</td><td><strong>book:</strong> cli_tools<br><span class='muted'><strong>terms:</strong> oc project, namespace</span></td><td>postinstallation_configuration > cli_tools > cli_tools > cli_tools > kmsc-operations<br><span class='muted'>top1: postinstallation_configuration / 6.2.1.2. 새 프로젝트 템플릿에 네트워크 정책 추가</span></td><td><span class="ok">PASS@3</span></td></tr><tr><td><code>official-data-image-prune-001</code><br>OpenShift 이미지 레지스트리에서 오래된 이미지와 태그를 정리하는 pruning 절차는 어디에 있어?</td><td>이미지 pruning 절차 청크 검색 확인</td><td><strong>book:</strong> registry, images<br><span class='muted'><strong>terms:</strong> prune, image, tag</span></td><td>machine_management > postinstallation_configuration > images > registry > registry<br><span class='muted'>top1: machine_management / 8.3.2. 기본 레지스트리 이동</span></td><td><span class="ok">PASS@3</span></td></tr>
+</tbody>
+</table>
+</details>
+
+<h2>작업 흐름</h2>
+<div class="step"><div class="badge">1</div><div class="card"><h3>문제 확인</h3><p><code>file-integrity</code> 주변 청크에 <code>nIHMaRlS...</code> 같은 base64 tail과 SHA/base64성 꼬리 토큰이 검색용 텍스트에 남아 있는지 확인했습니다.</p><p class="muted">대상: <code>90470771...</code>, <code>fd8dc617...</code>, <code>648524ce...</code></p></div></div>
+<div class="step"><div class="badge">2</div><div class="card"><h3>수정 범위 결정</h3><p>원본 계층인 <code>chunks.jsonl</code>은 보존하고, Qdrant/BM25에 들어가는 <code>embedding_text</code>와 <code>normalized_text</code>만 정리하기로 했습니다.</p><p class="muted">이 판단은 v0.1.4의 4계층 계약에 맞습니다.</p></div></div>
+<div class="step"><div class="badge">3</div><div class="card"><h3>오염 청크 정리</h3><p><code>90470771...</code>은 의미 없는 tail-only 청크라 projection에서 제외했습니다. <code>fd8dc617...</code>은 앞의 tail만 제거하고 <code>integritylog / base64 d / gunzip</code> 의미 신호는 유지했습니다. <code>648524ce...</code>는 AIDE 로그 의미는 유지하고 SHA성 꼬리만 제거했습니다.</p></div></div>
+<div class="step"><div class="badge">4</div><div class="card"><h3>재생성 규칙 보정</h3><p>ignore된 projection 파일만 고치는 것으로 끝내지 않고, <code>official_gold_import.py</code>에 tail 제거 규칙을 넣었습니다. 재생성해도 같은 유형의 오염이 다시 들어오지 않게 하기 위함입니다.</p></div></div>
+<div class="step"><div class="badge">5</div><div class="card"><h3>DB/Qdrant 반영</h3><p>dry-run에서 전체 skipped가 2,026건으로 넓게 잡혔기 때문에, <code>--delete-skipped</code> 전체 삭제는 하지 않았습니다. 대신 확인된 2개 청크만 재임베딩/upsert하고, tail-only 1개 point만 삭제했습니다.</p></div></div>
+<div class="step"><div class="badge">6</div><div class="card"><h3>재검증</h3><p>질문셋 expected 기준을 보정하고 retrieval-only 평가를 다시 돌렸습니다. 정제 노이즈는 0건이지만, 일부 질문은 여전히 정답 청크가 상위로 충분히 올라오지 않습니다.</p></div></div>
+
+<h2>수정 전후 요약</h2>
+<table>
+<thead><tr><th>항목</th><th>수정 전</th><th>수정 후</th></tr></thead>
+<tbody>
+<tr><td><code>90470771...</code></td><td><code>nIHMaRlS... Events none</code>만 남은 tail-only 청크가 검색 대상에 존재</td><td>embedding projection 제외, DB suppress, Qdrant point 삭제</td></tr>
+<tr><td><code>fd8dc617...</code></td><td>유효한 <code>integritylog | base64 -d | gunzip</code> 명령어 앞에 base64 tail 존재</td><td>tail 제거, 명령어 의미 신호 유지</td></tr>
+<tr><td><code>648524ce...</code></td><td>AIDE 로그 뒤에 SHA/base64성 꼬리 토큰 존재</td><td>AIDE 로그 의미 유지, SHA성 tail 제거</td></tr>
+<tr><td>질문셋 expected</td><td>현재 official book set에 없는 <code>applications</code> 포함</td><td><code>applications</code> 제거, 실제 근거 book 기준으로 보정</td></tr>
+<tr><td>검색 결과</td><td>1차 hit@5=0.8667, top5 노이즈 0건이었지만 인접 오염은 남아 있었음</td><td>보정 후 hit@5=0.9000, top15 노이즈 0건</td></tr>
+</tbody>
+</table>
+
+<h2>검증 결과</h2>
+<div class="grid">
+<div class="metric"><strong class="ok">13 passed</strong><span>official gold import 관련 테스트</span></div>
+<div class="metric"><strong class="ok">0건</strong><span>projection hard fail token</span></div>
+<div class="metric"><strong class="ok">0.9000</strong><span>retrieval hit@5</span></div>
+</div>
+
+<details>
+<summary>검증 명령과 핵심 결과 보기</summary>
+<pre>.\.venv\Scripts\python.exe -m pytest tests\test_official_gold_import.py -q
+# 13 passed
+
+official-embedding-qdrant-upsert --dry-run --delete-skipped
+# candidate_count: 25,881
+# skipped_source_point_count: 2,026
+# quality gate: all 0
+
+retrieval-eval --top-k 15 --candidate-k 30
+# hit@1=0.6333
+# hit@3=0.8333
+# hit@5=0.9000
+# top15 embedding/normalized noise: 0</pre>
+</details>
+
+<h2>아직 남은 해석</h2>
+<div class="card warn">
+오염 제거는 끝났지만, 이것이 “retrieval 품질 문제가 모두 해결됐다”는 뜻은 아닙니다. 남은 문제는 대체로 정답 청크가 없어서가 아니라, 정답 청크가 있어도 검색 순위에서 충분히 위로 올라오지 않는 쪽입니다.
+</div>
+<table>
+<thead><tr><th>케이스</th><th>현재 해석</th><th>다음 확인</th></tr></thead>
+<tbody>
+<tr><td><code>file-integrity-log</code></td><td>정답 명령어 청크는 있지만 top15에 직접 올라오지 않음</td><td>J의 query rewrite 수정 후 <code>integritylog</code>, <code>gunzip</code> 희귀 키워드 반영 확인</td></tr>
+<tr><td><code>web-console-overview</code></td><td><code>web_console</code>은 top15에 있으나 top5에는 못 올라옴</td><td>문서명/영역 질문에서 title/book_slug 신호 활용 여부 확인</td></tr>
+<tr><td><code>install-bootstrap-log</code></td><td>hit@5는 통과하지만 top1 직접성은 낮음</td><td>bootstrap/log/gather 키워드가 검색 순위에 어떻게 반영되는지 비교</td></tr>
+<tr><td><code>mcp-maxUnavailable</code></td><td>expected book은 맞지만 top1이 직접 설명 청크는 아님</td><td>정확 필드명 exact match와 section/title 신호 검토</td></tr>
+</tbody>
+</table>
+
+<h2>다음에 같은 실수를 줄이는 기준</h2>
+<div class="card info">
+<ul>
+<li>산출물은 “정보를 많이 넣기”보다 “읽는 사람이 결정할 수 있게 만들기”가 우선입니다.</li>
+<li>상세 로그와 이해용 요약은 분리합니다. 한 파일에 계속 누적하지 않습니다.</li>
+<li>ignore된 산출물은 직접 수정만 하지 않고, 생성 코드와 테스트까지 같이 봅니다.</li>
+<li>보고할 때는 <code>무엇을 고쳤는지</code>, <code>왜 그렇게 했는지</code>, <code>검증 결과가 무엇인지</code>, <code>아직 무엇이 남았는지</code>를 먼저 씁니다.</li>
+</ul>
+</div>
+
+</body>
+</html>

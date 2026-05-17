@@ -380,11 +380,44 @@ def _embedding_chunk_text(row: dict[str, Any]) -> str:
     text = _flatten_plain_text(_normalize_embedding_layout(text))
     for token, value in protected:
         text = text.replace(token, value)
-    return re.sub(r"\s+", " ", text).strip()
+    return _strip_embedding_noise_fragments(re.sub(r"\s+", " ", text).strip())
 
 
 def _keyword_normalized_chunk_text(row: dict[str, Any]) -> str:
     return _flatten_keyword_text(_embedding_chunk_text(row))
+
+
+def _strip_embedding_noise_fragments(text: str) -> str:
+    """Remove parser-tail residue while keeping useful command/log signals."""
+    cleaned = str(text or "").strip()
+    if not cleaned:
+        return ""
+    cleaned = re.sub(
+        r"^(?:[A-Za-z0-9+/=]{8,}\s+){1,8}Events\s+none\b\s*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"^openshift\s+io\s+files\s+removed\s+\d+\s+(?=Data\s+integritylog\b)",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"\s+SHA(?:256|384|512)\s+(?:[A-Za-z0-9+/=,._-]{4,}\s*)+$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if re.fullmatch(
+        r"(?:[A-Za-z0-9+/=]{8,}\s+){0,8}Events\s+none",
+        cleaned,
+        flags=re.IGNORECASE,
+    ):
+        return ""
+    return cleaned
 
 
 def _flatten_keyword_text(text: str) -> str:

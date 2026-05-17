@@ -410,6 +410,84 @@ def test_write_official_embedding_chunks_repairs_placeholder_artifacts():
     )
 
 
+def test_write_official_embedding_chunks_suppresses_file_integrity_tail_only_rows():
+    chunks_path = TEST_TMP / "embedding-file-integrity-tail-source.jsonl"
+    output_path = TEST_TMP / "embeddings" / "embedding_file_integrity_tail_chunks.jsonl"
+    _write_jsonl(
+        chunks_path,
+        [
+            {
+                "chunk_id": "33333333-3333-3333-3333-333333333333",
+                "book_slug": "security_and_compliance",
+                "book_title": "보안 및 컴플라이언스",
+                "section": "6.6.5.2 FileIntegrityNodeStatus CR 실패 상태의 예",
+                "section_path": ["6장. File Integrity Operator", "FileIntegrityNodeStatus CR 실패 상태의 예"],
+                "text": "nIHMaRlS+so61EN8VOpg Events: <none> [/CODE]",
+            }
+        ],
+    )
+
+    result = write_official_embedding_chunks(chunks_path, output_path)
+    rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    assert result["input_chunk_count"] == 1
+    assert result["embedding_chunk_count"] == 0
+    assert result["skipped_empty_embedding_count"] == 1
+    assert rows == []
+
+
+def test_write_official_embedding_chunks_removes_file_integrity_tail_prefix_and_sha_tail():
+    chunks_path = TEST_TMP / "embedding-file-integrity-noise-source.jsonl"
+    output_path = TEST_TMP / "embeddings" / "embedding_file_integrity_noise_chunks.jsonl"
+    _write_jsonl(
+        chunks_path,
+        [
+            {
+                "chunk_id": "44444444-4444-4444-4444-444444444444",
+                "book_slug": "security_and_compliance",
+                "book_title": "보안 및 컴플라이언스",
+                "section": "6.6.5.2 FileIntegrityNodeStatus CR 실패 상태의 예",
+                "section_path": ["6장. File Integrity Operator", "FileIntegrityNodeStatus CR 실패 상태의 예"],
+                "text": (
+                    "nIHMaRlS+so61EN8VOpg Events: <none> [/CODE]\n\n"
+                    "구성 맵 데이터 크기 제한으로 인해 1MB 이상의 AIDE 로그가 실패 구성 맵에 base64로 인코딩된 gzip 아카이브로 추가됩니다.\n"
+                    "[CODE language=\"shell\"]\n"
+                    "$ oc get cm <failure-cm-name> -o json | jq -r '.data.integritylog' | base64 -d | gunzip\n"
+                    "[/CODE]"
+                ),
+            },
+            {
+                "chunk_id": "55555555-5555-5555-5555-555555555555",
+                "book_slug": "security_and_compliance",
+                "book_title": "보안 및 컴플라이언스",
+                "section": "6.6.5.2 FileIntegrityNodeStatus CR 실패 상태의 예",
+                "section_path": ["6장. File Integrity Operator", "FileIntegrityNodeStatus CR 실패 상태의 예"],
+                "text": (
+                    "openshift.io/files-removed: 0 Data integritylog: ------ AIDE 0.15.1 found differences "
+                    "between database and filesystem!! Start timestamp: 2020-09-15 12:58:15 Summary: "
+                    "Total number of files: 31553 Added files: 0 Removed files: 0 Changed files: 1 "
+                    "File: /hostroot/etc/resolv.conf SHA512 : sTQYpB/AL7FeoGtu/1g7opv6C+KT1CBJ, qAeM+a8yTgHP"
+                ),
+            },
+        ],
+    )
+
+    write_official_embedding_chunks(chunks_path, output_path)
+    rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    assert len(rows) == 2
+    assert "nIHMaRlS" not in rows[0]["embedding_text"]
+    assert "Events none" not in rows[0]["embedding_text"]
+    assert "oc get cm" in rows[0]["embedding_text"]
+    assert "integritylog" in rows[0]["embedding_text"]
+    assert "base64" in rows[0]["embedding_text"]
+    assert "gunzip" in rows[0]["embedding_text"]
+    assert "openshift io files removed" not in rows[1]["embedding_text"]
+    assert "Data integritylog AIDE" in rows[1]["embedding_text"]
+    assert "SHA512" not in rows[1]["embedding_text"]
+    assert "sTQYpB" not in rows[1]["embedding_text"]
+
+
 def test_build_official_embedding_qdrant_candidates_uses_clean_text_without_raw_payload():
     chunks_path = TEST_TMP / "qdrant-source.jsonl"
     embedding_path = TEST_TMP / "embeddings" / "qdrant-embedding.jsonl"
