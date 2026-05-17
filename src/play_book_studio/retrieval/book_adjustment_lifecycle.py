@@ -6,6 +6,7 @@ from .intents import (
     ETCD_RE,
     has_backup_restore_intent,
     has_hosted_control_plane_signal,
+    has_postinstall_cluster_status_check_intent,
     has_project_finalizer_intent,
     has_project_terminating_intent,
 )
@@ -46,3 +47,25 @@ def apply_project_lifecycle_adjustments(
                 penalties.get("hosted_control_planes", 1.0),
                 0.25,
             )
+
+    if has_postinstall_cluster_status_check_intent(normalized):
+        boosts["postinstallation_configuration"] = max(
+            boosts.get("postinstallation_configuration", 1.0),
+            2.65,
+        )
+        boosts["installation_overview"] = max(boosts.get("installation_overview", 1.0), 1.28)
+        boosts["validation_and_troubleshooting"] = max(
+            boosts.get("validation_and_troubleshooting", 1.0),
+            1.22,
+        )
+        penalties["nodes"] = min(penalties.get("nodes", 1.0), 0.72)
+        penalties["operators"] = min(penalties.get("operators", 1.0), 0.72)
+        penalties["install_modes"] = min(penalties.get("install_modes", 1.0), 0.72)
+        penalties["installing_on_any_platform"] = min(
+            penalties.get("installing_on_any_platform", 1.0),
+            0.72,
+        )
+        penalties["installing_on_bare_metal"] = min(
+            penalties.get("installing_on_bare_metal", 1.0),
+            0.72,
+        )

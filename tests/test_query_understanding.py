@@ -86,6 +86,8 @@ def test_postinstall_cluster_status_query_avoids_install_and_olm_noise() -> None
 
     assert "oc get nodes" in normalized
     assert "clusteroperators" in normalized
+    assert "postinstallation_configuration" in normalized
+    assert "ClusterVersion" in normalized
     assert "Available" in normalized
     assert "NotReady" in normalized
     assert "Assisted Installer" not in normalized
@@ -94,6 +96,141 @@ def test_postinstall_cluster_status_query_avoids_install_and_olm_noise() -> None
     assert "ClusterServiceVersion" not in normalized
     assert "CatalogSource" not in normalized
     assert "InstallPlan" not in normalized
+
+
+def test_postinstall_cluster_status_query_boosts_postinstallation_book() -> None:
+    normalized = normalize_query("OpenShift 설치 후 클러스터 Operator와 노드 상태를 확인하는 기본 절차는 뭐야?")
+    boosts, penalties = query_book_adjustments(normalized, context=SessionContext())
+
+    assert boosts["postinstallation_configuration"] >= 2.65
+    assert boosts["postinstallation_configuration"] > boosts.get("installation_overview", 1.0)
+    assert penalties["nodes"] <= 0.72
+    assert penalties["operators"] <= 0.72
+
+
+def test_mcp_max_unavailable_query_targets_field_explanation_not_status_table() -> None:
+    normalized = normalize_query("MachineConfigPool의 maxUnavailable 값은 어디서 설명하고 어떤 주의사항이 있어?")
+    boosts, penalties = query_book_adjustments(normalized, context=SessionContext())
+
+    assert "maxUnavailable" in normalized
+    assert "MCO" in normalized
+    assert "기본값 1" in normalized
+    assert "3 으로 변경하지 마십시오" in normalized
+    assert "updating_clusters" in normalized
+    assert "oc get mcp" not in normalized
+    assert "UPDATED" not in normalized
+    assert "UPDATING" not in normalized
+    assert "DEGRADED" not in normalized
+    assert boosts["updating_clusters"] >= 2.35
+    assert boosts["architecture"] >= 1.85
+    assert penalties["nodes"] <= 0.42
+
+
+def test_registry_pvc_query_targets_image_registry_field_not_generic_pvc() -> None:
+    normalized = normalize_query(
+        "이미지 레지스트리 스토리지를 PVC로 설정하려면 configs.imageregistry/cluster에서 어떤 필드를 바꿔야 해?"
+    )
+
+    assert "configs.imageregistry/cluster" in normalized
+    assert "spec.storage.pvc" in normalized
+    assert "Image" in normalized
+    assert "openshift-image-registry" in normalized
+    assert "allowVolumeExpansion" not in normalized
+
+
+def test_etcd_restore_query_targets_restore_script_not_node_partition() -> None:
+    normalized = normalize_query("OpenShift 4.20에서 etcd 스냅샷으로 클러스터를 복원할 때 restore 스크립트와 절차는 어디에 있어?")
+
+    assert "cluster-restore.sh" in normalized
+    assert "/usr/local/bin/cluster-restore.sh" in normalized
+    assert "이전 클러스터 상태" in normalized
+    assert "복원 절차" in normalized
+    assert "lsblk" not in normalized
+    assert "/var" not in normalized
+
+
+def test_route_expose_query_targets_oc_expose_not_header_route() -> None:
+    normalized = normalize_query("OpenShift에서 서비스를 외부로 노출하기 위해 Route를 생성하는 절차와 oc expose 명령어는 뭐야?")
+
+    assert "oc expose" in normalized
+    assert "service" in normalized
+    assert "서비스" in normalized
+    assert "노출" in normalized
+    assert "HTTP 요청" not in normalized
+    assert "app-example-route.yaml" not in normalized
+
+
+def test_route_ingress_compare_query_avoids_expose_command_noise() -> None:
+    normalized = normalize_query("OpenShift Route와 Kubernetes Ingress의 관계와 차이를 설명하는 공식 문서는 어디야?")
+
+    assert "Route" in normalized
+    assert "Ingress" in normalized
+    assert "networking_overview" in normalized
+    assert "oc expose" not in normalized
+    assert "app-example-route.yaml" not in normalized
+
+
+def test_oidc_auth_query_targets_auth_config_not_release_notes() -> None:
+    normalized = normalize_query("외부 OIDC 인증 공급자를 설정할 때 authentication.config/cluster 구성 절차는 어디에 있어?")
+
+    assert "authentication.config/cluster" in normalized
+    assert "oc edit" in normalized
+    assert "OIDC" in normalized
+    assert "공급자" in normalized
+    assert "release notes" not in normalized.lower()
+    assert "OCPBUGS" not in normalized
+
+
+def test_pod_pending_query_targets_scheduler_events_not_etcd_or_build_pods() -> None:
+    normalized = normalize_query("Pod가 Pending 상태일 때 스케줄링 실패 원인과 이벤트를 확인하는 절차는 어떻게 돼?")
+
+    assert "FailedScheduling" in normalized
+    assert "oc describe pod" in normalized
+    assert "get events" in normalized
+    assert "openshift-etcd" not in normalized
+    assert "source-to-image" not in normalized.lower()
+
+
+def test_image_pruning_query_targets_pruner_not_tag_add_remove() -> None:
+    normalized = normalize_query("OpenShift 이미지 레지스트리에서 오래된 이미지와 태그를 정리하는 pruning 절차는 어디에 있어?")
+
+    assert "Pruner" in normalized
+    assert "adm prune images" in normalized
+    assert "pruning" in normalized
+    assert "images" in normalized
+    assert "oc tag -d" not in normalized
+
+
+def test_mco_concept_query_targets_machine_configuration_not_node_status() -> None:
+    normalized = normalize_query("Machine Config Operator가 노드 설정과 머신 구성을 관리하는 방식은 어디에 설명돼 있어?")
+    boosts, penalties = query_book_adjustments(normalized, context=SessionContext())
+
+    assert "Machine Config Operator" in normalized
+    assert "machine_configuration" in normalized
+    assert "machineconfigpool" in normalized.lower()
+    assert "ClusterServiceVersion" not in normalized
+    assert "oc get nodes" not in normalized
+    assert boosts["machine_configuration"] >= 2.65
+    assert penalties["nodes"] <= 0.42
+
+
+def test_observability_monitoring_query_treats_each_purpose_as_compare() -> None:
+    normalized = normalize_query("OpenShift observability와 monitoring 기능은 각각 어떤 목적으로 쓰이는지 설명해줘")
+    boosts, penalties = query_book_adjustments(normalized, context=SessionContext())
+
+    assert "Observability 정보" in normalized
+    assert "monitoring" in normalized
+    assert boosts["observability_overview"] >= 1.96
+    assert boosts["monitoring"] >= 1.82
+    assert penalties["support"] <= 0.38
+
+
+def test_upgrade_precheck_query_keeps_command_signal() -> None:
+    normalized = normalize_query("클러스터 업데이트 전에 oc adm upgrade recommend로 사전 점검하는 절차는 어디에 설명돼 있어?")
+
+    assert "oc adm upgrade recommend" in normalized
+    assert "릴리스 노트" in normalized
+    assert "준비" in normalized
 
 
 def test_web_console_doc_query_keeps_console_terms_without_cli_noise() -> None:

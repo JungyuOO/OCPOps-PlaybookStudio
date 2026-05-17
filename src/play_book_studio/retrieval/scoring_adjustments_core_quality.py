@@ -39,6 +39,66 @@ def _query_has_registry_storage(query: str) -> bool:
     )
 
 
+def _query_has_registry_pvc_config(query: str) -> bool:
+    lowered = query.lower()
+    return (
+        ("registry" in lowered or "레지스트리" in query)
+        and "pvc" in lowered
+        and (
+            "configs.imageregistry" in lowered
+            or "spec.storage.pvc" in lowered
+            or "필드" in query
+            or "설정" in query
+        )
+    )
+
+
+def _query_has_etcd_restore_script(query: str) -> bool:
+    lowered = query.lower()
+    return "etcd" in lowered and any(token in query for token in ("복원", "복구", "restore")) and any(
+        token in query for token in ("스냅샷", "snapshot", "스크립트", "script", "절차")
+    )
+
+
+def _query_has_oidc_auth_config(query: str) -> bool:
+    lowered = query.lower()
+    return "oidc" in lowered and (
+        "authentication.config/cluster" in lowered
+        or any(token in query for token in ("인증", "구성", "설정", "절차"))
+    )
+
+
+def _query_has_route_expose_service(query: str) -> bool:
+    lowered = query.lower()
+    return "route" in lowered and ("service" in lowered or "서비스" in query) and (
+        "oc expose" in lowered or "노출" in query or "외부" in query
+    )
+
+
+def _query_has_image_pruning(query: str) -> bool:
+    lowered = query.lower()
+    has_image_registry = (
+        "image" in lowered
+        or "registry" in lowered
+        or "이미지" in query
+        or "레지스트리" in query
+    )
+    return has_image_registry and (
+        "prune" in lowered
+        or "pruning" in lowered
+        or any(token in query for token in ("오래된", "정리", "가지치기", "태그"))
+    )
+
+
+def _query_has_upgrade_precheck(query: str) -> bool:
+    lowered = query.lower()
+    return (
+        "oc adm upgrade recommend" in lowered
+        or "upgrade recommend" in lowered
+        or ("업데이트" in query and any(token in query for token in ("사전 점검", "전에", "점검")))
+    )
+
+
 def _query_platform(query: str) -> str:
     lowered = query.lower()
     if "aws" in lowered:
@@ -86,6 +146,26 @@ def _apply_platform_registry_storage_adjustments(hit: RetrievalHit, *, query: st
         _apply_factor(hit, "v016_registry_operator_boost", 1.22)
 
 
+def _apply_registry_pvc_config_adjustments(hit: RetrievalHit, *, query: str) -> None:
+    if not _query_has_registry_pvc_config(query):
+        return
+    text = _hit_text(hit)
+    has_exact_field = _has_any(
+        text,
+        (
+            "configs.imageregistry/cluster",
+            "configs.imageregistry.operator.openshift.io",
+            "spec.storage.pvc",
+        ),
+    )
+    if has_exact_field:
+        _apply_factor(hit, "v016_registry_pvc_exact_field_boost", 2.35)
+    if hit.book_slug in {"registry", "installing_on_any_platform", "images"}:
+        _apply_factor(hit, "v016_registry_pvc_book_boost", 1.48)
+    if hit.book_slug == "storage" and not _has_any(text, ("registry", "imageregistry", "openshift-image-registry")):
+        _apply_factor(hit, "v016_registry_pvc_generic_storage_penalty", 0.34)
+
+
 def _apply_etcd_adjustments(hit: RetrievalHit, *, query: str) -> None:
     lowered_query = query.lower()
     if "etcd" not in lowered_query:
@@ -99,6 +179,11 @@ def _apply_etcd_adjustments(hit: RetrievalHit, *, query: str) -> None:
     if "backup" in lowered_query or "백업" in query:
         if _has_any(text, ("cluster-backup.sh", "oc debug", "chroot /host")):
             _apply_factor(hit, "v016_etcd_backup_command_boost", 1.55)
+    if _query_has_etcd_restore_script(query):
+        if _has_any(text, ("cluster-restore.sh", "/usr/local/bin/cluster-restore.sh", "이전 클러스터 상태로 복원")):
+            _apply_factor(hit, "v016_etcd_restore_script_boost", 2.35)
+        if _has_any(text, ("lsblk", "custom /var", "사용자 지정 /var", "worker node")):
+            _apply_factor(hit, "v016_etcd_restore_node_partition_penalty", 0.18)
     if "latency" in lowered_query or "대기 시간" in query:
         if _has_any(text, ("etcd_disk", "histogram_quantile", "latency", "prometheus")):
             _apply_factor(hit, "v016_etcd_latency_boost", 1.6)
@@ -144,10 +229,63 @@ def _apply_route_policy_adjustments(hit: RetrievalHit, *, query: str) -> None:
         _apply_factor(hit, "v016_route_expose_policy_mismatch_penalty", 0.35)
 
 
+def _apply_oidc_auth_config_adjustments(hit: RetrievalHit, *, query: str) -> None:
+    if not _query_has_oidc_auth_config(query):
+        return
+    text = _hit_text(hit)
+    if hit.book_slug == "authentication_and_authorization":
+        _apply_factor(hit, "v016_oidc_auth_book_boost", 1.72)
+    if _has_any(text, ("authentication.config/cluster", "oc edit authentication.config/cluster", "keycloak-oidc-ca")):
+        _apply_factor(hit, "v016_oidc_auth_config_boost", 2.1)
+    if hit.book_slug == "release_notes" or _has_any(text, ("ocpbugs", "known issue", "확인된 문제")):
+        _apply_factor(hit, "v016_oidc_auth_release_note_penalty", 0.18)
+
+
+def _apply_route_expose_service_adjustments(hit: RetrievalHit, *, query: str) -> None:
+    if not _query_has_route_expose_service(query):
+        return
+    text = _hit_text(hit)
+    if hit.book_slug in {"ingress_and_load_balancing", "cli_tools"}:
+        _apply_factor(hit, "v016_route_expose_book_boost", 1.28)
+    if _has_any(text, ("oc expose", "oc expose service")):
+        _apply_factor(hit, "v016_route_expose_command_boost", 2.15)
+    if _has_any(text, ("http 요청 및 응답 헤더", "request header", "response header", "ingress 오브젝트")):
+        _apply_factor(hit, "v016_route_expose_mismatch_penalty", 0.38)
+
+
+def _apply_image_pruning_adjustments(hit: RetrievalHit, *, query: str) -> None:
+    if not _query_has_image_pruning(query):
+        return
+    text = _hit_text(hit)
+    if hit.book_slug in {"images", "registry"}:
+        _apply_factor(hit, "v016_image_pruning_book_boost", 1.22)
+    if _has_any(text, ("pruning images", "image pruner", "oc adm prune images", "이미지 자동 정리", "이미지 정리")):
+        _apply_factor(hit, "v016_image_pruning_exact_boost", 2.5)
+    if _has_any(text, ("외부 이미지에 대해 태그 추가", "타사 레지스트리", "허용 목록", "oc tag -d")):
+        _apply_factor(hit, "v016_image_pruning_mismatch_penalty", 0.28)
+
+
+def _apply_upgrade_precheck_adjustments(hit: RetrievalHit, *, query: str) -> None:
+    if not _query_has_upgrade_precheck(query):
+        return
+    text = _hit_text(hit)
+    if hit.book_slug in {"updating_clusters", "release_notes", "cli_tools"}:
+        _apply_factor(hit, "v016_upgrade_precheck_book_boost", 1.22)
+    if _has_any(text, ("oc adm upgrade recommend", "recommend", "precheck", "업데이트 전")):
+        _apply_factor(hit, "v016_upgrade_precheck_exact_boost", 1.85)
+    if _has_any(text, ("multiarch tuning operator", "다중 아키텍처", "워크로드를 관리")):
+        _apply_factor(hit, "v016_upgrade_precheck_multiarch_penalty", 0.28)
+
+
 def apply_quality_core_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
     query = signals.query
     _apply_platform_registry_storage_adjustments(hit, query=query)
+    _apply_registry_pvc_config_adjustments(hit, query=query)
     _apply_etcd_adjustments(hit, query=query)
     _apply_insights_adjustments(hit, query=query)
     _apply_build_security_adjustments(hit, query=query)
     _apply_route_policy_adjustments(hit, query=query)
+    _apply_oidc_auth_config_adjustments(hit, query=query)
+    _apply_route_expose_service_adjustments(hit, query=query)
+    _apply_image_pruning_adjustments(hit, query=query)
+    _apply_upgrade_precheck_adjustments(hit, query=query)

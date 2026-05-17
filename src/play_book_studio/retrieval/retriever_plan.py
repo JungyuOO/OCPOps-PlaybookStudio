@@ -13,6 +13,7 @@ from .query import (
     has_doc_locator_intent,
     has_follow_up_reference,
     has_openshift_kubernetes_compare_intent,
+    has_postinstall_cluster_status_check_intent,
     normalize_query,
     rewrite_query,
 )
@@ -45,6 +46,8 @@ def build_retrieval_plan(
     normalize_query_ms = round((time.perf_counter() - normalize_started_at) * 1000, 1)
     unsupported_product = detect_unsupported_product(normalized_query)
     decomposed_queries = decompose_retrieval_queries(query)
+    if has_postinstall_cluster_status_check_intent(normalized_query):
+        decomposed_queries = [query]
     follow_up_detected = has_follow_up_reference(query)
     rewrite_started_at = time.perf_counter()
     rewrite_applied, rewrite_reason = rewrite_decision(normalized_query, context)

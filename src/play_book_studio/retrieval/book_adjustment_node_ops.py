@@ -7,6 +7,7 @@ from .intents import (
     has_cluster_node_usage_intent,
     has_deployment_scaling_intent,
     has_machine_config_reboot_intent,
+    has_mcp_max_unavailable_intent,
     has_node_drain_intent,
 )
 
@@ -74,6 +75,20 @@ def apply_node_and_deployment_adjustments(
             penalties.get("hosted_control_planes", 1.0),
             0.42,
         )
+
+    if has_mcp_max_unavailable_intent(normalized):
+        boosts["updating_clusters"] = max(boosts.get("updating_clusters", 1.0), 2.35)
+        boosts["architecture"] = max(boosts.get("architecture", 1.0), 1.85)
+        boosts["machine_configuration"] = max(boosts.get("machine_configuration", 1.0), 1.55)
+        penalties.pop("updating_clusters", None)
+        penalties.pop("architecture", None)
+        penalties["nodes"] = min(penalties.get("nodes", 1.0), 0.42)
+        penalties["postinstallation_configuration"] = min(
+            penalties.get("postinstallation_configuration", 1.0),
+            0.58,
+        )
+        penalties["operators"] = min(penalties.get("operators", 1.0), 0.62)
+        penalties["support"] = min(penalties.get("support", 1.0), 0.58)
 
     if has_deployment_scaling_intent(normalized) or has_deployment_scaling_intent(context_text):
         boosts["cli_tools"] = max(boosts.get("cli_tools", 1.0), 1.82)

@@ -30,6 +30,20 @@ def apply_pod_troubleshooting_adjustments(
             hit.fused_score *= 1.28
         if hit.book_slug == "nodes" and "failedscheduling" in lowered_text:
             hit.fused_score *= 1.22
+        if any(token in lowered_text for token in ("failedscheduling", "oc describe pod", "oc get events", "scheduler")):
+            hit.fused_score *= 1.36
+        if any(
+            token in lowered_text or token in lowered_section
+            for token in (
+                "openshift-etcd",
+                "etcd pod",
+                "source-to-image",
+                "build pod",
+                "deploy pod",
+                "machine api operator pod",
+            )
+        ):
+            hit.fused_score *= 0.34
         if "설치 문제 해결" in hit.text:
             hit.fused_score *= 0.64
             if "etcd" in lowered_section or "operator" in lowered_text:

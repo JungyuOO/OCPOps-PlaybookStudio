@@ -58,6 +58,19 @@ def _has_mco_status_signal(query: str) -> bool:
     )
 
 
+def _has_mcp_max_unavailable_signal(query: str) -> bool:
+    lowered = (query or "").lower()
+    return "maxunavailable" in lowered and any(
+        token in lowered
+        for token in (
+            "machineconfigpool",
+            "machine config pool",
+            "mcp",
+            "machine config operator",
+        )
+    )
+
+
 def apply_operator_core_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
     lowered_text = hit.text.lower()
     lowered_section = hit.section.lower()
@@ -66,6 +79,7 @@ def apply_operator_core_adjustments(hit: RetrievalHit, *, signals: ScoreSignals)
     lowered_query = query_text.lower()
     operator_status_signal = _has_operator_status_signal(query_text)
     mco_status_signal = _has_mco_status_signal(query_text)
+    mcp_max_unavailable_signal = _has_mcp_max_unavailable_signal(query_text)
 
     if operator_status_signal and not mco_status_signal:
         if hit.book_slug in {"operators", "postinstallation_configuration"}:
@@ -113,6 +127,27 @@ def apply_operator_core_adjustments(hit: RetrievalHit, *, signals: ScoreSignals)
             hit.fused_score *= 0.32
         if hit.book_slug in {"backup_and_restore", "disconnected_environments"}:
             hit.fused_score *= 0.55
+
+    if mcp_max_unavailable_signal:
+        has_exact_field = "maxunavailable" in lowered_text or "maxunavailable" in lowered_section
+        if has_exact_field:
+            hit.fused_score *= 1.8
+        elif hit.book_slug in {"nodes", "postinstallation_configuration", "machine_configuration"}:
+            hit.fused_score *= 0.58
+        if hit.book_slug in {"updating_clusters", "architecture"}:
+            hit.fused_score *= 1.28
+        if any(
+            token in lowered_text
+            for token in (
+                "기본 설정",
+                "default",
+                "3 으로 변경하지",
+                "3으로 변경하지",
+                "control plane",
+                "컨트롤 플레인",
+            )
+        ):
+            hit.fused_score *= 1.22
 
     if signals.operator_concept_intent:
         if hit.book_slug == "extensions":
@@ -186,6 +221,18 @@ def apply_operator_core_adjustments(hit: RetrievalHit, *, signals: ScoreSignals)
             hit.fused_score *= 1.08
         if "machine config pool" in lowered_text or "mcp" in hit.text:
             hit.fused_score *= 1.08
+        if hit.book_slug == "nodes" and "machine config operator" not in f"{lowered_section} {lowered_text}":
+            hit.fused_score *= 0.44
+        if hit.book_slug == "machine_configuration" and any(
+            token in lowered_text or token in lowered_section
+            for token in (
+                "machine config operator",
+                "mco",
+                "machine config pool",
+                "machine config daemon",
+            )
+        ):
+            hit.fused_score *= 1.28
         if (
             "노드" in hit.text
             or "RHCOS" in hit.text

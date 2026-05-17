@@ -82,7 +82,7 @@ OPERATOR_RE = re.compile(
     re.IGNORECASE,
 )
 DOC_LOCATOR_RE = re.compile(
-    r"(문서|가이드|어디서|어디 있어|어디를|찾아|찾을|봐야|보려면|보고 싶|참고할)|"
+    r"(문서|가이드|어디서|어디에|어디 있어|어디를|찾아|찾을|봐야|보려면|보고 싶|참고할)|"
     r"((위키|wiki).*(이동|순서|경로|들어가|찾아가|따라가))",
     re.IGNORECASE,
 )

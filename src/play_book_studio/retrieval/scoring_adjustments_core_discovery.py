@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from .models import RetrievalHit
 from .scoring_signals import ScoreSignals
+from .intents import has_route_ingress_compare_intent
 
 
 def apply_discovery_core_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
     lowered_text = hit.text.lower()
     lowered_section = hit.section.lower()
+    lowered_query = signals.query.lower()
 
     if signals.generic_intro_intent:
         if hit.book_slug == "architecture":
@@ -41,6 +43,34 @@ def apply_discovery_core_adjustments(hit: RetrievalHit, *, signals: ScoreSignals
             hit.fused_score *= 1.08
         if hit.book_slug in {"tutorials", "support", "cli_tools"}:
             hit.fused_score *= 0.75
+
+    if has_route_ingress_compare_intent(signals.query):
+        if hit.book_slug == "networking_overview":
+            hit.fused_score *= 2.15
+        if any(
+            token in lowered_text or token in lowered_section
+            for token in (
+                "ingress 및 route",
+                "route 오브젝트는 openshift",
+                "kubernetes 리소스",
+                "애플리케이션 노출",
+            )
+        ):
+            hit.fused_score *= 1.75
+        if any(token in lowered_text for token in ("oc expose", "yaml", "shard", "샤딩")):
+            hit.fused_score *= 0.42
+
+    if (
+        ("observability" in lowered_query or "옵저버" in signals.query or "관찰" in signals.query)
+        and ("monitoring" in lowered_query or "모니터링" in signals.query)
+        and any(token in signals.query for token in ("각각", "목적", "차이", "설명"))
+    ):
+        if hit.book_slug in {"observability_overview", "monitoring"}:
+            hit.fused_score *= 1.62
+        elif hit.book_slug == "overview":
+            hit.fused_score *= 0.62
+        if "observability" in lowered_text or "monitoring" in lowered_text or "모니터링" in hit.text:
+            hit.fused_score *= 1.18
 
     if signals.update_doc_locator_intent:
         is_update_guide = hit.book_slug == "updating_clusters"

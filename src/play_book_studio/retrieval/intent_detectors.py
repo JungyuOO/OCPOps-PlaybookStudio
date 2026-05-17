@@ -119,6 +119,60 @@ def has_certificate_monitor_intent(query: str) -> bool:
     )
 
 
+def has_postinstall_cluster_status_check_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    compact = lowered.replace(" ", "")
+    has_postinstall = any(
+        token in lowered
+        for token in (
+            "설치 후",
+            "설치후",
+            "postinstall",
+            "postinstallation",
+            "post installation",
+        )
+    )
+    has_cluster_operator = (
+        "clusteroperator" in compact
+        or "clusteroperators" in compact
+        or "cluster operator" in lowered
+        or "클러스터operator" in compact
+        or "클러스터오퍼레이터" in compact
+    )
+    has_node_status = any(token in lowered for token in ("node", "nodes", "노드")) and any(
+        token in lowered for token in ("상태", "status", "ready", "notready", "확인", "절차")
+    )
+    return has_postinstall and has_cluster_operator and has_node_status
+
+
+def has_mcp_max_unavailable_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    has_mcp = any(
+        token in lowered
+        for token in (
+            "machineconfigpool",
+            "machine config pool",
+            "mcp",
+            "machine config operator",
+        )
+    ) or any(token in query for token in ("머신 구성 풀", "머신컨피그풀", "머신 구성"))
+    has_max_unavailable = "maxunavailable" in lowered
+    has_field_explanation = any(
+        token in lowered
+        for token in (
+            "설명",
+            "주의",
+            "주의사항",
+            "기본값",
+            "default",
+            "field",
+            "값",
+            "어디서",
+        )
+    )
+    return has_mcp and has_max_unavailable and has_field_explanation
+
+
 def has_rbac_intent(query: str) -> bool:
     normalized = query or ""
     if RBAC_RE.search(normalized):
@@ -333,10 +387,12 @@ def has_mco_concept_intent(query: str) -> bool:
         or "뭘 해" in normalized
         or "하는 거야" in normalized
         or "어떤 역할" in normalized
+        or "관리하는" in normalized
         or "누가 관리" in normalized
         or "뭘 관리" in normalized
         or "건드리면" in normalized
         or "관리해" in normalized
+        or "설명" in normalized
         or (
             has_doc_locator_intent(normalized)
             and any(
@@ -434,6 +490,8 @@ __all__ = [
     "has_backup_restore_intent",
     "has_hosted_control_plane_signal",
     "has_certificate_monitor_intent",
+    "has_postinstall_cluster_status_check_intent",
+    "has_mcp_max_unavailable_intent",
     "has_rbac_intent",
     "has_project_scoped_rbac_intent",
     "has_rbac_assignment_intent",

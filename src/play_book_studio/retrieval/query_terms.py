@@ -15,6 +15,11 @@ from .query_understanding import understand_query
 from .concept_expansion import expand_query_terms
 from .cross_lingual import cross_lingual_rewrite_terms
 from .intent_profile import build_intent_profile
+from .intents import (
+    has_mco_concept_intent,
+    has_mcp_max_unavailable_intent,
+    has_route_ingress_compare_intent,
+)
 
 
 _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
@@ -56,6 +61,8 @@ _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
     "oc get csr",
     "oc adm certificate approve",
     "oc get clusteroperators",
+    "oc get clusterversion",
+    "oc get clusterversions",
     "oc get nodes",
     "oc describe node",
     "oc describe node <node-name>",
@@ -134,6 +141,20 @@ _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
     "configmaps",
     "developer perspective",
     "gunzip",
+    "cluster-restore.sh",
+    "/usr/local/bin/cluster-restore.sh",
+    "configs.imageregistry/cluster",
+    "configs.imageregistry.operator.openshift.io",
+    "spec.storage.pvc",
+    "oc expose",
+    "oc expose service",
+    "oc describe pod",
+    "oc get events",
+    "FailedScheduling",
+    "authentication.config/cluster",
+    "oc edit authentication.config/cluster",
+    "Image Pruner",
+    "oc adm prune images",
     "integritylog",
     "secret",
     "secrets",
@@ -198,12 +219,32 @@ def normalize_query(query: str) -> str:
 
 def _prune_terms_for_intent(query: str, terms: list[str]) -> list[str]:
     profile = build_intent_profile(query)
+    if _has_etcd_restore_script_intent(query):
+        return _prune_etcd_restore_script_terms(query, terms)
+    if _has_registry_pvc_config_intent(query):
+        return _prune_registry_pvc_config_terms(query, terms)
+    if _has_oidc_auth_config_intent(query):
+        return _prune_oidc_auth_config_terms(query, terms)
+    if _has_route_expose_service_intent(query):
+        return _prune_route_expose_service_terms(query, terms)
+    if _has_pod_pending_events_intent(query):
+        return _prune_pod_pending_events_terms(query, terms)
+    if _has_image_pruning_intent(query):
+        return _prune_image_pruning_terms(query, terms)
+    if _has_observability_monitoring_intent(query):
+        return _prune_observability_monitoring_terms(query, terms)
+    if has_mco_concept_intent(query):
+        return _prune_mco_concept_terms(query, terms)
+    if has_route_ingress_compare_intent(query):
+        return _prune_route_ingress_compare_terms(query, terms)
     if _has_web_console_doc_intent(query):
         return _prune_web_console_doc_terms(query, terms)
     if _has_architecture_node_role_intent(query):
         return _prune_architecture_node_role_terms(query, terms)
     if _has_file_integrity_log_extract_intent(query):
         return _prune_file_integrity_log_terms(query, terms)
+    if has_mcp_max_unavailable_intent(query):
+        return _prune_mcp_max_unavailable_terms(query, terms)
     if _has_postinstall_cluster_status_intent(query):
         return _prune_postinstall_cluster_status_terms(query, terms)
     if _has_clusteroperator_status_intent(query):
@@ -260,6 +301,77 @@ def _has_file_integrity_log_extract_intent(query: str) -> bool:
     )
 
 
+def _has_etcd_restore_script_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    return "etcd" in lowered and any(token in query for token in ("복원", "복구", "restore")) and any(
+        token in query for token in ("스냅샷", "snapshot", "스크립트", "script", "절차")
+    )
+
+
+def _has_registry_pvc_config_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    return (
+        any(token in query for token in ("이미지 레지스트리", "레지스트리"))
+        or "image registry" in lowered
+        or "registry" in lowered
+    ) and "pvc" in lowered and any(
+        token in lowered
+        for token in (
+            "configs.imageregistry",
+            "spec.storage.pvc",
+            "field",
+            "필드",
+            "설정",
+            "구성",
+        )
+    )
+
+
+def _has_oidc_auth_config_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    return "oidc" in lowered and (
+        "authentication.config/cluster" in lowered
+        or any(token in query for token in ("인증", "구성", "설정", "절차"))
+    )
+
+
+def _has_route_expose_service_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    return (
+        "route" in lowered
+        and ("service" in lowered or "서비스" in query)
+        and ("oc expose" in lowered or "노출" in query or "외부" in query)
+    )
+
+
+def _has_pod_pending_events_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    return (
+        ("pod" in lowered or "파드" in query)
+        and ("pending" in lowered or "펜딩" in query)
+        and any(token in query for token in ("스케줄", "이벤트", "원인", "절차"))
+    )
+
+
+def _has_image_pruning_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    return (
+        any(token in query for token in ("이미지", "레지스트리"))
+        or "image" in lowered
+        or "registry" in lowered
+    ) and any(token in lowered for token in ("prune", "pruning")) or (
+        any(token in query for token in ("이미지", "레지스트리"))
+        and any(token in query for token in ("오래된", "정리", "가지치기", "태그"))
+    )
+
+
+def _has_observability_monitoring_intent(query: str) -> bool:
+    lowered = (query or "").lower()
+    return ("observability" in lowered or "옵저버" in query or "관찰" in query) and (
+        "monitoring" in lowered or "모니터링" in query
+    ) and any(token in query for token in ("각각", "목적", "차이", "설명"))
+
+
 def _has_web_console_doc_intent(query: str) -> bool:
     lowered = (query or "").lower()
     return (
@@ -298,6 +410,249 @@ def _has_postinstall_cluster_status_intent(query: str) -> bool:
         and any(token in query for token in ("노드", "node"))
         and any(token in query for token in ("상태", "확인", "절차"))
     )
+
+
+def _prune_etcd_restore_script_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "/var",
+        "lsblk",
+        "worker node",
+        "image registry",
+        "cluster-backup.sh",
+        "defrag",
+        "certificate",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "etcd",
+            "restore",
+            "snapshot",
+            "recovery",
+            "cluster-restore.sh",
+            "/usr/local/bin/cluster-restore.sh",
+            "이전 클러스터 상태로 복원",
+            "etcd 백업에서 수동으로 클러스터 복원",
+            "복원 절차",
+        ]
+    )
+    return allowed_terms
+
+
+def _prune_registry_pvc_config_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "volume clone",
+        "local volume",
+        "storageclass",
+        "allowvolumeexpansion",
+        "pv1.yaml",
+        "pvc1.yaml",
+        "csi",
+        "lvm",
+        "lvms",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "image registry storage",
+            "openshift-image-registry",
+            "configs.imageregistry/cluster",
+            "configs.imageregistry.operator.openshift.io",
+            "spec.storage.pvc",
+            "Image Registry Operator",
+            "레지스트리 스토리지 구성",
+        ]
+    )
+    return allowed_terms
+
+
+def _prune_oidc_auth_config_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "release notes",
+        "ocpbugs",
+        "known issue",
+        "bug",
+        "릴리스 노트",
+        "확인된 문제",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "OIDC",
+            "authentication.config/cluster",
+            "oc edit authentication.config/cluster",
+            "외부 OIDC ID 공급자 구성",
+            "직접 인증",
+            "keycloak-oidc-ca",
+            "issuerCertificateAuthority",
+        ]
+    )
+    return allowed_terms
+
+
+def _prune_route_expose_service_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "http header",
+        "request header",
+        "response header",
+        "ingress object",
+        "certificate",
+        "default certificate",
+        "app-example-route.yaml",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "Route",
+            "service",
+            "oc expose",
+            "oc expose service",
+            "서비스 노출",
+            "경로 생성",
+            "프로젝트 및 서비스 생성",
+        ]
+    )
+    return allowed_terms
+
+
+def _prune_pod_pending_events_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "etcd",
+        "openshift-etcd",
+        "source-to-image",
+        "build pod",
+        "deploy pod",
+        "machine api operator",
+        "openshift-machine-api",
+        "operator pod",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "Pod Pending",
+            "FailedScheduling",
+            "scheduler",
+            "oc describe pod",
+            "oc get events",
+            "events",
+            "node selector",
+            "taint",
+            "toleration",
+        ]
+    )
+    return allowed_terms
+
+
+def _prune_image_pruning_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "oc tag -d",
+        "image stream tag",
+        "외부 이미지",
+        "third-party registry",
+        "allow list",
+        "허용 목록",
+        "default route",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "pruning images",
+            "Image Pruner",
+            "oc adm prune images",
+            "이미지 자동 정리",
+            "이미지 정리",
+            "태그 정리",
+        ]
+    )
+    return allowed_terms
+
+
+def _prune_observability_monitoring_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "installation overview",
+        "릴리스 노트",
+        "release notes",
+        "support",
+        "업데이트",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "Observability 정보",
+            "Red Hat OpenShift Observability",
+            "observability",
+            "monitoring",
+            "모니터링",
+            "로그",
+            "분산 추적",
+            "메트릭",
+            "실시간 가시성",
+        ]
+    )
+    return allowed_terms
+
+
+def _prune_mco_concept_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "clusteroperator",
+        "clusterserviceversion",
+        "subscription",
+        "installplan",
+        "catalogsource",
+        "oc get nodes",
+        "describe node",
+        "debug",
+        "ready",
+        "notready",
+        "degraded",
+        "상태 확인",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "Machine Config Operator",
+            "MCO",
+            "machine config",
+            "machine configuration",
+            "MachineConfig",
+            "MachineConfigPool",
+            "machine config daemon",
+            "노드 구성",
+            "머신 구성",
+            "machine_configuration",
+        ]
+    )
+    return allowed_terms
+
+
+def _prune_route_ingress_compare_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "oc expose",
+        "expose service",
+        "oc create route",
+        "app-example-route.yaml",
+        "http header",
+        "request header",
+        "response header",
+        "샤딩",
+        "sharding",
+        "default certificate",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "Route",
+            "Ingress",
+            "IngressController",
+            "application exposure",
+            "Ingress 및 Route 비교",
+            "Kubernetes Ingress",
+            "OpenShift Route",
+            "networking_overview",
+            "ingress_and_load_balancing",
+        ]
+    )
+    return allowed_terms
 
 
 def _prune_web_console_doc_terms(query: str, terms: list[str]) -> list[str]:
@@ -386,6 +741,40 @@ def _prune_file_integrity_log_terms(query: str, terms: list[str]) -> list[str]:
     return allowed_terms
 
 
+def _prune_mcp_max_unavailable_terms(query: str, terms: list[str]) -> list[str]:
+    blocked_fragments = (
+        "co machine-config",
+        "degraded",
+        "describe mcp",
+        "oc describe mcp",
+        "oc get co",
+        "oc get mcp",
+        "updated",
+        "updating",
+        "상태 확인",
+        "명령어",
+    )
+    allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
+    allowed_terms.extend(
+        [
+            "maxUnavailable",
+            "MachineConfigPool maxUnavailable",
+            "machine config pool maxUnavailable",
+            "MCO maxUnavailable",
+            "OpenShift 업데이트 서비스",
+            "카나리아 롤아웃",
+            "사용자 정의 머신 구성 풀",
+            "기본값 1",
+            "컨트롤 플레인 풀",
+            "3 으로 변경하지 마십시오",
+            "한 번에 하나의 컨트롤 플레인 노드",
+            "updating_clusters",
+            "architecture",
+        ]
+    )
+    return allowed_terms
+
+
 def _prune_clusteroperator_status_terms(query: str, terms: list[str]) -> list[str]:
     blocked_fragments = _olm_operator_fragments()
     allowed_terms = _filter_blocked_terms(terms, blocked_fragments)
@@ -435,8 +824,12 @@ def _prune_postinstall_cluster_status_terms(query: str, terms: list[str]) -> lis
             "Ready NotReady",
             "모든 노드가 준비",
             "클러스터 Operator를 모두 사용할 수",
+            "설치 후 클러스터 작업",
             "postinstallation",
+            "postinstallation_configuration",
             "cluster status",
+            "ClusterVersion",
+            "oc get ClusterVersion",
         ]
     )
     return allowed_terms

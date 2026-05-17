@@ -27,7 +27,12 @@ def apply_concept_discovery_adjustments(
     observability_compare = bool(
         OBSERVABILITY_RE.search(normalized)
         and MONITORING_RE.search(normalized)
-        and COMPARE_RE.search(normalized)
+        and (
+            COMPARE_RE.search(normalized)
+            or "각각" in normalized
+            or "목적" in normalized
+            or "어떤 용도" in normalized
+        )
     )
     logging_ambiguity = has_logging_ambiguity(normalized)
     hosted_control_plane_signal = has_hosted_control_plane_signal(normalized) or has_hosted_control_plane_signal(context_text)
@@ -85,7 +90,7 @@ def apply_concept_discovery_adjustments(
     if has_mco_concept_intent(normalized):
         boosts["architecture"] = max(boosts.get("architecture", 1.0), 1.28)
         boosts["overview"] = max(boosts.get("overview", 1.0), 1.24)
-        boosts["machine_configuration"] = max(boosts.get("machine_configuration", 1.0), 2.08)
+        boosts["machine_configuration"] = max(boosts.get("machine_configuration", 1.0), 2.65)
         boosts["machine_management"] = max(boosts.get("machine_management", 1.0), 1.62)
         boosts["operators"] = max(boosts.get("operators", 1.0), 1.34)
         boosts["postinstallation_configuration"] = max(
@@ -113,6 +118,7 @@ def apply_concept_discovery_adjustments(
             penalties.get("updating_clusters", 1.0),
             0.28,
         )
+        penalties["nodes"] = min(penalties.get("nodes", 1.0), 0.42)
     elif MCO_RE.search(context_text):
         boosts["machine_management"] = max(boosts.get("machine_management", 1.0), 1.12)
         boosts["architecture"] = max(boosts.get("architecture", 1.0), 1.08)

@@ -73,6 +73,8 @@ from .intent_detectors import (
     has_backup_restore_intent,
     has_hosted_control_plane_signal,
     has_certificate_monitor_intent,
+    has_postinstall_cluster_status_check_intent,
+    has_mcp_max_unavailable_intent,
     has_rbac_intent,
     has_project_scoped_rbac_intent,
     has_rbac_assignment_intent,
