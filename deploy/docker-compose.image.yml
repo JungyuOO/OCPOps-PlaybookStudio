@@ -134,7 +134,6 @@ services:
       - >
         python -m play_book_studio.cli official-gold-import
         --root-dir /app
-        --enrich-runtime-metadata
         --index
         --index-limit ${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}
         --refresh-qdrant-payloads
