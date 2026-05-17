@@ -120,7 +120,8 @@
     <table>
       <tbody>
         <tr><th>branch</th><td><code>feat/corpus_embedding_text_s</code></td></tr>
-        <tr><th>head</th><td><code>0c3f8a8 fix: align bm25 and qdrant refresh with text layers</code></td></tr>
+        <tr><th>code 기준 head</th><td><code>0c3f8a8 fix: align bm25 and qdrant refresh with text layers</code></td></tr>
+        <tr><th>audit 문서 기준 head</th><td><code>cbe3c10 docs: add corpus audit summary</code></td></tr>
         <tr><th>base corpus</th><td><code>corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl</code></td></tr>
         <tr><th>Qdrant collection</th><td><code>openshift_docs</code></td></tr>
         <tr><th>contract docs</th><td><code>db-corpus-schema.md</code>, <code>db-parsing-schema.md</code>, <code>planner.md</code></td></tr>
@@ -143,6 +144,49 @@
       <li>새 chunk size 기반 rechunk 정책.</li>
       <li>반복 표 chunk의 ranking/table handling.</li>
     </ul>
+
+    <h2>적용한 정제 규칙</h2>
+    <p>이번 작업은 사람이 row를 하나씩 편집한 것이 아니라, v0.1.4 계약에 맞춘 규칙을 코드에 반영하고 전체 official corpus에 일괄 적용한 작업이다.</p>
+    <table>
+      <thead>
+        <tr><th>규칙 영역</th><th>적용 규칙</th><th>이유</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>원천 데이터</td><td>기존 <code>chunks.jsonl</code>을 기준 source로 사용</td><td>새 chunk size를 임의로 도입하지 않고 기존 합의 데이터 기준 유지</td></tr>
+        <tr><td>표시용 본문</td><td><code>text</code> / <code>markdown</code>에는 코드블록, 개행, 표, 원문 출력 예시 보존</td><td>챗봇 근거 표시와 viewer에서 사람이 읽을 수 있어야 함</td></tr>
+        <tr><td>BM25/keyword</td><td><code>normalized_text</code>는 마크업, 코드 펜스, URL, 과도한 특수문자, 중복 공백 제거</td><td>keyword matching용 flat text 확보</td></tr>
+        <tr><td>vector input</td><td><code>embedding_text</code>는 개행 없는 flat text로 만들고, 표시용 marker와 source/viewer URL 제거</td><td>임베딩 모델에 문서 서식 노이즈가 들어가지 않게 함</td></tr>
+        <tr><td>기술 신호 보존</td><td><code>$</code>, <code>-n</code>, <code>--patch</code>, <code>/</code>, <code>.</code>, <code>:</code>, <code>=</code>, <code>{}</code>, <code>[]</code> 등은 필요한 범위에서 보존</td><td>OCP 문서에서는 기호가 명령어와 설정의 의미 일부이기 때문</td></tr>
+        <tr><td>출력 예시 제거</td><td><code>Tk9...</code> 형태의 padding 있는/없는 base64-like token은 검색 계층에서 제거</td><td>질문 의미와 무관한 encoded sample output이 검색 점수를 흐리지 않게 함</td></tr>
+        <tr><td>원문 보존</td><td>base64-like output도 표시용 <code>text</code>에는 남김</td><td>원문 코드블록을 viewer에서 확인할 수 있어야 함</td></tr>
+        <tr><td>중복/공백 처리</td><td>empty, exact duplicate, contained overlap projection은 Qdrant embedding 후보에서 제외</td><td>같은 의미의 중복 vector가 top-k를 낭비하지 않게 함</td></tr>
+        <tr><td>Qdrant payload</td><td><code>payload.text</code>는 표시용, <code>text_fields.embedding_text</code>는 vector용, <code>text_fields.normalized_text</code>는 BM25용</td><td>표시 계층과 검색 계층 혼선을 막기 위함</td></tr>
+        <tr><td>BM25 runtime</td><td>BM25 index는 <code>normalized_text</code>를 우선 토큰화하고, hit 반환은 표시용 <code>text</code> 유지</td><td>검색은 정제 텍스트로, 화면 표시는 사람이 읽는 텍스트로 분리</td></tr>
+        <tr><td>seed refresh</td><td>stale Qdrant point는 payload만 갱신하지 않고 새 <code>embedding_text</code>로 vector까지 재업서트</td><td>기존 collection 재사용 시 stale vector가 남는 문제 방지</td></tr>
+      </tbody>
+    </table>
+
+    <h2>제거 대상과 보존 대상</h2>
+    <table>
+      <thead>
+        <tr><th>구분</th><th>예</th><th>처리</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>문서 마커</td><td><code>[CODE]</code>, <code>[/CODE]</code>, <code>[TABLE]</code>, fenced code marker</td><td><code>normalized_text</code> / <code>embedding_text</code>에서 제거</td></tr>
+        <tr><td>URL/anchor</td><td>docs URL, viewer path, HTML anchor</td><td>검색 계층에서 제거</td></tr>
+        <tr><td>base64 출력 예</td><td><code>Tk9ERUlQX0hJTlQ9MTkyLjAuMCxxxx==</code>, <code>Tk9ERUlQX0hJTlQ9MTkyLjAuMC</code></td><td>검색 계층에서 제거, 표시용 <code>text</code>에는 보존</td></tr>
+        <tr><td>명령어</td><td><code>$ oc describe pvc &lt;pvc-name&gt; -n &lt;namespace&gt;</code></td><td><code>embedding_text</code>에서 의미 기호 보존</td></tr>
+        <tr><td>리소스명/경로</td><td><code>configs.imageregistry/cluster</code>, <code>spec.storage.pvc</code>, <code>/etc/default/nodeip-configuration</code></td><td>검색 계층에서 의미 신호로 보존 또는 토큰화</td></tr>
+        <tr><td>YAML/JSON 구조</td><td><code>apiVersion:</code>, <code>spec:</code>, <code>{ "migration": null }</code></td><td><code>embedding_text</code>에서는 의미 구조를 최대한 보존, <code>normalized_text</code>에서는 keyword 매칭에 맞게 평탄화</td></tr>
+      </tbody>
+    </table>
+
+    <section class="callout">
+      <strong>절차 판단:</strong>
+      이 절차의 핵심은 원문을 깨끗하게 덮어쓰는 것이 아니라, 같은 source row에서 목적별 텍스트 계층을 분리하는 것이다.
+      따라서 <code>text</code>에 코드블록/개행/base64 출력 예가 보이는 것은 정상일 수 있고,
+      <code>normalized_text</code>와 <code>embedding_text</code>에 같은 노이즈가 남으면 문제다.
+    </section>
 
     <h2>전체 검사 결과</h2>
     <table>
