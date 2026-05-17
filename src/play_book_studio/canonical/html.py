@@ -13,7 +13,7 @@ from play_book_studio.ingestion.models import (
 )
 from play_book_studio.ingestion.translation_lane import build_translation_metadata
 
-from .command_split import split_inline_commands
+from .command_split import COMMAND_HEAD_RE, split_inline_commands
 from .models import (
     AstProvenance,
     CanonicalDocumentAst,
@@ -193,6 +193,40 @@ def _parse_bool_attr(value: str | None, default: bool) -> bool:
     return default
 
 
+def _strip_code_command_prompt(line: str) -> str:
+    return re.sub(r"^\$+\s*", "", line.strip())
+
+
+def _strip_inline_callout_marker(line: str) -> str:
+    cleaned = line.strip()
+    cleaned = re.sub(r"\s*(?:\(\d+\)|<\d+>)\s*$", "", cleaned)
+    if re.search(r"<[^>\s]+>", cleaned):
+        cleaned = re.sub(r"\s*\d+\s*$", "", cleaned)
+    return cleaned.strip()
+
+
+def _command_screen_lines(code: str) -> list[str] | None:
+    raw_lines = [line.strip() for line in str(code or "").splitlines() if line.strip()]
+    if not raw_lines:
+        return None
+    commands: list[str] = []
+    for line in raw_lines:
+        candidate = _strip_code_command_prompt(line)
+        if not COMMAND_HEAD_RE.match(candidate):
+            break
+        commands.append(_strip_inline_callout_marker(candidate))
+    if not commands:
+        return None
+    return commands
+
+
+def _clean_code_block_text(code: str) -> str:
+    commands = _command_screen_lines(code)
+    if commands is None:
+        return str(code or "").strip()
+    return "\n".join(commands).strip()
+
+
 def _parse_plaintext_block(text: str):
     cleaned = text.strip()
     if not cleaned:
@@ -241,12 +275,12 @@ def _blocks_from_text(text: str) -> tuple[object, ...]:
         code_match = CODE_BLOCK_RE.match(chunk)
         if code_match:
             attrs = _parse_marker_attrs(code_match.group("attrs"))
-            code = code_match.group("body").strip()
+            code = _clean_code_block_text(code_match.group("body"))
             blocks.append(
                 CodeBlock(
                     code=code,
                     language=attrs.get("language", "shell") or "shell",
-                    copy_text=attrs.get("copy_text", code),
+                    copy_text=_clean_code_block_text(attrs.get("copy_text", code)),
                     wrap_hint=_parse_bool_attr(attrs.get("wrap_hint"), True),
                     overflow_hint=attrs.get("overflow_hint", "toggle") or "toggle",
                     caption=attrs.get("caption", ""),

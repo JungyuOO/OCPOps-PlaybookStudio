@@ -11,6 +11,13 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from .domain_lexicon import (
+    DOMAIN_LEXICONS,
+    query_matches_domain,
+    query_matches_dynamic_variant,
+    query_matches_static_variant,
+)
+
 from .query_understanding import StructuredQuerySignals, understand_query_signals
 
 
@@ -546,20 +553,29 @@ def _apply_domain_specific_enrichment(
         confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
         confidence["commands"] = max(confidence.get("commands", 0.0), 0.9)
 
-    if "pvc" in lowered:
-        _append(objects, "PVC", "StorageClass")
-        _append(primary_topics, "PVC", "StorageClass")
-        _append(secondary_topics, "volume binding", "storage provisioning")
-        _append(commands, "oc get pvc", "oc describe pvc")
-        _append(command_families, "oc_get", "oc_describe")
+    storage_lexicon = DOMAIN_LEXICONS["storage"]
+    if query_matches_domain(normalized_query, "storage"):
+        classification["domain"] = classification.get("domain") or storage_lexicon.domain
+        classification["book_slug_candidates"] = _tuple_append(
+            classification.get("book_slug_candidates", ()),
+            *storage_lexicon.book_slugs,
+        )
+        _append(objects, *storage_lexicon.objects)
+        _append(primary_topics, *storage_lexicon.primary_topics)
+        _append(secondary_topics, *storage_lexicon.secondary_topics)
+        _append(commands, *storage_lexicon.commands)
+        _append(command_families, *storage_lexicon.command_families)
+        if query_matches_static_variant(normalized_query, "storage"):
+            _append(primary_topics, "static provisioning")
+        if query_matches_dynamic_variant(normalized_query, "storage"):
+            _append(primary_topics, "dynamic provisioning")
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.9)
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
         confidence["commands"] = max(confidence.get("commands", 0.0), 0.86)
 
     has_vsphere_storage = (
         any(token in lowered for token in ("vsphere", "vmware"))
-        and (
-            any(token in lowered for token in ("pvc", "pv", "volume", "storage", "provision"))
-            or any(token in normalized_query for token in ("볼륨", "스토리지", "프로비저닝"))
-        )
+        and query_matches_domain(normalized_query, "storage")
     )
     if has_vsphere_storage:
         classification["domain"] = "storage"
@@ -579,10 +595,10 @@ def _apply_domain_specific_enrichment(
         _append(intent_labels, "configure_resource", "create_resource", "command_lookup")
         _append(answer_shapes, "step_by_step", "command")
         _append(command_families, "oc_create", "oc_get")
-        if "동적" in normalized_query or "dynamic" in lowered:
+        if query_matches_dynamic_variant(normalized_query, "storage"):
             _append(primary_topics, "dynamic provisioning")
             _append(secondary_topics, "thin StorageClass", "PersistentVolumeClaim")
-        elif "정적" in normalized_query or "static" in lowered or "연결" in normalized_query:
+        elif query_matches_static_variant(normalized_query, "storage"):
             _append(primary_topics, "static provisioning")
             _append(secondary_topics, "PersistentVolume", "PersistentVolumeClaim")
         confidence["domain"] = max(confidence.get("domain", 0.0), 0.94)
@@ -667,7 +683,7 @@ def _apply_domain_specific_enrichment(
         confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
     if "csi driver" in " ".join(components).lower():
         return
-    if "pvc" in lowered:
+    if query_matches_domain(normalized_query, "storage"):
         _append(components, "CSI Driver", "scheduler")
 
 

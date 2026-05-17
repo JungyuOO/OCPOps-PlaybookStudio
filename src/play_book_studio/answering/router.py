@@ -84,7 +84,6 @@ V016_OPERATIONAL_OVERRIDE_RE = re.compile(
     r"Local\s*Storage\s*Operator|Vertical\s*Pod\s*Autoscaler\s*Operator|로컬\s*스토리지|중단\s*예산|스케일링\s*정책|도메인별\s*HSTS",
     re.IGNORECASE,
 )
-STRUCTURED_QUERY_RE = re.compile(r"[/<>=:\d]")
 OBSERVABILITY_COMPARE_RE = re.compile(
     r"(monitoring|모니터링).*(logging|로깅).*(observability|관측|옵저버빌리티).*(구분|차이|설명|비교)"
     r"|(?:구분|차이|설명|비교).*(monitoring|모니터링).*(logging|로깅).*(observability|관측|옵저버빌리티)",
@@ -106,33 +105,6 @@ def _ocp_learning_advice_answer() -> str:
         "그다음에는 oc CLI, 로그와 이벤트 확인, 배포·롤백·스케일링, 프로젝트와 RBAC, 업데이트와 백업 같은 운영 절차를 손으로 반복해 보는 것이 가장 효과적입니다. "
         "원하면 입문 순서를 학습 로드맵처럼 나눠서 안내하겠습니다."
     )
-
-
-def _generic_smalltalk_answer() -> str:
-    return (
-        "답변: 반갑습니다. 저는 OCP PlayBook 챗봇입니다. "
-        "OpenShift 질문을 중심으로 돕지만, 가볍게 말을 붙여도 괜찮습니다. "
-        "지금 궁금한 상황이나 작업을 편하게 말해 주세요."
-    )
-
-
-def _looks_like_light_smalltalk(query: str) -> bool:
-    normalized = (query or "").strip()
-    if not normalized:
-        return False
-    if V016_OPERATIONAL_OVERRIDE_RE.search(normalized):
-        return False
-    if TECHNICAL_HINT_RE.search(normalized):
-        return False
-    if STRUCTURED_QUERY_RE.search(normalized):
-        return False
-    if len(normalized) > 24:
-        return False
-    token_count = len(re.findall(r"[\w가-힣]+", normalized, re.UNICODE))
-    if token_count == 0:
-        return False
-    return token_count <= 5
-
 
 def _looks_like_ocp_operational_question(query: str) -> bool:
     normalized = (query or "").strip()
@@ -264,6 +236,4 @@ def route_non_rag(
         return None
     if ocp_operational_question:
         return None
-    if _looks_like_light_smalltalk(normalized):
-        return RoutedResponse(route="smalltalk", answer=_generic_smalltalk_answer())
     return None

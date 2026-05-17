@@ -12,7 +12,7 @@ from typing import Any
 
 from play_book_studio.config.corpus_paths import OFFICIAL_GOLD_CHUNKS_PATH
 
-from .chunk_question_candidates import build_chunk_question_candidates
+from .chunk_question_candidates import build_chunk_question_candidates, has_current_question_candidates
 from .runtime_catalog_library import _bm25_row
 
 
@@ -32,10 +32,15 @@ def enrich_official_gold_chunks(
     *,
     bm25_path: Path | None = None,
     dry_run: bool = False,
+    question_llm_client: Any | None = None,
 ) -> dict[str, Any]:
     rows = _read_jsonl(chunks_path)
-    leaf_rows = [_enrich_leaf(row) for row in rows if str(row.get("chunk_role") or "leaf") != "parent"]
-    parents = [_parent_row(group) for group in _groups(leaf_rows).values() if group]
+    leaf_rows = [
+        _enrich_leaf(row, question_llm_client=question_llm_client)
+        for row in rows
+        if str(row.get("chunk_role") or "leaf") != "parent"
+    ]
+    parents = [_parent_row(group, question_llm_client=question_llm_client) for group in _groups(leaf_rows).values() if group]
     enriched_rows = _sort_rows([*leaf_rows, *parents])
     bm25_rows = [_bm25_row(row) for row in enriched_rows]
 
@@ -101,18 +106,18 @@ def _sort_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
 
-def _enrich_leaf(row: dict[str, Any]) -> dict[str, Any]:
+def _enrich_leaf(row: dict[str, Any], *, question_llm_client: Any | None = None) -> dict[str, Any]:
     enriched = dict(row)
     enriched["chunk_role"] = "leaf"
     enriched["parent_chunk_id"] = _parent_id_for_group_key(_group_key(enriched))
     enriched["child_chunk_ids"] = []
     enriched["navigation_only"] = bool(enriched.get("navigation_only")) or _is_navigation_only(enriched)
     enriched.setdefault("beginner_narrative", "")
-    _apply_question_candidates(enriched)
+    _apply_question_candidates(enriched, llm_client=question_llm_client)
     return enriched
 
 
-def _parent_row(group: list[dict[str, Any]]) -> dict[str, Any]:
+def _parent_row(group: list[dict[str, Any]], *, question_llm_client: Any | None = None) -> dict[str, Any]:
     first = dict(group[0])
     parent = dict(first)
     parent["chunk_id"] = _parent_id_for_group_key(_group_key(first))
@@ -124,7 +129,7 @@ def _parent_row(group: list[dict[str, Any]]) -> dict[str, Any]:
     parent["ordinal"] = max((int(row.get("ordinal") or 0) for row in group), default=0) + 1
     parent["navigation_only"] = False
     parent.setdefault("beginner_narrative", "")
-    _apply_question_candidates(parent)
+    _apply_question_candidates(parent, llm_client=question_llm_client)
     return parent
 
 
@@ -164,11 +169,15 @@ def _is_navigation_only(row: dict[str, Any]) -> bool:
     return any(phrase in text or phrase in lowered for phrase in NAVIGATION_PHRASES)
 
 
-def _apply_question_candidates(row: dict[str, Any]) -> None:
-    candidates = build_chunk_question_candidates(row)
+def _apply_question_candidates(row: dict[str, Any], *, llm_client: Any | None = None) -> None:
+    candidates = (
+        build_chunk_question_candidates(row, llm_client=llm_client)
+        if str(row.get("chunk_role") or "leaf") == "parent" or has_current_question_candidates(row)
+        else {"starter_question_candidates": [], "followup_question_candidates": []}
+    )
     row["starter_question_candidates"] = candidates["starter_question_candidates"]
     row["followup_question_candidates"] = candidates["followup_question_candidates"]
-    row["question_candidates_version"] = 1
+    row["question_candidates_version"] = 2 if candidates["starter_question_candidates"] else 0
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -98,6 +98,18 @@ def test_v015_query_signal_plan_expands_vsphere_static_storage() -> None:
     assert any("static provisioning" in query for query in plan.embedding_queries)
 
 
+def test_query_signal_plan_expands_general_static_storage_question() -> None:
+    plan = build_query_signal_plan("정적 프로비저닝 기준으로 다음 확인 단계는 뭐야?")
+
+    assert plan.classification["domain"] == "storage"
+    assert "storage" in plan.classification["book_slug_candidates"]
+    assert "PV" in plan.search_signals["objects"]
+    assert "PVC" in plan.search_signals["objects"]
+    assert "static provisioning" in plan.search_signals["primary_topics"]
+    assert "oc_get" in plan.search_signals["command_families"]
+    assert any("static provisioning" in query for query in plan.embedding_queries)
+
+
 def test_v015_query_signal_plan_expands_install_compare_question() -> None:
     plan = build_query_signal_plan("UPI랑 agent-based 설치 차이 알려줘")
 

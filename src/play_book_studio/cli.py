@@ -1041,6 +1041,15 @@ def _run_course_runtime_status(args: argparse.Namespace) -> int:
     return 0 if bool(payload.get("ready")) else 1
 
 
+def _question_candidate_llm_client(settings):
+    try:
+        from play_book_studio.answering.llm import LLMClient
+
+        return LLMClient(settings)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _run_official_gold_import(args: argparse.Namespace) -> int:
     from play_book_studio.ingestion.official_gold_import import (
         build_official_gold_import_plan,
@@ -1074,6 +1083,7 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
         bm25_path = bm25_path.resolve()
     elif args.enrich_runtime_metadata:
         bm25_path = resolve_official_gold_bm25_path(root_dir)
+    settings = load_settings(root_dir)
     enrich_report = None
     if args.enrich_runtime_metadata:
         from play_book_studio.ingestion.official_gold_enrichment import enrich_official_gold_chunks
@@ -1082,6 +1092,7 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
             chunks_path,
             bm25_path=bm25_path,
             dry_run=bool(args.dry_run),
+            question_llm_client=_question_candidate_llm_client(settings),
         )
     if args.dry_run:
         payload = build_official_gold_import_plan(chunks_path, limit=args.limit)
@@ -1102,7 +1113,6 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
 
-    settings = load_settings(root_dir)
     database_url = (args.database_url or settings.database_url).strip()
     if not database_url:
         print("DATABASE_URL is required. Set it in .env or pass --database-url.")
@@ -1486,6 +1496,7 @@ def _run_kmsc_course_import(args: argparse.Namespace) -> int:
         summary = import_kmsc_course_chunks(
             connection,
             course_dir=course_dir,
+            question_llm_client=_question_candidate_llm_client(settings),
             tenant_slug=args.tenant_slug,
             tenant_name=args.tenant_name,
             workspace_slug=args.workspace_slug,

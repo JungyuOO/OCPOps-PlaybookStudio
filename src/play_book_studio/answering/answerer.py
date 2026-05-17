@@ -15,15 +15,12 @@ from play_book_studio.config.settings import Settings
 from play_book_studio.retrieval import ChatRetriever, SessionContext
 from play_book_studio.retrieval.query import (
     has_backup_restore_intent,
-    has_cluster_node_usage_intent,
     has_command_request,
     has_corrective_follow_up,
-    has_deployment_scaling_intent,
     has_doc_locator_intent,
     has_follow_up_entity_ambiguity,
     has_follow_up_reference,
     has_mco_concept_intent,
-    has_node_drain_intent,
     has_openshift_kubernetes_compare_intent,
     has_operator_concept_intent,
     has_pod_lifecycle_concept_intent,
@@ -34,17 +31,11 @@ from play_book_studio.retrieval.query import (
     is_explainer_query,
     is_generic_intro_query,
 )
+from play_book_studio.retrieval.korean_text import normalized_token_set
 from play_book_studio.retrieval.query_understanding import has_beginner_troubleshooting_intent
 
-from .answer_text_commands import (
-    build_deployment_scaling_answer,
-    build_grounded_command_guide_answer,
-    build_grounded_status_answer,
-    has_sufficient_command_grounding,
-    shape_etcd_backup_answer,
-    strip_ungrounded_code_blocks,
-)
-from .answer_text_formatting import shape_beginner_grounded_answer, summarize_session_context
+from .answer_text_commands import has_sufficient_command_grounding, strip_ungrounded_code_blocks
+from .answer_text_formatting import summarize_session_context
 from .citations import (
     finalize_citations,
     inject_citation_indices,
@@ -56,11 +47,10 @@ from .citations import (
 from .context import assemble_context
 from .doc_locator_intent import is_document_sequence_query as _shared_is_document_sequence_query
 from .llm import LLMClient
-from .models import AnswerResult, Citation, ContextBundle
+from .models import AnswerResult, Citation
 from .pipeline_helpers import (
     build_answer_result,
     build_follow_up_clarification_answer,
-    finalize_deployment_scaling_answer,
     generate_grounded_answer_text,
 )
 from .prompt import build_messages
@@ -91,7 +81,6 @@ def _looks_like_missing_coverage_answer(answer: str) -> bool:
     )
 
 
-_CONFIDENCE_TOKEN_RE = re.compile(r"[0-9A-Za-z가-힣][0-9A-Za-z가-힣_-]*")
 _CONFIDENCE_STOPWORDS = {
     "어떻게",
     "어떤",
@@ -114,14 +103,11 @@ _CONFIDENCE_STOPWORDS = {
 
 
 def _confidence_tokens(*texts: str) -> set[str]:
-    tokens: set[str] = set()
-    for text in texts:
-        for token in _CONFIDENCE_TOKEN_RE.findall(str(text or "").lower()):
-            normalized = token.strip("-_ ")
-            if len(normalized) < 2 or normalized in _CONFIDENCE_STOPWORDS:
-                continue
-            tokens.add(normalized)
-    return tokens
+    return {
+        token
+        for token in normalized_token_set(*texts)
+        if token not in _CONFIDENCE_STOPWORDS
+    }
 
 
 def _selected_hit_score(selected_hits: list[dict] | None, key: str) -> float:
@@ -308,22 +294,6 @@ def _is_low_confidence_retrieval(
         or is_explainer_query(query)
         or _is_guided_learning_question(query)
         or _is_supported_ops_learning_question(query)
-    ):
-        return False
-    if any(token in normalized_query for token in ("vsphere", "vmware")) and any(
-        token in citation_haystack
-        for token in (
-            "vsphere",
-            "vmware",
-            "storage",
-            "persistentvolume",
-            "persistent volume",
-            "pvc",
-            "pv",
-            "스토리지",
-            "프로비저닝",
-            "영구 볼륨",
-        )
     ):
         return False
     if has_beginner_troubleshooting_intent(query) and any(
@@ -519,121 +489,6 @@ def _is_supported_ops_learning_question(query: str) -> bool:
     )
 
 
-def _build_doc_locator_answer(*, query: str, citations: list) -> str | None:
-    if not citations or not has_doc_locator_intent(query):
-        return None
-    if _is_document_sequence_query(query):
-        return None
-    if any(
-        (
-            has_command_request(query),
-            has_corrective_follow_up(query),
-            has_backup_restore_intent(query),
-            has_cluster_node_usage_intent(query),
-            has_node_drain_intent(query),
-            has_rbac_intent(query),
-            has_deployment_scaling_intent(query),
-            has_openshift_kubernetes_compare_intent(query),
-            has_crash_loop_troubleshooting_intent(query),
-            has_pod_pending_troubleshooting_intent(query),
-        )
-    ):
-        return None
-    if _requires_console_grounding(query) and not _citations_match_console_intent(citations):
-        return None
-    if _requires_rbac_grounding(query) and not _citations_match_rbac_intent(citations):
-        return None
-    primary = citations[0]
-    section_label = str(getattr(primary, "section_path_label", "") or getattr(primary, "section", "") or "").strip()
-    if not section_label:
-        return None
-    lowered = str(query or "").lower()
-    follow_up = ""
-    if any(token in lowered for token in ("시작", "먼저", "first")):
-        follow_up = " 이 경로를 먼저 열고 같은 문서 안의 절차를 순서대로 따라가면 됩니다 [1]."
-    elif any(token in lowered for token in ("순서", "이동", "흐름", "route")):
-        follow_up = " 이 경로를 먼저 열고 문제 해결 섹션을 순서대로 따라가면 됩니다 [1]."
-    elif any(token in lowered for token in ("경로", "path", "route")):
-        follow_up = " 이 경로를 기준으로 연결 문서와 다음 절차를 이어가면 됩니다 [1]."
-    return f"답변: 먼저 `{section_label}` 문서를 여는 것이 맞습니다 [1].{follow_up}"
-
-
-INTRO_PLAYBOOK_ROUTE = (
-    {
-        "book_slug": "overview",
-        "book_title": "개요",
-        "viewer_path": "/playbooks/wiki-runtime/active/overview/index.html",
-        "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/overview/index",
-        "source_label": "개요",
-        "section": "개요",
-    },
-    {
-        "book_slug": "architecture",
-        "book_title": "아키텍처",
-        "viewer_path": "/playbooks/wiki-runtime/active/architecture/index.html",
-        "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/architecture/index",
-        "source_label": "아키텍처",
-        "section": "아키텍처",
-    },
-    {
-        "book_slug": "operators",
-        "book_title": "Operator 운영 플레이북",
-        "viewer_path": "/playbooks/wiki-runtime/active/operators/index.html",
-        "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/operators/index",
-        "source_label": "Operator 운영 플레이북",
-        "section": "Operator 운영 플레이북",
-    },
-)
-
-
-def _has_intro_playbook_route_intent(query: str) -> bool:
-    normalized = " ".join(str(query or "").split()).lower()
-    if not normalized:
-        return False
-    has_pack_target = any(token in normalized for token in ("플레이북", "playbook", "문서"))
-    has_intro_signal = any(token in normalized for token in ("입문", "처음", "먼저", "start"))
-    has_count_signal = any(token in normalized for token in ("3개", "세 개", "3권", "세 권", "top 3"))
-    has_route_signal = any(token in normalized for token in ("봐야", "읽", "추천", "알려줘", "추천해"))
-    return has_pack_target and has_intro_signal and has_count_signal and has_route_signal
-
-
-def _build_intro_playbook_route_citations() -> list[Citation]:
-    citations: list[Citation] = []
-    for index, item in enumerate(INTRO_PLAYBOOK_ROUTE, start=1):
-        citations.append(
-            Citation(
-                index=index,
-                chunk_id=f"intro-playbook-route-{item['book_slug']}",
-                book_slug=item["book_slug"],
-                section=item["section"],
-                anchor="",
-                source_url=item["source_url"],
-                viewer_path=item["viewer_path"],
-                excerpt="운영 입문용 기본 Playbook route",
-                section_path=(item["section"],),
-                section_path_label=item["section"],
-                chunk_type="concept",
-                semantic_role="guide",
-                source_collection="core",
-            )
-        )
-    return citations
-
-
-def _build_intro_playbook_route_answer(query: str) -> tuple[str, list[Citation]] | None:
-    if not _has_intro_playbook_route_intent(query):
-        return None
-    citations = _build_intro_playbook_route_citations()
-    answer = (
-        "답변: 운영 입문이면 아래 3권 순서로 시작하는 게 가장 자연스럽습니다.\n\n"
-        "1. `개요`부터 엽니다. 제품 범위와 기본 용어를 먼저 잡는 단계입니다 [1].\n"
-        "2. `아키텍처`로 넘어갑니다. 클러스터 구성과 핵심 컴포넌트가 어떻게 맞물리는지 이해하는 단계입니다 [2].\n"
-        "3. `Operator 운영 플레이북`으로 마무리합니다. 실제 운영 흐름을 붙이기 좋은 출발점입니다 [3].\n\n"
-        "읽는 순서도 그대로 `개요 -> 아키텍처 -> Operator 운영 플레이북`으로 가면 됩니다 [1] [2] [3]."
-    )
-    return answer, citations
-
-
 def _allow_single_citation_fallback(*, query: str, citations: list) -> bool:
     return bool(citations) and any(
         (
@@ -701,44 +556,6 @@ def _prune_provenance_noise_citations(*, query: str, citations: list) -> list:
             pruned = [citation for citation in pruned if citation.book_slug in preferred_books]
 
     return pruned or citations
-
-
-def _deterministic_llm_runtime_meta(*, provider: str) -> dict[str, object]:
-    return {
-        "preferred_provider": provider,
-        "fallback_enabled": False,
-        "last_provider": provider,
-        "last_fallback_used": False,
-        "last_attempted_providers": [provider],
-        "last_requested_max_tokens": 0,
-        "provider_round_trip_ms": 0.0,
-        "post_process_ms": 0.0,
-        "raw_output_chars": 0,
-        "final_output_chars": 0,
-        "requested_max_tokens": 0,
-    }
-
-
-def _context_bundle_with_grounded_draft(
-    context_bundle: ContextBundle,
-    *,
-    draft: str,
-    source: str,
-) -> ContextBundle:
-    cleaned_draft = str(draft or "").strip()
-    if not cleaned_draft:
-        return context_bundle
-    draft_block = (
-        "\n\nGrounded answer draft for final LLM rewrite:\n"
-        f"source: {source}\n"
-        "Use this as a constraint, not as a substitute for the citations. "
-        "Keep grounded commands exactly unless citations require a correction.\n"
-        f"{cleaned_draft}"
-    )
-    return ContextBundle(
-        prompt_context=f"{context_bundle.prompt_context}{draft_block}",
-        citations=context_bundle.citations,
-    )
 
 
 def _is_explanation_query(query: str) -> bool:
@@ -1208,155 +1025,8 @@ class ChatAnswerer:
                 selected_hits=selected_hits,
             )
 
-        deterministic_answer_text = ""
-        deterministic_answer_source = ""
-
-        intro_playbook_route = _build_intro_playbook_route_answer(query)
-        if intro_playbook_route is not None:
-            answer_text, route_citations = intro_playbook_route
-            answer_text, final_citations, cited_indices = finalize_citations(
-                answer_text,
-                route_citations,
-            )
-            emit(
-                {
-                    "step": "deterministic_draft",
-                    "label": "grounded draft prepared",
-                    "status": "done",
-                    "detail": "intro_playbook_route",
-                }
-            )
-            deterministic_answer_text = answer_text
-            deterministic_answer_source = "intro_playbook_route"
-            context_bundle = _context_bundle_with_grounded_draft(
-                context_bundle,
-                draft=answer_text,
-                source=deterministic_answer_source,
-            )
-
-        grounded_command_answer = build_grounded_command_guide_answer(
-            query=query,
-            citations=context_bundle.citations,
-        )
-        if grounded_command_answer is not None and not deterministic_answer_text:
-            answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
-                grounded_command_answer,
-                context_bundle.citations,
-            )
-            status_answer = build_grounded_status_answer(
-                query=query,
-                citations=final_citations or context_bundle.citations,
-            )
-            if status_answer is not None and status_answer != answer_text:
-                answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
-                    status_answer,
-                    final_citations or context_bundle.citations,
-                )
-            beginner_shaped_answer_text = shape_beginner_grounded_answer(
-                answer_text,
-                query=query,
-                citations=final_citations or context_bundle.citations,
-            )
-            if beginner_shaped_answer_text != answer_text:
-                answer_text, final_citations, cited_indices = finalize_citations(
-                    beginner_shaped_answer_text,
-                    final_citations or context_bundle.citations,
-                )
-            emit(
-                {
-                    "step": "deterministic_draft",
-                    "label": "grounded draft prepared",
-                    "status": "done",
-                    "detail": "grounded_command_guide",
-                }
-            )
-            deterministic_answer_text = answer_text
-            deterministic_answer_source = "grounded_command_guide"
-            context_bundle = _context_bundle_with_grounded_draft(
-                context_bundle,
-                draft=answer_text,
-                source=deterministic_answer_source,
-            )
-
-        doc_locator_answer = _build_doc_locator_answer(
-            query=query,
-            citations=context_bundle.citations,
-        )
-        if doc_locator_answer is not None and not deterministic_answer_text:
-            answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
-                doc_locator_answer,
-                context_bundle.citations,
-            )
-            emit(
-                {
-                    "step": "deterministic_draft",
-                    "label": "grounded draft prepared",
-                    "status": "done",
-                    "detail": "doc_locator",
-                }
-            )
-            deterministic_answer_text = answer_text
-            deterministic_answer_source = "doc_locator"
-            context_bundle = _context_bundle_with_grounded_draft(
-                context_bundle,
-                draft=answer_text,
-                source=deterministic_answer_source,
-            )
-
-        deployment_scaling_answer = build_deployment_scaling_answer(
-            query=query,
-            context=context,
-            citations=context_bundle.citations,
-        )
-        if deployment_scaling_answer is not None and not deterministic_answer_text:
-            answer_text = deployment_scaling_answer
-            answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
-                answer_text,
-                context_bundle.citations,
-            )
-            emit(
-                {
-                    "step": "deterministic_draft",
-                    "label": "grounded draft prepared",
-                    "status": "done",
-                    "detail": "deployment_scaling",
-                }
-            )
-            deterministic_answer_text = answer_text
-            deterministic_answer_source = "deployment_scaling"
-            context_bundle = _context_bundle_with_grounded_draft(
-                context_bundle,
-                draft=answer_text,
-                source=deterministic_answer_source,
-            )
-
         answer_text = ""
         llm_runtime_meta: dict[str, object]
-        etcd_fast_path_answer = ""
-        if has_backup_restore_intent(query):
-            etcd_fast_path_answer = shape_etcd_backup_answer(
-                "",
-                query=query,
-                citations=context_bundle.citations,
-            )
-
-        if etcd_fast_path_answer and not deterministic_answer_text:
-            emit(
-                {
-                    "step": "deterministic_draft",
-                    "label": "grounded draft prepared",
-                    "status": "done",
-                    "detail": "etcd_backup_restore",
-                }
-            )
-            deterministic_answer_text = etcd_fast_path_answer
-            deterministic_answer_source = "etcd_backup_restore"
-            context_bundle = _context_bundle_with_grounded_draft(
-                context_bundle,
-                draft=etcd_fast_path_answer,
-                source=deterministic_answer_source,
-            )
-
         prompt_started_at = time.perf_counter()
         emit(
             {
@@ -1482,17 +1152,6 @@ class ChatAnswerer:
         )
         if guarded_answer_text != answer_text:
             answer_text = guarded_answer_text
-            answer_text, final_citations, cited_indices = finalize_citations(
-                answer_text,
-                final_citations or context_bundle.citations,
-            )
-        beginner_shaped_answer_text = shape_beginner_grounded_answer(
-            answer_text,
-            query=query,
-            citations=final_citations or context_bundle.citations,
-        )
-        if beginner_shaped_answer_text != answer_text:
-            answer_text = beginner_shaped_answer_text
             answer_text, final_citations, cited_indices = finalize_citations(
                 answer_text,
                 final_citations or context_bundle.citations,

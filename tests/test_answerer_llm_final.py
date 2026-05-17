@@ -81,7 +81,7 @@ def test_grounded_command_answer_is_rewritten_by_answer_llm(tmp_path: Path) -> N
     assert result.response_kind == "rag"
     assert "LLM 최종 답변입니다" in result.answer
     prompt_text = "\n".join(message["content"] for message in llm.calls[0])
-    assert "Grounded answer draft for final LLM rewrite" in prompt_text
+    assert "Grounded answer draft for final LLM rewrite" not in prompt_text
     assert "oc get pvc" in prompt_text
-    assert any(event.get("step") == "deterministic_draft" for event in result.pipeline_trace["events"])
+    assert not any(event.get("step") == "deterministic_draft" for event in result.pipeline_trace["events"])
     assert any(event.get("step") == "llm_runtime" for event in result.pipeline_trace["events"])

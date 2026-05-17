@@ -27,6 +27,22 @@ def test_short_operational_status_question_is_not_smalltalk() -> None:
     assert route_non_rag("PVC가 Pending인데 뭐 확인해야 해?") is None
 
 
+def test_korean_only_operational_questions_are_not_smalltalk() -> None:
+    for query in (
+        "디플로이먼트 상태 어떻게봐?",
+        "라우트 어떻게 만들어?",
+        "파드 로그 봐줘",
+    ):
+        assert route_non_rag(query) is None
+
+
+def test_explicit_smalltalk_still_routes_to_smalltalk() -> None:
+    for query in ("안녕", "고마워"):
+        routed = route_non_rag(query)
+        assert routed is not None
+        assert routed.route == "smalltalk"
+
+
 def test_v016_basic_ocp_command_questions_are_not_smalltalk() -> None:
     queries = [
         "추가 OAuth 클라이언트는 어떻게 등록해?",

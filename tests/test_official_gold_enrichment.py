@@ -18,6 +18,16 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
+class _FakeQuestionLlm:
+    def generate(self, messages, *, max_tokens=None):  # noqa: ANN001
+        del messages, max_tokens
+        return (
+            '{"starter_question_candidates":["설치 전에는 무엇을 먼저 확인하면 될까요?",'
+            '"클러스터 상태는 어디서 확인하면 될까요?"],'
+            '"followup_question_candidates":["oc get co 결과에서는 무엇을 봐야 할까요?"]}'
+        )
+
+
 def test_enrich_official_gold_chunks_adds_parent_leaf_metadata(tmp_path: Path) -> None:
     chunks_path = tmp_path / "chunks.jsonl"
     bm25_path = tmp_path / "bm25.jsonl"
@@ -89,7 +99,7 @@ def test_enrich_official_gold_chunks_adds_parent_leaf_metadata(tmp_path: Path) -
         ],
     )
 
-    report = enrich_official_gold_chunks(chunks_path, bm25_path=bm25_path)
+    report = enrich_official_gold_chunks(chunks_path, bm25_path=bm25_path, question_llm_client=_FakeQuestionLlm())
 
     rows = _read_jsonl(chunks_path)
     leaf_rows = [row for row in rows if row["chunk_role"] == "leaf"]
@@ -99,8 +109,9 @@ def test_enrich_official_gold_chunks_adds_parent_leaf_metadata(tmp_path: Path) -
     assert len(parent_rows) == 1
     assert {row["parent_chunk_id"] for row in leaf_rows} == {parent_rows[0]["chunk_id"]}
     assert parent_rows[0]["child_chunk_ids"] == ["leaf-1", "leaf-2"]
-    assert all(row["starter_question_candidates"] for row in rows)
-    assert all("�" not in question for row in rows for question in row["starter_question_candidates"])
+    assert all(row["starter_question_candidates"] for row in parent_rows)
+    assert all(not row["starter_question_candidates"] for row in leaf_rows)
+    assert all("�" not in question for row in parent_rows for question in row["starter_question_candidates"])
     assert len(_read_jsonl(bm25_path)) == len(rows)
 
 
