@@ -188,6 +188,61 @@
       <code>normalized_text</code>와 <code>embedding_text</code>에 같은 노이즈가 남으면 문제다.
     </section>
 
+    <h2>추가 변경 판단 근거</h2>
+    <h3>1. BM25가 normalized_text를 우선 토큰화하도록 바꾼 이유</h3>
+    <table>
+      <tbody>
+        <tr>
+          <th>원래 상태</th>
+          <td>BM25 index는 row의 <code>text</code>를 토큰화했다.</td>
+        </tr>
+        <tr>
+          <th>문제가 된 이유</th>
+          <td>이번 작업으로 <code>text</code>는 표시용 markdown/원문 계층으로 복원됐다. 따라서 <code>text</code>에는 코드블록, 개행, 표 표현, 원문 출력 예시가 남을 수 있다. 이 값을 그대로 BM25가 토큰화하면 BM25가 검색용으로 정제된 텍스트가 아니라 표시용 텍스트를 보게 된다.</td>
+        </tr>
+        <tr>
+          <th>변경한 내용</th>
+          <td>BM25 index 생성 시 <code>text_fields.normalized_text</code> 또는 <code>normalized_text</code>를 우선 사용하고, 값이 없을 때만 기존 <code>text</code>로 fallback하도록 수정했다.</td>
+        </tr>
+        <tr>
+          <th>기대 이점</th>
+          <td>BM25/keyword 검색은 정제된 flat text를 기준으로 동작하고, 검색 결과 화면이나 답변 근거에는 표시용 <code>text</code>를 그대로 돌려줄 수 있다. 즉 검색용 텍스트와 표시용 텍스트가 분리된다.</td>
+        </tr>
+        <tr>
+          <th>논의 가능 지점</th>
+          <td><code>normalized_text</code>에서 어느 수준까지 기호를 제거할지, 명령어 옵션을 BM25용에서도 일부 보존할지 여부는 팀 검색 정책에 따라 조정할 수 있다.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>이 변경은 "BM25 파일을 없앨지"의 문제가 아니라, runtime BM25가 어떤 텍스트 계층을 검색 대상으로 삼을지에 대한 정리다.</p>
+
+    <h3>2. compose seed stale refresh가 vector까지 재업서트하도록 바꾼 이유</h3>
+    <table>
+      <tbody>
+        <tr>
+          <th>원래 상태</th>
+          <td>docker compose seed 경로는 <code>official-gold-import --index --refresh-qdrant-payloads</code>를 사용한다. 이 중 refresh 경로는 기존 Qdrant point의 payload hash가 달라졌을 때 payload를 덮어쓰는 역할이었다.</td>
+        </tr>
+        <tr>
+          <th>문제가 된 이유</th>
+          <td><code>embedding_text</code>가 바뀌었는데 payload만 갱신하면, Qdrant에 저장된 vector는 예전 embedding input 기준으로 남을 수 있다. 화면에 보이는 payload는 최신인데 검색 vector는 낡은 상태가 되는 불일치가 생길 수 있다.</td>
+        </tr>
+        <tr>
+          <th>변경한 내용</th>
+          <td>stale refresh 대상 point는 payload만 overwrite하지 않고, 현재 <code>embedding_text</code>로 다시 embedding한 vector와 payload를 함께 upsert하도록 수정했다.</td>
+        </tr>
+        <tr>
+          <th>기대 이점</th>
+          <td>기존 collection을 재사용해 docker compose seed를 다시 돌려도, text layer 변경이 vector 검색에도 반영된다. 다음 작업자가 compose 기반으로 환경을 다시 띄울 때 "payload는 최신인데 vector는 이전 것"인 상태를 줄일 수 있다.</td>
+        </tr>
+        <tr>
+          <th>논의 가능 지점</th>
+          <td>운영 환경에서 refresh가 많은 point를 재임베딩하면 비용과 시간이 늘 수 있다. 대량 운영에서는 batch size, refresh limit, shadow collection 전략을 별도로 합의할 수 있다.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>이 변경은 새 collection을 항상 만드는 방식이 아니라, 기존 collection을 재사용하는 개발/검증 흐름에서 데이터 불일치를 줄이기 위한 안전장치다.</p>
+
     <h2>전체 검사 결과</h2>
     <table>
       <thead>
