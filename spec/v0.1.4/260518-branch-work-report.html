@@ -138,7 +138,39 @@ ul{margin-top:6px}
 </tr>
 </table>
 
-<h2>8. 의아할 수 있는 지점 정리</h2>
+<h2>8. Stage별 추가 진단</h2>
+<div class="warn">
+추가 확인 결과, 이번 평가에서 <code>rewrite_applied=false</code>는 “세션 context 기반 follow-up rewrite가 없었다”는 뜻입니다. 그러나 실제 검색문에는 query signal 확장어가 붙습니다. 따라서 남은 4건은 단순히 “rewrite가 안 됐다”가 아니라, <strong>query signal 확장이 도움인지 방해인지</strong>까지 같이 봐야 합니다.
+</div>
+<table>
+<tr><th>case</th><th>raw query 기준</th><th>query-signal expanded 기준</th><th>판단</th></tr>
+<tr>
+<td><code>file-integrity-log</code></td>
+<td>정답 청크가 BM25 1위, vector 5위, hybrid 2위입니다.</td>
+<td>정답 청크가 BM25 10위로 밀리고, vector/hybrid에서는 exact 정답 청크가 100위 안에 잡히지 않습니다.</td>
+<td><strong>query signal 확장이 방해한 케이스</strong>로 보입니다. <code>integritylog</code>, <code>gunzip</code> 같은 희귀 키워드가 있는데도 <code>oc logs</code>, OLM, CatalogSource 쪽 확장어가 붙으면서 operator/catalog 문서로 끌립니다.</td>
+</tr>
+<tr>
+<td><code>web-console-overview</code></td>
+<td>web_console book은 vector에서 2번째 book으로 잡히지만, 지정한 정답 청크 자체는 BM25/hybrid 40위권 밖입니다.</td>
+<td>확장 후에도 web_console book은 hybrid에서 보이지만, 정답 청크는 90위권으로 더 밀립니다.</td>
+<td><strong>metadata/title/section 신호가 필요한 케이스</strong>입니다. 질문이 “어떤 문서에서 설명해?” 형태라 본문 유사도보다 문서명/섹션 경로 신호가 중요합니다.</td>
+</tr>
+<tr>
+<td><code>architecture-control-plane</code></td>
+<td>hybrid 기준 architecture book은 1번째 book으로 잡히지만, 지정한 정답 청크는 60위권입니다.</td>
+<td>expanded 기준에서도 architecture book은 잡히지만, exact 정답 청크는 100위 안에 없습니다.</td>
+<td><strong>expected 기준과 ranking이 섞인 케이스</strong>입니다. 질문 자체는 architecture가 맞지만, nodes 문서도 일부 직접 설명을 갖고 있어 허용 기준을 먼저 정해야 합니다.</td>
+</tr>
+<tr>
+<td><code>postinstall-cluster-status</code></td>
+<td>postinstallation/installation book은 hybrid에서 4번째 book으로 잡히지만, 지정한 정답 청크는 약합니다.</td>
+<td>expanded 기준에서는 OLM/operator/install 계열 확장어가 붙어 expected book 순위가 더 밀립니다.</td>
+<td><strong>expected 기준 + query signal 확장 확인 케이스</strong>입니다. <code>validation_and_troubleshooting</code>을 정답으로 허용할지 먼저 정하고, 허용하지 않는다면 postinstallation 명령 청크가 왜 밀리는지 봐야 합니다.</td>
+</tr>
+</table>
+
+<h2>9. 의아할 수 있는 지점 정리</h2>
 <table>
 <tr><th>질문</th><th>답변</th></tr>
 <tr><td>이번 브랜치에서 코퍼스나 Qdrant를 다시 고쳤나요?</td><td>아니요. 이번 범위는 평가셋 계약 정리와 검수입니다. DB/Qdrant 재적재, embedding chunk 수정은 하지 않았습니다.</td></tr>
@@ -149,10 +181,11 @@ ul{margin-top:6px}
 <tr><td>다음에 무엇을 보면 되나요?</td><td>현재 포함된 query signal/rewrite 기준으로도 남는 4건을 봐야 합니다. 특히 단독 질문에서 rewrite가 적용되지 않는 구조가 맞는지, 아니면 metadata/section/title 신호나 검색 순위 조정으로 풀 문제인지 나눠서 보면 됩니다.</td></tr>
 </table>
 
-<h2>9. 다음 액션 제안</h2>
+<h2>10. 다음 액션 제안</h2>
 <ol>
 <li>현재 변경분을 리뷰받습니다.</li>
-<li><code>file-integrity-log</code>와 <code>web-console-overview</code>는 검색 순위/metadata 신호 쪽으로 추가 확인합니다.</li>
+<li><code>file-integrity-log</code>는 희귀 키워드가 있을 때 generic operator/OLM 확장어를 줄이거나 raw query lane을 보존하는 방향을 검토합니다.</li>
+<li><code>web-console-overview</code>는 문서명/section/title 신호를 검색 점수에 반영하는 방향을 검토합니다.</li>
 <li><code>architecture-control-plane</code>과 <code>postinstall-cluster-status</code>는 expected 허용 범위를 먼저 합의한 뒤 ranking 문제 여부를 판단합니다.</li>
 <li>이번 계약 테스트는 유지해서, inactive expected가 다시 들어오는 것을 막습니다.</li>
 </ol>
