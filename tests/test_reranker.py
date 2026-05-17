@@ -79,7 +79,7 @@ def test_remote_bge_reranker_uses_reranker_base_url_and_reorders(monkeypatch):
     reranker = RemoteBgeReranker(_settings())
 
     hits = [_hit("wrong", score=0.9, book_slug="support"), _hit("right", score=0.4)]
-    reranked = reranker.rerank("Route timeout 어디서 확인해?", hits, top_k=2)
+    reranked = reranker.rerank("Where do I check Route timeout?", hits, top_k=2)
 
     assert [hit.chunk_id for hit in reranked] == ["right", "wrong"]
     assert calls[0]["url"] == "http://reranker.internal/rerank"
@@ -102,7 +102,7 @@ def test_remote_bge_reranker_falls_back_to_tei_texts_payload(monkeypatch):
     monkeypatch.setattr("play_book_studio.retrieval.reranker.requests.post", fake_post)
     reranker = RemoteBgeReranker(_settings(reranker_base_url="http://tei.internal/v1/rerank"))
 
-    reranked = reranker.rerank("배포 확인", [_hit("a", score=0.1), _hit("b", score=0.2)], top_k=2)
+    reranked = reranker.rerank("Check deployment status", [_hit("a", score=0.1), _hit("b", score=0.2)], top_k=2)
 
     assert {"texts", "query", "raw_scores", "return_text", "truncate", "model"} <= payload_keys[0]
     assert {"documents", "query", "top_n", "return_documents", "model"} <= payload_keys[1]
@@ -181,7 +181,7 @@ def test_maybe_rerank_hits_falls_back_to_hybrid_on_reranker_error():
 
     hits, trace = maybe_rerank_hits(
         Retriever(),
-        query="노드 상태는 처음에 어디서 확인하면 돼?",
+        query="Where should I first check node status?",
         hybrid_hits=hybrid_hits,
         context=None,
         top_k=2,
@@ -229,6 +229,143 @@ def test_maybe_rerank_hits_uses_configured_candidate_budget():
     assert trace["candidate_budget"] == 5
     assert trace["reranked_count"] == 5
     assert [hit.chunk_id for hit in hits] == ["4", "3", "2", "1", "0"]
+
+
+def test_maybe_rerank_hits_allows_candidate_budget_below_top_k():
+    class CapturingReranker:
+        model_name = "capturing-reranker"
+        top_n = 5
+
+        def __init__(self) -> None:
+            self.received_hit_count = 0
+            self.top_n_override = 0
+
+        def rerank(self, query: str, hits: list[RetrievalHit], **kwargs: Any) -> list[RetrievalHit]:
+            del query
+            self.received_hit_count = len(hits)
+            self.top_n_override = int(kwargs["top_n_override"])
+            budget = self.top_n_override
+            return list(reversed(hits[:budget])) + hits[budget:]
+
+    class Retriever:
+        reranker = CapturingReranker()
+        settings = _settings(reranker_candidate_k=3)
+
+    hybrid_hits = [_hit(str(index), score=1.0 - index / 10) for index in range(8)]
+
+    hits, trace = maybe_rerank_hits(
+        Retriever(),
+        query="How do I configure Route admission policy?",
+        hybrid_hits=hybrid_hits,
+        context=None,
+        top_k=5,
+        trace_callback=lambda _event: None,
+        timings_ms={},
+    )
+
+    assert Retriever.reranker.received_hit_count == 8
+    assert Retriever.reranker.top_n_override == 3
+    assert trace["candidate_budget"] == 3
+    assert trace["reranked_count"] == 3
+    assert [hit.chunk_id for hit in hits[:5]] == ["2", "1", "0", "3", "4"]
+
+
+def test_maybe_rerank_hits_skips_model_for_confident_section_consensus():
+    class FailingReranker:
+        model_name = "must-not-run"
+        top_n = 5
+
+        def rerank(self, query: str, hits: list[RetrievalHit], **kwargs: Any) -> list[RetrievalHit]:
+            del query, hits, kwargs
+            raise AssertionError("reranker should be skipped for section consensus")
+
+    class Retriever:
+        reranker = FailingReranker()
+        settings = _settings(reranker_candidate_k=3)
+
+    hybrid_hits = [
+        _hit("route-command", score=0.18, book_slug="ingress_and_load_balancing"),
+        _hit("route-yaml", score=0.17, book_slug="ingress_and_load_balancing"),
+        _hit("other", score=0.09, book_slug="support"),
+    ]
+    for hit in hybrid_hits[:2]:
+        hit.section = "Route admission policy configuration"
+        hit.section_id = "ingress_and_load_balancing:nw-route-admission-policy_configuring-routes"
+        hit.component_scores = {"bm25_score": 0.01, "vector_score": 0.04}
+
+    hits, trace = maybe_rerank_hits(
+        Retriever(),
+        query="How do I configure Route admission policy?",
+        hybrid_hits=hybrid_hits,
+        context=None,
+        top_k=5,
+        trace_callback=lambda _event: None,
+        timings_ms={},
+    )
+
+    assert [hit.chunk_id for hit in hits] == ["route-command", "route-yaml", "other"]
+    assert trace["mode"] == "skipped"
+    assert trace["decision_reason"] == "confident_section_consensus"
+
+
+def test_maybe_rerank_hits_skips_model_for_confident_hybrid_top_hit():
+    class FailingReranker:
+        model_name = "must-not-run"
+        top_n = 5
+
+        def rerank(self, query: str, hits: list[RetrievalHit], **kwargs: Any) -> list[RetrievalHit]:
+            del query, hits, kwargs
+            raise AssertionError("reranker should be skipped for a confident hybrid top hit")
+
+    class Retriever:
+        reranker = FailingReranker()
+        settings = _settings(reranker_candidate_k=3)
+
+    hybrid_hits = [
+        _hit("top", score=0.22, book_slug="storage"),
+        _hit("runner-up", score=0.15, book_slug="storage"),
+        _hit("third", score=0.08, book_slug="storage"),
+    ]
+    hybrid_hits[0].component_scores = {"bm25_score": 0.03, "vector_score": 0.05}
+
+    hits, trace = maybe_rerank_hits(
+        Retriever(),
+        query="How do I create a persistent volume?",
+        hybrid_hits=hybrid_hits,
+        context=None,
+        top_k=5,
+        trace_callback=lambda _event: None,
+        timings_ms={},
+    )
+
+    assert [hit.chunk_id for hit in hits] == ["top", "runner-up", "third"]
+    assert trace["mode"] == "skipped"
+    assert trace["decision_reason"] == "confident_hybrid_top_hit"
+
+
+def test_remote_bge_reranker_treats_top_n_override_as_candidate_cap(monkeypatch):
+    batches: list[list[str]] = []
+
+    def fake_post(url: str, **kwargs: Any) -> _Response:
+        del url
+        texts = kwargs["json"]["texts"]
+        batches.append(texts)
+        return _Response([{"index": 0, "score": float(len(batches))}])
+
+    monkeypatch.setattr("play_book_studio.retrieval.reranker.requests.post", fake_post)
+    reranker = RemoteBgeReranker(
+        _settings(
+            reranker_base_url="http://tei.internal",
+            reranker_batch_size=1,
+            reranker_max_parallel_requests=1,
+        )
+    )
+
+    hits = [_hit(str(index), score=0.1) for index in range(5)]
+    reranked = reranker.rerank("small candidate cap", hits, top_k=5, top_n_override=3)
+
+    assert len(batches) == 3
+    assert [hit.chunk_id for hit in reranked[:5]] == ["2", "1", "0", "3", "4"]
 
 
 def test_rerank_document_includes_metadata_context():

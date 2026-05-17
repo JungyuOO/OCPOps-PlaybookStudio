@@ -10,7 +10,7 @@ from play_book_studio.config.corpus_paths import (
 )
 
 
-def test_official_resolvers_prefer_consolidated_corpus_seed_paths(tmp_path) -> None:
+def test_official_resolvers_prefer_legacy_data_seed_paths(tmp_path) -> None:
     modern_chunks = tmp_path / "corpus" / "sources" / "official" / "imported-gold" / "gold_corpus_ko" / "chunks.jsonl"
     legacy_chunks = tmp_path / "data" / "gold_corpus_ko" / "chunks.jsonl"
     modern_chunks.parent.mkdir(parents=True)
@@ -28,10 +28,12 @@ def test_official_resolvers_prefer_consolidated_corpus_seed_paths(tmp_path) -> N
     (modern_playbooks / "architecture.json").write_text("{}", encoding="utf-8")
     (legacy_playbooks / "legacy.json").write_text("{}", encoding="utf-8")
 
-    assert resolve_official_gold_chunks_path(tmp_path) == modern_chunks.resolve()
-    assert resolve_official_manualbook_documents_path(tmp_path) == modern_docs.resolve()
-    assert resolve_official_manualbook_playbooks_dir(tmp_path) == modern_playbooks.resolve()
-    assert resolve_official_manualbook_root_dir(tmp_path) == modern_playbooks.parent.resolve()
+    assert resolve_official_gold_chunks_path(tmp_path) == legacy_chunks.resolve()
+    assert resolve_official_manualbook_documents_path(tmp_path) == (
+        tmp_path / "corpus" / "sources" / "official" / "imported-gold" / "gold_manualbook_ko" / "playbook_documents.jsonl"
+    ).resolve()
+    assert resolve_official_manualbook_playbooks_dir(tmp_path) == legacy_playbooks.resolve()
+    assert resolve_official_manualbook_root_dir(tmp_path) == legacy_playbooks.parent.resolve()
 
 
 def test_official_resolvers_keep_legacy_data_fallback(tmp_path) -> None:
@@ -52,11 +54,11 @@ def test_official_resolvers_keep_legacy_data_fallback(tmp_path) -> None:
     chunk_candidates = official_gold_chunks_candidates(tmp_path)
     playbook_candidates = official_manualbook_playbook_dir_candidates(tmp_path)
 
-    assert chunk_candidates[0] == (
+    assert chunk_candidates[0] == legacy_chunks.resolve()
+    assert chunk_candidates[-1] == (
         tmp_path / "corpus" / "sources" / "official" / "imported-gold" / "gold_corpus_ko" / "chunks.jsonl"
     ).resolve()
-    assert chunk_candidates[-1] == legacy_chunks.resolve()
-    assert playbook_candidates[0] == (
+    assert playbook_candidates[0] == legacy_playbooks.resolve()
+    assert playbook_candidates[-1] == (
         tmp_path / "corpus" / "sources" / "official" / "imported-gold" / "gold_manualbook_ko" / "playbooks"
     ).resolve()
-    assert playbook_candidates[-1] == legacy_playbooks.resolve()

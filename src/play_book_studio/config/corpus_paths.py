@@ -125,8 +125,8 @@ def official_gold_chunks_candidates(root_dir: Path, *preferred_paths: Path) -> t
     return _unique_rooted_paths(
         root_dir,
         *preferred_paths,
-        OFFICIAL_GOLD_CHUNKS_PATH,
         LEGACY_OFFICIAL_GOLD_CHUNKS_PATH,
+        OFFICIAL_GOLD_CHUNKS_PATH,
     )
 
 
@@ -134,8 +134,8 @@ def resolve_official_gold_chunks_path(root_dir: Path, *preferred_paths: Path) ->
     return _prefer_existing_file(
         root_dir,
         *preferred_paths,
-        OFFICIAL_GOLD_CHUNKS_PATH,
         LEGACY_OFFICIAL_GOLD_CHUNKS_PATH,
+        OFFICIAL_GOLD_CHUNKS_PATH,
     )
 
 
@@ -143,8 +143,8 @@ def official_gold_bm25_candidates(root_dir: Path, *preferred_paths: Path) -> tup
     return _unique_rooted_paths(
         root_dir,
         *preferred_paths,
-        OFFICIAL_GOLD_BM25_PATH,
         LEGACY_OFFICIAL_GOLD_BM25_PATH,
+        OFFICIAL_GOLD_BM25_PATH,
     )
 
 
@@ -152,8 +152,8 @@ def resolve_official_gold_bm25_path(root_dir: Path, *preferred_paths: Path) -> P
     return _prefer_existing_file(
         root_dir,
         *preferred_paths,
-        OFFICIAL_GOLD_BM25_PATH,
         LEGACY_OFFICIAL_GOLD_BM25_PATH,
+        OFFICIAL_GOLD_BM25_PATH,
     )
 
 
@@ -161,8 +161,8 @@ def official_manualbook_documents_candidates(root_dir: Path, *preferred_paths: P
     return _unique_rooted_paths(
         root_dir,
         *preferred_paths,
-        OFFICIAL_MANUALBOOK_DOCUMENTS_PATH,
         LEGACY_OFFICIAL_MANUALBOOK_DOCUMENTS_PATH,
+        OFFICIAL_MANUALBOOK_DOCUMENTS_PATH,
     )
 
 
@@ -170,8 +170,8 @@ def resolve_official_manualbook_documents_path(root_dir: Path, *preferred_paths:
     return _prefer_existing_file(
         root_dir,
         *preferred_paths,
-        OFFICIAL_MANUALBOOK_DOCUMENTS_PATH,
         LEGACY_OFFICIAL_MANUALBOOK_DOCUMENTS_PATH,
+        OFFICIAL_MANUALBOOK_DOCUMENTS_PATH,
     )
 
 
@@ -179,8 +179,8 @@ def official_manualbook_playbook_dir_candidates(root_dir: Path, *preferred_dirs:
     return _unique_rooted_paths(
         root_dir,
         *preferred_dirs,
-        OFFICIAL_MANUALBOOK_PLAYBOOKS_DIR,
         LEGACY_OFFICIAL_MANUALBOOK_PLAYBOOKS_DIR,
+        OFFICIAL_MANUALBOOK_PLAYBOOKS_DIR,
     )
 
 
@@ -188,8 +188,8 @@ def resolve_official_manualbook_playbooks_dir(root_dir: Path, *preferred_dirs: P
     return _prefer_nonempty_dir(
         root_dir,
         *preferred_dirs,
-        OFFICIAL_MANUALBOOK_PLAYBOOKS_DIR,
         LEGACY_OFFICIAL_MANUALBOOK_PLAYBOOKS_DIR,
+        OFFICIAL_MANUALBOOK_PLAYBOOKS_DIR,
     )
 
 

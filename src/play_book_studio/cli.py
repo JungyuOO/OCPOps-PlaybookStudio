@@ -19,6 +19,7 @@ from play_book_studio.config.corpus_paths import (
     COURSE_QA_CASES_PATH,
     COURSE_QA_REJECTED_CASES_PATH,
     COURSE_QA_REPORT_PATH,
+    LEGACY_OFFICIAL_GOLD_CHUNKS_PATH,
     OFFICIAL_GOLD_CHUNKS_PATH,
     OFFICIAL_GOLD_EMBEDDING_CHUNKS_PATH,
     OFFICIAL_GOLD_TEXT_LAYERS_PATH,
@@ -27,6 +28,8 @@ from play_book_studio.config.corpus_paths import (
     OPS_LEARNING_GUIDES_PATH,
     RAGAS_EVAL_CASES_PATH,
     RETRIEVAL_EVAL_CASES_PATH,
+    resolve_official_gold_bm25_path,
+    resolve_official_gold_chunks_path,
 )
 from play_book_studio.config.settings import load_effective_env, load_settings
 
@@ -260,7 +263,7 @@ def build_parser() -> argparse.ArgumentParser:
     official_gold_import_parser.add_argument(
         "--chunks-path",
         type=Path,
-        default=OFFICIAL_GOLD_CHUNKS_PATH,
+        default=LEGACY_OFFICIAL_GOLD_CHUNKS_PATH,
     )
     official_gold_import_parser.add_argument("--database-url", default="")
     official_gold_import_parser.add_argument("--tenant-slug", default="public")
@@ -1049,8 +1052,11 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
     root_dir = args.root_dir.resolve()
     chunks_path = args.chunks_path
     if not chunks_path.is_absolute():
-        chunks_path = root_dir / chunks_path
-    chunks_path = chunks_path.resolve()
+        chunks_path = resolve_official_gold_chunks_path(root_dir, chunks_path)
+    elif not chunks_path.exists():
+        chunks_path = resolve_official_gold_chunks_path(root_dir, chunks_path)
+    else:
+        chunks_path = chunks_path.resolve()
     embedding_chunks_path = args.embedding_chunks_path
     if embedding_chunks_path is not None and not embedding_chunks_path.is_absolute():
         embedding_chunks_path = root_dir / embedding_chunks_path
@@ -1063,11 +1069,11 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
         text_layers_path = text_layers_path.resolve()
     bm25_path = args.bm25_path
     if bm25_path is not None and not bm25_path.is_absolute():
-        bm25_path = root_dir / bm25_path
+        bm25_path = resolve_official_gold_bm25_path(root_dir, bm25_path)
     if bm25_path is not None:
         bm25_path = bm25_path.resolve()
     elif args.enrich_runtime_metadata:
-        bm25_path = load_settings(root_dir).bm25_corpus_path.resolve()
+        bm25_path = resolve_official_gold_bm25_path(root_dir)
     enrich_report = None
     if args.enrich_runtime_metadata:
         from play_book_studio.ingestion.official_gold_enrichment import enrich_official_gold_chunks

@@ -175,6 +175,36 @@ def _has_confident_hybrid_top_hit(hits: list[RetrievalHit]) -> bool:
     return runner_up_score < (top_score * 0.88)
 
 
+def _has_confident_section_consensus(hits: list[RetrievalHit]) -> bool:
+    if len(hits) < 2:
+        return False
+    top_hit = hits[0]
+    top_score = float(top_hit.fused_score or top_hit.raw_score or 0.0)
+    if top_score < 0.12:
+        return False
+    component_scores = getattr(top_hit, "component_scores", {}) or {}
+    has_dual_support = any(key in component_scores for key in ("bm25_score", "overlay_bm25_score")) and (
+        "vector_score" in component_scores
+    )
+    if not has_dual_support:
+        return False
+    top_key = (
+        str(top_hit.book_slug or "").strip(),
+        str(top_hit.section_id or top_hit.section or "").strip(),
+    )
+    if not all(top_key):
+        return False
+    consensus_count = 0
+    for hit in hits[:3]:
+        hit_key = (
+            str(hit.book_slug or "").strip(),
+            str(hit.section_id or hit.section or "").strip(),
+        )
+        if hit_key == top_key:
+            consensus_count += 1
+    return consensus_count >= 2
+
+
 def _rerank_candidate_budget(
     query: str,
     *,
@@ -222,9 +252,13 @@ def _should_apply_reranker_model(
         return True, "follow_up_reference"
     if _is_heuristic_first_query(query):
         return False, "heuristic_first_intent"
+    if not _has_cross_book_ambiguity(hybrid_hits) and _has_confident_hybrid_top_hit(hybrid_hits):
+        return False, "confident_hybrid_top_hit"
     if _is_explanation_query(query) and not _has_cross_book_ambiguity(hybrid_hits):
         if _has_confident_hybrid_top_hit(hybrid_hits):
             return False, "confident_explanation_hybrid_top_hit"
+    if _has_confident_section_consensus(hybrid_hits):
+        return False, "confident_section_consensus"
     if _needs_semantic_model_rerank(query):
         return True, "semantic_intent"
     if len(hybrid_hits) <= 2:
@@ -1398,7 +1432,7 @@ def maybe_rerank_hits(
 ) -> tuple[list[RetrievalHit], dict[str, Any]]:
     hits = hybrid_hits[:top_k]
     configured_candidate_k = int(getattr(retriever.settings, "reranker_candidate_k", top_k) or top_k)
-    candidate_budget = min(len(hybrid_hits), max(top_k, configured_candidate_k)) if hybrid_hits else 0
+    candidate_budget = min(len(hybrid_hits), max(1, configured_candidate_k)) if hybrid_hits else 0
     reranker_trace: dict[str, Any] = {
         "enabled": retriever.reranker is not None,
         "applied": False,
@@ -1417,7 +1451,29 @@ def maybe_rerank_hits(
     if retriever.reranker is None or not hybrid_hits:
         return hits, reranker_trace
     try:
-        apply_model = True
+        apply_model, decision_reason = _should_apply_reranker_model(query, hybrid_hits=hybrid_hits)
+        reranker_trace["decision_reason"] = decision_reason
+        if not apply_model:
+            reranker_trace.update(
+                {
+                    "candidate_count": len(hybrid_hits),
+                    "reranked_count": 0,
+                    "top1_after_model": reranker_trace["top1_before"],
+                }
+            )
+            _emit_trace_event(
+                trace_callback,
+                step="rerank",
+                label="리랭킹 생략",
+                status="done",
+                detail=decision_reason,
+                meta={
+                    "mode": "skipped",
+                    "decision_reason": decision_reason,
+                    "candidate_budget": reranker_trace["candidate_budget"],
+                },
+            )
+            return hits, reranker_trace
         rerank_started_at = time.perf_counter()
         if apply_model:
             _emit_trace_event(

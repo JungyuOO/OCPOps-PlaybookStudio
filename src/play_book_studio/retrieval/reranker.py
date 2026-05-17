@@ -198,8 +198,10 @@ class RemoteBgeReranker:
         if not hits:
             return []
 
-        rerank_limit = top_n_override if top_n_override is not None else self.top_n
-        rerank_count = min(len(hits), max(top_k, rerank_limit))
+        if top_n_override is not None:
+            rerank_count = min(len(hits), max(1, top_n_override))
+        else:
+            rerank_count = min(len(hits), max(top_k, self.top_n))
         primary_candidates = [copy.deepcopy(hit) for hit in hits[:rerank_count]]
         remainder = [copy.deepcopy(hit) for hit in hits[rerank_count:]]
 
