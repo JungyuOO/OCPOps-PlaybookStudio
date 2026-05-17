@@ -192,6 +192,47 @@ $tmp = Join-Path $env:TEMP &quot;pbs-official-data-validation-260517.json&quot;
 현재 단계의 결론은 “확인된 file-integrity 오염은 수정 완료, 평가셋 expected 오류 일부 보정 완료, 하지만 남은 미상승 케이스는 데이터 누락보다는 retrieval/rewrite/expected 기준의 경계 문제”입니다. 따라서 다음 액션은 추가 코퍼스 삭제가 아니라, J의 query rewrite 수정분을 받은 뒤 같은 질문셋으로 전후 비교하는 쪽이 합리적입니다.
 </div>
 
+<h2>260518 평가셋 계약 정리 후 검수</h2>
+<div class="note">
+이 섹션은 <code>260518-eval-set-contract-audit.html</code> 작성 이후, 커밋 전에 다시 확인한 검수 결과입니다. 목적은 두 가지입니다. 첫째, 평가셋 expected 기준 문제가 닫혔는지 확인합니다. 둘째, 아직 남은 retrieval miss가 평가셋 탓인지, 데이터 누락인지, 청크 오염인지, 검색 순위 문제인지 분리합니다.
+</div>
+<h3>1. 계약 검수 결과</h3>
+<table><thead><tr><th>검수 항목</th><th>결과</th><th>판단</th></tr></thead><tbody>
+<tr><td>active official book set</td><td>embedding 기준 29권, active manifest 기준 29권, 두 목록 일치</td><td><span class="pass">통과</span></td></tr>
+<tr><td>eval JSONL expected</td><td>전체 eval JSONL의 <code>expected_book_slugs</code> inactive 참조 0건</td><td><span class="pass">통과</span></td></tr>
+<tr><td>official data validation 질문셋</td><td>30건, 필수 필드 누락 0건, <code>context/session_context</code> 0건, follow-up 표현 0건</td><td><span class="pass">통과</span></td></tr>
+<tr><td>테스트</td><td><code>test_eval_manifest_contract</code>, <code>test_chunk_quality_audit</code>, <code>test_answer_quality_v012_beginner</code> 총 9건 통과</td><td><span class="pass">통과</span></td></tr>
+<tr><td>diff hygiene</td><td><code>git diff --check</code> 경고 없음</td><td><span class="pass">통과</span></td></tr>
+</tbody></table>
+<h3>2. retrieval-only 재실행 결과</h3>
+<pre>$env:RERANKER_ENABLED="false"
+.\.venv\Scripts\python.exe -m play_book_studio.cli retrieval-eval `
+  --cases corpus\manifests\eval\retrieval_official_data_validation_cases.jsonl `
+  --top-k 5 `
+  --candidate-k 10 `
+  --database-url postgresql://admin:admin123@127.0.0.1:5432/playbookstudio `
+  --output $tmp</pre>
+<table><thead><tr><th>지표</th><th>결과</th><th>해석</th></tr></thead><tbody>
+<tr><td>case_count</td><td>30</td><td>단독 질문형 official 데이터 검증셋 전체를 실행했습니다.</td></tr>
+<tr><td>hit@1 / hit@3 / hit@5</td><td>0.7000 / 0.8000 / 0.8667</td><td>30건 중 26건은 기대 book_slug가 top5 안에 들어왔고, 4건은 miss로 남았습니다.</td></tr>
+<tr><td>landing_hit@1 / @3 / @5</td><td>0.3333 / 0.5333 / 0.6667</td><td>문서 단위보다 실제 근거 단어 적중은 낮습니다. 그래서 top chunk 직접 확인이 필요합니다.</td></tr>
+<tr><td>warning_free_rate</td><td>1.0000</td><td>실행 경고는 없었습니다.</td></tr>
+<tr><td>reranker / answer LLM</td><td>제외</td><td>J 요청대로 retrieval source 확인만 수행했습니다.</td></tr>
+</tbody></table>
+<h3>3. miss 4건 원인 분리</h3>
+<div class="warn">
+아래 4건은 “평가셋이 틀렸으니 끝”으로 뭉개지 않았습니다. 각 케이스마다 로컬 <code>embedding_chunks.jsonl</code>와 Qdrant payload를 확인했고, 정답 후보 청크가 실제로 존재하는지 먼저 봤습니다.
+</div>
+<table><thead><tr><th>case</th><th>확인한 정답 후보</th><th>분류</th><th>다음 행동</th></tr></thead><tbody>
+<tr><td><strong>file-integrity-log</strong><br>integritylog 확인과 압축 로그 해제 명령어</td><td><code>50446a40-22b8-5ba9-b2a8-4b0dd8160e59</code><br><code>security_and_compliance</code> / FileIntegrityNodeStatus CR 실패 상태의 예<br><code>oc get cm ... jq -r '.data.integritylog' | base64 -d | gunzip</code></td><td><strong>데이터 있음 + 검색 순위 미상승</strong><br>정답 명령어 청크는 Qdrant에 존재하고 정제도 깨끗합니다. 다만 top5에서는 disconnected/postinstall/study 쪽이 먼저 올라옵니다.</td><td><code>integritylog</code>, <code>gunzip</code>, <code>base64 d</code> 같은 희귀 키워드가 검색 순위에 충분히 반영되는지 J의 rewrite_query 수정분과 비교합니다.</td></tr>
+<tr><td><strong>web-console-overview</strong><br>웹 콘솔에서 클러스터 상태와 워크로드 확인</td><td><code>0faa0453-a874-5b6a-8faa-30b8c03d3b5c</code>, <code>5c40fd91-88cf-5d5f-ae21-64ef677a888c</code><br><code>web_console</code> / 웹 콘솔에서 개발자 역할<br>애플리케이션 상태, 리소스 사용률, 프로젝트 이벤트, 메트릭 설명 존재</td><td><strong>데이터 있음 + 검색 순위 미상승</strong><br>정답 후보는 Qdrant에 있지만 top5에는 support/updating/storage가 먼저 올라옵니다. top15 확장에서는 web_console이 뒤늦게 등장합니다.</td><td>질문이 “문서가 어디냐”에 가깝기 때문에 <code>book_slug/title/section_path</code> 신호를 검색 단계에서 얼마나 써야 할지 검토합니다.</td></tr>
+<tr><td><strong>architecture-control-plane</strong><br>컨트롤 플레인과 컴퓨팅 노드 역할</td><td><code>1fa5a26c-437b-541f-bf37-e5e7e1ec694b</code>, <code>c8f38728-02f7-509d-a1db-0709fb7dd19f</code><br><code>architecture</code> / 설치 프로세스 세부사항, 클러스터 작업자<br>컨트롤 플레인 시스템과 컴퓨팅 머신 설명 존재</td><td><strong>데이터 있음 + 기준/검색 경계 확인</strong><br>architecture 정답 후보는 존재합니다. 동시에 top5의 <code>nodes</code> 청크도 컨트롤 플레인 노드 역할을 일부 설명하므로, expected 기준이 너무 좁은지와 검색 순위 문제를 같이 봐야 합니다.</td><td>개념 설명형 질문은 <code>architecture</code>만 기대할지, <code>nodes</code>도 허용할지 기준을 먼저 맞춥니다. 그 뒤에도 architecture가 밀리면 검색 순위 문제로 봅니다.</td></tr>
+<tr><td><strong>postinstall-cluster-status</strong><br>설치 후 ClusterOperator와 노드 상태 확인</td><td><code>943b0346-97ed-57d1-a01c-f250f82c5a41</code>, <code>60382fdc-1771-58da-9797-3fbad3ed4781</code><br><code>postinstallation_configuration</code> / 클러스터에 컨트롤 플레인 노드 추가<br><code>oc get nodes</code>, <code>oc get ClusterOperators</code> 근거 존재</td><td><strong>데이터 있음 + 기준/검색 경계 확인</strong><br>정답 후보는 Qdrant에 있습니다. top1의 <code>validation_and_troubleshooting</code>도 노드 상태 확인 절차를 일부 포함하므로, expected에 이 문서를 허용할지 먼저 협의할 여지가 있습니다.</td><td>설치 후 상태 확인 질문은 postinstall, validation, nodes가 겹칩니다. 기대 문서 기준을 합의한 뒤, postinstallation의 직접 명령 청크가 왜 밀리는지 비교합니다.</td></tr>
+</tbody></table>
+<div class="note">
+이번 검수의 결론은 명확합니다. 평가셋의 inactive expected 문제는 닫혔습니다. 남은 4건은 정답 청크가 Qdrant에 없어서 생긴 문제가 아니라, 정답 후보가 있는데 top-k 우선순위나 expected 허용 범위에서 어긋난 문제입니다. 따라서 다음 단계는 corpus를 더 지우는 작업이 아니라, J의 query rewrite 변경분을 받은 뒤 같은 30건으로 전후 비교하고, 그래도 남는 케이스만 검색 순위/expected 기준으로 나눠 협의하는 것입니다.
+</div>
+
 <h2>공유 메모</h2>
 <div class="note">
 확인된 <code>file-integrity</code> 인접 오염은 embedding projection과 Qdrant 기준으로 보정했습니다. tail-only 청크 1건은 검색 대상에서 제외했고, 유효 명령어가 포함된 청크 1건과 AIDE 로그 예시 청크 1건은 의미 신호만 남기도록 정리했습니다.<br><br>

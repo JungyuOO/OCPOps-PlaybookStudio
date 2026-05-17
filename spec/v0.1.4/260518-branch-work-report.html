@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>260518 브랜치 작업 보고</title>
+<style>
+body{font-family:Arial,'Malgun Gothic',sans-serif;line-height:1.62;margin:32px;max-width:1180px;color:#172033}
+h1,h2,h3{color:#0f3563} code{background:#f5f7fb;border:1px solid #d8e0ef;border-radius:5px;padding:1px 4px}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0 22px} th,td{border:1px solid #d8e0ef;padding:9px;vertical-align:top} th{background:#edf3ff}
+.note{background:#eef8f2;border-left:4px solid #12b76a;padding:12px;margin:16px 0}.warn{background:#fff8e6;border-left:4px solid #f79009;padding:12px;margin:16px 0}
+.pass{color:#067647;font-weight:700}.miss{color:#b42318;font-weight:700}.muted{color:#667085;font-size:13px}.pill{display:inline-block;border-radius:999px;padding:2px 9px;background:#edf3ff;color:#0f3563;font-size:12px;font-weight:700}
+ul{margin-top:6px}
+</style>
+</head>
+<body>
+<h1>260518 브랜치 작업 보고</h1>
+<div class="note">
+이 문서는 <code>feat/corpus_embedding_test_S_v.2</code> 브랜치에서 새로 진행한 작업을 공유하기 위한 요약 보고입니다. 상세 로그가 아니라, 검토자가 의아해할 수 있는 지점을 먼저 없애는 것을 목적으로 작성했습니다.
+</div>
+
+<h2>1. 현재 작업 범위</h2>
+<table>
+<tr><th>항목</th><th>내용</th></tr>
+<tr><td>브랜치</td><td><code>feat/corpus_embedding_test_S_v.2</code></td></tr>
+<tr><td>작업 시작 기준</td><td><code>dev</code> 반영 후 새로 판 테스트 브랜치</td></tr>
+<tr><td>현재 head</td><td><code>4dd9fe5</code> 기준 미커밋 변경분</td></tr>
+<tr><td>이번 범위</td><td>평가셋 expected 기준 정리, 재발 방지 테스트 추가, retrieval-only 결과 재검수</td></tr>
+<tr><td>이번에 하지 않은 것</td><td>Qdrant/DB 재적재, corpus/embedding chunk 재수정, query rewrite/ranking/reranker 수정, answer LLM 품질 평가</td></tr>
+</table>
+
+<h2>2. 왜 이 작업을 했나</h2>
+<div class="warn">
+직전 검증에서 일부 평가셋의 <code>expected_book_slugs</code>가 현재 active official corpus와 맞지 않는 문제가 확인되었습니다. 예를 들어 <code>applications</code> 같은 값은 주제로는 익숙하지만, 현재 적재된 official embedding book set 29권에는 없는 <code>book_slug</code>였습니다.
+</div>
+<p>
+이 상태에서 retrieval 평가를 돌리면 검색기가 맞힐 수 없는 기준으로 채점하거나, 반대로 실제 근거 청크는 약한데 문서명만 맞아서 통과처럼 보일 수 있습니다. 그래서 먼저 평가 기준이 현재 적재 데이터와 같은 기준을 보도록 정리했습니다.
+</p>
+
+<h2>3. 이번에 바꾼 것</h2>
+<table>
+<tr><th>구분</th><th>작업 내용</th><th>이유</th></tr>
+<tr>
+<td>평가셋 expected 보정</td>
+<td>
+아래 eval JSONL의 <code>expected_book_slugs</code>를 현재 active official 29권 기준으로 보정했습니다.
+<ul>
+<li><code>answer_eval_realworld_cases.jsonl</code></li>
+<li><code>pbs_chat_quality_cases.jsonl</code></li>
+<li><code>pbs_chat_quality_extended_cases.jsonl</code></li>
+<li><code>pbs_chat_quality_v004_readable_cases.jsonl</code></li>
+<li><code>pbs_chat_quality_v012_beginner_cases.jsonl</code></li>
+<li><code>retrieval_root_cause_cases.jsonl</code></li>
+<li><code>retrieval_sanity_cases.jsonl</code></li>
+<li><code>retrieval_sanity_v004_readable_cases.jsonl</code></li>
+</ul>
+</td>
+<td>inactive book_slug가 expected에 남아 있으면 평가 결과를 신뢰하기 어렵기 때문입니다.</td>
+</tr>
+<tr>
+<td>재발 방지 테스트 추가</td>
+<td><code>tests/test_eval_manifest_contract.py</code> 추가</td>
+<td>앞으로 eval JSONL에 inactive expected가 다시 들어오면 테스트에서 바로 잡기 위함입니다.</td>
+</tr>
+<tr>
+<td>보고서 추가</td>
+<td><code>spec/v0.1.4/260518-eval-set-contract-audit.html</code> 추가</td>
+<td>무엇을 왜 보정했는지, active 29권 기준이 무엇인지, 남은 협의 항목이 무엇인지 사람이 읽을 수 있게 남겼습니다.</td>
+</tr>
+<tr>
+<td>기존 검증 문서 보강</td>
+<td><code>spec/v0.1.4/260517-official-data-validation.html</code>에 계약 정리 후 재검수 섹션 추가</td>
+<td>평가셋 계약 정리 이후에도 남은 miss 4건을 “데이터 누락 / 청크 오염 / 검색 순위 미상승 / 기대 기준 문제”로 분리하기 위함입니다.</td>
+</tr>
+</table>
+
+<h2>4. 대표 보정 기준</h2>
+<table>
+<tr><th>기존 값</th><th>처리</th><th>근거</th></tr>
+<tr><td><code>applications</code></td><td>제거하거나 <code>cli_tools</code>, <code>overview</code>, <code>nodes</code>, <code>support</code>, <code>architecture</code> 등 실제 근거 book으로 대체</td><td>현재 active official 29권에 <code>applications</code> book_slug가 없음</td></tr>
+<tr><td><code>building_applications</code></td><td><code>cli_tools</code> 또는 <code>architecture</code>로 대체</td><td>배포 명령/YAML 근거가 현재 active set에서는 CLI와 architecture 쪽에 있음</td></tr>
+<tr><td><code>disconnected_installation</code></td><td><code>disconnected_environments</code>로 대체</td><td>현재 active slug 명칭과 맞춤</td></tr>
+<tr><td><code>installing_on_bare_metal</code></td><td><code>installing_on_any_platform</code>, bootstrap/log 문맥은 <code>support</code>, <code>validation_and_troubleshooting</code> 사용</td><td>bare-metal book_slug가 active 29권에 없고, bootstrap/log 직접 근거는 troubleshooting/support에 있음</td></tr>
+</table>
+
+<h2>5. 검증 결과</h2>
+<table>
+<tr><th>검증</th><th>결과</th><th>해석</th></tr>
+<tr><td>active official book set</td><td><span class="pass">29권 일치</span></td><td><code>embedding_chunks.jsonl</code> 기준과 <code>active_manifest.json</code> 기준이 동일합니다.</td></tr>
+<tr><td>inactive expected 참조</td><td><span class="pass">0건</span></td><td>모든 eval JSONL의 <code>expected_book_slugs</code>가 active 29권 안에 있습니다.</td></tr>
+<tr><td>official data validation 질문셋</td><td><span class="pass">30건 정상</span></td><td>필수 필드 누락 0건, context/session_context 0건, follow-up 표현 0건입니다.</td></tr>
+<tr><td>테스트</td><td><span class="pass">9 passed</span></td><td><code>test_eval_manifest_contract</code>, <code>test_chunk_quality_audit</code>, <code>test_answer_quality_v012_beginner</code> 통과.</td></tr>
+<tr><td>diff hygiene</td><td><span class="pass">통과</span></td><td><code>git diff --check</code> 경고 없음.</td></tr>
+<tr><td>retrieval-only 재실행</td><td><span class="pass">실행 성공</span></td><td>30건 기준 <code>hit@1=0.7000</code>, <code>hit@3=0.8000</code>, <code>hit@5=0.8667</code>.</td></tr>
+</table>
+
+<h2>6. 남은 4건은 무엇인가</h2>
+<p>
+평가셋 계약 문제를 닫은 뒤에도 retrieval-only에서 4건이 top5 miss로 남았습니다. 이 4건은 정답 청크가 Qdrant에 없는 문제가 아니라, 정답 후보가 있는데 상위 순위로 충분히 올라오지 않거나 expected 허용 범위가 좁은 케이스로 분리했습니다.
+</p>
+<table>
+<tr><th>case</th><th>확인 결과</th><th>현재 판단</th></tr>
+<tr><td><code>file-integrity-log</code></td><td><code>security_and_compliance</code> 정답 명령어 청크가 Qdrant에 존재</td><td>데이터 있음 + 검색 순위 미상승</td></tr>
+<tr><td><code>web-console-overview</code></td><td><code>web_console</code> 정답 후보 청크가 Qdrant에 존재</td><td>데이터 있음 + 검색 순위 미상승</td></tr>
+<tr><td><code>architecture-control-plane</code></td><td><code>architecture</code> 정답 후보가 있고, <code>nodes</code>도 일부 맞는 설명을 포함</td><td>expected 기준과 검색 순위 경계 확인 필요</td></tr>
+<tr><td><code>postinstall-cluster-status</code></td><td><code>postinstallation_configuration</code> 정답 후보가 있고, <code>validation_and_troubleshooting</code>도 일부 맞는 절차를 포함</td><td>expected 허용 범위 협의 필요</td></tr>
+</table>
+
+<h2>7. 의아할 수 있는 지점 정리</h2>
+<table>
+<tr><th>질문</th><th>답변</th></tr>
+<tr><td>이번 브랜치에서 코퍼스나 Qdrant를 다시 고쳤나요?</td><td>아니요. 이번 범위는 평가셋 계약 정리와 검수입니다. DB/Qdrant 재적재, embedding chunk 수정은 하지 않았습니다.</td></tr>
+<tr><td><code>applications</code>를 왜 없앴나요?</td><td>주제 자체를 부정한 것이 아니라, 현재 active official embedding book set에는 <code>applications</code>라는 book_slug가 없기 때문입니다. 평가 expected는 현재 검색기가 실제로 맞힐 수 있는 active book 기준이어야 합니다.</td></tr>
+<tr><td>그럼 retrieval miss 4건은 평가셋 탓인가요?</td><td>전부 평가셋 탓으로 보지 않았습니다. 정답 청크 존재 여부를 확인했고, 대부분은 “정답은 있지만 top-k로 못 올라오는 문제” 또는 “허용할 expected 범위가 겹치는 문제”로 분리했습니다.</td></tr>
+<tr><td>이번 작업으로 챗봇 답변 품질까지 검증됐나요?</td><td>아니요. answer LLM, reranker, UI 답변 문장은 이번 범위에서 제외했습니다. J 요청대로 retrieval source와 top chunk 근거 중심으로만 봤습니다.</td></tr>
+<tr><td>다음에 무엇을 보면 되나요?</td><td>J의 query rewrite 수정분을 받은 뒤, 같은 30건으로 retrieval-only를 다시 돌려 전후 비교하면 됩니다. 그래도 남는 케이스만 expected 기준 조정 또는 검색 순위 조정으로 나누면 됩니다.</td></tr>
+</table>
+
+<h2>8. 다음 액션 제안</h2>
+<ol>
+<li>현재 변경분을 리뷰받습니다.</li>
+<li>J의 query rewrite 변경분을 받은 뒤 동일 30건으로 retrieval-only 전후 비교를 실행합니다.</li>
+<li>남은 miss는 <span class="pill">expected 기준</span> <span class="pill">검색 순위</span> <span class="pill">데이터 누락</span> <span class="pill">청크 오염</span> 중 하나로 계속 분리합니다.</li>
+<li>이번 계약 테스트는 유지해서, inactive expected가 다시 들어오는 것을 막습니다.</li>
+</ol>
+
+<h2>상세 문서</h2>
+<ul>
+<li><a href="260518-eval-set-contract-audit.html">260518-eval-set-contract-audit.html</a>: 평가셋 계약 정리 상세</li>
+<li><a href="260517-official-data-validation.html">260517-official-data-validation.html</a>: retrieval 결과와 miss 4건 상세</li>
+</ul>
+</body>
+</html>

@@ -1,8 +1,8 @@
 {"id":"rc-concept-001","category":"concept","query":"OpenShift 아키텍처를 처음 설명해줘","expected_book_slugs":["architecture","overview"]}
-{"id":"rc-concept-002","category":"concept","query":"Operator가 뭐고 왜 필요한가?","expected_book_slugs":["extensions","overview"]}
+{"id":"rc-concept-002","category":"concept","query":"Operator가 뭐고 왜 필요한가?","expected_book_slugs":["operators","overview"]}
 {"id":"rc-concept-003","category":"concept","query":"Machine Config Operator가 뭐 하는 거야?","expected_book_slugs":["architecture","overview"]}
 {"id":"rc-concept-004","category":"concept","query":"Ingress와 Route 차이를 설명해줘","expected_book_slugs":["ingress_and_load_balancing","networking_overview"]}
-{"id":"rc-concept-005","category":"concept","query":"Pod lifecycle 개념을 초보자 관점에서 설명해줘","expected_book_slugs":["nodes","workloads"]}
+{"id":"rc-concept-005","category":"concept","query":"Pod lifecycle 개념을 초보자 관점에서 설명해줘","expected_book_slugs":["nodes","architecture"]}
 {"id":"rc-ops-001","category":"ops","query":"etcd 백업은 어떻게 해?","expected_book_slugs":["etcd","backup_and_restore","postinstallation_configuration"]}
 {"id":"rc-ops-002","category":"ops","query":"클러스터 업그레이드 전에 뭘 확인해야 해?","expected_book_slugs":["updating_clusters","release_notes"]}
 {"id":"rc-ops-003","category":"ops","query":"노드 드레인은 어떻게 동작해?","expected_book_slugs":["nodes","machine_management"]}
