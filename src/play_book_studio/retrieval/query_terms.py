@@ -14,6 +14,7 @@ from .query_terms_operations import append_operation_query_terms
 from .query_understanding import understand_query
 from .concept_expansion import expand_query_terms
 from .cross_lingual import cross_lingual_rewrite_terms
+from .intent_profile import build_intent_profile
 
 
 _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
@@ -34,7 +35,26 @@ _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
     "oc get project",
     "oc get projects",
     "oc create namespace",
+    "oc create -f",
+    "oc delete localvolume",
+    "oc delete localvolumeset",
+    "oc delete localvolumediscovery",
+    "oc edit hpa",
+    "oc get all",
+    "oc delete vpa",
+    "oc delete crd",
+    "oc delete namespace",
+    "oc create route",
+    "oc expose route",
+    "oc edit ingresses.config.openshift.io/cluster",
+    "oc delete secrets kubeadmin",
+    "oc login",
+    "oc adm catalog build",
     "oc new-project",
+    "oc new-app",
+    "oc api-resources",
+    "oc get csr",
+    "oc adm certificate approve",
     "oc get clusteroperators",
     "oc get nodes",
     "oc describe node",
@@ -152,11 +172,58 @@ def normalize_query(query: str) -> str:
     append_core_query_terms(normalized, terms)
     append_operation_query_terms(normalized, terms)
     append_etcd_query_terms(normalized, terms)
+    terms = _prune_terms_for_intent(normalized, terms)
     terms = _prioritize_phrase_terms(terms)
     if _contains_hangul(normalized):
         terms = _filter_terms_for_korean_query(normalized, terms)
 
     return _append_terms(normalized, terms)
+
+
+def _prune_terms_for_intent(query: str, terms: list[str]) -> list[str]:
+    profile = build_intent_profile(query)
+    if profile.target_object != "route-http-headers":
+        return terms
+
+    allowed_fragments = (
+        "route",
+        "http",
+        "header",
+        "request",
+        "response",
+        "app-example",
+        "nw-route-set-or-delete-http-headers",
+        "oc -n app-example create -f app-example-route.yaml",
+        "set or delete",
+    )
+    blocked = {
+        "secret",
+        "secrets",
+        "configmap",
+        "configmaps",
+        "ingress",
+        "service",
+        "services",
+        "tls",
+        "registry",
+        "odf",
+        "ceph",
+        "rgw",
+        "openshift",
+        "kubernetes",
+        "ocp",
+    }
+    pruned: list[str] = []
+    for term in (*profile.query_terms, *terms):
+        cleaned = _collapse_spaces(term)
+        if not cleaned:
+            continue
+        lowered = cleaned.lower()
+        if lowered in blocked or any(lowered == item or lowered.startswith(f"{item} ") for item in blocked):
+            continue
+        if any(fragment in lowered for fragment in allowed_fragments):
+            pruned.append(cleaned)
+    return pruned
 
 
 def _prioritize_phrase_terms(terms: list[str]) -> list[str]:
@@ -177,14 +244,34 @@ def _prioritize_phrase_terms(terms: list[str]) -> list[str]:
     command_priority = {
         "oc create namespace": 0,
         "oc new-project": 1,
-        "oc adm top pods": 2,
-        "oc apply -f": 3,
-        "oc create deployment": 4,
-        "oc describe service": 5,
-        "oc get endpoints": 6,
-        "oc get nodes": 7,
-        "oc describe node": 8,
-        "oc describe node <node-name>": 9,
+        "oc new-app": 2,
+        "oc create -f": 3,
+        "oc edit hpa": 4,
+        "oc get all": 5,
+        "oc delete vpa": 6,
+        "oc delete crd": 7,
+        "oc delete namespace": 8,
+        "oc create route": 9,
+        "oc expose route": 10,
+        "oc edit ingresses.config.openshift.io/cluster": 11,
+        "oc delete secrets kubeadmin": 12,
+        "oc login": 13,
+        "oc adm catalog build": 14,
+        "oc delete localvolume": 15,
+        "oc delete localvolumeset": 16,
+        "oc delete localvolumediscovery": 17,
+        "oc api-resources": 18,
+        "oc get csr": 19,
+        "oc adm certificate approve": 20,
+        "oc adm top pods": 21,
+        "oc apply -f": 22,
+        "oc create deployment": 23,
+        "oc describe service": 24,
+        "oc get endpoints": 25,
+        "oc get nodes": 26,
+        "oc describe node": 27,
+        "oc describe node <node-name>": 28,
+        "oc -n app-example create -f app-example-route.yaml": 29,
     }
     command_terms = sorted(command_terms, key=lambda term: command_priority.get(term.lower(), 50))
     return [*command_terms, *technical_phrases, *rest]

@@ -12,6 +12,7 @@ from play_book_studio.retrieval.query import (
     is_generic_intro_query,
 )
 from play_book_studio.retrieval.query_understanding import understand_query
+from .sanitize import sanitize_cli_command
 
 CITATION_RE = re.compile(r"\[(\d+)\]")
 ANSWER_CODE_BLOCK_RE = re.compile(r"\[CODE\][ \t]*\n?(.*?)\n?[ \t]*\[(?:/)?CODE\]", re.DOTALL)
@@ -622,6 +623,7 @@ def _generic_grounded_commands(citations) -> list[str]:
                         flags=re.IGNORECASE,
                     )
                     cleaned_segment = re.sub(r"\s+oc$", "", cleaned_segment, flags=re.IGNORECASE).strip(" #.;'\"")
+                    cleaned_segment = sanitize_cli_command(cleaned_segment)
                     if cleaned_segment:
                         commands.append(cleaned_segment)
         text = _citation_text(citation)
@@ -639,11 +641,12 @@ def _generic_grounded_commands(citations) -> list[str]:
                         flags=re.IGNORECASE,
                     )
                     cleaned_segment = re.sub(r"\s+oc$", "", cleaned_segment, flags=re.IGNORECASE).strip(" #.;'\"")
+                    cleaned_segment = sanitize_cli_command(cleaned_segment)
                     if cleaned_segment:
                         commands.append(cleaned_segment)
     deduped: list[str] = []
     for command in commands:
-        cleaned = re.sub(r"\s+", " ", str(command or "")).strip(" $")
+        cleaned = sanitize_cli_command(re.sub(r"\s+", " ", str(command or "")).strip(" $"))
         if cleaned and cleaned not in deduped:
             deduped.append(cleaned)
     return deduped[:4]

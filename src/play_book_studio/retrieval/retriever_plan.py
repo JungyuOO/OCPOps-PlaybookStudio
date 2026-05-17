@@ -65,7 +65,7 @@ def build_retrieval_plan(
         )
         or follow_up_detected
     ):
-        effective_candidate_k = max(candidate_k, 40)
+        effective_candidate_k = max(candidate_k, 10)
 
     rewritten_queries: list[str] = []
 

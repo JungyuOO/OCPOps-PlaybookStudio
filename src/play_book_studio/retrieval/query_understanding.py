@@ -18,7 +18,7 @@ _TROUBLE_RE = re.compile(
     r"오류|에러|왜이래|왜\s*이래|안\s*돼|안돼|실패|문제|장애|trouble|troubleshoot|fail|error|degraded|pending|crashloop",
     re.IGNORECASE,
 )
-_SECRET_CONFIG_RE = re.compile(r"secret|시크릿|configmap|config\s*map|컨피그맵|컨피그|configuration|설정", re.IGNORECASE)
+_SECRET_CONFIG_RE = re.compile(r"secret|시크릿|configmap|config\s*map|컨피그맵|컨피그", re.IGNORECASE)
 _NAMESPACE_RE = re.compile(r"namespace|namespaces|네임스페이스|project|projects|프로젝트", re.IGNORECASE)
 
 
@@ -32,7 +32,7 @@ _TROUBLE_KO_RE = re.compile(
     re.IGNORECASE,
 )
 _SECRET_CONFIG_KO_RE = re.compile(
-    r"secret|시크릿|configmap|config\s*map|컨피그맵|컨피그|configuration|설정",
+    r"secret|시크릿|configmap|config\s*map|컨피그맵|컨피그",
     re.IGNORECASE,
 )
 _NAMESPACE_KO_RE = re.compile(r"namespace|namespaces|네임스페이스|프로젝트|project|projects", re.IGNORECASE)
@@ -59,8 +59,15 @@ _NAMESPACE_CREATE_RE = re.compile(
 )
 _PVC_RE = re.compile(r"(?<![a-z0-9])PVC(?![a-z0-9])|persistent\s*volume\s*claim|퍼시스턴트\s*볼륨\s*클레임", re.IGNORECASE)
 _PV_RE = re.compile(r"(?<![a-z0-9])PV(?![a-z0-9])|persistent\s*volume(?!\s*claim)|퍼시스턴트\s*볼륨", re.IGNORECASE)
+_VSPHERE_RE = re.compile(r"vsphere|vmware", re.IGNORECASE)
+_STORAGE_VOLUME_RE = re.compile(r"볼륨|volume|스토리지|storage|프로비저닝|provision", re.IGNORECASE)
 _POD_RE = re.compile(r"(?<![a-z0-9])pods?(?![a-z0-9])|파드", re.IGNORECASE)
 _ROUTE_RE = re.compile(r"(?<![a-z0-9])routes?(?![a-z0-9])|라우트", re.IGNORECASE)
+_ROUTE_HTTP_HEADER_RE = re.compile(
+    r"(?:route|routes|라우트|경로).*(?:http|헤더|header|요청|응답)"
+    r"|(?:http|헤더|header|요청|응답).*(?:route|routes|라우트|경로)",
+    re.IGNORECASE,
+)
 _ETCD_RE = re.compile(r"\betcd\b", re.IGNORECASE)
 _MCO_RE = re.compile(r"machine\s*config\s*operator|\bMCO\b|머신\s*구성\s*오퍼레이터", re.IGNORECASE)
 _RBAC_RE = re.compile(r"\brbac\b|rolebinding|clusterrolebinding|권한|롤바인딩", re.IGNORECASE)
@@ -335,6 +342,16 @@ def understand_query_signals(
         _append_unique(primary_topics, "Persistent Volume")
         _append_unique(domains, "storage")
         _append_unique(book_slug_candidates, "storage")
+    if _VSPHERE_RE.search(raw_query) and _STORAGE_VOLUME_RE.search(raw_query):
+        _append_unique(domains, "storage")
+        _append_unique(book_slug_candidates, "storage")
+        _append_unique(primary_topics, "VMware vSphere")
+        _append_unique(primary_topics, "vSphere volume provisioning")
+        _append_unique(objects, "PV")
+        if "pvc" in raw_query.lower() or "클레임" in raw_query:
+            _append_unique(objects, "PVC")
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.93)
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.88)
     if _POD_RE.search(raw_query):
         _append_unique(objects, "Pod")
         _append_unique(primary_topics, "Pod")
@@ -342,6 +359,19 @@ def understand_query_signals(
         _append_unique(objects, "Route")
         _append_unique(primary_topics, "Route")
         _append_unique(domains, "networking")
+    if _ROUTE_HTTP_HEADER_RE.search(raw_query):
+        _append_unique(objects, "Route")
+        _append_unique(primary_topics, "Route HTTP header configuration")
+        _append_unique(primary_topics, "HTTP request header")
+        _append_unique(primary_topics, "HTTP response header")
+        _append_unique(domains, "networking")
+        _append_unique(book_slug_candidates, "ingress_and_load_balancing")
+        _append_unique(intent_labels, "configure_resource")
+        _append_unique(intent_labels, "command_lookup")
+        _append_unique(answer_shapes, "command")
+        _append_unique(command_families, "oc_create")
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.93)
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
     if _ETCD_RE.search(raw_query):
         _append_unique(objects, "etcd")
         _append_unique(primary_topics, "etcd")

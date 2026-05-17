@@ -68,9 +68,34 @@ def _term_matches_text(term: str, text: str) -> bool:
     return len(tokens) >= 2 and all(token in text for token in tokens)
 
 
+_DOMAIN_BOOK_SLUGS = {
+    "networking": {"ingress_and_load_balancing", "networking", "advanced_networking"},
+    "storage": {"storage"},
+    "registry": {"registry", "images"},
+    "operators": {"operators", "postinstallation_configuration"},
+    "etcd": {"etcd", "backup_and_restore"},
+    "node_ops": {"nodes", "machine_management", "support"},
+}
+
+
+def _hit_matches_query_domain(hit: RetrievalHit, *, signals: ScoreSignals) -> bool:
+    classification = signals.structured_query_signals.classification
+    domain = str(classification.get("domain") or "").strip()
+    book_candidates = {
+        str(item or "").strip()
+        for item in classification.get("book_slug_candidates", ())
+        if str(item or "").strip()
+    }
+    allowed_books = set(book_candidates)
+    allowed_books.update(_DOMAIN_BOOK_SLUGS.get(domain, set()))
+    return not allowed_books or hit.book_slug in allowed_books
+
+
 def _apply_intent_profile_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
     profile = signals.intent_profile
     if not profile.needs_command or profile.confidence < 0.7:
+        return
+    if not _hit_matches_query_domain(hit, signals=signals):
         return
 
     search_text = _hit_search_text(hit)
@@ -144,78 +169,6 @@ def _query_matches_hit_object(query: str, hit: RetrievalHit) -> bool:
     )
 
 
-def _normalized_terms(values: tuple[str, ...]) -> set[str]:
-    terms: set[str] = set()
-    for value in values:
-        cleaned = re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
-        if cleaned:
-            terms.add(cleaned)
-    return terms
-
-
-def _command_families_for_hit(hit: RetrievalHit, search_text: str) -> set[str]:
-    families: set[str] = set()
-    command_text = "\n".join((*hit.cli_commands, search_text)).lower()
-    if "oc get" in command_text:
-        families.add("oc_get")
-    if "oc describe" in command_text:
-        families.add("oc_describe")
-    if "oc adm" in command_text:
-        families.add("oc_adm")
-    if "oc debug" in command_text:
-        families.add("oc_debug")
-    if "openshift-install" in command_text:
-        families.add("openshift_install")
-    return families
-
-
-def _apply_structured_signal_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
-    structured = signals.structured_query_signals
-    search_signals = structured.search_signals
-    search_text = _hit_search_text(hit)
-
-    query_objects = _normalized_terms(search_signals.get("objects", ()))
-    hit_objects = _normalized_terms(hit.k8s_objects)
-    if query_objects and (query_objects & hit_objects or any(term in search_text for term in query_objects)):
-        hit.fused_score *= 1.08
-        hit.component_scores["v014_object_signal_boost"] = 1.08
-
-    query_errors = {
-        str(item or "").strip().lower()
-        for item in search_signals.get("error_states", ())
-        if str(item or "").strip()
-    }
-    hit_errors = {
-        str(item or "").strip().lower()
-        for item in hit.error_strings
-        if str(item or "").strip()
-    }
-    if query_errors and (query_errors & hit_errors or any(error in search_text for error in query_errors)):
-        hit.fused_score *= 1.12
-        hit.component_scores["v014_error_state_signal_boost"] = 1.12
-
-    query_families = set(search_signals.get("command_families", ()))
-    hit_families = _command_families_for_hit(hit, search_text)
-    if query_families and query_families & hit_families:
-        hit.fused_score *= 1.06
-        hit.component_scores["v014_command_family_signal_boost"] = 1.06
-
-    answer_shapes = set(search_signals.get("answer_shapes", ()))
-    if answer_shapes & {"command", "step_by_step", "checklist", "troubleshooting_flow"}:
-        if hit.chunk_type in {"command", "procedure", "troubleshooting"}:
-            hit.fused_score *= 1.05
-            hit.component_scores["v014_answer_shape_chunk_boost"] = 1.05
-
-    book_candidates = {
-        str(item or "").strip()
-        for item in structured.classification.get("book_slug_candidates", ())
-        if str(item or "").strip()
-    }
-    if hit.book_slug in book_candidates:
-        hit.fused_score *= 1.04
-        hit.component_scores["v014_book_candidate_signal_boost"] = 1.04
-
-
 def apply_hit_adjustments(
     hit: RetrievalHit,
     *,
@@ -267,7 +220,6 @@ def apply_hit_adjustments(
             hit.component_scores["command_intent_object_match_boost"] = 1.12
 
     _apply_intent_profile_adjustments(hit, signals=signals)
-    _apply_structured_signal_adjustments(hit, signals=signals)
 
     apply_core_adjustments(hit, signals=signals)
 

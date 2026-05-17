@@ -70,6 +70,64 @@ def test_assemble_context_strips_internal_code_markup_from_citations() -> None:
     assert citation.section == "oc get"
 
 
+def test_assemble_context_drops_polluted_unrelated_cli_commands() -> None:
+    hit = RetrievalHit(
+        chunk_id="chunk-pvc",
+        book_slug="storage",
+        chapter="Storage",
+        section="PVC Pending",
+        anchor="pvc-pending",
+        source_url="https://example.test/storage",
+        viewer_path="/docs/storage",
+        text=(
+            "PVC가 Pending 상태인지 확인합니다.\n\n"
+            "```shell\n$ oc get pvc -n <namespace>\n```\n\n"
+            "출력 예\nNAME STATUS VOLUME\nclaim Bound pvc-123"
+        ),
+        source="vector",
+        raw_score=1.0,
+        cli_commands=(
+            "oc\n[/CODE]",
+            "oc create -f <file_name> -n <application_namespace>",
+            "oc get pvc -n <namespace>",
+        ),
+    )
+
+    bundle = assemble_context([hit], query="PVC가 Pending인데 뭐 확인해야 해?", max_chunks=1)
+    citation = bundle.citations[0]
+
+    assert citation.cli_commands == ("oc get pvc -n <namespace>",)
+    assert "oc create -f" not in bundle.prompt_context
+    assert "\noc\n" not in bundle.prompt_context
+
+
+def test_assemble_context_trims_command_output_examples() -> None:
+    hit = RetrievalHit(
+        chunk_id="chunk-pvc-output",
+        book_slug="storage",
+        chapter="Storage",
+        section="PVC Pending",
+        anchor="pvc-pending",
+        source_url="https://example.test/storage",
+        viewer_path="/docs/storage",
+        text=(
+            "PVC 상태는 다음 명령으로 확인합니다.\n"
+            "[CODE]oc get pvc -n <namespace>[/CODE]\n"
+            "출력 예\n"
+            "NAME STATUS VOLUME CAPACITY ACCESS MODES STORAGECLASS AGE\n"
+            "data Pending"
+        ),
+        source="vector",
+        raw_score=1.0,
+    )
+
+    bundle = assemble_context([hit], query="PVC가 Pending인데 뭐 확인해야 해?", max_chunks=1)
+    citation = bundle.citations[0]
+
+    assert citation.cli_commands == ("oc get pvc -n <namespace>",)
+    assert "oc get pvc -n <namespace> 출력 예" not in bundle.prompt_context
+
+
 def test_assemble_context_demotes_navigation_only_hits() -> None:
     nav_hit = RetrievalHit(
         chunk_id="chunk-nav",

@@ -111,6 +111,150 @@ def build_intent_profile(query: str) -> IntentProfile:
     lowered = text.lower()
     command_request = has_command_request(text)
 
+    if _contains_any(text, ("route", "routes", "라우트", "경로")) and _contains_any(
+        text, ("http", "header", "headers", "헤더", "요청", "응답")
+    ):
+        return _profile(
+            intent="operation_command",
+            target_object="route-http-headers",
+            task="configure",
+            needs_command=True,
+            primary_commands=("oc -n app-example create -f app-example-route.yaml",),
+            evidence_terms=(
+                "HTTP request header",
+                "HTTP response header",
+                "nw-route-set-or-delete-http-headers",
+                "Route",
+            ),
+            query_terms=("route http header configuration", "set or delete HTTP request response headers"),
+            confidence=0.9,
+            reasons=("route http request response header configuration request",),
+        )
+
+    if _contains_any(text, ("csr", "certificate signing request", "인증서 서명 요청")) and _contains_any(
+        text, ("approve", "approval", "승인")
+    ):
+        return _profile(
+            intent="operation_command",
+            target_object="csr",
+            task="approve",
+            needs_command=True,
+            primary_commands=("oc get csr", "oc adm certificate approve <csr-name>"),
+            evidence_terms=("CertificateSigningRequest", "CSR", "Approved", "oc adm certificate approve"),
+            query_terms=("approve pending csr", "certificate signing request approval"),
+            confidence=0.86,
+            reasons=("csr approval command request",),
+        )
+
+    if _contains_any(text, ("api-resource", "api-resources", "api resource", "api resources", "api 리소스")):
+        return _profile(
+            intent="command_lookup",
+            target_object="api-resource",
+            task="list",
+            needs_command=True,
+            primary_commands=("oc api-resources",),
+            evidence_terms=("APIResource", "api-resources", "namespaced", "verbs"),
+            query_terms=("supported API resources", "list api resources"),
+            confidence=0.84,
+            reasons=("api resources list command request",),
+        )
+
+    if _contains_any(text, ("application", "app", "애플리케이션", "앱")) and _contains_any(
+        text, ("create", "new", "make", "deploy", "생성", "만들", "배포")
+    ):
+        return _profile(
+            intent="operation_command",
+            target_object="application",
+            task="create",
+            needs_command=True,
+            primary_commands=("oc new-app <image-or-template>",),
+            evidence_terms=("new application", "oc new-app", "ImageStream", "template"),
+            query_terms=("create application from image", "deploy application"),
+            confidence=0.84,
+            reasons=("application creation command request",),
+        )
+
+    if _contains_any(text, ("kubeadmin",)) and _contains_any(text, ("remove", "delete", "제거", "삭제")):
+        return _profile(
+            intent="operation_command",
+            target_object="kubeadmin",
+            task="remove-user",
+            needs_command=True,
+            primary_commands=("oc delete secrets kubeadmin -n kube-system",),
+            evidence_terms=("kubeadmin", "kube-system", "Secret", "remove kubeadmin"),
+            query_terms=("remove kubeadmin user", "delete kubeadmin secret"),
+            confidence=0.86,
+            reasons=("kubeadmin removal command request",),
+        )
+
+    if _contains_any(text, ("prometheus",)) and _contains_any(text, ("auth", "authentication", "인증", "지표", "metrics")):
+        return _profile(
+            intent="operation_command",
+            target_object="prometheus",
+            task="authenticated-metrics",
+            needs_command=True,
+            primary_commands=("oc login",),
+            evidence_terms=("Prometheus", "authentication", "metrics", "oc login"),
+            query_terms=("prometheus authenticated metrics", "login before querying metrics"),
+            confidence=0.82,
+            reasons=("prometheus authenticated metrics first step",),
+        )
+
+    if _contains_any(text, ("operator catalog", "catalog build", "카탈로그")) and _contains_any(
+        text, ("build", "작업", "명령", "명령어")
+    ):
+        return _profile(
+            intent="operation_command",
+            target_object="operator-catalog",
+            task="build",
+            needs_command=True,
+            primary_commands=("oc adm catalog build",),
+            evidence_terms=("operator catalog", "catalog build", "oc adm catalog build"),
+            query_terms=("build operator catalog image", "operator catalog command"),
+            confidence=0.84,
+            reasons=("operator catalog build command request",),
+        )
+
+    if _contains_any(text, ("namespace", "namespaces", "project", "projects", "네임스페이스", "프로젝트")) and not (
+        _contains_any(text, ("can-i", "can i", "rbac", "권한")) or _has_pod_delete_permission_intent(text)
+    ):
+        if _contains_any(text, ("create", "new", "make", "생성", "만들", "추가", "새 ")):
+            return _profile(
+                intent="operation_command",
+                target_object="namespace",
+                task="create",
+                needs_command=True,
+                primary_commands=("oc new-project <project-name>", "oc create namespace <namespace-name>"),
+                evidence_terms=("Namespace", "Project", "oc new-project", "oc create namespace"),
+                query_terms=("create project namespace", "new OpenShift project"),
+                confidence=0.86,
+                reasons=("namespace project creation command request",),
+            )
+        if _contains_any(text, ("list", "목록", "전체", "조회")):
+            return _profile(
+                intent="command_lookup",
+                target_object="namespace",
+                task="list",
+                needs_command=True,
+                primary_commands=("oc get namespaces", "oc get projects"),
+                evidence_terms=("namespace", "project", "list"),
+                query_terms=("project list", "namespace list"),
+                confidence=0.86,
+                reasons=("namespace list command request",),
+            )
+        if _contains_any(text, ("current", "selected", "active", "현재", "선택", "보고 있")):
+            return _profile(
+                intent="command_lookup",
+                target_object="namespace",
+                task="current-context",
+                needs_command=True,
+                primary_commands=("oc project", "oc config view"),
+                evidence_terms=("current project", "selected project", "CLI profile", "current-context"),
+                query_terms=("view current project", "current namespace context"),
+                confidence=0.84,
+                reasons=("namespace current context command request",),
+            )
+
     if _has_oc_login_connection_intent(text):
         return _profile(
             intent="command_lookup",
@@ -266,6 +410,23 @@ def build_intent_profile(query: str) -> IntentProfile:
             reasons=("route timeout troubleshooting",),
         )
 
+    if _contains_any(text, ("route", "routes", "라우트")) and _contains_any(
+        text, ("admission", "namespaceownership", "allowed", "허용", "정책", "policy")
+    ):
+        return _profile(
+            intent="operation_command",
+            target_object="route-admission",
+            task="namespace-ownership-policy",
+            needs_command=True,
+            primary_commands=(
+                "oc -n openshift-ingress-operator patch ingresscontroller/default --patch '{\"spec\":{\"routeAdmission\":{\"namespaceOwnership\":\"InterNamespaceAllowed\"}}}' --type=merge",
+            ),
+            evidence_terms=("routeAdmission", "namespaceOwnership", "InterNamespaceAllowed", "IngressController"),
+            query_terms=("route admission policy", "namespace ownership route policy", "InterNamespaceAllowed"),
+            confidence=0.86,
+            reasons=("route admission namespace ownership command request",),
+        )
+
     if _contains_any(text, ("allowedregistries", "allowed registries")) or (
         _contains_any(text, ("registry", "레지스트리")) and _contains_any(text, ("allowed", "허용", "제한", "limit"))
     ):
@@ -307,13 +468,44 @@ def build_intent_profile(query: str) -> IntentProfile:
             reasons=("security context constraints troubleshooting",),
         )
 
+    if _contains_any(text, ("local storage operator", "localvolume", "localvolumeset", "localvolumediscovery", "로컬 스토리지")) and _contains_any(
+        text, ("remove", "delete", "uninstall", "cleanup", "제거", "삭제", "정리")
+    ):
+        return _profile(
+            intent="operation_command",
+            target_object="local-storage-operator",
+            task="cleanup-before-removal",
+            needs_command=True,
+            primary_commands=(
+                "oc delete localvolume --all --all-namespaces",
+                "oc delete localvolumeset --all --all-namespaces",
+                "oc delete localvolumediscovery --all --all-namespaces",
+            ),
+            evidence_terms=("Local Storage Operator", "LocalVolume", "LocalVolumeSet", "LocalVolumeDiscovery"),
+            query_terms=("local storage operator removal", "delete local storage custom resources"),
+            confidence=0.86,
+            reasons=("local storage operator cleanup command request",),
+        )
+
     if _contains_any(text, ("poddisruptionbudget", "pod disruption budget", "pdb")):
+        if _contains_any(text, ("apply", "create", "set", "policy", "정책", "적용", "생성")):
+            return _profile(
+                intent="operation_command",
+                target_object="poddisruptionbudget",
+                task="apply-policy",
+                needs_command=True,
+                primary_commands=("oc create -f pod-disruption-budget.yaml",),
+                evidence_terms=("PodDisruptionBudget", "PDB", "unhealthyPodEvictionPolicy", "pod-disruption-budget.yaml"),
+                query_terms=("apply pod disruption budget policy", "unhealthy pod eviction policy"),
+                confidence=0.84,
+                reasons=("pod disruption budget policy apply command request",),
+            )
         return _profile(
             intent="troubleshooting",
             target_object="poddisruptionbudget",
             task="drain-or-availability-blocked",
             needs_command=True,
-            primary_commands=("oc get pdb -n <namespace>", "oc describe pdb <pdb-name> -n <namespace>"),
+            primary_commands=("oc get poddisruptionbudget --all-namespaces", "oc get pdb -n <namespace>", "oc describe pdb <pdb-name> -n <namespace>"),
             evidence_terms=("PodDisruptionBudget", "PDB", "Allowed disruptions", "minAvailable", "maxUnavailable"),
             query_terms=("pod disruption budget", "node drain blocked", "application availability during disruption"),
             confidence=0.84,
@@ -321,6 +513,18 @@ def build_intent_profile(query: str) -> IntentProfile:
         )
 
     if _contains_any(text, ("horizontalpodautoscaler", "horizontal pod autoscaler", "hpa")):
+        if _contains_any(text, ("edit", "modify", "change", "policy", "수정", "변경", "정책")):
+            return _profile(
+                intent="operation_command",
+                target_object="horizontalpodautoscaler",
+                task="edit-policy",
+                needs_command=True,
+                primary_commands=("oc edit hpa <hpa-name> -n <namespace>",),
+                evidence_terms=("HorizontalPodAutoscaler", "HPA", "behavior", "scaleDown", "scaleUp"),
+                query_terms=("edit hpa scaling policy", "horizontal pod autoscaler behavior"),
+                confidence=0.86,
+                reasons=("horizontal pod autoscaler policy edit command request",),
+            )
         return _profile(
             intent="troubleshooting",
             target_object="horizontalpodautoscaler",
@@ -331,6 +535,48 @@ def build_intent_profile(query: str) -> IntentProfile:
             query_terms=("horizontal pod autoscaler metrics", "autoscaling target", "scale out not working"),
             confidence=0.84,
             reasons=("horizontal pod autoscaler troubleshooting",),
+        )
+
+    if _contains_any(text, ("vertical pod autoscaler", "verticalpodautoscaler", "vpa")):
+        if _contains_any(text, ("remove", "delete", "uninstall", "제거", "삭제")):
+            return _profile(
+                intent="operation_command",
+                target_object="verticalpodautoscaler",
+                task="remove-operator",
+                needs_command=True,
+                primary_commands=(
+                    "oc delete vpa <vpa-name>",
+                    "oc delete crd verticalpodautoscalercheckpoints.autoscaling.k8s.io",
+                    "oc delete namespace openshift-vertical-pod-autoscaler",
+                ),
+                evidence_terms=("Vertical Pod Autoscaler Operator", "VPA", "openshift-vertical-pod-autoscaler"),
+                query_terms=("remove vertical pod autoscaler operator", "delete vpa custom resources"),
+                confidence=0.86,
+                reasons=("vertical pod autoscaler operator removal command request",),
+            )
+        return _profile(
+            intent="operation_command",
+            target_object="verticalpodautoscaler",
+            task="install-operator",
+            needs_command=True,
+            primary_commands=("oc get all -n openshift-vertical-pod-autoscaler",),
+            evidence_terms=("Vertical Pod Autoscaler Operator", "VPA", "openshift-vertical-pod-autoscaler"),
+            query_terms=("install vertical pod autoscaler operator", "verify vertical pod autoscaler namespace"),
+            confidence=0.84,
+            reasons=("vertical pod autoscaler operator install command request",),
+        )
+
+    if _contains_any(text, ("hsts", "http strict transport security", "strict transport security")):
+        return _profile(
+            intent="operation_command",
+            target_object="hsts",
+            task="domain-policy",
+            needs_command=True,
+            primary_commands=("oc create route", "oc expose route", "oc edit ingresses.config.openshift.io/cluster"),
+            evidence_terms=("HSTS", "HTTP Strict Transport Security", "Ingress", "Route"),
+            query_terms=("domain hsts policy", "route hsts policy", "ingress hsts"),
+            confidence=0.84,
+            reasons=("domain hsts policy command request",),
         )
 
     if _has_resource_policy_intent(text, "imagepullbackoff", "errimagepull", "pull secret"):

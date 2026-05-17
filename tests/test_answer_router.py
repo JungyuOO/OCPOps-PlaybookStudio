@@ -1,4 +1,6 @@
 from play_book_studio.answering.router import route_non_rag
+from play_book_studio.answering.context import _should_force_clarification
+from play_book_studio.retrieval.models import RetrievalHit
 
 
 def test_security_ambiguity_asks_which_security_scope() -> None:
@@ -23,3 +25,50 @@ def test_observability_comparison_is_not_treated_as_ambiguous() -> None:
 
 def test_short_operational_status_question_is_not_smalltalk() -> None:
     assert route_non_rag("PVC가 Pending인데 뭐 확인해야 해?") is None
+
+
+def test_v016_basic_ocp_command_questions_are_not_smalltalk() -> None:
+    queries = [
+        "추가 OAuth 클라이언트는 어떻게 등록해?",
+        "CSR 승인은 어떤 명령어로 진행해?",
+        "새 프로젝트는 어떻게 만들어?",
+        "새 애플리케이션은 어떻게 만들어?",
+        "현재 선택된 프로젝트는 어떻게 확인해?",
+        "현재 프로젝트 상태는 어떻게 확인해?",
+        "지원되는 API 리소스 목록은 어떻게 봐?",
+    ]
+
+    for query in queries:
+        routed = route_non_rag(query)
+        assert routed is None, query
+
+
+def test_v016_operational_questions_bypass_force_clarification() -> None:
+    hits = [
+        RetrievalHit(
+            chunk_id="1",
+            book_slug="events",
+            chapter="",
+            section="cluster events",
+            anchor="a",
+            source_url="",
+            viewer_path="",
+            text="oc get events",
+            source="official",
+            raw_score=0.01,
+        ),
+        RetrievalHit(
+            chunk_id="2",
+            book_slug="nodes",
+            chapter="",
+            section="node list",
+            anchor="b",
+            source_url="",
+            viewer_path="",
+            text="oc get nodes",
+            source="official",
+            raw_score=0.01,
+        ),
+    ]
+
+    assert _should_force_clarification(hits, query="클러스터 이벤트는 어떻게 확인해?") is False

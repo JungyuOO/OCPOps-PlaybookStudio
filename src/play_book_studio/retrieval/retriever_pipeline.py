@@ -217,8 +217,8 @@ def execute_retrieval_pipeline(
     query: str,
     *,
     context: SessionContext | None = None,
-    top_k: int = 8,
-    candidate_k: int = 20,
+    top_k: int = 5,
+    candidate_k: int = 10,
     use_bm25: bool = True,
     use_vector: bool = True,
     trace_callback=None,
@@ -350,12 +350,12 @@ def execute_retrieval_pipeline(
         status="running",
     )
     fusion_started_at = time.perf_counter()
-    reranker_top_n = (
-        max(top_k, retriever.reranker.top_n)
+    reranker_candidate_budget = (
+        max(top_k, int(getattr(retriever.settings, "reranker_candidate_k", top_k) or top_k))
         if retriever.reranker is not None
         else top_k
     )
-    fusion_output_k = max(top_k, min(effective_candidate_k, reranker_top_n))
+    fusion_output_k = max(top_k, min(effective_candidate_k, reranker_candidate_budget))
     hybrid_hits = fuse_ranked_hits(
         plan.rewritten_query,
         {

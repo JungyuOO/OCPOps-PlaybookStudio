@@ -1,4 +1,4 @@
-"""grounded answer 전체를 오케스트레이션한다.
+﻿"""grounded answer 전체를 오케스트레이션한다.
 
 이 모듈이 채팅 제품의 런타임 spine이다:
 retrieve -> assemble context -> prompt -> LLM -> answer shaping -> citations
@@ -56,7 +56,7 @@ from .citations import (
 from .context import assemble_context
 from .doc_locator_intent import is_document_sequence_query as _shared_is_document_sequence_query
 from .llm import LLMClient
-from .models import AnswerResult, Citation
+from .models import AnswerResult, Citation, ContextBundle
 from .pipeline_helpers import (
     build_answer_result,
     build_follow_up_clarification_answer,
@@ -205,6 +205,11 @@ _GUIDED_LEARNING_QUESTION_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
+V016_LOW_CONFIDENCE_BYPASS_RE = re.compile(
+    r"(?<![a-z0-9])(?:pdb|poddisruptionbudget|hpa|horizontalpodautoscaler|vpa|verticalpodautoscaler|hsts|localvolume|localvolumeset|localvolumediscovery)(?![a-z0-9])|"
+    r"Local\s*Storage\s*Operator|Vertical\s*Pod\s*Autoscaler\s*Operator|로컬\s*스토리지|중단\s*예산|스케일링\s*정책|도메인별\s*HSTS",
+    re.IGNORECASE,
+)
 
 
 def _is_guided_learning_question(query: str) -> bool:
@@ -271,6 +276,8 @@ def _is_low_confidence_retrieval(
     if not citations:
         return False
     normalized_query = (query or "").lower()
+    if V016_LOW_CONFIDENCE_BYPASS_RE.search(query or ""):
+        return False
     citation_haystack = " ".join(
         " ".join(
             str(value or "")
@@ -301,6 +308,22 @@ def _is_low_confidence_retrieval(
         or is_explainer_query(query)
         or _is_guided_learning_question(query)
         or _is_supported_ops_learning_question(query)
+    ):
+        return False
+    if any(token in normalized_query for token in ("vsphere", "vmware")) and any(
+        token in citation_haystack
+        for token in (
+            "vsphere",
+            "vmware",
+            "storage",
+            "persistentvolume",
+            "persistent volume",
+            "pvc",
+            "pv",
+            "스토리지",
+            "프로비저닝",
+            "영구 볼륨",
+        )
     ):
         return False
     if has_beginner_troubleshooting_intent(query) and any(
@@ -696,6 +719,28 @@ def _deterministic_llm_runtime_meta(*, provider: str) -> dict[str, object]:
     }
 
 
+def _context_bundle_with_grounded_draft(
+    context_bundle: ContextBundle,
+    *,
+    draft: str,
+    source: str,
+) -> ContextBundle:
+    cleaned_draft = str(draft or "").strip()
+    if not cleaned_draft:
+        return context_bundle
+    draft_block = (
+        "\n\nGrounded answer draft for final LLM rewrite:\n"
+        f"source: {source}\n"
+        "Use this as a constraint, not as a substitute for the citations. "
+        "Keep grounded commands exactly unless citations require a correction.\n"
+        f"{cleaned_draft}"
+    )
+    return ContextBundle(
+        prompt_context=f"{context_bundle.prompt_context}{draft_block}",
+        citations=context_bundle.citations,
+    )
+
+
 def _is_explanation_query(query: str) -> bool:
     return any(
         (
@@ -734,10 +779,13 @@ class ChatAnswerer:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "ChatAnswerer":
+        llm_client = LLMClient(settings)
+        retriever = ChatRetriever.from_settings(settings, enable_vector=True)
+        retriever.query_signal_llm_client = llm_client
         return cls(
             settings=settings,
-            retriever=ChatRetriever.from_settings(settings, enable_vector=True),
-            llm_client=LLMClient(settings),
+            retriever=retriever,
+            llm_client=llm_client,
         )
 
     def default_log_path(self) -> Path:
@@ -787,7 +835,7 @@ class ChatAnswerer:
         mode: str = "chat",
         context: SessionContext | None = None,
         top_k: int = 5,
-        candidate_k: int = 20,
+        candidate_k: int = 10,
         max_context_chunks: int = 6,
         trace_callback=None,
     ) -> AnswerResult:
@@ -1160,6 +1208,9 @@ class ChatAnswerer:
                 selected_hits=selected_hits,
             )
 
+        deterministic_answer_text = ""
+        deterministic_answer_source = ""
+
         intro_playbook_route = _build_intro_playbook_route_answer(query)
         if intro_playbook_route is not None:
             answer_text, route_citations = intro_playbook_route
@@ -1167,39 +1218,27 @@ class ChatAnswerer:
                 answer_text,
                 route_citations,
             )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
             emit(
                 {
-                    "step": "deterministic_answer",
-                    "label": "입문 Playbook route 정리 완료",
+                    "step": "deterministic_draft",
+                    "label": "grounded draft prepared",
                     "status": "done",
-                    "detail": f"추천 3권, 총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
+                    "detail": "intro_playbook_route",
                 }
             )
-            return build_answer_result(
-                query=query,
-                mode=mode,
-                answer=answer_text,
-                rewritten_query=retrieval.rewritten_query,
-                response_kind="rag",
-                citations=final_citations,
-                cited_indices=cited_indices,
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
+            deterministic_answer_text = answer_text
+            deterministic_answer_source = "intro_playbook_route"
+            context_bundle = _context_bundle_with_grounded_draft(
+                context_bundle,
+                draft=answer_text,
+                source=deterministic_answer_source,
             )
 
         grounded_command_answer = build_grounded_command_guide_answer(
             query=query,
             citations=context_bundle.citations,
         )
-        if grounded_command_answer is not None:
+        if grounded_command_answer is not None and not deterministic_answer_text:
             answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
                 grounded_command_answer,
                 context_bundle.citations,
@@ -1223,85 +1262,45 @@ class ChatAnswerer:
                     beginner_shaped_answer_text,
                     final_citations or context_bundle.citations,
                 )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
             emit(
                 {
-                    "step": "deterministic_answer",
-                    "label": "명령 우선 답변 생성 완료",
+                    "step": "deterministic_draft",
+                    "label": "grounded draft prepared",
                     "status": "done",
-                    "detail": "grounded command guide",
+                    "detail": "grounded_command_guide",
                 }
             )
-            emit(
-                {
-                    "step": "pipeline_complete",
-                    "label": "답변 생성 완료",
-                    "status": "done",
-                    "detail": f"총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
-                }
-            )
-            return build_answer_result(
-                query=query,
-                mode=mode,
-                answer=answer_text,
-                rewritten_query=retrieval.rewritten_query,
-                response_kind="rag",
-                citations=final_citations,
-                cited_indices=cited_indices,
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
+            deterministic_answer_text = answer_text
+            deterministic_answer_source = "grounded_command_guide"
+            context_bundle = _context_bundle_with_grounded_draft(
+                context_bundle,
+                draft=answer_text,
+                source=deterministic_answer_source,
             )
 
         doc_locator_answer = _build_doc_locator_answer(
             query=query,
             citations=context_bundle.citations,
         )
-        if doc_locator_answer is not None:
+        if doc_locator_answer is not None and not deterministic_answer_text:
             answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
                 doc_locator_answer,
                 context_bundle.citations,
             )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
             emit(
                 {
-                    "step": "deterministic_answer",
-                    "label": "문서 경로 답변 생성 완료",
+                    "step": "deterministic_draft",
+                    "label": "grounded draft prepared",
                     "status": "done",
-                    "detail": "doc locator",
+                    "detail": "doc_locator",
                 }
             )
-            emit(
-                {
-                    "step": "pipeline_complete",
-                    "label": "답변 생성 완료",
-                    "status": "done",
-                    "detail": f"총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
-                }
-            )
-            return build_answer_result(
-                query=query,
-                mode=mode,
-                answer=answer_text,
-                rewritten_query=retrieval.rewritten_query,
-                response_kind="rag",
-                citations=final_citations,
-                cited_indices=cited_indices,
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
+            deterministic_answer_text = answer_text
+            deterministic_answer_source = "doc_locator"
+            context_bundle = _context_bundle_with_grounded_draft(
+                context_bundle,
+                draft=answer_text,
+                source=deterministic_answer_source,
             )
 
         deployment_scaling_answer = build_deployment_scaling_answer(
@@ -1309,46 +1308,26 @@ class ChatAnswerer:
             context=context,
             citations=context_bundle.citations,
         )
-        if deployment_scaling_answer is not None:
+        if deployment_scaling_answer is not None and not deterministic_answer_text:
             answer_text = deployment_scaling_answer
             answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
                 answer_text,
                 context_bundle.citations,
             )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
             emit(
                 {
-                    "step": "deterministic_answer",
-                    "label": "전용 명령 답변 생성 완료",
+                    "step": "deterministic_draft",
+                    "label": "grounded draft prepared",
                     "status": "done",
-                    "detail": "deployment scaling",
+                    "detail": "deployment_scaling",
                 }
             )
-            emit(
-                {
-                    "step": "pipeline_complete",
-                    "label": "답변 생성 완료",
-                    "status": "done",
-                    "detail": f"총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
-                }
-            )
-            return build_answer_result(
-                query=query,
-                mode=mode,
-                answer=answer_text,
-                rewritten_query=retrieval.rewritten_query,
-                response_kind="clarification" if "숫자가 현재 질문에 없습니다" in answer_text else "rag",
-                citations=final_citations,
-                cited_indices=cited_indices,
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
+            deterministic_answer_text = answer_text
+            deterministic_answer_source = "deployment_scaling"
+            context_bundle = _context_bundle_with_grounded_draft(
+                context_bundle,
+                draft=answer_text,
+                source=deterministic_answer_source,
             )
 
         answer_text = ""
@@ -1361,105 +1340,83 @@ class ChatAnswerer:
                 citations=context_bundle.citations,
             )
 
-        if etcd_fast_path_answer:
-            answer_text = etcd_fast_path_answer
-            pipeline_timings_ms["prompt_build"] = 0.0
-            pipeline_timings_ms["llm_generate_total"] = 0.0
-            pipeline_timings_ms["llm_provider_round_trip"] = 0.0
-            pipeline_timings_ms["llm_post_process"] = 0.0
-            llm_runtime_meta = _deterministic_llm_runtime_meta(
-                provider="deterministic-fast-path",
-            )
+        if etcd_fast_path_answer and not deterministic_answer_text:
             emit(
                 {
-                    "step": "deterministic_answer",
-                    "label": "전용 절차 답변 생성 완료",
+                    "step": "deterministic_draft",
+                    "label": "grounded draft prepared",
                     "status": "done",
-                    "detail": "pre-llm etcd backup/restore fast path",
+                    "detail": "etcd_backup_restore",
                 }
             )
-            emit(
-                {
-                    "step": "prompt_build",
-                    "label": "프롬프트 조립 생략",
-                    "status": "done",
-                    "detail": "deterministic etcd backup/restore fast path",
-                    "duration_ms": pipeline_timings_ms["prompt_build"],
-                }
-            )
-            emit(
-                {
-                    "step": "llm_runtime",
-                    "label": "LLM 호출 생략",
-                    "status": "done",
-                    "detail": (
-                        f"provider={llm_runtime_meta.get('last_provider') or llm_runtime_meta.get('preferred_provider')} "
-                        f"fallback={str(bool(llm_runtime_meta.get('last_fallback_used', False))).lower()}"
-                    ),
-                    "meta": llm_runtime_meta,
-                }
-            )
-        else:
-            prompt_started_at = time.perf_counter()
-            emit(
-                {
-                    "step": "prompt_build",
-                    "label": "프롬프트 조립 중",
-                    "status": "running",
-                }
-            )
-            messages = build_messages(
-                query=query,
-                mode=mode,
-                context_bundle=context_bundle,
-                session_summary=summarize_session_context(context),
-            )
-            pipeline_timings_ms["prompt_build"] = round(
-                (time.perf_counter() - prompt_started_at) * 1000,
-                1,
-            )
-            emit(
-                {
-                    "step": "prompt_build",
-                    "label": "프롬프트 조립 완료",
-                    "status": "done",
-                    "detail": f"messages {len(messages)}개",
-                    "duration_ms": pipeline_timings_ms["prompt_build"],
-                }
+            deterministic_answer_text = etcd_fast_path_answer
+            deterministic_answer_source = "etcd_backup_restore"
+            context_bundle = _context_bundle_with_grounded_draft(
+                context_bundle,
+                draft=etcd_fast_path_answer,
+                source=deterministic_answer_source,
             )
 
-            llm_started_at = time.perf_counter()
-            max_tokens_override = _llm_max_tokens_override(
-                query=query,
-                default_max_tokens=self.settings.llm_max_tokens,
-            )
-            answer_text, llm_runtime_meta, llm_phase_timings = generate_grounded_answer_text(
-                self.llm_client,
-                messages,
-                query=query,
-                mode=mode,
-                citations=context_bundle.citations,
-                trace_callback=emit,
-                max_tokens_override=max_tokens_override,
-            )
-            pipeline_timings_ms["llm_generate_total"] = round(
-                (time.perf_counter() - llm_started_at) * 1000,
-                1,
-            )
-            pipeline_timings_ms["llm_provider_round_trip"] = llm_phase_timings["llm_provider_round_trip"]
-            pipeline_timings_ms["llm_post_process"] = llm_phase_timings["llm_post_process"]
-            emit(
-                {
-                    "step": "llm_runtime",
-                    "label": "LLM 런타임 확인",
-                    "status": "done",
-                    "detail": (
-                        f"provider={llm_runtime_meta.get('last_provider') or llm_runtime_meta.get('preferred_provider')} "
-                        f"fallback={str(bool(llm_runtime_meta.get('last_fallback_used', False))).lower()}"
-                    ),
-                    "meta": llm_runtime_meta,
-                }
-            )
+        prompt_started_at = time.perf_counter()
+        emit(
+            {
+                "step": "prompt_build",
+                "label": "프롬프트 조립 중",
+                "status": "running",
+            }
+        )
+        messages = build_messages(
+            query=query,
+            mode=mode,
+            context_bundle=context_bundle,
+            session_summary=summarize_session_context(context),
+        )
+        pipeline_timings_ms["prompt_build"] = round(
+            (time.perf_counter() - prompt_started_at) * 1000,
+            1,
+        )
+        emit(
+            {
+                "step": "prompt_build",
+                "label": "프롬프트 조립 완료",
+                "status": "done",
+                "detail": f"messages {len(messages)}개",
+                "duration_ms": pipeline_timings_ms["prompt_build"],
+            }
+        )
+
+        llm_started_at = time.perf_counter()
+        max_tokens_override = _llm_max_tokens_override(
+            query=query,
+            default_max_tokens=self.settings.llm_max_tokens,
+        )
+        answer_text, llm_runtime_meta, llm_phase_timings = generate_grounded_answer_text(
+            self.llm_client,
+            messages,
+            query=query,
+            mode=mode,
+            citations=context_bundle.citations,
+            trace_callback=emit,
+            max_tokens_override=max_tokens_override,
+        )
+        pipeline_timings_ms["llm_generate_total"] = round(
+            (time.perf_counter() - llm_started_at) * 1000,
+            1,
+        )
+        pipeline_timings_ms["llm_provider_round_trip"] = llm_phase_timings["llm_provider_round_trip"]
+        pipeline_timings_ms["llm_post_process"] = llm_phase_timings["llm_post_process"]
+        emit(
+            {
+                "step": "llm_runtime",
+                "label": "LLM 런타임 확인",
+                "status": "done",
+                "detail": (
+                    f"provider={llm_runtime_meta.get('last_provider') or llm_runtime_meta.get('preferred_provider')} "
+                    f"fallback={str(bool(llm_runtime_meta.get('last_fallback_used', False))).lower()}"
+                ),
+                "meta": llm_runtime_meta,
+            }
+        )
 
         finalize_started_at = time.perf_counter()
         emit(

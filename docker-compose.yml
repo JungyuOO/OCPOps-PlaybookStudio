@@ -131,8 +131,19 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./src:/app/src
+      - ./data:/app/data
       - ./corpus:/app/corpus
-    command: ["python", "-m", "play_book_studio.cli", "official-gold-import", "--root-dir", "/app", "--chunks-path", "/app/corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl", "--enrich-runtime-metadata", "--index", "--index-limit", "${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}", "--refresh-qdrant-payloads", "--refresh-limit", "${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}"]
+    command:
+      - bash
+      - -lc
+      - >
+        python -m play_book_studio.cli official-gold-import
+        --root-dir /app
+        --index
+        --index-limit ${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}
+        --refresh-qdrant-payloads
+        --refresh-limit ${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}
+        --collection ${QDRANT_COLLECTION:-openshift_docs}
     restart: "no"
 
   qdrant-seed:

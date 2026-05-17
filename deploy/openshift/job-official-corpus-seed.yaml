@@ -34,18 +34,13 @@ spec:
             - name: DATABASE_URL
               value: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
           command:
-            - python
-            - -m
-            - play_book_studio.cli
-            - official-gold-import
-            - --root-dir
-            - /app
-            - --chunks-path
-            - /app/corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl
-            - --enrich-runtime-metadata
-            - --index
-            - --index-limit
-            - "50000"
-            - --refresh-qdrant-payloads
-            - --refresh-limit
-            - "50000"
+            - bash
+            - -lc
+            - >
+              python -m play_book_studio.cli official-gold-import
+              --root-dir /app
+              --index
+              --index-limit ${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}
+              --refresh-qdrant-payloads
+              --refresh-limit ${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}
+              --collection ${QDRANT_COLLECTION:-openshift_docs}

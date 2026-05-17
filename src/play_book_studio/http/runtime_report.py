@@ -273,6 +273,7 @@ def build_runtime_report(
             "reranker_base_url": settings.reranker_base_url,
             "reranker_model": settings.reranker_model,
             "reranker_top_n": settings.reranker_top_n,
+            "reranker_candidate_k": settings.reranker_candidate_k,
             "reranker_timeout_seconds": settings.reranker_timeout_seconds,
             "database_runtime": database_runtime,
             "seed_inputs_required_for_runtime": seed_required_for_runtime,

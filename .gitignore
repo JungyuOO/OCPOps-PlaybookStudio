@@ -39,6 +39,7 @@ reports/multiturn/
 reports/technical_notes/
 reports/execution_harness/**/chrome-headless-profile*/
 validation_report.json
+validation/
 tmp_customer_pack_live/
 #
 # local source mirrors for rebuild/materialization are intentionally unmanaged
@@ -92,3 +93,5 @@ corpus/sources/kmsc/parsed-preview/course_pbs/*
 !corpus/sources/kmsc/parsed-preview/course_pbs/manifests/ops_learning_chunks_v1.jsonl
 !corpus/sources/kmsc/parsed-preview/course_pbs/manifests/ops_learning_guides_v1.json
 !corpus/sources/kmsc/parsed-preview/course_pbs/chunks.jsonl
+corpus/sources/official/imported-gold/gold_corpus_ko/embeddings/
+corpus/sources/official/imported-gold/gold_corpus_ko/text-layers/

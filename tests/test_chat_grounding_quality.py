@@ -125,6 +125,100 @@ def test_intent_profile_prefers_matching_command_over_generic_cli_command() -> N
     assert "intent_profile_command_mismatch_penalty" in hits[1].component_scores
 
 
+def test_vsphere_dynamic_storage_query_prefers_vsphere_pvc_chunk_over_azure() -> None:
+    azure_hit = _hit(
+        "azure-file",
+        text="Azure File 정적 프로비저닝 절차입니다. oc create -f azure-file-pv.yaml",
+        cli_commands=("oc create -f azure-file-pv.yaml",),
+        k8s_objects=("PV", "PVC"),
+        chunk_type="procedure",
+        book_slug="storage",
+        section="Azure File의 정적 프로비저닝",
+        raw_score=0.34,
+    )
+    vsphere_hit = _hit(
+        "vsphere-pvc",
+        text=(
+            "CLI를 사용하여 VMware vSphere 볼륨을 동적으로 프로비저닝합니다. "
+            "기본 StorageClass thin을 사용하고 pvc.yaml 파일을 만든 후 oc create -f pvc.yaml 명령을 실행합니다."
+        ),
+        cli_commands=("oc create -f pvc.yaml",),
+        k8s_objects=("PVC", "StorageClass"),
+        chunk_type="procedure",
+        book_slug="storage",
+        section="CLI를 사용하여 VMware vSphere 볼륨을 동적으로 프로비저닝",
+        raw_score=0.22,
+    )
+
+    hits = fuse_ranked_hits(
+        "vSphere에서 PVC로 볼륨을 동적 프로비저닝하려면 어떻게 해?",
+        {"bm25": [azure_hit, vsphere_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "vsphere-pvc"
+    assert hits[0].component_scores["vsphere_storage_match_boost"] == 2.2
+    assert hits[0].component_scores["vsphere_dynamic_provisioning_boost"] == 1.65
+    assert "vsphere_storage_cloud_mismatch_penalty" in hits[1].component_scores
+
+
+def test_vsphere_static_storage_query_prefers_static_pv_pvc_chunk() -> None:
+    dynamic_hit = _hit(
+        "vsphere-dynamic",
+        text="VMware vSphere 볼륨을 동적으로 프로비저닝합니다. pvc.yaml 파일과 thin-csi StorageClass를 사용합니다.",
+        cli_commands=("oc create -f pvc.yaml",),
+        k8s_objects=("PVC", "StorageClass"),
+        chunk_type="procedure",
+        book_slug="storage",
+        raw_score=0.34,
+    )
+    static_hit = _hit(
+        "vsphere-static",
+        text=(
+            "정적으로 프로비저닝 VMware vSphere 볼륨 절차입니다. "
+            "pv1.yaml 및 pvc1.yaml 파일을 만들고 oc create -f pv1.yaml, oc create -f pvc1.yaml 명령을 실행합니다."
+        ),
+        cli_commands=("oc create -f pv1.yaml", "oc create -f pvc1.yaml"),
+        k8s_objects=("PV", "PVC"),
+        chunk_type="procedure",
+        book_slug="storage",
+        raw_score=0.24,
+    )
+
+    hits = fuse_ranked_hits(
+        "vSphere 볼륨을 정적으로 연결하려면 어떤 리소스를 만들어야 해?",
+        {"bm25": [dynamic_hit, static_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "vsphere-static"
+    assert hits[0].component_scores["vsphere_static_provisioning_boost"] == 1.72
+    assert "vsphere_static_dynamic_mismatch_penalty" in hits[1].component_scores
+
+
+def test_vsphere_storage_citation_does_not_trigger_low_confidence_clarification() -> None:
+    citation = Citation(
+        index=1,
+        chunk_id="vsphere-pvc",
+        book_slug="storage",
+        section="CLI를 사용하여 VMware vSphere 볼륨을 동적으로 프로비저닝",
+        anchor="vsphere-pvc",
+        source_url="",
+        viewer_path="/docs/storage#vsphere-pvc",
+        excerpt="VMware vSphere PersistentVolumeClaim을 pvc.yaml로 정의하고 oc create -f pvc.yaml 명령을 실행합니다.",
+        cli_commands=("oc create -f pvc.yaml",),
+        k8s_objects=("PVC", "StorageClass"),
+    )
+
+    assert not _is_low_confidence_retrieval(
+        query="vSphere에서 PVC로 볼륨을 동적 프로비저닝하려면 어떻게 해?",
+        citations=[citation],
+        selected_hits=[{"fused_score": 0.01, "pre_rerank_fused_score": 0.01, "vector_score": 0.01}],
+    )
+
+
 def test_v014_structured_signals_boost_matching_pvc_pending_troubleshooting_chunk() -> None:
     concept_hit = _hit(
         "storage-concept",
@@ -151,9 +245,9 @@ def test_v014_structured_signals_boost_matching_pvc_pending_troubleshooting_chun
     )
 
     assert hits[0].chunk_id == "pvc-pending"
-    assert hits[0].component_scores["v014_object_signal_boost"] == 1.08
-    assert hits[0].component_scores["v014_error_state_signal_boost"] == 1.12
-    assert hits[0].component_scores["v014_answer_shape_chunk_boost"] == 1.05
+    assert "v014_object_signal_boost" not in hits[0].component_scores
+    assert "v014_error_state_signal_boost" not in hits[0].component_scores
+    assert "v014_answer_shape_chunk_boost" not in hits[0].component_scores
 
 
 def test_command_context_selects_cli_profile_commands_instead_of_clarifying() -> None:
@@ -246,6 +340,32 @@ def test_namespace_list_command_query_expands_toward_namespace_list_docs() -> No
     assert profile.primary_commands == ("oc get namespaces", "oc get projects")
     assert "namespaces" in normalized
     assert "projects" in normalized
+
+
+def test_v016_korean_basic_operations_expand_to_specific_cli_profiles() -> None:
+    new_project = build_intent_profile("새 프로젝트는 어떻게 만들어?")
+    new_app = build_intent_profile("새 애플리케이션은 어떻게 생성해?")
+    api_resources = build_intent_profile("지원되는 API 리소스 목록은 어떻게 봐?")
+    csr = build_intent_profile("CSR 승인은 어떤 명령으로 해?")
+    current_project = build_intent_profile("현재 선택된 프로젝트는 어떻게 확인해?")
+
+    normalized_project = normalize_query("새 프로젝트는 어떻게 만들어?")
+    normalized_api = normalize_query("지원되는 API 리소스 목록은 어떻게 봐?")
+    normalized_csr = normalize_query("CSR 승인은 어떤 명령으로 해?")
+
+    assert new_project.task == "create"
+    assert new_project.primary_commands == ("oc new-project <project-name>", "oc create namespace <namespace-name>")
+    assert new_app.target_object == "application"
+    assert new_app.primary_commands == ("oc new-app <image-or-template>",)
+    assert api_resources.target_object == "api-resource"
+    assert api_resources.primary_commands == ("oc api-resources",)
+    assert csr.target_object == "csr"
+    assert "oc adm certificate approve <csr-name>" in csr.primary_commands
+    assert current_project.task == "current-context"
+    assert current_project.primary_commands == ("oc project", "oc config view")
+    assert "new-project" in normalized_project
+    assert "oc api-resources" in normalized_api
+    assert "certificate approve" in normalized_csr
 
 
 def test_korean_node_status_query_expands_to_node_status_commands() -> None:
@@ -1083,3 +1203,149 @@ def test_live_smoke_flags_missing_command_learning_terms() -> None:
 
     assert "missing_required_term:oc adm top nodes" in detail["failures"]
     assert "missing_citation_term:oc adm top nodes" in detail["failures"]
+
+
+def test_v016_aws_registry_storage_penalizes_rhosp_chunks() -> None:
+    rhosp_hit = _hit(
+        "rhosp-cinder",
+        text="RHOSP OpenStack Cinder volume can be used for image registry storage.",
+        book_slug="registry",
+        section="RHOSP image registry storage",
+        raw_score=0.42,
+    )
+    aws_hit = _hit(
+        "aws-s3",
+        text="AWS user-provisioned clusters configure image registry storage with S3 bucket settings.",
+        book_slug="registry",
+        section="AWS user-provisioned image registry storage",
+        raw_score=0.28,
+    )
+
+    hits = fuse_ranked_hits(
+        "AWS 사용자 프로비저닝 환경에서 레지스트리 스토리지는 어떻게 설정해?",
+        {"bm25": [rhosp_hit, aws_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "aws-s3"
+    assert hits[0].component_scores["v016_aws_registry_storage_platform_boost"] == 1.9
+    assert "v016_aws_registry_storage_platform_mismatch_penalty" in hits[1].component_scores
+
+
+def test_v016_etcd_defrag_penalizes_disk_only_commands() -> None:
+    disk_hit = _hit(
+        "disk-lsblk",
+        text="Use oc debug node/<node-name> -- chroot /host lsblk to inspect disks.",
+        cli_commands=("oc debug node/<node-name> -- chroot /host lsblk",),
+        book_slug="nodes",
+        raw_score=0.42,
+    )
+    defrag_hit = _hit(
+        "etcd-defrag",
+        text="Run etcdctl defrag from an etcdctl container to perform manual etcd defragmentation.",
+        cli_commands=("etcdctl defrag",),
+        book_slug="etcd",
+        section="Manual etcd defragmentation",
+        raw_score=0.24,
+    )
+
+    hits = fuse_ranked_hits(
+        "etcd 수동 조각 모음은 어떤 명령어로 진행해?",
+        {"bm25": [disk_hit, defrag_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "etcd-defrag"
+    assert hits[0].component_scores["v016_etcd_defrag_boost"] == 2.1
+    assert "v016_etcd_defrag_disk_command_penalty" in hits[1].component_scores
+
+
+def test_v016_insights_query_penalizes_operator_catalog_chunks() -> None:
+    catalog_hit = _hit(
+        "catalog",
+        text="Use oc get catalogsource to inspect an Operator catalog source.",
+        cli_commands=("oc get catalogsource",),
+        book_slug="operators",
+        raw_score=0.38,
+    )
+    insights_hit = _hit(
+        "insights",
+        text="The Insights Operator runs in openshift-insights and creates archives for remote health reporting.",
+        cli_commands=("oc get pods -n openshift-insights",),
+        book_slug="support",
+        section="Insights Operator archive",
+        raw_score=0.26,
+    )
+
+    hits = fuse_ranked_hits(
+        "Insights Operator 아카이브는 어떻게 업로드해?",
+        {"bm25": [catalog_hit, insights_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "insights"
+    assert hits[0].component_scores["v016_insights_support_boost"] == 1.8
+    assert "v016_insights_operator_catalog_penalty" in hits[1].component_scores
+
+
+def test_v016_build_input_security_penalizes_oauth_chunks() -> None:
+    oauth_hit = _hit(
+        "oauth",
+        text="Configure OAuth OIDC authentication.config/cluster with a client secret.",
+        cli_commands=("oc edit authentication.config/cluster",),
+        book_slug="authentication",
+        raw_score=0.4,
+    )
+    build_hit = _hit(
+        "build-secret",
+        text="BuildConfig can use a source secret to secure build inputs.",
+        cli_commands=("oc set build-secret --source bc/my-build my-secret",),
+        book_slug="builds",
+        section="Build input secrets",
+        raw_score=0.27,
+    )
+
+    hits = fuse_ranked_hits(
+        "빌드 입력 보안을 적용하려면 어떤 명령어를 써?",
+        {"bm25": [oauth_hit, build_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "build-secret"
+    assert hits[0].component_scores["v016_build_input_security_boost"] == 1.8
+    assert "v016_build_input_oauth_penalty" in hits[1].component_scores
+
+
+def test_v016_route_admission_policy_penalizes_expose_route_chunks() -> None:
+    expose_hit = _hit(
+        "route-expose",
+        text="Expose a service as a route with oc expose service nodejs-ex and verify with oc get route.",
+        cli_commands=("oc expose service nodejs-ex", "oc get route"),
+        book_slug="networking",
+        raw_score=0.4,
+    )
+    admission_hit = _hit(
+        "route-admission",
+        text="Configure routeAdmission namespaceOwnership InterNamespaceAllowed on the default IngressController.",
+        cli_commands=(
+            "oc -n openshift-ingress-operator patch ingresscontroller/default --patch '{\"spec\":{\"routeAdmission\":{\"namespaceOwnership\":\"InterNamespaceAllowed\"}}}' --type=merge",
+        ),
+        book_slug="ingress",
+        section="Route admission policy",
+        raw_score=0.25,
+    )
+
+    hits = fuse_ranked_hits(
+        "Route 허용 정책은 어떻게 설정해?",
+        {"bm25": [expose_hit, admission_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "route-admission"
+    assert hits[0].component_scores["v016_route_admission_policy_boost"] == 2.0
+    assert "v016_route_expose_policy_mismatch_penalty" in hits[1].component_scores

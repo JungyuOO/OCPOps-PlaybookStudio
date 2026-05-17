@@ -45,6 +45,18 @@ from .sanitize import sanitize_cli_command, sanitize_section_label, strip_intern
 SPACE_RE = re.compile(r"\s+")
 SECTION_PREFIX_RE = re.compile(r"^\d+(?:\.\d+)*\.?\s*")
 INTRO_RECOMMENDATION_COUNT_RE = re.compile(r"(\d+\s*개|세\s*개|3\s*개|목록|리스트|top\s*\d+)", re.IGNORECASE)
+OCP_OPERATIONAL_CLARIFICATION_BYPASS_RE = re.compile(
+    r"클러스터\s*이벤트|클러스터\s*진단|진단\s*데이터|Node\s*Feature\s*Discovery|"
+    r"\bNFD\b|Insights\s*Operator|원격\s*상태\s*보고|pull\s*secret|제거\s*예정\s*API|"
+    r"네트워크\s*지터|CSR\s*승인|새\s*프로젝트|새\s*애플리케이션|현재\s*선택된\s*프로젝트|"
+    r"현재\s*프로젝트\s*상태|지원되는\s*API\s*리소스",
+    re.IGNORECASE,
+)
+V016_OPERATIONAL_CLARIFICATION_BYPASS_RE = re.compile(
+    r"(?<![a-z0-9])(?:pdb|poddisruptionbudget|hpa|horizontalpodautoscaler|vpa|verticalpodautoscaler|hsts|localvolume|localvolumeset|localvolumediscovery)(?![a-z0-9])|"
+    r"Local\s*Storage\s*Operator|Vertical\s*Pod\s*Autoscaler\s*Operator|로컬\s*스토리지|중단\s*예산|스케일링\s*정책|도메인별\s*HSTS",
+    re.IGNORECASE,
+)
 MAX_PROMPT_CLI_COMMANDS = 4
 OC_LOGIN_QUERY_RE = re.compile(
     r"(?:\boc\s+login|로그인|login).*(?:token|토큰|server|서버|url|api)"
@@ -58,7 +70,10 @@ AUTH_CAN_I_QUERY_RE = re.compile(
 
 
 def _normalize_excerpt(text: str) -> str:
-    return SPACE_RE.sub(" ", strip_internal_markup(text))
+    cleaned = strip_internal_markup(text)
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 
 def _trim_command_candidate(value: str) -> str:
@@ -66,6 +81,10 @@ def _trim_command_candidate(value: str) -> str:
     for marker in (
         " [/CODE]",
         " [CODE",
+        " 출력 예 ",
+        " 출력예 ",
+        " 결과 ",
+        " NAME ",
         " Procedure ",
         " Example ",
         " Note ",
@@ -73,6 +92,7 @@ def _trim_command_candidate(value: str) -> str:
         " Verification ",
         " You ",
         " If ",
+        " Then ",
         " The ",
     ):
         marker_index = command.find(marker)
@@ -158,10 +178,12 @@ def _commands_from_excerpt(excerpt: str) -> tuple[str, ...]:
 
 def _citation_cli_commands(hit: RetrievalHit, excerpt: str) -> tuple[str, ...]:
     extracted = list(_commands_from_excerpt(excerpt))
+    excerpt_search_text = SPACE_RE.sub(" ", strip_internal_markup(excerpt)).casefold()
     existing = [
-        sanitize_cli_command(command)
+        sanitized
         for command in hit.cli_commands
-        if sanitize_cli_command(command)
+        if (sanitized := sanitize_cli_command(command))
+        and (not extracted or sanitized.casefold() in excerpt_search_text)
     ]
     merged: list[str] = []
     seen: set[str] = set()
@@ -914,6 +936,10 @@ def _should_force_clarification(
     query: str = "",
 ) -> bool:
     normalized = query or ""
+    if V016_OPERATIONAL_CLARIFICATION_BYPASS_RE.search(normalized):
+        return False
+    if OCP_OPERATIONAL_CLARIFICATION_BYPASS_RE.search(normalized):
+        return False
     if has_follow_up_reference(normalized):
         return False
     if any(
@@ -1995,7 +2021,7 @@ def assemble_context(
                 semantic_role=hit.semantic_role,
                 source_collection=hit.source_collection,
                 block_kinds=hit.block_kinds,
-                cli_commands=_citation_cli_commands(hit, hit.text),
+                cli_commands=_citation_cli_commands(hit, citation_excerpt),
                 error_strings=hit.error_strings,
                 k8s_objects=hit.k8s_objects,
                 operator_names=hit.operator_names,

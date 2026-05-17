@@ -507,29 +507,6 @@ def align_answer_to_grounded_commands(answer_text: str, *, query: str, citations
             "```bash\noc adm ocp-certificates monitor-certificates\n```"
         )
 
-    if (
-        NAMESPACE_ADMIN_QUERY_RE.search(query or "")
-        and has_rbac_intent(query)
-        and "add-role-to-user admin" in excerpt_text
-    ):
-        subject_user, subject_project = _extract_rbac_assignment_targets(query)
-        generic_command = "oc adm policy add-role-to-user admin <user> -n <project>"
-        if subject_user and subject_project:
-            return (
-                f"답변: `{subject_project}` 프로젝트의 `{subject_user}` 사용자에게 `admin` 역할을 주려면 "
-                "아래 명령을 실행하면 됩니다 [1].\n\n"
-                f"```bash\noc adm policy add-role-to-user admin {subject_user} -n {subject_project}\n```\n\n"
-                "같은 패턴의 일반형은 아래와 같습니다 [1].\n\n"
-                f"```bash\n{generic_command}\n```"
-            )
-        return (
-            "답변: 특정 프로젝트 또는 namespace에만 `admin` 권한을 주려면 먼저 아래 명령으로 "
-            "로컬 역할 바인딩을 추가합니다 [1].\n\n"
-            f"```bash\n{generic_command}\n```\n\n"
-            "예를 들어 `joe` 프로젝트의 `alice` 사용자에게 `admin` 역할을 주려면 아래처럼 실행하면 됩니다 [1].\n\n"
-            "```bash\noc adm policy add-role-to-user admin alice -n joe\n```"
-        )
-
     return updated
 
 
@@ -561,7 +538,7 @@ def _clean_shell_command_candidate(value: str) -> str:
     cleaned = (value or "").strip().lstrip("$").strip()
     cleaned = re.sub(r"^#+\s*", "", cleaned).strip()
     cleaned = re.split(
-        r"\s+(?:CLI|Web Console|Administration\s*->|Console\s*->|명령어|실행 결과|결과인|TEST-[A-Z]+-|이 이미지는)\b",
+        r"\s+(?:CLI|Web Console|Administration\s*->|Console\s*->|명령어|실행 결과|결과인|출력 예|출력예|NAME\s+STATUS|TEST-[A-Z]+-|이 이미지는)\b",
         cleaned,
         maxsplit=1,
         flags=re.IGNORECASE,

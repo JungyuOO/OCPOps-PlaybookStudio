@@ -61,6 +61,7 @@ class ChatRetriever:
         self.vector_retriever = vector_retriever
         self.reranker = reranker
         self.graph_runtime = graph_runtime or RetrievalGraphRuntime(settings)
+        self.query_signal_llm_client = None
         self._customer_pack_overlay_fingerprint: tuple[tuple[str, int], ...] = ()
         self._customer_pack_overlay_index: BM25Index | None = None
 
@@ -109,8 +110,8 @@ class ChatRetriever:
         query: str,
         *,
         context: SessionContext | None = None,
-        top_k: int = 8,
-        candidate_k: int = 20,
+        top_k: int = 5,
+        candidate_k: int = 10,
         use_bm25: bool = True,
         use_vector: bool = True,
         trace_callback=None,

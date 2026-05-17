@@ -5,6 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.corpus_paths import resolve_official_manualbook_playbooks_dir
 from play_book_studio.config.settings import load_settings
 from play_book_studio.http.viewer_blocks import (
     _clean_source_view_text,
@@ -194,7 +195,7 @@ def _playbook_anchor_index(root_dir_str: str) -> dict[str, str]:
     root_dir = Path(root_dir_str)
     if _db_runtime_enabled(root_dir):
         return _playbook_anchor_index_from_database(root_dir)
-    playbook_dir = root_dir / "data" / "gold_manualbook_ko" / "playbooks"
+    playbook_dir = resolve_official_manualbook_playbooks_dir(root_dir)
     index: dict[str, str] = {}
     if not playbook_dir.exists():
         return index

@@ -16,6 +16,7 @@ from .models import RetrievalHit
 
 DEFAULT_RERANKER_MODEL = "dragonkue/bge-reranker-v2-m3-ko"
 RERANKER_SOURCE = "hybrid_reranked"
+MAX_RERANK_DOCUMENT_CHARS = 1800
 
 
 def _build_rerank_document(hit: RetrievalHit) -> str:
@@ -24,6 +25,9 @@ def _build_rerank_document(hit: RetrievalHit) -> str:
     commands = ", ".join(command for command in hit.cli_commands if command)
     objects = ", ".join(obj for obj in hit.k8s_objects if obj)
     errors = ", ".join(error for error in hit.error_strings if error)
+    content = hit.text.strip()
+    if len(content) > MAX_RERANK_DOCUMENT_CHARS:
+        content = content[:MAX_RERANK_DOCUMENT_CHARS].rsplit(" ", 1)[0].strip()
     parts = [
         f"Book: {hit.book_slug.strip()}" if hit.book_slug.strip() else "",
         f"Chapter: {hit.chapter.strip()}" if hit.chapter.strip() else "",
@@ -35,7 +39,7 @@ def _build_rerank_document(hit: RetrievalHit) -> str:
         f"Kubernetes/OpenShift objects: {objects}" if objects else "",
         f"Errors: {errors}" if errors else "",
         "Content:",
-        hit.text.strip(),
+        content,
     ]
     return "\n".join(part for part in parts if part)
 
@@ -104,10 +108,7 @@ class RemoteBgeReranker:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.base_url = (
-            settings.reranker_base_url
-            or settings.embedding_base_url
-        ).strip().rstrip("/")
+        self.base_url = settings.reranker_base_url.strip().rstrip("/")
         self.endpoint = _rerank_endpoint(self.base_url)
         self.model_name = settings.reranker_model or DEFAULT_RERANKER_MODEL
         self.top_n = max(2, settings.reranker_top_n)
@@ -153,7 +154,7 @@ class RemoteBgeReranker:
 
     def _request_score_batch(self, query: str, documents: list[str]) -> list[float]:
         if not self.endpoint:
-            raise RuntimeError("RERANKER_BASE_URL or EMBEDDING_BASE_URL must be set")
+            raise RuntimeError("RERANKER_BASE_URL must be set")
 
         errors: list[str] = []
         for payload in self._payloads(query, documents):
@@ -197,8 +198,10 @@ class RemoteBgeReranker:
         if not hits:
             return []
 
-        rerank_limit = top_n_override if top_n_override is not None else self.top_n
-        rerank_count = min(len(hits), max(top_k, rerank_limit))
+        if top_n_override is not None:
+            rerank_count = min(len(hits), max(1, top_n_override))
+        else:
+            rerank_count = min(len(hits), max(top_k, self.top_n))
         primary_candidates = [copy.deepcopy(hit) for hit in hits[:rerank_count]]
         remainder = [copy.deepcopy(hit) for hit in hits[rerank_count:]]
 
