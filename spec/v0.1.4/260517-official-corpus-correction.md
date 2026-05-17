@@ -616,6 +616,7 @@ git diff --check
 @'
 import tests.test_official_gold_import as t1
 import tests.test_qdrant_indexer as t2
+import tests.test_bm25_postgres as t3
 
 for fn in [
     t1.test_write_official_embedding_chunks_creates_clean_embedding_projection,
@@ -625,6 +626,8 @@ for fn in [
     t2.test_qdrant_payload_from_row_matches_vector_retriever_contract,
     t2.test_qdrant_payload_from_row_preserves_official_gold_metadata,
     t2.test_qdrant_candidate_from_row_hashes_stable_payload,
+    t2.test_refresh_stale_qdrant_payloads_updates_existing_candidates,
+    t3.test_bm25_index_uses_normalized_text_for_matching_but_returns_display_text,
 ]:
     fn()
     print(f"PASS {fn.__name__}")
@@ -641,6 +644,8 @@ PASS test_build_official_embedding_qdrant_candidates_uses_clean_text_without_raw
 PASS test_qdrant_payload_from_row_matches_vector_retriever_contract
 PASS test_qdrant_payload_from_row_preserves_official_gold_metadata
 PASS test_qdrant_candidate_from_row_hashes_stable_payload
+PASS test_refresh_stale_qdrant_payloads_updates_existing_candidates
+PASS test_bm25_index_uses_normalized_text_for_matching_but_returns_display_text
 ```
 
 참고:
@@ -702,6 +707,8 @@ embedding_text:
   - `test_qdrant_payload_from_row_matches_vector_retriever_contract`
   - `test_qdrant_payload_from_row_preserves_official_gold_metadata`
   - `test_qdrant_candidate_from_row_hashes_stable_payload`
+  - `test_refresh_stale_qdrant_payloads_updates_existing_candidates`
+  - `test_bm25_index_uses_normalized_text_for_matching_but_returns_display_text`
 - `python -m compileall` 통과.
 - `git diff --check` 통과.
 
@@ -718,6 +725,7 @@ feat/corpus_embedding_text_s
 ```text
 1278063 fix: separate official display and embedding text
 c1d2b64 docs: record official corpus correction evidence
+cb64c1d fix: tighten official embedding noise gates
 ```
 
 ## 참고
@@ -730,10 +738,13 @@ c1d2b64 docs: record official corpus correction evidence
 - 재생성/재적재 후 DB의 `document_chunks.embedding_text`, `metadata.text_layers.embedding_text`, `metadata.text_layers.normalized_text`에서 `Tk9ERUlQ` 계열 문자열 0건을 확인했다.
 - Qdrant official docs payload 전체 scan에서도 `embedding_base64_like=0`을 확인했다.
 
+추가 점검 후 바로 처리한 부분:
+
+- BM25 runtime loader는 `payload.text`가 아니라 `text_fields.normalized_text` / `normalized_text`를 우선 토큰화하도록 수정했다. 표시용 `text`는 검색 hit 반환용으로 유지된다.
+- docker compose seed에서 사용하는 `--refresh-qdrant-payloads` 경로는 stale payload 후보를 payload만 덮어쓰지 않고, 새 `embedding_text`로 벡터까지 다시 upsert하도록 수정했다. 기존 collection 재사용 시 stale vector가 남는 리스크를 줄이기 위한 조치다.
+
 아직 "완료"로 과하게 말하면 안 되는 부분:
 
 - 반복이 많은 표 chunk는 `normalized_text == embedding_text`가 될 수 있다. 이 자체는 오류가 아니지만, retrieval rank에서 낮게 보거나 metadata로 table 성격을 반영할 수 있다.
-- BM25 runtime loader는 후속 확인/수정이 필요하다. 현재 구조상 `normalized_text`를 항상 직접 토큰화한다고 단정하면 안 된다.
-- docker compose seed 경로가 기존 collection에 대해 payload만 refresh하고 vector를 재임베딩하지 않는 경로를 탈 수 있는지 추가 확인이 필요하다. 새 collection 또는 전체 re-upsert 경로에서는 문제가 작지만, 기존 collection 재사용 시 stale vector 리스크가 남을 수 있다.
 - 새 chunk size로 rechunk한 작업은 아니므로, 청크 크기 정책을 변경하려면 별도 회의와 산출물이 필요하다.
 - `text`/`markdown`에는 표시용 코드블록이 남는 것이 정상이다. 임베딩 품질 검사는 `text_fields.embedding_text` 기준으로 보는 것이 맞다.

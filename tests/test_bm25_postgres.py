@@ -125,6 +125,26 @@ def test_bm25_index_can_search_postgres_payload_rows():
     assert hits[0].source_scope == "study_docs"
 
 
+def test_bm25_index_uses_normalized_text_for_matching_but_returns_display_text():
+    rows = [
+        {
+            "chunk_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            "book_slug": "storage",
+            "text": "표시용 본문에는 검색 전용 명령어가 없다.",
+            "text_fields": {
+                "normalized_text": "pvc pending 먼저 이벤트 확인 oc describe pvc pvc name n namespace",
+                "embedding_text": "$ oc describe pvc <pvc-name> -n <namespace>",
+            },
+        }
+    ]
+
+    hits = BM25Index.from_rows(rows).search("oc describe pvc namespace", top_k=3)
+
+    assert len(hits) == 1
+    assert hits[0].chunk_id == "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    assert hits[0].text == "표시용 본문에는 검색 전용 명령어가 없다."
+
+
 def test_db_runtime_bm25_does_not_fall_back_to_missing_seed_file(monkeypatch):
     missing_seed_file = REPO_ROOT / "tmp" / "bm25_postgres_tests" / "missing" / "bm25_corpus.jsonl"
     monkeypatch.setattr(

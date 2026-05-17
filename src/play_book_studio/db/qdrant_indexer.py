@@ -605,8 +605,9 @@ def refresh_stale_qdrant_payloads(
     source_scope: str = "",
     limit: int = 1000,
     batch_size: int = 256,
+    embedding_client: EmbeddingClient | None = None,
 ) -> dict[str, Any]:
-    """Overwrite Qdrant payloads when DB-derived payload hashes changed."""
+    """Re-upsert Qdrant points when DB-derived payload hashes changed."""
     target_collection = collection or settings.qdrant_collection
     scope = source_scope.strip()
     candidates = load_qdrant_payload_refresh_candidates(
@@ -623,6 +624,7 @@ def refresh_stale_qdrant_payloads(
             "existing_count": 0,
             "missing_count": 0,
             "refreshed_count": 0,
+            "reindexed_count": 0,
         }
 
     existing_point_ids: set[str] = set()
@@ -640,12 +642,9 @@ def refresh_stale_qdrant_payloads(
         candidate for candidate in candidates if candidate.point_id in existing_point_ids
     )
     if existing_candidates:
-        overwrite_qdrant_payloads(
-            settings,
-            target_collection,
-            existing_candidates,
-            batch_size=effective_batch_size,
-        )
+        client = embedding_client or EmbeddingClient(settings)
+        vectors = client.embed_texts(candidate.embedding_text for candidate in existing_candidates)
+        _upsert_candidates(settings, target_collection, existing_candidates, vectors)
         record_qdrant_index_entries(
             connection,
             collection=target_collection,
@@ -659,6 +658,7 @@ def refresh_stale_qdrant_payloads(
         "existing_count": len(existing_candidates),
         "missing_count": len(candidates) - len(existing_candidates),
         "refreshed_count": len(existing_candidates),
+        "reindexed_count": len(existing_candidates),
     }
 
 

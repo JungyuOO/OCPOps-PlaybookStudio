@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 from play_book_studio.cli import build_parser
 from play_book_studio.db.qdrant_indexer import (
@@ -401,7 +402,7 @@ def test_overwrite_qdrant_payloads_batches_distinct_payload_operations(monkeypat
     ]
 
 
-def test_refresh_stale_qdrant_payloads_updates_existing_candidates(monkeypatch):
+def test_refresh_stale_qdrant_payloads_updates_existing_candidates():
     stale = QdrantChunkCandidate(
         chunk_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         point_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -417,28 +418,34 @@ def test_refresh_stale_qdrant_payloads_updates_existing_candidates(monkeypatch):
         payload_hash="hash-b",
     )
     connection = FakeConnection()
-    overwritten = []
+    upserts = []
 
-    monkeypatch.setattr(
-        "play_book_studio.db.qdrant_indexer.load_qdrant_payload_refresh_candidates",
-        lambda connection, collection, source_scope, limit: (stale, missing),
-    )
-    monkeypatch.setattr(
-        "play_book_studio.db.qdrant_indexer.fetch_existing_qdrant_point_ids",
-        lambda settings, collection, point_ids: {stale.point_id},
-    )
-    monkeypatch.setattr(
-        "play_book_studio.db.qdrant_indexer.overwrite_qdrant_payloads",
-        lambda settings, collection, candidates, batch_size: overwritten.extend(candidates),
-    )
+    class FakeEmbeddingClient:
+        def embed_texts(self, texts):
+            return [[float(len(text))] for text in texts]
 
-    result = refresh_stale_qdrant_payloads(
-        SettingsStub(),
-        connection,
-        collection="openshift_docs",
-        source_scope="official_docs",
-        limit=2,
-    )
+    with (
+        patch(
+            "play_book_studio.db.qdrant_indexer.load_qdrant_payload_refresh_candidates",
+            lambda connection, collection, source_scope, limit: (stale, missing),
+        ),
+        patch(
+            "play_book_studio.db.qdrant_indexer.fetch_existing_qdrant_point_ids",
+            lambda settings, collection, point_ids: {stale.point_id},
+        ),
+        patch(
+            "play_book_studio.db.qdrant_indexer._upsert_candidates",
+            lambda settings, collection, candidates, vectors: upserts.append((collection, candidates, vectors)),
+        ),
+    ):
+        result = refresh_stale_qdrant_payloads(
+            SettingsStub(),
+            connection,
+            collection="openshift_docs",
+            source_scope="official_docs",
+            limit=2,
+            embedding_client=FakeEmbeddingClient(),
+        )
 
     assert result == {
         "collection": "openshift_docs",
@@ -447,8 +454,9 @@ def test_refresh_stale_qdrant_payloads_updates_existing_candidates(monkeypatch):
         "existing_count": 1,
         "missing_count": 1,
         "refreshed_count": 1,
+        "reindexed_count": 1,
     }
-    assert overwritten == [stale]
+    assert upserts == [("openshift_docs", (stale,), [[4.0]])]
     assert len(connection.cursor_obj.calls) == 1
     assert connection.cursor_obj.calls[0][1][0] == stale.chunk_id
 

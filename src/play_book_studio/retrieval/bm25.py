@@ -21,6 +21,14 @@ def tokenize_text(text: str) -> list[str]:
     return [token.lower() for token in TOKEN_RE.findall(text or "")]
 
 
+def _bm25_index_text(row: dict[str, Any]) -> str:
+    text_fields = row.get("text_fields") if isinstance(row.get("text_fields"), dict) else {}
+    normalized_text = str(text_fields.get("normalized_text") or row.get("normalized_text") or "").strip()
+    if normalized_text:
+        return normalized_text
+    return str(row.get("text", ""))
+
+
 def _row_to_hit(row: dict, score: float) -> RetrievalHit:
     return RetrievalHit(
         chunk_id=str(row["chunk_id"]),
@@ -84,7 +92,7 @@ class BM25Index:
         doc_frequencies: Counter[str] = Counter()
 
         for row in rows:
-            tokens = tokenize_text(str(row.get("text", "")))
+            tokens = tokenize_text(_bm25_index_text(row))
             frequencies = Counter(tokens)
             term_frequencies.append(frequencies)
             doc_lengths.append(len(tokens))

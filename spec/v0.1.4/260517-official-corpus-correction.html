@@ -737,7 +737,7 @@ print(json.dumps(counts, ensure_ascii=False, indent=2))
         </tr>
         <tr>
           <th>commit</th>
-          <td><code>1278063 fix: separate official display and embedding text</code><br><code>c1d2b64 docs: record official corpus correction evidence</code></td>
+          <td><code>1278063 fix: separate official display and embedding text</code><br><code>c1d2b64 docs: record official corpus correction evidence</code><br><code>cb64c1d fix: tighten official embedding noise gates</code></td>
         </tr>
         <tr>
           <th>compileall</th>
@@ -749,20 +749,23 @@ print(json.dumps(counts, ensure_ascii=False, indent=2))
         </tr>
         <tr>
           <th>pytest</th>
-          <td>로컬 venv에 pytest 미설치로 runner 실행 불가. 관련 테스트 함수 직접 호출 통과.</td>
+          <td>로컬 venv에 pytest 미설치로 runner 실행 불가. 관련 테스트 함수 직접 호출 통과. BM25 normalized_text 우선 토큰화와 stale Qdrant re-upsert 테스트 포함.</td>
         </tr>
       </tbody>
     </table>
 
     <h2>참고</h2>
     <p>추가 재검토에서 padding 없는 base64-like token 4건을 더 발견했고, 필터와 Qdrant 품질 게이트를 확장한 뒤 DB/Qdrant에서 0건으로 재확인했다.</p>
+    <p>BM25 runtime loader는 <code>payload.text</code> 대신 <code>text_fields.normalized_text</code> /
+      <code>normalized_text</code>를 우선 토큰화하도록 추가 수정했다. 표시용 <code>text</code>는 검색 hit 반환용으로 유지된다.
+    </p>
+    <p>docker compose seed에서 사용하는 <code>--refresh-qdrant-payloads</code> 경로는 stale 후보를 payload만 덮어쓰지 않고,
+      새 <code>embedding_text</code>로 벡터까지 다시 upsert하도록 수정했다.</p>
     <p>아래 항목은 이번 수정의 실패가 아니라, 다음 작업자가 과하게 완료로 이해하지 않도록 남기는 후속 확인 대상이다.</p>
     <ul>
       <li>반복이 많은 표 chunk는 <code>normalized_text == embedding_text</code>가 될 수 있다. 이는 명령어/코드가 없는 표 청크에서는 오류가 아닐 수 있다.
       </li>
       <li>다만 반복 표는 rank에서 낮게 보거나 metadata로 table 성격을 반영하는 후속 개선 후보가 될 수 있다.</li>
-      <li>BM25 runtime loader는 후속 확인/수정이 필요하다. 현재 구조상 <code>normalized_text</code>를 항상 직접 토큰화한다고 단정하면 안 된다.</li>
-      <li>docker compose seed 경로가 기존 collection에 대해 payload만 refresh하고 vector를 재임베딩하지 않는 경로를 탈 수 있는지 추가 확인이 필요하다.</li>
       <li>새 chunk size를 적용한 rechunk 작업은 아니다. chunk size 정책을 바꾸려면 별도 협의가 필요하다.</li>
       <li><code>text</code>에는 코드블록과 개행이 남는 것이 정상이다. 임베딩 품질 검사는 <code>text_fields.embedding_text</code> 기준으로 본다.</li>
     </ul>
