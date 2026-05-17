@@ -37,6 +37,27 @@ def test_v015_query_signal_plan_handles_pvc_pending_one_shot() -> None:
     assert "search_signals.objects" not in _filter_keys(plan)
 
 
+def test_query_signal_plan_keeps_route_header_rewrite_domain_specific() -> None:
+    question = "Route에서 HTTP 요청/응답 헤더 설정을 정리하려면 어떻게 해?"
+    plan = build_query_signal_plan(question)
+    combined_queries = " ".join(plan.embedding_queries)
+
+    assert plan.raw_query == question
+    assert plan.classification["domain"] == "networking"
+    assert "Route" in plan.search_signals["objects"]
+    assert "Route HTTP header configuration" in plan.search_signals["primary_topics"]
+    assert "oc -n app-example create -f app-example-route.yaml" in plan.search_signals["commands"]
+    assert len(plan.embedding_queries) <= 2
+    assert question in plan.embedding_queries[0]
+    assert "HTTP request header" in combined_queries
+    assert "HTTP response header" in combined_queries
+    assert "Secret" not in combined_queries
+    assert "ConfigMap" not in combined_queries
+    assert "TLS" not in combined_queries
+    assert "registry" not in combined_queries.lower()
+    assert "ceph" not in combined_queries.lower()
+
+
 def test_v015_query_signal_plan_extracts_etcd_backup_execution_target() -> None:
     plan = build_query_signal_plan("etcd 백업은 어느 노드에서 실행해?")
 

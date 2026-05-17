@@ -68,9 +68,34 @@ def _term_matches_text(term: str, text: str) -> bool:
     return len(tokens) >= 2 and all(token in text for token in tokens)
 
 
+_DOMAIN_BOOK_SLUGS = {
+    "networking": {"ingress_and_load_balancing", "networking", "advanced_networking"},
+    "storage": {"storage"},
+    "registry": {"registry", "images"},
+    "operators": {"operators", "postinstallation_configuration"},
+    "etcd": {"etcd", "backup_and_restore"},
+    "node_ops": {"nodes", "machine_management", "support"},
+}
+
+
+def _hit_matches_query_domain(hit: RetrievalHit, *, signals: ScoreSignals) -> bool:
+    classification = signals.structured_query_signals.classification
+    domain = str(classification.get("domain") or "").strip()
+    book_candidates = {
+        str(item or "").strip()
+        for item in classification.get("book_slug_candidates", ())
+        if str(item or "").strip()
+    }
+    allowed_books = set(book_candidates)
+    allowed_books.update(_DOMAIN_BOOK_SLUGS.get(domain, set()))
+    return not allowed_books or hit.book_slug in allowed_books
+
+
 def _apply_intent_profile_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
     profile = signals.intent_profile
     if not profile.needs_command or profile.confidence < 0.7:
+        return
+    if not _hit_matches_query_domain(hit, signals=signals):
         return
 
     search_text = _hit_search_text(hit)

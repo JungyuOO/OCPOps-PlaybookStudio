@@ -111,6 +111,26 @@ def build_intent_profile(query: str) -> IntentProfile:
     lowered = text.lower()
     command_request = has_command_request(text)
 
+    if _contains_any(text, ("route", "routes", "라우트", "경로")) and _contains_any(
+        text, ("http", "header", "headers", "헤더", "요청", "응답")
+    ):
+        return _profile(
+            intent="operation_command",
+            target_object="route-http-headers",
+            task="configure",
+            needs_command=True,
+            primary_commands=("oc -n app-example create -f app-example-route.yaml",),
+            evidence_terms=(
+                "HTTP request header",
+                "HTTP response header",
+                "nw-route-set-or-delete-http-headers",
+                "Route",
+            ),
+            query_terms=("route http header configuration", "set or delete HTTP request response headers"),
+            confidence=0.9,
+            reasons=("route http request response header configuration request",),
+        )
+
     if _contains_any(text, ("csr", "certificate signing request", "인증서 서명 요청")) and _contains_any(
         text, ("approve", "approval", "승인")
     ):

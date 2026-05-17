@@ -41,6 +41,20 @@ def test_secret_config_error_query_understanding_expands_for_troubleshooting() -
     assert "events" in normalized
 
 
+def test_generic_setting_query_does_not_expand_to_secret_configmap() -> None:
+    understanding = understand_query("Route HTTP header 설정 방법")
+    normalized = normalize_query("Route HTTP header 설정 방법")
+
+    assert "secret_config_concept" not in understanding.intents
+    assert "secret_config_troubleshooting" not in understanding.intents
+    assert "oc get secret" not in understanding.retrieval_terms
+    assert "oc get configmap" not in understanding.retrieval_terms
+    assert "Secret" not in normalized
+    assert "ConfigMap" not in normalized
+    assert "TLS" not in normalized
+    assert "Ingress" not in normalized
+
+
 def test_namespace_command_query_understanding_expands_project_commands() -> None:
     understanding = understand_query("namespace check command")
     normalized = normalize_query("namespace check command")

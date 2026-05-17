@@ -513,6 +513,10 @@ def _apply_domain_specific_enrichment(
     confidence: dict[str, float],
 ) -> None:
     lowered = normalized_query.lower()
+    route_http_headers = (
+        any(token in lowered for token in ("route", "routes", "라우트", "경로"))
+        and any(token in lowered for token in ("http", "header", "headers", "헤더", "요청", "응답"))
+    )
     objects = search_signals.setdefault("objects", [])
     commands = search_signals.setdefault("commands", [])
     command_families = search_signals.setdefault("command_families", [])
@@ -524,6 +528,23 @@ def _apply_domain_specific_enrichment(
     cluster_phase = search_signals.setdefault("cluster_phase", [])
     execution_target = search_signals.setdefault("execution_target", [])
     components = search_signals.setdefault("components", [])
+
+    if route_http_headers:
+        classification["domain"] = "networking"
+        classification["book_slug_candidates"] = _tuple_append(
+            classification.get("book_slug_candidates", ()),
+            "ingress_and_load_balancing",
+        )
+        _append(objects, "Route")
+        _append(primary_topics, "Route HTTP header configuration", "HTTP request header", "HTTP response header")
+        _append(secondary_topics, "nw-route-set-or-delete-http-headers")
+        _append(intent_labels, "configure_resource", "command_lookup")
+        _append(answer_shapes, "command", "step_by_step")
+        _append(commands, "oc -n app-example create -f app-example-route.yaml")
+        _append(command_families, "oc_create")
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.93)
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
+        confidence["commands"] = max(confidence.get("commands", 0.0), 0.9)
 
     if "pvc" in lowered:
         _append(objects, "PVC", "StorageClass")
@@ -711,8 +732,13 @@ def _embedding_queries(
     primary_topics = search_signals.get("primary_topics", ())
     secondary_topics = search_signals.get("secondary_topics", ())
     intents = search_signals.get("intent_labels", ())
+    route_http_headers = (
+        any(item.casefold() == "route" for item in objects)
+        and any("header" in item.casefold() for item in (*primary_topics, *secondary_topics))
+    )
 
     queries: list[str] = []
+    english_terms = () if route_http_headers else _english_terms(objects=objects, errors=errors, primary_topics=primary_topics)
     _append(
         queries,
         " ".join(
@@ -723,7 +749,7 @@ def _embedding_queries(
                     *primary_topics,
                     *objects,
                     *errors,
-                    *secondary_topics[:2],
+                    *(secondary_topics[:1] if route_http_headers else secondary_topics[:2]),
                 )
                 if item
             )
@@ -738,19 +764,36 @@ def _embedding_queries(
                     for item in (
                         raw_query,
                         *errors,
-                        *commands[:3],
-                        *command_families,
+                        *(commands[:1] if route_http_headers else commands[:3]),
+                        *(() if route_http_headers else command_families),
+                        *english_terms,
                         "troubleshooting" if "troubleshoot" in intents else "",
                     )
                     if item
                 )
             ),
         )
-    english_terms = _english_terms(objects=objects, errors=errors, primary_topics=primary_topics)
-    if english_terms:
+    if english_terms and len(queries) < 2:
         _append(queries, " ".join(english_terms))
-    _append(queries, baseline.vector_query)
-    return tuple(queries[:3])
+    if len(queries) < 2:
+        _append(queries, _domain_specific_baseline_vector_query(baseline.vector_query, objects=objects, primary_topics=primary_topics))
+    return tuple(queries[:2])
+
+
+def _domain_specific_baseline_vector_query(
+    vector_query: str,
+    *,
+    objects: tuple[str, ...],
+    primary_topics: tuple[str, ...],
+) -> str:
+    if not vector_query:
+        return ""
+    object_set = {item.casefold() for item in objects}
+    topic_text = " ".join(primary_topics).casefold()
+    if "route" in object_set and "header" in topic_text:
+        allowed = ("route", "http", "header", "request", "response", "nw-route-set-or-delete-http-headers")
+        return " ".join(dict.fromkeys(term for term in vector_query.split() if any(token in term.casefold() for token in allowed)))
+    return vector_query
 
 
 def _english_terms(
