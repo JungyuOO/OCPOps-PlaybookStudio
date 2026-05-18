@@ -30,7 +30,7 @@ def test_starter_group_labels_are_readable_korean() -> None:
 def test_official_faq_questions_are_composed_as_beginner_language() -> None:
     question = _official_faq_query(_rule("troubleshooting"), "검증 및 문제 해결")
 
-    assert question == "문제 해결은 어디부터 확인하면 될까요?"
+    assert question == "설치 검증 실패 시 어떤 로그와 상태를 먼저 확인하나요?"
     assert "What should" not in question
     assert "문서를 기준으로" not in question
     assert "Day-2" not in question
@@ -42,8 +42,8 @@ def test_learning_questions_are_beginner_natural_language() -> None:
     day2 = _beginner_learning_question(_rule("day2"), "Postinstallation configuration")
     networking = _beginner_learning_question(_rule("networking"), "Networking overview")
 
-    assert day2 == "설치 후 작업은 무엇부터 이어서 진행하면 될까요?"
-    assert networking == "Service와 Route 연결 구조를 먼저 이해하고 싶은데, 어디를 보면 될까요?"
+    assert day2 == "설치 후 구성 작업은 어떤 흐름으로 이해하면 될까요?"
+    assert networking == "Route가 Service를 통해 애플리케이션을 노출하는 구조는 어떻게 이해하면 될까요?"
     assert "Day-2" not in day2
     assert "Networking overview" not in networking
 
@@ -58,7 +58,7 @@ def test_operations_chunk_question_uses_chunk_context_without_fixed_query_varian
         }
     )
 
-    assert question == "성능 결과에서 목표와 조건은 어디를 먼저 보면 될까요?"
+    assert question == "성능 테스트 결과에서 목표와 병목은 어떤 순서로 확인하나요?"
     assert "성능 테스트는 어떤 목표와 조건부터 확인해야 해?" not in question
     assert "성능 목표와 조건 먼저 보기에서" not in question
 
@@ -72,7 +72,7 @@ def test_operations_chunk_question_does_not_expose_chunk_title_suffix() -> None:
         }
     )
 
-    assert question == "노드 상태는 처음에 어디를 보면 될까요?"
+    assert question == "운영 점검에서 Node 상태는 어떤 기준으로 확인하나요?"
     assert "검증부터 보기" not in question
 
 
@@ -85,7 +85,7 @@ def test_operations_chunk_question_cleans_generic_section_suffix() -> None:
         }
     )
 
-    assert question == "실운영 문서에서 무엇부터 확인하면 될까요?"
+    assert question == "KMSC 운영 문서 근거로 확인할 항목과 판단 기준은 무엇인가요?"
     assert "보기" not in question
 
 
@@ -108,3 +108,21 @@ def test_learning_starter_questions_rotate_by_seed(tmp_path: Path) -> None:
     assert second_questions
     assert first_questions != second_questions
     assert all("단계에서는" not in question for question in first_questions + second_questions)
+
+
+def test_starter_fallback_questions_are_rag_answerable_and_lane_specific() -> None:
+    official_storage = _official_faq_query(_rule("storage"), "Storage")
+    learning_network = _beginner_learning_question(_rule("networking"), "Networking overview")
+    operations_network = _ops_chunk_question(
+        {
+            "title": "Service Route 연결 확인",
+            "learning_goal": "운영 문서 기준으로 연결 흐름을 확인한다.",
+            "source_terms": ["Service", "Route", "운영"],
+        }
+    )
+
+    assert official_storage == "PVC와 PV 바인딩 상태는 어떤 명령으로 확인하나요?"
+    assert "어디부터" not in official_storage
+    assert "처음에 어디" not in official_storage
+    assert learning_network != operations_network
+    assert operations_network == "운영 문서에서 Service와 Route 연결 확인은 어떤 흐름으로 보나요?"
