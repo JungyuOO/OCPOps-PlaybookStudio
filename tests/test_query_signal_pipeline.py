@@ -195,7 +195,8 @@ def test_v015_query_signal_plan_uses_llm_one_shot_for_normalization_and_expansio
     assert llm.calls[0]["max_tokens"] == 900
     assert plan.normalized_query == "PVC가 Pending 상태인데 무엇을 확인해야 하나요?"
     assert plan.correction_notes[0].type == "typo"
-    assert plan.embedding_queries[0] == "PVC Pending 상태 확인 StorageClass PV Pod 이벤트"
+    assert plan.embedding_queries[0] == plan.normalized_query
+    assert plan.embedding_queries[1].startswith('PVC Pending')
     assert {"key": "classification.domain", "match": {"value": "storage"}} in plan.metadata_filter["must"]
 
 

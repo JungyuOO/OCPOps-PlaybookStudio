@@ -86,6 +86,7 @@ def test_starter_questions_are_loaded_from_manifests() -> None:
     assert groups["operations"]["questions"][0]["question"].endswith("?")
     assert groups["operations"]["questions"][0]["question"] != groups["operations"]["questions"][0]["title"] if "title" in groups["operations"]["questions"][0] else True
     assert "병목은 어디부터" not in groups["operations"]["questions"][0]["question"]
+    assert "성능 목표와 조건 먼저 보기" in groups["operations"]["questions"][0]["question"]
     assert payload["learning_sequence"][0]["learning_index"] == 0
     assert payload["sources"]["faq"] == "official.source_manifest"
 
@@ -199,8 +200,20 @@ def test_postgres_official_faq_questions_are_actionable_korean(monkeypatch) -> N
 
     assert questions
     assert all("What should" not in question for question in questions)
-    assert any("로그와 상태" in question for question in questions)
+    assert any("실패한 설치 로그 수집" in question for question in questions)
     assert all("어디부터" not in question for question in questions)
+
+
+def test_operations_questions_anchor_to_kmsc_chunk_title() -> None:
+    question = starter_questions._ops_chunk_question(
+        {
+            "title": "운영 장애 분석",
+            "learning_goal": "증상과 근거를 정리한다",
+            "source_terms": ["장애", "근거"],
+        }
+    )
+
+    assert question == "KMSC 운영 문서에서 운영 장애 분석의 증상과 근거는 어떤 순서로 확인하나요?"
 
 
 def test_learning_starter_questions_include_terminal_context_when_available(monkeypatch) -> None:

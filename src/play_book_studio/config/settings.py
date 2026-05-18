@@ -131,7 +131,9 @@ class Settings(SettingsPathMixin):
     reranker_model: str = "dragonkue/bge-reranker-v2-m3-ko"
     reranker_top_n: int = 5
     reranker_candidate_k: int = 5
-    reranker_batch_size: int = 1
+    reranker_min_fused_score: float = 0.0
+    reranker_min_relative_score: float = 0.0
+    reranker_batch_size: int = 16
     reranker_max_parallel_requests: int = 5
     reranker_device: str = "auto"
     reranker_timeout_seconds: float = 60.0
@@ -356,7 +358,9 @@ def load_settings(root_dir: str | Path) -> Settings:
         reranker_model=effective_env.get("RERANKER_MODEL", "dragonkue/bge-reranker-v2-m3-ko").strip(),
         reranker_top_n=int(effective_env.get("RERANKER_TOP_N", "5")),
         reranker_candidate_k=int(effective_env.get("RERANKER_CANDIDATE_K", "5")),
-        reranker_batch_size=int(effective_env.get("RERANKER_BATCH_SIZE", "1")),
+        reranker_min_fused_score=float(effective_env.get("RERANKER_MIN_FUSED_SCORE", "0")),
+        reranker_min_relative_score=float(effective_env.get("RERANKER_MIN_RELATIVE_SCORE", "0")),
+        reranker_batch_size=int(effective_env.get("RERANKER_BATCH_SIZE", "16")),
         reranker_max_parallel_requests=int(effective_env.get("RERANKER_MAX_PARALLEL_REQUESTS", "5")),
         reranker_device=effective_env.get("RERANKER_DEVICE", "auto").strip(),
         reranker_timeout_seconds=float(effective_env.get("RERANKER_TIMEOUT_SECONDS", "60")),
