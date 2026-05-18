@@ -132,6 +132,7 @@ _KOREAN_QUERY_TECH_TERM_ALLOWLIST = {
 }
 
 _SERVICE_ROUTE_CONCEPT_MARKERS = (
+    "구조",
     "뭔지",
     "무엇인지",
     "개념",
@@ -139,6 +140,7 @@ _SERVICE_ROUTE_CONCEPT_MARKERS = (
     "알고싶",
     "이해",
     "설명",
+    "어디",
     "먼저",
     "부터",
     "what is",
@@ -223,6 +225,7 @@ def normalize_query(query: str) -> str:
     append_core_query_terms(normalized, terms)
     append_operation_query_terms(normalized, terms)
     append_etcd_query_terms(normalized, terms)
+    terms = _prune_project_list_terms(normalized, terms)
     terms = _prune_terms_for_intent(normalized, terms)
     terms = _prune_service_route_concept_terms(normalized, terms)
     terms = _prioritize_phrase_terms(terms)
@@ -230,6 +233,31 @@ def normalize_query(query: str) -> str:
         terms = _filter_terms_for_korean_query(normalized, terms)
 
     return _append_terms(normalized, terms)
+
+
+def _is_project_list_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    has_project_scope = any(token in lowered for token in ("project", "projects", "namespace", "namespaces", "프로젝트", "네임스페이스"))
+    has_list_shape = any(token in lowered for token in ("list", "목록", "리스트", "전체", "조회"))
+    return has_project_scope and has_list_shape
+
+
+def _prune_project_list_terms(query: str, terms: list[str]) -> list[str]:
+    if not _is_project_list_query(query):
+        return terms
+    blocked = {
+        "oc create namespace",
+        "oc new-project",
+        "create project namespace",
+        "new openshift project",
+        "oc create namespace <namespace-name>",
+        "oc new-project <project-name>",
+    }
+    return [
+        term
+        for term in terms
+        if _collapse_spaces(term).lower() not in blocked
+    ]
 
 
 def _prune_terms_for_intent(query: str, terms: list[str]) -> list[str]:
@@ -302,6 +330,14 @@ def _prune_service_route_concept_terms(query: str, terms: list[str]) -> list[str
         if any(fragment in lowered for fragment in _SERVICE_ROUTE_CONCEPT_BLOCKED_FRAGMENTS):
             continue
         pruned.append(cleaned)
+    pruned.extend(
+        [
+            "Route Service relationship",
+            "Networking overview",
+            "application exposure",
+            "Route exposes Service",
+        ]
+    )
     return pruned
 
 

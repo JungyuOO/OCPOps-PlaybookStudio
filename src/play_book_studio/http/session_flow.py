@@ -481,6 +481,43 @@ def _citation_seed(result: AnswerResult) -> str:
     return "|".join((result.query or "", result.rewritten_query or "", chunk_ids, commands))
 
 
+_FAILURE_FOLLOW_UP_MARKERS = (
+    "fail",
+    "failed",
+    "failure",
+    "error",
+    "troubleshoot",
+    "troubleshooting",
+    "warning",
+    "crashloop",
+    "imagepullbackoff",
+    "notready",
+    "pending",
+    "degraded",
+    "log",
+    "logs",
+    "event",
+    "events",
+    "describe",
+    "실패",
+    "오류",
+    "에러",
+    "장애",
+    "문제",
+    "경고",
+    "로그",
+    "이벤트",
+    "안됨",
+    "안 돼",
+    "안돼",
+)
+
+
+def _has_failure_follow_up_evidence(*parts: str) -> bool:
+    lowered = " ".join(str(part or "") for part in parts).lower()
+    return any(marker in lowered for marker in _FAILURE_FOLLOW_UP_MARKERS)
+
+
 def _command_follow_up_templates(command: str, *, section: str, query: str) -> list[str]:
     lowered = " ".join((command, section, query)).lower()
     label = _clean_command_label(command)
@@ -516,22 +553,29 @@ def _command_follow_up_templates(command: str, *, section: str, query: str) -> l
             "Service endpoint가 비어 있으면 다음에 무엇을 봐야 해?",
             "Route TLS와 timeout 설정은 어디서 확인해?",
         ]
-    return [
+    candidates = [
         f"`{label}` 명령은 언제 쓰면 돼?",
         f"`{label}` 결과에서 무엇을 확인해야 해?",
-        f"`{label}`가 실패하면 다음에 어떤 근거를 봐야 해?",
     ]
+    if _has_failure_follow_up_evidence(command, section, query):
+        candidates.append(f"`{label}`가 실패하면 다음에 어떤 로그나 이벤트를 봐야 해?")
+    else:
+        candidates.append(f"`{label}` 실행 전 주의사항은 뭐야?")
+    return candidates
 
 
-def _section_follow_up_templates(section: str) -> list[str]:
+def _section_follow_up_templates(section: str, *, allow_failure: bool = False) -> list[str]:
     cleaned = _clean_suggestion_section(section)
     if not cleaned or _is_bad_suggestion_section(cleaned):
         return []
-    return [
+    candidates = [
         f"{cleaned} 기준으로 다음 확인 단계는 뭐야?",
-        f"{cleaned} 절차에서 흔한 실패 지점은 뭐야?",
         f"{cleaned} 내용을 초보자용 3단계로 다시 정리해줘",
+        f"{cleaned} 기준으로 주의사항을 정리해줘",
     ]
+    if allow_failure:
+        candidates.insert(1, f"{cleaned} 절차에서 흔한 실패 지점은 뭐야?")
+    return candidates
 
 
 def _suggestions_from_citations(result: AnswerResult) -> list[str]:
@@ -550,6 +594,18 @@ def _suggestions_from_citations(result: AnswerResult) -> list[str]:
 
     for citation in result.citations[:4]:
         section = _clean_suggestion_section(str(getattr(citation, "section", "") or ""))
+        citation_evidence = " ".join(
+            str(value or "")
+            for value in (
+                getattr(citation, "excerpt", ""),
+                " ".join(getattr(citation, "error_strings", ()) or ()),
+            )
+        )
+        allow_failure = _has_failure_follow_up_evidence(
+            result.query or "",
+            section,
+            citation_evidence,
+        )
         commands = [
             _clean_command_label(command)
             for command in (getattr(citation, "cli_commands", ()) or ())
@@ -558,7 +614,7 @@ def _suggestions_from_citations(result: AnswerResult) -> list[str]:
         for command in commands[:2]:
             for candidate in _command_follow_up_templates(command, section=section, query=result.query or ""):
                 add(candidate)
-        for candidate in _section_follow_up_templates(section):
+        for candidate in _section_follow_up_templates(section, allow_failure=allow_failure):
             add(candidate)
     rotated = _stable_rotate(suggestions, seed=_citation_seed(result))
     return dedupe_suggestions(rotated, query=result.query or "", limit=3)

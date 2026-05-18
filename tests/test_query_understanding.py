@@ -68,6 +68,17 @@ def test_namespace_command_query_understanding_expands_project_commands() -> Non
     assert "projects" in normalized
 
 
+def test_korean_project_list_query_prioritizes_get_commands_not_create() -> None:
+    understanding = understand_query("전체 프로젝트 목록 확인 어떻게 해")
+    normalized = normalize_query("전체 프로젝트 목록 확인 어떻게 해")
+
+    assert "command_lookup" in understanding.intents
+    assert "namespace_or_project" in understanding.intents
+    assert all(token in normalized for token in ("oc", "get", "projects", "namespaces"))
+    assert "oc new-project" not in normalized
+    assert "oc create namespace" not in normalized
+
+
 def test_v012_beginner_intents_expand_operational_terms() -> None:
     deployment = understand_query("보통 배포 yaml파일은 어케 작성하지")
     service = understand_query("Service쪽에서 계속 장애나는데 뭐가 원인일까?")
@@ -90,13 +101,17 @@ def test_v012_beginner_intents_expand_operational_terms() -> None:
 
 
 def test_service_route_concept_question_does_not_become_failure_diagnosis() -> None:
-    understanding = understand_query("Service와 Route 연결은 뭔지부터 알고 싶은데 어디서 확인하면 돼?")
-    normalized = normalize_query("Service와 Route 연결은 뭔지부터 알고 싶은데 어디서 확인하면 돼?")
+    query = "Service와 Route 연결 구조를 먼저 이해하고 싶은데, 어디를 보면 될까요?"
+    understanding = understand_query(query)
+    normalized = normalize_query(query)
 
     assert "service_failure_diagnosis" not in understanding.intents
-    assert understanding.answer_shape == "command_with_judgement"
+    assert understanding.answer_shape == "grounded_explanation"
     assert "oc describe service" not in normalized
     assert "oc get endpoints" not in normalized
+    assert "relationship" in normalized
+    assert "Networking" in normalized
+    assert "overview" in normalized
 
 
 def test_v014_query_signals_extract_pvc_pending_retrieval_contract() -> None:
