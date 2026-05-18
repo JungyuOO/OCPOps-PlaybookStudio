@@ -151,6 +151,16 @@ def _filter_latest_only_hits(retriever, hits: list[RetrievalHit]) -> list[Retrie
     return [hit for hit in hits if _is_latest_only_hit(hit, active_slugs=active_slugs)]
 
 
+def _filter_preferred_source_scope(
+    hits: list[RetrievalHit],
+    context: SessionContext,
+) -> list[RetrievalHit]:
+    preferred = str(getattr(context, "preferred_source_scope", "") or "").strip()
+    if not preferred:
+        return hits
+    return [hit for hit in hits if str(hit.source_scope or "").strip() == preferred]
+
+
 def _graph_worthy_intent(query: str) -> bool:
     return any(
         (
@@ -328,6 +338,8 @@ def execute_retrieval_pipeline(
         overlay_bm25_hits = bm25_search["overlay_hits"]
         bm25_hits = _filter_latest_only_hits(retriever, bm25_hits)
         overlay_bm25_hits = _filter_latest_only_hits(retriever, overlay_bm25_hits)
+        bm25_hits = _filter_preferred_source_scope(bm25_hits, context)
+        overlay_bm25_hits = _filter_preferred_source_scope(overlay_bm25_hits, context)
     vector_hits: list[RetrievalHit] = []
     vector_runtime: dict[str, object] = {}
     if use_vector:
@@ -342,6 +354,7 @@ def execute_retrieval_pipeline(
         vector_hits = vector_search["hits"]
         vector_runtime = vector_search["runtime"]
         vector_hits = _filter_latest_only_hits(retriever, vector_hits)
+        vector_hits = _filter_preferred_source_scope(vector_hits, context)
 
     _emit_trace_event(
         trace_callback,

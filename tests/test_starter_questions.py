@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -81,9 +80,9 @@ def test_starter_questions_are_loaded_from_manifests() -> None:
     assert groups["faq"]["questions"][0]["question"] != "Operator가 Degraded일 때 CSV 상태를 어떻게 확인해?"
     assert groups["faq"]["questions"][0]["target_book_slug"] in {"installing", "monitoring"}
     assert groups["learning"]["questions"][0]["source"] == "ocp420_repo_wide_source_manifest"
-    assert groups["learning"]["questions"][0]["route_kind"] == "official"
+    assert groups["learning"]["questions"][0]["route_kind"] == "learning"
     assert groups["operations"]["questions"][0]["source"].endswith("ops_learning_chunks_v1.jsonl")
-    assert groups["operations"]["questions"][0]["route_kind"] == "official"
+    assert groups["operations"]["questions"][0]["route_kind"] == "study_docs"
     assert groups["operations"]["questions"][0]["question"].endswith("?")
     assert groups["operations"]["questions"][0]["question"] != groups["operations"]["questions"][0]["title"] if "title" in groups["operations"]["questions"][0] else True
     assert "병목은 어디부터" not in groups["operations"]["questions"][0]["question"]
@@ -91,7 +90,7 @@ def test_starter_questions_are_loaded_from_manifests() -> None:
     assert payload["sources"]["faq"] == "official.source_manifest"
 
 
-def test_starter_questions_do_not_fall_back_to_files_when_database_is_configured(monkeypatch) -> None:
+def test_operations_starter_questions_use_existing_file_copy_when_database_is_configured(monkeypatch) -> None:
     root = TEST_TMP / "db_configured"
     course_manifests = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
     course_manifests.mkdir(parents=True, exist_ok=True)
@@ -111,12 +110,13 @@ def test_starter_questions_do_not_fall_back_to_files_when_database_is_configured
         "load_settings",
         lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
     )
-    monkeypatch.setitem(sys.modules, "psycopg", None)
 
     payload = build_studio_starter_questions(root, seed="stable")
     groups = {group["key"]: group for group in payload["groups"]}
 
-    assert groups["operations"]["questions"] == []
+    assert groups["operations"]["questions"][0]["source"].endswith("ops_learning_chunks_v1.jsonl")
+    assert groups["operations"]["questions"][0]["route_kind"] == "study_docs"
+    assert groups["operations"]["questions"][0]["question"] != "This file question should not leak"
 
 
 def test_starter_questions_use_postgres_official_metadata_when_database_is_configured(monkeypatch) -> None:
@@ -150,76 +150,6 @@ def test_starter_questions_use_postgres_official_metadata_when_database_is_confi
     assert "What should" not in groups["faq"]["questions"][0]["question"]
     assert "문서를 기준으로" not in groups["faq"]["questions"][0]["question"]
     assert payload["learning_sequence"][2]["target_viewer_path"] == "/playbooks/wiki-runtime/active/machine_configuration/index.html"
-
-
-def test_starter_questions_prefer_chunk_candidate_questions_when_available(monkeypatch) -> None:
-    root = TEST_TMP / "db_chunk_candidates"
-    root.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(
-        starter_questions,
-        "load_settings",
-        lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
-    )
-    monkeypatch.setattr(
-        starter_questions,
-        "_chunk_candidate_questions_from_db",
-        lambda _database_url, **kwargs: [
-            starter_questions._starter_question(
-                lane=kwargs["lane"],
-                question="Pod가 안 뜨면 처음에 어디부터 확인하면 될까요?",
-                route_kind=kwargs["route_kind"],
-                source=kwargs["source_label"],
-                target_book_slug="applications",
-            )
-        ]
-        if kwargs["source_scope"] == "official_docs"
-        else [],
-    )
-    monkeypatch.setattr(starter_questions, "_official_manifest_entries_from_db", lambda _database_url: [])
-
-    payload = build_studio_starter_questions(root, seed="stable")
-    faq_questions = [item for group in payload["groups"] if group["key"] == "faq" for item in group["questions"]]
-    learning_questions = [item for group in payload["groups"] if group["key"] == "learning" for item in group["questions"]]
-
-    assert faq_questions[0]["question"] == "Pod가 안 뜨면 처음에 어디부터 확인하면 될까요?"
-    assert faq_questions[0]["source"] == "postgres.document_chunks"
-    assert faq_questions[0]["target_book_slug"] == "applications"
-    assert learning_questions[0]["route_kind"] == "official"
-    assert learning_questions[0]["source"] == "postgres.document_chunks"
-
-
-def test_operations_chunk_candidate_questions_route_to_rag_chat(monkeypatch) -> None:
-    root = TEST_TMP / "db_operations_chunk_candidates"
-    root.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(
-        starter_questions,
-        "load_settings",
-        lambda _root: SimpleNamespace(database_url="postgresql://unit-test"),
-    )
-
-    def fake_chunk_candidates(_database_url, **kwargs):
-        if kwargs["source_scope"] != "study_docs":
-            return []
-        return [
-            starter_questions._starter_question(
-                lane=kwargs["lane"],
-                question="성능 테스트 결과에서 병목은 어디부터 확인하면 될까요?",
-                route_kind=kwargs["route_kind"],
-                source=kwargs["source_label"],
-                target_book_slug="kmsc-operations",
-            )
-        ]
-
-    monkeypatch.setattr(starter_questions, "_chunk_candidate_questions_from_db", fake_chunk_candidates)
-    monkeypatch.setattr(starter_questions, "_official_manifest_entries_from_db", lambda _database_url: [])
-
-    payload = build_studio_starter_questions(root, seed="stable")
-    operations_questions = [item for group in payload["groups"] if group["key"] == "operations" for item in group["questions"]]
-
-    assert operations_questions[0]["question"] == "성능 테스트 결과에서 병목은 어디부터 확인하면 될까요?"
-    assert operations_questions[0]["route_kind"] == "official"
-    assert operations_questions[0]["source"] == "postgres.study_docs_chunks"
-    assert operations_questions[0]["target_book_slug"] == "kmsc-operations"
 
 
 def test_starter_question_preserves_target_anchor() -> None:

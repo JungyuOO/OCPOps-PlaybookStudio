@@ -498,7 +498,7 @@ function normalizeWelcomeLane(value: string): WelcomeQuestion['lane'] {
 }
 
 function normalizeWelcomeRouteKind(value?: string): Message['routeKind'] {
-  if (value === 'learning' || value === 'course' || value === 'official') {
+  if (value === 'learning' || value === 'course' || value === 'official' || value === 'study_docs') {
     return value;
   }
   return undefined;
