@@ -20,6 +20,39 @@ from .ranking import (
 from .trace import duration_ms as _duration_ms, emit_trace_event as _emit_trace_event
 
 
+def _session_scope_row_filter(context):
+    active_document_id = str(getattr(context, "active_document_id", "") or "").strip()
+    active_repository_id = str(getattr(context, "active_repository_id", "") or "").strip()
+    if not active_document_id and not active_repository_id:
+        return None
+
+    def predicate(row: dict[str, object]) -> bool:
+        if active_document_id:
+            document_source_id = str(row.get("document_source_id") or row.get("source_id") or "").strip()
+            if document_source_id != active_document_id:
+                return False
+        if active_repository_id:
+            repository_id = str(row.get("repository_id") or "").strip()
+            if repository_id != active_repository_id:
+                return False
+        return True
+
+    return predicate
+
+
+def _session_scope_qdrant_filter(context) -> dict[str, object] | None:
+    active_document_id = str(getattr(context, "active_document_id", "") or "").strip()
+    active_repository_id = str(getattr(context, "active_repository_id", "") or "").strip()
+    must: list[dict[str, object]] = []
+    if active_document_id:
+        must.append({"key": "document_source_id", "match": {"value": active_document_id}})
+    if active_repository_id:
+        must.append({"key": "repository_id", "match": {"value": active_repository_id}})
+    if not must:
+        return None
+    return {"must": must}
+
+
 def _vector_subquery_runtime(
     *,
     query: str,
@@ -84,8 +117,9 @@ def search_bm25_candidates(
         status="running",
     )
     bm25_started_at = time.perf_counter()
+    scope_row_filter = _session_scope_row_filter(context)
     bm25_hit_sets = [
-        retriever.bm25_index.search(subquery, top_k=effective_candidate_k)
+        retriever.bm25_index.search(subquery, top_k=effective_candidate_k, row_filter=scope_row_filter)
         for subquery in rewritten_queries
     ]
     core_hits = _rrf_merge_hit_lists(
@@ -150,6 +184,7 @@ def search_bm25_candidates(
             "count": len(bm25_hits),
             "overlay_count": len(overlay_hits),
             "private_overlay_ready": private_index is not None,
+            "session_scope_filter_applied": scope_row_filter is not None,
             "summary": _summarize_hit_list(bm25_hits),
         },
     )
@@ -196,9 +231,10 @@ def search_vector_candidates(
         vector_subqueries: list[dict[str, object]] = []
         seen_embedding_queries: set[str] = set()
         query_signal_llm_client = getattr(retriever, "query_signal_llm_client", None)
+        scope_qdrant_filter = _session_scope_qdrant_filter(context)
         for subquery in rewritten_queries:
             query_plan = build_query_signal_plan(subquery, llm_client=query_signal_llm_client)
-            metadata_filter = query_plan.metadata_filter or None
+            metadata_filter = scope_qdrant_filter or query_plan.metadata_filter or None
             for embedding_query_index, vector_query in enumerate(query_plan.embedding_queries, start=1):
                 if vector_query in seen_embedding_queries:
                     continue
@@ -231,7 +267,7 @@ def search_vector_candidates(
                         runtime["normalized_query"] = query_plan.normalized_query
                         runtime["embedding_query_index"] = embedding_query_index
                         runtime["correction_notes"] = [item.to_dict() for item in query_plan.correction_notes]
-                        if not official_hits and metadata_filter:
+                        if not official_hits and metadata_filter and scope_qdrant_filter is None:
                             official_hits, fallback_runtime = retriever.vector_retriever.search_with_trace(
                                 vector_query,
                                 top_k=effective_candidate_k,

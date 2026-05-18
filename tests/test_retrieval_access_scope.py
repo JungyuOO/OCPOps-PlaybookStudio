@@ -91,6 +91,32 @@ def test_active_document_filters_shared_hits():
     ]
 
 
+def test_active_repository_filters_workspace_shared_hits():
+    context = SessionContext(owner_user_id="owner-a", active_repository_id="repo-a")
+    visible = _hit(
+        chunk_id="repo-a-hit",
+        repository_id="repo-a",
+        visibility="workspace_shared",
+        source_scope="user_upload",
+    )
+    wrong_repository = _hit(
+        chunk_id="repo-b-hit",
+        repository_id="repo-b",
+        visibility="workspace_shared",
+        source_scope="user_upload",
+    )
+    official_without_repository = _hit(
+        chunk_id="official-hit",
+        visibility="workspace_shared",
+        source_scope="official_docs",
+    )
+
+    assert [
+        hit.chunk_id
+        for hit in filter_hits_by_session_scope([visible, wrong_repository, official_without_repository], context=context)
+    ] == ["repo-a-hit"]
+
+
 def test_active_document_still_requires_private_repository_scope():
     context = SessionContext(
         owner_user_id="owner-a",

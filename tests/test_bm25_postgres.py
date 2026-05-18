@@ -125,6 +125,33 @@ def test_bm25_index_can_search_postgres_payload_rows():
     assert hits[0].source_scope == "study_docs"
 
 
+def test_bm25_index_can_limit_search_to_selected_repository_rows():
+    row_a = _row_dict()
+    row_b = {
+        **_row_dict(),
+        "chunk_id": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+        "repository_id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        "document_source_id": "99999999-9999-9999-9999-999999999999",
+    }
+    rows = load_bm25_rows_from_connection(
+        FakeConnection(
+            [
+                tuple(row_a.values()),
+                tuple(row_b.values()),
+            ],
+            list(row_a),
+        )
+    )
+
+    hits = BM25Index.from_rows(rows).search(
+        "Pod 상태 확인 oc get pods",
+        top_k=5,
+        row_filter=lambda row: row.get("repository_id") == "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    )
+
+    assert [hit.chunk_id for hit in hits] == ["eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"]
+
+
 def test_db_runtime_bm25_does_not_fall_back_to_missing_seed_file(monkeypatch):
     missing_seed_file = REPO_ROOT / "tmp" / "bm25_postgres_tests" / "missing" / "bm25_corpus.jsonl"
     monkeypatch.setattr(

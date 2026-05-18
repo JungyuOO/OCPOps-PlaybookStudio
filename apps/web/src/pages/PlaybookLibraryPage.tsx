@@ -2188,8 +2188,8 @@ const PlaybookLibraryPage: React.FC = () => {
             <section className="library-repository-strip box-container">
               <div className="section-header">
                 <div>
-                  <h2>Repository Documents</h2>
-                  <p className="text-muted">PostgreSQL repository 기준으로 업로드/공유 문서를 선택해 Chat 범위를 고정합니다.</p>
+                  <h2>My Uploads</h2>
+                  <p className="text-muted">업로드한 문서를 Studio Chat의 질문 범위로 선택합니다.</p>
                 </div>
                 <button type="button" className="library-dashboard-link" onClick={refreshDocumentRepositories}>
                   Refresh
@@ -2211,10 +2211,10 @@ const PlaybookLibraryPage: React.FC = () => {
                       </div>
                       <div className="library-document-actions">
                         <button type="button" onClick={() => openDocumentInChat(repository, document, categoryKey)}>
-                          Ask this document
+                          Chat with this document
                         </button>
                         <button type="button" onClick={() => openRepositoryInChat(repository)}>
-                          Chat with repository
+                          Chat with all uploads
                         </button>
                       </div>
                     </article>

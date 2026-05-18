@@ -10,6 +10,12 @@ def hit_visible_to_session(hit: RetrievalHit, context: SessionContext | None) ->
         if hit_document_id != active_document_id:
             return False
 
+    active_repository_id = str(getattr(context, "active_repository_id", "") or "").strip()
+    if active_repository_id:
+        hit_repository_id = str(getattr(hit, "repository_id", "") or "").strip()
+        if hit_repository_id != active_repository_id:
+            return False
+
     visibility = str(getattr(hit, "visibility", "") or "").strip()
     source_scope = str(getattr(hit, "source_scope", "") or "").strip()
     if not visibility and not source_scope:
@@ -22,13 +28,7 @@ def hit_visible_to_session(hit: RetrievalHit, context: SessionContext | None) ->
     owner_user_id = str(getattr(context, "owner_user_id", "") or getattr(context, "user_id", "") or "").strip()
     if not owner_user_id or str(hit.owner_user_id or "").strip() != owner_user_id:
         return False
-
-    active_repository_id = str(getattr(context, "active_repository_id", "") or "").strip()
-    if not active_repository_id:
-        return False
-    if active_repository_id and str(hit.repository_id or "").strip():
-        return str(hit.repository_id or "").strip() == active_repository_id
-    return False
+    return bool(active_repository_id)
 
 
 def filter_hits_by_session_scope(

@@ -2272,6 +2272,9 @@ export default function WorkspacePage() {
     [activeSourceId, documentRepositories],
   );
 
+  const activeRepositoryIdForRequest = activeRepository?.repository_id
+    || (activeSourceId?.startsWith('repository:') ? activeSourceId.slice('repository:'.length) : '');
+
   const activeRepositoryDocument = useMemo(
     () => activeRepository?.documents?.find((document) => document.document_source_id === activeDocumentId) ?? null,
     [activeDocumentId, activeRepository],
@@ -3097,9 +3100,23 @@ export default function WorkspacePage() {
       const repositoryPayload = await loadDocumentRepositories().catch(() => ({ repositories: [] }));
       const repositoryId = uploaded.repository_id || uploaded.persisted?.repository_id || activeRepository?.repository_id || '';
       const documentSourceId = uploaded.persisted?.document_source_id || '';
-      setDocumentRepositories(repositoryPayload.repositories ?? []);
+      const nextRepositories = repositoryPayload.repositories ?? [];
+      const uploadedDocument = nextRepositories
+        .find((repository) => repository.repository_id === repositoryId)
+        ?.documents?.find((document) => document.document_source_id === documentSourceId);
+      setDocumentRepositories(nextRepositories);
       if (repositoryId) {
         setActiveSourceId(`repository:${repositoryId}`);
+      }
+      if (documentSourceId) {
+        setActiveDocumentId(documentSourceId);
+        setActiveDocumentTitle(uploadedDocument?.title || uploadedDocument?.filename || uploaded.filename || file.name);
+        const categoryKey = workspaceMetadataString(uploadedDocument?.metadata, 'category_key');
+        const categoryLabel = workspaceMetadataString(uploadedDocument?.metadata, 'category_label');
+        setActiveCategoryKey(categoryKey);
+        setActiveCategoryLabel(categoryLabel || categoryKey);
+      } else {
+        clearActiveDocumentScope();
       }
       const nextBanner: IngestionStatusBanner = {
         status: 'ready',
@@ -3213,7 +3230,7 @@ export default function WorkspacePage() {
         selectedDraftIds: activeDraft ? [activeDraft.draft_id] : [],
         restrictUploadedSources: Boolean(activeDraft),
         routeKind: messageRouteKind,
-        activeRepositoryId: activeRepository?.repository_id,
+        activeRepositoryId: activeRepositoryIdForRequest,
         activeDocumentId,
         learningIndex: resolvedLearningIndex,
         learningCategoryKey: resolvedCategoryKey,
@@ -4786,7 +4803,7 @@ export default function WorkspacePage() {
                   <button className="section-header-btn" onClick={() => toggleSection('repositories')} type="button">
                     <div className="header-label-group">
                       {collapsedSections.repositories ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      <span className="list-title">Document Repositories</span>
+                      <span className="list-title">My Uploads</span>
                     </div>
                     <span className="item-count-badge">{repositorySources.length}</span>
                   </button>
@@ -4796,9 +4813,9 @@ export default function WorkspacePage() {
                         <div className="source-item source-item-muted">
                           <div className="item-main">
                             <BookOpen size={16} className="file-icon" />
-                            <span className="file-name">No DB repositories</span>
+                            <span className="file-name">No uploaded documents</span>
                           </div>
-                          <div className="item-meta">Upload documents from Playbook Library.</div>
+                          <div className="item-meta">Upload a document here or from Playbook Library.</div>
                         </div>
                       ) : repositorySources.map((file) => (
                         <div
@@ -4811,6 +4828,28 @@ export default function WorkspacePage() {
                             <span className="file-name">{file.name}</span>
                           </div>
                           <div className="item-meta">{file.meta}</div>
+                          {file.repository?.documents?.length ? (
+                            <div className="source-document-list" aria-label={`${file.name} documents`}>
+                              {file.repository.documents.slice(0, 5).map((document) => (
+                                <button
+                                  key={document.document_source_id}
+                                  type="button"
+                                  className={`source-document-item ${activeDocumentId === document.document_source_id ? 'selected' : ''}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setActiveSourceId(file.id);
+                                    selectActiveDocumentScope(document);
+                                    setPreview({ kind: 'empty' });
+                                    animatePreviewPanel();
+                                  }}
+                                  title="이 문서만 Chat 범위로 선택합니다"
+                                >
+                                  <FileText size={13} />
+                                  <span>{document.title || document.filename || 'Uploaded document'}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       ))}
                     </div>

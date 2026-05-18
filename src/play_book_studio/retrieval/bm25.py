@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import math
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -122,7 +123,13 @@ class BM25Index:
         doc_freq = self.doc_frequencies.get(token, 0)
         return math.log(1 + (total_docs - doc_freq + 0.5) / (doc_freq + 0.5))
 
-    def search(self, query: str, top_k: int = 10) -> list[RetrievalHit]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        *,
+        row_filter: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> list[RetrievalHit]:
         query_terms = tokenize_text(query)
         if not query_terms:
             return []
@@ -130,6 +137,8 @@ class BM25Index:
         scores: list[tuple[int, float]] = []
         unique_terms = set(query_terms)
         for index, frequencies in enumerate(self.term_frequencies):
+            if row_filter is not None and not row_filter(self.rows[index]):
+                continue
             doc_length = self.doc_lengths[index]
             score = 0.0
             for term in unique_terms:
