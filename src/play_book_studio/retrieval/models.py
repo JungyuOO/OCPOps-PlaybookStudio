@@ -21,6 +21,7 @@ class SessionContext:
     active_repository_id: str | None = None
     active_document_id: str | None = None
     unresolved_question: str | None = None
+    preferred_source_scope: str | None = None
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any] | None) -> "SessionContext":
@@ -50,6 +51,7 @@ class SessionContext:
             active_repository_id=(str(payload.get("active_repository_id") or "").strip() or None),
             active_document_id=(str(payload.get("active_document_id") or "").strip() or None),
             unresolved_question=payload.get("unresolved_question"),
+            preferred_source_scope=(str(payload.get("preferred_source_scope") or "").strip() or None),
         )
 
     def to_dict(self) -> dict[str, Any]:

@@ -111,6 +111,8 @@ def _answer_query_from_payload(query: str, payload: dict[str, Any]) -> str:
     route_kind = str(payload.get("route_kind") or "").strip()
     target_title = str(payload.get("learning_target_title") or "").strip()
     target_slug = str(payload.get("learning_target_book_slug") or "").strip()
+    if route_kind in {"course", "study_docs"}:
+        return f"KMSC 실운영 문서 study_docs source_scope:study_docs | {query}"
     if route_kind != "learning":
         if route_kind == "official" and (target_title or target_slug):
             target_slug_terms = target_slug.replace("_", " ")

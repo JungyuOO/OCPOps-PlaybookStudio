@@ -82,7 +82,7 @@ def test_starter_questions_are_loaded_from_manifests() -> None:
     assert groups["learning"]["questions"][0]["source"] == "ocp420_repo_wide_source_manifest"
     assert groups["learning"]["questions"][0]["route_kind"] == "learning"
     assert groups["operations"]["questions"][0]["source"].endswith("ops_learning_chunks_v1.jsonl")
-    assert groups["operations"]["questions"][0]["route_kind"] == "official"
+    assert groups["operations"]["questions"][0]["route_kind"] == "study_docs"
     assert groups["operations"]["questions"][0]["question"].endswith("?")
     assert groups["operations"]["questions"][0]["question"] != groups["operations"]["questions"][0]["title"] if "title" in groups["operations"]["questions"][0] else True
     assert "병목은 어디부터" not in groups["operations"]["questions"][0]["question"]
@@ -115,7 +115,7 @@ def test_operations_starter_questions_use_existing_file_copy_when_database_is_co
     groups = {group["key"]: group for group in payload["groups"]}
 
     assert groups["operations"]["questions"][0]["source"].endswith("ops_learning_chunks_v1.jsonl")
-    assert groups["operations"]["questions"][0]["route_kind"] == "official"
+    assert groups["operations"]["questions"][0]["route_kind"] == "study_docs"
     assert groups["operations"]["questions"][0]["question"] != "This file question should not leak"
 
 

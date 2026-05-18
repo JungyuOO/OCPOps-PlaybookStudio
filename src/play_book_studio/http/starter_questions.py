@@ -525,7 +525,7 @@ def _operations_questions(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
             _starter_question(
                 lane="operations",
                 question=question,
-                route_kind="official",
+                route_kind="study_docs",
                 source=source_label,
                 category_key=str(chunk.get("stage_id") or ""),
                 category_label=str(chunk.get("course_title") or ""),
