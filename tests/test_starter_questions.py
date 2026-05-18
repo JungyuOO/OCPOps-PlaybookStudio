@@ -199,7 +199,8 @@ def test_postgres_official_faq_questions_are_actionable_korean(monkeypatch) -> N
 
     assert questions
     assert all("What should" not in question for question in questions)
-    assert any(question.endswith("확인하면 될까요?") for question in questions)
+    assert any("로그와 상태" in question for question in questions)
+    assert all("어디부터" not in question for question in questions)
 
 
 def test_learning_starter_questions_include_terminal_context_when_available(monkeypatch) -> None:
