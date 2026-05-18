@@ -34,6 +34,7 @@ import {
   type ChatResponse,
   type ChatCitation,
   type ChatRelatedLink,
+  type ChatStreamTraceEnvelope,
   type CustomerPackBook,
   type CustomerPackDraft,
   type DocumentRepository,
@@ -940,64 +941,122 @@ function citationScrollTarget(citation: ChatCitation, answerContent = ''): strin
 
 type MessageStateUpdater = (updater: (current: Message[]) => Message[]) => void;
 
-function createThrottledMessageContentUpdater(
+function createTypewriterMessageContentUpdater(
   messageId: string,
   updateMessages: MessageStateUpdater,
-  delayMs = 90,
-): { push: (content: string) => void; flush: () => void; cancel: () => void } {
-  let latestContent = '';
+  frameDelayMs = 16,
+): { push: (content: string) => void; finish: () => Promise<void>; cancel: () => void } {
+  let targetContent = '';
+  let renderedContent = '';
   let timerId = 0;
-  let frameId = 0;
+  let finishResolvers: Array<() => void> = [];
 
-  const applyLatest = (): void => {
+  const applyContent = (content: string): void => {
     updateMessages((current) => current.map((message) => (
       message.id === messageId
-        ? { ...message, content: latestContent }
+        ? { ...message, content }
         : message
     )));
   };
 
-  const clearScheduled = (): void => {
+  const resolveFinished = (): void => {
+    if (renderedContent.length < targetContent.length) {
+      return;
+    }
+    const resolvers = finishResolvers;
+    finishResolvers = [];
+    resolvers.forEach((resolve) => resolve());
+  };
+
+  const clearTimer = (): void => {
     if (timerId) {
       window.clearTimeout(timerId);
       timerId = 0;
     }
-    if (frameId) {
-      window.cancelAnimationFrame(frameId);
-      frameId = 0;
+  };
+
+  const tick = (): void => {
+    timerId = 0;
+    if (renderedContent.length >= targetContent.length) {
+      resolveFinished();
+      return;
     }
+    const remaining = targetContent.length - renderedContent.length;
+    const step = Math.min(Math.max(4, Math.ceil(remaining / 18)), 12);
+    renderedContent = targetContent.slice(0, renderedContent.length + step);
+    applyContent(renderedContent);
+    schedule();
+  };
+
+  const schedule = (): void => {
+    if (typeof window === 'undefined' || timerId) {
+      return;
+    }
+    timerId = window.setTimeout(tick, frameDelayMs);
   };
 
   return {
     push(content: string): void {
-      latestContent = content;
+      targetContent = content;
       if (typeof window === 'undefined') {
-        applyLatest();
+        renderedContent = targetContent;
+        applyContent(renderedContent);
+        resolveFinished();
         return;
       }
-      if (timerId || frameId) {
-        return;
-      }
-      timerId = window.setTimeout(() => {
-        timerId = 0;
-        frameId = window.requestAnimationFrame(() => {
-          frameId = 0;
-          applyLatest();
-        });
-      }, delayMs);
+      schedule();
     },
-    flush(): void {
-      if (typeof window !== 'undefined') {
-        clearScheduled();
+    finish(): Promise<void> {
+      if (renderedContent.length >= targetContent.length) {
+        return Promise.resolve();
       }
-      applyLatest();
+      return new Promise((resolve) => {
+        finishResolvers.push(resolve);
+        schedule();
+      });
     },
     cancel(): void {
       if (typeof window !== 'undefined') {
-        clearScheduled();
+        clearTimer();
       }
+      finishResolvers = [];
     },
   };
+}
+
+function chatTraceThinkingStatus(event: ChatStreamTraceEnvelope): string | null {
+  if (event.status !== 'running' && event.status !== 'done') {
+    return null;
+  }
+  const step = String(event.step || '');
+  if (step === 'request_received' || step === 'route_query') {
+    return '질문 접수 중';
+  }
+  if (step === 'normalize_query') {
+    return '질문 정규화 중';
+  }
+  if (step === 'rewrite_query' || step === 'query_expansion') {
+    return '검색 질의 준비 중';
+  }
+  if (step === 'retrieval' || step === 'bm25_search' || step === 'vector_search') {
+    return '문서 탐색 중';
+  }
+  if (step === 'fusion' || step === 'graph_expand' || step === 'rerank') {
+    return '근거 후보 정리 중';
+  }
+  if (step === 'context_assembly' || step === 'prompt_build') {
+    return '답변 근거 조립 중';
+  }
+  if (step === 'llm_generate') {
+    return '답변 생성 중';
+  }
+  if (step === 'citation_finalize') {
+    return '출처 정리 중';
+  }
+  if (step === 'grounding_guard') {
+    return '근거 검증 중';
+  }
+  return event.label ? String(event.label) : null;
 }
 
 function parseViewerHtml(viewerHtml: string): Document | null {
@@ -1242,6 +1301,7 @@ export default function WorkspacePage() {
   const [viewerPageMode, setViewerPageMode] = useState<ViewerPageMode>('single');
   const [isPanelResizing, setIsPanelResizing] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [thinkingStatus, setThinkingStatus] = useState('질문 접수 중');
   const [isCapturing, setIsCapturing] = useState(false);
   const [isNormalizing, setIsNormalizing] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
@@ -3214,6 +3274,7 @@ export default function WorkspacePage() {
       setQuery('');
     }
     setIsSending(true);
+    setThinkingStatus('질문 접수 중');
 
     try {
       const requestPayload = {
@@ -3235,7 +3296,7 @@ export default function WorkspacePage() {
       };
       let response: ChatResponse;
       let assistantStreamMessageId = '';
-      let assistantStreamUpdater: ReturnType<typeof createThrottledMessageContentUpdater> | null = null;
+      let assistantStreamUpdater: ReturnType<typeof createTypewriterMessageContentUpdater> | null = null;
       assistantStreamMessageId = makeId('assistant');
       let streamedAnswer = '';
       setMessages((current) => [
@@ -3254,7 +3315,7 @@ export default function WorkspacePage() {
           learningIndex: resolvedLearningIndex,
         },
       ]);
-      assistantStreamUpdater = createThrottledMessageContentUpdater(assistantStreamMessageId, setMessages, 70);
+      assistantStreamUpdater = createTypewriterMessageContentUpdater(assistantStreamMessageId, setMessages);
       if (testMode) {
         setActiveTestTrace({
           query: trimmed,
@@ -3278,7 +3339,11 @@ export default function WorkspacePage() {
         }, (event) => {
           if (event.type === 'answer_delta') {
             streamedAnswer += event.delta;
+            setThinkingStatus('답변 작성 중');
             assistantStreamUpdater?.push(streamedAnswer);
+          }
+          if (event.type === 'stage') {
+            setThinkingStatus(event.stage.label || '처리 중');
           }
           if (testMode && event.type === 'stage') {
             setActiveTestTrace((current) => ({
@@ -3311,7 +3376,14 @@ export default function WorkspacePage() {
         response = await sendChatStream(requestPayload, (event) => {
           if (event.type === 'answer_delta') {
             streamedAnswer += event.delta;
+            setThinkingStatus('답변 작성 중');
             assistantStreamUpdater?.push(streamedAnswer);
+          }
+          if (event.type === 'trace') {
+            const nextThinkingStatus = chatTraceThinkingStatus(event);
+            if (nextThinkingStatus) {
+              setThinkingStatus(nextThinkingStatus);
+            }
           }
           if (testMode && event.type === 'trace') {
             setActiveTestTrace((current) => ({
@@ -3331,7 +3403,7 @@ export default function WorkspacePage() {
           }
         });
       }
-      assistantStreamUpdater.flush();
+      await assistantStreamUpdater.finish();
       const primaryTruth = primaryCitationTruth(response.citations);
 
       setSessionId(response.session_id || sessionId);
@@ -4568,7 +4640,7 @@ export default function WorkspacePage() {
                   </div>
                 ))}
 
-                {showThinkingIndicator && <ThinkingIndicator />}
+                {showThinkingIndicator && <ThinkingIndicator status={thinkingStatus} />}
 
                 <div ref={scrollAnchorRef} />
               </div>
