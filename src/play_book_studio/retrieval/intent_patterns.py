@@ -111,7 +111,7 @@ COMPARE_DECOMPOSE_RE = re.compile(
     re.IGNORECASE,
 )
 ROUTE_TIMEOUT_RE = re.compile(r"(route|루트).*(시간|timeout|타임아웃|늘리|줄이|변경|조정)", re.IGNORECASE)
-NODE_NOTREADY_RE = re.compile(r"(node|노드|worker|워커).*(notready|안돼|왜그래|상태|죽었|끊겼)", re.IGNORECASE)
+NODE_NOTREADY_RE = re.compile(r"(node|노드|worker|워커).*(notready|안돼|왜그래|죽었|끊겼|장애|문제)", re.IGNORECASE)
 CONJUNCTION_SPLIT_RE = re.compile(r"\s*(?:그리고|또한|및|and then|and also|and)\s*", re.IGNORECASE)
 GENERIC_CONTEXT_TOPIC_RE = re.compile(
     r"(운영 설정 변경|복구 절차 검토|설정 변경|설정 검토|운영 설정|복구 절차|절차 검토|일반 설정)",

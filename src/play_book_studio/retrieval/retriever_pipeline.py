@@ -236,7 +236,12 @@ def execute_retrieval_pipeline(
     retrieve_started_at = time.perf_counter()
     context = context or SessionContext()
     timings_ms: dict[str, float] = {}
-    plan = build_retrieval_plan(query, context=context, candidate_k=candidate_k)
+    plan = build_retrieval_plan(
+        query,
+        context=context,
+        candidate_k=candidate_k,
+        llm_client=getattr(retriever, "query_signal_llm_client", None),
+    )
     timings_ms["normalize_query"] = plan.normalize_query_ms
     _emit_trace_event(
         trace_callback,
@@ -260,17 +265,17 @@ def execute_retrieval_pipeline(
             "rewrite_applied": plan.rewrite_applied,
             "rewrite_reason": plan.rewrite_reason,
             "follow_up_detected": plan.follow_up_detected,
-            "subquery_count": len(plan.rewritten_queries),
+            "retrieval_query_count": len(plan.retrieval_queries),
         },
     )
-    if len(plan.decomposed_queries) > 1:
+    if len(plan.retrieval_queries) > 1:
         _emit_trace_event(
             trace_callback,
-            step="decompose_query",
+            step="query_expansion",
             label="질문 분해 완료",
             status="done",
-            detail=" | ".join(plan.decomposed_queries[:3]),
-            meta={"subqueries": plan.decomposed_queries},
+            detail=" | ".join(plan.retrieval_queries[:3]),
+            meta={"retrieval_queries": plan.retrieval_queries},
         )
 
     if unsupported_product is not None:
@@ -294,6 +299,7 @@ def execute_retrieval_pipeline(
                     "rewrite_reason": plan.rewrite_reason,
                     "follow_up_detected": plan.follow_up_detected,
                     "decomposed_query_count": len(plan.decomposed_queries),
+                    "retrieval_query_count": len(plan.retrieval_queries),
                 },
                 "vector_runtime": {},
                 "ablation": {
@@ -318,6 +324,7 @@ def execute_retrieval_pipeline(
                     "total": _duration_ms(retrieve_started_at),
                 },
                 "decomposed_queries": plan.decomposed_queries,
+                "retrieval_queries": plan.retrieval_queries,
             },
         )
 
@@ -347,6 +354,8 @@ def execute_retrieval_pipeline(
             retriever,
             context=context,
             rewritten_queries=plan.rewritten_queries,
+            metadata_filter=plan.metadata_filter or None,
+            correction_notes=plan.correction_notes,
             effective_candidate_k=effective_candidate_k,
             trace_callback=trace_callback,
             timings_ms=timings_ms,
@@ -432,7 +441,7 @@ def execute_retrieval_pipeline(
     should_expand_graph, graph_reason = _should_expand_graph(
         plan.rewritten_query,
         follow_up_detected=plan.follow_up_detected,
-        decomposed_query_count=len(plan.decomposed_queries),
+        decomposed_query_count=len(plan.retrieval_queries),
         hits=hybrid_hits,
     )
     if should_expand_graph:

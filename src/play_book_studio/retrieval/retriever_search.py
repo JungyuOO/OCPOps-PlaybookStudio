@@ -11,7 +11,6 @@ from .intake_overlay import (
     search_selected_customer_pack_private_vectors,
 )
 from .models import RetrievalHit
-from .query_signal_pipeline import build_query_signal_plan
 from .ranking import (
     rrf_merge_hit_lists as _rrf_merge_hit_lists,
     rrf_merge_named_hit_lists as _rrf_merge_named_hit_lists,
@@ -32,6 +31,9 @@ def _vector_subquery_runtime(
         "hit_count": int(runtime.get("hit_count", 0) or 0),
         "top_score": runtime.get("top_score"),
     }
+    for key in ("embedding_ms", "qdrant_ms", "hydrate_ms", "request_timeout_seconds"):
+        if runtime.get(key) is not None:
+            payload[key] = runtime[key]
     if isinstance(runtime.get("hydration"), dict):
         payload["hydration"] = dict(runtime["hydration"])
     if runtime.get("metadata_filter_applied"):
@@ -65,6 +67,9 @@ def _aggregate_vector_runtime(subqueries: list[dict[str, object]]) -> dict[str, 
         "endpoints_used": endpoints_used,
         "endpoint_used": endpoints_used[0] if len(endpoints_used) == 1 else "mixed" if endpoints_used else "",
         "empty_subqueries": sum(int(item.get("hit_count", 0) == 0) for item in subqueries),
+        "embedding_ms": round(sum(float(item.get("embedding_ms", 0.0) or 0.0) for item in subqueries), 1),
+        "qdrant_ms": round(sum(float(item.get("qdrant_ms", 0.0) or 0.0) for item in subqueries), 1),
+        "hydrate_ms": round(sum(float(item.get("hydrate_ms", 0.0) or 0.0) for item in subqueries), 1),
     }
 
 
@@ -165,6 +170,8 @@ def search_vector_candidates(
     *,
     context,
     rewritten_queries: list[str],
+    metadata_filter: dict[str, object] | None = None,
+    correction_notes: list[object] | None = None,
     effective_candidate_k: int,
     trace_callback,
     timings_ms: dict[str, float],
@@ -195,99 +202,100 @@ def search_vector_candidates(
         vector_hit_sets: list[list[RetrievalHit]] = []
         vector_subqueries: list[dict[str, object]] = []
         seen_embedding_queries: set[str] = set()
-        query_signal_llm_client = getattr(retriever, "query_signal_llm_client", None)
-        for subquery in rewritten_queries:
-            query_plan = build_query_signal_plan(subquery, llm_client=query_signal_llm_client)
-            metadata_filter = query_plan.metadata_filter or None
-            for embedding_query_index, vector_query in enumerate(query_plan.embedding_queries, start=1):
-                if vector_query in seen_embedding_queries:
-                    continue
-                seen_embedding_queries.add(vector_query)
-                official_hits: list[RetrievalHit] = []
-                runtime = {
-                    "endpoint_used": "",
-                    "attempted_endpoints": [],
-                    "hit_count": 0,
-                    "top_score": None,
-                    "vector_query": vector_query,
-                    "normalized_query": query_plan.normalized_query,
-                    "embedding_query_index": embedding_query_index,
-                    "correction_notes": [item.to_dict() for item in query_plan.correction_notes],
-                }
-                if retriever.vector_retriever is not None:
-                    if hasattr(retriever.vector_retriever, "search_with_trace"):
-                        try:
-                            official_hits, runtime = retriever.vector_retriever.search_with_trace(
-                                vector_query,
-                                top_k=effective_candidate_k,
-                                query_filter=metadata_filter,
-                            )
-                        except TypeError:
-                            official_hits, runtime = retriever.vector_retriever.search_with_trace(
-                                vector_query,
-                                top_k=effective_candidate_k,
-                            )
-                        runtime["vector_query"] = vector_query
-                        runtime["normalized_query"] = query_plan.normalized_query
-                        runtime["embedding_query_index"] = embedding_query_index
-                        runtime["correction_notes"] = [item.to_dict() for item in query_plan.correction_notes]
-                        if not official_hits and metadata_filter:
-                            official_hits, fallback_runtime = retriever.vector_retriever.search_with_trace(
-                                vector_query,
-                                top_k=effective_candidate_k,
-                            )
-                            runtime = {
-                                **fallback_runtime,
-                                "metadata_filter_applied": True,
-                                "metadata_filter": metadata_filter,
-                                "metadata_filter_fallback": True,
-                                "vector_query": vector_query,
-                                "normalized_query": query_plan.normalized_query,
-                                "embedding_query_index": embedding_query_index,
-                                "correction_notes": [item.to_dict() for item in query_plan.correction_notes],
-                            }
-                    else:
-                        official_hits = retriever.vector_retriever.search(
+        serialized_corrections = [
+            item.to_dict() if hasattr(item, "to_dict") else dict(item)
+            for item in (correction_notes or [])
+            if hasattr(item, "to_dict") or isinstance(item, dict)
+        ]
+        for embedding_query_index, vector_query in enumerate(rewritten_queries, start=1):
+            if vector_query in seen_embedding_queries:
+                continue
+            seen_embedding_queries.add(vector_query)
+            official_hits: list[RetrievalHit] = []
+            runtime = {
+                "endpoint_used": "",
+                "attempted_endpoints": [],
+                "hit_count": 0,
+                "top_score": None,
+                "vector_query": vector_query,
+                "normalized_query": vector_query,
+                "embedding_query_index": embedding_query_index,
+                "correction_notes": serialized_corrections,
+            }
+            if retriever.vector_retriever is not None:
+                if hasattr(retriever.vector_retriever, "search_with_trace"):
+                    try:
+                        official_hits, runtime = retriever.vector_retriever.search_with_trace(
+                            vector_query,
+                            top_k=effective_candidate_k,
+                            query_filter=metadata_filter,
+                        )
+                    except TypeError:
+                        official_hits, runtime = retriever.vector_retriever.search_with_trace(
+                            vector_query,
+                            top_k=effective_candidate_k,
+                        )
+                    runtime["vector_query"] = vector_query
+                    runtime["normalized_query"] = vector_query
+                    runtime["embedding_query_index"] = embedding_query_index
+                    runtime["correction_notes"] = serialized_corrections
+                    if not official_hits and metadata_filter:
+                        official_hits, fallback_runtime = retriever.vector_retriever.search_with_trace(
                             vector_query,
                             top_k=effective_candidate_k,
                         )
                         runtime = {
-                            "endpoint_used": "",
-                            "attempted_endpoints": [],
-                            "hit_count": len(official_hits),
-                            "top_score": float(official_hits[0].raw_score) if official_hits else None,
+                            **fallback_runtime,
+                            "metadata_filter_applied": True,
+                            "metadata_filter": metadata_filter,
+                            "metadata_filter_fallback": True,
                             "vector_query": vector_query,
-                            "normalized_query": query_plan.normalized_query,
+                            "normalized_query": vector_query,
                             "embedding_query_index": embedding_query_index,
-                            "correction_notes": [item.to_dict() for item in query_plan.correction_notes],
+                            "correction_notes": serialized_corrections,
                         }
-                official_hits = filter_hits_by_session_scope(official_hits, context=context)
-                private_hits, private_runtime = search_selected_customer_pack_private_vectors(
-                    retriever.settings,
-                    context=context,
-                    query=vector_query,
-                    top_k=effective_candidate_k,
-                )
-                private_hits = filter_hits_by_session_scope(private_hits, context=context)
-                merged_hits = (
-                    _rrf_merge_named_hit_lists(
-                        {
-                            "vector": official_hits,
-                            "private_vector": private_hits,
-                        },
-                        source_name="vector",
+                else:
+                    official_hits = retriever.vector_retriever.search(
+                        vector_query,
                         top_k=effective_candidate_k,
-                        weights={"vector": 1.0, "private_vector": 1.15},
                     )
-                    if official_hits and private_hits
-                    else (private_hits or official_hits)
+                    runtime = {
+                        "endpoint_used": "",
+                        "attempted_endpoints": [],
+                        "hit_count": len(official_hits),
+                        "top_score": float(official_hits[0].raw_score) if official_hits else None,
+                        "vector_query": vector_query,
+                        "normalized_query": vector_query,
+                        "embedding_query_index": embedding_query_index,
+                        "correction_notes": serialized_corrections,
+                    }
+            official_hits = filter_hits_by_session_scope(official_hits, context=context)
+            private_hits, private_runtime = search_selected_customer_pack_private_vectors(
+                retriever.settings,
+                context=context,
+                query=vector_query,
+                top_k=effective_candidate_k,
+            )
+            private_hits = filter_hits_by_session_scope(private_hits, context=context)
+            merged_hits = (
+                _rrf_merge_named_hit_lists(
+                    {
+                        "vector": official_hits,
+                        "private_vector": private_hits,
+                    },
+                    source_name="vector",
+                    top_k=effective_candidate_k,
+                    weights={"vector": 1.0, "private_vector": 1.15},
                 )
-                vector_hit_sets.append(merged_hits)
-                runtime_payload = _vector_subquery_runtime(query=vector_query, runtime=runtime)
-                runtime_payload["source_query"] = subquery
-                runtime_payload["private_vector_status"] = str(private_runtime.get("status", ""))
-                runtime_payload["private_hit_count"] = int(private_runtime.get("hit_count", 0) or 0)
-                vector_subqueries.append(runtime_payload)
+                if official_hits and private_hits
+                else (private_hits or official_hits)
+            )
+            vector_hit_sets.append(merged_hits)
+            runtime_payload = _vector_subquery_runtime(query=vector_query, runtime=runtime)
+            runtime_payload["source_query"] = vector_query
+            runtime_payload["private_vector_status"] = str(private_runtime.get("status", ""))
+            runtime_payload["private_hit_count"] = int(private_runtime.get("hit_count", 0) or 0)
+            vector_subqueries.append(runtime_payload)
         vector_hits = _rrf_merge_hit_lists(
             vector_hit_sets,
             source_name="vector",

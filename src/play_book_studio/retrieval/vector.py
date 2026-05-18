@@ -2,6 +2,7 @@
 # hybrid retrieval에서는 이 모듈이 semantic 후보만 준비하고, 최종 결합은 retriever가 맡는다.
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import requests
@@ -96,7 +97,9 @@ class VectorRetriever:
         *,
         query_filter: dict[str, Any] | None = None,
     ) -> tuple[list[RetrievalHit], dict[str, Any]]:
+        embedding_started_at = time.perf_counter()
         vector = self.embedding_client.embed_texts([query])[0]
+        embedding_ms = round((time.perf_counter() - embedding_started_at) * 1000, 1)
         payloads = [
             (
                 f"{self.settings.qdrant_url}/collections/{self.settings.qdrant_collection}/points/search",
@@ -124,14 +127,17 @@ class VectorRetriever:
         last_error = "vector search failed"
         attempted_endpoints: list[str] = []
         errors: list[dict[str, str]] = []
+        qdrant_ms = 0.0
         for url, payload in payloads:
             endpoint_name = url.rsplit("/", maxsplit=1)[-1]
             attempted_endpoints.append(endpoint_name)
+            qdrant_started_at = time.perf_counter()
             response = requests.post(
                 url,
                 json=payload,
                 timeout=self.request_timeout_seconds,
             )
+            qdrant_ms += (time.perf_counter() - qdrant_started_at) * 1000
             if not response.ok:
                 last_error = response.text[:500]
                 errors.append({"endpoint": endpoint_name, "error": last_error})
@@ -150,7 +156,9 @@ class VectorRetriever:
                         score=float(point.get("score", 0.0)),
                     )
                 )
+            hydration_started_at = time.perf_counter()
             hits, hydration = self._hydrate_hits_from_database(hits)
+            hydrate_ms = round((time.perf_counter() - hydration_started_at) * 1000, 1)
             return (
                 hits,
                 {
@@ -160,6 +168,10 @@ class VectorRetriever:
                     "hit_count": len(hits),
                     "top_score": float(points[0].get("score", 0.0)) if points else None,
                     "hydration": hydration,
+                    "embedding_ms": embedding_ms,
+                    "qdrant_ms": round(qdrant_ms, 1),
+                    "hydrate_ms": hydrate_ms,
+                    "request_timeout_seconds": self.request_timeout_seconds,
                     "metadata_filter_applied": bool(query_filter),
                     "metadata_filter": query_filter or {},
                 },

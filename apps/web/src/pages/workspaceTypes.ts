@@ -39,7 +39,7 @@ export interface Message {
   primaryBoundaryBadge?: string;
   primaryPublicationState?: string;
   primaryApprovalState?: string;
-  routeKind?: 'official' | 'learning' | 'course' | 'study_docs';
+  routeKind?: 'official' | 'learning' | 'study_docs';
   learningIndex?: number;
   rewrittenQuery?: string;
   activeCitationIndex?: number;

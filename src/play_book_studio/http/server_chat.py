@@ -1,6 +1,7 @@
 # chat / chat-stream 처리 흐름을 server.py 밖으로 분리한다.
 from __future__ import annotations
 
+import json
 import uuid
 import re
 from http import HTTPStatus
@@ -93,6 +94,111 @@ def _attach_server_timings(
         pipeline_trace["server_timings_ms"] = rounded
 
 
+def _round_ms(value: Any) -> float:
+    try:
+        return round(float(value), 1)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _sum_ms(*values: Any) -> float:
+    return round(sum(float(value or 0.0) for value in values), 1)
+
+
+def _selected_source_scopes(response_payload: dict[str, Any]) -> list[str]:
+    citations = response_payload.get("citations")
+    if not isinstance(citations, list):
+        return []
+    scopes: list[str] = []
+    for citation in citations:
+        if not isinstance(citation, dict):
+            continue
+        scope = str(citation.get("source_scope") or "").strip()
+        if scope and scope not in scopes:
+            scopes.append(scope)
+    return scopes
+
+
+def _vector_runtime_ms(vector_runtime: dict[str, Any], key: str) -> float:
+    if vector_runtime.get(key) is not None:
+        return _round_ms(vector_runtime.get(key))
+    subqueries = vector_runtime.get("subqueries")
+    if not isinstance(subqueries, list):
+        return 0.0
+    return round(
+        sum(
+            float(item.get(key, 0.0) or 0.0)
+            for item in subqueries
+            if isinstance(item, dict)
+        ),
+        1,
+    )
+
+
+def _build_chat_latency_log(
+    *,
+    request_id: str,
+    session_id: str,
+    route: str,
+    payload: dict[str, Any],
+    query: str,
+    request_context: SessionContext,
+    result: Any,
+    response_payload: dict[str, Any],
+    server_timings_ms: dict[str, float],
+) -> dict[str, Any]:
+    retrieval_trace = getattr(result, "retrieval_trace", {}) or {}
+    pipeline_trace = getattr(result, "pipeline_trace", {}) or {}
+    retrieval_timings = retrieval_trace.get("timings_ms") or {}
+    pipeline_timings = pipeline_trace.get("timings_ms") or {}
+    vector_runtime = retrieval_trace.get("vector_runtime") or {}
+    reranker_trace = retrieval_trace.get("reranker") or {}
+    llm_runtime = pipeline_trace.get("llm") or {}
+    ablation = retrieval_trace.get("ablation") or {}
+    return {
+        "event": "chat_latency",
+        "request_id": request_id,
+        "session_id": session_id,
+        "route": route,
+        "route_kind": str(payload.get("route_kind") or "").strip(),
+        "preferred_source_scope": str(getattr(request_context, "preferred_source_scope", "") or ""),
+        "query_len": len(query),
+        "response_kind": str(getattr(result, "response_kind", "") or ""),
+        "warnings": list(getattr(result, "warnings", []) or []),
+        "total_ms": _round_ms(server_timings_ms.get("request_total")),
+        "answerer_ms": _round_ms(server_timings_ms.get("answerer_runtime")),
+        "retrieval_ms": _round_ms(pipeline_timings.get("retrieval_total")),
+        "bm25_ms": _round_ms(retrieval_timings.get("bm25_search")),
+        "vector_ms": _round_ms(retrieval_timings.get("vector_search")),
+        "embedding_ms": _vector_runtime_ms(vector_runtime, "embedding_ms"),
+        "qdrant_ms": _vector_runtime_ms(vector_runtime, "qdrant_ms"),
+        "hydrate_ms": _vector_runtime_ms(vector_runtime, "hydrate_ms"),
+        "rerank_ms": _round_ms(retrieval_timings.get("rerank")),
+        "llm_ms": _round_ms(pipeline_timings.get("llm_generate_total")),
+        "llm_provider_ms": _round_ms(pipeline_timings.get("llm_provider_round_trip")),
+        "prompt_build_ms": _round_ms(pipeline_timings.get("prompt_build")),
+        "context_ms": _round_ms(pipeline_timings.get("context_assembly")),
+        "citation_finalize_ms": _round_ms(pipeline_timings.get("citation_finalize")),
+        "payload_build_ms": _round_ms(server_timings_ms.get("payload_build")),
+        "related_links_ms": _round_ms(server_timings_ms.get("payload_related_links")),
+        "related_sections_ms": _round_ms(server_timings_ms.get("payload_related_sections")),
+        "suggested_queries_ms": _round_ms(server_timings_ms.get("payload_suggested_queries")),
+        "session_persist_ms": _sum_ms(
+            server_timings_ms.get("session_persist_pre_payload"),
+            server_timings_ms.get("session_persist_post_payload"),
+        ),
+        "answer_log_persist_ms": _round_ms(server_timings_ms.get("answer_log_persist")),
+        "top_book_slugs": list(ablation.get("reranked_top_book_slugs") or [])[:5],
+        "source_scopes": _selected_source_scopes(response_payload),
+        "llm_model": str(llm_runtime.get("model") or ""),
+        "reranker_model": str(reranker_trace.get("model") or ""),
+    }
+
+
+def _emit_chat_latency_log(payload: dict[str, Any]) -> None:
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True), flush=True)
+
+
 def _stream_answer_delta(handler: Any, answer: str, *, target_chars: int = 34) -> None:
     buffer = ""
     for token in re.split(r"(\s+)", answer):
@@ -105,43 +211,6 @@ def _stream_answer_delta(handler: Any, answer: str, *, target_chars: int = 34) -
             time.sleep(0.01)
     if buffer:
         handler._stream_event({"type": "answer_delta", "delta": buffer})
-
-
-def _answer_query_from_payload(query: str, payload: dict[str, Any]) -> str:
-    route_kind = str(payload.get("route_kind") or "").strip()
-    target_title = str(payload.get("learning_target_title") or "").strip()
-    target_slug = str(payload.get("learning_target_book_slug") or "").strip()
-    if route_kind in {"course", "study_docs"}:
-        return f"KMSC 실운영 문서 study_docs source_scope:study_docs | {query}"
-    if route_kind != "learning":
-        if route_kind == "official" and (target_title or target_slug):
-            target_slug_terms = target_slug.replace("_", " ")
-            hints = " ".join(item for item in (target_title, target_slug, target_slug_terms) if item)
-            return f"{hints} | {query} | official seeded question"
-        return query
-    target_slug_terms = target_slug.replace("_", " ")
-    target_boosts = {
-        "machine_configuration": "MachineConfigPool machine-config MCO About the Machine Config Operator",
-        "installation_overview": "installation overview install cluster preparation",
-        "postinstallation_configuration": "postinstallation day 2 operations cluster configuration",
-        "monitoring": "OpenShift monitoring Prometheus Alertmanager",
-        "security_and_compliance": "certificate authentication authorization security compliance",
-        "networking_overview": "networking route ingress DNS service",
-        "validation_and_troubleshooting": "troubleshooting validation install issue",
-        "etcd": "etcd backup restore snapshot",
-    }
-    hints = [
-        target_title,
-        target_slug,
-        target_slug_terms,
-        target_boosts.get(target_slug, ""),
-        str(payload.get("learning_category_key") or "").strip(),
-        str(payload.get("learning_category_label") or "").strip(),
-    ]
-    hint_text = " ".join(item for item in hints if item)
-    if not hint_text:
-        return f"{query} 단계별 학습 순서"
-    return f"{hint_text} | {query} | 단계별 학습 순서"
 
 
 def _uuid_or_empty(value: Any) -> str:
@@ -263,6 +332,7 @@ def handle_chat(
     owner_user_id: str = "",
 ) -> None:
     request_started_at = time.perf_counter()
+    request_id = uuid.uuid4().hex
     active_answerer = current_answerer()
     session_id = str(payload.get("session_id") or uuid.uuid4().hex)
     session = store.get(session_id)
@@ -295,9 +365,8 @@ def handle_chat(
     server_timings_ms: dict[str, float] = {}
     try:
         answer_started_at = time.perf_counter()
-        answer_query = _answer_query_from_payload(query, payload)
         result = active_answerer.answer(
-            answer_query,
+            query,
             mode=mode,
             context=request_context,
             top_k=5,
@@ -375,6 +444,19 @@ def handle_chat(
     )
     server_timings_ms["request_total"] = (time.perf_counter() - request_started_at) * 1000
     _attach_server_timings(response_payload, server_timings_ms=server_timings_ms)
+    _emit_chat_latency_log(
+        _build_chat_latency_log(
+            request_id=request_id,
+            session_id=session_id,
+            route="/api/chat",
+            payload=payload,
+            query=query,
+            request_context=request_context,
+            result=result,
+            response_payload=response_payload,
+            server_timings_ms=server_timings_ms,
+        )
+    )
     handler._send_json(response_payload)
     _persist_chat_audit_logs(
         root_dir=root_dir,
@@ -410,6 +492,7 @@ def handle_chat_stream(
     owner_user_id: str = "",
 ) -> None:
     request_started_at = time.perf_counter()
+    request_id = uuid.uuid4().hex
     active_answerer = current_answerer()
     session_id = str(payload.get("session_id") or uuid.uuid4().hex)
     session = store.get(session_id)
@@ -456,9 +539,8 @@ def handle_chat_stream(
     server_timings_ms: dict[str, float] = {}
     try:
         answer_started_at = time.perf_counter()
-        answer_query = _answer_query_from_payload(query, payload)
         result = active_answerer.answer(
-            answer_query,
+            query,
             mode=mode,
             context=request_context,
             top_k=5,
@@ -534,6 +616,19 @@ def handle_chat_stream(
     )
     server_timings_ms["request_total"] = (time.perf_counter() - request_started_at) * 1000
     _attach_server_timings(response_payload, server_timings_ms=server_timings_ms)
+    _emit_chat_latency_log(
+        _build_chat_latency_log(
+            request_id=request_id,
+            session_id=session_id,
+            route="/api/chat/stream",
+            payload=payload,
+            query=query,
+            request_context=request_context,
+            result=result,
+            response_payload=response_payload,
+            server_timings_ms=server_timings_ms,
+        )
+    )
     _stream_answer_delta(handler, str(response_payload.get("answer") or ""))
     handler._stream_event(
         {
