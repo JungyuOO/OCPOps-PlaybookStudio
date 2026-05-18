@@ -10,6 +10,44 @@ def apply_node_adjustments(
     signals: ScoreSignals,
     lowered_text: str,
 ) -> None:
+    search_text = "\n".join(
+        str(part or "").lower()
+        for part in (
+            lowered_text,
+            hit.section,
+            hit.heading_title,
+            " ".join(hit.cli_commands),
+            " ".join(hit.k8s_objects),
+        )
+    )
+
+    profile = signals.intent_profile
+    if (
+        profile.target_object == "node"
+        and profile.task == "status"
+        and profile.intent == "command_lookup"
+    ):
+        if "oc get nodes" in search_text:
+            hit.fused_score *= 1.55
+            hit.component_scores["node_status_command_lookup_boost"] = 1.55
+        elif "oc describe node" in search_text:
+            hit.fused_score *= 1.18
+            hit.component_scores["node_status_describe_followup_boost"] = 1.18
+
+        if any(
+            token in search_text
+            for token in (
+                "oc ssh",
+                "journalctl",
+                "systemctl",
+                "crio",
+                "kubelet",
+                "oc adm node-logs",
+            )
+        ):
+            hit.fused_score *= 0.42
+            hit.component_scores["node_status_deep_troubleshooting_penalty"] = 0.42
+
     if signals.node_drain_intent:
         if hit.book_slug in {"nodes", "support"}:
             hit.fused_score *= 1.16

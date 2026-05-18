@@ -47,6 +47,10 @@ def _dedupe_queries(queries: tuple[str, ...], *, fallback: str) -> list[str]:
     return deduped[:2]
 
 
+def _uses_study_docs_scope(context: SessionContext) -> bool:
+    return str(getattr(context, "preferred_source_scope", "") or "").strip() == "study_docs"
+
+
 def build_retrieval_plan(
     query: str,
     *,
@@ -64,7 +68,12 @@ def build_retrieval_plan(
     rewrite_applied, rewrite_reason = rewrite_decision(normalized_query, context)
     rewritten_query = rewrite_query(normalized_query, context)
     signal_plan = build_query_signal_plan(rewritten_query, llm_client=llm_client)
-    retrieval_queries = _dedupe_queries(signal_plan.embedding_queries, fallback=rewritten_query)
+    if _uses_study_docs_scope(context):
+        retrieval_queries = _dedupe_queries((rewritten_query,), fallback=rewritten_query)
+        metadata_filter: dict[str, Any] = {}
+    else:
+        retrieval_queries = _dedupe_queries(signal_plan.embedding_queries, fallback=rewritten_query)
+        metadata_filter = signal_plan.metadata_filter
     rewrite_query_ms = round((time.perf_counter() - rewrite_started_at) * 1000, 1)
 
     effective_candidate_k = candidate_k
@@ -89,7 +98,7 @@ def build_retrieval_plan(
         decomposed_queries=list(retrieval_queries),
         rewritten_queries=list(retrieval_queries),
         retrieval_queries=list(retrieval_queries),
-        metadata_filter=signal_plan.metadata_filter,
+        metadata_filter=metadata_filter,
         correction_notes=list(signal_plan.correction_notes),
         unsupported_product=unsupported_product,
         follow_up_detected=follow_up_detected,

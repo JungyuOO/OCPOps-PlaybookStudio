@@ -475,7 +475,7 @@ def execute_retrieval_pipeline(
     graph_enriched_hits = _filter_latest_only_hits(retriever, graph_enriched_hits)
     hits, reranker_trace = maybe_rerank_hits(
         retriever,
-        query=plan.rewritten_query,
+        query=query,
         hybrid_hits=graph_enriched_hits,
         context=context,
         top_k=top_k,

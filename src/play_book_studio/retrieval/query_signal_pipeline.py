@@ -470,6 +470,13 @@ def _validated_embedding_queries(
     normalized_query: str,
 ) -> tuple[str, ...]:
     queries = _string_tuple(value, (), max_items=3, max_chars=300)
+    queries = tuple(
+        dict.fromkeys(
+            query
+            for query in (normalized_query, *queries)
+            if str(query or "").strip()
+        )
+    )
     if not queries:
         queries = fallback
     if not queries:

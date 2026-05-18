@@ -294,6 +294,59 @@ def _call_reranker(
         return reranker.rerank(query, hybrid_hits, **rerank_kwargs)
 
 
+def _hit_score(hit: RetrievalHit) -> float:
+    return float(hit.fused_score or hit.raw_score or 0.0)
+
+
+def _prepare_reranker_candidates(
+    hybrid_hits: list[RetrievalHit],
+    *,
+    top_k: int,
+    candidate_budget: int,
+    min_fused_score: float,
+    min_relative_score: float,
+) -> tuple[list[RetrievalHit], int, dict[str, Any]]:
+    if not hybrid_hits or candidate_budget <= 0:
+        return hybrid_hits, 0, {
+            "candidate_budget": candidate_budget,
+            "candidate_count_before": len(hybrid_hits),
+            "candidate_count_after": 0,
+            "filtered_count": 0,
+            "score_threshold": 0.0,
+        }
+
+    primary_pool = hybrid_hits[:candidate_budget]
+    remainder = hybrid_hits[candidate_budget:]
+    top_score = _hit_score(primary_pool[0]) if primary_pool else 0.0
+    absolute_floor = max(0.0, float(min_fused_score or 0.0))
+    relative_floor = (
+        top_score * max(0.0, float(min_relative_score or 0.0))
+        if top_score > 0
+        else 0.0
+    )
+    score_threshold = max(absolute_floor, relative_floor)
+    min_keep = min(len(primary_pool), max(1, min(top_k, candidate_budget)))
+
+    kept: list[RetrievalHit] = []
+    filtered: list[RetrievalHit] = []
+    for index, hit in enumerate(primary_pool):
+        if index < min_keep or score_threshold <= 0.0 or _hit_score(hit) >= score_threshold:
+            kept.append(hit)
+        else:
+            filtered.append(hit)
+
+    prepared_hits = [*kept, *filtered, *remainder]
+    return prepared_hits, len(kept), {
+        "candidate_budget": candidate_budget,
+        "candidate_count_before": len(primary_pool),
+        "candidate_count_after": len(kept),
+        "filtered_count": len(filtered),
+        "score_threshold": score_threshold,
+        "min_fused_score": absolute_floor,
+        "min_relative_score": max(0.0, float(min_relative_score or 0.0)),
+    }
+
+
 def _preferred_derived_family(query: str) -> str | None:
     normalized = query or ""
     lowered = normalized.lower()
@@ -1447,6 +1500,7 @@ def maybe_rerank_hits(
         "rebalance_reasons": [],
         "decision_reason": "model_required_when_configured",
         "candidate_budget": candidate_budget,
+        "prefilter": {},
     }
     if retriever.reranker is None or not hybrid_hits:
         return hits, reranker_trace
@@ -1476,18 +1530,30 @@ def maybe_rerank_hits(
             return hits, reranker_trace
         rerank_started_at = time.perf_counter()
         if apply_model:
+            rerank_input_hits, effective_candidate_budget, prefilter_meta = _prepare_reranker_candidates(
+                hybrid_hits,
+                top_k=top_k,
+                candidate_budget=candidate_budget,
+                min_fused_score=float(getattr(retriever.settings, "reranker_min_fused_score", 0.0) or 0.0),
+                min_relative_score=float(getattr(retriever.settings, "reranker_min_relative_score", 0.0) or 0.0),
+            )
+            reranker_trace["prefilter"] = prefilter_meta
             _emit_trace_event(
                 trace_callback,
                 step="rerank",
                 label="리랭킹 중",
                 status="running",
+                meta={
+                    "candidate_budget": candidate_budget,
+                    "prefilter": prefilter_meta,
+                },
             )
             reranked_hits = _call_reranker(
                 retriever.reranker,
                 query=query,
-                hybrid_hits=hybrid_hits,
+                hybrid_hits=rerank_input_hits,
                 top_k=top_k,
-                top_n_override=candidate_budget,
+                top_n_override=effective_candidate_budget,
             )
             reranker_trace["top1_after_model"] = _top_book_slug(reranked_hits)
             reranker_trace["model_applied"] = True
@@ -1506,12 +1572,7 @@ def maybe_rerank_hits(
                 "applied": bool(apply_model or rebalance_reasons or reranker_trace["top1_changed"]),
                 "candidate_count": len(hybrid_hits),
                 "reranked_count": (
-                    min(
-                        len(hybrid_hits),
-                        candidate_budget
-                        if candidate_budget is not None
-                        else max(top_k, retriever.reranker.top_n),
-                    )
+                    int((reranker_trace.get("prefilter") or {}).get("candidate_count_after") or 0)
                     if apply_model
                     else len(hybrid_hits)
                 ),
@@ -1538,6 +1599,7 @@ def maybe_rerank_hits(
                 "mode": reranker_trace["mode"],
                 "decision_reason": reranker_trace["decision_reason"],
                 "candidate_budget": reranker_trace["candidate_budget"],
+                "prefilter": reranker_trace["prefilter"],
             },
         )
     except Exception as exc:  # noqa: BLE001
@@ -1570,6 +1632,7 @@ def maybe_rerank_hits(
                 "mode": reranker_trace["mode"],
                 "decision_reason": reranker_trace["decision_reason"],
                 "candidate_budget": reranker_trace["candidate_budget"],
+                "prefilter": reranker_trace["prefilter"],
                 "error": reranker_trace["error"],
             },
         )
