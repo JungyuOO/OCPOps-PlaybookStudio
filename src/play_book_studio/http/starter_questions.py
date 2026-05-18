@@ -254,16 +254,6 @@ def _official_manifest_entries_from_db(database_url: str) -> list[dict[str, Any]
 
 
 def _official_faq_questions_from_db(database_url: str) -> list[dict[str, Any]]:
-    chunk_questions = _chunk_candidate_questions_from_db(
-        database_url,
-        source_scope="official_docs",
-        lane="faq",
-        route_kind="official",
-        source_label="postgres.document_chunks",
-        limit=24,
-    )
-    if chunk_questions:
-        return chunk_questions
     questions = _official_faq_questions_from_entries(
         _official_manifest_entries_from_db(database_url),
         source="postgres.official_docs",
@@ -278,107 +268,6 @@ def _official_faq_questions_from_db(database_url: str) -> list[dict[str, Any]]:
             source="postgres.official_docs",
         )
     ]
-
-
-def _chunk_candidate_questions_from_db(
-    database_url: str,
-    *,
-    source_scope: str,
-    lane: str,
-    route_kind: str,
-    source_label: str,
-    limit: int,
-) -> list[dict[str, Any]]:
-    try:
-        import psycopg
-    except Exception:  # noqa: BLE001
-        return []
-
-    try:
-        with psycopg.connect(database_url) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT
-                        c.id::text AS chunk_id,
-                        c.starter_question_candidates,
-                        c.followup_question_candidates,
-                        c.chunk_role,
-                        c.heading_title,
-                        c.section_path,
-                        c.source_anchor,
-                        c.repository_id::text AS repository_id,
-                        c.source_scope,
-                        c.ordinal,
-                        m.book_slug,
-                        m.viewer_path,
-                        m.source_url,
-                        m.category_key
-                    FROM document_chunks c
-                    CROSS JOIN LATERAL (
-                        SELECT
-                            c.metadata ->> 'book_slug' AS book_slug,
-                            c.metadata ->> 'viewer_path' AS viewer_path,
-                            c.metadata ->> 'source_url' AS source_url,
-                            c.metadata ->> 'category_key' AS category_key
-                    ) m
-                    WHERE c.source_scope = %s
-                        AND c.navigation_only = false
-                        AND jsonb_array_length(c.starter_question_candidates) > 0
-                    ORDER BY
-                        CASE c.chunk_role WHEN 'parent' THEN 0 ELSE 1 END,
-                        c.ordinal ASC
-                    LIMIT %s
-                    """,
-                    (source_scope, int(limit)),
-                )
-                rows = cursor.fetchall()
-                columns = [item.name for item in cursor.description]
-    except Exception:  # noqa: BLE001
-        return []
-
-    candidates: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for row in rows:
-        item = dict(zip(columns, row, strict=True))
-        questions = _coerce_question_list(item.get("starter_question_candidates"))
-        for question in questions:
-            cleaned = _clean_title(question)
-            if not cleaned or cleaned in seen:
-                continue
-            seen.add(cleaned)
-            section_path = item.get("section_path") if isinstance(item.get("section_path"), list) else []
-            candidates.append(
-                _starter_question(
-                    lane=lane,
-                    question=cleaned,
-                    route_kind=route_kind,
-                    source=source_label,
-                    category_key=str(item.get("category_key") or ""),
-                    target_book_slug=str(item.get("book_slug") or ""),
-                    target_viewer_path=str(item.get("viewer_path") or ""),
-                    target_anchor=str(item.get("source_anchor") or ""),
-                    target_title=_clean_title(
-                        str(item.get("heading_title") or (section_path[-1] if section_path else ""))
-                    ),
-                )
-            )
-    return candidates
-
-
-def _coerce_question_list(value: Any) -> list[str]:
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    if isinstance(value, tuple):
-        return [str(item).strip() for item in value if str(item).strip()]
-    if isinstance(value, str) and value.strip():
-        try:
-            loaded = json.loads(value)
-        except json.JSONDecodeError:
-            return [value.strip()]
-        if isinstance(loaded, list):
-            return [str(item).strip() for item in loaded if str(item).strip()]
-    return []
 
 
 def _official_faq_query(rule: StarterCategoryRule, title: str) -> str:
@@ -426,20 +315,6 @@ def _clean_title(title: str) -> str:
 
 
 def _learning_questions(root_dir: Path) -> list[dict[str, Any]]:
-    settings = load_settings(root_dir)
-    database_url = settings.database_url.strip()
-    if database_url:
-        chunk_candidates = _chunk_candidate_questions_from_db(
-            database_url,
-            source_scope="official_docs",
-            lane="learning",
-            route_kind="official",
-            source_label="postgres.document_chunks",
-            limit=24,
-        )
-        if chunk_candidates:
-            return chunk_candidates
-
     entries = _manifest_entries(root_dir)
     terminal_contexts = _learning_terminal_contexts(root_dir)
     questions: list[dict[str, Any]] = []
@@ -454,7 +329,7 @@ def _learning_questions(root_dir: Path) -> list[dict[str, Any]]:
             _starter_question(
                 lane="learning",
                 question=question,
-                route_kind="official",
+                route_kind="learning",
                 source="ocp420_repo_wide_source_manifest",
                 learning_index=index,
                 category_key=rule.key,
@@ -554,7 +429,7 @@ def _load_ops_learning_chunks_payload(root_dir: Path) -> tuple[list[dict[str, An
                 rows = load_ops_learning_chunks_payload(connection, workspace_slug="default")
             return rows, "postgres.learning_steps"
         except Exception:  # noqa: BLE001
-            return [], "postgres.learning_steps"
+            pass
     return (
         _iter_jsonl(root_dir / OPS_LEARNING_CHUNKS_PATH),
         OPS_LEARNING_CHUNKS_PATH.as_posix(),
@@ -638,20 +513,6 @@ def _compose_beginner_question(
 
 
 def _operations_questions(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
-    settings = load_settings(root_dir)
-    database_url = settings.database_url.strip()
-    if database_url:
-        chunk_candidates = _chunk_candidate_questions_from_db(
-            database_url,
-            source_scope="study_docs",
-            lane="operations",
-            route_kind="official",
-            source_label="postgres.study_docs_chunks",
-            limit=24,
-        )
-        if chunk_candidates:
-            return chunk_candidates, "postgres.study_docs_chunks"
-
     chunks, source_label = _load_ops_learning_chunks_payload(root_dir)
     candidates: list[dict[str, Any]] = []
     for chunk in chunks:
