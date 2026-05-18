@@ -153,6 +153,24 @@ def test_v015_query_signal_plan_normalizes_node_notready_alias() -> None:
     ]
 
 
+def test_query_signal_plan_expands_oc_login_command_alias() -> None:
+    plan = build_query_signal_plan("ocp 로그인 어떻게 함")
+
+    assert "command_lookup" in plan.search_signals["intent_labels"]
+    assert "oc login -u <username>" in plan.search_signals["commands"]
+    assert "oc whoami" in plan.search_signals["commands"]
+    assert any("oc login -u <username>" in query for query in plan.embedding_queries)
+
+
+def test_query_signal_plan_expands_pod_disruption_budget_alias() -> None:
+    plan = build_query_signal_plan("모든 프로젝트에서 pod 중단 예산 확인 어떻게해?")
+
+    assert "PodDisruptionBudget" in plan.search_signals["objects"]
+    assert "PDB" in plan.search_signals["objects"]
+    assert "oc get poddisruptionbudget --all-namespaces" in plan.search_signals["commands"]
+    assert any("poddisruptionbudget --all-namespaces" in query for query in plan.embedding_queries)
+
+
 def test_v015_query_signal_plan_uses_llm_one_shot_for_normalization_and_expansion() -> None:
     llm = FakeSignalLlm(
         {

@@ -158,6 +158,31 @@ _ALLOWED_COMMAND_FAMILIES = {
     "etcdctl",
     "cluster_backup",
 }
+_COMMAND_ALIAS_RULES: tuple[dict[str, Any], ...] = (
+    {
+        "name": "oc_login",
+        "aliases": ("oc login", "login", "로그인", "클러스터 로그인", "ocp 로그인", "openshift 로그인"),
+        "commands": ("oc login -u <username>", "oc whoami"),
+        "command_families": ("oc_get",),
+        "objects": (),
+        "primary_topics": ("OpenShift CLI login", "cluster login", "authentication"),
+    },
+    {
+        "name": "pod_disruption_budget",
+        "aliases": (
+            "poddisruptionbudget",
+            "pod disruption budget",
+            "pdb",
+            "pod 중단 예산",
+            "파드 중단 예산",
+            "중단 예산",
+        ),
+        "commands": ("oc get poddisruptionbudget --all-namespaces",),
+        "command_families": ("oc_get",),
+        "objects": ("PodDisruptionBudget", "PDB", "Pod"),
+        "primary_topics": ("PodDisruptionBudget", "pod disruption budget", "all namespaces"),
+    },
+)
 
 
 def build_query_signal_plan(
@@ -543,6 +568,17 @@ def _apply_domain_specific_enrichment(
     execution_target = search_signals.setdefault("execution_target", [])
     components = search_signals.setdefault("components", [])
 
+    _apply_command_alias_enrichment(
+        lowered_query=lowered,
+        objects=objects,
+        commands=commands,
+        command_families=command_families,
+        intent_labels=intent_labels,
+        answer_shapes=answer_shapes,
+        primary_topics=primary_topics,
+        confidence=confidence,
+    )
+
     if route_http_headers:
         classification["domain"] = "networking"
         classification["book_slug_candidates"] = _tuple_append(
@@ -692,6 +728,37 @@ def _apply_domain_specific_enrichment(
         return
     if query_matches_domain(normalized_query, "storage"):
         _append(components, "CSI Driver", "scheduler")
+
+
+def _apply_command_alias_enrichment(
+    *,
+    lowered_query: str,
+    objects: list[str],
+    commands: list[str],
+    command_families: list[str],
+    intent_labels: list[str],
+    answer_shapes: list[str],
+    primary_topics: list[str],
+    confidence: dict[str, float],
+) -> None:
+    for rule in _COMMAND_ALIAS_RULES:
+        aliases = tuple(str(item).casefold() for item in rule.get("aliases", ()) if str(item).strip())
+        if not aliases or not any(alias in lowered_query for alias in aliases):
+            continue
+        _append(objects, *(str(item) for item in rule.get("objects", ()) if str(item).strip()))
+        _append(commands, *(str(item) for item in rule.get("commands", ()) if str(item).strip()))
+        _append(
+            command_families,
+            *(str(item) for item in rule.get("command_families", ()) if str(item).strip()),
+        )
+        _append(primary_topics, *(str(item) for item in rule.get("primary_topics", ()) if str(item).strip()))
+        _append(intent_labels, "command_lookup", "check_status")
+        _append(answer_shapes, "command", "checklist")
+        confidence["commands"] = max(confidence.get("commands", 0.0), 0.9)
+        confidence["intent_labels"] = max(confidence.get("intent_labels", 0.0), 0.88)
+        confidence["answer_shapes"] = max(confidence.get("answer_shapes", 0.0), 0.84)
+        if rule.get("objects"):
+            confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
 
 
 def _tuple_append(values: Any, *items: str) -> tuple[str, ...]:

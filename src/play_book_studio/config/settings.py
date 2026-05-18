@@ -136,7 +136,7 @@ class Settings(SettingsPathMixin):
     reranker_batch_size: int = 16
     reranker_max_parallel_requests: int = 5
     reranker_device: str = "auto"
-    reranker_timeout_seconds: float = 60.0
+    reranker_timeout_seconds: float = 20.0
     graph_runtime_mode: str = "auto"
     graph_endpoint: str = ""
     graph_api_key: str = ""
@@ -363,7 +363,7 @@ def load_settings(root_dir: str | Path) -> Settings:
         reranker_batch_size=int(effective_env.get("RERANKER_BATCH_SIZE", "16")),
         reranker_max_parallel_requests=int(effective_env.get("RERANKER_MAX_PARALLEL_REQUESTS", "5")),
         reranker_device=effective_env.get("RERANKER_DEVICE", "auto").strip(),
-        reranker_timeout_seconds=float(effective_env.get("RERANKER_TIMEOUT_SECONDS", "60")),
+        reranker_timeout_seconds=float(effective_env.get("RERANKER_TIMEOUT_SECONDS", "20")),
         graph_runtime_mode=effective_env.get("GRAPH_RUNTIME_MODE", "auto").strip().lower() or "auto",
         graph_endpoint=effective_env.get("GRAPH_ENDPOINT", "").strip().rstrip("/"),
         graph_api_key=effective_env.get("GRAPH_API_KEY", "").strip(),
