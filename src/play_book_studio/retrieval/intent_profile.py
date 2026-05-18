@@ -218,6 +218,18 @@ def build_intent_profile(query: str) -> IntentProfile:
     if _contains_any(text, ("namespace", "namespaces", "project", "projects", "네임스페이스", "프로젝트")) and not (
         _contains_any(text, ("can-i", "can i", "rbac", "권한")) or _has_pod_delete_permission_intent(text)
     ):
+        if _contains_any(text, ("list", "목록", "리스트", "전체", "조회")):
+            return _profile(
+                intent="command_lookup",
+                target_object="namespace",
+                task="list",
+                needs_command=True,
+                primary_commands=("oc get namespaces", "oc get projects"),
+                evidence_terms=("namespace", "project", "list"),
+                query_terms=("project list", "namespace list"),
+                confidence=0.86,
+                reasons=("namespace list command request",),
+            )
         if _contains_any(text, ("create", "new", "make", "생성", "만들", "추가", "새 ")):
             return _profile(
                 intent="operation_command",

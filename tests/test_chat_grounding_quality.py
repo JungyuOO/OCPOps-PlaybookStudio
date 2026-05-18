@@ -771,6 +771,37 @@ def test_follow_up_questions_rotate_from_citation_seed_and_stay_grounded() -> No
     assert any("bootstrap" in suggestion or "openshift-install" in suggestion for suggestion in second_suggestions)
 
 
+def test_follow_up_questions_do_not_invent_failure_diagnostics_for_procedure_only_command() -> None:
+    result = AnswerResult(
+        query="kubeadmin 사용자를 제거하려면 어떻게 해?",
+        mode="chat",
+        answer="답변: `oc delete secrets kubeadmin -n kube-system` 명령으로 제거합니다 [1].",
+        rewritten_query="kubeadmin 사용자를 제거하려면 어떻게 해?",
+        response_kind="rag",
+        citations=[
+            Citation(
+                index=1,
+                chunk_id="kubeadmin-remove",
+                book_slug="authentication_and_authorization",
+                section="kubeadmin 사용자 제거",
+                anchor="kubeadmin-remove",
+                source_url="",
+                viewer_path="/docs/kubeadmin-remove",
+                excerpt="kubeadmin 사용자를 제거하려면 kubeadmin secret을 삭제합니다.",
+                cli_commands=("oc delete secrets kubeadmin -n kube-system",),
+            )
+        ],
+        cited_indices=[1],
+    )
+
+    suggestions = suggest_follow_up_questions(session=ChatSession(session_id="s1"), result=result)
+
+    assert suggestions
+    assert not any("실패하면" in suggestion for suggestion in suggestions)
+    assert not any("어떤 근거" in suggestion for suggestion in suggestions)
+    assert any("주의" in suggestion or "제거" in suggestion for suggestion in suggestions)
+
+
 def test_follow_up_suggestions_filter_mojibake_like_text_without_literal_glyphs() -> None:
     broken = "\u8b1b\u4e11\u89c0\u4e11 기준으로 설명해줘"
     suggestions = dedupe_suggestions(
