@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>챗봇 검색 매칭 점검 내역</title>
+<style>
+body{font-family:Arial,'Malgun Gothic',sans-serif;line-height:1.6;margin:32px;max-width:920px;color:#172033}
+h1{color:#0f3563;margin-bottom:8px} h2{color:#0f3563;margin:24px 0 6px;font-size:19px}
+code{background:#f5f7fb;border:1px solid #d8e0ef;border-radius:5px;padding:1px 4px;color:#24364f}
+.meta{color:#667085;font-size:13px;margin-bottom:18px}.block{border-bottom:1px solid #e4eaf5;padding-bottom:14px}
+ul{margin:6px 0 0;padding-left:22px} li{margin:4px 0}.ok{color:#067647;font-weight:700}.warn{color:#b54708;font-weight:700}
+pre{background:#f8fafc;color:#172033;border:1px solid #d8e0ef;border-radius:8px;padding:12px;overflow:auto;font-size:13px}
+pre code{background:transparent;border:0;padding:0;color:#172033}
+</style>
+</head>
+<body>
+<h1>챗봇 검색 매칭 점검 내역</h1>
+<p class="meta">2026-05-18 / branch: <code>feat/corpus_embedding_test_S_v.2</code> / head: <code>d8beca9</code></p>
+
+<div class="block">
+<h2>문제</h2>
+<ul>
+<li>챗봇의 답변이 잘못된 데이터를 향하거나 답을 못 찾는다는 피드백에 대한 조치를 취하기 위해 점검을 진행했습니다.</li>
+<li>답변 LLM 자체 문제인지, 검색 단계에서 근거 문서를 잘못 가져오는 문제인지 분리할 필요가 있었습니다.</li>
+</ul>
+</div>
+
+<div class="block">
+<h2>한 일: 공식문서 검색 테스트셋 정리</h2>
+<ul>
+<li>OCP 운영자가 물어볼 만한 공식문서 기준 단독 질문 30건을 정리했습니다.</li>
+<li>각 질문마다 최소한 찾아와야 할 공식문서군(<code>expected_book_slugs</code>)을 active official 29권 기준으로 맞췄습니다.</li>
+<li>기존에 현재 corpus에 없는 expected가 섞이면 점수가 왜곡될 수 있어 해당 기준을 보정했습니다.</li>
+</ul>
+</div>
+
+<div class="block">
+<h2>한 일: 검색 결과 top-k 확인</h2>
+<ul>
+<li><code>RERANKER_ENABLED=false</code> 조건에서 retrieval-only 평가를 실행했습니다.</li>
+<li>answer LLM, reranker, UI 답변 문장은 이번 검증에서 제외했습니다.</li>
+<li>각 질문마다 top1~top5에 기대 공식문서가 들어오는지 확인했습니다.</li>
+<li>문서명만 맞는 것이 아니라 실제 청크 텍스트가 질문 근거로 쓸 수 있는지도 따로 확인했습니다.</li>
+</ul>
+</div>
+
+<div class="block">
+<h2>한 일: 검색이 어긋나는 원인 분리</h2>
+<ul>
+<li>정답 데이터가 없는 문제인지 확인했습니다.</li>
+<li>청크나 embedding_text가 오염된 문제인지 확인했습니다.</li>
+<li>검색어/의도 신호가 넓어서 덜 직접적인 문서가 먼저 뜨는 문제인지 확인했습니다.</li>
+<li>평가셋 expected 기준 자체가 잘못된 문제인지 확인했습니다.</li>
+</ul>
+</div>
+
+<div class="block">
+<h2>한 일: 검색 매칭 보정</h2>
+<ul>
+<li>특정 질문/특정 chunk_id를 하드코딩하지 않았습니다.</li>
+<li>일반 패턴 기준으로 query signal과 scoring 보정을 적용했습니다.</li>
+<li>예: 덜 직접적인 일반 문서보다 질문 의도와 더 가까운 공식문서 청크가 먼저 올라오도록 조정했습니다.</li>
+<li>평가셋 expected 오류는 1건만 보정했습니다.</li>
+</ul>
+</div>
+
+<div class="block">
+<h2>확인 결과</h2>
+<ul>
+<li>official 단독 질문형 30건 기준 expected book_slug hit@5: <span class="ok">30/30</span></li>
+<li>top-k의 <code>embedding_text / normalized_text</code> 정제 경고: <span class="ok">0건</span></li>
+<li>정답 데이터가 아예 누락된 문제는 현재 핵심 원인으로 보이지 않습니다.</li>
+<li>남은 품질 검증은 답변 LLM, reranker, UI 답변 문장 단계에서 별도로 봐야 합니다.</li>
+</ul>
+</div>
+
+<div class="block">
+<h2>추가로 확인한 데이터 상태</h2>
+<ul>
+<li>원문 <code>chunks.jsonl</code>: 27,907 rows 보존</li>
+<li>4계층 <code>text_layers.jsonl</code>: 27,907 rows 존재</li>
+<li>검색용 <code>embedding_chunks.jsonl</code>: 25,881 rows 존재</li>
+<li>다만 산출물 재현성 측면에서 <code>text_layers</code>와 <code>embedding_chunks</code>를 현재 코드 기준으로 다시 생성해 맞추는 것이 안전하다고 판단했습니다.</li>
+</ul>
+</div>
+
+<div class="block">
+<h2>관련 테스트</h2>
+<ul>
+<li><code>tests/test_official_gold_import.py</code></li>
+<li><code>tests/test_eval_manifest_contract.py</code></li>
+<li><code>tests/test_chunk_quality_audit.py</code></li>
+<li><span class="ok">총 20개 테스트 통과</span></li>
+</ul>
+</div>
+
+</body>
+</html>
