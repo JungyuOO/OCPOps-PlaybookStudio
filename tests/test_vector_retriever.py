@@ -66,3 +66,7 @@ def test_vector_retriever_sends_qdrant_metadata_filter(monkeypatch) -> None:
     assert requests[0]["json"]["limit"] == 3
     assert runtime["metadata_filter_applied"] is True
     assert runtime["metadata_filter"] == query_filter
+    assert runtime["embedding_ms"] >= 0
+    assert runtime["qdrant_ms"] >= 0
+    assert runtime["hydrate_ms"] >= 0
+    assert runtime["request_timeout_seconds"] == settings.request_timeout_seconds

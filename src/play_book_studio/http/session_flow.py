@@ -88,11 +88,12 @@ def context_with_request_overrides(
         ]
     context.restrict_uploaded_sources = bool(payload.get("restrict_uploaded_sources", True))
     route_kind = str(payload.get("route_kind") or "").strip()
-    if route_kind in {"course", "study_docs"}:
+    if route_kind == "study_docs":
         context.preferred_source_scope = "study_docs"
         context.current_topic = "KMSC 실운영 문서"
         context.open_entities = ["KMSC", "실운영 문서", "study_docs"]
-    if route_kind == "learning":
+    elif route_kind in {"official", "learning"}:
+        context.preferred_source_scope = "official_docs"
         target_title = str(payload.get("learning_target_title") or "").strip()
         target_slug = str(payload.get("learning_target_book_slug") or "").strip()
         category_label = str(payload.get("learning_category_label") or "").strip()
