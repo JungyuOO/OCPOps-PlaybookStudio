@@ -5822,6 +5822,69 @@ details.factory-block:not([open]) .factory-block-toggle svg {
   max-width: 1040px;
 }
 
+.duplicate-upload-popover {
+  width: min(560px, calc(100vw - 32px));
+  height: auto;
+  max-height: calc(100vh - 48px);
+  border-radius: 18px;
+}
+
+.duplicate-upload-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 28px 28px;
+  color: rgba(226, 232, 240, 0.86);
+}
+
+.duplicate-upload-body p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.duplicate-upload-body strong {
+  color: #f8fafc;
+}
+
+.duplicate-upload-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.duplicate-upload-facts span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(34, 211, 238, 0.24);
+  color: #a7f3ff;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.duplicate-upload-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+[data-theme='light'] .duplicate-upload-body {
+  color: #334155;
+}
+
+[data-theme='light'] .duplicate-upload-body strong {
+  color: #0f172a;
+}
+
+[data-theme='light'] .duplicate-upload-facts span {
+  background: rgba(14, 116, 144, 0.08);
+  border-color: rgba(14, 116, 144, 0.2);
+  color: #0f6674;
+}
+
 .upload-report-body {
   display: flex;
   flex-direction: column;

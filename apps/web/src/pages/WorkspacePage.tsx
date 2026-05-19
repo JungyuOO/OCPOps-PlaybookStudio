@@ -3165,6 +3165,7 @@ export default function WorkspacePage() {
       let uploaded = await uploadDocumentIngestionStream(file, {
         index: true,
         repositoryId: activeRepository?.repository_id,
+        forceReingest: false,
       }, handleUploadStageEvent);
       if (uploaded.duplicate?.exists) {
         const shouldReingest = window.confirm(

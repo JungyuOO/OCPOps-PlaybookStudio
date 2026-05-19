@@ -109,6 +109,14 @@ interface UploadReportViewerState {
   error: string;
 }
 
+interface DuplicateUploadChoiceState {
+  fileName: string;
+  existingTitle: string;
+  existingDocumentSourceId: string;
+  existingChunkCount: number;
+  existingIndexedCount: number;
+}
+
 type FactoryDownloadStatus = 'queued' | 'producing' | 'done' | 'error';
 
 interface FactoryDownloadItem {
@@ -903,6 +911,8 @@ const PlaybookLibraryPage: React.FC = () => {
   const [latestUploadIngest, setLatestUploadIngest] = useState<UploadIngestResponse | null>(null);
   const [uploadStageEvents, setUploadStageEvents] = useState<UploadIngestStreamStageEvent[]>([]);
   const [uploadReportViewer, setUploadReportViewer] = useState<UploadReportViewerState | null>(null);
+  const [duplicateUploadChoice, setDuplicateUploadChoice] = useState<DuplicateUploadChoiceState | null>(null);
+  const duplicateUploadChoiceResolver = useRef<((choice: 'overwrite' | 'keep') => void) | null>(null);
   const [controlRoom, setControlRoom] = useState<DataControlRoomResponse | null>(null);
   const [drafts, setDrafts] = useState<CustomerPackDraft[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -1236,6 +1246,28 @@ const PlaybookLibraryPage: React.FC = () => {
     }
   }, [factoryLane, pipelineStage, uploadStageEvents]);
 
+  const requestDuplicateUploadChoice = (
+    file: File,
+    ingest: UploadIngestResponse,
+  ): Promise<'overwrite' | 'keep'> => new Promise((resolve) => {
+    const duplicate = ingest.duplicate;
+    duplicateUploadChoiceResolver.current = resolve;
+    setDuplicateUploadChoice({
+      fileName: file.name,
+      existingTitle: duplicate?.title || duplicate?.filename || file.name,
+      existingDocumentSourceId: duplicate?.document_source_id || ingest.persisted?.document_source_id || '',
+      existingChunkCount: Number(duplicate?.chunk_count || ingest.chunk_count || 0),
+      existingIndexedCount: Number(duplicate?.indexed_count || ingest.index?.indexed_count || 0),
+    });
+  });
+
+  const resolveDuplicateUploadChoice = (choice: 'overwrite' | 'keep') => {
+    const resolver = duplicateUploadChoiceResolver.current;
+    duplicateUploadChoiceResolver.current = null;
+    setDuplicateUploadChoice(null);
+    resolver?.(choice);
+  };
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1282,10 +1314,29 @@ const PlaybookLibraryPage: React.FC = () => {
         logUploadStreamEvent(event);
       };
 
-      // 같은 파일 재업로드는 백엔드가 자동으로 덮어쓰기. 별도 confirm 없음.
-      const ingest = await uploadDocumentIngestionStream(file, { index: true }, handleStreamEvent);
+      let ingest = await uploadDocumentIngestionStream(file, { index: true, forceReingest: false }, handleStreamEvent);
       if (ingest.duplicate?.exists) {
-        addLog('info', `'${ingest.duplicate.filename || file.name}' 같은 파일 감지 — 새 버전으로 덮어쓰는 중입니다.`);
+        addLog('info', `'${ingest.duplicate.filename || file.name}' 같은 파일 감지 — 사용자 선택을 기다립니다.`);
+        setLatestUploadIngest(ingest);
+        setUploadStageEvents(ingest.stage_events ?? []);
+        const duplicateChoice = await requestDuplicateUploadChoice(file, ingest);
+        if (duplicateChoice === 'keep') {
+          window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify({
+            status: 'basic_index_ready',
+            message: '기존 데이터를 유지하고 업로드 작업을 취소했습니다.',
+            filename: ingest.duplicate.filename || file.name,
+            repositoryId: ingest.duplicate.repository_id || ingest.repository_id || '',
+            documentSourceId: ingest.duplicate.document_source_id || ingest.persisted?.document_source_id || '',
+            updatedAt: new Date().toISOString(),
+          }));
+          addLog('info', `'${ingest.duplicate.filename || file.name}' 기존 데이터를 유지했습니다. 새 업로드는 취소되었습니다.`);
+          refreshData();
+          setTimeout(() => { setPipelineStage('idle'); setCurrentFile(''); }, 1500);
+          return;
+        }
+        setUploadStageEvents([]);
+        addLog('info', `'${ingest.duplicate.filename || file.name}' 새 데이터로 기존 문서를 덮어씁니다.`);
+        ingest = await uploadDocumentIngestionStream(file, { index: true, forceReingest: true }, handleStreamEvent);
       }
       const indexedCount = ingest.index?.indexed_count ?? 0;
       const indexLine = ingest.index ? `, ${indexedCount}/${ingest.index.candidate_count} indexed` : '';
@@ -1293,7 +1344,7 @@ const PlaybookLibraryPage: React.FC = () => {
       const basicIndexReady = Boolean(ingest.basic_index_ready || ingest.index?.status === 'indexed' || ingest.index?.status === 'duplicate_existing_indexed');
       const timings = ingest.timings_ms ?? {};
       setLatestUploadIngest(ingest);
-      setUploadStageEvents(ingest.stage_events ?? uploadStageEvents);
+      setUploadStageEvents(ingest.stage_events ?? []);
 
       addLog('success', `Ingested '${ingest.filename}': ${ingest.block_count} blocks, ${ingest.chunk_count} chunks${indexLine}.`);
       addLog(
@@ -4019,6 +4070,51 @@ const PlaybookLibraryPage: React.FC = () => {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {duplicateUploadChoice && (
+        <div className="preview-overlay" onClick={() => resolveDuplicateUploadChoice('keep')}>
+          <div className="preview-popover duplicate-upload-popover" onClick={(e) => e.stopPropagation()}>
+            <div className="preview-header">
+              <div className="preview-header-left">
+                <h3>같은 문서가 이미 있습니다</h3>
+                <div className="preview-header-meta">
+                  <span>{duplicateUploadChoice.fileName}</span>
+                  {duplicateUploadChoice.existingDocumentSourceId ? (
+                    <span>{duplicateUploadChoice.existingDocumentSourceId}</span>
+                  ) : null}
+                </div>
+              </div>
+              <button className="preview-close-btn" onClick={() => resolveDuplicateUploadChoice('keep')}><X size={18} /></button>
+            </div>
+            <div className="duplicate-upload-body">
+              <p>
+                <strong>{duplicateUploadChoice.existingTitle}</strong> 문서가 이미 업로드되어 있습니다.
+                새 카드로 둘 다 남기지 않고 기존 문서를 어떻게 처리할지 선택하세요.
+              </p>
+              <div className="duplicate-upload-facts">
+                <span>{duplicateUploadChoice.existingChunkCount.toLocaleString()} chunks</span>
+                <span>{duplicateUploadChoice.existingIndexedCount.toLocaleString()} indexed</span>
+              </div>
+              <div className="duplicate-upload-actions">
+                <button
+                  type="button"
+                  className="library-document-chat-btn library-document-chat-btn--secondary"
+                  onClick={() => resolveDuplicateUploadChoice('keep')}
+                >
+                  기존 데이터 유지
+                </button>
+                <button
+                  type="button"
+                  className="library-document-chat-btn"
+                  onClick={() => resolveDuplicateUploadChoice('overwrite')}
+                >
+                  새 데이터로 덮어쓰기
+                </button>
+              </div>
             </div>
           </div>
         </div>

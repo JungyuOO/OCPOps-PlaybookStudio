@@ -81,6 +81,17 @@ def _store_uploaded_file(root_dir: Path, payload: dict[str, Any]) -> tuple[Path,
     return target, storage_key, len(content)
 
 
+def _discard_uploaded_source_copy(source_path: Path) -> None:
+    try:
+        source_path.unlink(missing_ok=True)
+    except OSError:
+        return
+    try:
+        source_path.parent.rmdir()
+    except OSError:
+        return
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -639,6 +650,107 @@ def build_upload_ingest_response(
     source_path, storage_key, byte_size = _store_uploaded_file(root_dir, payload)
     timings["store_ms"] = int((time.perf_counter() - started_at) * 1000)
     emit("store", "done", "업로드 파일 저장이 완료되었습니다.", duration_ms=timings["store_ms"], byte_size=byte_size)
+    dry_run = _bool_payload(payload.get("dry_run"), default=False)
+    force_reingest_value = payload.get("force_reingest")
+    if force_reingest_value is None:
+        force_reingest_value = payload.get("force_duplicate")
+    force_reingest = _bool_payload(force_reingest_value, default=True)
+    created_by = str(payload.get("created_by") or "").strip()
+    visibility = str(payload.get("visibility") or "").strip()
+    source_scope = str(payload.get("source_scope") or "user_upload").strip() or "user_upload"
+    effective_visibility = visibility or ("private_user" if created_by else "workspace_shared")
+    uploaded_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    db_sha256 = scoped_document_sha256(
+        uploaded_sha256,
+        owner_user_id=created_by,
+        visibility=effective_visibility,
+        source_scope=source_scope,
+    )
+    database_url = str(payload.get("database_url") or settings.database_url or "").strip()
+    if not dry_run and database_url and not force_reingest:
+        import psycopg
+
+        with psycopg.connect(database_url) as connection:
+            existing = find_document_source_by_sha(
+                connection,
+                tenant_slug=str(payload.get("tenant_slug") or "public"),
+                workspace_slug=str(payload.get("workspace_slug") or "default"),
+                sha256=db_sha256,
+                owner_user_id=created_by,
+            )
+        if existing:
+            _discard_uploaded_source_copy(source_path)
+            existing_chunk_count = _int_value(existing.get("chunk_count"))
+            existing_indexed_count = _int_value(existing.get("indexed_count"))
+            duplicate_index_status = (
+                "duplicate_existing_indexed"
+                if existing_chunk_count > 0 and existing_indexed_count >= existing_chunk_count
+                else "duplicate_existing_unindexed"
+            )
+            emit(
+                "store",
+                "duplicate",
+                "같은 파일이 이미 있습니다. 기존 데이터를 유지할지 새 데이터로 덮어쓸지 선택이 필요합니다.",
+                document_source_id=existing.get("document_source_id") or "",
+                repository_id=existing.get("repository_id") or "",
+                candidate_count=existing_chunk_count,
+                indexed_count=existing_indexed_count,
+            )
+            timings["total_ms"] = int((time.perf_counter() - started_at) * 1000)
+            result: dict[str, Any] = {
+                "dry_run": dry_run,
+                "filename": existing.get("filename") or str(payload.get("file_name") or ""),
+                "storage_key": existing.get("storage_key") or "",
+                "byte_size": byte_size,
+                "document_format": "",
+                "mime_type": "",
+                "sha256": uploaded_sha256,
+                "db_sha256": db_sha256,
+                "block_count": 0,
+                "asset_count": 0,
+                "chunk_count": existing_chunk_count,
+                "owner_user_id": created_by,
+                "repository_id": existing.get("repository_id") or "",
+                "visibility": existing.get("visibility") or effective_visibility,
+                "source_scope": existing.get("source_scope") or source_scope,
+                "force_reingest": force_reingest,
+                "timings_ms": timings,
+                "warnings": ["이미 업로드된 같은 파일입니다."],
+                "sections": [],
+                "stage_events": stage_events,
+                "duplicate": {
+                    "exists": True,
+                    **existing,
+                    "chunk_count": existing_chunk_count,
+                    "indexed_count": existing_indexed_count,
+                },
+                "persisted": {
+                    "document_source_id": existing.get("document_source_id") or "",
+                    "document_version_id": "",
+                    "parse_job_id": "",
+                    "parsed_document_id": existing.get("parsed_document_id") or "",
+                    "repository_id": existing.get("repository_id") or "",
+                    "block_count": 0,
+                    "asset_count": 0,
+                    "chunk_count": existing_chunk_count,
+                },
+                "index": {
+                    "collection": str(payload.get("collection") or settings.qdrant_collection),
+                    "source_scope": existing.get("source_scope") or source_scope,
+                    "document_source_id": existing.get("document_source_id") or "",
+                    "candidate_count": existing_chunk_count,
+                    "indexed_count": existing_indexed_count,
+                    "status": duplicate_index_status,
+                },
+            }
+            _apply_upload_readiness(result)
+            emit(
+                "ready",
+                "duplicate",
+                "업로드를 잠시 멈췄습니다. 기존 유지 또는 새 데이터 덮어쓰기를 선택하세요.",
+                duration_ms=timings["total_ms"],
+            )
+            return result
     parse_started_at = time.perf_counter()
     emit("parse", "running", "문서에서 텍스트와 구조를 추출하는 중입니다.")
 
@@ -696,22 +808,6 @@ def build_upload_ingest_response(
             "검색에 쓸 수 있는 의미 단위가 없어 적재를 거부합니다."
         )
     emit("chunk", "done", "청크 생성이 완료되었습니다.", duration_ms=timings["chunk_ms"], chunk_count=len(chunks))
-    dry_run = _bool_payload(payload.get("dry_run"), default=False)
-    # 같은 파일 재업로드는 기본 덮어쓰기. 사용자가 명시적으로 force_reingest=false 보내야 중복 skip.
-    force_reingest_value = payload.get("force_reingest")
-    if force_reingest_value is None:
-        force_reingest_value = payload.get("force_duplicate")
-    force_reingest = _bool_payload(force_reingest_value, default=True)
-    created_by = str(payload.get("created_by") or "").strip()
-    visibility = str(payload.get("visibility") or "").strip()
-    source_scope = str(payload.get("source_scope") or "user_upload").strip() or "user_upload"
-    effective_visibility = visibility or ("private_user" if created_by else "workspace_shared")
-    db_sha256 = scoped_document_sha256(
-        parsed.sha256,
-        owner_user_id=created_by,
-        visibility=effective_visibility,
-        source_scope=source_scope,
-    )
     result: dict[str, Any] = {
         "dry_run": dry_run,
         "filename": parsed.filename,
@@ -759,7 +855,6 @@ def build_upload_ingest_response(
         _apply_upload_readiness(result)
         return result
 
-    database_url = str(payload.get("database_url") or settings.database_url or "").strip()
     if not database_url:
         raise ValueError("DATABASE_URL is required for upload ingestion")
 

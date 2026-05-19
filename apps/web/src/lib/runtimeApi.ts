@@ -1579,7 +1579,9 @@ function buildUploadIngestFormData(
   payload.append('file', file, file.name);
   payload.append('dry_run', String(Boolean(options.dryRun)));
   payload.append('index', String(options.index ?? true));
-  payload.append('force_reingest', String(Boolean(options.forceReingest)));
+  if (typeof options.forceReingest === 'boolean') {
+    payload.append('force_reingest', String(options.forceReingest));
+  }
   if (options.createdBy) {
     payload.append('created_by', options.createdBy);
   }
