@@ -1005,9 +1005,13 @@ def _select_hits(
 
     normalized = query or ""
     query_understanding = understand_query(normalized)
+    active_document_id = str(getattr(session_context, "active_document_id", "") or "").strip()
+    active_repository_id = str(getattr(session_context, "active_repository_id", "") or "").strip()
+    owner_user_id = str(getattr(session_context, "owner_user_id", "") or getattr(session_context, "user_id", "") or "").strip()
     allow_uploaded_hits = (
         _is_customer_pack_explicit_query(normalized)
         or has_active_customer_pack_selection(session_context)
+        or bool(active_document_id or active_repository_id or owner_user_id)
     )
     if not allow_uploaded_hits:
         ranked_hits = [
@@ -1769,9 +1773,22 @@ def _select_hits(
         score_cutoff = top_score * 0.46
     if _is_scc_query(normalized) or _is_auth_can_i_query(normalized):
         score_cutoff = -999.0
+    user_upload_context = bool(
+        active_document_id
+        or active_repository_id
+        or any(
+            str(hit.source_scope or "").strip() == "user_upload"
+            or str(hit.source_collection or "").strip() in {"uploaded", "uploads"}
+            for hit in support_window
+        )
+    )
+    if user_upload_context and top_score > 0:
+        score_cutoff = min(score_cutoff, top_score * 0.35)
     selected: list[RetrievalHit] = []
     per_book_counts: Counter[str] = Counter()
     per_book_limit = 2 if has_crash_loop_troubleshooting_intent(normalized) else 3 if is_procedure_query else 2
+    if user_upload_context:
+        per_book_limit = max(per_book_limit, min(max_chunks, 4))
     if _is_backup_only_etcd_query(normalized):
         per_book_limit = 2
     seen_sections: set[tuple[str, str]] = set()
@@ -1781,11 +1798,13 @@ def _select_hits(
     uploaded_hits = [
         hit
         for hit in ranked_hits
-        if str(hit.source_collection or "").strip() == "uploaded"
+        if str(hit.source_collection or "").strip() in {"uploaded", "uploads"}
+        or str(hit.source_scope or "").strip() == "user_upload"
     ]
     should_seed_uploaded = bool(uploaded_hits) and allow_uploaded_hits
 
     if should_seed_uploaded:
+        seed_limit = min(max_chunks, 3 if user_upload_context else 1)
         for hit in sorted(
             uploaded_hits,
             key=lambda item: (
@@ -1794,7 +1813,7 @@ def _select_hits(
                 item.chunk_id,
             ),
         ):
-            if len(selected) >= max_chunks:
+            if len(selected) >= seed_limit:
                 break
             section_signature = (hit.book_slug, _section_core(hit.section))
             if section_signature in seen_sections:
@@ -1803,7 +1822,6 @@ def _select_hits(
             per_book_counts[hit.book_slug] += 1
             seen_sections.add(section_signature)
             allowed_books.add(hit.book_slug)
-            break
 
     for hit in ranked_hits:
         if len(selected) >= max_chunks:

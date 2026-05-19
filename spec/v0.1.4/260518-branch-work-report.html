@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>260518 브랜치 작업 보고</title>
+<style>
+body{font-family:Arial,'Malgun Gothic',sans-serif;line-height:1.62;margin:32px;max-width:1180px;color:#172033}
+h1,h2,h3{color:#0f3563} code{background:#f5f7fb;border:1px solid #d8e0ef;border-radius:5px;padding:1px 4px}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0 22px} th,td{border:1px solid #d8e0ef;padding:9px;vertical-align:top} th{background:#edf3ff}
+.note{background:#eef8f2;border-left:4px solid #12b76a;padding:12px;margin:16px 0}.warn{background:#fff8e6;border-left:4px solid #f79009;padding:12px;margin:16px 0}
+.pass{color:#067647;font-weight:700}.hold{color:#b54708;font-weight:700}.miss{color:#b42318;font-weight:700}.muted{color:#667085;font-size:13px}
+.quote{background:#f8fafc;border-left:3px solid #8ea4c8;padding:8px;margin-top:4px;font-size:13px;color:#24364f}
+ul{margin-top:6px}
+</style>
+</head>
+<body>
+<h1>260518 브랜치 작업 보고</h1>
+
+<div class="note">
+현재 브랜치: <code>feat/corpus_embedding_test_S_v.2</code>. 이번 문서는 “숫자가 좋아졌다”가 아니라, partial 후보를 실제 top1~top5 payload로 다시 보고 어떤 케이스를 고쳤는지 설명하기 위한 보고서입니다.
+</div>
+<div class="warn">
+이번 결과의 <strong>30/30</strong>은 <code>expected_book_slug hit@5</code> 기준입니다. answer LLM, reranker, UI 문장 품질 검증은 포함하지 않습니다. 세부 청크 직접성은 별도로 보았고, 일부는 acceptable partial로 남겼습니다.
+</div>
+
+<h2>1. 작업 목표</h2>
+<table>
+<tr><th>항목</th><th>내용</th></tr>
+<tr><td>목표</td><td>official 단독 질문형 30건에서 partial 후보를 다시 뽑고, 실제 retrieval top1~top5 payload를 확인해 고칠 것만 고친다.</td></tr>
+<tr><td>검증 조건</td><td><code>RERANKER_ENABLED=false</code>, answer LLM 제외, 동일 cases, <code>--top-k 5</code>, <code>--candidate-k 10</code></td></tr>
+<tr><td>이번에 하지 않은 것</td><td>Qdrant/DB 재적재, corpus 원문 수정, embedding chunk 재생성, reranker/answer LLM/UI 수정</td></tr>
+<tr><td>주의</td><td>고객자료(<code>kmsc</code>) 활용 정책은 운영 챗봇 다음 단계로 미루고, 현재는 official 문서 기준 매칭 품질에 집중한다.</td></tr>
+</table>
+
+<h2>2. before / after</h2>
+<table>
+<tr><th>지표</th><th>수정 전</th><th>수정 후</th><th>해석</th></tr>
+<tr><td>hit@1</td><td>0.8333</td><td><span class="pass">0.9667</span></td><td>top1부터 기대 문서로 올라오는 비율이 개선됨</td></tr>
+<tr><td>hit@3</td><td>0.9333</td><td><span class="pass">1.0000</span></td><td>30건 모두 top3 안에 기대 문서 진입</td></tr>
+<tr><td>hit@5</td><td><span class="pass">1.0000</span></td><td><span class="pass">1.0000</span></td><td>수정 전에도 top5 문서군은 모두 들어왔지만, 직접성이 약한 케이스가 있었음</td></tr>
+<tr><td>landing hit@1</td><td>0.3667</td><td>0.4333</td><td>세부 키워드가 top1에 직접 보이는 비율은 일부 개선</td></tr>
+<tr><td>landing hit@3</td><td>0.5667</td><td>0.6333</td><td>top3 기준 직접성도 개선</td></tr>
+<tr><td>landing hit@5</td><td>0.7000</td><td>0.7000</td><td>자동 landing term은 영어/한국어 표현 차이로 false negative가 있어 수동 판정을 같이 봄</td></tr>
+<tr><td>similar document risk</td><td>0.1667</td><td><span class="pass">0.0333</span></td><td>비슷하지만 덜 직접적인 문서가 앞서는 케이스가 줄어듦</td></tr>
+<tr><td>정제 경고</td><td>1.0 warning-free</td><td><span class="pass">1.0 warning-free</span></td><td>top-k의 <code>embedding_text</code>/<code>normalized_text</code> 정제 경고 없음</td></tr>
+</table>
+
+<h2>3. partial 후보 분류</h2>
+<table>
+<tr><th>분류</th><th>case</th><th>판정</th><th>실제 조치</th></tr>
+<tr>
+<td>평가셋 expected 기준 문제</td>
+<td><code>registry-pvc</code></td>
+<td>정답 절차가 <code>registry</code>뿐 아니라 active official book인 <code>installing_on_any_platform</code>에도 존재함.</td>
+<td><code>retrieval_official_data_validation_cases.jsonl</code>에서 expected에 <code>installing_on_any_platform</code> 추가. 이는 점수 부풀리기가 아니라 실제 근거 문서 반영.</td>
+</tr>
+<tr>
+<td>query signal/retrieval 로직 문제</td>
+<td><code>etcd-restore</code>, <code>registry-pvc</code>, <code>route-create</code>, <code>pod-pending-scheduling</code>, <code>oidc-auth</code>, <code>mco-concept</code>, <code>observability-monitoring</code>, <code>image-prune</code>, <code>route-ingress</code>, <code>upgrade-precheck</code></td>
+<td>정답 데이터는 있었지만, 질문 의도와 덜 맞는 일반 문서/상태표/릴리스노트/태그 문서가 앞서는 케이스.</td>
+<td>query term pruning과 scoring adjustment를 좁게 추가. 특정 chunk_id 하드코딩은 하지 않음.</td>
+</tr>
+<tr>
+<td>청크/본문 문제</td>
+<td>이번 pass에서는 없음</td>
+<td>정답 청크는 Qdrant에 존재했고, top-k 정제 경고도 0건.</td>
+<td>corpus 원문, embedding chunk, DB/Qdrant는 수정하지 않음.</td>
+</tr>
+<tr>
+<td>top-k 조합으로 충분한 케이스</td>
+<td><code>pvc-pending-events</code>, <code>node-resource-usage</code>, <code>architecture-control-plane</code>, <code>web-console-overview</code>, <code>postinstall-cluster-status</code></td>
+<td>단일 top1만 보면 부족한 부분이 있어도 top-k 안에서 필요한 근거가 확인됨. 또는 자동 landing term의 언어 차이 때문에 false negative가 발생함.</td>
+<td>이번에는 수정하지 않음. 보고 시 “book_slug 30/30”과 “top chunk 직접성”을 분리해서 설명.</td>
+</tr>
+<tr>
+<td>acceptable partial</td>
+<td><code>ldap-auth</code>, <code>operator-concept</code>, 일부 개념/문서 위치 질문</td>
+<td>문서군과 근거 방향은 맞고, 자동 landing term이 한국어 표현/동의어 차이로 놓친 케이스.</td>
+<td>무리하게 로직을 더 늘리지 않음.</td>
+</tr>
+</table>
+
+<h2>4. 질문을 바꾼 것이 아니라 검색 입력을 바꿨다</h2>
+<div class="warn">
+중요한 정정: 사용자가 입력한 질문 문장 자체를 고쳐서 통과시킨 것이 아닙니다. 같은 질문을 그대로 두고, retrieval 내부에서 붙는 보조 검색어와 가중치 기준을 보정했습니다. 즉 “질문 바꿔치기”가 아니라 “검색기가 질문 의도를 덜 새게 만든 작업”입니다.
+</div>
+<table>
+<tr><th>case</th><th>원 질문</th><th>수정 전 내부 검색 입력 문제</th><th>수정 후 내부 검색 입력 방향</th></tr>
+<tr>
+<td><code>etcd-restore</code></td>
+<td>OpenShift 4.20에서 etcd 스냅샷으로 클러스터를 복원할 때 restore 스크립트와 절차는 어디에 있어?</td>
+<td><code>cluster-backup.sh</code>, <code>oc debug node</code>, <code>chroot /host</code> 같은 백업/노드 확인 신호가 같이 붙어 복원 질문이 흐려졌습니다.</td>
+<td><code>cluster-restore.sh</code>, <code>/usr/local/bin/cluster-restore.sh</code>, <code>이전 클러스터 상태로 복원</code> 신호를 강화하고 <code>/var</code>, <code>lsblk</code>류 노드 파티션 신호를 낮췄습니다.</td>
+</tr>
+<tr>
+<td><code>registry-pvc</code></td>
+<td>이미지 레지스트리 스토리지를 PVC로 설정하려면 configs.imageregistry/cluster에서 어떤 필드를 바꿔야 해?</td>
+<td>일반 PVC, PersistentVolumeClaim, StorageClass 쪽 신호가 강해져서 일반 storage 문서가 먼저 올라왔습니다.</td>
+<td><code>configs.imageregistry/cluster</code>, <code>spec.storage.pvc</code>, <code>openshift-image-registry</code>, <code>Image Registry Operator</code> 신호를 강화했습니다.</td>
+</tr>
+<tr>
+<td><code>route-create</code></td>
+<td>OpenShift에서 서비스를 외부로 노출하기 위해 Route를 생성하는 절차와 oc expose 명령어는 뭐야?</td>
+<td>Route 일반 설명과 HTTP header route 설정 쪽으로 넓게 검색됐습니다.</td>
+<td><code>oc expose</code>, <code>oc expose service</code>, <code>서비스 노출</code>, <code>경로 생성</code> 신호를 강화하고 header route 신호를 낮췄습니다.</td>
+</tr>
+<tr>
+<td><code>pod-pending-scheduling</code></td>
+<td>Pod가 Pending 상태일 때 스케줄링 실패 원인과 이벤트를 확인하는 절차는 어떻게 돼?</td>
+<td>Pod Pending 질문이 etcd Pod, S2I build pod, machine-api operator pod 같은 다른 Pod 문제로 새었습니다.</td>
+<td><code>FailedScheduling</code>, <code>oc describe pod</code>, <code>oc get events</code>, scheduler/event 신호를 강화하고 etcd/build/operator pod 신호를 낮췄습니다.</td>
+</tr>
+<tr>
+<td><code>oidc-auth</code></td>
+<td>외부 OIDC ID 공급자로 OpenShift 인증을 설정할 때 authentication.config/cluster를 수정하는 절차는 뭐야?</td>
+<td>OIDC 키워드만 보고 release notes의 확인된 문제 청크가 먼저 올라왔습니다.</td>
+<td><code>authentication.config/cluster</code>, <code>oc edit authentication.config/cluster</code>, 외부 OIDC ID 공급자 구성 절차 신호를 강화하고 release notes/bug 성격을 낮췄습니다.</td>
+</tr>
+<tr>
+<td><code>mco-concept</code></td>
+<td>Machine Config Operator가 노드 설정과 머신 구성을 관리하는 방식은 어디에 설명돼 있어?</td>
+<td>MCO 개념 질문인데 <code>oc get nodes</code>, <code>Ready/NotReady</code>, CSV/Subscription 같은 상태 확인 신호가 붙었습니다.</td>
+<td><code>Machine Config Operator</code>, <code>MCO</code>, <code>MachineConfig</code>, <code>MachineConfigPool</code>, <code>machine config daemon</code>, <code>machine_configuration</code> 신호를 강화했습니다.</td>
+</tr>
+<tr>
+<td><code>observability-monitoring</code></td>
+<td>OpenShift observability와 monitoring 기능은 각각 어떤 목적으로 쓰이는지 설명해줘</td>
+<td>관찰/모니터링 질문이 overview의 큰 목록 설명으로 먼저 갔습니다.</td>
+<td>“각각 어떤 목적”을 개념 비교 성격으로 보고 <code>Observability 정보</code>, <code>Red Hat OpenShift Observability</code>, monitoring/logging/tracing 신호를 강화했습니다.</td>
+</tr>
+<tr>
+<td><code>image-prune</code></td>
+<td>OpenShift 이미지 레지스트리에서 오래된 이미지와 태그를 정리하는 pruning 절차는 어디에 있어?</td>
+<td>오래된 이미지 정리 질문인데 이미지 태그 추가/삭제와 외부 이미지 문서가 먼저 올라왔습니다.</td>
+<td><code>Image Pruner</code>, <code>oc adm prune images</code>, <code>pruning images</code>, 이미지 자동 정리 신호를 강화했습니다.</td>
+</tr>
+<tr>
+<td><code>route-ingress</code></td>
+<td>OpenShift Route와 Kubernetes Ingress의 관계와 차이를 설명하는 공식 문서는 어디야?</td>
+<td>Route/Ingress 차이 질문인데 <code>oc expose</code>, YAML 생성, IngressController 샤딩 절차가 먼저 올라왔습니다.</td>
+<td><code>networking_overview</code>, <code>Ingress 및 Route 오브젝트</code>, <code>Kubernetes Ingress</code>, <code>OpenShift Route</code>, 개념 비교 신호를 강화했습니다.</td>
+</tr>
+<tr>
+<td><code>upgrade-precheck</code></td>
+<td>클러스터 업데이트 전에 oc adm upgrade recommend로 사전 점검하는 절차는 어디에 설명돼 있어?</td>
+<td>업데이트 사전 점검 질문인데 절차 문서와 release note 명령 소개가 섞여 있었습니다.</td>
+<td><code>oc adm upgrade recommend</code> 명령 신호를 유지하면서 <code>updating_clusters</code> 절차 문서와 release notes 명령 소개가 함께 잡히도록 보정했습니다.</td>
+</tr>
+</table>
+
+<h2>5. 실제 수정된 케이스 before / after</h2>
+<table>
+<tr><th>case</th><th>수정 전 top1</th><th>수정 후 top1</th><th>수정 이유</th></tr>
+<tr><td><code>etcd-restore</code></td><td><code>postinstallation_configuration</code> / AWS <code>/var</code> 파티션 확인</td><td><code>postinstallation_configuration</code> / 이전 클러스터 상태로 복원</td><td>restore 질문인데 노드 파티션 확인 청크가 앞서던 문제를 제거.</td></tr>
+<tr><td><code>registry-pvc</code></td><td><code>storage</code> / 일반 PVC 확장</td><td><code>registry</code> / 레지스트리 스토리지 구성</td><td><code>configs.imageregistry/cluster</code>, <code>spec.storage.pvc</code> exact field 신호를 우선.</td></tr>
+<tr><td><code>route-create</code></td><td>HTTP header route 설정</td><td>경로를 생성하여 서비스 노출</td><td>서비스를 외부 노출하는 질문은 header route가 아니라 <code>oc expose service</code> 근거가 우선.</td></tr>
+<tr><td><code>pod-pending-scheduling</code></td><td><code>support</code> / etcd 설치 Pod 문제</td><td><code>nodes</code> / 이벤트 보기</td><td>Pod Pending 질문에서 etcd/operator/build pod 노이즈 제거.</td></tr>
+<tr><td><code>oidc-auth</code></td><td><code>release_notes</code> / OIDC 확인된 문제</td><td><code>authentication_and_authorization</code> / 외부 OIDC ID 공급자 구성</td><td>설정 절차 질문에서 릴리스 노트가 앞서는 문제 제거.</td></tr>
+<tr><td><code>mco-concept</code></td><td><code>nodes</code> / CPU 예약, MCP 상태</td><td><code>machine_configuration</code> / configuration drift detection</td><td>MCO 개념 질문은 노드 운영 절차보다 MCO/MCD/MachineConfig 설명 청크가 우선.</td></tr>
+<tr><td><code>observability-monitoring</code></td><td><code>overview</code> / 클러스터 모니터링 목록</td><td><code>observability_overview</code> / Observability 정보</td><td>“각각 어떤 목적” 질문을 비교/개념 질문으로 처리.</td></tr>
+<tr><td><code>image-prune</code></td><td><code>images</code> / 외부 이미지 태그 추가</td><td><code>registry</code> / 이미지 자동 정리</td><td>오래된 이미지/태그 정리 질문은 tag add/remove가 아니라 pruner 문서가 우선.</td></tr>
+<tr><td><code>route-ingress</code></td><td><code>ingress_and_load_balancing</code> / Ingress 오브젝트로 경로 생성</td><td><code>networking_overview</code> / Ingress 및 Route 오브젝트를 사용한 애플리케이션 노출</td><td>Route/Ingress 차이 질문은 명령어 생성보다 개념 관계 청크가 우선.</td></tr>
+<tr><td><code>upgrade-precheck</code></td><td><code>release_notes</code> / <code>oc adm upgrade recommend</code> 소개</td><td><code>updating_clusters</code> / CLI를 사용한 클러스터 업데이트, top3에 <code>oc adm upgrade recommend</code></td><td>업데이트 절차 문서와 명령 소개가 함께 잡히도록 유지. top1 절차, top3 명령 소개로 acceptable.</td></tr>
+</table>
+
+<h2>5. 실제 파일 변경</h2>
+<table>
+<tr><th>파일</th><th>변경 이유</th></tr>
+<tr><td><code>corpus/manifests/eval/retrieval_official_data_validation_cases.jsonl</code></td><td><code>registry-pvc</code> expected에 실제 근거가 있는 <code>installing_on_any_platform</code> 추가.</td></tr>
+<tr><td><code>src/play_book_studio/retrieval/query_terms.py</code></td><td>restore, registry PVC, OIDC auth, route expose, pod pending, image pruning, observability/monitoring, MCO concept, route/ingress compare 질문의 보조 검색어를 정리.</td></tr>
+<tr><td><code>src/play_book_studio/retrieval/scoring_adjustments_core_quality.py</code></td><td>exact field/명령어/절차 청크를 올리고, 릴리스노트/일반 PVC/태그 추가/샤딩 같은 오답 성격 청크를 낮춤.</td></tr>
+<tr><td><code>src/play_book_studio/retrieval/scoring_adjustments_core_discovery.py</code></td><td>observability/monitoring 목적 질문과 Route/Ingress 개념 비교 질문을 개념 문서로 유도.</td></tr>
+<tr><td><code>src/play_book_studio/retrieval/scoring_adjustments_runtime_pod.py</code></td><td>Pod Pending 질문에서 etcd/S2I/build pod 노이즈를 낮추고 events/scheduler 신호를 올림.</td></tr>
+<tr><td><code>src/play_book_studio/retrieval/intent_patterns.py</code>, <code>intent_detectors.py</code></td><td><code>어디에</code>, “관리하는/설명” 형태의 문서 위치/개념 질문을 놓치지 않도록 보정.</td></tr>
+<tr><td><code>tests/test_query_understanding.py</code></td><td>이번에 고친 질문 신호가 다시 깨지지 않도록 회귀 테스트 추가.</td></tr>
+</table>
+
+<h2>6. 실행 명령</h2>
+<div class="quote">
+<code>$env:RERANKER_ENABLED='false'</code><br>
+<code>.\.venv\Scripts\python.exe -m play_book_studio.cli retrieval-eval --cases corpus\manifests\eval\retrieval_official_data_validation_cases.jsonl --top-k 5 --candidate-k 10 --database-url postgresql://admin:admin123@127.0.0.1:5432/playbookstudio --output %TEMP%\pbs-official-data-validation-after-partialfix4.json</code>
+</div>
+<table>
+<tr><th>검증</th><th>결과</th></tr>
+<tr><td><code>pytest tests/test_query_understanding.py tests/test_retriever_plan.py tests/test_eval_manifest_contract.py -q</code></td><td><span class="pass">30 passed</span></td></tr>
+<tr><td><code>pytest tests/test_official_gold_import.py -q</code></td><td><span class="pass">13 passed</span></td></tr>
+<tr><td>retrieval-only 30건</td><td><span class="pass">hit@5=1.0, warning_free_rate=1.0</span></td></tr>
+</table>
+
+<h2>7. 현재 결론</h2>
+<ul>
+<li>데이터 누락으로 보이는 케이스는 이번 pass에서 확인되지 않았습니다.</li>
+<li>청크/본문 오염으로 새로 고쳐야 할 케이스도 이번 pass에서는 없었습니다.</li>
+<li>실제 문제는 대부분 “질문 의도 신호가 너무 넓거나 엉뚱한 문서 유형을 앞세운 문제”였습니다.</li>
+<li>수정 후 official 단독 질문형 30건은 expected book_slug top5 기준 30/30 유지, top1/top3는 개선됐습니다.</li>
+<li>다만 answer LLM/reranker/UI 답변 품질은 아직 별도 단계입니다. 이 보고서를 “챗봇 완성”으로 읽으면 안 됩니다.</li>
+</ul>
+
+<h2>8. 다음 액션</h2>
+<ol>
+<li><code>git diff --check</code>와 관련 테스트를 한 번 더 실행합니다.</li>
+<li>변경 diff를 리뷰합니다. 특히 expected 변경은 <code>registry-pvc</code> 1건뿐인지 확인합니다.</li>
+<li>문제 없으면 커밋/푸시합니다.</li>
+<li>그 다음 단계에서 answer LLM/reranker/UI 답변 품질 검증을 별도로 진행합니다.</li>
+</ol>
+
+<h2>참고 문서</h2>
+<ul>
+<li><a href="260518-eval-set-contract-audit.html">260518-eval-set-contract-audit.html</a>: 평가셋 계약 정리 상세</li>
+<li><a href="260517-official-data-validation.html">260517-official-data-validation.html</a>: 이전 retrieval 결과와 문제 케이스 상세</li>
+</ul>
+</body>
+</html>

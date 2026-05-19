@@ -1,4 +1,4 @@
-import { RUNTIME_ORIGIN } from './runtimeApi';
+import { RUNTIME_ORIGIN, withSessionOwnerHeader } from './runtimeApi';
 
 export type OpsRouteKey =
   | 'workspaces'
@@ -404,10 +404,11 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (hasBody && !isFormData && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
+  withSessionOwnerHeader(headers);
   const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
+    ...init,
     credentials: 'include',
     headers,
-    ...init,
   });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -425,9 +426,11 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function requestResponse(path: string, init?: RequestInit): Promise<Response> {
+  const headers = withSessionOwnerHeader(new Headers(init?.headers ?? {}));
   const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
-    credentials: 'include',
     ...init,
+    credentials: 'include',
+    headers,
   });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -629,7 +632,7 @@ export async function sendOpsChatStream(
   const response = await fetch(`${RUNTIME_ORIGIN}/api/v1/chat/query/stream`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withSessionOwnerHeader(new Headers({ 'Content-Type': 'application/json' })),
     body: JSON.stringify(payload),
   });
   if (!response.ok || !response.body) {

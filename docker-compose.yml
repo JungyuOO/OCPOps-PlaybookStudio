@@ -40,6 +40,7 @@ services:
       COURSE_CHAT_LLM_REWRITE: "true"
       DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
       QDRANT_URL: http://qdrant:6333
+      PBS_SINGLE_USER_OWNER: ${PBS_SINGLE_USER_OWNER:-local-playbookstudio-user}
       TERMINAL_ENABLED: ${TERMINAL_ENABLED:-false}
       TERMINAL_HOST: 0.0.0.0
       TERMINAL_WS_PORT: ${TERMINAL_WS_PORT:-8770}
@@ -61,6 +62,7 @@ services:
       - ./artifacts:/app/artifacts
       - ./corpus:/app/corpus
       - ./reports:/app/reports
+      - ./storage:/app/storage
       - ./tmp:/app/tmp
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=5)"]

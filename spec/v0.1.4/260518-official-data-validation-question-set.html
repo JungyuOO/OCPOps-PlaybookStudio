@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>260518 Official Data Validation 질문셋 30건</title>
+<style>
+body{font-family:Arial,'Malgun Gothic',sans-serif;line-height:1.62;margin:30px;max-width:1400px;color:#172033;background:#fbfcff}
+h1,h2{color:#0f3563} h1{margin-bottom:6px} code{background:#f5f7fb;border:1px solid #d8e0ef;border-radius:5px;padding:1px 5px}
+.note{background:#eef8f2;border-left:4px solid #12b76a;padding:13px;margin:16px 0}
+.warn{background:#fff8e6;border-left:4px solid #f79009;padding:13px;margin:16px 0}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0 24px}
+.summary div{background:white;border:1px solid #d8e0ef;border-radius:10px;padding:14px}
+.summary strong{display:block;font-size:22px;color:#0f3563}
+table{border-collapse:collapse;width:100%;font-size:13px;background:white;margin:12px 0 28px}
+th,td{border:1px solid #d8e0ef;padding:9px;vertical-align:top} th{background:#edf3ff;color:#15395f}
+.num{font-weight:700;color:#0f3563;text-align:center;white-space:nowrap} .question{font-weight:700}
+.badge,.term{display:inline-block;border-radius:999px;padding:2px 8px;margin:2px;font-size:12px;font-weight:700}
+.badge{background:#eef4ff;color:#173e80;border:1px solid #c7d7fe} .term{background:#ecfdf3;color:#067647;border:1px solid #abefc6}
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.case-card{background:white;border:1px solid #d8e0ef;border-radius:10px;padding:15px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.case-card h2{font-size:17px;margin:10px 0 12px;line-height:1.45} .card-head{display:flex;align-items:center;gap:8px}
+.num-pill{background:#0f3563;color:white;border-radius:999px;padding:3px 9px;font-weight:700;font-size:12px}
+.focus{color:#344054} .muted{color:#667085;font-size:13px}
+@media (max-width:950px){.summary,.cards{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>260518 Official Data Validation 질문셋 30건</h1>
+<p class="muted">원본: <code>corpus/manifests/eval/retrieval_official_data_validation_cases.jsonl</code></p>
+<div class="note">
+이 문서는 official 문서 기준 retrieval-only 검증에 사용한 단독 질문형 30건을 사람이 읽기 쉽게 펼친 것이다. 답변 품질 평가용이 아니라, 검색기가 기대 문서와 근거 청크를 가져오는지 확인하기 위한 질문셋이다.
+</div>
+<div class="warn">
+주의: <code>expected_book_slugs</code>는 “정답 문장”이 아니라, 검색 결과에 포함되어야 할 기대 문서군이다. 실제 답변 품질은 별도 answer LLM 검증에서 확인해야 한다.
+</div>
+<div class="summary">
+  <div><strong>30</strong>단독 질문형 case</div>
+  <div><strong>27</strong>expected book_slug 종류</div>
+  <div><strong>82</strong>landing term 총 개수</div>
+</div>
+
+<h2>1. 전체 표</h2>
+<table>
+<tr><th>No.</th><th>case_id</th><th>question</th><th>expected_book_slugs</th><th>expected_landing_terms</th><th>validation_focus</th></tr>
+
+<tr>
+  <td class="num">01</td>
+  <td><code>official-data-etcd-backup-command-001</code></td>
+  <td class="question">OpenShift 4.20에서 etcd 백업을 만들 때 실행하는 cluster-backup.sh 명령어는 뭐야?</td>
+  <td><span class="badge">etcd</span> <span class="badge">backup_and_restore</span> <span class="badge">postinstallation_configuration</span></td>
+  <td><span class="term">cluster-backup.sh</span> <span class="term">snapshot</span> <span class="term">backup</span></td>
+  <td>etcd 백업 명령어 청크가 상위에 오는지 확인</td>
+</tr>
+<tr>
+  <td class="num">02</td>
+  <td><code>official-data-etcd-restore-command-001</code></td>
+  <td class="question">OpenShift 4.20에서 etcd 스냅샷으로 클러스터를 복원할 때 restore 스크립트와 절차는 어디에 있어?</td>
+  <td><span class="badge">etcd</span> <span class="badge">backup_and_restore</span> <span class="badge">postinstallation_configuration</span></td>
+  <td><span class="term">restore</span> <span class="term">snapshot</span> <span class="term">recovery</span></td>
+  <td>etcd 복원 절차 청크가 백업 생성 청크와 구분되어 검색되는지 확인</td>
+</tr>
+<tr>
+  <td class="num">03</td>
+  <td><code>official-data-registry-pvc-001</code></td>
+  <td class="question">이미지 레지스트리 스토리지를 PVC로 설정하려면 configs.imageregistry/cluster에서 어떤 필드를 바꿔야 해?</td>
+  <td><span class="badge">registry</span> <span class="badge">images</span> <span class="badge">installing_on_any_platform</span></td>
+  <td><span class="term">configs.imageregistry/cluster</span> <span class="term">spec.storage.pvc</span> <span class="term">PVC</span></td>
+  <td>registry PVC 설정 절차와 리소스명 보존 여부 확인. 해당 절차는 registry 문서와 installing_on_any_platform의 initial Operator configuration에도 존재한다.</td>
+</tr>
+<tr>
+  <td class="num">04</td>
+  <td><code>official-data-registry-rwx-001</code></td>
+  <td class="question">이미지 레지스트리를 복제본 두 개 이상으로 운영할 때 ReadWriteMany 스토리지가 필요한 이유는 뭐야?</td>
+  <td><span class="badge">registry</span> <span class="badge">storage</span> <span class="badge">images</span></td>
+  <td><span class="term">ReadWriteMany</span> <span class="term">ReadWriteOnce</span> <span class="term">registry</span></td>
+  <td>ReadWriteOnce/ReadWriteMany 설명 청크가 표 찌꺼기 없이 검색되는지 확인</td>
+</tr>
+<tr>
+  <td class="num">05</td>
+  <td><code>official-data-pvc-pending-events-001</code></td>
+  <td class="question">PVC가 Pending 상태일 때 PVC 이벤트와 바인딩 상태를 확인하는 절차는 어떻게 돼?</td>
+  <td><span class="badge">storage</span> <span class="badge">support</span> <span class="badge">cli_tools</span></td>
+  <td><span class="term">PVC</span> <span class="term">Pending</span> <span class="term">events</span></td>
+  <td>PVC Pending 문제 해결 청크가 상위에 오는지 확인</td>
+</tr>
+<tr>
+  <td class="num">06</td>
+  <td><code>official-data-storageclass-default-001</code></td>
+  <td class="question">PVC가 사용할 StorageClass와 기본 스토리지 클래스를 확인하려면 어떤 내용을 봐야 해?</td>
+  <td><span class="badge">storage</span> <span class="badge">cli_tools</span></td>
+  <td><span class="term">StorageClass</span> <span class="term">default</span> <span class="term">PVC</span></td>
+  <td>StorageClass/PVC 용어가 정제 과정에서 훼손되지 않았는지 확인</td>
+</tr>
+<tr>
+  <td class="num">07</td>
+  <td><code>official-data-upgrade-precheck-001</code></td>
+  <td class="question">클러스터 업데이트 전에 oc adm upgrade recommend로 사전 점검하는 절차는 어디에 설명돼 있어?</td>
+  <td><span class="badge">updating_clusters</span> <span class="badge">release_notes</span> <span class="badge">cli_tools</span></td>
+  <td><span class="term">oc adm upgrade recommend</span> <span class="term">precheck</span> <span class="term">upgrade</span></td>
+  <td>업데이트 사전 점검 명령어 청크 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">08</td>
+  <td><code>official-data-mcp-status-001</code></td>
+  <td class="question">MachineConfigPool 업데이트 상태에서 UPDATED, UPDATING, DEGRADED 값을 확인하는 명령어는 뭐야?</td>
+  <td><span class="badge">updating_clusters</span> <span class="badge">machine_configuration</span> <span class="badge">nodes</span></td>
+  <td><span class="term">oc get machineconfigpools</span> <span class="term">UPDATED</span> <span class="term">DEGRADED</span></td>
+  <td>MCP 상태 확인 명령어와 상태 컬럼 보존 여부 확인</td>
+</tr>
+<tr>
+  <td class="num">09</td>
+  <td><code>official-data-mcp-maxunavailable-001</code></td>
+  <td class="question">MachineConfigPool의 maxUnavailable 값은 어디서 설명하고 어떤 주의사항이 있어?</td>
+  <td><span class="badge">updating_clusters</span> <span class="badge">machine_configuration</span> <span class="badge">postinstallation_configuration</span> <span class="badge">nodes</span></td>
+  <td><span class="term">maxUnavailable</span> <span class="term">MachineConfigPool</span></td>
+  <td>MCP 설정 필드 설명 청크가 상위에 오는지 확인</td>
+</tr>
+<tr>
+  <td class="num">10</td>
+  <td><code>official-data-oc-mirror-imageset-001</code></td>
+  <td class="question">연결이 끊긴 환경에서 oc-mirror 플러그인으로 ImageSetConfiguration을 사용해 이미지를 미러링하는 절차는 뭐야?</td>
+  <td><span class="badge">disconnected_environments</span> <span class="badge">images</span></td>
+  <td><span class="term">oc-mirror</span> <span class="term">ImageSetConfiguration</span> <span class="term">mirror</span></td>
+  <td>oc-mirror/YAML 예시 청크가 깨지지 않고 검색되는지 확인</td>
+</tr>
+<tr>
+  <td class="num">11</td>
+  <td><code>official-data-idms-mirror-001</code></td>
+  <td class="question">연결이 끊긴 클러스터에서 ImageDigestMirrorSet 또는 ImageContentSourcePolicy로 이미지 미러를 설정하는 방법은 어디에 있어?</td>
+  <td><span class="badge">disconnected_environments</span> <span class="badge">images</span></td>
+  <td><span class="term">ImageDigestMirrorSet</span> <span class="term">ImageContentSourcePolicy</span> <span class="term">mirror</span></td>
+  <td>이미지 미러 리소스명 보존 및 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">12</td>
+  <td><code>official-data-route-ingress-001</code></td>
+  <td class="question">OpenShift Route와 Kubernetes Ingress의 관계와 차이를 설명하는 공식 문서는 어디야?</td>
+  <td><span class="badge">ingress_and_load_balancing</span> <span class="badge">networking_overview</span></td>
+  <td><span class="term">Route</span> <span class="term">Ingress</span></td>
+  <td>Route/Ingress 개념 청크가 YAML 생성 절차에만 치우치지 않는지 확인</td>
+</tr>
+<tr>
+  <td class="num">13</td>
+  <td><code>official-data-route-create-001</code></td>
+  <td class="question">OpenShift에서 서비스를 외부로 노출하기 위해 Route를 생성하는 절차와 oc expose 명령어는 뭐야?</td>
+  <td><span class="badge">ingress_and_load_balancing</span> <span class="badge">networking_overview</span> <span class="badge">cli_tools</span></td>
+  <td><span class="term">oc expose</span> <span class="term">route</span> <span class="term">service</span></td>
+  <td>Route 생성 명령어 청크 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">14</td>
+  <td><code>official-data-pod-pending-scheduling-001</code></td>
+  <td class="question">Pod가 Pending 상태일 때 스케줄링 실패 원인과 이벤트를 확인하는 절차는 어떻게 돼?</td>
+  <td><span class="badge">nodes</span> <span class="badge">support</span></td>
+  <td><span class="term">Pending</span> <span class="term">scheduling</span> <span class="term">events</span></td>
+  <td>Pod Pending 문제 해결 청크 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">15</td>
+  <td><code>official-data-node-resource-usage-001</code></td>
+  <td class="question">노드의 CPU와 메모리 사용량을 확인하는 OpenShift 명령어와 문서는 어디야?</td>
+  <td><span class="badge">nodes</span> <span class="badge">support</span> <span class="badge">cli_tools</span></td>
+  <td><span class="term">CPU</span> <span class="term">memory</span> <span class="term">node</span></td>
+  <td>노드 리소스 사용량 확인 청크 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">16</td>
+  <td><code>official-data-node-drain-001</code></td>
+  <td class="question">노드를 유지보수하기 전에 cordon과 drain을 수행하는 절차는 어떻게 돼?</td>
+  <td><span class="badge">nodes</span> <span class="badge">machine_management</span></td>
+  <td><span class="term">cordon</span> <span class="term">drain</span> <span class="term">node</span></td>
+  <td>노드 drain 절차 청크 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">17</td>
+  <td><code>official-data-audit-node-logs-001</code></td>
+  <td class="question">OpenShift 감사 로그를 oc adm node-logs 명령으로 확인하는 예시는 어디에 있어?</td>
+  <td><span class="badge">security_and_compliance</span> <span class="badge">support</span> <span class="badge">cli_tools</span></td>
+  <td><span class="term">oc adm node-logs</span> <span class="term">audit</span> <span class="term">log</span></td>
+  <td>감사 로그 명령어 청크가 일반 로그/표 조각보다 위에 오는지 확인</td>
+</tr>
+<tr>
+  <td class="num">18</td>
+  <td><code>official-data-file-integrity-log-001</code></td>
+  <td class="question">File Integrity Operator에서 integritylog를 확인하고 압축 로그를 해제하는 명령어는 뭐야?</td>
+  <td><span class="badge">security_and_compliance</span></td>
+  <td><span class="term">integritylog</span> <span class="term">base64</span> <span class="term">gunzip</span></td>
+  <td>명령어의 base64 옵션은 보존하되 base64 덤프 값은 오염되지 않는지 확인</td>
+</tr>
+<tr>
+  <td class="num">19</td>
+  <td><code>official-data-oidc-auth-001</code></td>
+  <td class="question">외부 OIDC ID 공급자로 OpenShift 인증을 설정할 때 authentication.config/cluster를 수정하는 절차는 뭐야?</td>
+  <td><span class="badge">authentication_and_authorization</span></td>
+  <td><span class="term">OIDC</span> <span class="term">authentication.config/cluster</span> <span class="term">identity provider</span></td>
+  <td>OIDC 인증 설정 리소스명 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">20</td>
+  <td><code>official-data-ldap-auth-001</code></td>
+  <td class="question">LDAP ID 공급자를 OpenShift OAuth 인증에 추가하는 절차는 어디에 설명돼 있어?</td>
+  <td><span class="badge">authentication_and_authorization</span></td>
+  <td><span class="term">LDAP</span> <span class="term">OAuth</span> <span class="term">identity provider</span></td>
+  <td>LDAP/OAuth 인증 문서 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">21</td>
+  <td><code>official-data-web-console-overview-001</code></td>
+  <td class="question">OpenShift 웹 콘솔에서 클러스터 상태와 워크로드를 확인하는 기능은 어떤 문서에서 설명해?</td>
+  <td><span class="badge">web_console</span> <span class="badge">overview</span></td>
+  <td><span class="term">web console</span> <span class="term">workloads</span></td>
+  <td>web_console 문서 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">22</td>
+  <td><code>official-data-architecture-control-plane-001</code></td>
+  <td class="question">OpenShift 아키텍처에서 컨트롤 플레인과 컴퓨팅 노드는 각각 어떤 역할을 해?</td>
+  <td><span class="badge">architecture</span> <span class="badge">overview</span></td>
+  <td><span class="term">control plane</span> <span class="term">compute node</span></td>
+  <td>아키텍처 개념 청크 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">23</td>
+  <td><code>official-data-operator-concept-001</code></td>
+  <td class="question">OpenShift Operator가 애플리케이션을 설치하고 관리하는 방식은 공식 문서에서 어떻게 설명해?</td>
+  <td><span class="badge">operators</span> <span class="badge">overview</span></td>
+  <td><span class="term">Operator</span> <span class="term">install</span> <span class="term">manage</span></td>
+  <td>Operator 개념 청크가 disconnected/카탈로그 절차에 과도하게 치우치지 않는지 확인</td>
+</tr>
+<tr>
+  <td class="num">24</td>
+  <td><code>official-data-mco-concept-001</code></td>
+  <td class="question">Machine Config Operator가 노드 설정과 머신 구성을 관리하는 방식은 어디에 설명돼 있어?</td>
+  <td><span class="badge">machine_configuration</span> <span class="badge">operators</span></td>
+  <td><span class="term">Machine Config Operator</span> <span class="term">machine config</span></td>
+  <td>MCO 개념/관리 청크 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">25</td>
+  <td><code>official-data-project-namespace-001</code></td>
+  <td class="question">OpenShift project와 Kubernetes namespace의 관계를 설명하는 공식 문서는 어디야?</td>
+  <td><span class="badge">overview</span> <span class="badge">cli_tools</span></td>
+  <td><span class="term">project</span> <span class="term">namespace</span></td>
+  <td>project/namespace 개념 청크 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">26</td>
+  <td><code>official-data-observability-monitoring-001</code></td>
+  <td class="question">OpenShift observability와 monitoring 기능은 각각 어떤 목적으로 쓰이는지 설명해줘</td>
+  <td><span class="badge">observability_overview</span> <span class="badge">monitoring</span></td>
+  <td><span class="term">observability</span> <span class="term">monitoring</span></td>
+  <td>observability/monitoring 소량 문서가 검색되는지 확인</td>
+</tr>
+<tr>
+  <td class="num">27</td>
+  <td><code>official-data-install-bootstrap-log-001</code></td>
+  <td class="question">OpenShift 설치 중 bootstrap 단계가 지연될 때 어떤 로그와 상태를 확인해야 해?</td>
+  <td><span class="badge">support</span> <span class="badge">validation_and_troubleshooting</span> <span class="badge">installation_overview</span></td>
+  <td><span class="term">bootstrap</span> <span class="term">log</span> <span class="term">install</span></td>
+  <td>설치 troubleshooting 청크 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">28</td>
+  <td><code>official-data-postinstall-cluster-status-001</code></td>
+  <td class="question">OpenShift 설치 후 클러스터 Operator와 노드 상태를 확인하는 기본 절차는 뭐야?</td>
+  <td><span class="badge">postinstallation_configuration</span> <span class="badge">installation_overview</span></td>
+  <td><span class="term">ClusterOperator</span> <span class="term">node</span> <span class="term">status</span></td>
+  <td>설치 후 상태 확인 청크 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">29</td>
+  <td><code>official-data-cli-project-namespace-001</code></td>
+  <td class="question">oc CLI에서 현재 프로젝트와 namespace를 확인하거나 전환하는 명령어는 뭐야?</td>
+  <td><span class="badge">cli_tools</span></td>
+  <td><span class="term">oc project</span> <span class="term">namespace</span></td>
+  <td>CLI project/namespace 명령어 청크 검색 확인</td>
+</tr>
+<tr>
+  <td class="num">30</td>
+  <td><code>official-data-image-prune-001</code></td>
+  <td class="question">OpenShift 이미지 레지스트리에서 오래된 이미지와 태그를 정리하는 pruning 절차는 어디에 있어?</td>
+  <td><span class="badge">registry</span> <span class="badge">images</span></td>
+  <td><span class="term">prune</span> <span class="term">image</span> <span class="term">tag</span></td>
+  <td>이미지 pruning 절차 청크 검색 확인</td>
+</tr>
+</table>
+
+<h2>2. 카드형 보기</h2>
+<div class="cards">
+
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">01</span><code>official-data-etcd-backup-command-001</code></div>
+  <h2>OpenShift 4.20에서 etcd 백업을 만들 때 실행하는 cluster-backup.sh 명령어는 뭐야?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">etcd</span> <span class="badge">backup_and_restore</span> <span class="badge">postinstallation_configuration</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">cluster-backup.sh</span> <span class="term">snapshot</span> <span class="term">backup</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>etcd 백업 명령어 청크가 상위에 오는지 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">02</span><code>official-data-etcd-restore-command-001</code></div>
+  <h2>OpenShift 4.20에서 etcd 스냅샷으로 클러스터를 복원할 때 restore 스크립트와 절차는 어디에 있어?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">etcd</span> <span class="badge">backup_and_restore</span> <span class="badge">postinstallation_configuration</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">restore</span> <span class="term">snapshot</span> <span class="term">recovery</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>etcd 복원 절차 청크가 백업 생성 청크와 구분되어 검색되는지 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">03</span><code>official-data-registry-pvc-001</code></div>
+  <h2>이미지 레지스트리 스토리지를 PVC로 설정하려면 configs.imageregistry/cluster에서 어떤 필드를 바꿔야 해?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">registry</span> <span class="badge">images</span> <span class="badge">installing_on_any_platform</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">configs.imageregistry/cluster</span> <span class="term">spec.storage.pvc</span> <span class="term">PVC</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>registry PVC 설정 절차와 리소스명 보존 여부 확인. 해당 절차는 registry 문서와 installing_on_any_platform의 initial Operator configuration에도 존재한다.</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">04</span><code>official-data-registry-rwx-001</code></div>
+  <h2>이미지 레지스트리를 복제본 두 개 이상으로 운영할 때 ReadWriteMany 스토리지가 필요한 이유는 뭐야?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">registry</span> <span class="badge">storage</span> <span class="badge">images</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">ReadWriteMany</span> <span class="term">ReadWriteOnce</span> <span class="term">registry</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>ReadWriteOnce/ReadWriteMany 설명 청크가 표 찌꺼기 없이 검색되는지 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">05</span><code>official-data-pvc-pending-events-001</code></div>
+  <h2>PVC가 Pending 상태일 때 PVC 이벤트와 바인딩 상태를 확인하는 절차는 어떻게 돼?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">storage</span> <span class="badge">support</span> <span class="badge">cli_tools</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">PVC</span> <span class="term">Pending</span> <span class="term">events</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>PVC Pending 문제 해결 청크가 상위에 오는지 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">06</span><code>official-data-storageclass-default-001</code></div>
+  <h2>PVC가 사용할 StorageClass와 기본 스토리지 클래스를 확인하려면 어떤 내용을 봐야 해?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">storage</span> <span class="badge">cli_tools</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">StorageClass</span> <span class="term">default</span> <span class="term">PVC</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>StorageClass/PVC 용어가 정제 과정에서 훼손되지 않았는지 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">07</span><code>official-data-upgrade-precheck-001</code></div>
+  <h2>클러스터 업데이트 전에 oc adm upgrade recommend로 사전 점검하는 절차는 어디에 설명돼 있어?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">updating_clusters</span> <span class="badge">release_notes</span> <span class="badge">cli_tools</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">oc adm upgrade recommend</span> <span class="term">precheck</span> <span class="term">upgrade</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>업데이트 사전 점검 명령어 청크 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">08</span><code>official-data-mcp-status-001</code></div>
+  <h2>MachineConfigPool 업데이트 상태에서 UPDATED, UPDATING, DEGRADED 값을 확인하는 명령어는 뭐야?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">updating_clusters</span> <span class="badge">machine_configuration</span> <span class="badge">nodes</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">oc get machineconfigpools</span> <span class="term">UPDATED</span> <span class="term">DEGRADED</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>MCP 상태 확인 명령어와 상태 컬럼 보존 여부 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">09</span><code>official-data-mcp-maxunavailable-001</code></div>
+  <h2>MachineConfigPool의 maxUnavailable 값은 어디서 설명하고 어떤 주의사항이 있어?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">updating_clusters</span> <span class="badge">machine_configuration</span> <span class="badge">postinstallation_configuration</span> <span class="badge">nodes</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">maxUnavailable</span> <span class="term">MachineConfigPool</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>MCP 설정 필드 설명 청크가 상위에 오는지 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">10</span><code>official-data-oc-mirror-imageset-001</code></div>
+  <h2>연결이 끊긴 환경에서 oc-mirror 플러그인으로 ImageSetConfiguration을 사용해 이미지를 미러링하는 절차는 뭐야?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">disconnected_environments</span> <span class="badge">images</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">oc-mirror</span> <span class="term">ImageSetConfiguration</span> <span class="term">mirror</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>oc-mirror/YAML 예시 청크가 깨지지 않고 검색되는지 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">11</span><code>official-data-idms-mirror-001</code></div>
+  <h2>연결이 끊긴 클러스터에서 ImageDigestMirrorSet 또는 ImageContentSourcePolicy로 이미지 미러를 설정하는 방법은 어디에 있어?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">disconnected_environments</span> <span class="badge">images</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">ImageDigestMirrorSet</span> <span class="term">ImageContentSourcePolicy</span> <span class="term">mirror</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>이미지 미러 리소스명 보존 및 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">12</span><code>official-data-route-ingress-001</code></div>
+  <h2>OpenShift Route와 Kubernetes Ingress의 관계와 차이를 설명하는 공식 문서는 어디야?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">ingress_and_load_balancing</span> <span class="badge">networking_overview</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">Route</span> <span class="term">Ingress</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>Route/Ingress 개념 청크가 YAML 생성 절차에만 치우치지 않는지 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">13</span><code>official-data-route-create-001</code></div>
+  <h2>OpenShift에서 서비스를 외부로 노출하기 위해 Route를 생성하는 절차와 oc expose 명령어는 뭐야?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">ingress_and_load_balancing</span> <span class="badge">networking_overview</span> <span class="badge">cli_tools</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">oc expose</span> <span class="term">route</span> <span class="term">service</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>Route 생성 명령어 청크 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">14</span><code>official-data-pod-pending-scheduling-001</code></div>
+  <h2>Pod가 Pending 상태일 때 스케줄링 실패 원인과 이벤트를 확인하는 절차는 어떻게 돼?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">nodes</span> <span class="badge">support</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">Pending</span> <span class="term">scheduling</span> <span class="term">events</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>Pod Pending 문제 해결 청크 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">15</span><code>official-data-node-resource-usage-001</code></div>
+  <h2>노드의 CPU와 메모리 사용량을 확인하는 OpenShift 명령어와 문서는 어디야?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">nodes</span> <span class="badge">support</span> <span class="badge">cli_tools</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">CPU</span> <span class="term">memory</span> <span class="term">node</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>노드 리소스 사용량 확인 청크 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">16</span><code>official-data-node-drain-001</code></div>
+  <h2>노드를 유지보수하기 전에 cordon과 drain을 수행하는 절차는 어떻게 돼?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">nodes</span> <span class="badge">machine_management</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">cordon</span> <span class="term">drain</span> <span class="term">node</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>노드 drain 절차 청크 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">17</span><code>official-data-audit-node-logs-001</code></div>
+  <h2>OpenShift 감사 로그를 oc adm node-logs 명령으로 확인하는 예시는 어디에 있어?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">security_and_compliance</span> <span class="badge">support</span> <span class="badge">cli_tools</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">oc adm node-logs</span> <span class="term">audit</span> <span class="term">log</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>감사 로그 명령어 청크가 일반 로그/표 조각보다 위에 오는지 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">18</span><code>official-data-file-integrity-log-001</code></div>
+  <h2>File Integrity Operator에서 integritylog를 확인하고 압축 로그를 해제하는 명령어는 뭐야?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">security_and_compliance</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">integritylog</span> <span class="term">base64</span> <span class="term">gunzip</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>명령어의 base64 옵션은 보존하되 base64 덤프 값은 오염되지 않는지 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">19</span><code>official-data-oidc-auth-001</code></div>
+  <h2>외부 OIDC ID 공급자로 OpenShift 인증을 설정할 때 authentication.config/cluster를 수정하는 절차는 뭐야?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">authentication_and_authorization</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">OIDC</span> <span class="term">authentication.config/cluster</span> <span class="term">identity provider</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>OIDC 인증 설정 리소스명 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">20</span><code>official-data-ldap-auth-001</code></div>
+  <h2>LDAP ID 공급자를 OpenShift OAuth 인증에 추가하는 절차는 어디에 설명돼 있어?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">authentication_and_authorization</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">LDAP</span> <span class="term">OAuth</span> <span class="term">identity provider</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>LDAP/OAuth 인증 문서 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">21</span><code>official-data-web-console-overview-001</code></div>
+  <h2>OpenShift 웹 콘솔에서 클러스터 상태와 워크로드를 확인하는 기능은 어떤 문서에서 설명해?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">web_console</span> <span class="badge">overview</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">web console</span> <span class="term">workloads</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>web_console 문서 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">22</span><code>official-data-architecture-control-plane-001</code></div>
+  <h2>OpenShift 아키텍처에서 컨트롤 플레인과 컴퓨팅 노드는 각각 어떤 역할을 해?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">architecture</span> <span class="badge">overview</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">control plane</span> <span class="term">compute node</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>아키텍처 개념 청크 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">23</span><code>official-data-operator-concept-001</code></div>
+  <h2>OpenShift Operator가 애플리케이션을 설치하고 관리하는 방식은 공식 문서에서 어떻게 설명해?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">operators</span> <span class="badge">overview</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">Operator</span> <span class="term">install</span> <span class="term">manage</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>Operator 개념 청크가 disconnected/카탈로그 절차에 과도하게 치우치지 않는지 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">24</span><code>official-data-mco-concept-001</code></div>
+  <h2>Machine Config Operator가 노드 설정과 머신 구성을 관리하는 방식은 어디에 설명돼 있어?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">machine_configuration</span> <span class="badge">operators</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">Machine Config Operator</span> <span class="term">machine config</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>MCO 개념/관리 청크 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">25</span><code>official-data-project-namespace-001</code></div>
+  <h2>OpenShift project와 Kubernetes namespace의 관계를 설명하는 공식 문서는 어디야?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">overview</span> <span class="badge">cli_tools</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">project</span> <span class="term">namespace</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>project/namespace 개념 청크 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">26</span><code>official-data-observability-monitoring-001</code></div>
+  <h2>OpenShift observability와 monitoring 기능은 각각 어떤 목적으로 쓰이는지 설명해줘</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">observability_overview</span> <span class="badge">monitoring</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">observability</span> <span class="term">monitoring</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>observability/monitoring 소량 문서가 검색되는지 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">27</span><code>official-data-install-bootstrap-log-001</code></div>
+  <h2>OpenShift 설치 중 bootstrap 단계가 지연될 때 어떤 로그와 상태를 확인해야 해?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">support</span> <span class="badge">validation_and_troubleshooting</span> <span class="badge">installation_overview</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">bootstrap</span> <span class="term">log</span> <span class="term">install</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>설치 troubleshooting 청크 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">28</span><code>official-data-postinstall-cluster-status-001</code></div>
+  <h2>OpenShift 설치 후 클러스터 Operator와 노드 상태를 확인하는 기본 절차는 뭐야?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">postinstallation_configuration</span> <span class="badge">installation_overview</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">ClusterOperator</span> <span class="term">node</span> <span class="term">status</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>설치 후 상태 확인 청크 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">29</span><code>official-data-cli-project-namespace-001</code></div>
+  <h2>oc CLI에서 현재 프로젝트와 namespace를 확인하거나 전환하는 명령어는 뭐야?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">cli_tools</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">oc project</span> <span class="term">namespace</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>CLI project/namespace 명령어 청크 검색 확인</p>
+</section>
+<section class="case-card">
+  <div class="card-head"><span class="num-pill">30</span><code>official-data-image-prune-001</code></div>
+  <h2>OpenShift 이미지 레지스트리에서 오래된 이미지와 태그를 정리하는 pruning 절차는 어디에 있어?</h2>
+  <p><strong>기대 문서</strong><br><span class="badge">registry</span> <span class="badge">images</span></p>
+  <p><strong>핵심 확인어</strong><br><span class="term">prune</span> <span class="term">image</span> <span class="term">tag</span></p>
+  <p class="focus"><strong>검증 의도</strong><br>이미지 pruning 절차 청크 검색 확인</p>
+</section>
+</div>
+</body>
+</html>

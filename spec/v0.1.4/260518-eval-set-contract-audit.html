@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>260518 Eval Set Contract Audit</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d9e2ef;
+      --bg: #f7f9fc;
+      --card: #ffffff;
+      --good: #0f766e;
+      --warn: #b45309;
+      --bad: #b42318;
+      --code: #0f172a;
+    }
+    body {
+      margin: 0;
+      padding: 40px;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Malgun Gothic", Arial, sans-serif;
+      line-height: 1.55;
+    }
+    main { max-width: 1180px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; font-size: 30px; }
+    h2 { margin-top: 34px; padding-top: 18px; border-top: 2px solid var(--line); font-size: 22px; }
+    h3 { margin-top: 24px; font-size: 17px; }
+    p { margin: 8px 0 14px; }
+    .meta, .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin: 16px 0;
+    }
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 18px;
+    }
+    .label { color: var(--muted); font-size: 13px; }
+    code, pre {
+      font-family: Consolas, "Courier New", monospace;
+      color: var(--code);
+      background: #eef3f8;
+      border-radius: 4px;
+    }
+    code { padding: 1px 5px; }
+    pre { padding: 12px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0 22px; background: var(--card); }
+    th, td { border: 1px solid var(--line); padding: 9px 10px; vertical-align: top; }
+    th { background: #edf3fa; text-align: left; }
+    .pass { color: var(--good); font-weight: 700; }
+    .warn { color: var(--warn); font-weight: 700; }
+    .fail { color: var(--bad); font-weight: 700; }
+    .small { color: var(--muted); font-size: 13px; }
+    ul { margin-top: 8px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>평가셋 계약 정리 및 재발 방지 감사</h1>
+  <p>
+    이번 문서는 청크나 임베딩 데이터를 다시 고친 기록이 아니다. 목적은 평가셋의
+    <code>expected_book_slugs</code>가 현재 실제 적재 기준과 맞지 않아 결과 해석이 흔들리는 문제를
+    막는 것이다.
+  </p>
+
+  <section class="meta">
+    <div><div class="label">Branch</div><code>feat/corpus_embedding_test_S_v.2</code></div>
+    <div><div class="label">Head</div><code>4dd9fe5</code></div>
+    <div><div class="label">작성일</div><code>2026-05-18</code></div>
+    <div><div class="label">범위</div>eval JSONL 계약, 테스트, 보고서</div>
+    <div><div class="label">Source of Truth</div><code>embedding_chunks.jsonl</code>, <code>active_manifest.json</code></div>
+    <div><div class="label">Out of Scope</div>Qdrant/DB/임베딩/랭킹/query rewrite 수정 없음</div>
+  </section>
+
+  <h2>1. 왜 이 작업이 필요했나</h2>
+  <div class="card">
+    <p>
+      일부 평가셋은 과거 더 넓은 official manifest 기준의 book slug를 그대로 들고 있었다.
+      예를 들어 <code>applications</code>, <code>building_applications</code>,
+      <code>hosted_control_planes</code>는 broader manifest에는 흔적이 있지만,
+      현재 active official gold 29권에는 없다.
+    </p>
+    <p>
+      이 상태에서 retrieval 평가를 돌리면 검색기가 맞힐 수 없는 정답지를 기준으로 채점하거나,
+      반대로 book slug만 맞고 실제 청크 텍스트는 약한데 통과로 보이는 상황이 생긴다.
+      그래서 이번 작업은 “평가셋 탓”을 나중에 다시 하지 않도록 기준을 먼저 잠그는 작업이다.
+    </p>
+  </div>
+
+  <h2>2. 현재 active official 기준</h2>
+  <table>
+    <tr><th>항목</th><th>확인 결과</th></tr>
+    <tr><td>active official book 수</td><td><span class="pass">29권</span></td></tr>
+    <tr><td>embedding 기준</td><td><code>corpus/sources/official/imported-gold/gold_corpus_ko/embeddings/embedding_chunks.jsonl</code></td></tr>
+    <tr><td>runtime manifest 기준</td><td><code>corpus/data/wiki_runtime_books/active_manifest.json</code></td></tr>
+    <tr><td>두 기준 일치 여부</td><td><span class="pass">일치</span></td></tr>
+  </table>
+
+  <p class="small">
+    active 29권: advanced_networking, architecture, authentication_and_authorization,
+    backup_and_restore, cli_tools, disconnected_environments, etcd, images,
+    ingress_and_load_balancing, installation_overview, installing_on_any_platform,
+    logging, machine_configuration, machine_management, monitoring, networking_overview,
+    nodes, observability_overview, operators, overview, postinstallation_configuration,
+    registry, release_notes, security_and_compliance, storage, support,
+    updating_clusters, validation_and_troubleshooting, web_console.
+  </p>
+
+  <h2>3. 수정한 기준</h2>
+  <table>
+    <tr><th>기존 expected</th><th>처리 기준</th><th>이유</th></tr>
+    <tr><td><code>applications</code></td><td>제거 또는 <code>cli_tools</code>, <code>overview</code>, <code>nodes</code>, <code>support</code>, <code>architecture</code></td><td>현재 active 29권에 없음. 질문별 실제 근거 book으로 보정.</td></tr>
+    <tr><td><code>building_applications</code></td><td><code>cli_tools</code>, <code>architecture</code></td><td>배포 명령/YAML 근거가 현재 active set에서는 CLI와 architecture 쪽에 존재.</td></tr>
+    <tr><td><code>hosted_control_planes</code></td><td><code>etcd</code>, <code>backup_and_restore</code>, <code>postinstallation_configuration</code></td><td>etcd 백업/복구 질문에서 현재 근거가 있는 문서로 보정.</td></tr>
+    <tr><td><code>tutorials</code></td><td>제거</td><td>현재 active 29권에 없고, RBAC 명령 근거는 기존 auth/postinstall expected로 충분.</td></tr>
+    <tr><td><code>disconnected_installation</code></td><td><code>disconnected_environments</code></td><td>현재 active slug 명칭과 맞춤.</td></tr>
+    <tr><td><code>networking_operators</code>, <code>dns_operator</code>, <code>network_security</code>, <code>egress</code></td><td><code>networking_overview</code>, <code>advanced_networking</code></td><td>네트워크 정책/DNS/egress 질문의 현재 active 근거 위치로 보정.</td></tr>
+    <tr><td><code>installing_on_bare_metal</code></td><td><code>installing_on_any_platform</code>, bootstrap/log 문맥은 <code>support</code>, <code>validation_and_troubleshooting</code></td><td>현재 active set에 bare-metal book이 없고, bootstrap log 직접 근거는 troubleshooting/support에 있음.</td></tr>
+    <tr><td><code>extensions</code></td><td><code>operators</code>, <code>overview</code></td><td>Operator 개념 질문의 현재 active 근거로 보정.</td></tr>
+    <tr><td><code>workloads</code></td><td><code>nodes</code>, <code>architecture</code></td><td>Pod lifecycle 개념 질문의 현재 active 근거로 보정.</td></tr>
+  </table>
+
+  <h2>4. 수정한 파일</h2>
+  <table>
+    <tr><th>파일</th><th>주요 변경</th></tr>
+    <tr><td><code>answer_eval_realworld_cases.jsonl</code></td><td>RBAC, etcd 백업/복구 expected를 active slug로 보정.</td></tr>
+    <tr><td><code>pbs_chat_quality_cases.jsonl</code></td><td>tutorials, hosted_control_planes, applications, disconnected_installation, networking_operators, installing_on_bare_metal 제거/대체.</td></tr>
+    <tr><td><code>pbs_chat_quality_extended_cases.jsonl</code></td><td>network/applications 계열 stale expected를 질문별 active book으로 보정.</td></tr>
+    <tr><td><code>pbs_chat_quality_v004_readable_cases.jsonl</code></td><td>project/namespace 개념 질문에서 applications 제거.</td></tr>
+    <tr><td><code>pbs_chat_quality_v012_beginner_cases.jsonl</code></td><td>building_applications/applications 제거, CLI/architecture 기준으로 보정.</td></tr>
+    <tr><td><code>retrieval_root_cause_cases.jsonl</code></td><td>extensions, workloads를 operators/overview, nodes/architecture로 보정.</td></tr>
+    <tr><td><code>retrieval_sanity_cases.jsonl</code></td><td>applications, installing_on_bare_metal expected를 active slug로 보정.</td></tr>
+    <tr><td><code>retrieval_sanity_v004_readable_cases.jsonl</code></td><td>project/namespace expected에서 applications 제거.</td></tr>
+    <tr><td><code>tests/test_eval_manifest_contract.py</code></td><td>모든 eval JSONL expected가 active 29권 안에 있는지 검사하는 재발 방지 테스트 추가.</td></tr>
+  </table>
+
+  <h2>5. 일부러 이번에 고치지 않은 것</h2>
+  <div class="card">
+    <p>
+      <code>forbidden_book_slugs</code>의 inactive slug는 hard fail로 만들지 않았다.
+      이 필드는 실제 정답 문서라기보다 “이쪽으로 답이 새면 안 된다”는 주제 라벨처럼 쓰인 흔적이 있다.
+      지금 제거하면 답변 품질 평가의 의도 자체가 바뀔 수 있어 별도 협의 항목으로 남겼다.
+    </p>
+    <p class="small">
+      남은 예: <code>network_security</code>, <code>operator_apis</code>,
+      <code>installing_on_a_single_node</code>, <code>service_mesh</code> 등.
+    </p>
+  </div>
+
+  <h2>6. 검증 결과</h2>
+  <table>
+    <tr><th>검증</th><th>명령</th><th>결과</th></tr>
+    <tr>
+      <td>eval 계약 테스트</td>
+      <td><code>.\.venv\Scripts\python.exe -m pytest tests\test_eval_manifest_contract.py -q</code></td>
+      <td><span class="pass">3 passed</span></td>
+    </tr>
+    <tr>
+      <td>기존 관련 테스트</td>
+      <td><code>.\.venv\Scripts\python.exe -m pytest tests\test_chunk_quality_audit.py tests\test_answer_quality_v012_beginner.py -q</code></td>
+      <td><span class="pass">6 passed</span></td>
+    </tr>
+    <tr>
+      <td>retrieval-only 재실행</td>
+      <td><code>RERANKER_ENABLED=false; retrieval-eval --cases retrieval_official_data_validation_cases.jsonl --top-k 5 --candidate-k 10</code></td>
+      <td><span class="pass">실행 성공</span>. hit@1 0.7000, hit@3 0.8000, hit@5 0.8667, warning_free_rate 1.0000.</td>
+    </tr>
+  </table>
+
+  <h2>7. retrieval 결과 해석</h2>
+  <div class="card">
+    <p>
+      이번 expected 계약 정리 후에도 <code>retrieval_official_data_validation_cases.jsonl</code>의
+      retrieval-only 결과는 top5 기준 26/30이다. 이 수치는 평가셋 계약 문제가 아니라,
+      실제 검색 순위 문제를 따로 봐야 한다는 뜻이다.
+    </p>
+    <p>
+      miss 4건은 <code>file-integrity-log</code>, <code>web-console-overview</code>,
+      <code>architecture-control-plane</code>, <code>postinstall-cluster-status</code>다.
+      여기서는 “데이터가 없다”고 단정하지 않고, 정답 청크 존재 여부와 검색 순위 미상승을 별도 표로 분리해서 봐야 한다.
+    </p>
+  </div>
+
+  <h2>8. 병렬 검토 운용 기록</h2>
+  <table>
+    <tr><th>검토 축</th><th>확인 내용</th><th>결론</th></tr>
+    <tr><td>평가셋 기준</td><td>모든 eval JSONL을 active 29권 기준으로 감사.</td><td><span class="pass">official validation set은 clean, 오래된 answer/chat/sanity set에 stale expected 확인.</span></td></tr>
+    <tr><td>소비 코드</td><td>CLI, 테스트, smoke에서 어떤 eval file을 쓰는지 추적.</td><td><span class="pass">stale expected는 local eval report를 왜곡할 수 있어 보정 필요.</span></td></tr>
+    <tr><td>원천 manifest 관계</td><td>broader manifest와 active gold corpus의 book_slug 차이 확인.</td><td><span class="pass">broader manifest에는 application 계열이 있으나 active gold 29권에는 없음.</span></td></tr>
+  </table>
+  <p class="small">
+    병렬 에이전트는 read-only 검토에만 사용했고, 결과 회수 후 close했다. 구현 변경은 한 번에 통합해 충돌을 피했다.
+  </p>
+
+  <h2>9. 다음에 볼 항목</h2>
+  <ul>
+    <li>inactive <code>forbidden_book_slugs</code>를 문서 slug로 볼지, 주제 라벨로 볼지 협의한다.</li>
+    <li>retrieval miss 4건은 정답 청크 존재 여부와 top-k 미상승 원인을 분리해서 본다.</li>
+    <li>공식 데이터 검증 리포트에서는 book_slug hit와 top chunk text 적합성을 계속 별도 지표로 유지한다.</li>
+  </ul>
+</main>
+</body>
+</html>

@@ -58,7 +58,7 @@ def test_private_hits_require_matching_owner_and_active_repository():
     ]
 
 
-def test_private_hits_are_hidden_without_active_repository_selection():
+def test_private_hits_are_visible_to_matching_owner_without_repository_selection():
     context = SessionContext(owner_user_id="owner-a")
     private_hit = _hit(
         chunk_id="private",
@@ -67,8 +67,29 @@ def test_private_hits_are_hidden_without_active_repository_selection():
         visibility="private_user",
         source_scope="user_upload",
     )
+    wrong_owner = _hit(
+        chunk_id="wrong-owner",
+        repository_id="repo-a",
+        owner_user_id="owner-b",
+        visibility="private_user",
+        source_scope="user_upload",
+    )
 
-    assert not hit_visible_to_session(private_hit, context)
+    assert hit_visible_to_session(private_hit, context)
+    assert not hit_visible_to_session(wrong_owner, context)
+
+
+def test_active_document_allows_matching_private_upload_without_active_repository():
+    context = SessionContext(owner_user_id="owner-a", active_document_id="doc-a")
+    visible = _hit(
+        chunk_id="private-doc",
+        document_source_id="doc-a",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+    )
+
+    assert hit_visible_to_session(visible, context)
 
 
 def test_active_document_filters_shared_hits():

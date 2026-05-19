@@ -28,7 +28,7 @@ def hit_visible_to_session(hit: RetrievalHit, context: SessionContext | None) ->
     owner_user_id = str(getattr(context, "owner_user_id", "") or getattr(context, "user_id", "") or "").strip()
     if not owner_user_id or str(hit.owner_user_id or "").strip() != owner_user_id:
         return False
-    return bool(active_repository_id)
+    return True
 
 
 def filter_hits_by_session_scope(

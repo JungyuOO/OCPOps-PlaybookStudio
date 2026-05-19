@@ -19,11 +19,116 @@ const VIEWER_READER_POLISH = `
     color: #0f172a;
     min-width: 0;
     max-width: 100%;
+    --pbs-reader-card-bg: rgba(255, 255, 255, 0.96);
+    --pbs-reader-border: rgba(15, 23, 42, 0.12);
+    --pbs-reader-text: #0f172a;
+    --pbs-reader-dim: #64748b;
+    --pbs-reader-code-bg: rgba(0, 0, 0, 0.03);
+  }
+
+  :host([data-viewer-theme="obsidian"]) {
+    color: #e5eef8;
+    --pbs-reader-card-bg: rgba(15, 23, 42, 0.88);
+    --pbs-reader-border: rgba(148, 163, 184, 0.18);
+    --pbs-reader-text: #e5eef8;
+    --pbs-reader-dim: rgba(203, 213, 225, 0.68);
+    --pbs-reader-code-bg: rgba(255, 255, 255, 0.035);
+  }
+
+  :host,
+  .viewer-root,
+  .viewer-root * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(89, 208, 255, 0.42) rgba(8, 13, 22, 0.72);
+  }
+
+  :host([data-viewer-theme="paper"]),
+  :host([data-viewer-theme="paper"]) .viewer-root,
+  :host([data-viewer-theme="paper"]) .viewer-root * {
+    scrollbar-color: rgba(194, 65, 12, 0.5) rgba(238, 231, 220, 0.92);
+  }
+
+  :host::-webkit-scrollbar,
+  .viewer-root::-webkit-scrollbar,
+  .viewer-root *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  :host::-webkit-scrollbar-track,
+  .viewer-root::-webkit-scrollbar-track,
+  .viewer-root *::-webkit-scrollbar-track {
+    background: rgba(8, 13, 22, 0.72);
+  }
+
+  :host::-webkit-scrollbar-thumb,
+  .viewer-root::-webkit-scrollbar-thumb,
+  .viewer-root *::-webkit-scrollbar-thumb {
+    border: 2px solid rgba(8, 13, 22, 0.72);
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(89, 208, 255, 0.56), rgba(34, 211, 238, 0.24));
+  }
+
+  :host::-webkit-scrollbar-thumb:hover,
+  .viewer-root::-webkit-scrollbar-thumb:hover,
+  .viewer-root *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(103, 232, 249, 0.72), rgba(89, 208, 255, 0.34));
+  }
+
+  :host([data-viewer-theme="paper"])::-webkit-scrollbar-track,
+  :host([data-viewer-theme="paper"]) .viewer-root::-webkit-scrollbar-track,
+  :host([data-viewer-theme="paper"]) .viewer-root *::-webkit-scrollbar-track {
+    background: rgba(238, 231, 220, 0.92);
+  }
+
+  :host([data-viewer-theme="paper"])::-webkit-scrollbar-thumb,
+  :host([data-viewer-theme="paper"]) .viewer-root::-webkit-scrollbar-thumb,
+  :host([data-viewer-theme="paper"]) .viewer-root *::-webkit-scrollbar-thumb {
+    border-color: rgba(238, 231, 220, 0.92);
+    background: linear-gradient(180deg, rgba(194, 65, 12, 0.48), rgba(97, 72, 42, 0.22));
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root,
+  :host([data-viewer-theme="obsidian"]) .viewer-root main,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .study-document,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .reader-layout,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .hero,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .hero-grid,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .hero-main,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .section-list,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .section-body,
+  :host([data-viewer-theme="obsidian"]) .viewer-root article {
+    background: transparent !important;
+    color: var(--pbs-reader-text) !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root p,
+  :host([data-viewer-theme="obsidian"]) .viewer-root li,
+  :host([data-viewer-theme="obsidian"]) .viewer-root td,
+  :host([data-viewer-theme="obsidian"]) .viewer-root th,
+  :host([data-viewer-theme="obsidian"]) .viewer-root blockquote,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .section-body span,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .section-body div {
+    color: rgba(226, 232, 240, 0.86) !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root h1,
+  :host([data-viewer-theme="obsidian"]) .viewer-root h2,
+  :host([data-viewer-theme="obsidian"]) .viewer-root h3,
+  :host([data-viewer-theme="obsidian"]) .viewer-root h4,
+  :host([data-viewer-theme="obsidian"]) .viewer-root h5,
+  :host([data-viewer-theme="obsidian"]) .viewer-root strong {
+    color: #f8fafc !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root a {
+    color: #67e8f9 !important;
   }
 
   .viewer-root {
     min-height: 100%;
     background: transparent;
+    color: var(--pbs-reader-text);
     padding-bottom: 40px;
     min-width: 0;
     max-width: 100%;
@@ -88,7 +193,7 @@ const VIEWER_READER_POLISH = `
   }
 
   .viewer-root .code-block {
-    background: rgba(0,0,0,0.03) !important;
+    background: var(--pbs-reader-code-bg) !important;
     border: 1px solid var(--pbs-reader-border) !important;
   }
 
@@ -134,6 +239,11 @@ const VIEWER_READER_POLISH = `
     color: #182230;
   }
 
+  :host([data-viewer-theme="obsidian"][data-viewer-variant="editorial"]) .viewer-root {
+    background: transparent !important;
+    color: var(--pbs-reader-text) !important;
+  }
+
   :host([data-viewer-variant="editorial"]) .viewer-root main {
     width: min(760px, 100%) !important;
     max-width: 760px !important;
@@ -152,6 +262,11 @@ const VIEWER_READER_POLISH = `
     margin-bottom: 34px !important;
   }
 
+  :host([data-viewer-theme="obsidian"][data-viewer-variant="editorial"]) .viewer-root .section-card {
+    background: transparent !important;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14) !important;
+  }
+
   .viewer-root img,
   .viewer-root figure,
   .viewer-root .course-slide-card,
@@ -168,11 +283,21 @@ const VIEWER_READER_POLISH = `
     box-shadow: none !important;
   }
 
+  :host([data-viewer-theme="obsidian"][data-viewer-variant="editorial"]) .viewer-root .code-block {
+    background: rgba(2, 6, 12, 0.78) !important;
+    border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  }
+
   :host([data-viewer-variant="editorial"]) .viewer-root .table-wrap {
     border-radius: 14px !important;
     border: 1px solid #dde4ef !important;
     box-shadow: none !important;
     background: #ffffff !important;
+  }
+
+  :host([data-viewer-theme="obsidian"][data-viewer-variant="editorial"]) .viewer-root .table-wrap {
+    border-color: rgba(148, 163, 184, 0.18) !important;
+    background: rgba(15, 23, 42, 0.72) !important;
   }
 
   .viewer-root .code-block.viewer-code-scroll-target {
@@ -619,6 +744,9 @@ export default function ViewerDocumentStage({
       return;
     }
     host.dataset.viewerVariant = surfaceVariant;
+    host.dataset.viewerTheme = document.documentElement.getAttribute('data-theme') === 'light'
+      ? 'paper'
+      : 'obsidian';
     const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
     shadowRootRef.current = root;
     root.replaceChildren();

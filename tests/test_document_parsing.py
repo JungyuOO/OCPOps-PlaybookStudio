@@ -6,10 +6,13 @@ from pathlib import Path
 import pytest
 
 from play_book_studio.ingestion.document_parsing import (
+    DocumentAsset,
+    _pdf_pages_to_markdown,
     build_document_chunks,
     detect_document_format,
     parse_upload_document,
 )
+from play_book_studio.http.server_routes_viewer import _markdownish_to_html
 
 TEST_TMP = Path(__file__).resolve().parents[1] / "tmp" / "document_parsing_tests"
 
@@ -188,6 +191,159 @@ def test_converter_formats_use_injected_markdown_adapter():
     assert parsed.document_format == "pdf"
     assert parsed.blocks[0].block_type == "heading"
     assert parsed.blocks[1].text == "Body"
+
+
+def test_pdf_markdown_uses_first_meaningful_korean_line_as_title():
+    asset = DocumentAsset(
+        asset_id="11111111-1111-1111-1111-111111111111",
+        asset_type="image",
+        filename="pdf-page-002-image-01.png",
+        mime_type="image/png",
+        sha256="asset-sha",
+        page_number=2,
+    )
+    markdown = _pdf_pages_to_markdown(
+        [
+            "스토리지\n개념 살펴보기\nPersistentVolume (PV)\n클러스터 내에서 관리되는 스토리지 리소스",
+            "스토리지\n2\nStorageClass (SC)\n# demo-svc.yaml\napiVersion: v1\nkind: Service\nmetadata:\n  name: demo-svc",
+        ],
+        "02.-03.19",
+        assets=(asset,),
+    )
+
+    assert markdown.startswith("# 스토리지")
+    assert "# 02.-03.19" not in markdown
+    assert "## Page 1" not in markdown
+    assert "\n## 스토리지\n" not in markdown
+    assert "## 개념 살펴보기" in markdown
+    assert "## PersistentVolume (PV)" in markdown
+    assert "## StorageClass (SC)" in markdown
+    assert "```yaml\n# demo-svc.yaml\napiVersion: v1\nkind: Service\nmetadata:\n  name: demo-svc\n```" in markdown
+    assert "![pdf-page-002-image-01.png](asset://11111111-1111-1111-1111-111111111111)" in markdown
+
+
+def test_pdf_markdown_repairs_wrapped_korean_and_keeps_real_code_blocks():
+    markdown = _pdf_pages_to_markdown(
+        [
+            "\n".join(
+                [
+                    "실습",
+                    "1. 클러스터 내부에서 즉시 확인 가능한 리얼 데모",
+                    "실습 시나리오",
+                    "ConfigMap: OpenShift 클러스터 내부의 Kubernetes API 서비스 주소를 저장합니",
+                    "다. ( https://kubernetes.default.svc )",
+                    "Secret: 내부 통신에 필요한 ServiceAccount 토큰을 사용하는 대신, 테스트용으로",
+                    "임의의 API Key를 생성해 넣습니다.",
+                    "검증: Pod이 실행되면서 ConfigMap에 저장된 주소로 curl 을 날려 실제 네트워크 응",
+                    "답(200 OK 또는 403 Forbidden 등)이 오는지 확인합니다.",
+                    "Step 1. 리소스 생성 (현실적인 값 주입)",
+                    "yaml",
+                    "apiVersion: v1",
+                    "kind: ConfigMap",
+                    "metadata:",
+                    "  name: app-config",
+                ]
+            ),
+            "\n".join(
+                [
+                    "실습",
+                    "3",
+                    '          # ConfigMap에서 가져온 TARGET_URL로 접속 시도 (-k는',
+                    "인증서 검증 무시)",
+                    '          RESPONSE=$(curl -k -s -o /dev/null -w "%{http_cod',
+                    'e}" $TARGET_URL)',
+                    '          if [ "$RESPONSE" ==',
+                    '"200" ]; then',
+                    '            echo "결과: 성공! $TARGET_URL 에 도달했습니다. (HTT',
+                    'P 응답 코드: $RESPONSE)"',
+                ]
+            ),
+        ],
+        "07. 실습(03.23)",
+    )
+
+    assert "## 1. 클러스터 내부에서 즉시 확인 가능한 리얼 데모" in markdown
+    assert "## 실습 시나리오" in markdown
+    assert "## Step 1. 리소스 생성 (현실적인 값 주입)" in markdown
+    assert "ConfigMap: OpenShift 클러스터 내부의 Kubernetes API 서비스 주소를 저장합니다." in markdown
+    assert "네트워크 응답(200 OK 또는 403 Forbidden 등)" in markdown
+    assert "```yaml\nConfigMap:" not in markdown
+    assert "```yaml\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app-config\n```" in markdown
+    assert "# ConfigMap에서 가져온 TARGET_URL로 접속 시도 (-k는 인증서 검증 무시)" in markdown
+    assert 'RESPONSE=$(curl -k -s -o /dev/null -w "%{http_code}" $TARGET_URL)' in markdown
+    assert 'if [ "$RESPONSE" == "200" ]; then' in markdown
+    assert "HTTP 응답 코드: $RESPONSE" in markdown
+
+
+def test_pdf_markdown_preserves_powershell_command_line_breaks():
+    markdown = _pdf_pages_to_markdown(
+        [
+            "\n".join(
+                [
+                    "폐쇄망 외부에서 접근하기(github)",
+                    "3. windows powershell 실행",
+                    "# smee-client 설치",
+                    "npm install --global smee-client",
+                    "# GitHub 신호를 받아서 내 OCP 주소로 쏴주기",
+                ]
+            ),
+            "\n".join(
+                [
+                    '$env:NODE_TLS_REJECT_UNAUTHORIZED = "0"',
+                    "smee --url https://smee.io/esRZDPmzzYd87BN8 --target http",
+                    "s://pipelines-as-code-controller-openshift-pipelines.apps.o",
+                    "cp.test.com/",
+                    "4. 혹시 webhook secrets 생각안난다?",
+                    'oc patch secret demo-token -n demo -p \'{"stringData":{"w',
+                    'ebhook.secret":"mysecret1234"}}\'',
+                    "",
+                    "## 예 demo-token-2csgx",
+                ]
+            ),
+        ],
+        "11. 폐쇄망_외부에서_접근하기(github)(03.24)",
+    )
+
+    assert (
+        "```bash\n"
+        "# smee-client 설치\n"
+        "npm install --global smee-client\n"
+        "# GitHub 신호를 받아서 내 OCP 주소로 쏴주기\n"
+        "```"
+    ) in markdown
+    assert (
+        "```powershell\n"
+        '$env:NODE_TLS_REJECT_UNAUTHORIZED = "0"\n'
+        "smee --url https://smee.io/esRZDPmzzYd87BN8 --target "
+        "https://pipelines-as-code-controller-openshift-pipelines.apps.ocp.test.com/\n"
+        "```"
+    ) in markdown
+    assert (
+        "```bash\n"
+        'oc patch secret demo-token -n demo -p \'{"stringData":{"webhook.secret":"mysecret1234"}}\'\n'
+        "\n"
+        "## 예 demo-token-2csgx\n"
+        "```"
+    ) in markdown
+
+
+def test_upload_viewer_code_blocks_render_copy_and_wrap_controls():
+    rendered = _markdownish_to_html(
+        "\n".join(
+            [
+                "```bash",
+                "# smee-client 설치",
+                "npm install --global smee-client",
+                "# GitHub 신호를 받아서 내 OCP 주소로 쏴주기",
+                "```",
+            ]
+        )
+    )
+
+    assert 'class="code-block overflow-toggle"' in rendered
+    assert 'class="copy-button icon-button"' in rendered
+    assert 'class="wrap-button icon-button"' in rendered
+    assert "줄바꿈" in rendered
 
 
 def test_docx_default_pipeline_extracts_markdown_blocks_and_chunks():

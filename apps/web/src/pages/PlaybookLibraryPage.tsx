@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft,
-  Activity,
   Database,
   Layers,
   Cpu,
@@ -28,7 +26,9 @@ import {
 } from 'lucide-react';
 import gsap from 'gsap';
 import './PlaybookLibraryPage.css';
+import AppHeader from '../components/AppHeader';
 import ViewerDocumentStage, { type ViewerDocumentPayload } from '../components/ViewerDocumentStage';
+import { useGlobalTheme } from '../lib/globalTheme';
 import {
   DOCUMENT_INGEST_UPLOAD_ACCEPT,
   type CustomerPackDraft,
@@ -46,7 +46,13 @@ import {
   type DocumentRepository,
   type DocumentRepositoryDocument,
   type UploadIngestResponse,
-  uploadDocumentIngestion,
+  type UploadIngestReport,
+  type UploadIngestStreamStageEvent,
+  type UploadIngestStreamEvent,
+  deleteUploadedDocument,
+  type ViewerPageMode,
+  uploadDocumentIngestionStream,
+  loadUploadIngestReport,
   loadDataControlRoom,
   loadDataControlRoomChunks,
   listCustomerPackDrafts,
@@ -66,7 +72,8 @@ import {
 } from '../lib/runtimeApi';
 import { ROUTES } from '../routing/routes';
 
-type PipelineStage = 'idle' | 'uploading' | 'capturing' | 'normalizing' | 'done' | 'error';
+type UserUploadStage = 'received' | 'store' | 'parse' | 'chunk' | 'persist' | 'index' | 'scope' | 'ready';
+type PipelineStage = 'idle' | UserUploadStage | 'error';
 type FactoryLane = 'tools' | 'user';
 type FactoryRunMode = 'auto' | 'manual';
 type OfficialSourceBasisKey = 'official_repo' | 'official_homepage';
@@ -80,6 +87,14 @@ interface LogEntry {
   time: string;
   tag: 'success' | 'info' | 'error' | 'warn';
   msg: string;
+}
+
+interface UploadReportViewerState {
+  title: string;
+  documentSourceId: string;
+  report: UploadIngestReport | null;
+  loading: boolean;
+  error: string;
 }
 
 type FactoryDownloadStatus = 'queued' | 'producing' | 'done' | 'error';
@@ -370,12 +385,30 @@ const FACTORY_PIPELINE_STEPS: Record<FactoryLane, Array<{ badge: string; title: 
     { badge: 'Judge', title: '라이브러리 합류 검증', description: '완성본 검증 후 Playbook Library 반영' },
   ],
   user: [
-    { badge: 'Bronze', title: 'Source Intake', description: '파일 업로드 · 원본 캡처' },
-    { badge: 'Silver', title: 'Structured Wiki', description: '정규화 · 섹션 · 위키 책' },
-    { badge: 'Gold', title: 'Playbook Materialize', description: '코퍼스 · 플레이북 생성' },
-    { badge: 'Judge', title: 'User Library Join', description: 'User Library 저장' },
+    { badge: 'Bronze', title: '업로드 요청', description: '브라우저에서 서버로 파일 전송' },
+    { badge: 'Silver', title: '서버 처리', description: '파싱 · 청킹 · DB 저장' },
+    { badge: 'Gold', title: '검색 인덱싱', description: '임베딩 · Qdrant 반영' },
+    { badge: 'Judge', title: '기본 인덱싱 확인', description: '답변 품질 검수 전' },
   ],
 };
+
+const USER_UPLOAD_PIPELINE_STEPS: Array<{
+  stage: UserUploadStage;
+  badge: string;
+  title: string;
+  description: string;
+}> = [
+  { stage: 'received', badge: '1', title: '요청 접수', description: '업로드 요청을 서버가 접수' },
+  { stage: 'store', badge: '2', title: '원본 저장', description: '업로드 바이트를 디스크에 보관' },
+  { stage: 'parse', badge: '3', title: '문서 파싱', description: '텍스트 · 구조 추출' },
+  { stage: 'chunk', badge: '4', title: '청크 생성', description: '검색 단위 생성' },
+  { stage: 'persist', badge: '5', title: 'DB 저장', description: 'PostgreSQL · 스코프 기록' },
+  { stage: 'index', badge: '6', title: 'Qdrant 인덱싱', description: '임베딩 · 벡터 검색 가능' },
+  { stage: 'scope', badge: '7', title: '스코프 확인', description: 'Owner · Repository 연결 확인' },
+  { stage: 'ready', badge: '8', title: '완료 판정', description: '기본 검색 가능 상태 확인' },
+];
+
+const USER_UPLOAD_STAGE_ORDER = USER_UPLOAD_PIPELINE_STEPS.map((step) => step.stage);
 
 function nowTime(): string {
   const d = new Date();
@@ -391,6 +424,93 @@ function statusColor(status: string): string {
     case 'planned': return 'gray';
     default: return 'red';
   }
+}
+
+function repositoryDocumentStatus(document: DocumentRepositoryDocument): {
+  label: string;
+  tone: 'ready' | 'partial' | 'empty' | 'error';
+  detail: string;
+} {
+  const chunks = Number(document.chunk_count || 0);
+  const indexed = Number(document.indexed_chunk_count || 0);
+  const parseStatus = String(document.parse_status || '').trim().toLowerCase();
+  if (parseStatus && !['parsed', 'completed', 'complete', 'ready', 'ok', 'success'].includes(parseStatus)) {
+    return {
+      label: parseStatus,
+      tone: 'error',
+      detail: chunks > 0 ? `${chunks.toLocaleString()} chunks captured` : 'Parser needs attention',
+    };
+  }
+  if (chunks > 0 && indexed >= chunks) {
+    return {
+      label: '기본 인덱싱 완료',
+      tone: 'ready',
+      detail: `답변 품질 검수 전 · ${indexed.toLocaleString()} / ${chunks.toLocaleString()} chunks indexed`,
+    };
+  }
+  if (chunks > 0 || indexed > 0) {
+    return {
+      label: 'Indexing',
+      tone: 'partial',
+      detail: `${indexed.toLocaleString()} / ${chunks.toLocaleString()} chunks indexed`,
+    };
+  }
+  return {
+    label: 'Uploaded',
+    tone: 'empty',
+    detail: 'Waiting for parsed chunks',
+  };
+}
+
+function repositoryDocumentUpdatedLabel(document: DocumentRepositoryDocument, repository: DocumentRepository): string {
+  const raw = document.updated_at || document.created_at || repository.updated_at || repository.last_document_at;
+  if (!raw) {
+    return 'Updated time unknown';
+  }
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) {
+    return raw;
+  }
+  return `Updated ${date.toLocaleDateString()}`;
+}
+
+function uploadDocumentViewerPath(document: DocumentRepositoryDocument): string {
+  return `/uploads/documents/${document.document_source_id}/index.html`;
+}
+
+function formatDurationMs(value: number | undefined): string {
+  const ms = Number(value || 0);
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return '0 ms';
+  }
+  if (ms < 1000) {
+    return `${Math.round(ms)} ms`;
+  }
+  return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
+}
+
+function uploadStageTitle(stage: string): string {
+  return USER_UPLOAD_PIPELINE_STEPS.find((step) => step.stage === stage)?.title ?? stage;
+}
+
+function uploadStageStatusLabel(status: string): string {
+  switch (status) {
+    case 'running': return '진행 중';
+    case 'done': return '완료';
+    case 'warning': return '경고';
+    case 'failed': return '실패';
+    case 'skipped': return '건너뜀';
+    case 'duplicate': return '중복';
+    default: return status || '-';
+  }
+}
+
+function uploadStageTone(status: string): 'running' | 'done' | 'warning' | 'failed' | 'idle' {
+  if (status === 'running') return 'running';
+  if (status === 'done' || status === 'duplicate' || status === 'skipped') return 'done';
+  if (status === 'warning') return 'warning';
+  if (status === 'failed') return 'failed';
+  return 'idle';
 }
 
 function customerPackBookTruth(book?: LibraryBook | null): string {
@@ -687,20 +807,25 @@ const PlaybookLibraryPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const { globalTheme, toggleGlobalTheme } = useGlobalTheme();
   const [factoryLane, setFactoryLane] = useState<FactoryLane>('tools');
   const [pipelineStage, setPipelineStage] = useState<PipelineStage>('idle');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [currentFile, setCurrentFile] = useState('');
   const [latestUploadIngest, setLatestUploadIngest] = useState<UploadIngestResponse | null>(null);
+  const [uploadStageEvents, setUploadStageEvents] = useState<UploadIngestStreamStageEvent[]>([]);
+  const [uploadReportViewer, setUploadReportViewer] = useState<UploadReportViewerState | null>(null);
   const [controlRoom, setControlRoom] = useState<DataControlRoomResponse | null>(null);
   const [drafts, setDrafts] = useState<CustomerPackDraft[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [previewDraft, setPreviewDraft] = useState<CustomerPackDraft | null>(null);
   const [metricPopover, setMetricPopover] = useState<MetricPopoverState | null>(null);
   const [buyerPacketPopover, setBuyerPacketPopover] = useState<{ title: string; packets: BuyerPacket[] } | null>(null);
   const [chunkViewer, setChunkViewer] = useState<ChunkViewerState | null>(null);
   const [bookViewer, setBookViewer] = useState<LibraryBook | null>(null);
+  const [bookViewerPageMode, setBookViewerPageMode] = useState<ViewerPageMode>('single');
   const [bookViewerDocument, setBookViewerDocument] = useState<ViewerDocumentPayload | null>(null);
   const [bookViewerLoading, setBookViewerLoading] = useState(false);
   const [previewCapturedUrl, setPreviewCapturedUrl] = useState('');
@@ -733,7 +858,6 @@ const PlaybookLibraryPage: React.FC = () => {
   const [documentRepositories, setDocumentRepositories] = useState<DocumentRepository[]>([]);
   const [repositoryStage, setRepositoryStage] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [repositoryError, setRepositoryError] = useState('');
-  const [activeWikiCategory, setActiveWikiCategory] = useState<WikiCategoryKey>('install');
   const [repositoryMeta, setRepositoryMeta] = useState<{ rewrittenQuery: string; authMode: 'token' | 'public' }>({
     rewrittenQuery: '',
     authMode: 'public',
@@ -749,7 +873,7 @@ const PlaybookLibraryPage: React.FC = () => {
     : 'monitoring';
 
   const addLog = (tag: LogEntry['tag'], msg: string) => {
-    setLogs((prev) => [{ time: nowTime(), tag, msg }, ...prev].slice(0, 10));
+    setLogs((prev) => [{ time: nowTime(), tag, msg }, ...prev].slice(0, 40));
   };
 
   const stopToolsRunHeartbeat = useCallback(() => {
@@ -832,6 +956,59 @@ const PlaybookLibraryPage: React.FC = () => {
     navigate(ROUTES.pbsStudio);
   }, [navigate]);
 
+  const openUploadedDocumentReader = useCallback((document: DocumentRepositoryDocument) => {
+    setBookViewerPageMode('single');
+    setBookViewer({
+      book_slug: 'uploaded-documents',
+      title: document.title || document.filename || 'Uploaded document',
+      grade: '',
+      review_status: document.visibility || 'private_user',
+      source_type: 'uploaded_document',
+      source_lane: document.source_scope || 'user_upload',
+      section_count: Number(document.chunk_count || 0),
+      code_block_count: 0,
+      viewer_path: uploadDocumentViewerPath(document),
+      source_url: '',
+      updated_at: document.updated_at || document.created_at || '',
+      boundary_badge: document.visibility || 'private_user',
+      runtime_truth_label: '업로드 문서 Reader',
+      chunk_count: Number(document.chunk_count || 0),
+      token_total: 0,
+      source_collection: document.source_scope || 'user_upload',
+      source_origin_label: document.filename || '',
+    });
+  }, []);
+
+  const openUploadProcessingReport = useCallback((document: DocumentRepositoryDocument) => {
+    const title = document.title || document.filename || 'Uploaded document';
+    setUploadReportViewer({
+      title,
+      documentSourceId: document.document_source_id,
+      report: null,
+      loading: true,
+      error: '',
+    });
+    loadUploadIngestReport(document.document_source_id)
+      .then((report) => {
+        setUploadReportViewer({
+          title,
+          documentSourceId: document.document_source_id,
+          report,
+          loading: false,
+          error: '',
+        });
+      })
+      .catch((error: unknown) => {
+        setUploadReportViewer({
+          title,
+          documentSourceId: document.document_source_id,
+          report: null,
+          loading: false,
+          error: errorMessage(error, '작업 로그를 불러오지 못했습니다.'),
+        });
+      });
+  }, []);
+
   useEffect(() => {
     refreshData();
   }, [refreshData]);
@@ -851,7 +1028,7 @@ const PlaybookLibraryPage: React.FC = () => {
     setBookViewerLoading(true);
     setBookViewerDocument(null);
 
-    loadViewerDocument(bookViewer.viewer_path)
+    loadViewerDocument(bookViewer.viewer_path, bookViewerPageMode)
       .then((viewerDocument) => {
         if (cancelled) {
           return;
@@ -876,7 +1053,7 @@ const PlaybookLibraryPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [bookViewer]);
+  }, [bookViewer, bookViewerPageMode]);
 
   useEffect(() => {
     return () => {
@@ -945,17 +1122,25 @@ const PlaybookLibraryPage: React.FC = () => {
     const steps = pipelineRef.current.querySelectorAll('.pipeline-step');
     const connectors = pipelineRef.current.querySelectorAll('.pipeline-connector');
 
-    const stageIndex = { idle: -1, uploading: 0, capturing: 1, normalizing: 2, done: 3, error: -1 }[pipelineStage];
+    const stageIndex = pipelineStage === 'error'
+      ? -1
+      : USER_UPLOAD_STAGE_ORDER.indexOf(pipelineStage as UserUploadStage);
+    const eventByStage = new Map<string, UploadIngestStreamStageEvent>();
+    uploadStageEvents.forEach((event) => eventByStage.set(event.stage, event));
 
     steps.forEach((step, i) => {
-      step.classList.toggle('completed', i < stageIndex);
+      const stepName = USER_UPLOAD_STAGE_ORDER[i];
+      const state = stepName ? uploadStageTone(eventByStage.get(stepName)?.status || '') : 'idle';
       step.classList.toggle('active', i === stageIndex);
-      step.classList.toggle('final', pipelineStage === 'done' && i === 3);
+      step.classList.toggle('completed', state === 'done');
+      step.classList.toggle('final', stepName === 'ready' && state === 'done');
     });
 
     connectors.forEach((conn, i) => {
-      conn.classList.toggle('filled', i < stageIndex);
-      conn.classList.toggle('flowing', i === stageIndex - 1 || (pipelineStage === 'done' && i === 2));
+      const previousName = USER_UPLOAD_STAGE_ORDER[i];
+      const previousState = previousName ? uploadStageTone(eventByStage.get(previousName)?.status || '') : 'idle';
+      conn.classList.toggle('filled', previousState === 'done');
+      conn.classList.toggle('flowing', i === stageIndex - 1);
     });
 
     if (stageIndex >= 0 && steps[stageIndex]) {
@@ -965,7 +1150,7 @@ const PlaybookLibraryPage: React.FC = () => {
         { scale: 1, opacity: 1, duration: 0.5, ease: 'back.out(1.7)' },
       );
     }
-  }, [factoryLane, pipelineStage]);
+  }, [factoryLane, pipelineStage, uploadStageEvents]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -975,53 +1160,88 @@ const PlaybookLibraryPage: React.FC = () => {
     setErrorMsg('');
     setCurrentFile(file.name);
     setLatestUploadIngest(null);
+    setUploadStageEvents([]);
 
     try {
-      setPipelineStage('uploading');
       window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify({
         status: 'recognizing',
-        message: '문서 인식중입니다.',
+        message: '서버 단계 이벤트를 기다리는 중입니다.',
         filename: file.name,
         updatedAt: new Date().toISOString(),
       }));
-      addLog('info', `Uploading '${file.name}' to document ingestion...`);
+      addLog('info', `Upload request started: '${file.name}'`);
 
-      setPipelineStage('capturing');
-      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify({
-        status: 'parsing',
-        message: '문서 파싱중입니다.',
-        filename: file.name,
-        updatedAt: new Date().toISOString(),
-      }));
-      addLog('info', 'Parsing source into Markdown blocks and semantic chunks...');
-      setPipelineStage('normalizing');
-      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify({
-        status: 'indexing',
-        message: '인덱싱중입니다.',
-        filename: file.name,
-        updatedAt: new Date().toISOString(),
-      }));
-      addLog('info', 'Persisting chunks to PostgreSQL and indexing them for RAG...');
-      const ingest = await uploadDocumentIngestion(file, { index: true });
+      const handleStreamEvent = (event: UploadIngestStreamEvent) => {
+        const nextStage = stageFromUploadEvent(event);
+        if (nextStage) {
+          setPipelineStage(nextStage);
+        }
+        if (event.type === 'stage') {
+          setUploadStageEvents((prev) => [...prev, event]);
+          const status =
+            event.stage === 'parse' || event.stage === 'chunk'
+              ? 'parsing'
+              : event.stage === 'persist' || event.stage === 'index'
+                ? 'indexing'
+                : event.stage === 'ready'
+                  ? event.status === 'done' || event.status === 'duplicate'
+                    ? 'basic_index_ready'
+                    : 'index_failed'
+                  : 'recognizing';
+          window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify({
+            status,
+            message: event.message,
+            filename: file.name,
+            updatedAt: new Date().toISOString(),
+          }));
+        }
+        logUploadStreamEvent(event);
+      };
+
+      // 같은 파일 재업로드는 백엔드가 자동으로 덮어쓰기. 별도 confirm 없음.
+      const ingest = await uploadDocumentIngestionStream(file, { index: true }, handleStreamEvent);
+      if (ingest.duplicate?.exists) {
+        addLog('info', `'${ingest.duplicate.filename || file.name}' 같은 파일 감지 — 새 버전으로 덮어쓰는 중입니다.`);
+      }
       const indexedCount = ingest.index?.indexed_count ?? 0;
       const indexLine = ingest.index ? `, ${indexedCount}/${ingest.index.candidate_count} indexed` : '';
+      const indexFailed = ingest.index?.status === 'failed';
+      const basicIndexReady = Boolean(ingest.basic_index_ready || ingest.index?.status === 'indexed' || ingest.index?.status === 'duplicate_existing_indexed');
+      const timings = ingest.timings_ms ?? {};
       setLatestUploadIngest(ingest);
+      setUploadStageEvents(ingest.stage_events ?? uploadStageEvents);
 
       addLog('success', `Ingested '${ingest.filename}': ${ingest.block_count} blocks, ${ingest.chunk_count} chunks${indexLine}.`);
+      addLog(
+        'info',
+        `Processing receipt: parse ${formatDurationMs(timings.parse_ms)}, chunk ${formatDurationMs(timings.chunk_ms)}, persist ${formatDurationMs(timings.persist_ms)}, index ${formatDurationMs(timings.index_ms)}, total ${formatDurationMs(timings.total_ms)}.`,
+      );
       if (ingest.warnings.length > 0) {
         addLog('warn', ingest.warnings.slice(0, 2).join(' / '));
       }
+      if (indexFailed) {
+        addLog('warn', `Search indexing failed: ${ingest.index?.error || 'embedding service unavailable'}`);
+      }
 
-      setPipelineStage('done');
       window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify({
-        status: 'ready',
-        message: '문서 준비가 완료되었습니다.',
+        status: indexFailed ? 'index_failed' : basicIndexReady ? 'basic_index_ready' : 'indexing',
+        message: indexFailed
+          ? '문서 저장은 완료됐지만 검색 인덱싱에 실패했습니다.'
+          : basicIndexReady
+            ? '기본 텍스트 인덱싱이 완료되었습니다. 답변 품질 검수는 별도입니다.'
+            : '문서 저장은 완료됐지만 검색 인덱싱 확인이 더 필요합니다.',
         filename: ingest.filename || file.name,
         repositoryId: ingest.repository_id || ingest.persisted?.repository_id || '',
         documentSourceId: ingest.persisted?.document_source_id || '',
         updatedAt: new Date().toISOString(),
       }));
-      addLog('success', `'${ingest.filename}' is now available to the RAG corpus.`);
+      if (indexFailed) {
+        addLog('warn', `'${ingest.filename}' was saved, but is not searchable until indexing is retried.`);
+      } else if (basicIndexReady) {
+        addLog('success', `'${ingest.filename}' 기본 텍스트 인덱싱 완료. 답변 품질 검수는 별도입니다.`);
+      } else {
+        addLog('warn', `'${ingest.filename}' 저장 완료. 검색 인덱싱 상태를 추가 확인해야 합니다.`);
+      }
       refreshData();
       setTimeout(() => { setPipelineStage('idle'); setCurrentFile(''); }, 6000);
     } catch (error: unknown) {
@@ -1036,6 +1256,35 @@ const PlaybookLibraryPage: React.FC = () => {
       }));
       addLog('error', `Pipeline failed: ${msg}`);
       setTimeout(() => { setPipelineStage('idle'); setCurrentFile(''); }, 5000);
+    }
+  };
+
+  const handleUploadedDocumentDelete = async (
+    documentSourceId: string,
+    title: string,
+  ): Promise<boolean> => {
+    if (!documentSourceId) return false;
+    if (!confirm(`'${title}' 문서를 삭제할까요?\n\nPostgreSQL · Qdrant 인덱스 · 원본 파일이 모두 삭제됩니다. 같은 파일을 다시 업로드하면 새 인덱싱이 시작됩니다.`)) {
+      return false;
+    }
+    setDeletingDocumentId(documentSourceId);
+    try {
+      const result = await deleteUploadedDocument(documentSourceId);
+      addLog(
+        'success',
+        `Deleted '${result.filename || title}' — Postgres ${result.postgres_rows_deleted}건, Qdrant ${result.qdrant_points_deleted}개 정리.`,
+      );
+      if (result.qdrant_errors.length > 0) {
+        addLog('warn', `Qdrant 정리 일부 실패: ${result.qdrant_errors.slice(0, 2).join(' / ')}`);
+      }
+      refreshData();
+      return true;
+    } catch (err) {
+      const msg = errorMessage(err, '문서 삭제 실패');
+      addLog('error', `Failed to delete '${title}': ${msg}`);
+      return false;
+    } finally {
+      setDeletingDocumentId(null);
     }
   };
 
@@ -1588,17 +1837,68 @@ const PlaybookLibraryPage: React.FC = () => {
   };
 
   const stageLabel = (stage: PipelineStage) => {
-    switch (stage) {
-      case 'uploading': return 'Uploading...';
-      case 'capturing': return 'Parsing Document...';
-      case 'normalizing': return 'Indexing Chunks...';
-      case 'done': return 'Pipeline Complete';
-      case 'error': return 'Pipeline Failed';
-      default: return 'Engine Idle';
-    }
+    if (stage === 'idle') return '대기 중';
+    if (stage === 'error') return '문서 처리 실패';
+    if (stage === 'ready') return '기본 인덱싱 확인';
+    return `${uploadStageTitle(stage)} 처리 중`;
   };
 
-  const isProcessing = ['uploading', 'capturing', 'normalizing'].includes(pipelineStage);
+  const isProcessing = pipelineStage !== 'idle' && pipelineStage !== 'ready' && pipelineStage !== 'error';
+
+  const stageFromUploadEvent = (event: UploadIngestStreamEvent): PipelineStage | null => {
+    if (event.type === 'error') return 'error';
+    if (event.type === 'result') return null;
+    if (USER_UPLOAD_STAGE_ORDER.includes(event.stage as UserUploadStage)) {
+      return event.stage as UserUploadStage;
+    }
+    return null;
+  };
+
+  const latestUploadStageByName = useMemo(() => {
+    const byStage = new Map<string, UploadIngestStreamStageEvent>();
+    uploadStageEvents.forEach((event) => byStage.set(event.stage, event));
+    return byStage;
+  }, [uploadStageEvents]);
+
+  const uploadStepState = (stage: UserUploadStage, index: number): 'idle' | 'running' | 'done' | 'warning' | 'failed' => {
+    void index;
+    const event = latestUploadStageByName.get(stage);
+    if (event) {
+      return uploadStageTone(event.status);
+    }
+    if (pipelineStage === 'error') return 'failed';
+    return 'idle';
+  };
+
+  const logUploadStreamEvent = (event: UploadIngestStreamEvent) => {
+    if (event.type === 'result') return;
+    if (event.type === 'error') {
+      addLog('error', event.error || 'Upload ingestion stream failed');
+      return;
+    }
+    const suffixParts = [
+      typeof event.duration_ms === 'number' ? formatDurationMs(event.duration_ms) : '',
+      typeof (event.counts?.block_count ?? event.block_count) === 'number'
+        ? `${event.counts?.block_count ?? event.block_count} blocks`
+        : '',
+      typeof (event.counts?.chunk_count ?? event.chunk_count) === 'number'
+        ? `${event.counts?.chunk_count ?? event.chunk_count} chunks`
+        : '',
+      typeof (event.counts?.indexed_count ?? event.indexed_count) === 'number'
+        && typeof (event.counts?.candidate_count ?? event.candidate_count) === 'number'
+        ? `${event.counts?.indexed_count ?? event.indexed_count}/${event.counts?.candidate_count ?? event.candidate_count} indexed`
+        : '',
+    ].filter(Boolean);
+    const suffix = suffixParts.length ? ` (${suffixParts.join(', ')})` : '';
+    const tag: LogEntry['tag'] = event.status === 'failed'
+      ? 'error'
+      : event.status === 'done' || event.status === 'duplicate' || event.status === 'skipped'
+        ? 'success'
+        : event.status === 'warning'
+          ? 'warn'
+          : 'info';
+    addLog(tag, `[${uploadStageTitle(event.stage)}] ${event.message}${suffix}`);
+  };
 
   const summary = controlRoom?.summary;
   const officialCorpusBooks = [...(controlRoom?.corpus?.books ?? [])];
@@ -1615,14 +1915,6 @@ const PlaybookLibraryPage: React.FC = () => {
     ),
     [documentRepositories],
   );
-  const officialDocumentRows = useMemo(
-    () => repositoryDocumentRows.filter(({ document, repository }) => {
-      const scope = String(document.source_scope || repository.metadata?.source_scope || '').toLowerCase();
-      const visibility = String(document.visibility || repository.visibility || '').toLowerCase();
-      return scope.includes('official') || visibility === 'global_shared' || repository.repository_kind === 'official';
-    }),
-    [repositoryDocumentRows],
-  );
   const userUploadDocumentRows = useMemo(
     () => repositoryDocumentRows.filter(({ document, repository }) => {
       const scope = String(document.source_scope || repository.metadata?.source_scope || '').toLowerCase();
@@ -1631,9 +1923,13 @@ const PlaybookLibraryPage: React.FC = () => {
     }),
     [repositoryDocumentRows],
   );
-  const activeWikiDocumentRows = useMemo(
-    () => officialDocumentRows.filter((row) => row.categoryKey === activeWikiCategory),
-    [activeWikiCategory, officialDocumentRows],
+  const userUploadIndexedChunkCount = userUploadDocumentRows.reduce(
+    (total, { document }) => total + Number(document.indexed_chunk_count || 0),
+    0,
+  );
+  const userUploadChunkCount = userUploadDocumentRows.reduce(
+    (total, { document }) => total + Number(document.chunk_count || 0),
+    0,
   );
   const approvedRuntimeBooks = summary?.approved_runtime_count ?? summary?.gold_book_count ?? controlRoom?.gold_books?.length ?? 0;
   const userLibraryBooks = [...(userLibraryBucket?.books ?? [])];
@@ -1652,7 +1948,6 @@ const PlaybookLibraryPage: React.FC = () => {
   const latestNonGoldPlaybookCount = allOperationalWikiBooks.length
     ? latestNonGoldOperationalWikiBooks.length
     : Math.max(approvedWikiRuntimeBooks - approvedRuntimeBooks, 0);
-  const operationalWikiBooks = allOperationalWikiBooks.slice(0, 8);
   const wikiNavigationBacklog = summary?.wiki_navigation_backlog_count ?? controlRoom?.wiki_navigation_backlog?.books?.length ?? 0;
   const wikiUsageSignals = summary?.wiki_usage_signal_count ?? controlRoom?.wiki_usage_signals?.books?.length ?? 0;
   const productGate = summary?.product_gate_count ?? controlRoom?.product_gate?.books?.length ?? 0;
@@ -1738,7 +2033,7 @@ const PlaybookLibraryPage: React.FC = () => {
   const bookFactoryStatusClass = factoryLane === 'user'
     ? pipelineStage === 'error'
       ? 'error'
-      : pipelineStage === 'done'
+      : pipelineStage === 'ready'
         ? 'done'
         : ''
     : factoryDownloadList.some((item) => item.status === 'error')
@@ -1820,113 +2115,137 @@ const PlaybookLibraryPage: React.FC = () => {
     }
     return actions;
   }, [generatedCatalogPreferredBasis]);
+  const activeLibrarySurface = viewMode === 'repository' ? 'uploads' : 'official';
+  const connectedOfficialBookCountLabel = controlRoom ? allOperationalWikiBooks.length.toLocaleString() : '--';
+  const librarySurfaceCards = [
+    {
+      key: 'official',
+      label: '공식 문서',
+      value: allOperationalWikiBooks.length,
+      detail: '연결 완료 문서',
+      icon: BookOpen,
+      action: () => navigate('/playbook-library/control-tower'),
+    },
+    {
+      key: 'uploads',
+      label: '내 업로드',
+      value: userUploadDocumentRows.length,
+      detail: `${userCorpusBookCount.toLocaleString()}개 사용자 코퍼스`,
+      icon: UploadCloud,
+      action: () => navigate('/playbook-library/repository'),
+    },
+  ];
 
   return (
     <div className="library-wrapper">
       <div className="bokeh-bg bokeh-1"></div>
       <div className="bokeh-bg bokeh-2"></div>
 
-      <header className="library-header">
-        <div className="header-container">
-          <div className="header-content">
-            <button className="back-btn" onClick={() => navigate('/')}>
-              <ArrowLeft size={20} />
-            </button>
-            <div className="header-text">
-              <h1>Playbook Library</h1>
-              <p className="text-muted">
-                Repository 기반 공식 문서와 업로드 문서를 한 곳에서 관리합니다.
-              </p>
-            </div>
-          </div>
-
-          <div className="header-actions">
-            <button className="library-dashboard-link" type="button" onClick={() => navigate('/')}>
-              Playbook Studio
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        currentPage="library"
+        globalTheme={globalTheme}
+        onOpenDashboard={() => navigate(ROUTES.pbsControlTower)}
+        onOpenLibrary={() => navigate(ROUTES.pbsPlaybookLibrary)}
+        onOpenStudio={() => navigate(ROUTES.pbsStudio)}
+        onToggleGlobalTheme={toggleGlobalTheme}
+        title="WIKI Library"
+      />
 
       <main className="library-main">
         <div className="library-shell">
-          <aside className="library-sidebar" aria-label="Playbook Library categories">
-            <section>
-              <h2>Wiki</h2>
-              <button
-                type="button"
-                className={`library-sidebar-item ${viewMode === 'monitoring' ? 'active' : ''}`}
-                onClick={() => navigate('/playbook-library/control-tower')}
-              >
-                <Activity size={15} />
-                <span>Operational Wiki</span>
-              </button>
-              {WIKI_CATEGORIES.map((category) => (
-                <button
-                  key={category.key}
-                  type="button"
-                  className={`library-sidebar-item ${activeWikiCategory === category.key && viewMode === 'monitoring' ? 'active' : 'muted'}`}
-                  onClick={() => {
-                    setActiveWikiCategory(category.key);
-                    navigate('/playbook-library/control-tower');
-                  }}
-                >
-                  <BookOpen size={15} />
-                  <span>{category.label}</span>
-                </button>
-              ))}
-            </section>
-            <section>
-              <h2>Repository</h2>
-              <button
-                type="button"
-                className={`library-sidebar-item ${viewMode === 'repository' ? 'active' : ''}`}
-                onClick={() => navigate('/playbook-library/repository')}
-              >
-                <UploadCloud size={15} />
-                <span>My Uploads</span>
-              </button>
-            </section>
-          </aside>
           <div className="library-content-panel">
+            <section id="system-data-board" className={`library-runtime-board ${viewMode === 'repository' ? 'compact' : ''}`}>
+              <div className="library-runtime-board-head">
+                <div className="library-board-tabs" role="tablist" aria-label="Library surface">
+                  {librarySurfaceCards.map((card) => {
+                    const Icon = card.icon;
+                    const active = card.key === activeLibrarySurface;
+                    return (
+                      <button
+                        key={card.key}
+                        type="button"
+                        className={`library-board-tab ${active ? 'active' : ''}`}
+                        onClick={card.action}
+                      >
+                        <Icon size={16} />
+                        <span>{card.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button type="button" className="library-runtime-refresh" onClick={refreshData}>
+                  새로고침
+                </button>
+              </div>
+
+              {viewMode === 'monitoring' ? (
+                <>
+                  <div className="library-runtime-board-copy">
+                    <span className="factory-hub-eyebrow">공식 지식 베이스</span>
+                    <h2>현재 연결된 공식 문서</h2>
+                    <p>플랫폼에서 바로 질문 범위로 선택할 수 있는 공식 문서를 한 화면에 보여줍니다.</p>
+                  </div>
+
+                  <div className="library-runtime-summary" aria-label="Official document connection summary">
+                    <span>공식 문서 {connectedOfficialBookCountLabel}권</span>
+                    <span>현재 런타임 연결 기준</span>
+                  </div>
+                </>
+              ) : (
+                <div className="library-upload-summary" aria-label="업로드 문서 요약">
+                  <span>업로드 문서 {userUploadDocumentRows.length.toLocaleString()}개</span>
+                  <span>인덱싱 {userUploadIndexedChunkCount.toLocaleString()} / {userUploadChunkCount.toLocaleString()} 청크</span>
+                  <span>인덱싱 완료 후 문서 단위 질문 가능</span>
+                </div>
+              )}
+            </section>
+
         {viewMode === 'monitoring' ? (
           <div className="monitoring-view">
             <section className="operational-shelf box-container">
               <div className="operational-shelf-header">
                 <div>
-                  <span className="operational-shelf-eyebrow">Official Documents</span>
-                  <h2>{WIKI_CATEGORIES.find((category) => category.key === activeWikiCategory)?.label ?? 'Wiki'} documents</h2>
-                  <p>PostgreSQL document_sources 기준으로 분류된 공식 문서입니다. 문서별 채팅은 해당 document_source_id로 RAG 범위를 고정합니다.</p>
+                  <span className="operational-shelf-eyebrow">공식 문서</span>
+                  <h2>연결된 공식 문서 {connectedOfficialBookCountLabel}권</h2>
+                  <p>현재 런타임에 연결된 공식 문서 전체입니다. 문서는 전체 페이지로 열고, 원천소스 기준은 카드 안에서 바로 확인합니다.</p>
                 </div>
-                <span className="operational-library-count">{activeWikiDocumentRows.length.toLocaleString()} docs</span>
+                <span className="operational-library-count">{connectedOfficialBookCountLabel}권</span>
               </div>
-              {activeWikiDocumentRows.length === 0 ? (
+              {!controlRoom ? (
+                <div className="repo-empty">
+                  <Loader2 size={32} className="spin-icon" />
+                  <p>연결된 공식 문서를 불러오는 중입니다.</p>
+                </div>
+              ) : allOperationalWikiBooks.length === 0 ? (
                 <div className="repo-empty">
                   <Database size={36} />
-                  <p>이 카테고리에 매핑된 공식 문서가 아직 없습니다.</p>
+                  <p>연결된 공식 문서가 아직 없습니다.</p>
                 </div>
               ) : (
                 <div className="operational-library-grid">
-                  {activeWikiDocumentRows.map(({ repository, document, categoryKey }) => (
+                  {allOperationalWikiBooks.map((book) => (
                     <article
-                      key={document.document_source_id}
-                      className="operational-library-card operational-library-card--document"
+                      key={`official-${book.book_slug}`}
+                      className="operational-library-card"
                     >
                       <div className="operational-card-open">
-                        <span className="operational-library-card-badge">{document.source_scope || repository.visibility}</span>
-                        <strong>{document.title || document.filename}</strong>
-                        <span className="operational-card-open-subtitle">
-                          {document.chunk_count.toLocaleString()} chunks / {document.indexed_chunk_count.toLocaleString()} indexed
-                        </span>
+                        <span className="operational-library-card-badge">{normalizePlaybookGrade(book.grade)}</span>
+                        <strong>{book.title}</strong>
+                        <span className="operational-card-open-subtitle">{book.book_slug.replace(/_/g, ' ')}</span>
                       </div>
                       <div className="library-document-actions">
+                        <OfficialSourcePopover record={book} />
                         <button
                           type="button"
                           className="library-document-chat-btn"
-                          onClick={() => openDocumentInChat(repository, document, categoryKey)}
+                          onClick={() => {
+                            setBookViewerPageMode('single');
+                            setBookViewer(book);
+                          }}
                         >
-                          <MessageSquare size={14} />
-                          <span>Ask this document</span>
+                          <BookOpen size={14} />
+                          <span>문서 열기</span>
                         </button>
                       </div>
                     </article>
@@ -1934,77 +2253,6 @@ const PlaybookLibraryPage: React.FC = () => {
                 </div>
               )}
             </section>
-
-            {operationalWikiBooks.length > 0 && (
-              <section className="operational-shelf box-container">
-                <div className="operational-shelf-header">
-                  <div>
-                    <span className="operational-shelf-eyebrow">Operational Wiki</span>
-                    <h2>바로 읽을 수 있는 운영 위키</h2>
-                    <p>지금 제품 표면에서 바로 여는 핵심 운영 문서 묶음입니다.</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="operational-shelf-link"
-                    onClick={() => openMetricPopover('wikiRuntime')}
-                  >
-                    전체 {approvedWikiRuntimeBooks.toLocaleString()}권 보기
-                  </button>
-                </div>
-                {(
-                  <div className="operational-shelf-grid">
-                    {operationalWikiBooks.map((book) => (
-                      <article
-                        key={book.book_slug}
-                        className="operational-book-card"
-                      >
-                        <button
-                          type="button"
-                          className="operational-card-open"
-                          onClick={() => setBookViewer(book)}
-                        >
-                          <span className="operational-book-badge">{normalizePlaybookGrade(book.grade)}</span>
-                          <strong>{book.title}</strong>
-                          <span className="operational-card-open-subtitle">{book.book_slug.replace(/_/g, ' ')}</span>
-                        </button>
-                        <OfficialSourcePopover record={book} />
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
-
-            {allOperationalWikiBooks.length > 0 && (
-              <section className="operational-library box-container">
-                <div className="operational-library-header">
-                  <div>
-                    <span className="operational-library-eyebrow">Operational Library</span>
-                    <h2>운영 위키 {approvedWikiRuntimeBooks.toLocaleString()}권</h2>
-                  </div>
-                  <span className="operational-library-count">{approvedWikiRuntimeBooks.toLocaleString()} books</span>
-                </div>
-                <div className="operational-library-grid">
-                  {allOperationalWikiBooks.map((book) => (
-                    <article
-                      key={`library-${book.book_slug}`}
-                      className="operational-library-card"
-                    >
-                      <button
-                        type="button"
-                        className="operational-card-open"
-                        onClick={() => setBookViewer(book)}
-                      >
-                        <span className="operational-library-card-badge">{normalizePlaybookGrade(book.grade)}</span>
-                        <strong>{book.title}</strong>
-                        <span className="operational-card-open-subtitle">{book.book_slug.replace(/_/g, ' ')}</span>
-                      </button>
-                      <OfficialSourcePopover record={book} />
-                    </article>
-                  ))}
-                </div>
-              </section>
-            )}
 
             {releaseCandidateFreeze?.exists && (
               <section className="release-freeze-hero">
@@ -2188,37 +2436,115 @@ const PlaybookLibraryPage: React.FC = () => {
             <section className="library-repository-strip box-container">
               <div className="section-header">
                 <div>
-                  <h2>My Uploads</h2>
-                  <p className="text-muted">업로드한 문서를 Studio Chat의 질문 범위로 선택합니다.</p>
+                  <h2>내 업로드</h2>
+                  <p className="text-muted">개인 문서를 업로드하면 세션 범위 안에서만 Studio Chat의 검색 근거로 연결합니다.</p>
+                  <div className="library-upload-flow" aria-label="Upload ingestion flow">
+                    <span>업로드</span>
+                    <span>파싱/청킹</span>
+                    <span>PostgreSQL 저장</span>
+                    <span>Qdrant 인덱싱</span>
+                    <span>챗봇 질문 가능</span>
+                  </div>
                 </div>
-                <button type="button" className="library-dashboard-link" onClick={refreshDocumentRepositories}>
-                  Refresh
-                </button>
+                <div className="library-section-actions">
+                  <button
+                    type="button"
+                    className="upload-trigger-btn"
+                    onClick={() => openUserDocsUpload(true)}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? <Loader2 size={16} className="spin-icon" /> : <UploadCloud size={16} />}
+                    <span>{isProcessing ? '처리 중...' : '문서 업로드'}</span>
+                  </button>
+                  <button type="button" className="library-dashboard-link" onClick={refreshDocumentRepositories}>
+                    새로고침
+                  </button>
+                </div>
               </div>
               {userUploadDocumentRows.length === 0 ? (
                 <div className="repo-empty">
                   <Database size={36} />
-                  <p>아직 조회 가능한 repository 문서가 없습니다.</p>
+                  <p>아직 업로드한 문서가 없습니다.</p>
+                  <span>문서를 올리면 처리 단계와 인덱싱 결과를 카드에서 바로 확인할 수 있습니다.</span>
                 </div>
               ) : (
-                <div className="library-repository-grid">
-                  {userUploadDocumentRows.map(({ repository, document, categoryKey }) => (
-                    <article className="library-repository-card" key={document.document_source_id}>
-                      <div>
-                        <span className="library-repository-scope">{document.source_scope || repository.visibility || repository.repository_kind}</span>
-                        <h3>{document.title || document.filename}</h3>
-                        <p>{repository.visibility} · {repository.document_count} docs</p>
-                      </div>
-                      <div className="library-document-actions">
-                        <button type="button" onClick={() => openDocumentInChat(repository, document, categoryKey)}>
-                          Chat with this document
-                        </button>
-                        <button type="button" onClick={() => openRepositoryInChat(repository)}>
-                          Chat with all uploads
-                        </button>
-                      </div>
-                    </article>
-                  ))}
+                <div className="library-repository-grid library-upload-grid">
+                  {userUploadDocumentRows.map(({ repository, document, categoryKey }) => {
+                    const status = repositoryDocumentStatus(document);
+                    const title = document.title || document.filename || 'Untitled upload';
+                    const subtitle = document.filename && document.filename !== title ? document.filename : repository.title || repository.slug;
+                    return (
+                      <article className="library-repository-card library-upload-card" key={document.document_source_id}>
+                        <div className="library-upload-card-top">
+                          <span className="library-repository-scope">{document.source_scope || repository.visibility || repository.repository_kind}</span>
+                          <span className={`library-upload-status library-upload-status--${status.tone}`}>{status.label}</span>
+                        </div>
+                        <div className="library-upload-card-main">
+                          <FileText size={20} className="library-upload-icon" />
+                          <div>
+                            <h3>{title}</h3>
+                            <p>{subtitle}</p>
+                          </div>
+                        </div>
+                        <div className="library-upload-facts" aria-label={`${title} repository status`}>
+                          <span>{status.detail}</span>
+                          <span>업로드 묶음 {repository.document_count.toLocaleString()}개 문서</span>
+                          <span>{repositoryDocumentUpdatedLabel(document, repository)}</span>
+                        </div>
+                        <div className="library-upload-proof" aria-label={`${title} RAG ingestion proof`}>
+                          <span>PostgreSQL 저장 기록</span>
+                          <span>Qdrant {document.indexed_chunk_count.toLocaleString()}개 인덱싱</span>
+                          <span>세션 범위 기록</span>
+                        </div>
+                        <div className="library-document-actions">
+                          <button
+                            type="button"
+                            className="library-document-chat-btn library-document-chat-btn--reader"
+                            onClick={() => openUploadedDocumentReader(document)}
+                          >
+                            <BookOpen size={14} />
+                            <span>문서 보기</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="library-document-chat-btn library-document-chat-btn--report"
+                            onClick={() => openUploadProcessingReport(document)}
+                          >
+                            <Clock size={14} />
+                            <span>작업 로그</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="library-document-chat-btn"
+                            onClick={() => openDocumentInChat(repository, document, categoryKey)}
+                          >
+                            <MessageSquare size={14} />
+                            <span>이 문서로 질문</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="library-document-chat-btn library-document-chat-btn--secondary"
+                            onClick={() => openRepositoryInChat(repository)}
+                          >
+                            <Layers size={14} />
+                            <span>전체 업로드로 질문</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="library-document-chat-btn library-document-chat-btn--danger"
+                            disabled={deletingDocumentId === document.document_source_id}
+                            onClick={() => handleUploadedDocumentDelete(document.document_source_id, title)}
+                            title="이 문서와 관련 인덱스를 모두 삭제"
+                          >
+                            {deletingDocumentId === document.document_source_id
+                              ? <Loader2 size={14} className="spin-icon" />
+                              : <Trash2 size={14} />}
+                            <span>삭제</span>
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </section>
@@ -2230,7 +2556,7 @@ const PlaybookLibraryPage: React.FC = () => {
                   <div className="factory-workbench-title-row">
                     <h2>Book Factory</h2>
                     <span className="factory-workbench-title-tag">
-                      {factoryLane === 'tools' ? 'Book Factory Pipeline' : 'User Docs Upload'}
+                      {factoryLane === 'tools' ? 'Book Factory Pipeline' : 'User Docs Pipeline'}
                     </span>
                   </div>
                   <p className="text-muted">
@@ -2240,16 +2566,6 @@ const PlaybookLibraryPage: React.FC = () => {
                   </p>
                 </div>
                 <div className="factory-workbench-controls">
-                  {factoryLane === 'user' && (
-                    <button
-                      className="upload-trigger-btn"
-                      onClick={() => openUserDocsUpload(true)}
-                      disabled={isProcessing}
-                    >
-                      {isProcessing ? <Loader2 size={16} className="spin-icon" /> : <UploadCloud size={16} />}
-                      <span>{isProcessing ? 'Processing...' : 'Upload File'}</span>
-                    </button>
-                  )}
                   <div className="factory-mode-toggle" role="tablist" aria-label="Book Factory mode">
                     <button
                       type="button"
@@ -2289,15 +2605,15 @@ const PlaybookLibraryPage: React.FC = () => {
                     onClick={() => { void openToolsDocsUpload(); }}
                   >
                     <Database size={16} />
-                    <span>Tools Docs Upload</span>
+                    <span>Official Source Pipeline</span>
                   </button>
                   <button
                     type="button"
                     className={`factory-entry-btn ${factoryLane === 'user' ? 'active' : ''}`}
-                    onClick={() => openUserDocsUpload(true)}
+                    onClick={() => setFactoryLane('user')}
                   >
                     <UploadCloud size={16} />
-                    <span>User Docs Upload</span>
+                    <span>User Document Pipeline</span>
                   </button>
                 </div>
 
@@ -2370,54 +2686,44 @@ const PlaybookLibraryPage: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <div className="pipeline-visualizer" ref={pipelineRef}>
-                  <div className="pipeline-step">
-                    <div className="step-badge">Bronze</div>
-                    <div className="step-icon">
-                      {pipelineStage === 'uploading' ? <Loader2 className="spin-icon" /> : <UploadCloud />}
-                    </div>
-                    <div className="step-info">
-                      <h4>Source Intake</h4>
-                      <p>파일 업로드 · 원본 캡처</p>
-                    </div>
-                  </div>
-
-                  <div className="pipeline-connector"><div className="flow-particle"></div></div>
-
-                  <div className="pipeline-step">
-                    <div className="step-badge">Silver</div>
-                    <div className="step-icon">
-                      {pipelineStage === 'capturing' ? <Loader2 className="spin-icon" /> : <HardDrive />}
-                    </div>
-                    <div className="step-info">
-                      <h4>Structured Wiki</h4>
-                      <p>정규화 · 섹션 · 위키 책</p>
-                    </div>
-                  </div>
-
-                  <div className="pipeline-connector"><div className="flow-particle"></div></div>
-
-                  <div className="pipeline-step">
-                    <div className="step-badge">Gold</div>
-                    <div className="step-icon">
-                      {pipelineStage === 'normalizing' ? <Loader2 className="spin-icon" /> : <Cpu />}
-                    </div>
-                    <div className="step-info">
-                      <h4>Playbook Materialize</h4>
-                      <p>코퍼스 · 플레이북 생성</p>
-                    </div>
-                  </div>
-
-                  <div className="pipeline-connector"><div className="flow-particle"></div></div>
-
-                  <div className="pipeline-step">
-                    <div className="step-badge">Judge</div>
-                    <div className="step-icon"><BookOpen /></div>
-                    <div className="step-info">
-                      <h4>User Library Join</h4>
-                      <p>정상 저장 · 재오픈 가능</p>
-                    </div>
-                  </div>
+                <div className="pipeline-visualizer pipeline-visualizer--user-upload" ref={pipelineRef}>
+                  {USER_UPLOAD_PIPELINE_STEPS.map((step, index) => {
+                    const stepState = uploadStepState(step.stage, index);
+                    const event = latestUploadStageByName.get(step.stage);
+                    const icon = step.stage === 'received'
+                      ? <UploadCloud />
+                      : step.stage === 'store'
+                        ? <HardDrive />
+                        : step.stage === 'parse'
+                          ? <FileText />
+                          : step.stage === 'chunk'
+                            ? <Layers />
+                            : step.stage === 'persist'
+                              ? <Database />
+                              : step.stage === 'index'
+                                ? <Cpu />
+                                : step.stage === 'scope'
+                                  ? <ShieldCheck />
+                                  : <BookOpen />;
+                    return (
+                      <div
+                        className={`pipeline-step pipeline-step--compact pipeline-step--stage-${step.stage} pipeline-step--${stepState} ${stepState === 'done' ? 'completed' : ''} ${stepState === 'running' ? 'active' : ''} ${step.stage === 'ready' && stepState === 'done' ? 'final' : ''}`}
+                        key={step.stage}
+                      >
+                        <div className="step-badge">{step.badge}</div>
+                        <div className="step-icon">
+                          {stepState === 'running' ? <Loader2 className="spin-icon" /> : icon}
+                        </div>
+                        <div className="step-info">
+                          <h4>{step.title}</h4>
+                          <p>{event?.message || step.description}</p>
+                          {typeof event?.duration_ms === 'number' ? (
+                            <span className="step-duration">{formatDurationMs(event.duration_ms)}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -2962,7 +3268,7 @@ const PlaybookLibraryPage: React.FC = () => {
                       <div className="repo-panel-header">
                         <div>
                           <span className="factory-hub-eyebrow">Factory Assistant</span>
-                          <h2>Tools Docs Upload</h2>
+                          <h2>Official Source Intake</h2>
                           <p className="text-muted">
                             답하지 못한 질문에서 공식 레포 AsciiDoc과 공식 웹페이지 manual 후보를 찾고, 내려받을 계획표를 준비합니다.
                           </p>
@@ -3603,6 +3909,110 @@ const PlaybookLibraryPage: React.FC = () => {
         </div>
       )}
 
+      {uploadReportViewer && (
+        <div className="preview-overlay" onClick={() => setUploadReportViewer(null)}>
+          <div className="preview-popover preview-popover-upload-report" onClick={(e) => e.stopPropagation()}>
+            <div className="preview-header">
+              <div className="preview-header-left">
+                <h3>{uploadReportViewer.title}</h3>
+                <div className="preview-header-meta">
+                  <span>User Upload Report</span>
+                  <span>{uploadReportViewer.documentSourceId}</span>
+                  {uploadReportViewer.report?.report_reconstructed ? <span>reconstructed</span> : <span>stored report</span>}
+                </div>
+              </div>
+              <div className="preview-header-actions">
+                <button className="preview-close-btn" onClick={() => setUploadReportViewer(null)}><X size={18} /></button>
+              </div>
+            </div>
+            <div className="upload-report-body">
+              {uploadReportViewer.loading ? (
+                <div className="preview-loading"><Loader2 size={20} className="spin-icon" /> 작업 로그를 불러오는 중...</div>
+              ) : uploadReportViewer.error ? (
+                <div className="preview-no-sections">{uploadReportViewer.error}</div>
+              ) : uploadReportViewer.report ? (
+                <>
+                  <div className="upload-report-summary">
+                    <div>
+                      <span>파일</span>
+                      <strong>{uploadReportViewer.report.filename || uploadReportViewer.title}</strong>
+                    </div>
+                    <div>
+                      <span>검색 상태</span>
+                      <strong>
+                        {uploadReportViewer.report.basic_index_ready
+                          ? '기본 인덱싱 완료'
+                          : '검색 인덱싱 확인 필요'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>답변 품질</span>
+                      <strong>
+                        {uploadReportViewer.report.answer_ready || uploadReportViewer.report.ready_for_chat
+                          ? '검증 완료'
+                          : '검수 전'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>청크 / 인덱싱</span>
+                      <strong>
+                        {Number(uploadReportViewer.report.counts?.chunk_count || 0).toLocaleString()}
+                        {' / '}
+                        {Number(uploadReportViewer.report.counts?.indexed_count || 0).toLocaleString()}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Owner Scope</span>
+                      <strong>{uploadReportViewer.report.scope?.owner_user_id || uploadReportViewer.report.owner_user_id || '-'}</strong>
+                    </div>
+                  </div>
+
+                  <div className="upload-report-scope">
+                    <span>repository_id: {uploadReportViewer.report.scope?.repository_id || uploadReportViewer.report.repository_id || '-'}</span>
+                    <span>document_source_id: {uploadReportViewer.report.document_source_id}</span>
+                    {uploadReportViewer.report.index?.collection ? <span>collection: {uploadReportViewer.report.index.collection}</span> : null}
+                  </div>
+
+                  {(uploadReportViewer.report.warnings ?? []).length > 0 && (
+                    <div className="upload-report-warning-list">
+                      {(uploadReportViewer.report.warnings ?? []).map((warning, index) => (
+                        <span key={`${warning}-${index}`}>{warning}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="upload-report-timeline">
+                    {USER_UPLOAD_PIPELINE_STEPS.map((step) => {
+                      const event = (uploadReportViewer.report?.stages ?? [])
+                        .filter((item) => item.stage === step.stage)
+                        .slice(-1)[0];
+                      const status = event?.status || 'not_recorded';
+                      return (
+                        <div className={`upload-report-stage upload-report-stage--${uploadStageTone(status)}`} key={step.stage}>
+                          <div className="upload-report-stage-head">
+                            <span>{step.badge}</span>
+                            <strong>{step.title}</strong>
+                            <em>{uploadStageStatusLabel(status)}</em>
+                          </div>
+                          <p>{event?.message || '저장된 단계 이벤트가 없습니다.'}</p>
+                          <div className="upload-report-stage-meta">
+                            {typeof event?.duration_ms === 'number' ? <span>{formatDurationMs(event.duration_ms)}</span> : null}
+                            {event?.started_at ? <span>start {new Date(event.started_at).toLocaleTimeString()}</span> : null}
+                            {event?.finished_at ? <span>end {new Date(event.finished_at).toLocaleTimeString()}</span> : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div className="preview-no-sections">표시할 작업 로그가 없습니다.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Book Viewer Popover */}
       {bookViewer && (
         <div className="preview-overlay" onClick={() => setBookViewer(null)}>
@@ -3614,8 +4024,14 @@ const PlaybookLibraryPage: React.FC = () => {
                   <span>{customerPackBookTruth(bookViewer) || bookViewer.source_lane}</span>
                   {bookViewer.current_source_label ? <span>{bookViewer.current_source_label}</span> : null}
                   {bookViewer.source_origin_label ? <span>{bookViewer.source_origin_label}</span> : null}
-                  <span>{bookViewer.section_count} sections</span>
-                  <span className={playbookGradeBadgeClass(bookViewer.grade)}>{normalizePlaybookGrade(bookViewer.grade)}</span>
+                  <span>
+                    {bookViewer.source_type === 'uploaded_document'
+                      ? `${bookViewer.chunk_count || bookViewer.section_count} chunks`
+                      : `${bookViewer.section_count} sections`}
+                  </span>
+                  {bookViewer.source_type !== 'uploaded_document' ? (
+                    <span className={playbookGradeBadgeClass(bookViewer.grade)}>{normalizePlaybookGrade(bookViewer.grade)}</span>
+                  ) : null}
                 </div>
                 {customerPackBookEvidenceBits(bookViewer).length > 0 && (
                   <div className="preview-chip-row">
@@ -3626,7 +4042,26 @@ const PlaybookLibraryPage: React.FC = () => {
                 )}
               </div>
               <div className="preview-header-actions">
-                {bookSourceOriginHref(bookViewer) ? (
+                {bookViewer.source_type === 'uploaded_document' ? (
+                  <span className="preview-viewer-mode preview-viewer-mode-static" title="업로드 문서는 HTML 문서 뷰어로 표시합니다.">
+                    <BookOpen size={14} aria-hidden="true" />
+                    <span>업로드 문서</span>
+                  </span>
+                ) : (
+                  <label className="preview-viewer-mode" title="문서 보기 형식">
+                    <BookOpen size={14} aria-hidden="true" />
+                    <select
+                      className="preview-viewer-mode-select"
+                      value={bookViewerPageMode}
+                      aria-label="문서 보기 형식"
+                      onChange={(event) => setBookViewerPageMode(event.target.value as ViewerPageMode)}
+                    >
+                      <option value="single">단일</option>
+                      <option value="multi">멀티</option>
+                    </select>
+                  </label>
+                )}
+                {bookViewer.source_type !== 'uploaded_document' && bookSourceOriginHref(bookViewer) ? (
                   <a
                     className="preview-open-full-btn"
                     href={toRuntimeUrl(bookSourceOriginHref(bookViewer))}

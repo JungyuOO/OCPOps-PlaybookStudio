@@ -1,0 +1,1216 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>User Upload 8-Stage Runtime Map</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #071018;
+      --panel: #0d1824;
+      --panel-2: #111f2d;
+      --ink: #edf7ff;
+      --muted: #9db0c2;
+      --line: rgba(157, 176, 194, 0.22);
+      --cyan: #20d5ff;
+      --green: #39d98a;
+      --yellow: #ffd166;
+      --pink: #ff6fae;
+      --red: #ff6b6b;
+      --blue: #8ab4ff;
+      --code: #06111c;
+      --shadow: 0 22px 80px rgba(0, 0, 0, 0.32);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 18% 8%, rgba(32, 213, 255, 0.14), transparent 30%),
+        linear-gradient(180deg, #071018 0%, #09131d 45%, #050a10 100%);
+      color: var(--ink);
+      font-family: Inter, Pretendard, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.6;
+    }
+
+    a {
+      color: var(--cyan);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    code {
+      border: 1px solid rgba(138, 180, 255, 0.24);
+      border-radius: 6px;
+      background: rgba(6, 17, 28, 0.88);
+      color: #d9ecff;
+      padding: 0.12rem 0.34rem;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.88em;
+    }
+
+    .page {
+      width: min(1180px, calc(100vw - 44px));
+      margin: 0 auto;
+      padding: 44px 0 72px;
+    }
+
+    .hero {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(17, 31, 45, 0.94), rgba(7, 16, 24, 0.92));
+      box-shadow: var(--shadow);
+      padding: 34px;
+    }
+
+    .eyebrow {
+      color: var(--cyan);
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 10px 0 14px;
+      max-width: 920px;
+      font-size: clamp(2.2rem, 5vw, 4.8rem);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 900px;
+      margin: 0;
+      color: #c8d8e6;
+      font-size: 1.08rem;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.035);
+      padding: 16px;
+      min-height: 118px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 1.42rem;
+      line-height: 1.1;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .section {
+      margin-top: 28px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(13, 24, 36, 0.86);
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.22);
+      padding: 26px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 1.48rem;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .section-header p {
+      max-width: 760px;
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .pill {
+      border: 1px solid rgba(32, 213, 255, 0.22);
+      border-radius: 999px;
+      background: rgba(32, 213, 255, 0.08);
+      color: #d6f7ff;
+      padding: 6px 10px;
+      font-size: 0.82rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .pill.warn {
+      border-color: rgba(255, 209, 102, 0.3);
+      background: rgba(255, 209, 102, 0.1);
+      color: #ffe6a5;
+    }
+
+    .pill.bad {
+      border-color: rgba(255, 107, 107, 0.34);
+      background: rgba(255, 107, 107, 0.1);
+      color: #ffc1c1;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .legend-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel-2);
+      padding: 16px;
+    }
+
+    .legend-card strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .legend-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.93rem;
+    }
+
+    .flow {
+      display: grid;
+      gap: 14px;
+      counter-reset: stage;
+    }
+
+    .stage {
+      position: relative;
+      display: grid;
+      grid-template-columns: 84px minmax(0, 1fr);
+      gap: 18px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(17, 31, 45, 0.96), rgba(9, 19, 29, 0.96));
+      padding: 20px;
+    }
+
+    .stage::before {
+      counter-increment: stage;
+      content: counter(stage);
+      display: grid;
+      place-items: center;
+      width: 52px;
+      height: 52px;
+      border: 1px solid rgba(32, 213, 255, 0.34);
+      border-radius: 16px;
+      background: rgba(32, 213, 255, 0.1);
+      color: var(--cyan);
+      font-size: 1.22rem;
+      font-weight: 900;
+    }
+
+    .stage h3 {
+      margin: 0;
+      font-size: 1.25rem;
+      line-height: 1.25;
+    }
+
+    .stage .subtitle {
+      margin: 4px 0 0;
+      color: var(--muted);
+    }
+
+    .stage-body {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .box {
+      border: 1px solid rgba(157, 176, 194, 0.17);
+      border-radius: 12px;
+      background: rgba(6, 17, 28, 0.52);
+      padding: 13px;
+    }
+
+    .box b {
+      display: block;
+      margin-bottom: 6px;
+      color: #f4fbff;
+    }
+
+    .box p {
+      margin: 0;
+      color: #bfd0df;
+      font-size: 0.92rem;
+    }
+
+    .status-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .status {
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+
+    .status.done {
+      background: rgba(57, 217, 138, 0.14);
+      color: #9cf2c5;
+    }
+
+    .status.info {
+      background: rgba(138, 180, 255, 0.14);
+      color: #c2d7ff;
+    }
+
+    .status.warn {
+      background: rgba(255, 209, 102, 0.13);
+      color: #ffe2a0;
+    }
+
+    .status.fail {
+      background: rgba(255, 107, 107, 0.13);
+      color: #ffc1c1;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .callout {
+      margin-top: 14px;
+      border: 1px solid rgba(255, 209, 102, 0.32);
+      border-radius: 16px;
+      background: rgba(255, 209, 102, 0.08);
+      padding: 18px;
+    }
+
+    .callout.warning {
+      border-color: rgba(255, 209, 102, 0.32);
+      background: rgba(255, 209, 102, 0.08);
+    }
+
+    .callout.danger {
+      border-color: rgba(255, 107, 107, 0.34);
+      background: rgba(255, 107, 107, 0.08);
+    }
+
+    .callout.good {
+      border-color: rgba(57, 217, 138, 0.28);
+      background: rgba(57, 217, 138, 0.08);
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #ffe6a5;
+    }
+
+    .callout h3 {
+      margin: 0 0 8px;
+      font-size: 1.08rem;
+    }
+
+    .callout p {
+      margin: 0;
+      color: #d7e4ef;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+      background: rgba(6, 17, 28, 0.48);
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid rgba(157, 176, 194, 0.16);
+      padding: 13px 14px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: #eaf8ff;
+      background: rgba(32, 213, 255, 0.08);
+      font-size: 0.82rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    td {
+      color: #c8d8e6;
+      font-size: 0.92rem;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .checklist {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .checklist li {
+      border: 1px solid rgba(157, 176, 194, 0.16);
+      border-radius: 12px;
+      background: rgba(6, 17, 28, 0.42);
+      padding: 12px 14px;
+      color: #cfdeea;
+    }
+
+    .footer {
+      margin-top: 22px;
+      color: #7f93a6;
+      font-size: 0.86rem;
+    }
+
+    @media (max-width: 920px) {
+      .hero-grid,
+      .legend,
+      .split,
+      .stage-body {
+        grid-template-columns: 1fr;
+      }
+
+      .stage {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="eyebrow">User Upload Runtime Guide</div>
+      <h1>유저 업로드 8단계 실행 안내도</h1>
+      <p class="lead">
+        이 문서는 <code>/playbook-library/repository</code>의 유저 업로드가 현재 코드에서 어떤 순서로 실행되는지,
+        각 단계가 실제로 어떤 함수와 외부 서비스를 쓰는지, 그리고 제품 요구사항과 현재 구현 사이의 gap이 무엇인지 정리한다.
+      </p>
+      <div class="hero-grid">
+        <div class="metric">
+          <strong>8 backend events</strong>
+          <span>서버가 NDJSON stream으로 내보내는 실제 stage event 수</span>
+        </div>
+        <div class="metric">
+          <strong>5 visible cards</strong>
+          <span>현재 프론트 진행 카드가 공식 단계로 그리는 수</span>
+        </div>
+        <div class="metric">
+          <strong>Text RAG</strong>
+          <span>현재 구현이 주로 보장하는 완료 범위</span>
+        </div>
+        <div class="metric">
+          <strong>Wiki asset gap</strong>
+          <span>PDF 페이지 이미지, OCR, diagram asset 보존은 별도 계약 필요</span>
+        </div>
+        <div class="metric">
+          <strong>Company LLM OCR</strong>
+          <span><code>LLM_ENDPOINT</code> 기반 Gemma 4 OCR/VL을 파싱 단계의 기본 경로로 둔다</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>화면 5단계와 8단계 매핑</h2>
+          <p>
+            화면 카드 수는 제품 UX용 압축이고, 백엔드 stage event는 진단용 실제 실행 단위다.
+            <code>parse</code>는 내용 검증 단계이므로 <code>원본 저장</code> 카드에 숨기지 않는 편이 안전하다.
+          </p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>화면 카드</th>
+              <th>백엔드 stage</th>
+              <th>완료 의미</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1. 원본 저장</td>
+              <td><code>received</code> + <code>store</code></td>
+              <td>요청을 받았고 원본 파일 bytes가 서버 storage에 저장됨. 아직 본문 추출 성공은 아님.</td>
+            </tr>
+            <tr>
+              <td>2. 문서 파싱</td>
+              <td><code>parse</code></td>
+              <td>본문 markdown, block, asset 후보가 만들어짐. OCR/VL도 이 단계의 sub-step으로 들어와야 함.</td>
+            </tr>
+            <tr>
+              <td>3. 청크 생성</td>
+              <td><code>chunk</code></td>
+              <td>RAG 검색 단위인 chunk가 생성됨. 아직 viewer와 검색 인덱스에는 고정되지 않음.</td>
+            </tr>
+            <tr>
+              <td>4. DB 저장</td>
+              <td><code>persist</code></td>
+              <td>PostgreSQL에 source, parsed document, block, chunk, asset row가 저장됨. 이 시점부터 업로드 viewer가 본문을 읽을 수 있음.</td>
+            </tr>
+            <tr>
+              <td>5. Qdrant 인덱싱</td>
+              <td><code>index</code> + <code>scope</code> + <code>ready</code></td>
+              <td>embedding/Qdrant 반영과 owner/repository scope 확인까지 끝남. 텍스트 검색 가능 여부는 <code>indexed_count</code>로 판단.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout good">
+        <h3>뷰어 기준 완료점</h3>
+        <p>
+          <code>parse</code>가 끝나면 본문은 메모리에만 있고, <code>persist</code>가 끝나야 viewer route가 PostgreSQL에서 읽어 화면에 보여줄 수 있다.
+          단, 현재 viewer는 원본 PDF 페이지 복원이 아니라 <code>parsed_documents.markdown</code> 기반의 parsed view다.
+        </p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>저장 위치</h2>
+          <p>
+            업로드 결과는 하나의 파일에 전부 저장되지 않는다. 원본 파일은 로컬 storage에 남고,
+            파싱 결과와 검색 단위는 PostgreSQL/Qdrant에 나뉘어 저장된다.
+          </p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>데이터</th>
+              <th>로컬/컨테이너 위치</th>
+              <th>설명</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>원본 업로드 파일</td>
+              <td><code>C:\Users\soulu\cywell\OCPOps-PlayBookStudio\storage\uploads\sources\{upload_id}\{filename}</code><br /><code>/app/storage/uploads/sources/{upload_id}/{filename}</code></td>
+              <td><code>_store_uploaded_file()</code>이 저장한다. Docker compose에서 <code>./storage:/app/storage</code>로 bind mount된다.</td>
+            </tr>
+            <tr>
+              <td>업로드 리포트</td>
+              <td><code>C:\Users\soulu\cywell\OCPOps-PlayBookStudio\storage\uploads\reports\{document_source_id}\ingestion-report.json</code></td>
+              <td>stage event, block/chunk/index count, quality gate 상태를 저장한다.</td>
+            </tr>
+            <tr>
+              <td>파싱 본문과 block</td>
+              <td><code>PostgreSQL: parsed_documents, document_blocks</code></td>
+              <td>viewer가 읽는 본문 source. 별도 markdown 파일로 저장되지 않는다.</td>
+            </tr>
+            <tr>
+              <td>검색 chunk</td>
+              <td><code>PostgreSQL: document_chunks</code></td>
+              <td>RAG 검색의 원문 단위. viewer diagnostic에도 사용된다.</td>
+            </tr>
+            <tr>
+              <td>이미지/asset metadata</td>
+              <td><code>PostgreSQL: document_assets</code> + storage asset key</td>
+              <td>현재 PDF 경로는 asset이 0개일 수 있다. PDF page image/OCR 구현 후 이 영역이 중요해진다.</td>
+            </tr>
+            <tr>
+              <td>벡터 인덱스</td>
+              <td><code>Qdrant collection: openshift_docs</code></td>
+              <td><code>document_source_id</code>, <code>repository_id</code>, <code>owner_user_id</code> payload filter로 검색 scope를 잡는다.</td>
+            </tr>
+            <tr>
+              <td>업로드 viewer</td>
+              <td><code>/uploads/documents/{document_source_id}/index.html</code></td>
+              <td>디스크 HTML 파일이 아니라 PostgreSQL에서 동적으로 렌더링되는 route다.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2><code>corpus/data</code>에서 가져올 계약</h2>
+          <p>
+            기존 위키화 산출물은 user upload를 그대로 저장할 위치가 아니라, v0.1.5 구현자가 따라야 할 viewer/asset/relation 구조의 샘플이다.
+            private user 문서를 <code>corpus/data</code> 공용 폴더에 섞으면 access boundary가 흐려지므로, 모양만 가져오고 저장 truth는 PostgreSQL과 <code>storage/uploads</code>에 둔다.
+          </p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th><code>corpus/data</code> 구조</th>
+              <th>현재 역할</th>
+              <th>user upload에 적용할 방식</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>wiki_runtime_books/active_manifest.json</code></td>
+              <td>책 slug, title, source ref, viewer path, runtime markdown path를 묶는 manifest.</td>
+              <td><code>document_sources</code>와 <code>parsed_documents.metadata</code>에 upload document manifest equivalent를 둔다. 파일 JSON을 공용 manifest에 바로 추가하지 않는다.</td>
+            </tr>
+            <tr>
+              <td><code>wiki_assets/{group}/{book_slug}/*.png</code></td>
+              <td>공식 위키 figure 이미지의 실제 파일 저장소.</td>
+              <td>PDF page image와 embedded image는 <code>storage/uploads/assets/{document_source_id}/...</code>에 저장하고 <code>document_assets.storage_key</code>로 연결한다.</td>
+            </tr>
+            <tr>
+              <td><code>wiki_relations/figure_assets.json</code></td>
+              <td>figure caption, asset URL, figure viewer path, source file, section hint, related entities를 연결.</td>
+              <td><code>document_assets</code>와 asset metadata에 caption/OCR/VL 결과, page number, viewer path, section hint를 저장한다.</td>
+            </tr>
+            <tr>
+              <td><code>wiki_relations/diagram_assets.json</code></td>
+              <td>diagram과 일반 figure를 구분하고 semantic diagram으로 노출.</td>
+              <td>Gemma 4 OCR/VL 결과로 <code>asset_type</code>, <code>diagram_type</code>, <code>description_status</code>를 남기는 계약을 둔다.</td>
+            </tr>
+            <tr>
+              <td><code>wiki_relations/entity_hubs.json</code></td>
+              <td>entity 중심으로 관련 책, 다음 읽을 경로, figure를 묶음.</td>
+              <td>v0.1.4에서는 구현하지 않고, v0.1.5에서 corpus enrichment 또는 relation table 후보로 넘긴다.</td>
+            </tr>
+            <tr>
+              <td><code>/playbooks/wiki-assets/*</code>, <code>/wiki/figures/*</code></td>
+              <td>static asset serve와 figure detail viewer route.</td>
+              <td>private upload용 route는 <code>/uploads/documents/{document_source_id}/assets/{asset_id}</code> 계열로 분리해야 한다.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warning">
+        <strong>v0.1.4 판단</strong>
+        <p>
+          이번 버전에서 할 일은 full wiki runtime을 새로 만드는 것이 아니라,
+          upload pipeline을 UI, viewer, chatbot까지 닫힌 루프로 완성하고,
+          user upload가 나중에 같은 위키 경험으로 승격될 수 있게 page image, OCR/VL, asset relation의 저장 계약을 분명히 남기는 것이다.
+        </p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>추천 방식: DB-backed wiki projection</h2>
+          <p>
+            더 좋은 방법은 <code>corpus/data</code>의 폴더를 복제하는 것이 아니라,
+            현재 DB와 <code>storage/uploads</code>에 저장된 private upload를 viewer가 필요할 때 위키형 구조로 투영하는 것이다.
+          </p>
+        </div>
+      </div>
+      <div class="flow">
+        <article class="stage">
+          <div></div>
+          <div>
+            <h3>1. 저장 truth는 DB와 scoped storage</h3>
+            <p class="subtitle">원본, 파싱 본문, block, chunk, asset은 기존 업로드 테이블과 <code>storage/uploads</code>에 저장한다.</p>
+            <div class="stage-body">
+              <div class="box">
+                <b>핵심 이유</b>
+                <p>private upload는 owner/repository/visibility가 붙어야 하므로 공용 <code>corpus/data</code> manifest에 직접 섞지 않는다.</p>
+              </div>
+              <div class="box">
+                <b>필수 row</b>
+                <p><code>document_sources</code>, <code>parsed_documents</code>, <code>document_blocks</code>, <code>document_assets</code>, <code>document_chunks</code>.</p>
+              </div>
+              <div class="box">
+                <b>필수 파일</b>
+                <p>원본 PDF와 page/image asset bytes는 <code>storage/uploads</code> 아래에 둔다.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="stage">
+          <div></div>
+          <div>
+            <h3>2. viewer는 manifest를 즉석 projection</h3>
+            <p class="subtitle">정적 JSON 파일을 만들지 않아도 viewer route가 DB에서 manifest equivalent를 구성할 수 있다.</p>
+            <div class="stage-body">
+              <div class="box">
+                <b>Book equivalent</b>
+                <p><code>document_source_id</code>를 slug처럼 쓰고, title/filename/repository/owner를 viewer header로 만든다.</p>
+              </div>
+              <div class="box">
+                <b>Asset equivalent</b>
+                <p><code>document_assets</code> rows를 <code>figure_assets.json</code>의 item처럼 렌더링한다.</p>
+              </div>
+              <div class="box">
+                <b>Relation equivalent</b>
+                <p>v0.1.4에서는 page, section, asset 연결까지만 보장하고 entity hub는 v0.1.5 enrichment로 넘긴다.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="stage">
+          <div></div>
+          <div>
+            <h3>3. chat은 같은 scope로 검증</h3>
+            <p class="subtitle">위키형 viewer와 RAG 검색이 같은 <code>document_source_id</code>를 바라보는지 확인한다.</p>
+            <div class="stage-body">
+              <div class="box">
+                <b>UI</b>
+                <p>Repository list에서 업로드 문서가 보이고 viewer/action이 연결된다.</p>
+              </div>
+              <div class="box">
+                <b>Viewer</b>
+                <p><code>/uploads/documents/{document_source_id}/index.html</code>이 parsed body와 asset diagnostics를 보여준다.</p>
+              </div>
+              <div class="box">
+                <b>Chat</b>
+                <p>답변 citation이 같은 <code>document_source_id</code> 또는 viewer path를 포함한다.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>v0.1.4 완료 경계</h2>
+          <p>
+            v0.1.5에서 J가 이어받기 전에, 현재 버전은 user upload runtime pipeline을 제품에서 확인 가능한 상태로 끝낸다.
+            다만 full wiki/corpus promotion까지 밀어붙이지는 않는다.
+          </p>
+        </div>
+      </div>
+      <div class="split">
+        <div class="callout good">
+          <h3>v0.1.4에서 완성할 것</h3>
+          <p>
+            업로드한 자료가 Repository UI에 표시되고, viewer에서 파싱 본문을 확인할 수 있고,
+            <code>Ask this document</code> 또는 동일 scope의 Studio Chat에서 업로드 문서를 citation으로 쓰는 답변이 나오는지 확인한다.
+            이때 stage count, 저장 위치, OCR/VL provider, 현재 PDF asset gap도 함께 드러나야 한다.
+          </p>
+        </div>
+        <div class="callout danger">
+          <h3>v0.1.5로 넘길 것</h3>
+          <p>
+            PDF page render, Gemma 4 OCR/VL batch 호출, asset route, wiki-style upload viewer,
+            corpus layer 승격, relation/entity enrichment, SQL migration 정리와 재색인 검증.
+          </p>
+        </div>
+      </div>
+      <div class="table-wrap" style="margin-top: 16px;">
+        <table>
+          <thead>
+            <tr>
+              <th>v0.1.4 acceptance</th>
+              <th>pass 기준</th>
+              <th>evidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>UI 표시</td>
+              <td>업로드 후 repository document list에 파일명, 상태, chunk/index count, viewer action이 보인다.</td>
+              <td>프론트 화면 + upload report JSON.</td>
+            </tr>
+            <tr>
+              <td>Viewer 확인</td>
+              <td><code>/uploads/documents/{document_source_id}/index.html</code>에서 non-empty parsed body와 diagnostics를 확인한다.</td>
+              <td>viewer HTTP 200, <code>block_count &gt; 0</code>, <code>chunk_count &gt; 0</code>.</td>
+            </tr>
+            <tr>
+              <td>Chat 연계</td>
+              <td>같은 owner/repository/document scope로 질문했을 때 citation에 업로드 문서가 포함된다.</td>
+              <td>chat response citation의 <code>document_source_id</code> 또는 viewer path.</td>
+            </tr>
+            <tr>
+              <td>한계 노출</td>
+              <td>PDF image/OCR이 아직 빠졌다면 success로 숨기지 않고 <code>asset_count=0</code>, OCR/VL 미수행 상태를 보여준다.</td>
+              <td>stage event, report, UI warning.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>현재 팩트</h2>
+          <p>
+            8단계는 화면 카드 수가 아니라 백엔드가 실제로 emit하는 stage event 기준이다.
+            프론트는 그중 일부만 시각화한다.
+          </p>
+          <div class="pill-row">
+            <span class="pill">backend: received/store/parse/chunk/persist/index/scope/ready</span>
+            <span class="pill warn">frontend card: store/parse/chunk/persist/index</span>
+            <span class="pill bad">not guaranteed: full PDF image wiki viewer</span>
+          </div>
+        </div>
+      </div>
+      <div class="legend">
+        <div class="legend-card">
+          <strong>성공의 최소 의미</strong>
+          <p><code>chunk_count &gt; 0</code>이고 <code>indexed_count &gt; 0</code>이면 텍스트 기반 RAG 검색은 가능하다.</p>
+        </div>
+        <div class="legend-card">
+          <strong>성공이 아닌 것</strong>
+          <p><code>basic_index_ready</code>는 답변 품질 검증 완료나 원본 위키 복원을 의미하지 않는다.</p>
+        </div>
+        <div class="legend-card">
+          <strong>제품 목표</strong>
+          <p>PDF 원본 페이지, 이미지, OCR/VL 설명, 위키 viewer, RAG citation까지 같은 문서 계약으로 묶어야 한다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>OCR/VL Provider 결정</h2>
+          <p>
+            PDF 이미지와 스캔 페이지를 읽는 경로는 로컬 OCR을 기본값으로 두지 않는다.
+            회사 LLM 서버가 OpenAI-compatible vision 요청을 받아 처리하는 것을 파싱 단계의 기본 계약으로 둔다.
+          </p>
+        </div>
+      </div>
+      <div class="legend">
+        <div class="legend-card">
+          <strong>환경 변수</strong>
+          <p><code>LLM_ENDPOINT=http://cllm.cywell.co.kr/v1</code>, <code>LLM_MODEL=gemma-4-26b-a4b-it-awq-8bit</code>를 runtime 설정의 source of truth로 쓴다.</p>
+        </div>
+        <div class="legend-card">
+          <strong>현재 코드 hook</strong>
+          <p><code>upload_api.py</code>는 <code>build_qwen_image_describer(settings)</code>를 넘기고, 이 client는 <code>/chat/completions</code>에 base64 image payload를 보낸다.</p>
+        </div>
+        <div class="legend-card">
+          <strong>현재 gap</strong>
+          <p>PDF 파서가 페이지 이미지나 내부 이미지를 <code>DocumentAsset</code>으로 만들지 않으면 <code>LLM_ENDPOINT</code>가 있어도 OCR/VL 호출은 발생하지 않는다.</p>
+        </div>
+      </div>
+      <div class="callout warning">
+        <strong>이름 부채</strong>
+        <p>
+          코드의 <code>QwenVisionClient</code>, <code>qwen_model</code>, <code>qwen_status</code>는 현재 모델을 뜻하는 이름이 아니라 과거 구현명이 남은 것이다.
+          실제 provider 판정은 환경 변수의 <code>LLM_ENDPOINT</code>와 <code>LLM_MODEL</code>로 해야 한다.
+        </p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>8단계 실행 지도</h2>
+          <p>아래 단계명은 백엔드 stage event 이름 그대로다. 각 단계는 사용자가 보는 UI 문구와 다를 수 있다.</p>
+        </div>
+      </div>
+
+      <div class="flow">
+        <article class="stage">
+          <div></div>
+          <div>
+            <h3><code>received</code> — 요청 접수</h3>
+            <p class="subtitle">업로드 API가 요청을 받고 NDJSON stream을 시작한다.</p>
+            <div class="stage-body">
+              <div class="box">
+                <b>실행 진입점</b>
+                <p><code>handle_upload_ingest_stream()</code>가 stream을 열고 <code>build_upload_ingest_response()</code>를 호출한다.</p>
+              </div>
+              <div class="box">
+                <b>쓰는 도구</b>
+                <p>Python HTTP handler, multipart payload, NDJSON event writer.</p>
+              </div>
+              <div class="box">
+                <b>처리 결과</b>
+                <p>아직 파일 분석은 하지 않는다. 사용자는 “서버가 업로드 요청을 받았다”는 신호만 받는다.</p>
+              </div>
+            </div>
+            <div class="status-line">
+              <span class="status info">event: running</span>
+              <span class="status done">event: done</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage">
+          <div></div>
+          <div>
+            <h3><code>store</code> — 원본 파일 저장</h3>
+            <p class="subtitle">업로드된 파일 bytes를 서버 object storage 아래에 저장한다.</p>
+            <div class="stage-body">
+              <div class="box">
+                <b>실행 함수</b>
+                <p><code>_store_uploaded_file()</code>이 파일명을 정리하고 storage path를 만든다.</p>
+              </div>
+              <div class="box">
+                <b>쓰는 도구</b>
+                <p>Python filesystem write, <code>Path.write_bytes()</code>, <code>load_settings()</code>.</p>
+              </div>
+              <div class="box">
+                <b>처리 결과</b>
+                <p><code>uploads/sources/{upload_id}/{filename}</code>에 원본 파일이 저장되고 <code>storage_key</code>가 생긴다.</p>
+              </div>
+            </div>
+            <div class="status-line">
+              <span class="status done">output: source_path</span>
+              <span class="status done">output: storage_key</span>
+              <span class="status done">output: byte_size</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage">
+          <div></div>
+          <div>
+            <h3><code>parse</code> — 문서 파싱</h3>
+            <p class="subtitle">원본 파일을 markdown, block, asset 후보로 변환한다.</p>
+            <div class="stage-body">
+              <div class="box">
+                <b>실행 함수</b>
+                <p><code>parse_upload_document()</code>. PDF는 <code>_convert_pdf_to_markdown()</code>을 탄다.</p>
+              </div>
+              <div class="box">
+                <b>쓰는 도구</b>
+                <p>PDF text: PyMuPDF <code>fitz</code> 우선, 품질이 낮거나 실패하면 pdfplumber fallback 경로. PDF image/OCR: page image asset을 만든 뒤 <code>LLM_ENDPOINT</code>의 Gemma 4 vision 요청으로 처리해야 한다.</p>
+              </div>
+              <div class="box">
+                <b>처리 결과</b>
+                <p><code>ParsedUploadDocument</code>, <code>DocumentBlock</code>, markdown, warnings, metadata가 만들어진다.</p>
+              </div>
+            </div>
+            <div class="status-line">
+              <span class="status info">info: format detected</span>
+              <span class="status info">info: extractor progress</span>
+              <span class="status done">guard: block_count &gt; 0</span>
+              <span class="status fail">fail: empty parse</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage">
+          <div></div>
+          <div>
+            <h3><code>chunk</code> — 검색 청크 생성</h3>
+            <p class="subtitle">파싱된 block을 RAG 검색 단위로 나눈다.</p>
+            <div class="stage-body">
+              <div class="box">
+                <b>실행 함수</b>
+                <p><code>build_document_chunks()</code>가 heading, size, overlap 기준으로 block을 묶는다.</p>
+              </div>
+              <div class="box">
+                <b>쓰는 도구</b>
+                <p>내부 Python splitter. 별도 외부 API는 호출하지 않는다.</p>
+              </div>
+              <div class="box">
+                <b>처리 결과</b>
+                <p><code>DocumentChunk</code>마다 <code>embedding_text</code>, section, page range, asset ids가 붙는다.</p>
+              </div>
+            </div>
+            <div class="status-line">
+              <span class="status done">guard: chunk_count &gt; 0</span>
+              <span class="status fail">fail: no searchable chunk</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage">
+          <div></div>
+          <div>
+            <h3><code>persist</code> — PostgreSQL 저장</h3>
+            <p class="subtitle">문서, 파싱 결과, block, asset, chunk를 DB에 저장한다.</p>
+            <div class="stage-body">
+              <div class="box">
+                <b>실행 함수</b>
+                <p><code>persist_parsed_upload_document()</code>와 <code>build_parsed_document_rows()</code>.</p>
+              </div>
+              <div class="box">
+                <b>쓰는 도구</b>
+                <p><code>psycopg</code>, PostgreSQL transaction, repository/document upsert.</p>
+              </div>
+              <div class="box">
+                <b>처리 결과</b>
+                <p><code>document_source_id</code>, <code>repository_id</code>, <code>parsed_document_id</code>, chunk rows가 확정된다.</p>
+              </div>
+            </div>
+            <div class="status-line">
+              <span class="status done">table: document_sources</span>
+              <span class="status done">table: parsed_documents</span>
+              <span class="status done">table: document_chunks</span>
+              <span class="status info">visibility: private_user or workspace_shared</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage">
+          <div></div>
+          <div>
+            <h3><code>index</code> — Qdrant 인덱싱</h3>
+            <p class="subtitle">DB chunk를 embedding vector로 만들고 Qdrant collection에 upsert한다.</p>
+            <div class="stage-body">
+              <div class="box">
+                <b>실행 함수</b>
+                <p><code>index_pending_document_chunks()</code>가 후보 조회부터 Qdrant 기록까지 처리한다.</p>
+              </div>
+              <div class="box">
+                <b>쓰는 도구</b>
+                <p><code>EmbeddingClient</code>가 remote embedding <code>/embeddings</code>를 호출하고, Qdrant REST API를 호출한다.</p>
+              </div>
+              <div class="box">
+                <b>처리 결과</b>
+                <p>Qdrant point와 <code>qdrant_index_entries</code>가 생긴다. <code>candidate_count</code>, <code>indexed_count</code>가 응답에 들어간다.</p>
+              </div>
+            </div>
+            <div class="status-line">
+              <span class="status done">output: indexed</span>
+              <span class="status warn">warning: partial</span>
+              <span class="status fail">failed: embedding or qdrant error</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage">
+          <div></div>
+          <div>
+            <h3><code>scope</code> — 검색 범위 확인</h3>
+            <p class="subtitle">이 문서가 어떤 owner/repository/document scope에 묶였는지 확인한다.</p>
+            <div class="stage-body">
+              <div class="box">
+                <b>실행 로직</b>
+                <p>직전 단계 결과의 <code>repository_id</code>와 <code>document_source_id</code> 존재 여부를 확인한다.</p>
+              </div>
+              <div class="box">
+                <b>쓰는 도구</b>
+                <p>외부 도구 없음. DB/Qdrant 추가 호출도 아니라 결과값 검증 이벤트에 가깝다.</p>
+              </div>
+              <div class="box">
+                <b>처리 결과</b>
+                <p>나중에 Studio Chat이 <code>activeRepositoryId</code>, <code>activeDocumentId</code>로 필터링할 기준이 된다.</p>
+              </div>
+            </div>
+            <div class="status-line">
+              <span class="status done">done: ids present</span>
+              <span class="status warn">warning: scope incomplete</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage">
+          <div></div>
+          <div>
+            <h3><code>ready</code> — 기본 인덱싱 판정</h3>
+            <p class="subtitle">검색 가능한 기본 텍스트 인덱싱인지, 답변 품질 검증까지 된 것인지 분리한다.</p>
+            <div class="stage-body">
+              <div class="box">
+                <b>실행 함수</b>
+                <p><code>_basic_index_ready()</code>, <code>_answer_ready()</code>, <code>_apply_upload_readiness()</code>.</p>
+              </div>
+              <div class="box">
+                <b>쓰는 도구</b>
+                <p>내부 판정 로직. 외부 API 호출 없음.</p>
+              </div>
+              <div class="box">
+                <b>처리 결과</b>
+                <p><code>basic_index_ready</code>, <code>answer_ready</code>, <code>ready_for_chat</code>가 응답과 report에 기록된다.</p>
+              </div>
+            </div>
+            <div class="status-line">
+              <span class="status done">basic_index_ready: text search ready</span>
+              <span class="status warn">answer_ready: quality gate required</span>
+              <span class="status warn">ready_for_chat = answer_ready</span>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>8단계 이후의 채팅 연결</h2>
+          <p>업로드 pipeline 자체와 Studio Chat RAG 검색은 별도 흐름이다. 버튼을 눌러 scope를 넘겨야 문서 단위 질문이 된다.</p>
+        </div>
+      </div>
+      <div class="split">
+        <div class="callout good">
+          <h3>프론트가 넘기는 값</h3>
+          <p>
+            <code>이 문서로 질문</code> 버튼은 <code>workspace.activeSourceId</code>에 repository id를,
+            <code>workspace.activeDocumentId</code>에 document source id를 저장한다.
+          </p>
+        </div>
+        <div class="callout">
+          <h3>검색이 쓰는 필터</h3>
+          <p>
+            Chat 요청은 <code>active_repository_id</code>, <code>active_document_id</code>를 보낸다.
+            retrieval은 Qdrant filter에 <code>document_source_id</code>, <code>repository_id</code>를 넣는다.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>현재 빠진 제품 계약</h2>
+          <p>아래 항목은 8단계 이름만 봐서는 들어있어 보이지만, 현재 구현이 충분히 보장하지 않는 부분이다.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>항목</th>
+              <th>현재 상태</th>
+              <th>제품적으로 필요한 상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>PDF 페이지 이미지</td>
+              <td>텍스트 추출 중심. 페이지를 이미지 asset으로 렌더링해 보존하는 계약은 없음.</td>
+              <td>각 페이지를 viewer asset으로 저장하고 페이지 단위로 탐색 가능해야 함.</td>
+            </tr>
+            <tr>
+              <td>이미지/OCR/VL</td>
+              <td><code>LLM_ENDPOINT</code> 기반 image describer hook은 있으나, 텍스트 PDF 내부 이미지까지 항상 asset화하지는 않음.</td>
+              <td>PDF 내부 이미지/캡처/도식을 page/image asset으로 만든 뒤 Gemma 4 OCR/VL 설명을 생성하고 RAG embedding text에 반영.</td>
+            </tr>
+            <tr>
+              <td>위키 viewer</td>
+              <td>업로드 viewer는 <code>parsed markdown</code>과 <code>chunk diagnostic</code>을 보여주는 화면.</td>
+              <td><code>corpus/data/wiki_assets</code>, <code>wiki_relations</code> 같은 asset 관계를 가진 위키형 문서.</td>
+            </tr>
+            <tr>
+              <td>Chat-ready 문구</td>
+              <td><code>basic_index_ready</code>와 <code>ready_for_chat</code>의 의미가 UI에서 섞일 수 있음.</td>
+              <td>“텍스트 검색 가능”, “답변 품질 검수 전”, “검증된 답변 가능”을 분리해야 함.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>검증 체크리스트</h2>
+          <p>수정 후에는 아래 기준을 통과해야 “업로드가 RAG에 반영됐다”고 말할 수 있다.</p>
+        </div>
+      </div>
+      <ul class="checklist">
+        <li>텍스트 PDF 업로드 후 <code>block_count &gt; 0</code>, <code>chunk_count &gt; 0</code>, <code>index.indexed_count &gt; 0</code>가 응답에 나온다.</li>
+        <li>PostgreSQL의 <code>document_sources</code>, <code>document_chunks</code>, <code>qdrant_index_entries</code>가 같은 <code>document_source_id</code>로 이어진다.</li>
+        <li>Studio Chat이 <code>activeDocumentId</code> scope로 질문했을 때 citation에 업로드 문서의 viewer path가 포함된다.</li>
+        <li>PDF 내부 이미지/도식이 있는 경우 <code>document_assets</code> 또는 위키 asset 저장소에 남고, viewer에서 확인 가능하다.</li>
+        <li>이미지/스캔 페이지가 있는 경우 parse metadata에 <code>LLM_MODEL=gemma-4-26b-a4b-it-awq-8bit</code> 기반 OCR/VL 결과가 남는다.</li>
+        <li>스캔 PDF처럼 텍스트 추출이 불가능한 경우 “성공”이 아니라 OCR 필요 또는 파싱 실패로 명확히 떨어진다.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>코드 위치 빠른 참조</h2>
+          <p>단계별 진입점을 찾을 때 보는 파일이다.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>영역</th>
+              <th>파일</th>
+              <th>역할</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Upload API</td>
+              <td><code>src/play_book_studio/http/upload_api.py</code></td>
+              <td>8개 stage event emit, storage, parse/chunk/persist/index orchestration, report 작성.</td>
+            </tr>
+            <tr>
+              <td>Parser</td>
+              <td><code>src/play_book_studio/ingestion/document_parsing.py</code></td>
+              <td>PDF/DOCX/PPTX/TXT 변환, block 분해, chunk 생성.</td>
+            </tr>
+            <tr>
+              <td>Repository DB</td>
+              <td><code>src/play_book_studio/db/document_repository.py</code></td>
+              <td>document source, parsed document, block, asset, chunk를 PostgreSQL에 저장.</td>
+            </tr>
+            <tr>
+              <td>Qdrant Index</td>
+              <td><code>src/play_book_studio/db/qdrant_indexer.py</code></td>
+              <td>chunk 후보 조회, payload 생성, Qdrant upsert, index entry 기록.</td>
+            </tr>
+            <tr>
+              <td>Embedding</td>
+              <td><code>src/play_book_studio/ingestion/embedding.py</code></td>
+              <td>remote embedding endpoint 호출과 vector 생성.</td>
+            </tr>
+            <tr>
+              <td>Upload Viewer</td>
+              <td><code>src/play_book_studio/http/server_routes_viewer.py</code></td>
+              <td>현재 업로드 문서의 parsed markdown viewer 생성. 원본 PDF page viewer는 아님.</td>
+            </tr>
+            <tr>
+              <td>Frontend</td>
+              <td><code>apps/web/src/pages/PlaybookLibraryPage.tsx</code></td>
+              <td>파일 선택, stream event 수신, 진행 UI, 문서별 질문 버튼.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="footer">
+        Generated for branch <code>feat/docs_uploads_S_v1</code>. 기준일: 2026-05-19.
+      </p>
+    </section>
+  </main>
+</body>
+</html>

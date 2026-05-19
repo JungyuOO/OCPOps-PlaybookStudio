@@ -1,4 +1,4 @@
-import { RUNTIME_ORIGIN, type ChatCitation, type ChatRelatedLink, type ChatResponse } from './runtimeApi';
+import { RUNTIME_ORIGIN, withSessionOwnerHeader, type ChatCitation, type ChatRelatedLink, type ChatResponse } from './runtimeApi';
 
 export interface CourseManifestStage {
   stage_id: string;
@@ -316,9 +316,11 @@ export type CourseChatStreamEvent =
   | { type: 'error'; error?: string; message?: string };
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = withSessionOwnerHeader(new Headers(init?.headers ?? {}));
   const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
-    credentials: 'include',
     ...init,
+    credentials: 'include',
+    headers,
   });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -427,7 +429,7 @@ export async function sendCourseChatStream(
   const response = await fetch(`${RUNTIME_ORIGIN}/api/v1/course/chat/stream`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withSessionOwnerHeader(new Headers({ 'Content-Type': 'application/json' })),
     body: JSON.stringify({
       message: payload.message,
       session_id: payload.sessionId,

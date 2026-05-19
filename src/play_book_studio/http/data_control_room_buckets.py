@@ -11,7 +11,7 @@ import yaml
 
 from play_book_studio.config.settings import load_settings
 from play_book_studio.db.official_documents import load_official_manifest_entries
-from play_book_studio.runtime_catalog_registry import official_runtime_books
+from play_book_studio.runtime_catalog_registry import official_runtime_books, active_manifest_runtime_slugs
 
 from .runtime_truth import official_runtime_grade, official_runtime_truth_payload
 from .wiki_user_overlay import build_wiki_overlay_signal_payload
@@ -220,7 +220,10 @@ def _latest_runtime_review_status(entry: dict[str, Any], *, grade: str) -> str:
 
 def _build_approved_wiki_runtime_book_bucket(root: Path, *, translation_lane_report: dict[str, Any]) -> dict[str, Any]:
     settings = load_settings(root)
-    manifest_path = root / "data" / "wiki_runtime_books" / "active_manifest.json"
+    corpus_manifest_path = root / "corpus" / "data" / "wiki_runtime_books" / "active_manifest.json"
+    runtime_manifest_path = root / "data" / "wiki_runtime_books" / "active_manifest.json"
+    manifest_path = corpus_manifest_path if corpus_manifest_path.exists() else runtime_manifest_path
+    active_slugs = set(active_manifest_runtime_slugs(root))
     blocked_slugs = _translation_runtime_blocked_slugs(translation_lane_report)
     books: list[dict[str, Any]] = []
     runtime_paths: list[Path] = []
@@ -229,6 +232,8 @@ def _build_approved_wiki_runtime_book_bucket(root: Path, *, translation_lane_rep
     for entry in official_runtime_books(root):
         slug = str(entry.get("book_slug") or "").strip()
         if not slug:
+            continue
+        if active_slugs and slug not in active_slugs:
             continue
         grade = _latest_runtime_grade(entry)
         runtime_path_value = str(entry.get("runtime_path") or "").strip()
@@ -292,6 +297,8 @@ def _build_approved_wiki_runtime_book_bucket(root: Path, *, translation_lane_rep
             continue
         slug = str(entry.get("book_slug") or "").strip()
         if not slug or slug in seen_slugs:
+            continue
+        if active_slugs and slug not in active_slugs:
             continue
         if slug in blocked_slugs:
             continue
