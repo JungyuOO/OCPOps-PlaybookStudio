@@ -1,5 +1,6 @@
 import json
 
+from play_book_studio.retrieval.intent_detectors import has_command_request
 from play_book_studio.retrieval.query_signal_pipeline import build_query_signal_plan
 
 
@@ -168,6 +169,115 @@ def test_query_signal_plan_expands_pod_disruption_budget_alias() -> None:
     assert "PDB" in plan.search_signals["objects"]
     assert "oc get poddisruptionbudget --all-namespaces" in plan.search_signals["commands"]
     assert any("poddisruptionbudget --all-namespaces" in query for query in plan.embedding_queries)
+
+
+def test_query_signal_plan_expands_operator_status_alias() -> None:
+    plan = build_query_signal_plan("Operator 설치 상태는 어디서 확인하나요?")
+
+    assert plan.classification["domain"] == "operators"
+    assert "Operator" in plan.search_signals["objects"]
+    assert "ClusterServiceVersion" in plan.search_signals["objects"]
+    assert "oc get csv" in plan.search_signals["commands"]
+    assert "oc get subscription" in plan.search_signals["commands"]
+    assert plan.metadata_filter["_domain_boosts"] == ("operators",)
+
+
+def test_query_signal_plan_expands_etcd_backup_alias() -> None:
+    plan = build_query_signal_plan("etcd 백업은 어떤 순서로 수행하나요?")
+
+    assert plan.classification["domain"] == "etcd"
+    assert "cluster-backup.sh" in plan.search_signals["commands"]
+    assert "oc get pods -n openshift-etcd -l k8s-app=etcd" in plan.search_signals["commands"]
+    assert "cluster_backup" in plan.search_signals["command_families"]
+
+
+def test_query_signal_plan_expands_openshift_install_version_alias() -> None:
+    plan = build_query_signal_plan("openshift-install 버전 확인 명령은?")
+
+    assert plan.classification["domain"] == "install"
+    assert "openshift-install version" in plan.search_signals["commands"]
+    assert "oc get clusterversion" in plan.search_signals["commands"]
+
+
+def test_query_signal_plan_expands_node_maintenance_aliases() -> None:
+    plan = build_query_signal_plan("노드 cordon과 drain은 어떤 차이가 있나요?")
+
+    assert plan.classification["domain"] == "node_ops"
+    assert "oc adm cordon <node_name>" in plan.search_signals["commands"]
+    assert "oc adm drain <node_name>" in plan.search_signals["commands"]
+    assert "oc_adm" in plan.search_signals["command_families"]
+
+
+def test_query_signal_plan_expands_second_pass_operational_aliases() -> None:
+    cases = [
+        (
+            "이벤트는 전체 네임스페이스에서 어떻게 확인하나요?",
+            "oc get events -A",
+            "Event",
+        ),
+        (
+            "StorageClass 목록과 기본값은 어떻게 확인하나요?",
+            "oc get storageclass",
+            "StorageClass",
+        ),
+        (
+            "ServiceAccount가 어떤 권한을 갖는지 확인하려면?",
+            "oc auth can-i <verb> <resource>",
+            "ServiceAccount",
+        ),
+        (
+            "네임스페이스 안의 모든 리소스를 확인하는 명령은?",
+            "oc get all -n <namespace>",
+            "Namespace",
+        ),
+        (
+            "재시작된 컨테이너의 이전 로그를 확인하는 옵션은?",
+            "oc logs -n <namespace> <pod_name> --previous",
+            "Pod",
+        ),
+    ]
+
+    for query, expected_command, expected_object in cases:
+        plan = build_query_signal_plan(query)
+        assert expected_command in plan.search_signals["commands"], query
+        assert expected_object in plan.search_signals["objects"], query
+        assert "command_lookup" in plan.search_signals["intent_labels"], query
+
+
+def test_clean_korean_operational_questions_are_command_requests() -> None:
+    queries = [
+        "이벤트는 전체 네임스페이스에서 어떻게 확인하나요?",
+        "특정 노드의 자세한 상태는 어떻게 봐요?",
+        "Pod 이벤트만 빠르게 확인하는 방법은?",
+        "StorageClass 목록과 기본값은 어떻게 확인하나요?",
+        "ServiceAccount가 어떤 권한을 갖는지 확인하려면?",
+        "네임스페이스 안의 모든 리소스를 확인하는 명령은?",
+        "재시작된 컨테이너의 이전 로그를 확인하는 옵션은?",
+    ]
+
+    for query in queries:
+        assert has_command_request(query), query
+
+
+def test_llm_plan_still_applies_raw_query_command_aliases() -> None:
+    llm = FakeSignalLlm(
+        {
+            "normalized_query": "oc get all",
+            "domain": "troubleshooting",
+            "objects": ["resources"],
+            "intent_labels": ["command_lookup"],
+            "command_families": ["oc_get"],
+            "commands": ["oc get all"],
+            "queries": ["oc get all", "all resources"],
+            "confidence": 0.95,
+        }
+    )
+
+    plan = build_query_signal_plan("네임스페이스 안의 모든 리소스를 확인하는 명령은?", llm_client=llm)
+
+    assert "oc get all -n <namespace>" in plan.search_signals["commands"]
+    assert "Namespace" in plan.search_signals["objects"]
+    assert "cli_tools" in plan.classification["book_slug_candidates"]
 
 
 def test_v015_query_signal_plan_uses_llm_one_shot_for_normalization_and_expansion() -> None:

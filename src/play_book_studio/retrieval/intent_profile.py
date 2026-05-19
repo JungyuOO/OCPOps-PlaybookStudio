@@ -643,6 +643,139 @@ def build_intent_profile(query: str) -> IntentProfile:
             reasons=("must-gather support collection command request",),
         )
 
+    if _contains_any(text, ("이벤트", "events", "event")) and _contains_any(text, ("전체", "모든", "namespace", "namespaces", "네임스페이스", "all namespaces", "pod", "pods")):
+        commands = ("oc get events -A", "oc get events --all-namespaces")
+        if _contains_any(text, ("pod", "pods")) and not _contains_any(text, ("전체", "모든", "all namespaces")):
+            commands = ("oc get events -n <namespace> --sort-by=.lastTimestamp", "oc events --for pod/<pod-name> --watch")
+        return _profile(
+            intent="command_lookup",
+            target_object="event",
+            task="event-list",
+            needs_command=True,
+            primary_commands=commands,
+            evidence_terms=("events", "oc events", "oc get events", "namespace"),
+            query_terms=("cluster events", "pod events", "all namespaces"),
+            confidence=0.86,
+            reasons=("event listing command request",),
+        )
+
+    if _contains_any(text, ("daemonset", "노드마다")):
+        return _profile(
+            intent="command_lookup",
+            target_object="daemonset",
+            task="daemonset-node-coverage",
+            needs_command=True,
+            primary_commands=("oc get daemonset -A -o wide", "oc get pods -A -o wide"),
+            evidence_terms=("DaemonSet", "desired", "current", "ready", "node"),
+            query_terms=("daemonset node coverage", "pods on every node"),
+            confidence=0.86,
+            reasons=("daemonset coverage command request",),
+        )
+
+    if _contains_any(text, ("spec.nodename", "field-selector spec.nodename", "특정 노드", "스케줄")) and _contains_any(text, ("pod", "pods", "포드")):
+        return _profile(
+            intent="command_lookup",
+            target_object="pod",
+            task="pods-on-node",
+            needs_command=True,
+            primary_commands=("oc get pods -A -o wide", "oc get pods -A --field-selector spec.nodeName=<node-name>"),
+            evidence_terms=("spec.nodeName", "NODE", "field-selector", "pods"),
+            query_terms=("pods on node", "pod scheduling node"),
+            confidence=0.86,
+            reasons=("pod scheduling node command request",),
+        )
+
+    if _contains_any(text, ("node-logs", "journal", "systemd unit", "kubelet service", "kubelet 서비스")):
+        return _profile(
+            intent="command_lookup",
+            target_object="node",
+            task="node-unit-logs",
+            needs_command=True,
+            primary_commands=("oc adm node-logs <node-name> -u <unit-name>", "oc adm node-logs <node-name> -u kubelet"),
+            evidence_terms=("oc adm node-logs", "systemd", "kubelet", "journal"),
+            query_terms=("node systemd unit logs", "kubelet service logs"),
+            confidence=0.86,
+            reasons=("node systemd log command request",),
+        )
+
+    if _contains_any(text, ("rolebinding", "clusterrolebinding")) and _contains_any(text, ("subject", "대상", "serviceaccount", "user", "사용자")):
+        return _profile(
+            intent="command_lookup",
+            target_object="rbac",
+            task="rolebinding-subjects",
+            needs_command=True,
+            primary_commands=("oc get rolebinding -o wide", "oc get clusterrolebinding -o wide", "oc describe rolebinding <rolebinding-name>"),
+            evidence_terms=("RoleBinding", "ClusterRoleBinding", "subjects", "ServiceAccount"),
+            query_terms=("rolebinding subjects", "rbac serviceaccount user"),
+            confidence=0.86,
+            reasons=("rolebinding subject inspection",),
+        )
+
+    if _contains_any(text, ("oauth pod", "openshift-authentication", "oauth server")):
+        return _profile(
+            intent="command_lookup",
+            target_object="oauth",
+            task="oauth-pod-logs",
+            needs_command=True,
+            primary_commands=("oc get pods -n openshift-authentication", "oc logs -n openshift-authentication <oauth-pod-name>"),
+            evidence_terms=("OAuth", "openshift-authentication", "pod", "logs"),
+            query_terms=("oauth pod status logs", "authentication operator"),
+            confidence=0.86,
+            reasons=("oauth pod status and log command request",),
+        )
+
+    if _contains_any(text, ("network.operator", "cluster network", "네트워크 설정", "클러스터 네트워크")):
+        return _profile(
+            intent="command_lookup",
+            target_object="network",
+            task="cluster-network-config",
+            needs_command=True,
+            primary_commands=("oc describe network.operator cluster", "oc get network.operator cluster -o yaml"),
+            evidence_terms=("Network", "network.operator", "cluster network", "describe"),
+            query_terms=("cluster network configuration", "network operator cluster"),
+            confidence=0.86,
+            reasons=("cluster network config command request",),
+        )
+
+    if _contains_any(text, ("installplan", "manual approval", "수동 승인")):
+        return _profile(
+            intent="command_lookup",
+            target_object="installplan",
+            task="installplan-status-approval",
+            needs_command=True,
+            primary_commands=("oc get installplan -n <namespace>", "oc patch installplan <installplan-name> --type merge -p '{\"spec\":{\"approved\":true}}'"),
+            evidence_terms=("InstallPlan", "approved", "manual", "Subscription"),
+            query_terms=("installplan pending approval", "operator install plan"),
+            confidence=0.86,
+            reasons=("operator installplan command request",),
+        )
+
+    if _contains_any(text, ("packagemanifest", "package manifest")):
+        return _profile(
+            intent="command_lookup",
+            target_object="packagemanifest",
+            task="packagemanifest-details",
+            needs_command=True,
+            primary_commands=("oc get packagemanifest -n openshift-marketplace", "oc describe packagemanifest <package-name> -n openshift-marketplace"),
+            evidence_terms=("PackageManifest", "OperatorHub", "catalog", "openshift-marketplace"),
+            query_terms=("operator package manifest details", "operatorhub package"),
+            confidence=0.86,
+            reasons=("packagemanifest detail command request",),
+        )
+
+    if _contains_any(text, ("subscription", "csv", "clusterserviceversion")) and _contains_any(text, ("operator", "install", "pending", "목록", "상태")):
+        return _profile(
+            intent="command_lookup",
+            target_object="operator",
+            task="operator-subscription-csv-status",
+            needs_command=True,
+            primary_commands=("oc get subscription -n <namespace>", "oc get csv -n <namespace>", "oc describe subscription <subscription-name> -n <namespace>"),
+            evidence_terms=("Subscription", "ClusterServiceVersion", "CSV", "Operator"),
+            query_terms=("operator subscription csv status", "operator install status"),
+            confidence=0.86,
+            reasons=("operator subscription csv command request",),
+        )
+
     if _contains_any(text, ("oc adm inspect", "inspect")):
         return _profile(
             intent="command_lookup",

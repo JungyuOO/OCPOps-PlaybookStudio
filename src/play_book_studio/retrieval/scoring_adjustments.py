@@ -51,6 +51,12 @@ def _term_matches_text(term: str, text: str) -> bool:
         return False
     if normalized_term in text:
         return True
+    if normalized_term.startswith("oc get events") and "oc events" in text:
+        return True
+    if normalized_term.startswith("oc get endpointslice") and (
+        "oc get endpointslice" in text or "oc get endpointslices" in text
+    ):
+        return True
     without_placeholders = _PLACEHOLDER_RE.sub(" ", normalized_term)
     if without_placeholders.strip() and without_placeholders.strip() in text:
         return True
@@ -69,7 +75,25 @@ def _term_matches_text(term: str, text: str) -> bool:
 
 
 _DOMAIN_BOOK_SLUGS = {
+    "backup_restore": {"backup_and_restore", "etcd"},
+    "install": {
+        "installation_overview",
+        "installing_on_any_platform",
+        "disconnected_environments",
+        "cli_tools",
+        "support",
+    },
+    "logging": {"logging", "observability_overview", "support", "cli_tools"},
+    "monitoring": {
+        "monitoring",
+        "monitoring_alerts_admin",
+        "monitoring_metrics_admin",
+        "monitoring_troubleshooting",
+        "observability_overview",
+        "operators",
+    },
     "networking": {"ingress_and_load_balancing", "networking", "advanced_networking"},
+    "security": {"authentication_and_authorization", "security_and_compliance", "images", "cli_tools"},
     "storage": {"storage"},
     "registry": {"registry", "images"},
     "operators": {"operators", "postinstallation_configuration"},
@@ -197,6 +221,14 @@ def _structured_signal_commands(
     return tuple(merged)
 
 
+def _structured_signal_values(signals: ScoreSignals, key: str) -> tuple[str, ...]:
+    search_signals = signals.structured_query_signals.search_signals
+    values = search_signals.get(key, ()) if isinstance(search_signals, dict) else ()
+    if not isinstance(values, tuple | list):
+        return ()
+    return tuple(str(value or "").strip() for value in values if str(value or "").strip())
+
+
 def _query_matches_hit_object(query: str, hit: RetrievalHit) -> bool:
     lowered_query = (query or "").lower()
     if not lowered_query:
@@ -276,13 +308,55 @@ def apply_hit_adjustments(
 
     classification = signals.structured_query_signals.classification
     domain = str(classification.get("domain") or "").strip()
-    if domain == "storage" and signals.structured_query_signals.confidence.get("domain", 0.0) >= 0.85:
+    domain_confidence = signals.structured_query_signals.confidence.get("domain", 0.0)
+    if domain == "storage" and domain_confidence >= 0.85:
         if _hit_matches_query_domain(hit, signals=signals):
             hit.fused_score *= 1.18
             hit.component_scores["domain_match_boost"] = 1.18
         else:
             hit.fused_score *= 0.48
             hit.component_scores["domain_mismatch_penalty"] = 0.48
+    elif domain in _DOMAIN_BOOK_SLUGS and domain not in {"troubleshooting"} and domain_confidence >= 0.85:
+        if _hit_matches_query_domain(hit, signals=signals):
+            hit.fused_score *= 1.14
+            hit.component_scores["domain_match_boost"] = 1.14
+        elif signals.command_request_intent:
+            hit.fused_score *= 0.72
+            hit.component_scores["domain_mismatch_penalty"] = 0.72
+
+    intent_labels = {value.lower() for value in _structured_signal_values(signals, "intent_labels")}
+    lowered_query = (signals.query or "").lower()
+    lowered_section = (hit.section or "").lower()
+    lowered_search_text = _hit_search_text(hit)
+    has_etcd_backup_intent = (
+        "backup" in intent_labels
+        or "backup" in lowered_query
+        or "백업" in signals.query
+    ) and ("etcd" in lowered_query or domain in {"etcd", "backup_restore"})
+    if has_etcd_backup_intent:
+        if hit.book_slug == "backup_and_restore" and (
+            "automated etcd backup" in lowered_section
+            or "creating a single automated etcd backup" in lowered_section
+            or "backing up etcd" in lowered_section
+            or "etcd backup" in lowered_section
+        ):
+            hit.fused_score *= 2.2
+            hit.component_scores["etcd_backup_section_boost"] = 2.2
+        elif "cluster-backup.sh" in lowered_search_text or "/usr/local/bin/cluster-backup.sh" in lowered_search_text:
+            hit.fused_score *= 1.45
+            hit.component_scores["etcd_backup_command_boost"] = 1.45
+
+        is_replacement_query = any(
+            term in lowered_query
+            for term in ("replace", "replacement", "restore", "crash", "loop", "member", "복구", "교체")
+        )
+        is_replacement_hit = any(
+            term in lowered_section
+            for term in ("replacing", "replacement", "unhealthy", "crashloop", "crash loop", "restore")
+        )
+        if not is_replacement_query and is_replacement_hit:
+            hit.fused_score *= 0.5
+            hit.component_scores["etcd_backup_replacement_penalty"] = 0.5
 
     if is_reference_heavy_book_slug(hit.book_slug):
         if signals.concept_like_intent and not signals.doc_locator_intent and not signals.structured_query_terms:
