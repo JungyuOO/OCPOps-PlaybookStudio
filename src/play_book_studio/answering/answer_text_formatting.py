@@ -11,7 +11,7 @@ from play_book_studio.retrieval.query import (
     has_pod_lifecycle_concept_intent,
     is_generic_intro_query,
 )
-from play_book_studio.retrieval.query_understanding import understand_query
+from .query_intents import understand_query
 from .sanitize import sanitize_cli_command
 
 CITATION_RE = re.compile(r"\[(\d+)\]")

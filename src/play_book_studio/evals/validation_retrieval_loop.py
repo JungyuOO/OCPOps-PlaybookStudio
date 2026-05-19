@@ -22,7 +22,7 @@ from play_book_studio.evals.validation_real_loop import (
     load_blind_question_cases,
     load_gold_answer_cases,
 )
-from play_book_studio.retrieval.intent_profile import build_intent_profile
+from play_book_studio.answering.query_intents import build_intent_profile
 from play_book_studio.retrieval.retriever import ChatRetriever
 
 

@@ -34,11 +34,10 @@ from play_book_studio.retrieval.query import (
     has_rbac_intent,
     is_generic_intro_query,
 )
-from play_book_studio.retrieval.query_understanding import understand_query
-from play_book_studio.retrieval.intent_profile import build_intent_profile
 
 from .doc_locator_intent import is_cross_document_follow_query
 from .models import Citation, ContextBundle
+from .query_intents import build_intent_profile, understand_query
 from .sanitize import sanitize_cli_command, sanitize_section_label, strip_internal_markup
 
 

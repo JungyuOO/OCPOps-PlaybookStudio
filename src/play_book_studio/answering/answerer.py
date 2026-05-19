@@ -32,7 +32,6 @@ from play_book_studio.retrieval.query import (
     is_generic_intro_query,
 )
 from play_book_studio.retrieval.korean_text import normalized_token_set
-from play_book_studio.retrieval.query_understanding import has_beginner_troubleshooting_intent
 
 from .answer_text_commands import has_sufficient_command_grounding, strip_ungrounded_code_blocks
 from .answer_text_formatting import summarize_session_context
@@ -54,6 +53,7 @@ from .pipeline_helpers import (
     generate_grounded_answer_text,
 )
 from .prompt import build_messages
+from .query_intents import has_beginner_troubleshooting_intent
 from .router import route_non_rag
 
 
