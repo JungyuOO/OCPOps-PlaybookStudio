@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from play_book_studio.evals.recall_probe import hit_matches_case, rank_in_hits
+from play_book_studio.evals.recall_probe import hit_matches_case, probe_case, rank_in_hits
 from play_book_studio.retrieval.models import RetrievalHit
 
 
@@ -37,3 +37,37 @@ def test_rank_in_hits_returns_one_based_rank_or_none():
     hits = [_hit("a"), _hit("b", cli_commands=("oc get nodes",)), _hit("c")]
     assert rank_in_hits(hits, case) == 2
     assert rank_in_hits([_hit("x")], case) is None
+
+
+class _FakeBM25:
+    def __init__(self, hits):
+        self._hits = hits
+
+    def search(self, query, top_k=10):
+        return self._hits[:top_k]
+
+
+class _FakeVector:
+    def __init__(self, hits):
+        self._hits = hits
+
+    def search(self, query, top_k=10, query_filter=None):
+        return self._hits[:top_k]
+
+
+def test_probe_case_reports_per_stage_ranks():
+    target = _hit("pdb", section="Pod 중단 예산", cli_commands=("oc get poddisruptionbudget",))
+    noise = _hit("noise", section="기타")
+    case = {"id": "pdb", "query": "pod 중단 예산", "expect_command": "oc get poddisruptionbudget"}
+
+    result = probe_case(
+        bm25_index=_FakeBM25([noise, target]),
+        vector_retriever=_FakeVector([target]),
+        case=case,
+        candidate_k=40,
+    )
+
+    assert result["bm25_rank"] == 2
+    assert result["vector_rank"] == 1
+    assert result["rrf_rank"] == 1
+    assert result["pass_at_8"] is True

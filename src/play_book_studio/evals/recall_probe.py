@@ -6,6 +6,7 @@ catch misses that book-level hit metrics hide.
 from __future__ import annotations
 
 from play_book_studio.retrieval.models import RetrievalHit
+from play_book_studio.retrieval.ranking import rrf_merge_named_hit_lists
 
 
 def hit_matches_case(hit: RetrievalHit, case: dict) -> bool:
@@ -38,3 +39,38 @@ def rank_in_hits(hits: list[RetrievalHit], case: dict) -> int | None:
         if hit_matches_case(hit, case):
             return index
     return None
+
+
+def probe_case(*, bm25_index, vector_retriever, case: dict, candidate_k: int = 40) -> dict:
+    """Run one case through stage-1 retrieval and report per-stage ranks."""
+    query = str(case.get("query", ""))
+
+    bm25_hits = bm25_index.search(query, top_k=candidate_k) if bm25_index else []
+    vector_hits = []
+    vector_error = ""
+    if vector_retriever is not None:
+        try:
+            vector_hits = vector_retriever.search(query, top_k=candidate_k)
+        except Exception as exc:  # noqa: BLE001
+            vector_error = str(exc)
+
+    rrf_hits = rrf_merge_named_hit_lists(
+        {"bm25": bm25_hits, "vector": vector_hits},
+        source_name="hybrid",
+        top_k=candidate_k,
+    )
+
+    bm25_rank = rank_in_hits(bm25_hits, case)
+    vector_rank = rank_in_hits(vector_hits, case)
+    rrf_rank = rank_in_hits(rrf_hits, case)
+
+    return {
+        "id": case.get("id"),
+        "query": query,
+        "bm25_rank": bm25_rank,
+        "vector_rank": vector_rank,
+        "rrf_rank": rrf_rank,
+        "pass_at_8": rrf_rank is not None and rrf_rank <= 8,
+        "pass_at_20": rrf_rank is not None and rrf_rank <= 20,
+        "vector_error": vector_error,
+    }
