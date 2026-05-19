@@ -3826,6 +3826,40 @@
   contain: layout paint;
 }
 
+.source-viewer-content.viewer-surface .atlas-ink-stage {
+  flex: 0 0 auto;
+  min-height: 100%;
+}
+
+.source-viewer-content.viewer-surface .reader-stage {
+  flex: 0 0 auto;
+  min-height: auto;
+  padding: 0 0 40px;
+}
+
+.source-viewer-content.viewer-surface .viewer-document-stage-shell,
+.source-viewer-content.viewer-surface .playbook-reader-shadow-host {
+  min-height: auto;
+}
+
+.source-viewer-content.viewer-surface::-webkit-scrollbar {
+  width: 10px;
+}
+
+.source-viewer-content.viewer-surface::-webkit-scrollbar-track {
+  background: rgba(238, 231, 220, 0.84);
+}
+
+.source-viewer-content.viewer-surface::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(238, 231, 220, 0.84);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(194, 65, 12, 0.48), rgba(97, 72, 42, 0.22));
+}
+
+.source-viewer-content.viewer-surface::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(194, 65, 12, 0.62), rgba(97, 72, 42, 0.32));
+}
+
 .source-viewer-content.viewer-surface {
   padding: 0 0 36px;
   background:
@@ -4248,7 +4282,8 @@
 
 .reader-stage {
   min-width: 0;
-  padding: 0 28px 52px;
+  box-sizing: border-box;
+  padding: 0 clamp(12px, 3vw, 28px) 52px;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -4265,7 +4300,9 @@
 .viewer-document-stage-shell {
   position: relative;
   width: 100%;
+  min-width: 0;
   min-height: 100%;
+  box-sizing: border-box;
 }
 
 .viewer-text-editor-popover {

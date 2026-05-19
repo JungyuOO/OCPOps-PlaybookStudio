@@ -19,6 +19,8 @@ const VIEWER_READER_POLISH = `
     color: #0f172a;
     min-width: 0;
     max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
     --pbs-reader-card-bg: rgba(255, 255, 255, 0.96);
     --pbs-reader-border: rgba(15, 23, 42, 0.12);
     --pbs-reader-text: #0f172a;
@@ -38,6 +40,7 @@ const VIEWER_READER_POLISH = `
   :host,
   .viewer-root,
   .viewer-root * {
+    box-sizing: border-box;
     scrollbar-width: thin;
     scrollbar-color: rgba(89, 208, 255, 0.42) rgba(8, 13, 22, 0.72);
   }
@@ -132,6 +135,8 @@ const VIEWER_READER_POLISH = `
     padding-bottom: 40px;
     min-width: 0;
     max-width: 100%;
+    width: 100%;
+    overflow-wrap: break-word;
   }
 
   /* 
@@ -169,6 +174,283 @@ const VIEWER_READER_POLISH = `
     margin: 0 auto !important;
     padding: 28px 32px 56px !important;
     min-width: 0 !important;
+    overflow: visible !important;
+  }
+
+  .viewer-root.upload-reader-document {
+    padding-bottom: 0 !important;
+    color: #1e293b !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 10px 8px 44px !important;
+    min-width: 0 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .eyebrow {
+    color: #0e7490 !important;
+    letter-spacing: 0.11em !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader h1 {
+    margin: 8px 0 10px !important;
+    color: #1f2937 !important;
+    font-size: clamp(1.8rem, 4vw, 2.45rem) !important;
+    line-height: 1.08 !important;
+    letter-spacing: 0 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .summary {
+    color: #64748b !important;
+    font-size: 0.88rem !important;
+    line-height: 1.65 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .meta {
+    max-width: 100% !important;
+    gap: 8px !important;
+    margin: 18px 0 20px !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .meta span {
+    border: 1px solid rgba(14, 116, 144, 0.18) !important;
+    background: rgba(236, 254, 255, 0.86) !important;
+    color: #0f6471 !important;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.78) inset !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-panel,
+  .viewer-root.upload-reader-document .upload-reader .diagnostic-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(15, 23, 42, 0.09) !important;
+    border-radius: 16px !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 248, 244, 0.96)) !important;
+    box-shadow: none !important;
+    padding: 12px !important;
+    margin: 10px 0 0 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-panel > h2,
+  .viewer-root.upload-reader-document .upload-reader .diagnostic-panel > h2 {
+    color: #111827 !important;
+    font-size: 1.08rem !important;
+    letter-spacing: 0 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-body {
+    gap: 18px !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-body > * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-chunk-section {
+    position: relative !important;
+    scroll-margin-top: 28px !important;
+    border-top: 0 !important;
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-chunk-section + .upload-chunk-section {
+    margin-top: 14px !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-chunk-section:target {
+    border-color: rgba(14, 116, 144, 0.28) !important;
+    background: linear-gradient(90deg, rgba(236, 254, 255, 0.62), rgba(236, 254, 255, 0)) !important;
+    border-radius: 12px !important;
+    padding-left: 14px !important;
+    margin-left: -14px !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-anchor-alias {
+    position: relative !important;
+    top: -28px !important;
+    display: block !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-chunk-path {
+    margin: 0 0 8px !important;
+    color: #0e7490 !important;
+    font-size: 0.78rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.02em !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-body h2,
+  .viewer-root.upload-reader-document .upload-reader .document-body h3,
+  .viewer-root.upload-reader-document .upload-reader .document-body h4,
+  .viewer-root.upload-reader-document .upload-reader .document-body h5 {
+    color: #1f2937 !important;
+    margin: 24px 0 8px !important;
+    line-height: 1.38 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-body h2:first-child,
+  .viewer-root.upload-reader-document .upload-reader .document-body h3:first-child,
+  .viewer-root.upload-reader-document .upload-reader .document-body h4:first-child {
+    margin-top: 0 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader p,
+  .viewer-root.upload-reader-document .upload-reader li,
+  .viewer-root.upload-reader-document .upload-reader td {
+    color: #334155 !important;
+    line-height: 1.72 !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader strong,
+  .viewer-root.upload-reader-document .upload-reader th {
+    color: #111827 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-body,
+  .viewer-root.upload-reader-document .upload-reader .upload-table-wrap,
+  .viewer-root.upload-reader-document .upload-reader .code-block,
+  .viewer-root.upload-reader-document .upload-reader pre {
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-table-wrap,
+  .viewer-root.upload-reader-document .upload-reader pre {
+    overflow-x: auto !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-asset-figure {
+    max-width: 100% !important;
+    background: #ffffff !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-asset-figure img {
+    display: block !important;
+    width: auto !important;
+    max-width: 100% !important;
+    max-height: min(52vh, 360px) !important;
+    object-fit: contain !important;
+    margin: 0 auto !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-table-wrap {
+    border: 1px solid rgba(15, 23, 42, 0.08) !important;
+    background: #ffffff !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-table {
+    color: #334155 !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-table th {
+    background: #f8fafc !important;
+    color: #111827 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-table td,
+  .viewer-root.upload-reader-document .upload-reader .upload-table th {
+    border-color: rgba(15, 23, 42, 0.08) !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader code:not(pre code) {
+    background: rgba(14, 116, 144, 0.08) !important;
+    color: #0f6471 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-block {
+    border: 1px solid rgba(15, 23, 42, 0.1) !important;
+    border-radius: 14px !important;
+    background: #0f172a !important;
+    box-shadow: none !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-header,
+  .viewer-root.upload-reader-document .upload-reader .code-footer {
+    background: #111827 !important;
+    border-color: rgba(148, 163, 184, 0.18) !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-label {
+    color: #cbd5e1 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .icon-button {
+    border-color: rgba(148, 163, 184, 0.22) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: #cbd5e1 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .icon-button:hover,
+  .viewer-root.upload-reader-document .upload-reader .icon-button[aria-pressed="true"] {
+    border-color: rgba(14, 116, 144, 0.24) !important;
+    background: rgba(236, 254, 255, 0.96) !important;
+    color: #0f6471 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-block pre,
+  .viewer-root.upload-reader-document .upload-reader .code-block code,
+  .viewer-root.upload-reader-document .upload-reader pre,
+  .viewer-root.upload-reader-document .upload-reader pre code {
+    background: #0f172a !important;
+    color: #dbeafe !important;
+    font-size: 0.82rem !important;
+    line-height: 1.58 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .collapse-button {
+    color: #cbd5e1 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .collapse-button:hover,
+  .viewer-root.upload-reader-document .upload-reader .collapse-button.is-collapsed {
+    color: #0e7490 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-block.is-collapsible.is-collapsed pre::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-token.code-key {
+    color: #7dd3fc !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-token.code-string {
+    color: #86efac !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-token.code-number {
+    color: #c4b5fd !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-token.code-atom {
+    color: #fbbf24 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-token.code-comment {
+    color: #cbd5e1 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-token.code-punctuation {
+    color: #e2e8f0 !important;
   }
 
   .viewer-root .section-card {
@@ -192,16 +474,16 @@ const VIEWER_READER_POLISH = `
     color: var(--pbs-reader-dim) !important;
   }
 
-  .viewer-root .code-block {
+  .viewer-root:not(.upload-reader-document) .code-block {
     background: var(--pbs-reader-code-bg) !important;
     border: 1px solid var(--pbs-reader-border) !important;
   }
 
-  .viewer-root .code-block pre,
-  .viewer-root .code-block code,
-  .viewer-root .code-block span,
-  .viewer-root pre,
-  .viewer-root pre code {
+  .viewer-root:not(.upload-reader-document) .code-block pre,
+  .viewer-root:not(.upload-reader-document) .code-block code,
+  .viewer-root:not(.upload-reader-document) .code-block span,
+  .viewer-root:not(.upload-reader-document) pre,
+  .viewer-root:not(.upload-reader-document) pre code {
     color: #0f172a !important;
   }
 
@@ -569,20 +851,20 @@ function isViewerHref(href: string): boolean {
 }
 
 function scrollShadowTargetIntoView(host: HTMLDivElement, targetNode: HTMLElement): void {
-  let scrollContainer: Element | null = host.parentElement;
-  while (scrollContainer && scrollContainer !== document.documentElement) {
-    const style = window.getComputedStyle(scrollContainer);
-    if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
-    scrollContainer = scrollContainer.parentElement;
-  }
-  if (scrollContainer && scrollContainer !== document.documentElement) {
-    const containerRect = scrollContainer.getBoundingClientRect();
+  const scrollContainer = findScrollContainer(host);
+  if (scrollContainer !== window) {
+    const container = scrollContainer as HTMLElement;
+    const containerRect = container.getBoundingClientRect();
     const nodeRect = targetNode.getBoundingClientRect();
-    const targetScrollTop = scrollContainer.scrollTop + (nodeRect.top - containerRect.top) - 16;
-    scrollContainer.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    const targetScrollTop = Math.max(
+      0,
+      Math.min(maxScrollTop, container.scrollTop + (nodeRect.top - containerRect.top) - 24),
+    );
+    container.scrollTo({ top: targetScrollTop, behavior: 'auto' });
     return;
   }
-  targetNode.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  targetNode.scrollIntoView({ block: 'start', behavior: 'auto' });
 }
 
 function findScrollContainer(host: HTMLDivElement): HTMLElement | Window {
@@ -669,7 +951,7 @@ function findShadowTarget(root: ShadowRoot, targetId: string): HTMLElement | nul
 
 function findSectionNodes(container: ParentNode): HTMLElement[] {
   return Array.from(
-    container.querySelectorAll('section.section-card[id], section.embedded-section[id]'),
+    container.querySelectorAll('section.section-card[id], section.embedded-section[id], section.upload-chunk-section[id]'),
   ).filter((node): node is HTMLElement => node instanceof HTMLElement);
 }
 
@@ -1063,16 +1345,23 @@ export default function ViewerDocumentStage({
     const host = hostRef.current;
     const root = shadowRootRef.current;
     if (!host || !root || !currentViewerPath || !currentViewerPath.includes('#')) {
-      return;
+      return undefined;
     }
     const targetId = currentViewerPath.split('#').slice(1).join('#');
     const targetNode = findShadowTarget(root, targetId);
     if (!targetNode) {
-      return;
+      return undefined;
     }
-    requestAnimationFrame(() => {
+    const frameId = requestAnimationFrame(() => {
       scrollShadowTargetIntoView(host, targetNode);
     });
+    const retryTimers = [120, 360].map((delay) => window.setTimeout(() => {
+      scrollShadowTargetIntoView(host, targetNode);
+    }, delay));
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      retryTimers.forEach((timer) => window.clearTimeout(timer));
+    };
   }, [currentViewerPath, viewerDocument.html]);
 
   useEffect(() => {

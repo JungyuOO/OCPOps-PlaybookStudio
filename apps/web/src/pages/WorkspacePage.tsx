@@ -154,6 +154,13 @@ const WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY = 'workspace.activeDocumentTit
 const WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY = 'workspace.activeCategoryKey';
 const WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY = 'workspace.activeCategoryLabel';
 const WORKSPACE_INGESTION_STATUS_STORAGE_KEY = 'workspace.ingestionStatus';
+const STALE_INGESTION_STATUS_MS = 30 * 60 * 1000;
+const IN_FLIGHT_INGESTION_STATUSES = new Set<IngestionStatusBanner['status']>([
+  'recognizing',
+  'parsing',
+  'embedding',
+  'indexing',
+]);
 
 function workspaceMetadataRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -178,7 +185,18 @@ function loadStoredIngestionStatus(): IngestionStatusBanner | null {
   }
   try {
     const raw = window.localStorage.getItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) as IngestionStatusBanner : null;
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as IngestionStatusBanner;
+    if (IN_FLIGHT_INGESTION_STATUSES.has(parsed.status)) {
+      const ageMs = Date.now() - Date.parse(parsed.updatedAt || '');
+      if (!parsed.documentSourceId || !Number.isFinite(ageMs) || ageMs > STALE_INGESTION_STATUS_MS) {
+        window.localStorage.removeItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY);
+        return null;
+      }
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -1391,6 +1409,7 @@ export default function WorkspacePage() {
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState('');
   const [ingestionStatusBanner, setIngestionStatusBanner] = useState<IngestionStatusBanner | null>(() => loadStoredIngestionStatus());
+  const [isWorkspaceUploading, setIsWorkspaceUploading] = useState(false);
 
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1398,6 +1417,7 @@ export default function WorkspacePage() {
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   const quickNavRef = useRef<HTMLDivElement>(null);
+  const viewerPreviewRetryKeysRef = useRef<Set<string>>(new Set());
   const leftPanelRef = usePanelRef();
   const rightPanelRef = usePanelRef();
 
@@ -1782,6 +1802,32 @@ export default function WorkspacePage() {
       cancelled = true;
     };
   }, [ingestionStatusBanner?.documentSourceId, ingestionStatusBanner?.repositoryId]);
+
+  useEffect(() => {
+    if (
+      !ingestionStatusBanner
+      || isWorkspaceUploading
+      || !IN_FLIGHT_INGESTION_STATUSES.has(ingestionStatusBanner.status)
+      || ingestionStatusBanner.documentSourceId
+      || ingestionStatusBanner.repositoryId
+    ) {
+      return undefined;
+    }
+    const updatedAtMs = Date.parse(ingestionStatusBanner.updatedAt || '');
+    const ageMs = Number.isFinite(updatedAtMs) ? Date.now() - updatedAtMs : STALE_INGESTION_STATUS_MS;
+    const delayMs = Math.max(0, Math.min(STALE_INGESTION_STATUS_MS, 60_000) - ageMs);
+    const timer = window.setTimeout(() => {
+      const nextBanner: IngestionStatusBanner = {
+        ...ingestionStatusBanner,
+        status: 'failed',
+        message: '업로드 상태 확인이 중단되었습니다. 다시 업로드하거나 작업 로그를 확인해주세요.',
+        updatedAt: new Date().toISOString(),
+      };
+      setIngestionStatusBanner(nextBanner);
+      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [ingestionStatusBanner, isWorkspaceUploading]);
 
   const refreshWikiOverlays = useCallback(async () => {
     setIsOverlayLoading(true);
@@ -2570,6 +2616,36 @@ export default function WorkspacePage() {
     }
   }
 
+  useEffect(() => {
+    if (testMode || preview.kind !== 'viewer' || preview.viewerDocument?.html || !preview.viewerUrl) {
+      return undefined;
+    }
+    const viewerPath = runtimePathFromUrl(preview.viewerUrl);
+    if (!viewerPath) {
+      return undefined;
+    }
+    const retryKey = `${viewerPath}|${viewerPageMode}`;
+    if (viewerPreviewRetryKeysRef.current.has(retryKey)) {
+      return undefined;
+    }
+    viewerPreviewRetryKeysRef.current.add(retryKey);
+    const timer = window.setTimeout(() => {
+      void openViewerPreview(
+        viewerPath,
+        preview.title,
+        activeSourceId ?? undefined,
+        viewerPageMode,
+        preview.scrollTargetText,
+      );
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeSourceId,
+    preview,
+    testMode,
+    viewerPageMode,
+  ]);
+
   async function handleViewerPageModeChange(nextMode: ViewerPageMode): Promise<void> {
     if (nextMode === viewerPageMode) {
       return;
@@ -2756,22 +2832,49 @@ export default function WorkspacePage() {
     }
   }
 
-  async function openCitationEvidenceDrawer(citation: ChatCitation, answerContent = ''): Promise<void> {
-    await openEvidenceDrawerPath(
-      citationEvidenceTitle(citation),
-      citation.viewer_path,
-      citationScrollTarget(citation, answerContent) || firstCitationCommand(citation),
-    );
-  }
-
-  function handleCitationEvidenceToggle(messageId: string, citation: ChatCitation): void {
+  async function handleCitationReferenceClick(messageId: string, citation: ChatCitation, answerContent = ''): Promise<void> {
     setMessages((current) => current.map((message) => {
       if (message.id !== messageId) {
         return message;
       }
-      const nextIndex = message.activeCitationIndex === citation.index ? undefined : citation.index;
-      return { ...message, activeCitationIndex: nextIndex };
+      return { ...message, activeCitationIndex: citation.index };
     }));
+    const viewerPath = String(citation.viewer_path || '').trim();
+    if (!viewerPath) {
+      return;
+    }
+    try {
+      if (rightCollapsed) {
+        rightPanelRef.current?.expand();
+        setRightCollapsed(false);
+      }
+      await openViewerPreview(
+        viewerPath,
+        citationEvidenceTitle(citation),
+        `citation:${messageId}:${citation.index}`,
+        viewerPageMode,
+        citationScrollTarget(citation, answerContent) || firstCitationCommand(citation),
+      );
+      if (!isCourseMode) {
+        animatePreviewPanel();
+      }
+      if (
+        ingestionStatusBanner
+        && !isWorkspaceUploading
+        && IN_FLIGHT_INGESTION_STATUSES.has(ingestionStatusBanner.status)
+        && !ingestionStatusBanner.documentSourceId
+        && !ingestionStatusBanner.repositoryId
+      ) {
+        setIngestionStatusBanner(null);
+        window.localStorage.removeItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY);
+      }
+    } catch (error) {
+      console.error('citation-viewer-open-failed', {
+        viewerPath,
+        citationIndex: citation.index,
+        error,
+      });
+    }
   }
 
   async function handleRelatedLinkClick(link: ChatRelatedLink): Promise<void> {
@@ -3128,6 +3231,7 @@ export default function WorkspacePage() {
       return;
     }
 
+    setIsWorkspaceUploading(true);
     try {
       setIngestionStatusBanner({
         status: 'parsing',
@@ -3236,8 +3340,17 @@ export default function WorkspacePage() {
       setPreview({ kind: 'empty' });
     } catch (error) {
       console.error(error);
+      const nextBanner: IngestionStatusBanner = {
+        status: 'failed',
+        message: '업로드가 중단되었습니다. 다시 업로드하거나 작업 로그를 확인해주세요.',
+        filename: file.name,
+        updatedAt: new Date().toISOString(),
+      };
+      setIngestionStatusBanner(nextBanner);
+      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
       window.alert(error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.');
     } finally {
+      setIsWorkspaceUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -4578,7 +4691,7 @@ export default function WorkspacePage() {
                               primaryPublicationState={message.primaryPublicationState}
                               primaryApprovalState={message.primaryApprovalState}
                               onCitationClick={(citation) => {
-                                handleCitationEvidenceToggle(message.id, citation);
+                                void handleCitationReferenceClick(message.id, citation, message.content);
                               }}
                               onRelatedLinkClick={(link) => {
                                 void handleRelatedLinkClick(link);
@@ -4623,20 +4736,6 @@ export default function WorkspacePage() {
                                       <code>{activeCitation.cli_commands[0]}</code>
                                     </div>
                                   ) : null}
-                                  <div className="citation-evidence-actions">
-                                    <button
-                                      type="button"
-                                      onClick={() => { void openCitationEvidenceDrawer(activeCitation, message.content); }}
-                                    >
-                                      Open document
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleCitationEvidenceToggle(message.id, activeCitation)}
-                                    >
-                                      Close
-                                    </button>
-                                  </div>
                                 </div>
                               );
                             })()}
@@ -4651,7 +4750,7 @@ export default function WorkspacePage() {
                             <CitationTag
                               key={`${message.id}-${citation.index}`}
                               citation={citation}
-                              onOpen={(selected) => { void openCitationEvidenceDrawer(selected, message.content); }}
+                              onOpen={(selected) => { void handleCitationReferenceClick(message.id, selected, message.content); }}
                             />
                           ))}
                         </div>
