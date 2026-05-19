@@ -16,6 +16,7 @@ oc apply -f "${SCRIPT_DIR}/core.yaml"
 # The upstream postgres/qdrant/nginx images are not fully arbitrary-UID clean.
 # This keeps the first in-cluster test deployment moving; harden later if needed.
 oc adm policy add-scc-to-user anyuid -z playbookstudio -n "${NAMESPACE}" >/dev/null || true
+oc adm policy add-scc-to-user anyuid -z terminal-broker -n "${NAMESPACE}" >/dev/null || true
 
 oc create secret generic playbookstudio-secret \
   -n "${NAMESPACE}" \
