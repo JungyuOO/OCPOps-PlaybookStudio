@@ -6,6 +6,7 @@ catch misses that book-level hit metrics hide.
 from __future__ import annotations
 
 from play_book_studio.retrieval.models import RetrievalHit
+from play_book_studio.retrieval.query_normalize import normalize_query
 from play_book_studio.retrieval.ranking import rrf_merge_named_hit_lists
 
 
@@ -43,7 +44,7 @@ def rank_in_hits(hits: list[RetrievalHit], case: dict) -> int | None:
 
 def probe_case(*, bm25_index, vector_retriever, case: dict, candidate_k: int = 40) -> dict:
     """Run one case through stage-1 retrieval and report per-stage ranks."""
-    query = str(case.get("query", ""))
+    query = normalize_query(str(case.get("query", "")))
 
     bm25_hits = bm25_index.search(query, top_k=candidate_k) if bm25_index else []
     vector_hits = []

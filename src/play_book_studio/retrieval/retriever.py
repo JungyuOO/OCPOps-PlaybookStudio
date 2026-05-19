@@ -19,9 +19,7 @@ from .intake_overlay import (
     load_customer_pack_overlay_index,
 )
 from .models import RetrievalResult, SessionContext
-from .scoring import fuse_ranked_hits
 from .vector import VectorRetriever
-from .retriever_pipeline import execute_retrieval_pipeline
 
 if TYPE_CHECKING:
     from .reranker import RemoteBgeReranker
@@ -110,20 +108,48 @@ class ChatRetriever:
         query: str,
         *,
         context: SessionContext | None = None,
-        top_k: int = 5,
-        candidate_k: int = 10,
+        top_k: int = 8,
+        candidate_k: int = 40,
         use_bm25: bool = True,
         use_vector: bool = True,
         trace_callback=None,
     ) -> RetrievalResult:
-        result = execute_retrieval_pipeline(
-            self,
+        from .hybrid_search import hybrid_search
+
+        context = context or SessionContext()
+        search = hybrid_search(
             query,
-            context=context,
+            bm25_index=self.bm25_index if use_bm25 else None,
+            vector_retriever=self.vector_retriever if use_vector else None,
+            candidate_k=candidate_k,
+            top_k=top_k,
+            database_url=getattr(self.settings, "database_url", ""),
+        )
+        hits = search.hits
+        reranker_failed = False
+        reranker_applied = False
+        if self.reranker is not None and self.reranker.enabled and hits:
+            try:
+                hits = self.reranker.rerank(search.normalized_query, hits, top_k=top_k)[:top_k]
+                reranker_applied = True
+            except Exception:  # noqa: BLE001
+                reranker_failed = True
+                hits = search.hits
+
+        return RetrievalResult(
+            query=query,
+            normalized_query=search.normalized_query,
+            rewritten_query=search.normalized_query,
             top_k=top_k,
             candidate_k=candidate_k,
-            use_bm25=use_bm25,
-            use_vector=use_vector,
-            trace_callback=trace_callback,
+            context=context.to_dict(),
+            hits=hits,
+            trace={
+                "retrieval_query_count": 1,
+                "bm25_count": search.bm25_count,
+                "vector_count": search.vector_count,
+                "vector_failed": search.vector_failed,
+                "reranker_applied": reranker_applied,
+                "reranker_failed": reranker_failed,
+            },
         )
-        return result
