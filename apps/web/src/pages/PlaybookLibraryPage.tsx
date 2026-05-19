@@ -89,6 +89,18 @@ interface LogEntry {
   msg: string;
 }
 
+interface UploadProgressItem {
+  key: string;
+  stage: string;
+  taskKind: string;
+  label: string;
+  message: string;
+  current: number;
+  total: number;
+  percent: number;
+  status: string;
+}
+
 interface UploadReportViewerState {
   title: string;
   documentSourceId: string;
@@ -506,11 +518,46 @@ function uploadStageStatusLabel(status: string): string {
 }
 
 function uploadStageTone(status: string): 'running' | 'done' | 'warning' | 'failed' | 'idle' {
-  if (status === 'running') return 'running';
+  if (status === 'running' || status === 'info' || status === 'progress') return 'running';
   if (status === 'done' || status === 'duplicate' || status === 'skipped') return 'done';
   if (status === 'warning') return 'warning';
   if (status === 'failed') return 'failed';
   return 'idle';
+}
+
+function uploadProgressTaskLabel(taskKind: string, stage: string): string {
+  switch (taskKind) {
+    case 'image_ocr': return '이미지 OCR/설명';
+    case 'asset_write': return '이미지 파일 저장';
+    default: return taskKind ? taskKind.replace(/_/g, ' ') : uploadStageTitle(stage);
+  }
+}
+
+function progressFromUploadEvents(events: UploadIngestStreamStageEvent[]): UploadProgressItem[] {
+  const items = new Map<string, UploadProgressItem>();
+  events.forEach((event) => {
+    const total = Number(event.progress_total || 0);
+    if (!Number.isFinite(total) || total <= 0) return;
+    const current = Math.max(0, Number(event.progress_current || 0));
+    const rawPercent = typeof event.progress_percent === 'number'
+      ? event.progress_percent
+      : (current / total) * 100;
+    const percent = Math.max(0, Math.min(100, Math.round(rawPercent)));
+    const taskKind = String(event.task_kind || '').trim();
+    const key = String(event.progress_key || `${event.stage}:${taskKind || event.item_label || 'progress'}`).trim();
+    items.set(key, {
+      key,
+      stage: event.stage,
+      taskKind,
+      label: uploadProgressTaskLabel(taskKind, event.stage),
+      message: event.item_label || event.message || uploadStageTitle(event.stage),
+      current,
+      total,
+      percent,
+      status: event.status,
+    });
+  });
+  return Array.from(items.values());
 }
 
 function customerPackBookTruth(book?: LibraryBook | null): string {
@@ -1860,6 +1907,11 @@ const PlaybookLibraryPage: React.FC = () => {
     return byStage;
   }, [uploadStageEvents]);
 
+  const liveUploadProgressItems = useMemo(
+    () => progressFromUploadEvents(uploadStageEvents),
+    [uploadStageEvents],
+  );
+
   const uploadStepState = (stage: UserUploadStage, index: number): 'idle' | 'running' | 'done' | 'warning' | 'failed' => {
     void index;
     const event = latestUploadStageByName.get(stage);
@@ -1887,6 +1939,9 @@ const PlaybookLibraryPage: React.FC = () => {
       typeof (event.counts?.indexed_count ?? event.indexed_count) === 'number'
         && typeof (event.counts?.candidate_count ?? event.candidate_count) === 'number'
         ? `${event.counts?.indexed_count ?? event.indexed_count}/${event.counts?.candidate_count ?? event.candidate_count} indexed`
+        : '',
+      typeof event.progress_current === 'number' && typeof event.progress_total === 'number' && event.progress_total > 0
+        ? `${event.progress_current}/${event.progress_total}`
         : '',
     ].filter(Boolean);
     const suffix = suffixParts.length ? ` (${suffixParts.join(', ')})` : '';
@@ -2966,6 +3021,31 @@ const PlaybookLibraryPage: React.FC = () => {
               <div className="pipeline-details">
                 <div className="log-container">
                   <div className="log-header">{factoryLane === 'tools' ? 'Book Factory Processing Logs' : 'Recent Processing Logs'}</div>
+                  {factoryLane === 'user' && liveUploadProgressItems.length > 0 && (
+                    <div className="upload-progress-board" aria-label="Upload detailed progress">
+                      <div className="upload-progress-board-head">
+                        <span>작업별 진행률</span>
+                        <strong>{currentFile || latestUploadIngest?.filename || '업로드 문서'}</strong>
+                      </div>
+                      <div className="upload-progress-list">
+                        {liveUploadProgressItems.map((item) => (
+                          <div className={`upload-progress-row upload-progress-row--${uploadStageTone(item.status)}`} key={item.key}>
+                            <div className="upload-progress-row-top">
+                              <span>{item.label}</span>
+                              <strong>{item.current.toLocaleString()} / {item.total.toLocaleString()}</strong>
+                            </div>
+                            <div className="upload-progress-track" aria-hidden="true">
+                              <span style={{ width: `${item.percent}%` }} />
+                            </div>
+                            <div className="upload-progress-row-bottom">
+                              <span>{item.message}</span>
+                              <em>{item.percent}%</em>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {logs.length === 0 && (
                     <div className="log-empty">
                       {factoryLane === 'tools' ? '생산을 시작하면 단계별 로그가 여기에 표시됩니다.' : 'No activity yet.'}
@@ -3977,6 +4057,26 @@ const PlaybookLibraryPage: React.FC = () => {
                     <div className="upload-report-warning-list">
                       {(uploadReportViewer.report.warnings ?? []).map((warning, index) => (
                         <span key={`${warning}-${index}`}>{warning}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {progressFromUploadEvents(uploadReportViewer.report.stages ?? []).length > 0 && (
+                    <div className="upload-report-progress-list">
+                      {progressFromUploadEvents(uploadReportViewer.report.stages ?? []).map((item) => (
+                        <div className={`upload-progress-row upload-progress-row--${uploadStageTone(item.status)}`} key={item.key}>
+                          <div className="upload-progress-row-top">
+                            <span>{item.label}</span>
+                            <strong>{item.current.toLocaleString()} / {item.total.toLocaleString()}</strong>
+                          </div>
+                          <div className="upload-progress-track" aria-hidden="true">
+                            <span style={{ width: `${item.percent}%` }} />
+                          </div>
+                          <div className="upload-progress-row-bottom">
+                            <span>{item.message}</span>
+                            <em>{item.percent}%</em>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}

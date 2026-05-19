@@ -368,21 +368,28 @@ def _pdf_asset_bytes(source_path: Path, metadata: dict[str, Any]) -> bytes:
 
 def _uploaded_document_asset_sources(root_dir: Path, document: dict[str, Any], asset_rows: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
     settings = load_settings(root_dir)
+    storage_root = settings.object_storage_dir.resolve()
     source_path = (settings.object_storage_dir / str(document.get("storage_key") or "")).resolve()
     result: dict[str, dict[str, str]] = {}
-    if not source_path.exists():
-        return result
     for row in asset_rows:
         asset_id = str(row.get("asset_id") or "").strip()
         if not asset_id:
             continue
         metadata = _json_dict(row.get("metadata"))
         content = b""
-        if str(metadata.get("pdf_xref") or "").strip():
+        storage_key = str(row.get("storage_key") or "").strip()
+        if storage_key:
+            try:
+                asset_path = (settings.object_storage_dir / storage_key).resolve()
+                if storage_root in asset_path.parents and asset_path.is_file():
+                    content = asset_path.read_bytes()
+            except OSError:
+                content = b""
+        if not content and source_path.exists() and str(metadata.get("pdf_xref") or "").strip():
             content = _pdf_asset_bytes(source_path, metadata)
         if not content:
             continue
-        filename = str(metadata.get("filename") or row.get("storage_key") or asset_id).strip()
+        filename = str(metadata.get("filename") or storage_key or asset_id).strip()
         result[asset_id] = {
             "src": _asset_data_url(content, str(row.get("mime_type") or "image/png")),
             "caption": filename,

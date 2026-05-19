@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
+import mimetypes
 import re
+import shutil
 import time
 import uuid
+import zipfile
 from datetime import datetime, timezone
 from http import HTTPStatus
 from pathlib import Path
@@ -87,6 +91,218 @@ def _upload_report_storage_key(document_source_id: str) -> str:
 
 def _upload_report_path(settings, document_source_id: str) -> Path:
     return settings.object_storage_dir / _upload_report_storage_key(document_source_id)
+
+
+def _storage_path_for_key(settings, storage_key: str) -> Path:
+    normalized = str(storage_key or "").strip().replace("\\", "/").lstrip("/")
+    if not normalized:
+        raise ValueError("storage_key is required")
+    target = (settings.object_storage_dir / normalized).resolve()
+    storage_root = settings.object_storage_dir.resolve()
+    if target == storage_root or storage_root not in target.parents:
+        raise ValueError(f"invalid storage_key outside object storage: {storage_key}")
+    return target
+
+
+def _asset_extension(asset: Any) -> str:
+    suffix = Path(str(getattr(asset, "filename", "") or "")).suffix.lower()
+    if suffix:
+        return suffix
+    guessed = mimetypes.guess_extension(str(getattr(asset, "mime_type", "") or ""))
+    return guessed or ".bin"
+
+
+def _extract_asset_bytes(source_path: Path, asset: Any) -> tuple[bytes, str]:
+    metadata = getattr(asset, "metadata", {}) if isinstance(getattr(asset, "metadata", {}), dict) else {}
+    pdf_xref = str(metadata.get("pdf_xref") or "").strip()
+    if pdf_xref:
+        try:
+            import fitz  # PyMuPDF
+
+            doc = fitz.open(str(source_path))
+            try:
+                payload = doc.extract_image(int(pdf_xref))
+                return bytes(payload.get("image") or b""), "pdf_xref"
+            finally:
+                doc.close()
+        except Exception:  # noqa: BLE001
+            return b"", "pdf_xref"
+
+    source_member = str(metadata.get("source_member") or "").strip()
+    if source_member and not source_member.startswith("pdf:"):
+        try:
+            with zipfile.ZipFile(source_path) as archive:
+                return archive.read(source_member), "zip_member"
+        except Exception:  # noqa: BLE001
+            return b"", "zip_member"
+
+    if source_path.is_file() and str(getattr(asset, "asset_type", "") or "") == "image":
+        try:
+            return source_path.read_bytes(), "source_file"
+        except OSError:
+            return b"", "source_file"
+
+    return b"", "unknown"
+
+
+def _materialize_upload_assets(
+    settings,
+    *,
+    source_path: Path,
+    parsed: Any,
+    persisted: Any,
+    connection: Any,
+    progress: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    document_source_id = str(getattr(persisted, "document_source_id", "") or "").strip()
+    parsed_document_id = str(getattr(persisted, "parsed_document_id", "") or "").strip()
+    scoped_asset_ids = tuple(str(asset_id or "") for asset_id in getattr(persisted, "asset_ids", ()) or ())
+    assets = tuple(getattr(parsed, "assets", ()) or ())
+    manifest: dict[str, Any] = {
+        "schema_version": "user_upload_asset_materialization_v1",
+        "generated_at": _now_iso(),
+        "document_source_id": document_source_id,
+        "parsed_document_id": parsed_document_id,
+        "asset_root_storage_key": f"uploads/assets/{document_source_id}",
+        "image_count": sum(1 for asset in assets if str(getattr(asset, "asset_type", "") or "") == "image"),
+        "written_count": 0,
+        "assets": [],
+        "warnings": [],
+    }
+    if not document_source_id or not assets:
+        return manifest
+
+    asset_root = (settings.object_storage_dir / "uploads" / "assets" / document_source_id).resolve()
+    storage_root = settings.object_storage_dir.resolve()
+    if storage_root in asset_root.parents and asset_root.is_dir():
+        shutil.rmtree(asset_root)
+
+    image_assets = [asset for asset in assets if str(getattr(asset, "asset_type", "") or "") == "image"]
+    total_images = len(image_assets)
+    image_position = 0
+    with connection.cursor() as cursor:
+        for index, asset in enumerate(assets):
+            if str(getattr(asset, "asset_type", "") or "") != "image":
+                continue
+            image_position += 1
+            scoped_asset_id = scoped_asset_ids[index] if index < len(scoped_asset_ids) and scoped_asset_ids[index] else str(getattr(asset, "asset_id", ""))
+            if not scoped_asset_id:
+                manifest["warnings"].append(f"asset index {index} has no scoped id")
+                continue
+            if progress is not None:
+                progress({
+                    "task_kind": "asset_write",
+                    "progress_key": "asset_write",
+                    "item_label": str(getattr(asset, "filename", "") or scoped_asset_id),
+                    "progress_current": max(image_position - 1, 0),
+                    "progress_total": total_images,
+                    "progress_percent": round((max(image_position - 1, 0) / max(total_images, 1)) * 100),
+                    "message": f"이미지 파일 저장 중: {getattr(asset, 'filename', scoped_asset_id)} ({image_position}/{total_images})",
+                })
+            content, source_kind = _extract_asset_bytes(source_path, asset)
+            if not content:
+                manifest["warnings"].append(f"{getattr(asset, 'filename', scoped_asset_id)} materialize failed from {source_kind}")
+                continue
+            metadata = getattr(asset, "metadata", {}) if isinstance(getattr(asset, "metadata", {}), dict) else {}
+            extension = _asset_extension(asset)
+            storage_key = f"uploads/assets/{document_source_id}/images/{scoped_asset_id}{extension}"
+            target = _storage_path_for_key(settings, storage_key)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+            actual_sha256 = hashlib.sha256(content).hexdigest()
+            ocr_storage_key = f"uploads/assets/{document_source_id}/ocr/{scoped_asset_id}.json"
+            ocr_target = _storage_path_for_key(settings, ocr_storage_key)
+            ocr_target.parent.mkdir(parents=True, exist_ok=True)
+            ocr_payload = {
+                "schema_version": "user_upload_asset_ocr_v1",
+                "generated_at": manifest["generated_at"],
+                "asset_id": scoped_asset_id,
+                "parser_asset_id": str(getattr(asset, "asset_id", "") or ""),
+                "filename": str(getattr(asset, "filename", "") or target.name),
+                "mime_type": str(getattr(asset, "mime_type", "") or mimetypes.guess_type(target.name)[0] or "application/octet-stream"),
+                "image_storage_key": storage_key,
+                "description": str(getattr(asset, "description", "") or ""),
+                "ocr_text": str(getattr(asset, "ocr_text", "") or ""),
+                "vision_model": str(metadata.get("vision_model") or metadata.get("qwen_model") or ""),
+                "vision_provider": str(metadata.get("vision_provider") or ""),
+                "vision_status": str(metadata.get("vision_status") or ""),
+                "vision_error": str(metadata.get("vision_error") or ""),
+            }
+            ocr_target.write_text(json.dumps(ocr_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            entry = {
+                "asset_id": scoped_asset_id,
+                "parser_asset_id": str(getattr(asset, "asset_id", "") or ""),
+                "filename": str(getattr(asset, "filename", "") or target.name),
+                "mime_type": str(getattr(asset, "mime_type", "") or mimetypes.guess_type(target.name)[0] or "application/octet-stream"),
+                "storage_key": storage_key,
+                "ocr_storage_key": ocr_storage_key,
+                "byte_size": len(content),
+                "sha256": actual_sha256,
+                "source": source_kind,
+            }
+            manifest["assets"].append(entry)
+            manifest["written_count"] += 1
+            metadata_patch = {
+                "materialized_storage_key": storage_key,
+                "ocr_storage_key": ocr_storage_key,
+                "materialized_byte_size": len(content),
+                "materialized_sha256": actual_sha256,
+                "materialized_at": manifest["generated_at"],
+                "materialized_from": source_kind,
+            }
+            cursor.execute(
+                """
+                UPDATE document_assets
+                SET storage_key = %s,
+                    metadata = metadata || %s::jsonb
+                WHERE id = %s::uuid
+                """,
+                (storage_key, json.dumps(metadata_patch, ensure_ascii=False), scoped_asset_id),
+            )
+            if progress is not None:
+                progress({
+                    "task_kind": "asset_write",
+                    "progress_key": "asset_write",
+                    "item_label": str(getattr(asset, "filename", "") or scoped_asset_id),
+                    "progress_current": image_position,
+                    "progress_total": total_images,
+                    "progress_percent": round((image_position / max(total_images, 1)) * 100),
+                    "message": f"이미지 파일 저장 완료: {getattr(asset, 'filename', scoped_asset_id)} ({image_position}/{total_images})",
+                })
+    return manifest
+
+
+def _write_upload_debug_artifacts(
+    settings,
+    *,
+    document_source_id: str,
+    parsed: Any,
+    chunks: tuple[Any, ...],
+    asset_manifest: dict[str, Any],
+) -> dict[str, str]:
+    if not document_source_id:
+        return {}
+    artifact_specs = {
+        "parsed_markdown": (
+            f"uploads/reports/{document_source_id}/parsed.md",
+            str(getattr(parsed, "markdown", "") or ""),
+        ),
+        "chunks_json": (
+            f"uploads/reports/{document_source_id}/chunks.json",
+            json.dumps([chunk.to_dict() if hasattr(chunk, "to_dict") else dict(chunk) for chunk in chunks], ensure_ascii=False, indent=2),
+        ),
+        "assets_manifest": (
+            f"uploads/reports/{document_source_id}/assets-manifest.json",
+            json.dumps(asset_manifest, ensure_ascii=False, indent=2),
+        ),
+    }
+    written: dict[str, str] = {}
+    for key, (storage_key, content) in artifact_specs.items():
+        target = _storage_path_for_key(settings, storage_key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        written[key] = storage_key
+    return written
 
 
 def _document_source_id_from_result(result: dict[str, Any]) -> str:
@@ -192,6 +408,8 @@ def _write_upload_ingestion_report(settings, result: dict[str, Any], stage_event
         "quality_gate": result.get("quality_gate") or {},
         "stages": stage_events,
         "index": index_payload,
+        "asset_materialization": result.get("asset_materialization") or {},
+        "artifacts": result.get("artifacts") or {},
         "warnings": result.get("warnings") or [],
         "ready_for_chat": result.get("ready_for_chat") is True,
         "answer_ready": result.get("answer_ready") is True,
@@ -425,10 +643,9 @@ def build_upload_ingest_response(
     emit("parse", "running", "문서에서 텍스트와 구조를 추출하는 중입니다.")
 
     def _parse_progress(_stage: str, status: str, detail: dict[str, Any]) -> None:
-        # parser 가 흘리는 sub-event 를 그대로 'parse' 단계의 info 이벤트로 emit.
-        # 프런트는 status='info'를 로그창에만 표시하고 카드는 running 유지.
         note = str(detail.get("note") or "").strip() or status
-        emit("parse", "info", note)
+        extra = {key: value for key, value in detail.items() if key != "note"}
+        emit("parse", "progress" if status == "progress" else "info", note, **extra)
 
     parsed = parse_upload_document(
         source_path,
@@ -481,7 +698,10 @@ def build_upload_ingest_response(
     emit("chunk", "done", "청크 생성이 완료되었습니다.", duration_ms=timings["chunk_ms"], chunk_count=len(chunks))
     dry_run = _bool_payload(payload.get("dry_run"), default=False)
     # 같은 파일 재업로드는 기본 덮어쓰기. 사용자가 명시적으로 force_reingest=false 보내야 중복 skip.
-    force_reingest = _bool_payload(payload.get("force_reingest") or payload.get("force_duplicate"), default=True)
+    force_reingest_value = payload.get("force_reingest")
+    if force_reingest_value is None:
+        force_reingest_value = payload.get("force_duplicate")
+    force_reingest = _bool_payload(force_reingest_value, default=True)
     created_by = str(payload.get("created_by") or "").strip()
     visibility = str(payload.get("visibility") or "").strip()
     source_scope = str(payload.get("source_scope") or "user_upload").strip() or "user_upload"
@@ -665,6 +885,41 @@ def build_upload_ingest_response(
             "asset_count": len(persisted.asset_ids),
             "chunk_count": len(persisted.chunk_ids),
         }
+        asset_manifest = _materialize_upload_assets(
+            settings,
+            source_path=source_path,
+            parsed=parsed,
+            persisted=persisted,
+            connection=connection,
+            progress=lambda detail: emit(
+                "persist",
+                "progress",
+                str(detail.get("message") or "이미지 에셋 파일을 저장하는 중입니다."),
+                task_kind=detail.get("task_kind") or "asset_write",
+                progress_key=detail.get("progress_key") or "asset_write",
+                item_label=detail.get("item_label") or "",
+                progress_current=int(detail.get("progress_current") or 0),
+                progress_total=int(detail.get("progress_total") or 0),
+                progress_percent=int(detail.get("progress_percent") or 0),
+            ),
+        )
+        debug_artifacts = _write_upload_debug_artifacts(
+            settings,
+            document_source_id=persisted.document_source_id,
+            parsed=parsed,
+            chunks=chunks,
+            asset_manifest=asset_manifest,
+        )
+        result["asset_materialization"] = asset_manifest
+        result["artifacts"] = debug_artifacts
+        if asset_manifest.get("warnings"):
+            result.setdefault("warnings", []).extend(str(item) for item in asset_manifest.get("warnings") or [])
+        if asset_manifest.get("image_count"):
+            emit(
+                "persist",
+                "info",
+                f"이미지 에셋 파일 저장: {asset_manifest.get('written_count', 0)}/{asset_manifest.get('image_count', 0)}개",
+            )
         if _bool_payload(payload.get("index"), default=False):
             index_started_at = time.perf_counter()
             emit("index", "running", "Qdrant 검색 인덱스를 생성하는 중입니다.")
@@ -870,14 +1125,21 @@ def handle_upload_delete(
     # ingestion-report.json 도 같이 정리
     report_removed = False
     try:
-        report_path = _upload_report_path(settings, deleted_info["document_source_id"])
-        if report_path.is_file():
-            report_path.unlink()
+        report_dir = (settings.object_storage_dir / "uploads" / "reports" / deleted_info["document_source_id"]).resolve()
+        storage_root = settings.object_storage_dir.resolve()
+        if storage_root in report_dir.parents and report_dir.is_dir():
+            shutil.rmtree(report_dir)
             report_removed = True
-            try:
-                report_path.parent.rmdir()
-            except OSError:
-                pass
+    except Exception:  # noqa: BLE001
+        pass
+
+    asset_dir_removed = False
+    try:
+        asset_dir = (settings.object_storage_dir / "uploads" / "assets" / deleted_info["document_source_id"]).resolve()
+        storage_root = settings.object_storage_dir.resolve()
+        if storage_root in asset_dir.parents and asset_dir.is_dir():
+            shutil.rmtree(asset_dir)
+            asset_dir_removed = True
     except Exception:  # noqa: BLE001
         pass
 
@@ -891,6 +1153,7 @@ def handle_upload_delete(
         "storage_file_removed": storage_removed,
         "storage_error": storage_error,
         "report_file_removed": report_removed,
+        "asset_dir_removed": asset_dir_removed,
     })
 
 

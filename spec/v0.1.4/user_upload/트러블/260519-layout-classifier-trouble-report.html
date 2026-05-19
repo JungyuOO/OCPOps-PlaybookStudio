@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>User Upload Trouble Report - Layout Classifier</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07101d;
+      --panel: #0d1727;
+      --panel-2: #111d30;
+      --line: #263a57;
+      --text: #edf6ff;
+      --muted: #9fb0c4;
+      --cyan: #20d5ff;
+      --green: #2ce1a2;
+      --amber: #ffd15c;
+      --red: #ff6b88;
+      --violet: #b48cff;
+      --code: #050a14;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, Pretendard, "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.68;
+    }
+
+    main {
+      width: min(1180px, calc(100vw - 48px));
+      margin: 0 auto;
+      padding: 48px 0 72px;
+    }
+
+    header {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 28px;
+      margin-bottom: 28px;
+    }
+
+    .eyebrow {
+      color: var(--cyan);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 8px 0 12px;
+      font-size: clamp(34px, 5vw, 64px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 36px 0 16px;
+      font-size: 24px;
+    }
+
+    h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    .lead {
+      max-width: 940px;
+      color: #c7d6e7;
+      font-size: 18px;
+    }
+
+    .meta-grid,
+    .trouble-grid,
+    .evidence-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .meta-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-top: 22px;
+    }
+
+    .trouble-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .evidence-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    .meta-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .meta-value {
+      margin-top: 6px;
+      font-family: "Cascadia Code", Consolas, monospace;
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0 4px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 24px;
+      border-radius: 999px;
+      border: 1px solid currentColor;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.3;
+    }
+
+    .open { color: var(--amber); }
+    .fixed { color: var(--green); }
+    .risk { color: var(--red); }
+    .watch { color: var(--violet); }
+    .info { color: var(--cyan); }
+
+    .trouble {
+      background: linear-gradient(180deg, rgba(17, 29, 48, .96), rgba(13, 23, 39, .96));
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .trouble + .trouble {
+      margin-top: 14px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .section-label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    ul {
+      margin: 8px 0 0;
+      padding-left: 22px;
+    }
+
+    li + li {
+      margin-top: 6px;
+    }
+
+    code,
+    pre {
+      font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+    }
+
+    code {
+      color: #d7efff;
+      background: rgba(11, 19, 33, .9);
+      border: 1px solid rgba(52, 78, 116, .75);
+      border-radius: 5px;
+      padding: 1px 5px;
+    }
+
+    pre {
+      overflow: auto;
+      margin: 10px 0 0;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid #1d3150;
+      background: var(--code);
+      color: #eaf6ff;
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 8px;
+      margin-top: 10px;
+      border: 1px solid var(--line);
+    }
+
+    th,
+    td {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: #13223a;
+      color: #d9efff;
+      font-size: 13px;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .callout {
+      border-left: 4px solid var(--cyan);
+      background: rgba(32, 213, 255, .08);
+      padding: 14px 16px;
+      margin-top: 16px;
+      color: #d8f4ff;
+    }
+
+    @media (max-width: 860px) {
+      main {
+        width: min(100vw - 28px, 1180px);
+        padding-top: 28px;
+      }
+
+      .meta-grid,
+      .evidence-grid,
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">User Upload Trouble Log</div>
+      <h1>레이아웃 기반 블록 분류 작업 중 발견된 문제</h1>
+      <p class="lead">
+        이 문서는 v0.1.4 유저 업로드 파이프라인 고도화 중 실제 검증에서 드러난 문제를 숨기지 않고 고정하기 위한 기록이다.
+        해결된 문제와 남은 문제를 분리하고, 다음 작업자가 같은 논쟁을 반복하지 않도록 재현 조건과 판단 근거를 함께 남긴다.
+      </p>
+      <div class="meta-grid">
+        <div class="card">
+          <div class="meta-label">Branch</div>
+          <div class="meta-value">feat/docs_uploads_S_v1</div>
+        </div>
+        <div class="card">
+          <div class="meta-label">Base Head</div>
+          <div class="meta-value">553493e</div>
+        </div>
+        <div class="card">
+          <div class="meta-label">작성일</div>
+          <div class="meta-value">2026-05-19</div>
+        </div>
+        <div class="card">
+          <div class="meta-label">Scope</div>
+          <div class="meta-value">user upload parser / viewer / RAG smoke</div>
+        </div>
+      </div>
+    </header>
+
+    <section>
+      <h2>현재 판단</h2>
+      <div class="callout">
+        파서와 뷰어는 레이아웃 기반 분류로 개선되었고, 실제 업로드 문서의 DB/HTML 산출물도 대체로 정상화되었다.
+        다만 챗봇 답변 생성 단계에서 긴 명령어 URL을 다시 시각적 줄바꿈하는 문제가 남아 있어, “업로드 문서 품질이 곧 답변 품질까지 완전 보장된다”고 말하면 안 된다.
+      </div>
+    </section>
+
+    <section>
+      <h2>열린 문제</h2>
+      <article class="trouble">
+        <div class="status-row">
+          <span class="badge open">OPEN</span>
+          <span class="badge risk">Answer Formatting</span>
+          <span class="badge info">RAG citation은 잡힘</span>
+        </div>
+        <h3>T-001. 챗봇 답변에서 긴 PowerShell URL이 다시 줄바꿈됨</h3>
+        <p>
+          DB와 뷰어 HTML에는 긴 URL이 한 줄로 저장되어 있는데, 챗봇 답변 생성 결과에서
+          <code>openshift-pi</code> / <code>pelines.apps...</code>처럼 시각적 줄바꿈이 다시 들어간 사례가 확인되었다.
+        </p>
+        <div class="two-col">
+          <div>
+            <span class="section-label">Evidence</span>
+            <ul>
+              <li>DB의 <code>document_blocks.markdown</code>에는 전체 URL이 한 줄로 존재한다.</li>
+              <li>뷰어 API HTML에도 전체 URL 문자열이 포함된다.</li>
+              <li><code>/api/chat</code> smoke에서 같은 코드블록이 답변으로 재생성될 때 줄이 나뉜 사례가 있었다.</li>
+            </ul>
+          </div>
+          <div>
+            <span class="section-label">Current Diagnosis</span>
+            <ul>
+              <li>원인은 PDF 파서나 DB 저장이 아니라 answer synthesis 또는 answer formatting 단계로 보는 것이 맞다.</li>
+              <li>복사 가능한 명령어를 답변하는 경우에는 코드블록 내부 줄바꿈 보존 규칙을 더 강하게 걸어야 한다.</li>
+            </ul>
+          </div>
+        </div>
+        <pre><code>정상 원본:
+smee --url https://smee.io/esRZDPmzzYd87BN8 --target https://pipelines-as-code-controller-openshift-pipelines.apps.ocp.test.com/
+
+답변에서 관측된 문제:
+smee --url https://smee.io/esRZDPmzzYd87BN8 --target https://pipelines-as-code-controller-openshift-pi
+pelines.apps.ocp.test.com/</code></pre>
+        <div class="two-col">
+          <div>
+            <span class="section-label">Acceptance Criteria</span>
+            <ul>
+              <li>PowerShell 코드블록 답변에서 URL/명령어가 DB chunk 원문과 동일한 줄 구조를 유지한다.</li>
+              <li>복사했을 때 명령어가 실행 가능한 문자열로 유지된다.</li>
+            </ul>
+          </div>
+          <div>
+            <span class="section-label">Suggested Next File Area</span>
+            <ul>
+              <li><code>src/play_book_studio/answering/*</code></li>
+              <li><code>src/play_book_studio/http/server_chat.py</code></li>
+              <li>답변 후처리 또는 코드블록 보존 프롬프트/formatter 테스트</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="trouble">
+        <div class="status-row">
+          <span class="badge open">OPEN</span>
+          <span class="badge watch">Diagnostic Trap</span>
+        </div>
+        <h3>T-002. 뷰어 API 진단 시 <code>documentId</code>가 아니라 <code>viewer_path</code>가 필요함</h3>
+        <p>
+          프론트는 업로드 문서 뷰어를 <code>/uploads/documents/{document_source_id}/index.html</code> 형태로 열고,
+          <code>/api/viewer-document</code>도 <code>viewer_path</code> 파라미터를 요구한다. <code>documentId</code>로 호출하면
+          실제 제품 실패가 아니어도 <code>viewer_path가 필요합니다.</code> 에러가 난다.
+        </p>
+        <div class="two-col">
+          <div>
+            <span class="section-label">Evidence</span>
+            <ul>
+              <li><code>apps/web/src/lib/runtimeApi.ts</code>의 <code>loadViewerDocument(viewerPath)</code></li>
+              <li><code>apps/web/src/pages/PlaybookLibraryPage.tsx</code>의 업로드 문서 viewer path 생성</li>
+              <li><code>src/play_book_studio/http/server_routes_viewer.py</code>의 업로드 문서 viewer path regex</li>
+            </ul>
+          </div>
+          <div>
+            <span class="section-label">Risk</span>
+            <ul>
+              <li>테스트/수동 검증자가 잘못된 API 계약으로 확인하면 “뷰어가 안 뜬다”고 오판할 수 있다.</li>
+              <li>다음 작업자에게 진단 URL을 문서로 고정해야 한다.</li>
+            </ul>
+          </div>
+        </div>
+        <pre><code>정상 진단 URL:
+/api/viewer-document?viewer_path=%2Fuploads%2Fdocuments%2F{document_source_id}%2Findex.html</code></pre>
+      </article>
+
+      <article class="trouble">
+        <div class="status-row">
+          <span class="badge open">OPEN</span>
+          <span class="badge watch">Source of Truth</span>
+        </div>
+        <h3>T-003. <code>document_sources.metadata.viewer_path</code>는 비어 있고 프론트가 경로를 계산함</h3>
+        <p>
+          최신 업로드 row를 확인했을 때 <code>document_sources.metadata-&gt;'viewer_path'</code>는 비어 있었다.
+          현재 화면은 이 값을 읽는 대신 <code>document_source_id</code>로 viewer path를 계산한다.
+        </p>
+        <div class="two-col">
+          <div>
+            <span class="section-label">Impact</span>
+            <ul>
+              <li>DB만 보는 사람은 “viewer_path 저장이 안 됐다”고 오판할 수 있다.</li>
+              <li>검색 payload, citation, viewer route의 truth source가 분산되어 보인다.</li>
+            </ul>
+          </div>
+          <div>
+            <span class="section-label">Suggested Decision</span>
+            <ul>
+              <li>v0.1.4에서는 계산식 유지가 가능하지만, handoff 문서에 공식 viewer path 규칙을 명시한다.</li>
+              <li>v0.1.5에서 DB metadata에도 canonical viewer path를 저장할지 J와 협의한다.</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section>
+      <h2>이번 작업으로 닫힌 문제</h2>
+      <div class="trouble-grid">
+        <article class="trouble">
+          <div class="status-row">
+            <span class="badge fixed">FIXED IN WORKTREE</span>
+            <span class="badge info">Parser</span>
+          </div>
+          <h3>F-001. 코드블록 내부 <code>## 예 ...</code>가 제목처럼 렌더링되던 문제</h3>
+          <p>
+            레이아웃 기반 code block으로 먼저 분류한 뒤 Markdown을 만들도록 바꿔, 코드블록 내부의 <code>##</code> 라인이 heading으로 승격되지 않게 했다.
+          </p>
+        </article>
+
+        <article class="trouble">
+          <div class="status-row">
+            <span class="badge fixed">FIXED IN WORKTREE</span>
+            <span class="badge info">Parser</span>
+          </div>
+          <h3>F-002. URL이나 일반 문장이 코드로 과분류되던 문제</h3>
+          <p>
+            <code>https://</code> 같은 URL scheme은 YAML의 <code>key:</code> 패턴으로 보지 않도록 제외했고, 코드성 라인 수와 레이아웃 정보를 함께 보도록 조정했다.
+          </p>
+        </article>
+
+        <article class="trouble">
+          <div class="status-row">
+            <span class="badge fixed">FIXED IN WORKTREE</span>
+            <span class="badge info">Viewer</span>
+          </div>
+          <h3>F-003. OCR 결과가 뷰어 본문에 직접 노출되던 문제</h3>
+          <p>
+            현재 검증 대상 문서의 viewer HTML에서는 <code>OCR 결과</code> 문자열이 노출되지 않는다.
+            OCR 텍스트는 검색 보조 맥락으로만 쓰고, 사람용 본문에는 원문 구조를 우선한다는 기준을 유지해야 한다.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>검증 기록</h2>
+      <div class="evidence-grid">
+        <div class="card">
+          <h3>테스트</h3>
+          <pre><code>uv run pytest tests/test_document_parsing.py -q
+20 passed
+
+uv run pytest tests/test_document_parsing.py tests/test_document_repository.py tests/test_company_llm_vision.py tests/test_session_owner_scoping.py -q
+43 passed
+
+npm --prefix apps/web run build
+passed</code></pre>
+        </div>
+        <div class="card">
+          <h3>실제 업로드 문서 산출물</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>문서</th>
+                <th>Blocks</th>
+                <th>Chunks</th>
+                <th>Code</th>
+                <th>Tables</th>
+                <th>Images</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>01. yaml 파일 작성 방법</td><td>43</td><td>12</td><td>14</td><td>1</td><td>0</td></tr>
+              <tr><td>02. 스토리지</td><td>153</td><td>42</td><td>25</td><td>2</td><td>1</td></tr>
+              <tr><td>03. 네트워킹</td><td>99</td><td>34</td><td>22</td><td>2</td><td>6</td></tr>
+              <tr><td>11. 폐쇄망 외부에서 접근하기</td><td>15</td><td>5</td><td>3</td><td>0</td><td>3</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>다음 작업자에게 남기는 기준</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>영역</th>
+            <th>Pass 기준</th>
+            <th>실패로 볼 조건</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Parser</td>
+            <td>원문 제목, 본문, 코드블록, 표, 이미지가 최소한 손실 없이 분리된다.</td>
+            <td>코드 주석이 heading이 되거나, URL/일반 문장이 코드로 대량 오분류된다.</td>
+          </tr>
+          <tr>
+            <td>Viewer</td>
+            <td>업로드 문서를 열면 본문이 스크롤 가능하고, 코드블록은 복사/줄바꿈 제어를 제공한다.</td>
+            <td>본문 대신 OCR dump가 보이거나, 이미지/코드블록이 사라진다.</td>
+          </tr>
+          <tr>
+            <td>RAG</td>
+            <td>업로드 문서 citation이 잡히고, 답변 코드블록이 원문 명령어 줄 구조를 유지한다.</td>
+            <td>citation은 잡히지만 답변 생성 중 명령어가 재줄바꿈되어 복사 실행성이 깨진다.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

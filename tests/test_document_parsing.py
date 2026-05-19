@@ -7,6 +7,10 @@ import pytest
 
 from play_book_studio.ingestion.document_parsing import (
     DocumentAsset,
+    PdfLayoutBlock,
+    _merge_pdf_layout_blocks,
+    _pdf_classify_text_layout_block,
+    _pdf_layout_blocks_to_markdown,
     _pdf_pages_to_markdown,
     build_document_chunks,
     detect_document_format,
@@ -161,13 +165,14 @@ def test_markdown_sections_store_toc_metadata_outside_body_text():
 def test_parse_image_document_keeps_asset_and_description():
     image_path = _case_dir("image_asset") / "diagram.png"
     image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    progress_events = []
 
     def describe(path, asset):
         assert path == image_path.resolve()
         assert asset.mime_type == "image/png"
         return "OpenShift topology image"
 
-    parsed = parse_upload_document(image_path, image_describer=describe)
+    parsed = parse_upload_document(image_path, image_describer=describe, progress=lambda stage, status, detail: progress_events.append((stage, status, detail)))
 
     assert parsed.document_format == "image"
     assert len(parsed.assets) == 1
@@ -175,6 +180,8 @@ def test_parse_image_document_keeps_asset_and_description():
     assert parsed.blocks[0].block_type == "image"
     assert parsed.blocks[0].asset_ids == (parsed.assets[0].asset_id,)
     assert "OpenShift topology image" in parsed.markdown
+    image_progress = [detail for _stage, status, detail in progress_events if status == "progress" and detail.get("task_kind") == "image_ocr"]
+    assert image_progress[-1]["progress_percent"] == 100
 
 
 def test_converter_formats_use_injected_markdown_adapter():
@@ -344,6 +351,53 @@ def test_upload_viewer_code_blocks_render_copy_and_wrap_controls():
     assert 'class="copy-button icon-button"' in rendered
     assert 'class="wrap-button icon-button"' in rendered
     assert "줄바꿈" in rendered
+
+
+def test_pdf_layout_classifier_keeps_urls_as_text_and_literal_hashes_as_code():
+    url_block = _pdf_classify_text_layout_block(
+        text="https://nodejs.org/ko/download",
+        bbox=(72, 190, 250, 205),
+        font_size=12,
+        median_font_size=12,
+        font_names=["Courier New"],
+    )
+    assert url_block.kind == "paragraph"
+
+    merged = _merge_pdf_layout_blocks(
+        [
+            PdfLayoutBlock(
+                kind="heading",
+                text="4. 혹시 webhook secrets 생각안난다?",
+                bbox=(72, 282, 322, 304),
+                font_size=15,
+            ),
+            PdfLayoutBlock(
+                kind="code",
+                text='oc patch secret demo-token -n demo -p \'{"stringData":{"webhook.secret":"mysecret1234"}}\'',
+                bbox=(84, 322, 505, 355),
+                font_size=12,
+                language="bash",
+            ),
+            PdfLayoutBlock(
+                kind="code",
+                text="## 예 demo-token-2csgx",
+                bbox=(84, 376, 240, 392),
+                font_size=12,
+                language="bash",
+            ),
+        ]
+    )
+    markdown = _pdf_layout_blocks_to_markdown(merged, title="폐쇄망 외부에서 접근하기(github)", page_index=2)
+
+    assert "## 4. 혹시 webhook secrets 생각안난다?" in markdown
+    assert (
+        "```bash\n"
+        'oc patch secret demo-token -n demo -p \'{"stringData":{"webhook.secret":"mysecret1234"}}\'\n'
+        "\n"
+        "## 예 demo-token-2csgx\n"
+        "```"
+    ) in markdown
+    assert "\n## 예 demo-token-2csgx\n\n" not in markdown
 
 
 def test_docx_default_pipeline_extracts_markdown_blocks_and_chunks():

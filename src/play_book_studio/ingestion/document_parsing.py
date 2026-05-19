@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import contextlib
 import io
+import json
 import mimetypes
 import re
 import uuid
@@ -37,6 +38,7 @@ DocumentFormat = Literal[
 ]
 ParseStatus = Literal["parsed", "staged", "failed"]
 BlockType = Literal["heading", "paragraph", "table", "code", "image"]
+PdfLayoutBlockKind = Literal["heading", "paragraph", "table", "code"]
 
 
 MARKDOWN_FORMATS = {"md", "asciidoc"}
@@ -154,6 +156,17 @@ class DocumentChunk:
         return payload
 
 
+@dataclass(frozen=True, slots=True)
+class PdfLayoutBlock:
+    kind: PdfLayoutBlockKind
+    text: str
+    bbox: tuple[float, float, float, float]
+    font_size: float = 0.0
+    language: str = ""
+    confidence: float = 0.0
+    reason: str = ""
+
+
 MarkdownConverter = Callable[[Path, DocumentFormat], str | ConvertedMarkdown]
 ImageDescriber = Callable[[Path, DocumentAsset], str]
 
@@ -182,6 +195,9 @@ _PPT_ROW_TAG = "{http://schemas.openxmlformats.org/drawingml/2006/main}tr"
 _PPT_CELL_TAG = "{http://schemas.openxmlformats.org/drawingml/2006/main}tc"
 _PAGE_MARKER_RE = re.compile(r"^<!--\s*(?:page|slide)\s*:\s*(\d+)\s*-->\s*$", re.IGNORECASE)
 _DRAWING_EMBED_RE = re.compile(r'r:embed="([^"]+)"')
+_PDF_LAYOUT_MARKER = "<!-- pbs-pdf-layout-v1 -->"
+_PDF_LAYOUT_BLOCK_START_RE = re.compile(r"^<!--\s*pbs-layout-block\s+(?P<payload>\{.*\})\s*-->\s*$")
+_PDF_LAYOUT_BLOCK_END = "<!-- /pbs-layout-block -->"
 
 
 def detect_document_format(path: Path, *, sample_size: int = 4096) -> DocumentFormat:
@@ -245,8 +261,27 @@ def parse_upload_document(
         _emit("info", note="이미지 자산 처리")
         asset = _image_asset(path, sha256=sha256, mime_type=mime_type)
         if image_describer:
-            _emit("info", note="Company LLM 이미지 OCR/설명 생성 중...")
+            _emit(
+                "progress",
+                note=f"이미지 OCR/설명 처리 중: {asset.filename} (0/1)",
+                task_kind="image_ocr",
+                progress_key="image_ocr",
+                item_label=asset.filename,
+                progress_current=0,
+                progress_total=1,
+                progress_percent=0,
+            )
             asset = _describe_asset(path, asset, image_describer=image_describer)
+            _emit(
+                "progress",
+                note=f"이미지 OCR/설명 완료: {asset.filename} (1/1)",
+                task_kind="image_ocr",
+                progress_key="image_ocr",
+                item_label=asset.filename,
+                progress_current=1,
+                progress_total=1,
+                progress_percent=100,
+            )
         assets.append(asset)
         markdown = _image_markdown(asset)
     elif document_format in UNSUPPORTED_UPLOAD_FORMATS:
@@ -274,10 +309,32 @@ def parse_upload_document(
             raise ValueError(f"markdown converter produced empty output for {path.name}")
         if image_describer and assets:
             _emit("info", note=f"Company LLM 이미지 OCR/설명 생성 중 ({len(assets)}개 자산)...")
-            assets = [
-                _describe_asset(path, asset, image_describer=image_describer)
-                for asset in assets
-            ]
+            described_assets: list[DocumentAsset] = []
+            total_assets = len(assets)
+            for index, asset in enumerate(assets, start=1):
+                _emit(
+                    "progress",
+                    note=f"이미지 OCR/설명 처리 중: {asset.filename} ({index}/{total_assets})",
+                    task_kind="image_ocr",
+                    progress_key="image_ocr",
+                    item_label=asset.filename,
+                    progress_current=index - 1,
+                    progress_total=total_assets,
+                    progress_percent=round(((index - 1) / max(total_assets, 1)) * 100),
+                )
+                described = _describe_asset(path, asset, image_describer=image_describer)
+                described_assets.append(described)
+                _emit(
+                    "progress",
+                    note=f"이미지 OCR/설명 완료: {asset.filename} ({index}/{total_assets})",
+                    task_kind="image_ocr",
+                    progress_key="image_ocr",
+                    item_label=asset.filename,
+                    progress_current=index,
+                    progress_total=total_assets,
+                    progress_percent=round((index / max(total_assets, 1)) * 100),
+                )
+            assets = described_assets
     else:
         raise ValueError(f"unsupported document format for ingestion: {path.name}")
 
@@ -745,6 +802,8 @@ def _pdf_title_from_pages(pages: list[str], fallback: str) -> str:
             line = " ".join(raw_line.strip().split())
             if not line:
                 continue
+            if line.startswith("<!--"):
+                continue
             if len(line) > 80:
                 continue
             if re.fullmatch(r"(?i)page\s+\d+", line):
@@ -858,6 +917,7 @@ _PDF_YAML_KEYS = {
     "port",
     "host",
     "server",
+    "services",
     "http",
     "paths",
     "path",
@@ -1104,7 +1164,155 @@ def _pdf_code_language_for_line(line: str, pending_language: str = "") -> str:
     return "yaml"
 
 
+def _pdf_line_looks_yaml_code(line: str) -> bool:
+    stripped = str(line or "").strip()
+    if not stripped or stripped.startswith("#"):
+        return False
+    if re.match(r"^-\s+\S+", stripped):
+        return True
+    key_match = re.match(r"^([A-Za-z][A-Za-z0-9_.-]*):(?:\s|$)", stripped)
+    if key_match and key_match.group(1) in _PDF_YAML_KEYS:
+        return True
+    compact_key_match = re.match(r"^([A-Za-z][A-Za-z0-9_.-]*):\S+", stripped)
+    return bool(compact_key_match and compact_key_match.group(1) in _PDF_YAML_KEYS)
+
+
+def _serialize_pdf_layout_blocks(blocks: list[PdfLayoutBlock]) -> str:
+    lines = [_PDF_LAYOUT_MARKER]
+    for block in blocks:
+        payload = {
+            "kind": block.kind,
+            "bbox": [round(value, 2) for value in block.bbox],
+            "font_size": round(float(block.font_size or 0.0), 2),
+            "language": block.language,
+            "confidence": round(float(block.confidence or 0.0), 3),
+            "reason": block.reason,
+        }
+        lines.append(f"<!-- pbs-layout-block {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))} -->")
+        lines.extend(str(block.text or "").rstrip("\n").splitlines())
+        lines.append(_PDF_LAYOUT_BLOCK_END)
+    return "\n".join(lines).strip()
+
+
+def _parse_pdf_layout_blocks_source(text: str) -> list[PdfLayoutBlock] | None:
+    lines = str(text or "").splitlines()
+    if not any(line.strip() == _PDF_LAYOUT_MARKER for line in lines[:3]):
+        return None
+    blocks: list[PdfLayoutBlock] = []
+    index = 0
+    while index < len(lines):
+        start_match = _PDF_LAYOUT_BLOCK_START_RE.match(lines[index].strip())
+        if start_match is None:
+            index += 1
+            continue
+        try:
+            payload = json.loads(start_match.group("payload"))
+        except json.JSONDecodeError:
+            index += 1
+            continue
+        body: list[str] = []
+        index += 1
+        while index < len(lines) and lines[index].strip() != _PDF_LAYOUT_BLOCK_END:
+            body.append(lines[index].rstrip())
+            index += 1
+        raw_bbox = payload.get("bbox") if isinstance(payload, dict) else None
+        bbox_values = raw_bbox if isinstance(raw_bbox, list) and len(raw_bbox) == 4 else [0, 0, 0, 0]
+        kind = str(payload.get("kind") or "paragraph") if isinstance(payload, dict) else "paragraph"
+        if kind not in {"heading", "paragraph", "table", "code"}:
+            kind = "paragraph"
+        blocks.append(
+            PdfLayoutBlock(
+                kind=kind,  # type: ignore[arg-type]
+                text="\n".join(body).strip("\n"),
+                bbox=tuple(float(value or 0) for value in bbox_values),  # type: ignore[arg-type]
+                font_size=float(payload.get("font_size") or 0.0) if isinstance(payload, dict) else 0.0,
+                language=str(payload.get("language") or "") if isinstance(payload, dict) else "",
+                confidence=float(payload.get("confidence") or 0.0) if isinstance(payload, dict) else 0.0,
+                reason=str(payload.get("reason") or "") if isinstance(payload, dict) else "",
+            )
+        )
+        index += 1
+    return blocks
+
+
+def _pdf_noncode_lines_without_repeated(text: str, *, title: str) -> list[str]:
+    cleaned: list[str] = []
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.rstrip()
+        if not _clean_pdf_line(line):
+            if cleaned and cleaned[-1] != "":
+                cleaned.append("")
+            continue
+        if _is_pdf_repeated_header_or_footer(line, title=title):
+            continue
+        cleaned.append(line)
+    while cleaned and not cleaned[0].strip():
+        cleaned.pop(0)
+    while cleaned and not cleaned[-1].strip():
+        cleaned.pop()
+    return cleaned
+
+
+def _pdf_layout_blocks_to_markdown(blocks: list[PdfLayoutBlock], *, title: str, page_index: int) -> str:
+    output: list[str] = []
+
+    def append_blank() -> None:
+        if output and output[-1] != "":
+            output.append("")
+
+    for block in blocks:
+        text = str(block.text or "").strip("\n")
+        if not text.strip():
+            continue
+        if block.kind == "table":
+            append_blank()
+            output.append(text.strip())
+            output.append("")
+            continue
+        if block.kind == "code":
+            code_lines = _repair_pdf_wrapped_lines([line.rstrip() for line in text.splitlines()])
+            while code_lines and not code_lines[0].strip():
+                code_lines.pop(0)
+            while code_lines and not code_lines[-1].strip():
+                code_lines.pop()
+            if not code_lines:
+                continue
+            first_code_line = next((line for line in code_lines if line.strip()), "")
+            language = block.language or _pdf_code_language_for_line(first_code_line)
+            append_blank()
+            output.append(f"```{language or 'text'}")
+            output.extend(code_lines)
+            output.append("```")
+            output.append("")
+            continue
+        lines = _pdf_noncode_lines_without_repeated(text, title=title)
+        if not lines:
+            continue
+        if block.kind == "heading":
+            for line in lines:
+                clean_line = _clean_pdf_line(line)
+                if not clean_line:
+                    continue
+                if page_index == 1 and _normalize_pdf_title_for_compare(clean_line) == _normalize_pdf_title_for_compare(title):
+                    continue
+                append_blank()
+                output.append(f"## {clean_line}")
+                output.append("")
+            continue
+        repaired_lines = _repair_pdf_wrapped_lines(lines)
+        paragraph_lines = [line for line in repaired_lines if line.strip()]
+        if paragraph_lines:
+            append_blank()
+            output.extend(_clean_pdf_line(line) for line in paragraph_lines)
+            output.append("")
+    return "\n".join(output).strip()
+
+
 def _pdf_page_text_to_markdown(text: str, *, title: str, page_index: int) -> str:
+    layout_blocks = _parse_pdf_layout_blocks_source(text)
+    if layout_blocks is not None:
+        return _pdf_layout_blocks_to_markdown(layout_blocks, title=title, page_index=page_index)
+
     page_lines: list[str] = []
     for raw_line in str(text or "").splitlines():
         line = str(raw_line or "").rstrip()
@@ -1248,43 +1456,221 @@ def _markdown_table_from_rows(rows: list[list[Any]]) -> str:
     return "\n".join(lines)
 
 
+def _pdf_codeish_line_count(lines: list[str]) -> int:
+    count = 0
+    for line in lines:
+        stripped = line.strip()
+        if _is_pdf_code_line(line):
+            count += 1
+        elif stripped.startswith(("#", "---")):
+            count += 1
+        elif re.match(r"^[-]\s+\S+", stripped):
+            count += 1
+        elif re.match(r"^[A-Za-z][A-Za-z0-9_.-]*:\S+", stripped) and not re.match(r"^[a-z][a-z0-9+.-]*://", stripped, re.IGNORECASE):
+            count += 1
+    return count
+
+
 def _pdf_text_block_looks_like_code(text: str) -> bool:
     lines = [line.rstrip() for line in str(text or "").splitlines() if line.strip()]
     if not lines:
         return False
 
-    def is_codeish(line: str) -> bool:
-        stripped = line.strip()
-        if _is_pdf_code_line(line):
-            return True
-        if stripped.startswith(("#", "---")):
-            return True
-        if re.match(r"^[-]\s+\S+", stripped):
-            return True
-        if re.match(r"^[A-Za-z][A-Za-z0-9_.-]*:\S+", stripped):
-            return True
-        return False
-
-    codeish_count = sum(1 for line in lines if is_codeish(line))
+    codeish_count = _pdf_codeish_line_count(lines)
     return codeish_count > 0 and codeish_count >= max(1, len(lines) // 2)
 
 
-def _pdf_text_items_should_join_as_code(
-    previous: tuple[float, float, tuple[float, float, float, float], str, bool, bool],
-    current: tuple[float, float, tuple[float, float, float, float], str, bool, bool],
-) -> bool:
-    _, previous_x, previous_bbox, _, previous_is_code, previous_is_table = previous
-    _, current_x, current_bbox, _, current_is_code, current_is_table = current
-    if previous_is_table or current_is_table or not (previous_is_code and current_is_code):
+def _pdf_layout_block_language(text: str) -> str:
+    lines = [line for line in str(text or "").splitlines() if line.strip()]
+    first_line = lines[0] if lines else ""
+    if not first_line:
+        return ""
+    if any(str(line).strip().startswith("$env:") for line in lines):
+        return "powershell"
+    if any(_PDF_SHELL_COMMAND_RE.match(str(line).strip()) for line in lines):
+        return "bash"
+    if any(_pdf_line_looks_yaml_code(line) for line in lines):
+        return "yaml"
+    return _pdf_code_language_for_line(first_line)
+
+
+def _pdf_classify_text_layout_block(
+    *,
+    text: str,
+    bbox: tuple[float, float, float, float],
+    font_size: float,
+    median_font_size: float,
+    font_names: list[str],
+) -> PdfLayoutBlock:
+    lines = [line.rstrip() for line in str(text or "").splitlines() if line.strip()]
+    joined = _clean_pdf_line(" ".join(lines))
+    mono_font = any(re.search(r"(?:mono|courier|consola|menlo|code)", font, re.IGNORECASE) for font in font_names)
+    codeish_count = _pdf_codeish_line_count(lines)
+    if lines and (
+        _pdf_text_block_looks_like_code(text)
+        or (mono_font and len(lines) >= 2)
+        or (codeish_count > 0 and len(lines) >= 2 and bbox[0] >= 72)
+    ):
+        confidence = min(0.96, 0.62 + 0.16 * codeish_count + (0.12 if mono_font else 0.0))
+        return PdfLayoutBlock(
+            kind="code",
+            text=text,
+            bbox=bbox,
+            font_size=font_size,
+            language=_pdf_layout_block_language(text),
+            confidence=confidence,
+            reason="codeish_lines_or_monospace_region",
+        )
+    font_boost = median_font_size > 0 and font_size >= max(median_font_size + 1.2, median_font_size * 1.12)
+    if joined and len(lines) <= 2 and _is_pdf_heading_candidate(joined):
+        return PdfLayoutBlock(
+            kind="heading",
+            text=text,
+            bbox=bbox,
+            font_size=font_size,
+            confidence=0.88 if font_boost else 0.76,
+            reason="heading_candidate_with_layout",
+        )
+    if joined and len(lines) <= 2 and font_boost and len(joined) <= 80 and not _pdf_line_has_sentence_end(joined):
+        return PdfLayoutBlock(
+            kind="heading",
+            text=text,
+            bbox=bbox,
+            font_size=font_size,
+            confidence=0.72,
+            reason="large_short_text",
+        )
+    return PdfLayoutBlock(
+        kind="paragraph",
+        text=text,
+        bbox=bbox,
+        font_size=font_size,
+        confidence=0.7,
+        reason="default_text_region",
+    )
+
+
+def _pdf_union_bbox(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    return (
+        min(first[0], second[0]),
+        min(first[1], second[1]),
+        max(first[2], second[2]),
+        max(first[3], second[3]),
+    )
+
+
+def _pdf_layout_blocks_should_merge_code(previous: PdfLayoutBlock, current: PdfLayoutBlock) -> bool:
+    if previous.kind != "code" or current.kind != "code":
         return False
-    if abs(previous_x - current_x) > 28:
+    if abs(previous.bbox[0] - current.bbox[0]) > 34:
         return False
-    vertical_gap = float(current_bbox[1] - previous_bbox[3])
-    return -2 <= vertical_gap <= 18
+    vertical_gap = float(current.bbox[1] - previous.bbox[3])
+    return -3 <= vertical_gap <= 36
+
+
+def _merge_pdf_layout_blocks(blocks: list[PdfLayoutBlock]) -> list[PdfLayoutBlock]:
+    merged: list[PdfLayoutBlock] = []
+    for block in blocks:
+        if merged and _pdf_layout_blocks_should_merge_code(merged[-1], block):
+            previous = merged[-1]
+            vertical_gap = float(block.bbox[1] - previous.bbox[3])
+            separator = "\n\n" if vertical_gap > 18 else "\n"
+            merged[-1] = PdfLayoutBlock(
+                kind="code",
+                text=f"{previous.text.rstrip()}{separator}{block.text.lstrip()}",
+                bbox=_pdf_union_bbox(previous.bbox, block.bbox),
+                font_size=max(previous.font_size, block.font_size),
+                language=_pdf_layout_block_language(f"{previous.text.rstrip()}{separator}{block.text.lstrip()}"),
+                confidence=max(previous.confidence, block.confidence),
+                reason=f"{previous.reason}+merged_layout_code",
+            )
+            continue
+        merged.append(block)
+    return merged
+
+
+def _pdf_text_layout_blocks_with_pymupdf(
+    page: Any,
+    *,
+    table_bboxes: list[tuple[float, float, float, float]],
+) -> list[PdfLayoutBlock]:
+    raw_blocks: list[dict[str, Any]] = []
+    try:
+        page_dict = page.get_text("dict")
+        text_blocks = list(page_dict.get("blocks", []) or [])
+    except Exception:  # noqa: BLE001
+        text_blocks = []
+
+    for block in text_blocks:
+        if int(block.get("type", 0) or 0) != 0:
+            continue
+        raw_bbox = tuple(float(value) for value in block.get("bbox", ()) or ())
+        if len(raw_bbox) != 4:
+            continue
+        bbox = raw_bbox  # type: ignore[assignment]
+        if any(_pdf_rects_overlap(bbox, table_bbox) for table_bbox in table_bboxes):
+            continue
+        lines: list[str] = []
+        font_sizes: list[float] = []
+        font_names: list[str] = []
+        for line in list(block.get("lines", []) or []):
+            spans = list(line.get("spans", []) or [])
+            text_line = "".join(str(span.get("text") or "") for span in spans).rstrip()
+            if text_line.strip():
+                lines.append(text_line)
+            for span in spans:
+                span_text = str(span.get("text") or "")
+                if not span_text.strip():
+                    continue
+                font_sizes.append(float(span.get("size") or 0.0))
+                font_names.append(str(span.get("font") or ""))
+        text = "\n".join(lines).strip()
+        if not text:
+            continue
+        raw_blocks.append(
+            {
+                "text": text,
+                "bbox": bbox,
+                "font_size": max(font_sizes) if font_sizes else 0.0,
+                "font_names": font_names,
+            }
+        )
+
+    if not raw_blocks:
+        try:
+            block_tuples = page.get_text("blocks")
+        except Exception:  # noqa: BLE001
+            block_tuples = []
+        for block in block_tuples:
+            if len(block) < 5:
+                continue
+            bbox = (float(block[0]), float(block[1]), float(block[2]), float(block[3]))
+            if any(_pdf_rects_overlap(bbox, table_bbox) for table_bbox in table_bboxes):
+                continue
+            text = str(block[4] or "").strip()
+            if not text:
+                continue
+            raw_blocks.append({"text": text, "bbox": bbox, "font_size": 0.0, "font_names": []})
+
+    font_sizes = sorted(float(block.get("font_size") or 0.0) for block in raw_blocks if float(block.get("font_size") or 0.0) > 0)
+    median_font_size = font_sizes[len(font_sizes) // 2] if font_sizes else 0.0
+    return [
+        _pdf_classify_text_layout_block(
+            text=str(block["text"]),
+            bbox=block["bbox"],
+            font_size=float(block.get("font_size") or 0.0),
+            median_font_size=median_font_size,
+            font_names=list(block.get("font_names") or []),
+        )
+        for block in raw_blocks
+    ]
 
 
 def _extract_pdf_page_markdown_source_with_pymupdf(page: Any) -> str:
-    items: list[tuple[float, float, tuple[float, float, float, float], str, bool, bool]] = []
+    blocks: list[PdfLayoutBlock] = []
     table_bboxes: list[tuple[float, float, float, float]] = []
     try:
         with contextlib.redirect_stdout(io.StringIO()):
@@ -1303,36 +1689,18 @@ def _extract_pdf_page_markdown_source_with_pymupdf(page: Any) -> str:
         if not markdown_table:
             continue
         table_bboxes.append(bbox_raw)  # type: ignore[arg-type]
-        items.append((bbox_raw[1], bbox_raw[0], bbox_raw, markdown_table, False, True))  # type: ignore[arg-type]
-    try:
-        text_blocks = page.get_text("blocks")
-    except Exception:  # noqa: BLE001
-        text_blocks = []
-    for block in text_blocks:
-        if len(block) < 5:
-            continue
-        bbox = (float(block[0]), float(block[1]), float(block[2]), float(block[3]))
-        if any(_pdf_rects_overlap(bbox, table_bbox) for table_bbox in table_bboxes):
-            continue
-        text = str(block[4] or "").strip()
-        if not text:
-            continue
-        items.append((bbox[1], bbox[0], bbox, text, _pdf_text_block_looks_like_code(text), False))
-    items.sort(key=lambda item: (round(item[0], 1), round(item[1], 1)))
-    page_parts: list[str] = []
-    previous: tuple[float, float, tuple[float, float, float, float], str, bool, bool] | None = None
-    for item in items:
-        text = item[3]
-        if not page_parts:
-            page_parts.append(text)
-        elif previous is not None and _pdf_text_items_should_join_as_code(previous, item):
-            page_parts.append("\n")
-            page_parts.append(text)
-        else:
-            page_parts.append("\n\n")
-            page_parts.append(text)
-        previous = item
-    return "".join(page_parts).strip()
+        blocks.append(
+            PdfLayoutBlock(
+                kind="table",
+                text=markdown_table,
+                bbox=bbox_raw,  # type: ignore[arg-type]
+                confidence=0.96,
+                reason="pymupdf_table_detector",
+            )
+        )
+    blocks.extend(_pdf_text_layout_blocks_with_pymupdf(page, table_bboxes=table_bboxes))
+    blocks.sort(key=lambda block: (round(block.bbox[1], 1), round(block.bbox[0], 1)))
+    return _serialize_pdf_layout_blocks(_merge_pdf_layout_blocks(blocks))
 
 
 def _extract_pdf_pages_with_pymupdf(path: Path) -> list[str] | None:

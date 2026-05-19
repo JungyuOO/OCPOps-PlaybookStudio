@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 from http import HTTPStatus
 from pathlib import Path
+from types import SimpleNamespace
 
+from play_book_studio.ingestion.document_parsing import DocumentAsset, DocumentBlock, ParsedUploadDocument
 from play_book_studio.http.upload_api import (
+    _materialize_upload_assets,
     _safe_upload_name,
+    _write_upload_debug_artifacts,
     build_upload_ingest_response,
     handle_upload_ingest,
     handle_upload_ingest_report,
@@ -54,6 +59,28 @@ class StoredDocument:
     block_ids = ("block-1",)
     asset_ids = ()
     chunk_ids = ("chunk-1",)
+
+
+class RecordingCursor:
+    def __init__(self):
+        self.calls = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def execute(self, sql, params=()):
+        self.calls.append((sql, params))
+
+
+class RecordingConnection:
+    def __init__(self):
+        self.cursor_obj = RecordingCursor()
+
+    def cursor(self):
+        return self.cursor_obj
 
 
 def test_build_upload_ingest_response_dry_run_stores_file_and_chunks(monkeypatch):
@@ -114,6 +141,123 @@ def test_upload_ingest_response_is_json_serializable(monkeypatch):
     )
 
     assert json.loads(json.dumps(result, ensure_ascii=False))["filename"] == "serializable.md"
+
+
+def test_upload_ingest_preserves_parser_progress_events(monkeypatch):
+    storage_dir = _storage_dir("parser_progress")
+    monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(storage_dir))
+
+    def fake_parse_upload_document(path, *, image_describer=None, progress=None):
+        if progress is not None:
+            progress(
+                "parse",
+                "progress",
+                {
+                    "note": "이미지 OCR/설명 완료: page-001.png (1/2)",
+                    "task_kind": "image_ocr",
+                    "progress_key": "image_ocr",
+                    "item_label": "page-001.png",
+                    "progress_current": 1,
+                    "progress_total": 2,
+                    "progress_percent": 50,
+                },
+            )
+        block = DocumentBlock(
+            block_id="block-1",
+            ordinal=1,
+            block_type="paragraph",
+            markdown="Image text.",
+            text="Image text.",
+        )
+        return ParsedUploadDocument(
+            document_id="doc-1",
+            filename=Path(path).name,
+            document_format="md",
+            mime_type="text/markdown",
+            sha256="abc",
+            markdown="Image text.",
+            blocks=(block,),
+        )
+
+    monkeypatch.setattr("play_book_studio.http.upload_api.parse_upload_document", fake_parse_upload_document)
+
+    result = build_upload_ingest_response(
+        REPO_ROOT,
+        {
+            "file_name": "progress.md",
+            "file_bytes": b"# Progress",
+            "dry_run": True,
+        },
+    )
+
+    progress_events = [event for event in result["stage_events"] if event.get("status") == "progress"]
+    assert progress_events
+    assert progress_events[0]["task_kind"] == "image_ocr"
+    assert progress_events[0]["progress_current"] == 1
+    assert progress_events[0]["progress_total"] == 2
+    assert progress_events[0]["progress_percent"] == 50
+
+
+def test_materialize_upload_assets_writes_real_asset_and_debug_files(monkeypatch):
+    storage_dir = _storage_dir("asset_materialize")
+    monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(storage_dir))
+    source_path = storage_dir / "source.png"
+    source_bytes = b"\x89PNG\r\n\x1a\nfake-image"
+    source_path.write_bytes(source_bytes)
+    asset = DocumentAsset(
+        asset_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        asset_type="image",
+        filename="diagram.png",
+        mime_type="image/png",
+        sha256=hashlib.sha256(source_bytes).hexdigest(),
+        storage_key="uploads/assets/old.png",
+    )
+    parsed = SimpleNamespace(assets=(asset,), markdown="# Diagram\n\n![diagram](asset://aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa)")
+    persisted = SimpleNamespace(
+        document_source_id="22222222-2222-2222-2222-222222222222",
+        parsed_document_id="55555555-5555-5555-5555-555555555555",
+        asset_ids=("11111111-1111-1111-1111-111111111111",),
+    )
+    connection = RecordingConnection()
+    settings = SimpleNamespace(object_storage_dir=storage_dir)
+    stale_asset = storage_dir / "uploads" / "assets" / persisted.document_source_id / "images" / "stale.png"
+    stale_asset.parent.mkdir(parents=True, exist_ok=True)
+    stale_asset.write_bytes(b"old")
+    progress_events = []
+
+    manifest = _materialize_upload_assets(
+        settings,
+        source_path=source_path,
+        parsed=parsed,
+        persisted=persisted,
+        connection=connection,
+        progress=progress_events.append,
+    )
+    artifacts = _write_upload_debug_artifacts(
+        settings,
+        document_source_id=persisted.document_source_id,
+        parsed=parsed,
+        chunks=(),
+        asset_manifest=manifest,
+    )
+
+    assert manifest["written_count"] == 1
+    materialized_key = manifest["assets"][0]["storage_key"]
+    assert materialized_key == (
+        "uploads/assets/22222222-2222-2222-2222-222222222222/images/"
+        "11111111-1111-1111-1111-111111111111.png"
+    )
+    ocr_key = manifest["assets"][0]["ocr_storage_key"]
+    assert not stale_asset.exists()
+    assert (storage_dir / materialized_key).read_bytes() == source_bytes
+    assert json.loads((storage_dir / ocr_key).read_text(encoding="utf-8"))["image_storage_key"] == materialized_key
+    assert progress_events[-1]["progress_percent"] == 100
+    assert progress_events[-1]["task_kind"] == "asset_write"
+    assert connection.cursor_obj.calls
+    assert connection.cursor_obj.calls[0][1][0] == materialized_key
+    assert (storage_dir / artifacts["parsed_markdown"]).read_text(encoding="utf-8").startswith("# Diagram")
+    assert (storage_dir / artifacts["chunks_json"]).read_text(encoding="utf-8") == "[]"
+    assert json.loads((storage_dir / artifacts["assets_manifest"]).read_text(encoding="utf-8"))["written_count"] == 1
 
 
 def test_upload_ingest_indexes_only_persisted_document(monkeypatch):
@@ -342,6 +486,7 @@ def test_upload_ingest_reports_duplicate_without_reprocessing(monkeypatch):
             "file_bytes": b"# Duplicate\n\nAlready uploaded.",
             "index": True,
             "created_by": "stable-owner",
+            "force_reingest": False,
         },
     )
 

@@ -215,6 +215,34 @@ export interface UploadIngestReportPointer {
   available: boolean;
 }
 
+export interface UploadAssetMaterialization {
+  schema_version?: string;
+  generated_at?: string;
+  document_source_id?: string;
+  parsed_document_id?: string;
+  asset_root_storage_key?: string;
+  image_count?: number;
+  written_count?: number;
+  assets?: Array<{
+    asset_id?: string;
+    parser_asset_id?: string;
+    filename?: string;
+    mime_type?: string;
+    storage_key?: string;
+    ocr_storage_key?: string;
+    byte_size?: number;
+    sha256?: string;
+    source?: string;
+  }>;
+  warnings?: string[];
+}
+
+export interface UploadDebugArtifacts {
+  parsed_markdown?: string;
+  chunks_json?: string;
+  assets_manifest?: string;
+}
+
 export interface UploadIngestResponse {
   dry_run: boolean;
   filename: string;
@@ -237,6 +265,8 @@ export interface UploadIngestResponse {
   force_reingest?: boolean;
   stage_events?: UploadIngestStreamStageEvent[];
   report?: UploadIngestReportPointer;
+  asset_materialization?: UploadAssetMaterialization;
+  artifacts?: UploadDebugArtifacts;
   quality_gate?: UploadQualityGate;
   basic_index_ready?: boolean;
   answer_ready?: boolean;
@@ -289,6 +319,12 @@ export interface UploadIngestStreamStageEvent {
   document_source_id?: string;
   repository_id?: string;
   owner_user_id?: string;
+  task_kind?: string;
+  progress_key?: string;
+  item_label?: string;
+  progress_current?: number;
+  progress_total?: number;
+  progress_percent?: number;
   warning?: string;
   error?: string;
 }
@@ -328,6 +364,8 @@ export interface UploadIngestReport {
   timings_ms?: Record<string, number>;
   stages?: UploadIngestStreamStageEvent[];
   index?: UploadIngestIndexSummary;
+  asset_materialization?: UploadAssetMaterialization;
+  artifacts?: UploadDebugArtifacts;
   quality_gate?: UploadQualityGate;
   warnings?: string[];
   ready_for_chat?: boolean;
