@@ -18,6 +18,18 @@ class HybridSearchResult:
     vector_failed: bool
 
 
+def hydrate_final_hits(hits: list[RetrievalHit], *, database_url: str) -> list[RetrievalHit]:
+    """Hydrate only the final merged candidates from canonical DB rows."""
+    if not hits or not database_url.strip():
+        return hits
+    import psycopg
+
+    from .chunk_hydration import hydrate_retrieval_hits
+
+    with psycopg.connect(database_url) as connection:
+        return hydrate_retrieval_hits(connection, hits)
+
+
 def hybrid_search(
     query: str,
     *,
@@ -25,6 +37,7 @@ def hybrid_search(
     vector_retriever,
     candidate_k: int = 40,
     top_k: int = 8,
+    database_url: str = "",
 ) -> HybridSearchResult:
     normalized = normalize_query(query)
     vector_failed = False
@@ -55,6 +68,7 @@ def hybrid_search(
         source_name="hybrid",
         top_k=top_k,
     )
+    merged = hydrate_final_hits(merged, database_url=database_url)
     return HybridSearchResult(
         hits=merged,
         normalized_query=normalized,

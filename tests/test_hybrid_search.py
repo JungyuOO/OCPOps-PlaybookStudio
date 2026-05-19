@@ -61,3 +61,29 @@ def test_hybrid_search_falls_back_to_bm25_when_vector_fails():
     )
     assert [hit.chunk_id for hit in result.hits] == ["a"]
     assert result.vector_failed is True
+
+
+def test_hybrid_search_hydrates_only_final_hits(monkeypatch):
+    hydrated_calls = []
+
+    def fake_hydrate(hits, *, database_url):
+        hydrated_calls.append(len(hits))
+        return hits
+
+    import play_book_studio.retrieval.hybrid_search as hybrid_search_module
+
+    monkeypatch.setattr(hybrid_search_module, "hydrate_final_hits", fake_hydrate)
+
+    bm25 = _FakeBM25([_hit(f"b{i}") for i in range(40)])
+    vector = _FakeVector([_hit(f"v{i}") for i in range(40)])
+    result = hybrid_search(
+        "q",
+        bm25_index=bm25,
+        vector_retriever=vector,
+        candidate_k=40,
+        top_k=8,
+        database_url="postgres://x",
+    )
+
+    assert len(result.hits) == 8
+    assert hydrated_calls == [8]

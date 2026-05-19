@@ -156,9 +156,6 @@ class VectorRetriever:
                         score=float(point.get("score", 0.0)),
                     )
                 )
-            hydration_started_at = time.perf_counter()
-            hits, hydration = self._hydrate_hits_from_database(hits)
-            hydrate_ms = round((time.perf_counter() - hydration_started_at) * 1000, 1)
             return (
                 hits,
                 {
@@ -167,10 +164,14 @@ class VectorRetriever:
                     "errors": errors,
                     "hit_count": len(hits),
                     "top_score": float(points[0].get("score", 0.0)) if points else None,
-                    "hydration": hydration,
+                    "hydration": {
+                        "status": "deferred",
+                        "requested_count": len(hits),
+                        "hydrated_count": 0,
+                    },
                     "embedding_ms": embedding_ms,
                     "qdrant_ms": round(qdrant_ms, 1),
-                    "hydrate_ms": hydrate_ms,
+                    "hydrate_ms": 0.0,
                     "request_timeout_seconds": self.request_timeout_seconds,
                     "metadata_filter_applied": bool(query_filter),
                     "metadata_filter": query_filter or {},
