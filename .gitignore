@@ -83,6 +83,9 @@ reports
 .venv
 __pycache__
 
+# Personal HTML handoff artifacts.
+spec/v0.1.4/kugnus_only/
+
 .playwright-cli
 output/*
 corpus/sources/kmsc/raw/*
