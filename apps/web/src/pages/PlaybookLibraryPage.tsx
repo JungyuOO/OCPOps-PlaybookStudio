@@ -895,7 +895,7 @@ const PlaybookLibraryPage: React.FC = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { globalTheme, toggleGlobalTheme } = useGlobalTheme();
-  const [factoryLane, setFactoryLane] = useState<FactoryLane>('tools');
+  const [factoryLane, setFactoryLane] = useState<FactoryLane>('user');
   const [pipelineStage, setPipelineStage] = useState<PipelineStage>('idle');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
