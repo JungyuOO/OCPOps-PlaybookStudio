@@ -33,6 +33,9 @@ oc create secret generic playbookstudio-secret \
   --from-literal=DATABASE_URL="postgresql://admin:${POSTGRES_PASSWORD}@postgres:5432/playbookstudio" \
   --from-literal=OCP_API_TOKEN="$(oc whoami -t)" \
   --dry-run=client -o yaml | oc apply -f -
+
+oc adm policy add-scc-to-user anyuid -z playbookstudio -n pbs-ocpops
+oc adm policy add-scc-to-user anyuid -z terminal-broker -n pbs-ocpops
 ```
 
 Apply the Git source:

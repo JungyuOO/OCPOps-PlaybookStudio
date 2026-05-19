@@ -18,6 +18,9 @@ spec:
         app.kubernetes.io/part-of: playbookstudio
     spec:
       serviceAccountName: terminal-broker
+      securityContext:
+        fsGroup: 0
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: app
           image: ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev
