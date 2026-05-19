@@ -34,6 +34,10 @@ def apply_node_adjustments(
             hit.fused_score *= 1.18
             hit.component_scores["node_status_describe_followup_boost"] = 1.18
 
+        if any(token in search_text for token in ("selector", "선택기", "-l <key>", "label selector")):
+            hit.fused_score *= 0.38
+            hit.component_scores["node_status_selector_mismatch_penalty"] = 0.38
+
         if any(
             token in search_text
             for token in (

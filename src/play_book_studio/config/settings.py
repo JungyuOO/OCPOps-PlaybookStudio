@@ -106,6 +106,9 @@ class Settings(SettingsPathMixin):
     embedding_api_key: str = ""
     embedding_batch_size: int = 32
     embedding_timeout_seconds: float = 8
+    vector_max_parallel_requests: int = 4
+    vector_domain_filter_enabled: bool = False
+    query_signal_llm_enabled: bool = False
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = DEFAULT_CORE_PACK.qdrant_collection
     qdrant_vector_size: int = 1024
@@ -328,6 +331,11 @@ def load_settings(root_dir: str | Path) -> Settings:
         embedding_api_key=effective_env.get("EMBEDDING_API_KEY", "").strip(),
         embedding_batch_size=int(effective_env.get("EMBEDDING_BATCH_SIZE", "32")),
         embedding_timeout_seconds=float(effective_env.get("EMBEDDING_TIMEOUT_SECONDS", "8")),
+        vector_max_parallel_requests=int(effective_env.get("VECTOR_MAX_PARALLEL_REQUESTS", "4")),
+        vector_domain_filter_enabled=effective_env.get("VECTOR_DOMAIN_FILTER_ENABLED", "false").lower()
+        in {"1", "true", "yes", "on"},
+        query_signal_llm_enabled=effective_env.get("QUERY_SIGNAL_LLM_ENABLED", "false").lower()
+        in {"1", "true", "yes", "on"},
         qdrant_url=effective_env.get("QDRANT_URL", "http://localhost:6333").rstrip("/"),
         qdrant_collection=effective_env.get("QDRANT_COLLECTION", DEFAULT_CORE_PACK.qdrant_collection),
         qdrant_vector_size=int(effective_env.get("QDRANT_VECTOR_SIZE", "1024")),

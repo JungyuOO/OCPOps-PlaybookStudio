@@ -77,6 +77,7 @@ docs/arrange_26.04.18*.md
 docs/ocp420_assignment_*.md
 docs/pipeline_toolchain_detail.md
 docs/retrieval_flow.md
+reports
 
 .omx
 .venv
