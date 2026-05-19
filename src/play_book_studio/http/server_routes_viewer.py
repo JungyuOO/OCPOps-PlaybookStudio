@@ -6,7 +6,7 @@ import re
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urljoin, urlparse, urlunparse
+from urllib.parse import parse_qs, quote, urljoin, urlparse, urlunparse
 
 from play_book_studio.http.customer_pack_read_boundary import (
     customer_pack_draft_id_from_viewer_path,
@@ -232,6 +232,11 @@ def _markdownish_to_html(markdown: str, asset_sources: dict[str, dict[str, str]]
     return "\n".join(parts)
 
 
+def _html_id(value: object) -> str:
+    normalized = re.sub(r"[\s#?&/\\<>\"']+", "-", str(value or "").strip()).strip("-")
+    return normalized[:160]
+
+
 def _is_markdown_table_line(line: str) -> bool:
     stripped = str(line or "").strip()
     return stripped.startswith("|") and stripped.endswith("|") and stripped.count("|") >= 2
@@ -344,6 +349,13 @@ def _json_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _short_viewer_text(value: Any, *, limit: int = 220) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit].rstrip()}..."
+
+
 def _asset_data_url(content: bytes, mime_type: str) -> str:
     encoded = base64.b64encode(content).decode("ascii")
     return f"data:{mime_type or 'application/octet-stream'};base64,{encoded}"
@@ -400,8 +412,67 @@ def _uploaded_document_asset_sources(root_dir: Path, document: dict[str, Any], a
     return result
 
 
+def _course_asset_viewer_src(asset_path: str) -> str:
+    normalized = str(asset_path or "").strip().replace("\\", "/")
+    if not normalized.startswith("data/course_pbs/assets/"):
+        return ""
+    if not re.search(r"\.(?:png|jpe?g|webp|gif)$", normalized, re.IGNORECASE):
+        return ""
+    return f"/api/v1/course/assets?path={quote(normalized, safe='/._-()')}"
+
+
+def _uploaded_document_course_asset_figures_html(chunk: dict[str, Any]) -> str:
+    metadata = _json_dict(chunk.get("metadata"))
+    attachments = metadata.get("image_attachments")
+    if not isinstance(attachments, list):
+        return ""
+
+    candidates = [
+        attachment
+        for attachment in attachments
+        if isinstance(attachment, dict) and not bool(attachment.get("exclude_from_default"))
+    ]
+    candidates.sort(
+        key=lambda item: (
+            not bool(item.get("is_default_visible", True)),
+            int(item.get("default_visible_order") or item.get("image_rank_order") or 9999),
+            str(item.get("asset_id") or item.get("attachment_id") or ""),
+        )
+    )
+
+    figures: list[str] = []
+    seen_paths: set[str] = set()
+    for attachment in candidates[:6]:
+        asset_path = str(attachment.get("asset_path") or "").strip()
+        src = _course_asset_viewer_src(asset_path)
+        if not src or src in seen_paths:
+            continue
+        seen_paths.add(src)
+        caption = _short_viewer_text(
+            attachment.get("visual_summary")
+            or attachment.get("caption_text")
+            or attachment.get("ocr_text")
+            or attachment.get("instructional_role")
+            or "",
+            limit=220,
+        )
+        slide_no = int(attachment.get("slide_no") or 0)
+        role = str(attachment.get("instructional_role") or "").strip().replace("_", " ")
+        caption_parts = [part for part in [f"Slide {slide_no}" if slide_no else "", role, caption] if part]
+        caption_text = " - ".join(caption_parts)
+        alt_text = caption or caption_text or "고객문서 이미지"
+        figures.append(
+            '<figure class="upload-asset-figure upload-course-asset-figure">'
+            f'<img src="{html.escape(src, quote=True)}" alt="{html.escape(alt_text, quote=True)}" loading="lazy" />'
+            + (f"<figcaption>{html.escape(caption_text)}</figcaption>" if caption_text else "")
+            + "</figure>"
+        )
+    return "\n".join(figures)
+
+
 def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_user_id: str = "") -> str | None:
-    match = _UPLOAD_DOCUMENT_VIEWER_PATH_RE.fullmatch(_canonicalize_viewer_path(viewer_path))
+    canonical_viewer_path = _canonicalize_viewer_path(viewer_path)
+    match = _UPLOAD_DOCUMENT_VIEWER_PATH_RE.fullmatch(urlparse(canonical_viewer_path).path)
     if not match:
         return None
     document_source_id = match.group("document_source_id")
@@ -456,13 +527,17 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
                 """
                 SELECT
                     id::text AS chunk_id,
+                    COALESCE(source_anchor, '') AS source_anchor,
+                    COALESCE(chunk_key, '') AS chunk_key,
                     ordinal,
                     heading_title,
                     section_path,
                     markdown,
                     token_count,
                     page_start,
-                    page_end
+                    page_end,
+                    asset_ids,
+                    metadata
                 FROM document_chunks
                 WHERE parsed_document_id = %s::uuid
                   AND navigation_only = false
@@ -529,6 +604,40 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
         quality_notes.append("파일 크기에 비해 추출된 텍스트가 적습니다. 스캔 PDF/이미지 PDF이거나 텍스트 추출이 제한되었을 수 있습니다.")
     if parsed_warnings:
         quality_notes.extend(parsed_warnings)
+    document_body_html = _markdownish_to_html(parsed_markdown, asset_sources=asset_sources)
+    if chunks:
+        chunk_sections: list[str] = []
+        used_anchor_ids: set[str] = set()
+        for index, row in enumerate(chunks, start=1):
+            chunk_id = _html_id(row.get("chunk_id"))
+            source_anchor = _html_id(row.get("source_anchor"))
+            chunk_key = _html_id(row.get("chunk_key"))
+            section_id = next(
+                (
+                    candidate
+                    for candidate in [chunk_id, source_anchor, chunk_key]
+                    if candidate and candidate not in used_anchor_ids
+                ),
+                f"upload-chunk-{index}",
+            )
+            used_anchor_ids.add(section_id)
+            alias_parts = []
+            for alias in [source_anchor, chunk_key]:
+                if alias and alias != section_id and alias not in used_anchor_ids:
+                    alias_parts.append(f'<span id="{html.escape(alias, quote=True)}" class="upload-anchor-alias"></span>')
+                    used_anchor_ids.add(alias)
+            chunk_markdown = _strip_uploaded_document_title(str(row.get("markdown") or ""), title)
+            chunk_markdown = _strip_uploaded_document_title(chunk_markdown, stored_title)
+            chunk_html = _markdownish_to_html(chunk_markdown, asset_sources=asset_sources)
+            chunk_asset_html = _uploaded_document_course_asset_figures_html(row)
+            chunk_sections.append(
+                f'<section id="{html.escape(section_id, quote=True)}" class="upload-chunk-section">'
+                + "".join(alias_parts)
+                + chunk_html
+                + chunk_asset_html
+                + "</section>"
+            )
+        document_body_html = "\n".join(chunk_sections)
     body_parts = [
         "<!doctype html>",
         '<html lang="ko">',
@@ -596,6 +705,21 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
         .upload-reader .document-body {
           display: grid;
           gap: 14px;
+        }
+        .upload-reader .upload-chunk-section {
+          position: relative;
+          scroll-margin-top: 24px;
+        }
+        .upload-reader .upload-chunk-section:target {
+          border-radius: 12px;
+          background: linear-gradient(90deg, rgba(125, 211, 252, 0.12), rgba(125, 211, 252, 0));
+        }
+        .upload-reader .upload-anchor-alias {
+          position: relative;
+          top: -24px;
+          display: block;
+          height: 0;
+          overflow: hidden;
         }
         .upload-reader .document-body h2,
         .upload-reader .document-body h3,
@@ -665,10 +789,11 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
         }
         .upload-reader .upload-asset-figure figcaption {
           padding: 10px 12px;
-          color: #a8d7ee;
+          color: #334155;
           font-size: 0.86rem;
           line-height: 1.55;
-          border-top: 1px solid rgba(125, 211, 252, 0.14);
+          border-top: 1px solid rgba(148, 163, 184, 0.22);
+          background: #f8fafc;
         }
         .upload-reader .quality-notes {
           display: grid;
@@ -874,14 +999,116 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
         .upload-reader .code-token.code-punctuation {
           color: #e2e8f0;
         }
+        .upload-reader,
+        .upload-reader * {
+          box-sizing: border-box;
+        }
+        .upload-reader {
+          width: 100%;
+          max-width: 100%;
+          padding: 10px 8px 44px;
+          overflow-x: hidden;
+        }
+        .upload-reader h1 {
+          font-size: clamp(1.8rem, 4vw, 2.45rem);
+          overflow-wrap: anywhere;
+        }
+        .upload-reader .summary,
+        .upload-reader p,
+        .upload-reader li,
+        .upload-reader td,
+        .upload-reader h2,
+        .upload-reader h3,
+        .upload-reader h4,
+        .upload-reader h5 {
+          overflow-wrap: anywhere;
+          word-break: normal;
+        }
+        .upload-reader .document-panel,
+        .upload-reader .diagnostic-panel {
+          max-width: 100%;
+          min-width: 0;
+          padding: 12px;
+          box-shadow: none;
+        }
+        .upload-reader .document-body > *,
+        .upload-reader .code-block,
+        .upload-reader pre,
+        .upload-reader .upload-table-wrap {
+          max-width: 100%;
+          min-width: 0;
+        }
+        .upload-reader .upload-asset-figure {
+          max-width: 100%;
+          background: #ffffff;
+        }
+        .upload-reader .upload-asset-figure img {
+          width: auto;
+          max-width: 100%;
+          max-height: min(52vh, 360px);
+          object-fit: contain;
+          margin: 0 auto;
+        }
+        .upload-reader .upload-table {
+          min-width: 0 !important;
+          table-layout: fixed;
+        }
+        .upload-reader .upload-table th,
+        .upload-reader .upload-table td {
+          overflow-wrap: anywhere;
+        }
+        .upload-reader .code-block {
+          background: #0f172a !important;
+          box-shadow: none;
+        }
+        .upload-reader .code-header,
+        .upload-reader .code-footer {
+          background: #111827 !important;
+          border-color: rgba(148, 163, 184, 0.18) !important;
+        }
+        .upload-reader .code-label,
+        .upload-reader .collapse-button {
+          color: #cbd5e1;
+        }
+        .upload-reader .code-block pre,
+        .upload-reader .code-block code,
+        .upload-reader pre,
+        .upload-reader pre code {
+          background: #0f172a !important;
+          color: #dbeafe !important;
+          font-size: 0.82rem;
+          line-height: 1.58;
+        }
+        .upload-reader .code-token.code-key {
+          color: #7dd3fc !important;
+        }
+        .upload-reader .code-token.code-string {
+          color: #86efac !important;
+        }
+        .upload-reader .code-token.code-number {
+          color: #c4b5fd !important;
+        }
+        .upload-reader .code-token.code-atom {
+          color: #fbbf24 !important;
+        }
+        .upload-reader .code-token.code-comment {
+          color: #cbd5e1 !important;
+        }
+        .upload-reader .code-token.code-punctuation {
+          color: #e2e8f0 !important;
+        }
+        .upload-reader .code-block.is-collapsible.is-collapsed pre::after {
+          content: none !important;
+          display: none !important;
+        }
         """,
         "</style>",
         "</head>",
         '<body class="is-embedded upload-reader-document">',
         '<main class="upload-reader">',
-        '<div class="eyebrow">User Upload Parsed View</div>',
+        '<div class="eyebrow">User Upload Document</div>',
         f"<h1>{html.escape(title)}</h1>",
-        f'<p class="summary">{html.escape(filename)}에서 추출한 파싱 본문을 먼저 보여줍니다. 검색 청크는 아래 진단 영역에서만 확인합니다.</p>',
+        f'<p class="summary">{html.escape(filename)}에서 추출해 정리한 문서 본문입니다. 인용 번호를 누르면 관련 위치로 이동합니다.</p>',
         '<div class="meta">',
         f"<span>{block_count:,} blocks</span>",
         f"<span>{len(chunks)} chunks</span>",
@@ -891,9 +1118,9 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
         f"<span>{html.escape(str(document.get('visibility') or 'private_user'))}</span>",
         "</div>",
         '<section class="document-panel">',
-        "<h2>파싱 본문</h2>",
+        "<h2>문서 본문</h2>",
         '<div class="document-body">',
-        _markdownish_to_html(parsed_markdown, asset_sources=asset_sources) or "<p>표시할 파싱 본문이 없습니다.</p>",
+        document_body_html or "<p>표시할 문서 본문이 없습니다.</p>",
         "</div>",
         "</section>",
     ]
@@ -905,8 +1132,8 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
     body_parts.extend(
         [
             '<section class="diagnostic-panel">',
-            "<h2>검색 청크 진단</h2>",
-            "<p>아래 항목은 챗봇 검색용으로 나뉜 내부 청크입니다. 문서 본문 확인용 주 화면이 아닙니다.</p>",
+            "<h2>검색 인덱스 기록</h2>",
+            "<p>아래 항목은 챗봇 검색에 사용된 내부 색인 단위입니다.</p>",
             "<details>",
             "<summary>청크 목록 열기</summary>",
         ]
@@ -1010,6 +1237,109 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
         ]
     )
     return "\n".join(body_parts)
+
+
+def _uploaded_document_source_meta(root_dir: Path, viewer_path: str, *, owner_user_id: str = "") -> dict[str, Any] | None:
+    canonical_viewer_path = _canonicalize_viewer_path(viewer_path)
+    match = _UPLOAD_DOCUMENT_VIEWER_PATH_RE.fullmatch(urlparse(canonical_viewer_path).path)
+    if not match:
+        return None
+    document_source_id = match.group("document_source_id")
+    anchor = urlparse(canonical_viewer_path).fragment.strip()
+    settings = load_settings(root_dir)
+    database_url = settings.database_url.strip()
+    if not database_url:
+        return None
+
+    import psycopg
+    from psycopg.rows import dict_row
+
+    with psycopg.connect(database_url, row_factory=dict_row) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    ds.id::text AS document_source_id,
+                    ds.filename,
+                    ds.storage_key,
+                    ds.owner_user_id,
+                    ds.visibility,
+                    ds.source_scope,
+                    ds.metadata AS source_metadata,
+                    pd.id::text AS parsed_document_id,
+                    COALESCE(NULLIF(pd.title, ''), ds.filename) AS title,
+                    pd.parser_name,
+                    pd.metadata AS parsed_metadata,
+                    COALESCE(dc.id::text, '') AS chunk_id,
+                    COALESCE(dc.heading_title, '') AS heading_title,
+                    COALESCE(dc.source_anchor, '') AS source_anchor,
+                    COALESCE(dc.section_path, '[]'::jsonb) AS chunk_section_path
+                FROM document_sources ds
+                LEFT JOIN LATERAL (
+                    SELECT parsed_documents.*
+                    FROM parsed_documents
+                    WHERE parsed_documents.document_source_id = ds.id
+                    ORDER BY parsed_documents.created_at DESC
+                    LIMIT 1
+                ) pd ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT document_chunks.*
+                    FROM document_chunks
+                    WHERE document_chunks.parsed_document_id = pd.id
+                      AND (%s = '' OR document_chunks.id::text = %s OR document_chunks.source_anchor = %s OR document_chunks.chunk_key = %s)
+                    ORDER BY
+                        CASE
+                            WHEN document_chunks.id::text = %s THEN 0
+                            WHEN document_chunks.source_anchor = %s OR document_chunks.chunk_key = %s THEN 1
+                            ELSE 2
+                        END,
+                        document_chunks.ordinal ASC
+                    LIMIT 1
+                ) dc ON TRUE
+                WHERE ds.id = %s::uuid
+                  AND (
+                    ds.visibility IN ('workspace_shared', 'global_shared')
+                    OR COALESCE(ds.owner_user_id, '') = %s
+                  )
+                LIMIT 1
+                """,
+                (anchor, anchor, anchor, anchor, anchor, anchor, anchor, document_source_id, owner_user_id),
+            )
+            row = cursor.fetchone()
+    if not row:
+        return None
+
+    title = str(row.get("title") or row.get("filename") or "Uploaded document").strip()
+    section_path = [
+        str(item).strip()
+        for item in _json_list(row.get("chunk_section_path"))
+        if str(item).strip()
+    ]
+    section = str(row.get("heading_title") or "").strip() or (section_path[-1] if section_path else title)
+    source_scope = str(row.get("source_scope") or "user_upload").strip() or "user_upload"
+    resolved_anchor = str(row.get("chunk_id") or row.get("source_anchor") or anchor or "").strip()
+    parsed_viewer_path = urlparse(canonical_viewer_path)
+    resolved_viewer_path = urlunparse(parsed_viewer_path._replace(fragment=resolved_anchor))
+    return {
+        "book_slug": "uploaded-documents",
+        "book_title": title,
+        "anchor": resolved_anchor,
+        "section": section,
+        "section_path": section_path or [title],
+        "section_path_label": " > ".join(section_path) if section_path else section,
+        "source_url": str(row.get("storage_key") or "").strip(),
+        "viewer_path": resolved_viewer_path,
+        "section_match_exact": bool(anchor and row.get("chunk_id")),
+        "source_collection": "uploads",
+        "pack_label": "User Upload",
+        "source_lane": source_scope,
+        "approval_state": "private",
+        "publication_state": "uploaded",
+        "parser_backend": str(row.get("parser_name") or ""),
+        "boundary_truth": "private_user_upload_runtime",
+        "runtime_truth_label": "User Upload Document",
+        "boundary_badge": "User Upload",
+    }
 
 
 def _viewer_html_for_path(
@@ -1140,6 +1470,9 @@ def _official_runtime_source_meta(
 
 def _viewer_source_meta(root_dir: Path, viewer_path: str) -> dict[str, Any] | None:
     viewer_path = _canonicalize_viewer_path(viewer_path)
+    uploaded_meta = _uploaded_document_source_meta(root_dir, viewer_path)
+    if uploaded_meta is not None:
+        return uploaded_meta
     customer_pack_meta = _customer_pack_meta_for_viewer_path(root_dir, viewer_path)
     if customer_pack_meta is not None:
         return customer_pack_meta
@@ -1234,6 +1567,10 @@ def handle_source_meta(handler: Any, query: str, *, root_dir: Path) -> None:
     viewer_path = str((params.get("viewer_path") or [""])[0]).strip()
     if not viewer_path:
         handler._send_json({"error": "viewer_path가 필요합니다."}, HTTPStatus.BAD_REQUEST)
+        return
+    uploaded_payload = _uploaded_document_source_meta(root_dir, viewer_path, owner_user_id=_owner_hash_from_handler(handler))
+    if uploaded_payload is not None:
+        handler._send_json(uploaded_payload)
         return
     customer_pack_draft_id = customer_pack_draft_id_from_viewer_path(viewer_path)
     if customer_pack_draft_id and not _customer_pack_read_allowed(root_dir, customer_pack_draft_id):

@@ -1404,6 +1404,11 @@ export async function sendChat(payload: {
   learningTargetViewerPath?: string;
   activeRepositoryId?: string;
   activeDocumentId?: string;
+  enabledSourceScopes?: string[];
+  enabledOfficialBookSlugs?: string[];
+  enabledCustomerDraftIds?: string[];
+  enabledCustomerDocumentIds?: string[];
+  enabledUploadDocumentIds?: string[];
 }): Promise<ChatResponse> {
   return requestJson<ChatResponse>('/api/chat', {
     method: 'POST',
@@ -1423,6 +1428,11 @@ export async function sendChat(payload: {
       learning_target_viewer_path: payload.learningTargetViewerPath ?? '',
       active_repository_id: payload.activeRepositoryId ?? '',
       active_document_id: payload.activeDocumentId ?? '',
+      enabled_source_scopes: payload.enabledSourceScopes ?? [],
+      enabled_official_book_slugs: payload.enabledOfficialBookSlugs ?? [],
+      enabled_customer_draft_ids: payload.enabledCustomerDraftIds ?? [],
+      enabled_customer_document_ids: payload.enabledCustomerDocumentIds ?? [],
+      enabled_upload_document_ids: payload.enabledUploadDocumentIds ?? [],
     }),
   });
 }
@@ -1444,6 +1454,11 @@ export async function sendChatStream(
     learningTargetViewerPath?: string;
     activeRepositoryId?: string;
     activeDocumentId?: string;
+    enabledSourceScopes?: string[];
+    enabledOfficialBookSlugs?: string[];
+    enabledCustomerDraftIds?: string[];
+    enabledCustomerDocumentIds?: string[];
+    enabledUploadDocumentIds?: string[];
   },
   onEvent: (event: ChatStreamEvent) => void,
 ): Promise<ChatResponse> {
@@ -1469,6 +1484,11 @@ export async function sendChatStream(
       learning_target_viewer_path: payload.learningTargetViewerPath ?? '',
       active_repository_id: payload.activeRepositoryId ?? '',
       active_document_id: payload.activeDocumentId ?? '',
+      enabled_source_scopes: payload.enabledSourceScopes ?? [],
+      enabled_official_book_slugs: payload.enabledOfficialBookSlugs ?? [],
+      enabled_customer_draft_ids: payload.enabledCustomerDraftIds ?? [],
+      enabled_customer_document_ids: payload.enabledCustomerDocumentIds ?? [],
+      enabled_upload_document_ids: payload.enabledUploadDocumentIds ?? [],
     }),
   });
   if (!response.ok || !response.body) {

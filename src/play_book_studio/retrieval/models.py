@@ -7,6 +7,25 @@ from typing import Any
 from .text_utils import strip_section_prefix
 
 
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        value = [
+            item.strip()
+            for item in value.replace(";", ",").split(",")
+            if item.strip()
+        ]
+    if not isinstance(value, list):
+        return []
+    seen: set[str] = set()
+    items: list[str] = []
+    for item in value:
+        normalized = str(item).strip()
+        if normalized and normalized not in seen:
+            items.append(normalized)
+            seen.add(normalized)
+    return items
+
+
 @dataclass(slots=True)
 class SessionContext:
     mode: str | None = None
@@ -22,6 +41,11 @@ class SessionContext:
     active_document_id: str | None = None
     unresolved_question: str | None = None
     preferred_source_scope: str | None = None
+    enabled_source_scopes: list[str] = field(default_factory=list)
+    enabled_official_book_slugs: list[str] = field(default_factory=list)
+    enabled_customer_draft_ids: list[str] = field(default_factory=list)
+    enabled_customer_document_ids: list[str] = field(default_factory=list)
+    enabled_upload_document_ids: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any] | None) -> "SessionContext":
@@ -31,8 +55,7 @@ class SessionContext:
         if isinstance(open_entities, str):
             open_entities = [open_entities]
         selected_draft_ids = payload.get("selected_draft_ids") or []
-        if isinstance(selected_draft_ids, str):
-            selected_draft_ids = [selected_draft_ids]
+        enabled_source_scopes = payload.get("enabled_source_scopes") or []
         return cls(
             mode=payload.get("mode"),
             user_id=(str(payload.get("user_id") or "").strip() or None),
@@ -43,15 +66,18 @@ class SessionContext:
             ),
             open_entities=list(open_entities),
             ocp_version=payload.get("ocp_version"),
-            selected_draft_ids=[
-                str(item).strip() for item in selected_draft_ids if str(item).strip()
-            ],
+            selected_draft_ids=_string_list(selected_draft_ids),
             restrict_uploaded_sources=bool(payload.get("restrict_uploaded_sources", True)),
             owner_user_id=(str(payload.get("owner_user_id") or "").strip() or None),
             active_repository_id=(str(payload.get("active_repository_id") or "").strip() or None),
             active_document_id=(str(payload.get("active_document_id") or "").strip() or None),
             unresolved_question=payload.get("unresolved_question"),
             preferred_source_scope=(str(payload.get("preferred_source_scope") or "").strip() or None),
+            enabled_source_scopes=_string_list(enabled_source_scopes),
+            enabled_official_book_slugs=_string_list(payload.get("enabled_official_book_slugs")),
+            enabled_customer_draft_ids=_string_list(payload.get("enabled_customer_draft_ids")),
+            enabled_customer_document_ids=_string_list(payload.get("enabled_customer_document_ids")),
+            enabled_upload_document_ids=_string_list(payload.get("enabled_upload_document_ids")),
         )
 
     def to_dict(self) -> dict[str, Any]:

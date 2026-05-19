@@ -153,7 +153,35 @@ const WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY = 'workspace.activeDocumentId';
 const WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY = 'workspace.activeDocumentTitle';
 const WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY = 'workspace.activeCategoryKey';
 const WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY = 'workspace.activeCategoryLabel';
+const WORKSPACE_RAG_SOURCE_SCOPES_STORAGE_KEY = 'workspace.ragSourceScopes';
+const WORKSPACE_RAG_SCOPE_DETAILS_STORAGE_KEY = 'workspace.ragScopeDetails';
 const WORKSPACE_INGESTION_STATUS_STORAGE_KEY = 'workspace.ingestionStatus';
+const STALE_INGESTION_STATUS_MS = 30 * 60 * 1000;
+const IN_FLIGHT_INGESTION_STATUSES = new Set<IngestionStatusBanner['status']>([
+  'recognizing',
+  'parsing',
+  'embedding',
+  'indexing',
+]);
+type RagSourceScope = 'official_docs' | 'customer_docs' | 'user_upload';
+type RagScopeDetailKind = 'officialBookSlugs' | 'customerDraftIds' | 'customerDocumentIds' | 'uploadDocumentIds';
+type RagScopeDetailState = Record<RagScopeDetailKind, string[]>;
+const DEFAULT_RAG_SOURCE_SCOPES: RagSourceScope[] = ['official_docs', 'customer_docs', 'user_upload'];
+const EMPTY_RAG_SCOPE_DETAILS: RagScopeDetailState = {
+  officialBookSlugs: [],
+  customerDraftIds: [],
+  customerDocumentIds: [],
+  uploadDocumentIds: [],
+};
+const RAG_SOURCE_SCOPE_OPTIONS: Array<{
+  id: RagSourceScope;
+  label: string;
+  meta: string;
+}> = [
+  { id: 'official_docs', label: '공식문서', meta: '기준 운영 문서' },
+  { id: 'customer_docs', label: '고객문서', meta: '현장/고객 자료' },
+  { id: 'user_upload', label: '내 업로드', meta: '내가 올린 문서' },
+];
 
 function workspaceMetadataRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -172,13 +200,95 @@ function loadStoredActiveSourceId(): string | null {
   return value && value.trim() ? value : null;
 }
 
+function normalizeRagSourceScopes(value: unknown): RagSourceScope[] {
+  const source = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.replace(/;/g, ',').split(',')
+      : [];
+  const seen = new Set<RagSourceScope>();
+  source.forEach((item) => {
+    const normalized = String(item || '').trim() as RagSourceScope;
+    if (DEFAULT_RAG_SOURCE_SCOPES.includes(normalized)) {
+      seen.add(normalized);
+    }
+  });
+  return DEFAULT_RAG_SOURCE_SCOPES.filter((scope) => seen.has(scope));
+}
+
+function loadStoredRagSourceScopes(): RagSourceScope[] {
+  if (typeof window === 'undefined') {
+    return DEFAULT_RAG_SOURCE_SCOPES;
+  }
+  try {
+    const raw = window.localStorage.getItem(WORKSPACE_RAG_SOURCE_SCOPES_STORAGE_KEY);
+    if (!raw) {
+      return DEFAULT_RAG_SOURCE_SCOPES;
+    }
+    const parsed = JSON.parse(raw);
+    const normalized = normalizeRagSourceScopes(parsed);
+    return normalized.length ? normalized : DEFAULT_RAG_SOURCE_SCOPES;
+  } catch {
+    return DEFAULT_RAG_SOURCE_SCOPES;
+  }
+}
+
+function normalizeRagDetailList(value: unknown): string[] {
+  const source = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.replace(/;/g, ',').split(',')
+      : [];
+  return source
+    .map((item) => String(item || '').trim())
+    .filter((item, index, items) => item && items.indexOf(item) === index);
+}
+
+function loadStoredRagScopeDetails(): RagScopeDetailState {
+  if (typeof window === 'undefined') {
+    return EMPTY_RAG_SCOPE_DETAILS;
+  }
+  try {
+    const raw = window.localStorage.getItem(WORKSPACE_RAG_SCOPE_DETAILS_STORAGE_KEY);
+    if (!raw) {
+      return EMPTY_RAG_SCOPE_DETAILS;
+    }
+    const parsed = JSON.parse(raw) as Partial<RagScopeDetailState>;
+    return {
+      officialBookSlugs: normalizeRagDetailList(parsed.officialBookSlugs),
+      customerDraftIds: normalizeRagDetailList(parsed.customerDraftIds),
+      customerDocumentIds: normalizeRagDetailList(parsed.customerDocumentIds),
+      uploadDocumentIds: normalizeRagDetailList(parsed.uploadDocumentIds),
+    };
+  } catch {
+    return EMPTY_RAG_SCOPE_DETAILS;
+  }
+}
+
+function effectiveRagDetailSelection(allIds: string[], selectedIds: string[]): string[] {
+  const known = new Set(allIds);
+  const selected = selectedIds.filter((id) => known.has(id));
+  return selected.length > 0 ? selected : allIds;
+}
+
 function loadStoredIngestionStatus(): IngestionStatusBanner | null {
   if (typeof window === 'undefined') {
     return null;
   }
   try {
     const raw = window.localStorage.getItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) as IngestionStatusBanner : null;
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as IngestionStatusBanner;
+    if (IN_FLIGHT_INGESTION_STATUSES.has(parsed.status)) {
+      const ageMs = Date.now() - Date.parse(parsed.updatedAt || '');
+      if (!parsed.documentSourceId || !Number.isFinite(ageMs) || ageMs > STALE_INGESTION_STATUS_MS) {
+        window.localStorage.removeItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY);
+        return null;
+      }
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -1263,6 +1373,8 @@ export default function WorkspacePage() {
   const [rightPanelMode, setRightPanelMode] = useState<RightPanelMode>('terminal');
   const [activeTestTrace, setActiveTestTrace] = useState<WorkspaceTestTrace | null>(null);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(() => loadStoredActiveSourceId());
+  const [enabledRagSourceScopes, setEnabledRagSourceScopes] = useState<RagSourceScope[]>(() => loadStoredRagSourceScopes());
+  const [ragScopeDetails, setRagScopeDetails] = useState<RagScopeDetailState>(() => loadStoredRagScopeDetails());
   const [activeDocumentId, setActiveDocumentId] = useState(() => {
     if (typeof window === 'undefined') {
       return '';
@@ -1391,15 +1503,25 @@ export default function WorkspacePage() {
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState('');
   const [ingestionStatusBanner, setIngestionStatusBanner] = useState<IngestionStatusBanner | null>(() => loadStoredIngestionStatus());
+  const [isWorkspaceUploading, setIsWorkspaceUploading] = useState(false);
 
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const chatMessagesRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
+  const scrollIntentTouchYRef = useRef<number | null>(null);
   const quickNavRef = useRef<HTMLDivElement>(null);
+  const viewerPreviewRetryKeysRef = useRef<Set<string>>(new Set());
   const leftPanelRef = usePanelRef();
   const rightPanelRef = usePanelRef();
+
+  const updateChatScrollLock = useCallback((locked: boolean): void => {
+    userScrolledUpRef.current = locked;
+    setUserScrolledUp((current) => (current === locked ? current : locked));
+    chatMessagesRef.current?.classList.toggle('scroll-locked', locked);
+  }, []);
 
   // Persist + restore panel sizes across reloads.
   const { defaultLayout: savedLayout, onLayoutChanged: handlePanelLayoutChanged } = useDefaultLayout({
@@ -1783,6 +1905,32 @@ export default function WorkspacePage() {
     };
   }, [ingestionStatusBanner?.documentSourceId, ingestionStatusBanner?.repositoryId]);
 
+  useEffect(() => {
+    if (
+      !ingestionStatusBanner
+      || isWorkspaceUploading
+      || !IN_FLIGHT_INGESTION_STATUSES.has(ingestionStatusBanner.status)
+      || ingestionStatusBanner.documentSourceId
+      || ingestionStatusBanner.repositoryId
+    ) {
+      return undefined;
+    }
+    const updatedAtMs = Date.parse(ingestionStatusBanner.updatedAt || '');
+    const ageMs = Number.isFinite(updatedAtMs) ? Date.now() - updatedAtMs : STALE_INGESTION_STATUS_MS;
+    const delayMs = Math.max(0, Math.min(STALE_INGESTION_STATUS_MS, 60_000) - ageMs);
+    const timer = window.setTimeout(() => {
+      const nextBanner: IngestionStatusBanner = {
+        ...ingestionStatusBanner,
+        status: 'failed',
+        message: '업로드 상태 확인이 중단되었습니다. 다시 업로드하거나 작업 로그를 확인해주세요.',
+        updatedAt: new Date().toISOString(),
+      };
+      setIngestionStatusBanner(nextBanner);
+      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [ingestionStatusBanner, isWorkspaceUploading]);
+
   const refreshWikiOverlays = useCallback(async () => {
     setIsOverlayLoading(true);
     try {
@@ -1832,6 +1980,16 @@ export default function WorkspacePage() {
       window.localStorage.removeItem(WORKSPACE_ACTIVE_SOURCE_STORAGE_KEY);
     }
   }, [activeSourceId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(WORKSPACE_RAG_SOURCE_SCOPES_STORAGE_KEY, JSON.stringify(enabledRagSourceScopes));
+  }, [enabledRagSourceScopes]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(WORKSPACE_RAG_SCOPE_DETAILS_STORAGE_KEY, JSON.stringify(ragScopeDetails));
+  }, [ragScopeDetails]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1984,19 +2142,14 @@ export default function WorkspacePage() {
   useEffect(() => {
     const el = chatMessagesRef.current;
     if (!el) return;
+    const scrollElement = el;
 
     let frameId = 0;
-    let lastLocked = userScrolledUp;
     function syncScrollLock(): void {
       frameId = 0;
-      if (!el) return;
-      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      const atBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight < 80;
       const nextLocked = !atBottom;
-      if (nextLocked !== lastLocked) {
-        lastLocked = nextLocked;
-        setUserScrolledUp(nextLocked);
-      }
-      el.classList.toggle('scroll-locked', nextLocked);
+      updateChatScrollLock(nextLocked);
     }
 
     function handleScroll(): void {
@@ -2006,20 +2159,44 @@ export default function WorkspacePage() {
       frameId = requestAnimationFrame(syncScrollLock);
     }
 
-    el.addEventListener('scroll', handleScroll, { passive: true });
+    function handleWheel(event: WheelEvent): void {
+      if (event.deltaY < -2 && scrollElement.scrollTop > 0) {
+        updateChatScrollLock(true);
+      }
+    }
+
+    function handleTouchStart(event: TouchEvent): void {
+      scrollIntentTouchYRef.current = event.touches[0]?.clientY ?? null;
+    }
+
+    function handleTouchMove(event: TouchEvent): void {
+      const nextY = event.touches[0]?.clientY ?? null;
+      const previousY = scrollIntentTouchYRef.current;
+      if (nextY !== null && previousY !== null && nextY - previousY > 4 && scrollElement.scrollTop > 0) {
+        updateChatScrollLock(true);
+      }
+      scrollIntentTouchYRef.current = nextY;
+    }
+
+    scrollElement.addEventListener('scroll', handleScroll, { passive: true });
+    scrollElement.addEventListener('wheel', handleWheel, { passive: true });
+    scrollElement.addEventListener('touchstart', handleTouchStart, { passive: true });
+    scrollElement.addEventListener('touchmove', handleTouchMove, { passive: true });
     return () => {
       if (frameId) {
         cancelAnimationFrame(frameId);
       }
-      el.removeEventListener('scroll', handleScroll);
+      scrollElement.removeEventListener('scroll', handleScroll);
+      scrollElement.removeEventListener('wheel', handleWheel);
+      scrollElement.removeEventListener('touchstart', handleTouchStart);
+      scrollElement.removeEventListener('touchmove', handleTouchMove);
     };
-  }, [userScrolledUp]);
+  }, [updateChatScrollLock]);
 
   function scrollToBottom(): void {
     const el = chatMessagesRef.current;
     if (el) {
-      el.classList.remove('scroll-locked');
-      setUserScrolledUp(false);
+      updateChatScrollLock(false);
       el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
     }
   }
@@ -2027,7 +2204,7 @@ export default function WorkspacePage() {
   function resetSession() {
     setSessionId(makeId('ID'));
     setMessages([]);
-    setUserScrolledUp(false);
+    updateChatScrollLock(false);
     void refreshSessionList();
   }
 
@@ -2171,8 +2348,11 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     const container = chatMessagesRef.current;
-    if (messages.length > 0 && container && !userScrolledUp) {
-      requestAnimationFrame(() => {
+    if (messages.length > 0 && container && !userScrolledUpRef.current) {
+      const frameId = requestAnimationFrame(() => {
+        if (userScrolledUpRef.current) {
+          return;
+        }
         try {
           container.scrollTo({
             top: container.scrollHeight,
@@ -2182,18 +2362,23 @@ export default function WorkspacePage() {
           // ignore
         }
       });
+      return () => cancelAnimationFrame(frameId);
     }
-  }, [messages, userScrolledUp]);
+    return undefined;
+  }, [messages]);
 
   useEffect(() => {
-    if (!testMode || userScrolledUp) {
+    if (!testMode || userScrolledUpRef.current) {
       return;
     }
     const container = chatMessagesRef.current;
     if (!container) {
       return;
     }
-    requestAnimationFrame(() => {
+    const frameId = requestAnimationFrame(() => {
+      if (userScrolledUpRef.current) {
+        return;
+      }
       try {
         container.scrollTo({
           top: container.scrollHeight,
@@ -2203,7 +2388,8 @@ export default function WorkspacePage() {
         container.scrollTop = container.scrollHeight;
       }
     });
-  }, [testMode, activeTestTrace?.events.length, activeTestTrace?.result?.answer, userScrolledUp]);
+    return () => cancelAnimationFrame(frameId);
+  }, [testMode, activeTestTrace?.events.length, activeTestTrace?.result?.answer]);
 
   useEffect(() => {
     let animated = false;
@@ -2326,6 +2512,158 @@ export default function WorkspacePage() {
 
   const activeRepositoryIdForRequest = activeRepository?.repository_id
     || (activeSourceId?.startsWith('repository:') ? activeSourceId.slice('repository:'.length) : '');
+
+  const allOfficialBookSlugs = useMemo(
+    () => manualBooks.map((book) => book.book_slug).filter(Boolean),
+    [manualBooks],
+  );
+
+  const allCustomerDraftIds = useMemo(
+    () => drafts.map((draft) => draft.draft_id).filter(Boolean),
+    [drafts],
+  );
+
+  const ragCustomerDocuments = useMemo(
+    () =>
+      documentRepositories.flatMap((repository) => {
+        const isCustomerRepository = repository.repository_kind === 'study' || repository.slug === 'study-docs';
+        return (repository.documents ?? [])
+          .filter((document) => isCustomerRepository || document.source_scope === 'study_docs')
+          .map((document) => ({
+            ...document,
+            repositoryId: repository.repository_id,
+            repositoryTitle: repository.title || repository.slug || '고객문서',
+          }));
+      }),
+    [documentRepositories],
+  );
+
+  const allCustomerDocumentIds = useMemo(
+    () => ragCustomerDocuments.map((document) => document.document_source_id).filter(Boolean),
+    [ragCustomerDocuments],
+  );
+
+  const ragUploadDocuments = useMemo(
+    () =>
+      documentRepositories.flatMap((repository) => {
+        const isPersonalRepository = repository.repository_kind === 'personal' || repository.slug === 'personal-uploads';
+        return (repository.documents ?? [])
+          .filter((document) => isPersonalRepository || document.source_scope === 'user_upload')
+          .map((document) => ({
+            ...document,
+            repositoryId: repository.repository_id,
+            repositoryTitle: repository.title || repository.slug || '내 업로드',
+          }));
+      }),
+    [documentRepositories],
+  );
+
+  const allUploadDocumentIds = useMemo(
+    () => ragUploadDocuments.map((document) => document.document_source_id).filter(Boolean),
+    [ragUploadDocuments],
+  );
+
+  const selectedOfficialBookSlugs = useMemo(
+    () => effectiveRagDetailSelection(allOfficialBookSlugs, ragScopeDetails.officialBookSlugs),
+    [allOfficialBookSlugs, ragScopeDetails.officialBookSlugs],
+  );
+
+  const selectedCustomerDraftIds = useMemo(
+    () => effectiveRagDetailSelection(allCustomerDraftIds, ragScopeDetails.customerDraftIds),
+    [allCustomerDraftIds, ragScopeDetails.customerDraftIds],
+  );
+
+  const selectedCustomerDocumentIds = useMemo(
+    () => effectiveRagDetailSelection(allCustomerDocumentIds, ragScopeDetails.customerDocumentIds),
+    [allCustomerDocumentIds, ragScopeDetails.customerDocumentIds],
+  );
+
+  const selectedUploadDocumentIds = useMemo(
+    () => effectiveRagDetailSelection(allUploadDocumentIds, ragScopeDetails.uploadDocumentIds),
+    [allUploadDocumentIds, ragScopeDetails.uploadDocumentIds],
+  );
+
+  const selectedOfficialBookSlugSet = useMemo(
+    () => new Set(selectedOfficialBookSlugs),
+    [selectedOfficialBookSlugs],
+  );
+
+  const selectedCustomerDraftIdSet = useMemo(
+    () => new Set(selectedCustomerDraftIds),
+    [selectedCustomerDraftIds],
+  );
+
+  const selectedCustomerDocumentIdSet = useMemo(
+    () => new Set(selectedCustomerDocumentIds),
+    [selectedCustomerDocumentIds],
+  );
+
+  const selectedUploadDocumentIdSet = useMemo(
+    () => new Set(selectedUploadDocumentIds),
+    [selectedUploadDocumentIds],
+  );
+
+  const enabledRagSourceScopeSet = useMemo(
+    () => new Set<RagSourceScope>(enabledRagSourceScopes),
+    [enabledRagSourceScopes],
+  );
+
+  const enabledRagSourceSummary = useMemo(() => {
+    const labels = RAG_SOURCE_SCOPE_OPTIONS
+      .filter((option) => enabledRagSourceScopeSet.has(option.id))
+      .map((option) => option.label);
+    return labels.length === RAG_SOURCE_SCOPE_OPTIONS.length ? '전체 포함' : labels.join(' + ');
+  }, [enabledRagSourceScopeSet]);
+
+  const usesRagOverlaySources = useMemo(
+    () => enabledRagSourceScopes.some((scope) => scope !== 'user_upload'),
+    [enabledRagSourceScopes],
+  );
+
+  const toggleRagSourceScope = useCallback((scope: RagSourceScope) => {
+    setEnabledRagSourceScopes((current) => {
+      const exists = current.includes(scope);
+      if (exists && current.length <= 1) {
+        return current;
+      }
+      if (exists) {
+        return current.filter((item) => item !== scope);
+      }
+      return DEFAULT_RAG_SOURCE_SCOPES.filter((item) => item === scope || current.includes(item));
+    });
+  }, []);
+
+  const toggleRagDetailItem = useCallback((kind: RagScopeDetailKind, id: string, allIds: string[]) => {
+    const targetId = id.trim();
+    if (!targetId) {
+      return;
+    }
+    setRagScopeDetails((current) => {
+      const orderedIds = normalizeRagDetailList(allIds);
+      if (!orderedIds.includes(targetId)) {
+        return current;
+      }
+      const currentExplicit = effectiveRagDetailSelection(orderedIds, current[kind]);
+      const exists = currentExplicit.includes(targetId);
+      if (exists && currentExplicit.length <= 1) {
+        return current;
+      }
+      const next = exists
+        ? currentExplicit.filter((item) => item !== targetId)
+        : orderedIds.filter((item) => item === targetId || currentExplicit.includes(item));
+      return {
+        ...current,
+        [kind]: next.length === orderedIds.length ? [] : next,
+      };
+    });
+  }, []);
+
+  const resetRagDetailSelection = useCallback((kind: RagScopeDetailKind) => {
+    setRagScopeDetails((current) => ({
+      ...current,
+      [kind]: [],
+    }));
+  }, []);
 
   const activeRepositoryDocument = useMemo(
     () => activeRepository?.documents?.find((document) => document.document_source_id === activeDocumentId) ?? null,
@@ -2570,6 +2908,36 @@ export default function WorkspacePage() {
     }
   }
 
+  useEffect(() => {
+    if (testMode || preview.kind !== 'viewer' || preview.viewerDocument?.html || !preview.viewerUrl) {
+      return undefined;
+    }
+    const viewerPath = runtimePathFromUrl(preview.viewerUrl);
+    if (!viewerPath) {
+      return undefined;
+    }
+    const retryKey = `${viewerPath}|${viewerPageMode}`;
+    if (viewerPreviewRetryKeysRef.current.has(retryKey)) {
+      return undefined;
+    }
+    viewerPreviewRetryKeysRef.current.add(retryKey);
+    const timer = window.setTimeout(() => {
+      void openViewerPreview(
+        viewerPath,
+        preview.title,
+        activeSourceId ?? undefined,
+        viewerPageMode,
+        preview.scrollTargetText,
+      );
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeSourceId,
+    preview,
+    testMode,
+    viewerPageMode,
+  ]);
+
   async function handleViewerPageModeChange(nextMode: ViewerPageMode): Promise<void> {
     if (nextMode === viewerPageMode) {
       return;
@@ -2756,22 +3124,49 @@ export default function WorkspacePage() {
     }
   }
 
-  async function openCitationEvidenceDrawer(citation: ChatCitation, answerContent = ''): Promise<void> {
-    await openEvidenceDrawerPath(
-      citationEvidenceTitle(citation),
-      citation.viewer_path,
-      citationScrollTarget(citation, answerContent) || firstCitationCommand(citation),
-    );
-  }
-
-  function handleCitationEvidenceToggle(messageId: string, citation: ChatCitation): void {
+  async function handleCitationReferenceClick(messageId: string, citation: ChatCitation, answerContent = ''): Promise<void> {
     setMessages((current) => current.map((message) => {
       if (message.id !== messageId) {
         return message;
       }
-      const nextIndex = message.activeCitationIndex === citation.index ? undefined : citation.index;
-      return { ...message, activeCitationIndex: nextIndex };
+      return { ...message, activeCitationIndex: citation.index };
     }));
+    const viewerPath = String(citation.viewer_path || '').trim();
+    if (!viewerPath) {
+      return;
+    }
+    try {
+      if (rightCollapsed) {
+        rightPanelRef.current?.expand();
+        setRightCollapsed(false);
+      }
+      await openViewerPreview(
+        viewerPath,
+        citationEvidenceTitle(citation),
+        `citation:${messageId}:${citation.index}`,
+        viewerPageMode,
+        citationScrollTarget(citation, answerContent) || firstCitationCommand(citation),
+      );
+      if (!isCourseMode) {
+        animatePreviewPanel();
+      }
+      if (
+        ingestionStatusBanner
+        && !isWorkspaceUploading
+        && IN_FLIGHT_INGESTION_STATUSES.has(ingestionStatusBanner.status)
+        && !ingestionStatusBanner.documentSourceId
+        && !ingestionStatusBanner.repositoryId
+      ) {
+        setIngestionStatusBanner(null);
+        window.localStorage.removeItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY);
+      }
+    } catch (error) {
+      console.error('citation-viewer-open-failed', {
+        viewerPath,
+        citationIndex: citation.index,
+        error,
+      });
+    }
   }
 
   async function handleRelatedLinkClick(link: ChatRelatedLink): Promise<void> {
@@ -3128,6 +3523,7 @@ export default function WorkspacePage() {
       return;
     }
 
+    setIsWorkspaceUploading(true);
     try {
       setIngestionStatusBanner({
         status: 'parsing',
@@ -3236,8 +3632,17 @@ export default function WorkspacePage() {
       setPreview({ kind: 'empty' });
     } catch (error) {
       console.error(error);
+      const nextBanner: IngestionStatusBanner = {
+        status: 'failed',
+        message: '업로드가 중단되었습니다. 다시 업로드하거나 작업 로그를 확인해주세요.',
+        filename: file.name,
+        updatedAt: new Date().toISOString(),
+      };
+      setIngestionStatusBanner(nextBanner);
+      window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
       window.alert(error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.');
     } finally {
+      setIsWorkspaceUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -3318,6 +3723,7 @@ export default function WorkspacePage() {
       learningIndex: resolvedLearningIndex,
       rewrittenQuery: trimmed !== visibleQuery ? trimmed : undefined,
     };
+    updateChatScrollLock(false);
     setMessages((current) => [...current, nextUserMessage]);
     if (!queryOverride) {
       setQuery('');
@@ -3326,16 +3732,33 @@ export default function WorkspacePage() {
     setThinkingStatus('질문 접수 중');
 
     try {
+      const enabledCustomerDraftIdsForRequest = enabledRagSourceScopeSet.has('customer_docs')
+        ? selectedCustomerDraftIds
+        : [];
+      const enabledCustomerDocumentIdsForRequest = enabledRagSourceScopeSet.has('customer_docs')
+        ? selectedCustomerDocumentIds
+        : [];
+      const enabledUploadDocumentIdsForRequest = enabledRagSourceScopeSet.has('user_upload')
+        ? selectedUploadDocumentIds
+        : [];
+      const enabledOfficialBookSlugsForRequest = enabledRagSourceScopeSet.has('official_docs')
+        ? selectedOfficialBookSlugs
+        : [];
       const requestPayload = {
         query: trimmed,
         sessionId,
         mode: 'ops',
         userId: wikiOverlayUserId,
-        selectedDraftIds: activeDraft ? [activeDraft.draft_id] : [],
-        restrictUploadedSources: Boolean(activeDraft),
+        selectedDraftIds: enabledCustomerDraftIdsForRequest,
+        restrictUploadedSources: enabledCustomerDraftIdsForRequest.length > 0,
         routeKind: requestRouteKind,
         activeRepositoryId: activeRepositoryIdForRequest,
         activeDocumentId,
+        enabledSourceScopes: enabledRagSourceScopes,
+        enabledOfficialBookSlugs: enabledOfficialBookSlugsForRequest,
+        enabledCustomerDraftIds: enabledCustomerDraftIdsForRequest,
+        enabledCustomerDocumentIds: enabledCustomerDocumentIdsForRequest,
+        enabledUploadDocumentIds: enabledUploadDocumentIdsForRequest,
         learningIndex: resolvedLearningIndex,
         learningCategoryKey: resolvedCategoryKey,
         learningCategoryLabel: resolvedCategoryLabel,
@@ -4095,6 +4518,231 @@ export default function WorkspacePage() {
                       </div>
                     )}
                   </section>
+                  <details className="outline-more outline-surface-card outline-surface-card--sources rag-source-scope-card" open>
+                    <summary>
+                      <span>RAG 범위</span>
+                      <span>{enabledRagSourceSummary}</span>
+                    </summary>
+                    <div className="rag-source-scope-list" role="group" aria-label="RAG source scope">
+                      {RAG_SOURCE_SCOPE_OPTIONS.map((option) => {
+                        const checked = enabledRagSourceScopeSet.has(option.id);
+                        const detailCount =
+                          option.id === 'official_docs'
+                            ? `${selectedOfficialBookSlugs.length}/${allOfficialBookSlugs.length || 0}`
+                            : option.id === 'customer_docs'
+                              ? `${selectedCustomerDraftIds.length + selectedCustomerDocumentIds.length}/${allCustomerDraftIds.length + allCustomerDocumentIds.length || 0}`
+                              : `${selectedUploadDocumentIds.length}/${allUploadDocumentIds.length || 0}`;
+                        return (
+                          <div key={option.id} className={`rag-source-scope-block${checked ? ' active' : ''}`}>
+                            <label className={`rag-source-scope-option${checked ? ' active' : ''}`}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={checked && enabledRagSourceScopes.length <= 1}
+                                onChange={() => toggleRagSourceScope(option.id)}
+                              />
+                              <span className="rag-source-scope-check" aria-hidden="true">
+                                {checked ? <Check size={12} /> : null}
+                              </span>
+                              <span className="rag-source-scope-copy">
+                                <strong>{option.label}</strong>
+                                <span>{option.meta}</span>
+                              </span>
+                              <span className="rag-source-scope-count">{detailCount}</span>
+                            </label>
+                            {checked && option.id === 'official_docs' && (
+                              <details className="rag-source-detail-panel" open>
+                                <summary className="rag-source-detail-head">
+                                  <span>책 단위</span>
+                                  <button
+                                    type="button"
+                                    disabled={selectedOfficialBookSlugs.length === allOfficialBookSlugs.length}
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      resetRagDetailSelection('officialBookSlugs');
+                                    }}
+                                  >
+                                    전체 선택
+                                  </button>
+                                </summary>
+                                {outlineCategoryGroups.length === 0 ? (
+                                  <p className="rag-source-detail-empty">공식문서 목록 없음</p>
+                                ) : (
+                                  outlineCategoryGroups.map((group) => {
+                                    const groupBookSlugs = group.books.map((book) => book.book_slug).filter(Boolean);
+                                    const selectedInGroup = groupBookSlugs.filter((bookSlug) => selectedOfficialBookSlugSet.has(bookSlug)).length;
+                                    return (
+                                      <details key={`rag-official:${group.key}`} className="rag-source-child-group">
+                                        <summary>
+                                          <span>{group.label}</span>
+                                          <span>{selectedInGroup}/{groupBookSlugs.length}</span>
+                                        </summary>
+                                        <div className="rag-source-child-list">
+                                          {group.books.map((book) => {
+                                            const selected = selectedOfficialBookSlugSet.has(book.book_slug);
+                                            return (
+                                              <label
+                                                key={`rag-official-book:${book.book_slug}`}
+                                                className={`rag-source-child-option${selected ? ' active' : ''}`}
+                                              >
+                                                <input
+                                                  type="checkbox"
+                                                  checked={selected}
+                                                  disabled={selected && selectedOfficialBookSlugs.length <= 1}
+                                                  onChange={() => toggleRagDetailItem('officialBookSlugs', book.book_slug, allOfficialBookSlugs)}
+                                                />
+                                                <span className="rag-source-child-check" aria-hidden="true">
+                                                  {selected ? <Check size={10} /> : null}
+                                                </span>
+                                                <span className="rag-source-child-copy">
+                                                  <strong>{book.title}</strong>
+                                                  <span>{describeOutlineVariant(book)} · {summarizeBookMeta(book)}</span>
+                                                </span>
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      </details>
+                                    );
+                                  })
+                                )}
+                              </details>
+                            )}
+                            {checked && option.id === 'customer_docs' && (
+                              <details className="rag-source-detail-panel">
+                                <summary className="rag-source-detail-head">
+                                  <span>고객 문서</span>
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      selectedCustomerDraftIds.length === allCustomerDraftIds.length
+                                      && selectedCustomerDocumentIds.length === allCustomerDocumentIds.length
+                                    }
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      resetRagDetailSelection('customerDraftIds');
+                                      resetRagDetailSelection('customerDocumentIds');
+                                    }}
+                                  >
+                                    전체 선택
+                                  </button>
+                                </summary>
+                                <div className="rag-source-child-list">
+                                  {ragCustomerDocuments.length === 0 && drafts.length === 0 ? (
+                                    <p className="rag-source-detail-empty">고객문서 없음</p>
+                                  ) : (
+                                    <>
+                                      {ragCustomerDocuments.length > 0 && (
+                                        <span className="rag-source-child-subhead">KMSC / 현장 문서</span>
+                                      )}
+                                      {ragCustomerDocuments.map((document) => {
+                                        const selected = selectedCustomerDocumentIdSet.has(document.document_source_id);
+                                        return (
+                                          <label
+                                            key={`rag-customer-doc:${document.document_source_id}`}
+                                            className={`rag-source-child-option${selected ? ' active' : ''}`}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={selected}
+                                              disabled={selected && selectedCustomerDocumentIds.length <= 1 && selectedCustomerDraftIds.length === 0}
+                                              onChange={() => toggleRagDetailItem('customerDocumentIds', document.document_source_id, allCustomerDocumentIds)}
+                                            />
+                                            <span className="rag-source-child-check" aria-hidden="true">
+                                              {selected ? <Check size={10} /> : null}
+                                            </span>
+                                            <span className="rag-source-child-copy">
+                                              <strong>{document.title || document.filename}</strong>
+                                              <span>{document.repositoryTitle} · {document.indexed_chunk_count}/{document.chunk_count} chunks</span>
+                                            </span>
+                                          </label>
+                                        );
+                                      })}
+                                      {drafts.length > 0 && (
+                                        <span className="rag-source-child-subhead">고객 팩</span>
+                                      )}
+                                      {drafts.map((draft) => {
+                                        const selected = selectedCustomerDraftIdSet.has(draft.draft_id);
+                                        return (
+                                          <label
+                                            key={`rag-customer:${draft.draft_id}`}
+                                            className={`rag-source-child-option${selected ? ' active' : ''}`}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={selected}
+                                              disabled={selected && selectedCustomerDraftIds.length <= 1 && selectedCustomerDocumentIds.length === 0}
+                                              onChange={() => toggleRagDetailItem('customerDraftIds', draft.draft_id, allCustomerDraftIds)}
+                                            />
+                                            <span className="rag-source-child-check" aria-hidden="true">
+                                              {selected ? <Check size={10} /> : null}
+                                            </span>
+                                            <span className="rag-source-child-copy">
+                                              <strong>{draft.title}</strong>
+                                              <span>{formatDraftMeta(draft)}</span>
+                                            </span>
+                                          </label>
+                                        );
+                                      })}
+                                    </>
+                                  )}
+                                </div>
+                              </details>
+                            )}
+                            {checked && option.id === 'user_upload' && (
+                              <details className="rag-source-detail-panel" open>
+                                <summary className="rag-source-detail-head">
+                                  <span>업로드 문서</span>
+                                  <button
+                                    type="button"
+                                    disabled={selectedUploadDocumentIds.length === allUploadDocumentIds.length}
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      resetRagDetailSelection('uploadDocumentIds');
+                                    }}
+                                  >
+                                    전체 선택
+                                  </button>
+                                </summary>
+                                <div className="rag-source-child-list">
+                                  {ragUploadDocuments.length === 0 ? (
+                                    <p className="rag-source-detail-empty">업로드 문서 없음</p>
+                                  ) : (
+                                    ragUploadDocuments.map((document) => {
+                                      const selected = selectedUploadDocumentIdSet.has(document.document_source_id);
+                                      return (
+                                        <label
+                                          key={`rag-upload:${document.document_source_id}`}
+                                          className={`rag-source-child-option${selected ? ' active' : ''}`}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={selected}
+                                            disabled={selected && selectedUploadDocumentIds.length <= 1}
+                                            onChange={() => toggleRagDetailItem('uploadDocumentIds', document.document_source_id, allUploadDocumentIds)}
+                                          />
+                                          <span className="rag-source-child-check" aria-hidden="true">
+                                            {selected ? <Check size={10} /> : null}
+                                          </span>
+                                          <span className="rag-source-child-copy">
+                                            <strong>{document.title || document.filename}</strong>
+                                            <span>{document.repositoryTitle} · {document.indexed_chunk_count}/{document.chunk_count} chunks</span>
+                                          </span>
+                                        </label>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                              </details>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
                   {false && (
                     <>
                   {outlineCategoryGroups.length > 0 && (
@@ -4401,28 +5049,6 @@ export default function WorkspacePage() {
                   )}
                 </div>
               )}
-
-              <div className="user-profile-section">
-                <div className="profile-container profile-container-ops">
-                  <div className="profile-avatar profile-avatar-ops">
-                    <Cpu size={18} />
-                    <div className={`status-dot-online ${isClusterConnected ? '' : 'status-dot-idle'}`}></div>
-                  </div>
-                  <div className="profile-ops-summary">
-                    <button
-                      className={`profile-ops-name-btn ${activeFooterConnection ? '' : 'is-undefined'}`}
-                      type="button"
-                      onClick={() => setDashboardOpen(true)}
-                      title={activeFooterConnection ? 'Open cluster dashboard' : 'Cluster is not connected'}
-                    >
-                      {isFooterProfileLoading ? 'Syncing' : footerProfileName}
-                    </button>
-                    <span className={`profile-cluster-status profile-cluster-status--${clusterConnectionStatus}`}>
-                      {clusterStatusLabel}
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
           </Panel>
 
@@ -4578,7 +5204,7 @@ export default function WorkspacePage() {
                               primaryPublicationState={message.primaryPublicationState}
                               primaryApprovalState={message.primaryApprovalState}
                               onCitationClick={(citation) => {
-                                handleCitationEvidenceToggle(message.id, citation);
+                                void handleCitationReferenceClick(message.id, citation, message.content);
                               }}
                               onRelatedLinkClick={(link) => {
                                 void handleRelatedLinkClick(link);
@@ -4623,20 +5249,6 @@ export default function WorkspacePage() {
                                       <code>{activeCitation.cli_commands[0]}</code>
                                     </div>
                                   ) : null}
-                                  <div className="citation-evidence-actions">
-                                    <button
-                                      type="button"
-                                      onClick={() => { void openCitationEvidenceDrawer(activeCitation, message.content); }}
-                                    >
-                                      Open document
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleCitationEvidenceToggle(message.id, activeCitation)}
-                                    >
-                                      Close
-                                    </button>
-                                  </div>
                                 </div>
                               );
                             })()}
@@ -4651,7 +5263,7 @@ export default function WorkspacePage() {
                             <CitationTag
                               key={`${message.id}-${citation.index}`}
                               citation={citation}
-                              onOpen={(selected) => { void openCitationEvidenceDrawer(selected, message.content); }}
+                              onOpen={(selected) => { void handleCitationReferenceClick(message.id, selected, message.content); }}
                             />
                           ))}
                         </div>
@@ -4728,7 +5340,11 @@ export default function WorkspacePage() {
                   <div className="chat-scope-status">
                     <BookOpen size={14} />
                     <div>
-                      <span>{activeDocumentId ? 'Document-scoped RAG' : 'Repository-scoped RAG'}</span>
+                      <span>
+                        {activeDocumentId
+                          ? (usesRagOverlaySources ? 'Document overlay RAG' : 'Document-scoped RAG')
+                          : (usesRagOverlaySources ? 'Repository overlay RAG' : 'Repository-scoped RAG')}
+                      </span>
                       <strong>
                         {activeDocumentId
                           ? activeDocumentScopeLabel
@@ -5030,6 +5646,7 @@ export default function WorkspacePage() {
                       void handleRemoveSectionTextAnnotation(section, annotationId);
                     }}
                     className="playbook-reader-shadow-host"
+                    surfaceTheme="paper"
                   />
                 ) : (
                   <div className="playbook-reader-empty">문서 본문을 불러오지 못했습니다.</div>
@@ -5083,6 +5700,7 @@ export default function WorkspacePage() {
                         void openViewerPreview(viewerPath, preview.title, undefined, viewerPageMode);
                       }}
                       className="playbook-reader-shadow-host"
+                      surfaceTheme="paper"
                     />
                   ) : (
                     <div className="doc-section">
