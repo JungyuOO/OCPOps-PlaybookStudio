@@ -1,0 +1,10 @@
+{"id": "ocp-login", "query": "ocp 로그인 어떻게 함", "expect_command": "oc login", "note": "알려진 실패"}
+{"id": "pdb-all-ns", "query": "모든 프로젝트에서 pod 중단 예산 확인 어떻게해?", "expect_section_contains": "중단 예산", "expect_command": "oc get poddisruptionbudget", "note": "알려진 실패"}
+{"id": "node-status", "query": "노드 상태 어디서 봐", "expect_command": "oc get nodes"}
+{"id": "namespace-list", "query": "네임스페이스 목록 보는 명령어", "expect_command": "oc get"}
+{"id": "pvc-pending", "query": "pvc가 pending인데 뭐 확인해", "expect_section_contains": "PVC"}
+{"id": "etcd-backup", "query": "etcd 백업 어떻게 해", "expect_command": "cluster-backup.sh"}
+{"id": "clusteroperator-degraded", "query": "클러스터 오퍼레이터 degraded 확인", "expect_command": "oc get clusteroperators"}
+{"id": "must-gather", "query": "장애 분석 자료 어떻게 모아", "expect_command": "oc adm must-gather"}
+{"id": "pod-logs", "query": "파드 로그 보는 법", "expect_command": "oc logs"}
+{"id": "csr-approve", "query": "csr 승인 명령어", "expect_command": "oc adm certificate approve"}
