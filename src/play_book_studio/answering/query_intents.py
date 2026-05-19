@@ -75,6 +75,19 @@ def understand_query(query: str) -> QueryUnderstanding:
     if re.search(r"(pod|pods|파드).*(resource|usage|cpu|memory|메모리|리소스|사용량|top)", lowered):
         intents.append("pod_resource_inspection")
         terms.extend(("oc adm top pods", "cpu", "memory", "resource usage"))
+    if _contains_any(lowered, ("resourcequota", "resourcequotas", "quota", "quotas", "쿼터")):
+        intents.append("resourcequota_inspection")
+        terms.extend(
+            (
+                "ResourceQuota",
+                "resourcequota",
+                "resourcequotas",
+                "oc get resourcequotas",
+                "hard pods",
+                "requests.cpu",
+                "requests.memory",
+            )
+        )
     if re.search(r"(service|svc|서비스).*(장애|오류|에러|안\s*됨|접속|연결|endpoint|selector|fail|error)", lowered):
         intents.append("service_failure_diagnosis")
         terms.extend(("service", "endpoint", "selector", "route"))
@@ -105,9 +118,11 @@ def build_intent_profile(query: str) -> IntentProfile:
     primary_commands = tuple(term for term in query_terms if term.startswith("oc ") or term in {"oc"})
     needs_command = understanding.has_intent("command_lookup") or bool(primary_commands)
     intent = understanding.intents[0] if understanding.intents else "unknown"
+    target_object = "resourcequota" if understanding.has_intent("resourcequota_inspection") else ""
     confidence = 0.75 if intent != "unknown" else 0.0
     return IntentProfile(
         intent=intent,
+        target_object=target_object,
         needs_command=needs_command,
         primary_commands=primary_commands,
         evidence_terms=query_terms,

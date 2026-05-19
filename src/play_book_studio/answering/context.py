@@ -393,6 +393,13 @@ def _beginner_operational_priority(hit: RetrievalHit, query: str) -> tuple[int, 
             score -= 24
         if any(token in haystack for token in ("cpu", "memory", "metrics", "requests", "limits")):
             score -= 8
+    if understanding.has_intent("resourcequota_inspection"):
+        if any(token in haystack for token in ("resourcequota", "resourcequotas", "oc get resourcequotas")):
+            score -= 30
+        if any(token in haystack for token in ("hard pods", "requests.cpu", "requests.memory", "quota")):
+            score -= 12
+        if hit.book_slug in {"cli_tools", "nodes"}:
+            score += 12
     if understanding.has_intent("service_failure_diagnosis"):
         if hit.book_slug in {"networking_overview", "ingress_and_load_balancing", "cli_tools"}:
             score -= 18
@@ -1044,6 +1051,7 @@ def _select_hits(
             query_understanding.has_intent("namespace_create"),
             query_understanding.has_intent("deployment_yaml_authoring"),
             query_understanding.has_intent("pod_resource_inspection"),
+            query_understanding.has_intent("resourcequota_inspection"),
             query_understanding.has_intent("service_failure_diagnosis"),
         ]
     )
@@ -1114,6 +1122,7 @@ def _select_hits(
             "namespace_create",
             "deployment_yaml_authoring",
             "pod_resource_inspection",
+            "resourcequota_inspection",
             "service_failure_diagnosis",
         )
     ):
