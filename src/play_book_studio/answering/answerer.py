@@ -81,6 +81,32 @@ def _looks_like_missing_coverage_answer(answer: str) -> bool:
     )
 
 
+def _retrieval_command_hints(retrieval_trace: dict) -> tuple[str, ...]:
+    query_signal_debug = retrieval_trace.get("query_signal_debug")
+    if not isinstance(query_signal_debug, dict):
+        return ()
+    validated_plan = query_signal_debug.get("validated_plan")
+    if not isinstance(validated_plan, dict):
+        return ()
+    search_signals = validated_plan.get("search_signals")
+    if not isinstance(search_signals, dict):
+        return ()
+    commands = search_signals.get("commands") or ()
+    if isinstance(commands, str):
+        candidates = [commands]
+    else:
+        candidates = [str(command) for command in commands if str(command).strip()]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for command in candidates:
+        key = command.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(command)
+    return tuple(deduped[:3])
+
+
 _CONFIDENCE_STOPWORDS = {
     "어떻게",
     "어떤",
@@ -831,6 +857,7 @@ class ChatAnswerer:
         context_bundle = assemble_context(
             retrieval.hits,
             query=query,
+            command_hints=_retrieval_command_hints(retrieval.trace),
             session_context=context,
             root_dir=self.settings.root_dir,
             max_chunks=max_context_chunks,

@@ -195,6 +195,566 @@ _COMMAND_ALIAS_RULES: tuple[dict[str, Any], ...] = (
         "objects": ("PodDisruptionBudget", "PDB", "Pod"),
         "primary_topics": ("PodDisruptionBudget", "pod disruption budget", "all namespaces"),
     },
+    {
+        "name": "openshift_version",
+        "aliases": (
+            "openshift-install version",
+            "openshift install version",
+            "openshift-install 버전",
+            "ocp 버전",
+            "openshift 버전",
+            "버전 확인",
+        ),
+        "domain": "install",
+        "book_slug_candidates": ("cli_tools", "installing_on_any_platform", "installation_overview"),
+        "commands": ("openshift-install version", "oc version", "oc get clusterversion"),
+        "command_families": ("oc_get",),
+        "objects": ("ClusterVersion",),
+        "primary_topics": ("OpenShift version", "OpenShift CLI", "installer version"),
+    },
+    {
+        "name": "node_cordon_drain",
+        "aliases": ("cordon", "drain", "노드 cordon", "노드 drain", "노드 중지", "노드 비우기"),
+        "domain": "node_ops",
+        "book_slug_candidates": ("nodes", "machine_management"),
+        "commands": ("oc adm cordon <node_name>", "oc adm drain <node_name>"),
+        "command_families": ("oc_adm",),
+        "objects": ("Node", "Pod"),
+        "primary_topics": ("node maintenance", "cordon", "drain"),
+    },
+    {
+        "name": "node_taint",
+        "aliases": ("taint", "테인트", "노드 taint", "노드에 taint"),
+        "domain": "node_ops",
+        "book_slug_candidates": ("nodes", "machine_management"),
+        "commands": ("oc describe node <node_name>", "oc adm taint nodes <node_name> <key>=<value>:<effect>"),
+        "command_families": ("oc_describe", "oc_adm"),
+        "objects": ("Node", "Taint"),
+        "primary_topics": ("node taint", "node scheduling"),
+    },
+    {
+        "name": "node_debug_shell",
+        "aliases": ("debug shell", "debug node", "oc debug node", "노드 debug", "노드 디버그", "debug shell로"),
+        "domain": "node_ops",
+        "book_slug_candidates": ("nodes", "support"),
+        "commands": ("oc debug node/<node_name>", "chroot /host"),
+        "command_families": ("oc_debug",),
+        "objects": ("Node",),
+        "primary_topics": ("node debug", "debug shell", "host shell"),
+    },
+    {
+        "name": "pods_on_node",
+        "aliases": (
+            "spec.nodename",
+            "field-selector spec.nodename",
+            "노드에 올라간",
+            "노드에 있는 pod",
+            "노드의 pod",
+            "특정 노드",
+            "스케줄",
+            "특정 노드에 스케줄",
+            "노드에 올라간 pod",
+            "pod 목록을 확인",
+        ),
+        "domain": "node_ops",
+        "book_slug_candidates": ("nodes",),
+        "commands": ("oc get pods -A -o wide", "oc get pods -A --field-selector spec.nodeName=<node_name>"),
+        "command_families": ("oc_get",),
+        "objects": ("Node", "Pod"),
+        "primary_topics": ("pods on node", "node pod listing"),
+    },
+    {
+        "name": "operator_status",
+        "aliases": (
+            "operator 설치 상태",
+            "operator 상태",
+            "csv",
+            "clusterserviceversion",
+            "subscription",
+            "installplan",
+            "operatorgroup",
+            "operator 목록",
+            "operator pending",
+        ),
+        "domain": "operators",
+        "book_slug_candidates": ("operators",),
+        "commands": (
+            "oc get csv",
+            "oc get subscription",
+            "oc get installplan",
+            "oc get operatorgroup",
+            "oc get operators",
+        ),
+        "command_families": ("oc_get",),
+        "objects": ("Operator", "ClusterServiceVersion", "Subscription", "InstallPlan", "OperatorGroup"),
+        "primary_topics": ("Operator Lifecycle Manager", "operator status", "CSV", "Subscription", "InstallPlan"),
+    },
+    {
+        "name": "monitoring_operator_status",
+        "aliases": (
+            "모니터링 operator",
+            "monitoring operator",
+            "prometheus pod",
+            "alertmanager",
+            "thanos querier",
+            "serviceMonitor",
+            "servicemonitor",
+        ),
+        "domain": "monitoring",
+        "book_slug_candidates": ("monitoring", "observability_overview", "operators"),
+        "commands": (
+            "oc get clusteroperator monitoring",
+            "oc get pods -n openshift-monitoring",
+            "oc get route -n openshift-monitoring",
+        ),
+        "command_families": ("oc_get",),
+        "objects": ("ClusterOperator", "Pod", "Route", "ServiceMonitor"),
+        "primary_topics": ("monitoring", "Prometheus", "Alertmanager", "ServiceMonitor"),
+    },
+    {
+        "name": "logging_operator_status",
+        "aliases": (
+            "logging operator",
+            "openshift logging operator",
+            "로그 수집",
+            "감사 로그",
+            "audit log",
+            "oc adm node-logs",
+            "systemd unit 로그",
+        ),
+        "domain": "logging",
+        "book_slug_candidates": ("logging", "observability_overview", "support"),
+        "commands": (
+            "oc get csv -n openshift-logging",
+            "oc get pods -n openshift-logging",
+            "oc adm node-logs <node_name> -u <unit_name>",
+        ),
+        "command_families": ("oc_get", "oc_adm"),
+        "objects": ("Operator", "Pod", "Node"),
+        "primary_topics": ("OpenShift Logging", "audit log", "node logs"),
+    },
+    {
+        "name": "etcd_backup_restore",
+        "aliases": (
+            "etcd 백업",
+            "etcd 복구",
+            "cluster-backup",
+            "cluster-backup.sh",
+            "etcdctl",
+            "etcd pod",
+            "etcd 멤버",
+            "etcd proxy",
+        ),
+        "domain": "etcd",
+        "book_slug_candidates": ("etcd", "backup_and_restore"),
+        "commands": (
+            "oc debug node/<control-plane-node>",
+            "chroot /host",
+            "cluster-backup.sh",
+            "oc get pods -n openshift-etcd -l k8s-app=etcd",
+            "oc rsh -n openshift-etcd <etcd_pod>",
+            "etcdctl endpoint status",
+            "oc get proxy cluster -o yaml",
+        ),
+        "command_families": ("oc_get", "oc_debug", "cluster_backup", "etcdctl"),
+        "objects": ("Pod", "Node", "Proxy", "etcd"),
+        "primary_topics": ("etcd", "etcd backup", "etcd restore", "control plane"),
+    },
+    {
+        "name": "route_service_status",
+        "aliases": ("route가 어떤 service", "route service", "route host", "admitted", "ingresscontroller", "jsonpath"),
+        "domain": "networking",
+        "book_slug_candidates": ("ingress_and_load_balancing", "networking"),
+        "commands": (
+            "oc get route",
+            "oc describe route",
+            "oc get service",
+            "oc get ingresscontroller -n openshift-ingress-operator -o jsonpath='{.items[*].status.conditions}'",
+        ),
+        "command_families": ("oc_get", "oc_describe"),
+        "objects": ("Route", "Service", "IngressController"),
+        "primary_topics": ("Route", "IngressController", "service routing"),
+    },
+    {
+        "name": "rbac_rolebinding_subjects",
+        "aliases": (
+            "rolebinding",
+            "clusterrolebinding",
+            "serviceaccount",
+            "service account",
+            "권한",
+            "pull secret을 serviceaccount",
+            "image pull secret",
+        ),
+        "domain": "security",
+        "book_slug_candidates": ("authentication_and_authorization", "security_and_compliance", "images"),
+        "commands": (
+            "oc get rolebinding",
+            "oc get clusterrolebinding",
+            "oc get serviceaccount",
+            "oc secrets link <serviceaccount> <pull_secret> --for=pull",
+        ),
+        "command_families": ("oc_get",),
+        "objects": ("RoleBinding", "ClusterRoleBinding", "ServiceAccount", "Secret"),
+        "primary_topics": ("RBAC", "ServiceAccount", "image pull secret"),
+    },
+    {
+        "name": "pod_events_logs",
+        "aliases": (
+            "pod 이벤트",
+            "pod 로그",
+            "컨테이너 로그",
+            "이전 컨테이너",
+            "pod 이벤트",
+            "pod 이벤트만",
+            "pod 로그",
+            "컨테이너 로그",
+            "crashloopbackoff",
+            "oomkilled",
+            "readiness probe",
+        ),
+        "domain": "troubleshooting",
+        "book_slug_candidates": ("support", "cli_tools", "nodes"),
+        "commands": (
+            "oc describe pod <pod_name>",
+            "oc logs <pod_name>",
+            "oc logs <pod_name> --previous",
+            "oc get events",
+        ),
+        "command_families": ("oc_describe", "oc_logs", "oc_get"),
+        "objects": ("Pod", "Event"),
+        "primary_topics": ("pod troubleshooting", "pod events", "container logs"),
+    },
+    {
+        "name": "cluster_events",
+        "aliases": (
+            "event",
+            "events",
+            "이벤트",
+            "전체 네임스페이스",
+            "모든 네임스페이스",
+            "이벤트",
+            "전체 네임스페이스 이벤트",
+            "모든 네임스페이스 이벤트",
+            "all namespaces event",
+            "all-namespaces events",
+        ),
+        "domain": "troubleshooting",
+        "book_slug_candidates": ("support", "nodes", "cli_tools"),
+        "commands": ("oc get events -A", "oc get events --all-namespaces"),
+        "command_families": ("oc_get",),
+        "objects": ("Event",),
+        "primary_topics": ("cluster events", "all namespaces", "troubleshooting"),
+    },
+    {
+        "name": "namespace_project_ops",
+        "aliases": (
+            "oc project",
+            "프로젝트 전환",
+            "현재 프로젝트",
+            "네임스페이스 안의 모든 리소스",
+            "namespace all resources",
+            "project all resources",
+            "클러스터 api 주소",
+            "api 주소",
+        ),
+        "domain": "architecture",
+        "book_slug_candidates": ("cli_tools", "architecture"),
+        "commands": ("oc project <project_name>", "oc get all -n <namespace>", "oc whoami --show-server"),
+        "command_families": ("oc_project", "oc_get"),
+        "objects": ("Project", "Namespace"),
+        "primary_topics": ("OpenShift CLI project", "namespace resources", "cluster API server"),
+    },
+    {
+        "name": "storageclass_ops",
+        "aliases": (
+            "storageclass",
+            "storage class",
+            "기본 storageclass",
+            "기본 storage class",
+            "default storageclass",
+            "storageclass 목록",
+            "allowvolumeexpansion",
+            "용량 확장",
+            "volumesnapshot",
+        ),
+        "domain": "storage",
+        "book_slug_candidates": ("storage",),
+        "commands": (
+            "oc get storageclass",
+            "oc get storageclass -o yaml",
+            "oc patch storageclass <storageclass_name>",
+            "oc get volumesnapshot",
+            "oc get volumesnapshotclass",
+        ),
+        "command_families": ("oc_get",),
+        "objects": ("StorageClass", "VolumeSnapshot", "VolumeSnapshotClass", "PVC"),
+        "primary_topics": ("StorageClass", "default StorageClass", "volume expansion", "VolumeSnapshot"),
+    },
+    {
+        "name": "service_endpoint_ops",
+        "aliases": (
+            "endpointslice",
+            "endpoint slice",
+            "service가 pod",
+            "service pod",
+            "서비스가 pod",
+            "서비스 dns",
+            "service dns",
+            "트래픽",
+            "endpoint",
+        ),
+        "domain": "networking",
+        "book_slug_candidates": ("networking", "ingress_and_load_balancing"),
+        "commands": ("oc get service", "oc describe service", "oc get endpointslice"),
+        "command_families": ("oc_get", "oc_describe"),
+        "objects": ("Service", "EndpointSlice", "Pod"),
+        "primary_topics": ("Service", "EndpointSlice", "service discovery"),
+    },
+    {
+        "name": "rbac_can_i",
+        "aliases": (
+            "can-i",
+            "auth can-i",
+            "권한 확인",
+            "어떤 권한",
+            "pod 목록을 볼 수",
+            "만들 수 있는지",
+            "serviceaccount 권한",
+            "service account 권한",
+        ),
+        "domain": "security",
+        "book_slug_candidates": ("authentication_and_authorization", "security_and_compliance"),
+        "commands": (
+            "oc auth can-i <verb> <resource>",
+            "oc auth can-i get pods --as system:serviceaccount:<namespace>:<serviceaccount>",
+            "oc describe serviceaccount <serviceaccount_name>",
+        ),
+        "command_families": ("oc_get",),
+        "objects": ("ServiceAccount", "RoleBinding", "ClusterRoleBinding", "Pod"),
+        "primary_topics": ("RBAC", "oc auth can-i", "ServiceAccount permissions"),
+    },
+    {
+        "name": "node_and_cluster_logs",
+        "aliases": (
+            "이전 로그",
+            "--previous",
+            "kubelet 로그",
+            "kubelet 서비스 로그",
+            "journal",
+            "node-logs",
+            "ovn node pod 로그",
+            "ovn-kubernetes 로그",
+            "operator pod 로그",
+            "현재 로그 이전 로그",
+        ),
+        "domain": "logging",
+        "book_slug_candidates": ("support", "logging", "networking"),
+        "commands": (
+            "oc adm node-logs <node_name> -u kubelet",
+            "oc logs -n openshift-ovn-kubernetes <pod_name>",
+            "oc logs -n <namespace> <pod_name>",
+            "oc logs -n <namespace> <pod_name> --previous",
+        ),
+        "command_families": ("oc_logs", "oc_adm"),
+        "objects": ("Node", "Pod"),
+        "primary_topics": ("node logs", "kubelet", "OVN Kubernetes logs", "pod logs"),
+    },
+    {
+        "name": "oc_mirror_ops",
+        "aliases": (
+            "oc-mirror",
+            "미러링 결과",
+            "imagecontentsourcepolicy",
+            "imagedigestmirrorset",
+            "catalogsource",
+            "disconnected 미러링",
+        ),
+        "domain": "install",
+        "book_slug_candidates": ("disconnected_installation_mirroring", "installing_on_any_platform", "operators"),
+        "commands": (
+            "oc get imagecontentsourcepolicy",
+            "oc get imagedigestmirrorset",
+            "oc get catalogsource -A",
+        ),
+        "command_families": ("oc_get",),
+        "objects": ("ImageContentSourcePolicy", "ImageDigestMirrorSet", "CatalogSource"),
+        "primary_topics": ("disconnected installation", "oc-mirror", "mirror registry"),
+    },
+    {
+        "name": "operator_action_ops",
+        "aliases": (
+            "수동 승인 installplan",
+            "installplan 승인",
+            "operatorhub",
+            "packagemanifest",
+            "catalogsource 상태",
+            "csv failed",
+        ),
+        "domain": "operators",
+        "book_slug_candidates": ("operators",),
+        "commands": (
+            "oc patch installplan <installplan_name> --type merge -p '{\"spec\":{\"approved\":true}}'",
+            "oc get packagemanifest",
+            "oc describe packagemanifest <package_name>",
+            "oc get catalogsource -n openshift-marketplace",
+            "oc get csv",
+        ),
+        "command_families": ("oc_get", "oc_describe"),
+        "objects": ("InstallPlan", "PackageManifest", "CatalogSource", "ClusterServiceVersion"),
+        "primary_topics": ("OperatorHub", "InstallPlan approval", "CatalogSource", "CSV"),
+    },
+    {
+        "name": "workload_node_scheduling",
+        "aliases": (
+            "daemonset",
+            "daemonset on every node",
+            "scheduled on node",
+            "spec.nodename",
+            "field-selector spec.nodename",
+            "노드마다",
+            "특정 노드",
+            "스케줄",
+            "스케줄됐",
+            "노드에 올라간 pod",
+        ),
+        "domain": "node_ops",
+        "book_slug_candidates": ("nodes", "support"),
+        "commands": (
+            "oc get daemonset -A -o wide",
+            "oc get pods -A -o wide",
+            "oc get pods -A --field-selector spec.nodeName=<node_name>",
+        ),
+        "command_families": ("oc_get",),
+        "objects": ("DaemonSet", "Pod", "Node"),
+        "primary_topics": ("pod scheduling", "DaemonSet", "node workloads"),
+    },
+    {
+        "name": "cluster_network_config",
+        "aliases": (
+            "cluster network",
+            "network.operator",
+            "network config",
+            "cluster network config",
+            "클러스터 네트워크",
+            "네트워크 설정",
+            "describe해서 봐",
+        ),
+        "domain": "networking",
+        "book_slug_candidates": ("networking", "networking_overview"),
+        "commands": ("oc describe network.operator cluster", "oc get network.operator cluster -o yaml"),
+        "command_families": ("oc_get", "oc_describe"),
+        "objects": ("Network",),
+        "primary_topics": ("cluster network configuration", "Network operator"),
+    },
+    {
+        "name": "install_prereq_and_fips",
+        "aliases": (
+            "pull secret",
+            "ssh key",
+            "ssh 키",
+            "fips installer",
+            "fips 설치 프로그램",
+            "rhcos iso",
+            "kernel argument",
+            "kernel arguments",
+            "disconnected",
+            "설치 방식",
+            "준비 항목",
+            "설치 전에",
+            "커널 argument",
+        ),
+        "domain": "install",
+        "book_slug_candidates": ("installation_overview", "installing_on_any_platform", "disconnected_installation_mirroring"),
+        "commands": (
+            "openshift-install create install-config",
+            "openshift-install coreos print-stream-json",
+            "oc adm release extract --command=openshift-install",
+        ),
+        "command_families": ("oc_adm",),
+        "objects": ("InstallConfig", "Secret"),
+        "primary_topics": ("OpenShift installation", "pull secret", "SSH key", "RHCOS"),
+    },
+    {
+        "name": "monitoring_runtime_ops",
+        "aliases": (
+            "cluster alert",
+            "cluster alerts",
+            "alertmanager route",
+            "prometheus pod",
+            "thanos querier",
+            "servicemonitor",
+            "service monitor",
+            "클러스터 알람",
+            "알람",
+            "메트릭 수집",
+            "현재 채널",
+            "업데이트 가능한 채널",
+        ),
+        "domain": "monitoring",
+        "book_slug_candidates": ("monitoring", "support", "updating_clusters"),
+        "commands": (
+            "oc get co monitoring",
+            "oc get pods -n openshift-monitoring",
+            "oc logs -n openshift-monitoring <pod_name>",
+            "oc get route -n openshift-monitoring",
+            "oc get servicemonitor -A",
+            "oc adm upgrade",
+        ),
+        "command_families": ("oc_get", "oc_logs", "oc_adm"),
+        "objects": ("Prometheus", "Alertmanager", "ServiceMonitor", "ClusterVersion"),
+        "primary_topics": ("monitoring", "alerts", "Prometheus", "Alertmanager", "cluster updates"),
+    },
+    {
+        "name": "security_runtime_ops",
+        "aliases": (
+            "oauth pod",
+            "rolebinding 대상",
+            "serviceaccount pod 목록",
+            "특정 리소스를 만들 수",
+            "imagepullbackoff",
+            "pull secret",
+            "serviceaccount에 연결",
+            "권한 확인",
+        ),
+        "domain": "security",
+        "book_slug_candidates": ("authentication_and_authorization", "security_and_compliance", "images"),
+        "commands": (
+            "oc auth can-i <verb> <resource>",
+            "oc auth can-i get pods --as system:serviceaccount:<namespace>:<serviceaccount>",
+            "oc get rolebinding -o wide",
+            "oc get clusterrolebinding -o wide",
+            "oc get pods -n openshift-authentication",
+            "oc logs -n openshift-authentication <pod_name>",
+            "oc get serviceaccount <serviceaccount_name> -o yaml",
+            "oc secrets link <serviceaccount> <pull_secret> --for=pull",
+        ),
+        "command_families": ("oc_get", "oc_logs"),
+        "objects": ("OAuth", "Pod", "ServiceAccount", "RoleBinding", "Secret"),
+        "primary_topics": ("authentication", "authorization", "RBAC", "pull secret"),
+    },
+    {
+        "name": "odf_storage_ops",
+        "aliases": (
+            "odf cluster",
+            "odf 클러스터",
+            "ceph 상태",
+            "볼륨 분리",
+            "node shutdown",
+            "volume detach",
+        ),
+        "domain": "storage",
+        "book_slug_candidates": ("storage",),
+        "commands": (
+            "oc get storagecluster -n openshift-storage",
+            "oc get cephcluster -n openshift-storage",
+            "oc get pods -n openshift-storage",
+            "oc describe volumeattachment <volumeattachment_name>",
+        ),
+        "command_families": ("oc_get", "oc_describe"),
+        "objects": ("StorageCluster", "CephCluster", "Pod", "VolumeAttachment"),
+        "primary_topics": ("OpenShift Data Foundation", "Ceph", "volume detach"),
+    },
 )
 
 
@@ -507,8 +1067,9 @@ def _validated_llm_plan(
     )
     search_signals = _validated_search_signals(payload.get("search_signals"), fallback.search_signals)
     confidence = _validated_confidence(payload.get("confidence"), fallback.confidence)
+    enrichment_query = " ".join(part for part in (raw_query, normalized_query) if str(part or "").strip())
     _apply_domain_specific_enrichment(
-        normalized_query=normalized_query,
+        normalized_query=enrichment_query,
         classification=classification,
         search_signals=search_signals,
         confidence=confidence,
@@ -559,6 +1120,25 @@ def _clean_text(value: Any, default: str = "", *, max_chars: int = 300) -> str:
     return cleaned[:max_chars].strip()
 
 
+def _command_families_for_commands(commands: tuple[str, ...]) -> list[str]:
+    families: list[str] = []
+    for command in commands:
+        lowered = command.casefold()
+        if lowered.startswith("oc get") or lowered.startswith("kubectl get"):
+            _append(families, "oc_get" if lowered.startswith("oc ") else "kubectl_get")
+        if lowered.startswith("oc describe") or lowered.startswith("kubectl describe"):
+            _append(families, "oc_describe" if lowered.startswith("oc ") else "kubectl_describe")
+        if lowered.startswith("oc logs") or lowered.startswith("kubectl logs"):
+            _append(families, "oc_logs")
+        if lowered.startswith("oc adm"):
+            _append(families, "oc_adm")
+        if lowered.startswith("oc apply"):
+            _append(families, "oc_apply")
+        if lowered.startswith("oc patch"):
+            _append(families, "oc_get")
+    return families or ["oc_get"]
+
+
 def _prune_query_signal_noise(
     *,
     raw_query: str,
@@ -567,11 +1147,112 @@ def _prune_query_signal_noise(
     search_signals: dict[str, list[str]],
     confidence: dict[str, float],
 ) -> None:
-    text = str(raw_query or normalized_query or "").casefold()
+    text = " ".join(
+        part for part in (str(raw_query or ""), str(normalized_query or "")) if part.strip()
+    ).casefold()
     errors = search_signals.setdefault("error_states", [])
     commands = search_signals.setdefault("commands", [])
     command_families = search_signals.setdefault("command_families", [])
     intents = search_signals.setdefault("intent_labels", [])
+
+    def reset_scope(
+        *,
+        domain: str,
+        books: tuple[str, ...],
+        objects: tuple[str, ...] = (),
+        scoped_commands: tuple[str, ...] = (),
+        topics: tuple[str, ...] = (),
+    ) -> None:
+        classification["domain"] = domain
+        classification["domain_filter_values"] = (domain,)
+        classification["book_slug_candidates"] = books
+        search_signals["objects"] = list(dict.fromkeys(objects))
+        if scoped_commands:
+            scoped_command_list = list(dict.fromkeys(scoped_commands))
+            scoped_family_list = _command_families_for_commands(scoped_commands)
+            search_signals["commands"] = scoped_command_list
+            search_signals["command_families"] = scoped_family_list
+            commands[:] = scoped_command_list
+            command_families[:] = scoped_family_list
+        if topics:
+            search_signals["primary_topics"] = list(dict.fromkeys(topics))
+        _append(search_signals.setdefault("intent_labels", []), "command_lookup", "check_status")
+        _append(search_signals.setdefault("answer_shapes", []), "command", "checklist")
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.93)
+        if objects:
+            confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
+        if scoped_commands:
+            confidence["commands"] = max(confidence.get("commands", 0.0), 0.92)
+
+    if "dpa" in text or "oadp" in text:
+        reset_scope(
+            domain="backup_restore",
+            books=("backup_and_restore",),
+            objects=("DataProtectionApplication", "DPA", "OADP"),
+            scoped_commands=(
+                "oc get dpa -n openshift-adp -o yaml",
+                "oc get dpa -n openshift-adp -o jsonpath='{.items[*].status.conditions}'",
+                "oc get all -n openshift-adp",
+            ),
+            topics=("OADP", "Data Protection Application", "backup restore"),
+        )
+    elif "event" in text and "pod" in text:
+        reset_scope(
+            domain="troubleshooting",
+            books=("cli_tools", "support"),
+            objects=("Pod", "Event"),
+            scoped_commands=(
+                "oc get events --field-selector involvedObject.kind=Pod",
+                "oc get events -n <namespace> --sort-by=.lastTimestamp",
+                "oc events",
+            ),
+            topics=("pod events", "cluster events"),
+        )
+    elif "--previous" in text or "previous" in text:
+        reset_scope(
+            domain="troubleshooting",
+            books=("support", "cli_tools"),
+            objects=("Pod", "Container"),
+            scoped_commands=(
+                "oc logs <pod-name> -n <namespace> --previous",
+                "oc logs <pod-name> --previous",
+            ),
+            topics=("pod logs", "previous container logs"),
+        )
+    elif "endpointslice" in text or "endpoint slice" in text:
+        reset_scope(
+            domain="networking",
+            books=("networking", "ingress_and_load_balancing", "cli_tools"),
+            objects=("EndpointSlice", "Service", "Pod"),
+            scoped_commands=(
+                "oc get endpointslice -n <namespace>",
+                "oc get endpointslices -n <namespace>",
+                "oc describe service <service-name> -n <namespace>",
+            ),
+            topics=("EndpointSlice", "service discovery"),
+        )
+    elif "oc get all" in " ".join(commands).casefold() and (
+        "namespace" in text or "project" in text or "네임스페이스" in text
+    ):
+        reset_scope(
+            domain="architecture",
+            books=("cli_tools", "architecture"),
+            objects=("Namespace", "Project"),
+            scoped_commands=("oc get all -n <namespace>", "oc project <project-name>"),
+            topics=("namespace resources", "OpenShift CLI"),
+        )
+    elif "prometheus" in text or "alertmanager" in text or "servicemonitor" in text or "thanos" in text:
+        reset_scope(
+            domain="monitoring",
+            books=("monitoring", "observability_overview", "support"),
+            objects=("Prometheus", "Alertmanager", "ServiceMonitor", "Pod"),
+            scoped_commands=(
+                "oc get pods -n openshift-monitoring",
+                "oc logs -n openshift-monitoring <pod-name>",
+                "oc get clusteroperator monitoring",
+            ),
+            topics=("monitoring", "Prometheus", "Alertmanager", "ServiceMonitor"),
+        )
 
     filtered_errors = [error for error in errors if _error_state_supported_by_query(error, text)]
     if len(filtered_errors) != len(errors):
@@ -913,6 +1594,7 @@ def _apply_domain_specific_enrichment(
 
     _apply_command_alias_enrichment(
         lowered_query=lowered,
+        classification=classification,
         objects=objects,
         commands=commands,
         command_families=command_families,
@@ -1007,9 +1689,10 @@ def _apply_domain_specific_enrichment(
         confidence["domain"] = max(confidence.get("domain", 0.0), 0.92)
         confidence["execution_target"] = max(confidence.get("execution_target", 0.0), 0.9)
 
-    if "imagepullbackoff" in lowered:
-        if not classification.get("domain"):
-            classification["domain"] = "registry"
+    signal_text = f"{lowered} {normalized_query.lower()}"
+    if "imagepullbackoff" in signal_text or "errimagepull" in signal_text:
+        classification["domain"] = "registry"
+        classification["domain_filter_values"] = ("registry", "troubleshooting")
         classification["book_slug_candidates"] = _tuple_append(
             classification.get("book_slug_candidates", ()),
             "images",
@@ -1047,7 +1730,7 @@ def _apply_domain_specific_enrichment(
         confidence["objects"] = max(confidence.get("objects", 0.0), 0.94)
         confidence["error_states"] = max(confidence.get("error_states", 0.0), 0.95)
 
-    if classification.get("domain") == "troubleshooting" and "imagepullbackoff" in lowered:
+    if classification.get("domain") == "troubleshooting" and "imagepullbackoff" in signal_text:
         classification["domain"] = "registry"
         classification["domain_filter_values"] = ("registry", "troubleshooting")
         confidence["domain"] = max(confidence.get("domain", 0.0), 0.88)
@@ -1076,6 +1759,7 @@ def _apply_domain_specific_enrichment(
 def _apply_command_alias_enrichment(
     *,
     lowered_query: str,
+    classification: dict[str, Any],
     objects: list[str],
     commands: list[str],
     command_families: list[str],
@@ -1088,6 +1772,13 @@ def _apply_command_alias_enrichment(
         aliases = tuple(str(item).casefold() for item in rule.get("aliases", ()) if str(item).strip())
         if not aliases or not any(alias in lowered_query for alias in aliases):
             continue
+        domain = str(rule.get("domain") or "").strip()
+        if (
+            domain == "security"
+            and classification.get("domain") == "registry"
+            and any(token in lowered_query for token in ("imagepullbackoff", "errimagepull"))
+        ):
+            continue
         _append(objects, *(str(item) for item in rule.get("objects", ()) if str(item).strip()))
         _append(commands, *(str(item) for item in rule.get("commands", ()) if str(item).strip()))
         _append(
@@ -1097,6 +1788,19 @@ def _apply_command_alias_enrichment(
         _append(primary_topics, *(str(item) for item in rule.get("primary_topics", ()) if str(item).strip()))
         _append(intent_labels, "command_lookup", "check_status")
         _append(answer_shapes, "command", "checklist")
+        if domain in _ALLOWED_DOMAINS:
+            classification["domain"] = domain
+            classification["domain_filter_values"] = _tuple_append(
+                classification.get("domain_filter_values", ()),
+                domain,
+            )
+            confidence["domain"] = max(confidence.get("domain", 0.0), float(rule.get("domain_confidence", 0.9)))
+        book_slugs = tuple(str(item) for item in rule.get("book_slug_candidates", ()) if str(item).strip())
+        if book_slugs:
+            classification["book_slug_candidates"] = _tuple_append(
+                classification.get("book_slug_candidates", ()),
+                *book_slugs,
+            )
         confidence["commands"] = max(confidence.get("commands", 0.0), 0.9)
         confidence["intent_labels"] = max(confidence.get("intent_labels", 0.0), 0.88)
         confidence["answer_shapes"] = max(confidence.get("answer_shapes", 0.0), 0.84)
