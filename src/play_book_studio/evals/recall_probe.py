@@ -74,3 +74,27 @@ def probe_case(*, bm25_index, vector_retriever, case: dict, candidate_k: int = 4
         "pass_at_20": rrf_rank is not None and rrf_rank <= 20,
         "vector_error": vector_error,
     }
+
+
+def summarize_probe_results(results: list[dict]) -> dict:
+    """Summarize stage-1 probe rows into recall and rank metrics."""
+    total = len(results)
+    if total == 0:
+        return {
+            "case_count": 0,
+            "recall_at_8": 0.0,
+            "recall_at_20": 0.0,
+            "mrr": 0.0,
+            "fail_ids": [],
+        }
+
+    pass_at_8 = sum(1 for row in results if row.get("pass_at_8"))
+    pass_at_20 = sum(1 for row in results if row.get("pass_at_20"))
+    reciprocal_rank_sum = sum(1.0 / row["rrf_rank"] for row in results if row.get("rrf_rank"))
+    return {
+        "case_count": total,
+        "recall_at_8": round(pass_at_8 / total, 4),
+        "recall_at_20": round(pass_at_20 / total, 4),
+        "mrr": round(reciprocal_rank_sum / total, 4),
+        "fail_ids": [row.get("id") for row in results if not row.get("pass_at_8")],
+    }
