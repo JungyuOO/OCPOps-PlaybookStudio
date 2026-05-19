@@ -525,6 +525,46 @@ function uploadStageTone(status: string): 'running' | 'done' | 'warning' | 'fail
   return 'idle';
 }
 
+function uploadStageStateFromEvents(
+  events: UploadIngestStreamStageEvent[],
+  stage: UserUploadStage,
+): 'running' | 'done' | 'warning' | 'failed' | 'idle' {
+  let state: 'running' | 'done' | 'warning' | 'failed' | 'idle' = 'idle';
+  events.forEach((event) => {
+    if (event.stage !== stage) return;
+    if (event.status === 'failed') {
+      state = 'failed';
+      return;
+    }
+    if (event.status === 'warning') {
+      if (state !== 'failed') state = 'warning';
+      return;
+    }
+    if (event.status === 'done' || event.status === 'duplicate' || event.status === 'skipped') {
+      if (state !== 'failed') state = 'done';
+      return;
+    }
+    if (event.status === 'progress') {
+      const total = Number(event.progress_total || 0);
+      const current = Number(event.progress_current || 0);
+      if (Number.isFinite(total) && total > 0 && Number.isFinite(current) && current >= total) {
+        if (state !== 'failed') state = 'done';
+      } else if (state !== 'failed') {
+        state = 'running';
+      }
+      return;
+    }
+    if (event.status === 'running') {
+      if (state !== 'failed') state = 'running';
+      return;
+    }
+    if (event.status === 'info' && state === 'idle') {
+      state = 'running';
+    }
+  });
+  return state;
+}
+
 function uploadProgressTaskLabel(taskKind: string, stage: string): string {
   switch (taskKind) {
     case 'image_ocr': return '이미지 OCR/설명';
@@ -1172,12 +1212,9 @@ const PlaybookLibraryPage: React.FC = () => {
     const stageIndex = pipelineStage === 'error'
       ? -1
       : USER_UPLOAD_STAGE_ORDER.indexOf(pipelineStage as UserUploadStage);
-    const eventByStage = new Map<string, UploadIngestStreamStageEvent>();
-    uploadStageEvents.forEach((event) => eventByStage.set(event.stage, event));
-
     steps.forEach((step, i) => {
       const stepName = USER_UPLOAD_STAGE_ORDER[i];
-      const state = stepName ? uploadStageTone(eventByStage.get(stepName)?.status || '') : 'idle';
+      const state = stepName ? uploadStageStateFromEvents(uploadStageEvents, stepName) : 'idle';
       step.classList.toggle('active', i === stageIndex);
       step.classList.toggle('completed', state === 'done');
       step.classList.toggle('final', stepName === 'ready' && state === 'done');
@@ -1185,7 +1222,7 @@ const PlaybookLibraryPage: React.FC = () => {
 
     connectors.forEach((conn, i) => {
       const previousName = USER_UPLOAD_STAGE_ORDER[i];
-      const previousState = previousName ? uploadStageTone(eventByStage.get(previousName)?.status || '') : 'idle';
+      const previousState = previousName ? uploadStageStateFromEvents(uploadStageEvents, previousName) : 'idle';
       conn.classList.toggle('filled', previousState === 'done');
       conn.classList.toggle('flowing', i === stageIndex - 1);
     });
@@ -1914,10 +1951,8 @@ const PlaybookLibraryPage: React.FC = () => {
 
   const uploadStepState = (stage: UserUploadStage, index: number): 'idle' | 'running' | 'done' | 'warning' | 'failed' => {
     void index;
-    const event = latestUploadStageByName.get(stage);
-    if (event) {
-      return uploadStageTone(event.status);
-    }
+    const state = uploadStageStateFromEvents(uploadStageEvents, stage);
+    if (state !== 'idle') return state;
     if (pipelineStage === 'error') return 'failed';
     return 'idle';
   };
@@ -4083,16 +4118,20 @@ const PlaybookLibraryPage: React.FC = () => {
 
                   <div className="upload-report-timeline">
                     {USER_UPLOAD_PIPELINE_STEPS.map((step) => {
-                      const event = (uploadReportViewer.report?.stages ?? [])
+                      const stageEvents = (uploadReportViewer.report?.stages ?? [])
+                        .filter((item) => item.stage === step.stage);
+                      const event = stageEvents
                         .filter((item) => item.stage === step.stage)
                         .slice(-1)[0];
                       const status = event?.status || 'not_recorded';
+                      const stageState = uploadStageStateFromEvents(stageEvents, step.stage);
+                      const labelStatus = stageState === 'done' ? 'done' : status;
                       return (
-                        <div className={`upload-report-stage upload-report-stage--${uploadStageTone(status)}`} key={step.stage}>
+                        <div className={`upload-report-stage upload-report-stage--${stageState}`} key={step.stage}>
                           <div className="upload-report-stage-head">
                             <span>{step.badge}</span>
                             <strong>{step.title}</strong>
-                            <em>{uploadStageStatusLabel(status)}</em>
+                            <em>{uploadStageStatusLabel(labelStatus)}</em>
                           </div>
                           <p>{event?.message || '저장된 단계 이벤트가 없습니다.'}</p>
                           <div className="upload-report-stage-meta">

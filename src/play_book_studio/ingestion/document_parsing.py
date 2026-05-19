@@ -38,7 +38,7 @@ DocumentFormat = Literal[
 ]
 ParseStatus = Literal["parsed", "staged", "failed"]
 BlockType = Literal["heading", "paragraph", "table", "code", "image"]
-PdfLayoutBlockKind = Literal["heading", "paragraph", "table", "code"]
+PdfLayoutBlockKind = Literal["heading", "paragraph", "table", "code", "image"]
 
 
 MARKDOWN_FORMATS = {"md", "asciidoc"}
@@ -1218,7 +1218,7 @@ def _parse_pdf_layout_blocks_source(text: str) -> list[PdfLayoutBlock] | None:
         raw_bbox = payload.get("bbox") if isinstance(payload, dict) else None
         bbox_values = raw_bbox if isinstance(raw_bbox, list) and len(raw_bbox) == 4 else [0, 0, 0, 0]
         kind = str(payload.get("kind") or "paragraph") if isinstance(payload, dict) else "paragraph"
-        if kind not in {"heading", "paragraph", "table", "code"}:
+        if kind not in {"heading", "paragraph", "table", "code", "image"}:
             kind = "paragraph"
         blocks.append(
             PdfLayoutBlock(
@@ -1264,6 +1264,11 @@ def _pdf_layout_blocks_to_markdown(blocks: list[PdfLayoutBlock], *, title: str, 
         text = str(block.text or "").strip("\n")
         if not text.strip():
             continue
+        if block.kind == "image":
+            append_blank()
+            output.append(text.strip())
+            output.append("")
+            continue
         if block.kind == "table":
             append_blank()
             output.append(text.strip())
@@ -1308,10 +1313,107 @@ def _pdf_layout_blocks_to_markdown(blocks: list[PdfLayoutBlock], *, title: str, 
     return "\n".join(output).strip()
 
 
-def _pdf_page_text_to_markdown(text: str, *, title: str, page_index: int) -> str:
+def _pdf_asset_bbox(asset: DocumentAsset) -> tuple[float, float, float, float] | None:
+    metadata = asset.metadata if isinstance(asset.metadata, dict) else {}
+    raw_bbox = metadata.get("pdf_bbox")
+    if not isinstance(raw_bbox, (list, tuple)) or len(raw_bbox) != 4:
+        return None
+    try:
+        return tuple(float(value) for value in raw_bbox)  # type: ignore[return-value]
+    except (TypeError, ValueError):
+        return None
+
+
+def _pdf_image_layout_blocks(assets: tuple[DocumentAsset, ...]) -> tuple[PdfLayoutBlock, ...]:
+    blocks: list[PdfLayoutBlock] = []
+    for asset in assets:
+        bbox = _pdf_asset_bbox(asset)
+        if bbox is None:
+            continue
+        blocks.append(
+            PdfLayoutBlock(
+                kind="image",
+                text=_image_markdown(asset),
+                bbox=bbox,
+                confidence=0.98,
+                reason="pymupdf_image_bbox",
+            )
+        )
+    return tuple(blocks)
+
+
+def _pdf_opening_fence_language(line: str) -> str | None:
+    stripped = str(line or "").strip()
+    if not stripped.startswith("```") or stripped == "```":
+        return None
+    return stripped[3:].strip().lower()
+
+
+def _merge_continuation_code_fences(markdown: str) -> str:
+    lines = str(markdown or "").splitlines()
+    output: list[str] = []
+    active_language = ""
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        opening_language = _pdf_opening_fence_language(line)
+        if opening_language is not None:
+            active_language = opening_language
+            output.append(line)
+            index += 1
+            continue
+        if line.strip() != "```" or not active_language:
+            output.append(line)
+            index += 1
+            continue
+
+        lookahead = index + 1
+        while lookahead < len(lines) and not lines[lookahead].strip():
+            lookahead += 1
+        page_marker_index = -1
+        if lookahead < len(lines) and re.fullmatch(r"<!--\s*page:\s*\d+\s*-->", lines[lookahead].strip()):
+            page_marker_index = lookahead
+            lookahead += 1
+            while lookahead < len(lines) and not lines[lookahead].strip():
+                lookahead += 1
+        next_language = _pdf_opening_fence_language(lines[lookahead]) if lookahead < len(lines) else None
+        if next_language is not None and next_language == active_language and page_marker_index >= 0:
+            if output and output[-1] != "":
+                output.append("")
+            index = lookahead + 1
+            continue
+
+        output.append(line)
+        active_language = ""
+        index += 1
+    return "\n".join(output).strip()
+
+
+def _pdf_page_text_to_markdown(
+    text: str,
+    *,
+    title: str,
+    page_index: int,
+    assets: tuple[DocumentAsset, ...] = (),
+) -> str:
     layout_blocks = _parse_pdf_layout_blocks_source(text)
     if layout_blocks is not None:
-        return _pdf_layout_blocks_to_markdown(layout_blocks, title=title, page_index=page_index)
+        image_blocks = _pdf_image_layout_blocks(assets)
+        placed_asset_ids = {
+            block.text.split("asset://", 1)[1].split(")", 1)[0]
+            for block in image_blocks
+            if "asset://" in block.text
+        }
+        if image_blocks:
+            layout_blocks = [*layout_blocks, *image_blocks]
+            layout_blocks.sort(key=lambda block: (round(block.bbox[1], 1), round(block.bbox[0], 1)))
+            layout_blocks = _merge_pdf_layout_blocks(layout_blocks)
+        markdown = _pdf_layout_blocks_to_markdown(layout_blocks, title=title, page_index=page_index)
+        unplaced_assets = tuple(asset for asset in assets if asset.asset_id not in placed_asset_ids)
+        if unplaced_assets:
+            asset_markdown = "\n\n".join(_image_markdown(asset) for asset in unplaced_assets)
+            markdown = f"{markdown}\n\n{asset_markdown}".strip() if markdown else asset_markdown
+        return markdown
 
     page_lines: list[str] = []
     for raw_line in str(text or "").splitlines():
@@ -1401,7 +1503,11 @@ def _pdf_page_text_to_markdown(text: str, *, title: str, page_index: int) -> str
         output.append(clean_line)
         previous_was_heading = False
     close_code()
-    return "\n".join(output).strip()
+    markdown = "\n".join(output).strip()
+    if assets:
+        asset_markdown = "\n\n".join(_image_markdown(asset) for asset in assets)
+        markdown = f"{markdown}\n\n{asset_markdown}".strip() if markdown else asset_markdown
+    return markdown
 
 
 def _pdf_pages_to_markdown(pages: list[str], stem: str, assets: tuple[DocumentAsset, ...] = ()) -> str:
@@ -1413,13 +1519,19 @@ def _pdf_pages_to_markdown(pages: list[str], stem: str, assets: tuple[DocumentAs
             continue
         assets_by_page.setdefault(int(asset.page_number), []).append(asset)
     for page_index, text in enumerate(pages, start=1):
-        page_markdown = _pdf_page_text_to_markdown(text, title=title, page_index=page_index)
+        page_assets = tuple(assets_by_page.get(page_index, []))
+        page_markdown = _pdf_page_text_to_markdown(
+            text,
+            title=title,
+            page_index=page_index,
+            assets=page_assets,
+        )
         if page_markdown:
             lines.extend(["", f"<!-- page: {page_index} -->", "", page_markdown])
-        for asset in assets_by_page.get(page_index, []):
-            lines.extend(["", _image_markdown(asset)])
     joined = "\n".join(lines).strip()
-    return "" if joined == f"# {title}" else joined
+    if joined == f"# {title}":
+        return ""
+    return _merge_continuation_code_fences(joined)
 
 
 def _pdf_rects_overlap(first: tuple[float, float, float, float], second: tuple[float, float, float, float]) -> bool:
@@ -1485,12 +1597,13 @@ def _pdf_layout_block_language(text: str) -> str:
     first_line = lines[0] if lines else ""
     if not first_line:
         return ""
+    yamlish_count = sum(1 for line in lines if _pdf_line_looks_yaml_code(line))
+    if yamlish_count >= 2 or _pdf_line_looks_yaml_code(first_line):
+        return "yaml"
     if any(str(line).strip().startswith("$env:") for line in lines):
         return "powershell"
     if any(_PDF_SHELL_COMMAND_RE.match(str(line).strip()) for line in lines):
         return "bash"
-    if any(_pdf_line_looks_yaml_code(line) for line in lines):
-        return "yaml"
     return _pdf_code_language_for_line(first_line)
 
 
@@ -1742,6 +1855,14 @@ def _extract_pdf_image_assets_with_pymupdf(path: Path, *, source_sha256: str) ->
                     ext = str(image.get("ext") or "png").lower().lstrip(".") or "png"
                     if not content or width < 48 or height < 48:
                         continue
+                    bbox: list[float] = []
+                    try:
+                        rects = list(page.get_image_rects(xref) or [])
+                        if rects:
+                            rect = rects[0]
+                            bbox = [float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1)]
+                    except Exception:  # noqa: BLE001
+                        bbox = []
                     media_name = f"pdf-page-{page_number:03d}-image-{image_index:02d}.{ext}"
                     sha256 = hashlib.sha256(content).hexdigest()
                     asset_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{path.name}:{source_sha256}:pdf:{page_number}:{xref}:{sha256}"))
@@ -1760,6 +1881,7 @@ def _extract_pdf_image_assets_with_pymupdf(path: Path, *, source_sha256: str) ->
                                 "pdf_image_index": image_index,
                                 "width": width,
                                 "height": height,
+                                "pdf_bbox": bbox,
                             },
                         )
                     )

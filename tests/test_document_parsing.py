@@ -10,8 +10,10 @@ from play_book_studio.ingestion.document_parsing import (
     PdfLayoutBlock,
     _merge_pdf_layout_blocks,
     _pdf_classify_text_layout_block,
+    _pdf_layout_block_language,
     _pdf_layout_blocks_to_markdown,
     _pdf_pages_to_markdown,
+    _serialize_pdf_layout_blocks,
     build_document_chunks,
     detect_document_format,
     parse_upload_document,
@@ -398,6 +400,75 @@ def test_pdf_layout_classifier_keeps_urls_as_text_and_literal_hashes_as_code():
         "```"
     ) in markdown
     assert "\n## 예 demo-token-2csgx\n\n" not in markdown
+
+
+def test_pdf_layout_places_images_by_bbox_and_merges_code_across_pages():
+    asset = DocumentAsset(
+        asset_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        asset_type="image",
+        filename="page-001-image-01.png",
+        mime_type="image/png",
+        sha256="asset-sha",
+        page_number=1,
+        metadata={"pdf_bbox": [72, 72, 524, 295]},
+    )
+    page_1 = _serialize_pdf_layout_blocks(
+        [
+            PdfLayoutBlock(
+                kind="heading",
+                text="CI 순서",
+                bbox=(72, 48, 180, 92),
+                font_size=30,
+            ),
+            PdfLayoutBlock(
+                kind="heading",
+                text="4. git source에 파이프라인 yaml 구성",
+                bbox=(72, 343, 314, 365),
+                font_size=16,
+            ),
+            PdfLayoutBlock(
+                kind="code",
+                text="apiVersion: tekton.dev/v1\nkind: PipelineRun\nmetadata:\n  annotations:",
+                bbox=(127, 659, 481, 763),
+                font_size=12,
+                language="yaml",
+            ),
+        ]
+    )
+    page_2 = _serialize_pdf_layout_blocks(
+        [
+            PdfLayoutBlock(
+                kind="code",
+                text='pipelinesascode.tekton.dev/on-target-branch: "[main]"\nspec:\n  params:',
+                bbox=(127, 73, 519, 753),
+                font_size=12,
+                language="yaml",
+            ),
+        ]
+    )
+
+    markdown = _pdf_pages_to_markdown([page_1, page_2], "CI 순서", assets=(asset,))
+
+    assert markdown.index("![page-001-image-01.png]") < markdown.index("## 4. git source에 파이프라인 yaml 구성")
+    assert markdown.count("```yaml") == 1
+    assert "kind: PipelineRun\nmetadata:" in markdown
+    assert 'pipelinesascode.tekton.dev/on-target-branch: "[main]"' in markdown
+    assert "```\n\n<!-- page: 2 -->\n\n```yaml" not in markdown
+
+
+def test_pdf_layout_language_prefers_yaml_for_pipeline_blocks_with_shell_script_lines():
+    assert _pdf_layout_block_language(
+        "\n".join(
+            [
+                "workspace: source",
+                "- name: update-gitops",
+                "  params:",
+                "  - name: GIT_SCRIPT",
+                "    value: |",
+                "      git clone $(params.gitops_repo_url) gitops-repo",
+            ]
+        )
+    ) == "yaml"
 
 
 def test_docx_default_pipeline_extracts_markdown_blocks_and_chunks():

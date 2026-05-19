@@ -864,16 +864,6 @@ def build_upload_ingest_response(
             visibility=visibility,
             source_scope=source_scope,
         )
-        timings["persist_ms"] = int((time.perf_counter() - persist_started_at) * 1000)
-        emit(
-            "persist",
-            "done",
-            "PostgreSQL 저장이 완료되었습니다.",
-            duration_ms=timings["persist_ms"],
-            document_source_id=persisted.document_source_id,
-            block_count=len(persisted.block_ids),
-            chunk_count=len(persisted.chunk_ids),
-        )
         result["repository_id"] = persisted.repository_id
         result["persisted"] = {
             "document_source_id": persisted.document_source_id,
@@ -920,6 +910,17 @@ def build_upload_ingest_response(
                 "info",
                 f"이미지 에셋 파일 저장: {asset_manifest.get('written_count', 0)}/{asset_manifest.get('image_count', 0)}개",
             )
+        timings["persist_ms"] = int((time.perf_counter() - persist_started_at) * 1000)
+        emit(
+            "persist",
+            "done",
+            "PostgreSQL 및 이미지 파일 저장이 완료되었습니다.",
+            duration_ms=timings["persist_ms"],
+            document_source_id=persisted.document_source_id,
+            block_count=len(persisted.block_ids),
+            asset_count=len(persisted.asset_ids),
+            chunk_count=len(persisted.chunk_ids),
+        )
         if _bool_payload(payload.get("index"), default=False):
             index_started_at = time.perf_counter()
             emit("index", "running", "Qdrant 검색 인덱스를 생성하는 중입니다.")
