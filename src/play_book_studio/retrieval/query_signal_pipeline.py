@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import json
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -45,6 +46,7 @@ class QuerySignalPlan:
     confidence: dict[str, float]
     embedding_queries: tuple[str, ...]
     metadata_filter: dict[str, Any]
+    debug: dict[str, Any]
 
     @property
     def vector_query(self) -> str:
@@ -61,6 +63,7 @@ class QuerySignalPlan:
             "embedding_queries": list(self.embedding_queries),
             "metadata_filter": self.metadata_filter,
             "vector_query": self.vector_query,
+            "debug": self.debug,
         }
 
 
@@ -75,6 +78,13 @@ _NORMALIZATION_RULES: tuple[tuple[str, str, str], ...] = (
     (r"노트\s*레디|노트레디", "NotReady", "error_alias"),
     (r"\bnot\s+ready\b", "NotReady", "error_alias"),
     (r"\bimage\s+pull\s+back\s+off\b", "ImagePullBackOff", "error_alias"),
+    (
+        r"(?<![A-Za-z])peding(?![A-Za-z])|"
+        r"(?<![A-Za-z])pendding(?![A-Za-z])|"
+        r"(?<![A-Za-z])pendig(?![A-Za-z])",
+        "Pending",
+        "error_alias",
+    ),
 )
 
 _ALLOWED_DOMAINS = {
@@ -158,6 +168,34 @@ _ALLOWED_COMMAND_FAMILIES = {
     "etcdctl",
     "cluster_backup",
 }
+_COMMAND_ALIAS_RULES: tuple[dict[str, Any], ...] = (
+    {
+        "name": "oc_login",
+        "aliases": ("oc login", "login", "로그인", "클러스터 로그인", "ocp 로그인", "openshift 로그인"),
+        "commands": ("oc login -u <username>", "oc whoami"),
+        "command_families": ("oc_get",),
+        "objects": (),
+        "primary_topics": ("OpenShift CLI login", "cluster login", "authentication"),
+    },
+    {
+        "name": "pod_disruption_budget",
+        "aliases": (
+            "poddisruptionbudget",
+            "pod disruption budget",
+            "pdb",
+            "pod 중단 예산",
+            "pod 중단",
+            "pdb 확인",
+            "pod 중단 예산",
+            "파드 중단 예산",
+            "중단 예산",
+        ),
+        "commands": ("oc get poddisruptionbudget --all-namespaces",),
+        "command_families": ("oc_get",),
+        "objects": ("PodDisruptionBudget", "PDB", "Pod"),
+        "primary_topics": ("PodDisruptionBudget", "pod disruption budget", "all namespaces"),
+    },
+)
 
 
 def build_query_signal_plan(
@@ -202,6 +240,13 @@ def _build_rule_based_query_signal_plan(
         search_signals=search_signals,
         confidence=confidence,
     )
+    _prune_query_signal_noise(
+        raw_query=raw_query,
+        normalized_query=normalized_query,
+        classification=classification,
+        search_signals=search_signals,
+        confidence=confidence,
+    )
 
     normalized_signals = {
         key: tuple(dict.fromkeys(item for item in values if str(item or "").strip()))
@@ -216,8 +261,7 @@ def _build_rule_based_query_signal_plan(
     metadata_filter = _metadata_filter(
         classification=classification,
         confidence=confidence,
-        ocp_version=ocp_version,
-        locale=locale,
+        search_signals=normalized_signals,
     )
 
     return QuerySignalPlan(
@@ -229,6 +273,11 @@ def _build_rule_based_query_signal_plan(
         confidence=confidence,
         embedding_queries=embedding_queries,
         metadata_filter=metadata_filter,
+        debug={
+            "mode": "rule_based",
+            "llm_enabled": False,
+            "raw_query": raw_query,
+        },
     )
 
 
@@ -240,30 +289,119 @@ def _build_llm_query_signal_plan(
     ocp_version: str,
     locale: str,
 ) -> QuerySignalPlan:
+    total_started_at = time.perf_counter()
+    timeline_origin = total_started_at
+
+    def _elapsed_ms() -> float:
+        return round((time.perf_counter() - timeline_origin) * 1000, 1)
+
+    timeline_ms: dict[str, float] = {
+        "rewrite_start": 0.0,
+        "messages_build_start": 0.0,
+    }
+    messages_started_at = time.perf_counter()
+    messages = _query_signal_messages(raw_query=raw_query, ocp_version=ocp_version, locale=locale)
+    messages_ms = round((time.perf_counter() - messages_started_at) * 1000, 1)
+    timeline_ms["messages_build_done"] = _elapsed_ms()
+    timeline_ms["llm_request_start"] = _elapsed_ms()
+    llm_started_at = time.perf_counter()
+    query_signal_max_tokens = 300
     content = llm_client.generate(
-        _query_signal_messages(raw_query=raw_query, ocp_version=ocp_version, locale=locale),
-        max_tokens=900,
+        messages,
+        max_tokens=query_signal_max_tokens,
     )
-    payload = _extract_json_object(content)
-    return _validated_llm_plan(
+    llm_runtime_meta = (
+        llm_client.runtime_metadata()
+        if hasattr(llm_client, "runtime_metadata")
+        else {}
+    )
+    llm_ms = round((time.perf_counter() - llm_started_at) * 1000, 1)
+    timeline_ms["llm_response_received"] = _elapsed_ms()
+    timeline_ms["json_parse_start"] = _elapsed_ms()
+    parse_started_at = time.perf_counter()
+    payload = _expand_minimal_query_signal_payload(
+        _extract_json_object(content),
+        fallback=fallback,
+        ocp_version=ocp_version,
+        locale=locale,
+    )
+    parse_ms = round((time.perf_counter() - parse_started_at) * 1000, 1)
+    timeline_ms["json_parse_done"] = _elapsed_ms()
+    timeline_ms["validation_start"] = _elapsed_ms()
+    validate_started_at = time.perf_counter()
+    plan = _validated_llm_plan(
         raw_query=raw_query,
         payload=payload,
         fallback=fallback,
         ocp_version=ocp_version,
         locale=locale,
     )
+    validate_ms = round((time.perf_counter() - validate_started_at) * 1000, 1)
+    total_ms = round((time.perf_counter() - total_started_at) * 1000, 1)
+    timeline_ms["validation_done"] = _elapsed_ms()
+    timeline_ms["rewrite_done"] = total_ms
+    debug = {
+        "mode": "llm",
+        "llm_enabled": True,
+        "raw_query": raw_query,
+        "messages": messages,
+        "request": {
+            "max_tokens": query_signal_max_tokens,
+            "message_count": len(messages),
+            "prompt_chars": sum(len(str(message.get("content") or "")) for message in messages),
+        },
+        "llm_runtime": llm_runtime_meta,
+        "llm_http_debug": llm_runtime_meta.get("last_http_debug", {}),
+        "raw_response": content,
+        "parsed_payload": payload,
+        "validated_plan": {
+            "normalized_query": plan.normalized_query,
+            "correction_notes": [item.to_dict() for item in plan.correction_notes],
+            "classification": dict(plan.classification),
+            "search_signals": {key: list(value) for key, value in plan.search_signals.items()},
+            "confidence": dict(plan.confidence),
+            "embedding_queries": list(plan.embedding_queries),
+            "metadata_filter": plan.metadata_filter,
+        },
+        "timings_ms": {
+            "messages_build": messages_ms,
+            "llm_generate": llm_ms,
+            "json_parse": parse_ms,
+            "validation": validate_ms,
+            "total": total_ms,
+        },
+        "timeline_ms": timeline_ms,
+    }
+    return QuerySignalPlan(
+        raw_query=plan.raw_query,
+        normalized_query=plan.normalized_query,
+        correction_notes=plan.correction_notes,
+        classification=plan.classification,
+        search_signals=plan.search_signals,
+        confidence=plan.confidence,
+        embedding_queries=plan.embedding_queries,
+        metadata_filter=plan.metadata_filter,
+        debug=debug,
+    )
 
 
 def _query_signal_messages(*, raw_query: str, ocp_version: str, locale: str) -> list[dict[str, str]]:
+    domains = ",".join(sorted(_ALLOWED_DOMAINS))
+    intents = ",".join(sorted(_ALLOWED_INTENT_LABELS))
+    command_families = ",".join(sorted(_ALLOWED_COMMAND_FAMILIES))
     return [
         {
             "role": "system",
             "content": (
-                "You extract retrieval signals for an OpenShift RAG pipeline. "
-                "Return only one JSON object. Do not answer the user. "
-                "Normalize typos and aliases, classify the question, extract search signals, "
-                "and create 2-3 embedding search queries. "
-                "Use only allowed concise labels. Do not invent platform or commands when uncertain."
+                "Extract minimal OpenShift RAG retrieval signals. Return JSON only. "
+                "No markdown, no explanation, no user answer. "
+                "Output exactly these keys: normalized_query, domain, objects, "
+                "error_states, intent_labels, command_families, commands, queries, confidence. "
+                "Keep strings short. Arrays max 3. queries exactly 2. "
+                "If commands are known, include exact commands in normalized_query and each query. "
+                f"domains={domains}. intents={intents}. command_families={command_families}. "
+                "Use resource domain for troubleshooting: Node=>node_ops, PVC=>storage, "
+                "ImagePullBackOff=>registry."
             ),
         },
         {
@@ -271,35 +409,7 @@ def _query_signal_messages(*, raw_query: str, ocp_version: str, locale: str) -> 
             "content": json.dumps(
                 {
                     "query": raw_query,
-                    "fixed_context": {"ocp_version": ocp_version, "locale": locale},
-                    "domain_policy": (
-                        "classification.domain is the document/search area for metadata filtering, "
-                        "not the user's intent. If a troubleshooting question has a clear target object, "
-                        "prefer the object-specific domain and put troubleshooting in intent_labels. "
-                        "Examples: Node NotReady -> domain=node_ops with intent_labels=[troubleshoot, check_status]; "
-                        "PVC Pending -> domain=storage with intent_labels=[troubleshoot, check_status]; "
-                        "ImagePullBackOff -> domain=registry with intent_labels=[troubleshoot, check_status]."
-                    ),
-                    "allowed_domains": sorted(_ALLOWED_DOMAINS),
-                    "allowed_platforms": sorted(_ALLOWED_PLATFORMS),
-                    "allowed_intent_labels": sorted(_ALLOWED_INTENT_LABELS),
-                    "allowed_answer_shapes": sorted(_ALLOWED_ANSWER_SHAPES),
-                    "allowed_command_families": sorted(_ALLOWED_COMMAND_FAMILIES),
-                    "required_json_shape": {
-                        "normalized_query": "string",
-                        "correction_notes": [{"type": "typo|alias|spacing|object_alias|error_alias", "from": "string", "to": "string"}],
-                        "classification": {
-                            "domain": "allowed domain or empty string",
-                            "book_slug_candidates": ["string"],
-                            "domain_filter_values": ["optional allowed domains when one query should scope multiple document areas"],
-                            "platform": "allowed platform",
-                            "ocp_version": ocp_version,
-                            "locale": locale,
-                        },
-                        "search_signals": {key: ["string"] for key in _SEARCH_SIGNAL_KEYS},
-                        "confidence": {"domain": 0.0, "objects": 0.0, "commands": 0.0},
-                        "embedding_queries": ["2-3 short retrieval queries, max 300 chars each"],
-                    },
+                    "context": {"ocp_version": ocp_version, "locale": locale},
                 },
                 ensure_ascii=False,
             ),
@@ -323,6 +433,60 @@ def _extract_json_object(content: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("query signal LLM response must be a JSON object")
     return payload
+
+
+def _expand_minimal_query_signal_payload(
+    payload: dict[str, Any],
+    *,
+    fallback: QuerySignalPlan,
+    ocp_version: str,
+    locale: str,
+) -> dict[str, Any]:
+    if isinstance(payload.get("classification"), dict) or isinstance(payload.get("search_signals"), dict):
+        return payload
+
+    domain = _clean_text(payload.get("domain"), max_chars=40)
+    domain_values = payload.get("domain_filter_values") or payload.get("domains") or ([domain] if domain else [])
+    commands = payload.get("commands") or []
+    objects = payload.get("objects") or []
+    error_states = payload.get("error_states") or []
+    normalized_query = _clean_text(payload.get("normalized_query"), fallback.normalized_query, max_chars=180)
+    queries = list(_string_tuple(payload.get("queries") or payload.get("embedding_queries") or [], max_items=2, max_chars=140))
+    confidence = payload.get("confidence") if isinstance(payload.get("confidence"), dict) else {}
+    if not confidence:
+        confidence = {
+            "domain": 0.9 if domain else 0.0,
+            "objects": 0.9 if payload.get("objects") else 0.0,
+            "commands": 0.9 if commands else 0.0,
+        }
+
+    return {
+        "normalized_query": normalized_query,
+        "correction_notes": payload.get("correction_notes") or [],
+        "classification": {
+            "domain": domain,
+            "book_slug_candidates": payload.get("book_slug_candidates") or [],
+            "domain_filter_values": domain_values,
+            "platform": payload.get("platform") or "any_platform",
+            "ocp_version": ocp_version,
+            "locale": locale,
+        },
+        "search_signals": {
+            "objects": objects,
+            "error_states": error_states,
+            "intent_labels": payload.get("intent_labels") or payload.get("intents") or [],
+            "answer_shapes": payload.get("answer_shapes") or (["command"] if commands else []),
+            "command_families": payload.get("command_families") or [],
+            "primary_topics": payload.get("primary_topics") or [],
+            "cluster_phase": payload.get("cluster_phase") or [],
+            "execution_target": payload.get("execution_target") or [],
+            "commands": commands,
+            "secondary_topics": payload.get("secondary_topics") or [],
+            "components": payload.get("components") or [],
+        },
+        "confidence": confidence,
+        "embedding_queries": queries,
+    }
 
 
 def _validated_llm_plan(
@@ -349,20 +513,27 @@ def _validated_llm_plan(
         search_signals=search_signals,
         confidence=confidence,
     )
+    _prune_query_signal_noise(
+        raw_query=raw_query,
+        normalized_query=normalized_query,
+        classification=classification,
+        search_signals=search_signals,
+        confidence=confidence,
+    )
     normalized_signals = {
         key: tuple(dict.fromkeys(item for item in values if str(item or "").strip()))
         for key, values in search_signals.items()
     }
-    embedding_queries = _validated_embedding_queries(
-        payload.get("embedding_queries"),
-        fallback=fallback.embedding_queries,
+    embedding_queries = _embedding_queries(
+        raw_query=raw_query,
         normalized_query=normalized_query,
+        baseline=fallback,
+        search_signals=normalized_signals,
     )
     metadata_filter = _metadata_filter(
         classification=classification,
         confidence=confidence,
-        ocp_version=ocp_version,
-        locale=locale,
+        search_signals=normalized_signals,
     )
     return QuerySignalPlan(
         raw_query=raw_query,
@@ -373,6 +544,11 @@ def _validated_llm_plan(
         confidence=confidence,
         embedding_queries=embedding_queries,
         metadata_filter=metadata_filter,
+        debug={
+            "mode": "llm_validated",
+            "llm_enabled": True,
+            "raw_query": raw_query,
+        },
     )
 
 
@@ -381,6 +557,198 @@ def _clean_text(value: Any, default: str = "", *, max_chars: int = 300) -> str:
     if not cleaned:
         cleaned = default
     return cleaned[:max_chars].strip()
+
+
+def _prune_query_signal_noise(
+    *,
+    raw_query: str,
+    normalized_query: str,
+    classification: dict[str, Any],
+    search_signals: dict[str, list[str]],
+    confidence: dict[str, float],
+) -> None:
+    text = str(raw_query or normalized_query or "").casefold()
+    errors = search_signals.setdefault("error_states", [])
+    commands = search_signals.setdefault("commands", [])
+    command_families = search_signals.setdefault("command_families", [])
+    intents = search_signals.setdefault("intent_labels", [])
+
+    filtered_errors = [error for error in errors if _error_state_supported_by_query(error, text)]
+    if len(filtered_errors) != len(errors):
+        search_signals["error_states"] = filtered_errors
+        if not filtered_errors:
+            confidence["error_states"] = 0.0
+            if "troubleshoot" in intents and not _looks_troubleshooting_query(text):
+                search_signals["intent_labels"] = [item for item in intents if item != "troubleshoot"]
+
+    filtered_commands = [command for command in commands if _command_supported_by_query(command, text)]
+    if len(filtered_commands) != len(commands):
+        search_signals["commands"] = filtered_commands
+        if not filtered_commands:
+            confidence["commands"] = 0.0
+
+    if not any("debug" in command.casefold() for command in search_signals.get("commands", [])):
+        search_signals["command_families"] = [family for family in command_families if family != "oc_debug"]
+
+    if _looks_pdb_query(text):
+        classification["domain"] = classification.get("domain") or "node_ops"
+        _append(search_signals.setdefault("objects", []), "PodDisruptionBudget", "PDB")
+        _append(search_signals.setdefault("commands", []), "oc get poddisruptionbudget --all-namespaces")
+        _append(search_signals.setdefault("command_families", []), "oc_get")
+        _append(search_signals.setdefault("intent_labels", []), "command_lookup", "check_status")
+        _append(search_signals.setdefault("answer_shapes", []), "command", "checklist")
+        confidence["commands"] = max(confidence.get("commands", 0.0), 0.92)
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
+    elif _looks_rbac_can_i_query(text):
+        classification["domain"] = "security"
+        _append(search_signals.setdefault("objects", []), "RoleBinding", "ClusterRoleBinding", "Pod")
+        _append(search_signals.setdefault("commands", []), "oc auth can-i get pods")
+        _append(search_signals.setdefault("command_families", []), "oc_get")
+        _append(search_signals.setdefault("intent_labels", []), "command_lookup", "check_status")
+        confidence["commands"] = max(confidence.get("commands", 0.0), 0.92)
+    elif _looks_ingresscontroller_query(text):
+        classification["domain"] = "networking"
+        _append(search_signals.setdefault("objects", []), "IngressController")
+        _append(search_signals.setdefault("commands", []), "oc get ingresscontroller")
+        _append(search_signals.setdefault("command_families", []), "oc_get")
+        _append(search_signals.setdefault("intent_labels", []), "command_lookup", "check_status")
+        confidence["commands"] = max(confidence.get("commands", 0.0), 0.9)
+    elif _looks_pod_on_node_query(text):
+        classification["domain"] = "node_ops"
+        search_signals["commands"] = [
+            command
+            for command in search_signals.get("commands", [])
+            if "get nodes" not in command.casefold() and "describe node" not in command.casefold()
+        ]
+        _append(search_signals.setdefault("objects", []), "Pod", "Node")
+        _append(search_signals.setdefault("commands", []), "oc get pods -o wide")
+        _append(search_signals.setdefault("command_families", []), "oc_get")
+        _append(search_signals.setdefault("intent_labels", []), "command_lookup", "check_status")
+        confidence["commands"] = max(confidence.get("commands", 0.0), 0.9)
+    elif _looks_node_detail_query(text):
+        classification["domain"] = "node_ops"
+        _append(search_signals.setdefault("objects", []), "Node")
+        _append(search_signals.setdefault("commands", []), "oc describe node <node-name>", "oc get nodes")
+        _append(search_signals.setdefault("command_families", []), "oc_describe", "oc_get")
+        _append(search_signals.setdefault("intent_labels", []), "command_lookup", "check_status")
+        _append(search_signals.setdefault("answer_shapes", []), "command", "checklist")
+        confidence["commands"] = max(confidence.get("commands", 0.0), 0.9)
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.9)
+    elif _looks_node_status_query(text):
+        classification["domain"] = "node_ops"
+        _append(search_signals.setdefault("objects", []), "Node")
+        _append(search_signals.setdefault("commands", []), "oc get nodes", "oc describe node <node-name>")
+        _append(search_signals.setdefault("command_families", []), "oc_get", "oc_describe")
+        _append(search_signals.setdefault("intent_labels", []), "command_lookup", "check_status")
+        _append(search_signals.setdefault("answer_shapes", []), "command", "checklist")
+        confidence["commands"] = max(confidence.get("commands", 0.0), 0.9)
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.9)
+
+
+def _error_state_supported_by_query(error_state: str, text: str) -> bool:
+    error = str(error_state or "").casefold()
+    if not error:
+        return False
+    if "notready" in error or error in {"ready", "not ready"}:
+        return any(
+            token in text
+            for token in ("notready", "not ready", "노트레디", "준비 안", "레디 안", "ready/notready")
+        )
+    if "crashloop" in error:
+        return any(token in text for token in ("crashloop", "crash loop", "crashloopbackoff"))
+    if "imagepull" in error or "errimagepull" in error:
+        return any(token in text for token in ("imagepull", "errimagepull", "이미지풀", "이미지 pull"))
+    if "pending" in error:
+        return any(token in text for token in ("pending", "펜딩", "대기"))
+    if "degraded" in error:
+        return "degraded" in text
+    return error in text
+
+
+def _command_supported_by_query(command: str, text: str) -> bool:
+    command_text = str(command or "").casefold()
+    if not command_text:
+        return False
+    if "debug" in command_text and not any(
+        token in text for token in ("debug", "디버그", "host", "chroot", "백업", "backup", "etcd", "복구")
+    ):
+        return False
+    if _looks_pdb_query(text):
+        return "pdb" in command_text or "poddisruptionbudget" in command_text
+    if _looks_rbac_can_i_query(text):
+        return "auth can-i" in command_text
+    if _looks_ingresscontroller_query(text):
+        return "ingresscontroller" in command_text
+    if _looks_pod_on_node_query(text) and ("get nodes" in command_text or "describe node" in command_text):
+        return False
+    return True
+
+
+def _looks_pdb_query(text: str) -> bool:
+    return any(
+        token in text
+        for token in (
+            "poddisruptionbudget",
+            "pod disruption budget",
+            "pdb",
+            "pod 중단 예산",
+            "pod 중단",
+            "파드 중단 예산",
+            "중단 예산",
+        )
+    )
+
+
+def _looks_rbac_can_i_query(text: str) -> bool:
+    return "auth can-i" in text or ("권한" in text and "get pods" in text)
+
+
+def _looks_ingresscontroller_query(text: str) -> bool:
+    return "ingresscontroller" in text or "ingress controller" in text
+
+
+def _looks_pod_on_node_query(text: str) -> bool:
+    return "pod" in text and any(token in text for token in ("node", "노드")) and any(
+        token in text for token in ("스케줄", "scheduled", "specific node", "특정 노드", "출력")
+    )
+
+
+def _looks_node_detail_query(text: str) -> bool:
+    return any(token in text for token in ("node", "노드")) and any(
+        token in text for token in ("describe", "자세", "상세", "세부", "detail")
+    )
+
+
+def _looks_node_status_query(text: str) -> bool:
+    return any(token in text for token in ("node", "nodes", "노드")) and any(
+        token in text for token in ("상태", "status", "명령", "command", "확인", "ready")
+    )
+
+
+def _looks_troubleshooting_query(text: str) -> bool:
+    return any(
+        token in text
+        for token in (
+            "trouble",
+            "장애",
+            "문제",
+            "실패",
+            "오류",
+            "에러",
+            "안됨",
+            "안 돼",
+            "failed",
+            "error",
+            "degraded",
+            "pending",
+            "crashloop",
+            "notready",
+            "not ready",
+            "노트레디",
+        )
+    )
 
 
 def _validated_corrections(value: Any) -> tuple[QueryCorrection, ...]:
@@ -470,6 +838,13 @@ def _validated_embedding_queries(
     normalized_query: str,
 ) -> tuple[str, ...]:
     queries = _string_tuple(value, (), max_items=3, max_chars=300)
+    queries = tuple(
+        dict.fromkeys(
+            query
+            for query in (normalized_query, *queries)
+            if str(query or "").strip()
+        )
+    )
     if not queries:
         queries = fallback
     if not queries:
@@ -535,6 +910,17 @@ def _apply_domain_specific_enrichment(
     cluster_phase = search_signals.setdefault("cluster_phase", [])
     execution_target = search_signals.setdefault("execution_target", [])
     components = search_signals.setdefault("components", [])
+
+    _apply_command_alias_enrichment(
+        lowered_query=lowered,
+        objects=objects,
+        commands=commands,
+        command_families=command_families,
+        intent_labels=intent_labels,
+        answer_shapes=answer_shapes,
+        primary_topics=primary_topics,
+        confidence=confidence,
+    )
 
     if route_http_headers:
         classification["domain"] = "networking"
@@ -687,6 +1073,37 @@ def _apply_domain_specific_enrichment(
         _append(components, "CSI Driver", "scheduler")
 
 
+def _apply_command_alias_enrichment(
+    *,
+    lowered_query: str,
+    objects: list[str],
+    commands: list[str],
+    command_families: list[str],
+    intent_labels: list[str],
+    answer_shapes: list[str],
+    primary_topics: list[str],
+    confidence: dict[str, float],
+) -> None:
+    for rule in _COMMAND_ALIAS_RULES:
+        aliases = tuple(str(item).casefold() for item in rule.get("aliases", ()) if str(item).strip())
+        if not aliases or not any(alias in lowered_query for alias in aliases):
+            continue
+        _append(objects, *(str(item) for item in rule.get("objects", ()) if str(item).strip()))
+        _append(commands, *(str(item) for item in rule.get("commands", ()) if str(item).strip()))
+        _append(
+            command_families,
+            *(str(item) for item in rule.get("command_families", ()) if str(item).strip()),
+        )
+        _append(primary_topics, *(str(item) for item in rule.get("primary_topics", ()) if str(item).strip()))
+        _append(intent_labels, "command_lookup", "check_status")
+        _append(answer_shapes, "command", "checklist")
+        confidence["commands"] = max(confidence.get("commands", 0.0), 0.9)
+        confidence["intent_labels"] = max(confidence.get("intent_labels", 0.0), 0.88)
+        confidence["answer_shapes"] = max(confidence.get("answer_shapes", 0.0), 0.84)
+        if rule.get("objects"):
+            confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
+
+
 def _tuple_append(values: Any, *items: str) -> tuple[str, ...]:
     result = [str(value) for value in values if str(value or "").strip()] if isinstance(values, tuple | list) else []
     _append(result, *items)
@@ -697,16 +1114,26 @@ def _metadata_filter(
     *,
     classification: dict[str, Any],
     confidence: dict[str, float],
-    ocp_version: str,
-    locale: str,
+    search_signals: dict[str, tuple[str, ...]] | None = None,
 ) -> dict[str, Any]:
+    # locale/ocp_version/enabled_for_chat/navigation_only are uniform across the
+    # collection, so filtering on them only adds payload-eval cost. citation_eligible
+    # and corpus_scope are non-uniform chat-scope correctness filters and are kept.
     must: list[dict[str, Any]] = [
-        {"key": "source.enabled_for_chat", "match": {"value": True}},
-        {"key": "source.review_status", "match": {"value": "approved"}},
         {"key": "source.citation_eligible", "match": {"value": True}},
-        {"key": "classification.locale", "match": {"value": locale}},
-        {"key": "classification.ocp_version", "match": {"value": ocp_version}},
-        {"key": "chunk.navigation_only", "match": {"value": False}},
+        {"key": "source.corpus_scope", "match": {"value": "official_docs"}},
+        {
+            "key": "chunk.chunk_type",
+            "match": {
+                "any": [
+                    "command",
+                    "procedure",
+                    "concept",
+                    "reference",
+                    "troubleshooting",
+                ]
+            },
+        },
     ]
     domain = str(classification.get("domain") or "").strip()
     domain_filter_values = tuple(
@@ -721,17 +1148,61 @@ def _metadata_filter(
         )
     )
     if domain and confidence.get("domain", 0.0) >= 0.85 and len(domain_filter_values) <= 1:
-        must.append({"key": "classification.domain", "match": {"value": domain}})
+        domain_filter_values = (domain,)
+    if (
+        domain
+        and domain != "troubleshooting"
+        and confidence.get("domain", 0.0) >= 0.85
+        and confidence.get("commands", 0.0) >= 0.8
+        and search_signals
+        and search_signals.get("commands")
+    ):
+        domain_filter_values = (domain,)
+    if (
+        domain == "node_ops"
+        and search_signals
+        and "troubleshoot" in set(search_signals.get("intent_labels") or ())
+    ):
+        domain_filter_values = tuple(dict.fromkeys((*domain_filter_values, "troubleshooting")))
     platform = str(classification.get("platform") or "").strip()
     if platform and platform != "any_platform" and confidence.get("platform", 0.0) >= 0.9:
         must.append({"key": "classification.platform", "match": {"value": platform}})
     metadata_filter: dict[str, Any] = {"must": must}
-    if domain and confidence.get("domain", 0.0) >= 0.85 and len(domain_filter_values) > 1:
-        metadata_filter["should"] = [
-            {"key": "classification.domain", "match": {"value": item}}
-            for item in domain_filter_values
-        ]
+    if domain_filter_values:
+        metadata_filter["_domain_filter_values"] = domain_filter_values
+        metadata_filter["_domain_boosts"] = domain_filter_values
+    signal_boosts = _metadata_signal_boosts(search_signals or {}, confidence=confidence)
+    if signal_boosts:
+        metadata_filter["_intent_signal_boosts"] = signal_boosts
     return metadata_filter
+
+
+def _metadata_signal_boosts(
+    search_signals: dict[str, tuple[str, ...]],
+    *,
+    confidence: dict[str, float],
+) -> dict[str, tuple[str, ...]]:
+    if not search_signals:
+        return {}
+
+    boosts: dict[str, tuple[str, ...]] = {}
+    objects = search_signals.get("objects", ())
+    commands = search_signals.get("commands", ())
+    command_families = search_signals.get("command_families", ())
+    intent_labels = search_signals.get("intent_labels", ())
+    if objects and confidence.get("objects", 0.0) >= 0.7:
+        boosts["objects"] = _clean_signal_values(search_signals.get("objects", ()))
+    if commands and confidence.get("commands", 0.0) >= 0.7:
+        boosts["commands"] = _clean_signal_values(search_signals.get("commands", ()))
+    if command_families and confidence.get("commands", 0.0) >= 0.7:
+        boosts["command_families"] = _clean_signal_values(search_signals.get("command_families", ()))
+    if intent_labels and confidence.get("intent_labels", 0.0) >= 0.7:
+        boosts["intent_labels"] = _clean_signal_values(search_signals.get("intent_labels", ()))
+    return boosts
+
+
+def _clean_signal_values(values: tuple[str, ...], *, limit: int = 4) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(str(value).strip() for value in values if str(value or "").strip()))[:limit]
 
 
 def _embedding_queries(
@@ -755,22 +1226,7 @@ def _embedding_queries(
 
     queries: list[str] = []
     english_terms = () if route_http_headers else _english_terms(objects=objects, errors=errors, primary_topics=primary_topics)
-    _append(
-        queries,
-        " ".join(
-            dict.fromkeys(
-                item
-                for item in (
-                    normalized_query,
-                    *primary_topics,
-                    *objects,
-                    *errors,
-                    *(secondary_topics[:1] if route_http_headers else secondary_topics[:2]),
-                )
-                if item
-            )
-        ),
-    )
+    _append(queries, normalized_query)
     if commands or command_families or {"troubleshoot", "check_status"} & set(intents):
         _append(
             queries,
@@ -778,8 +1234,10 @@ def _embedding_queries(
                 dict.fromkeys(
                     item
                     for item in (
-                        raw_query,
+                        *primary_topics,
+                        *objects,
                         *errors,
+                        *(secondary_topics[:1] if route_http_headers else secondary_topics[:2]),
                         *(commands[:1] if route_http_headers else commands[:3]),
                         *(() if route_http_headers else command_families),
                         *english_terms,

@@ -69,11 +69,11 @@ STARTER_QUESTION_COPY: dict[str, dict[str, str]] = {
         "security": "사용자 권한은 어떤 명령으로 확인하나요?",
         "performance": "Pod 리소스 사용량은 어떤 명령으로 확인하나요?",
         "deploy": "Deployment 배포 상태는 어떤 명령으로 확인하나요?",
-        "troubleshooting": "설치 검증 실패 시 어떤 로그와 상태를 먼저 확인하나요?",
+        "troubleshooting": "설치 문제 해결에서 실패한 설치 로그 수집은 어떻게 확인하나요?",
         "default": "공식 문서 근거로 확인할 명령과 판단 기준은 무엇인가요?",
     },
     "learning": {
-        "install": "OpenShift 설치 방식과 준비 항목은 어떻게 구분하나요?",
+        "install": "OpenShift Container Platform 설치 정보에서 설치 방식은 어떻게 구분하나요?",
         "postinstall": "설치 후 구성 작업은 어떤 흐름으로 이해하면 될까요?",
         "namespace": "Project와 Namespace 관계는 어떻게 이해하면 될까요?",
         "pod": "Pod 상태와 조건은 어떻게 읽으면 될까요?",
@@ -444,6 +444,20 @@ def _ops_chunk_question(chunk: dict[str, Any]) -> str:
         for item in chunk.get("source_terms", [])
         if str(item).strip()
     ] if isinstance(chunk.get("source_terms"), list) else []
+    if title and title != "운영 절차":
+        topic = _starter_topic_terms(title, goal, terms)
+        if topic == "performance":
+            return f"KMSC 운영 문서에서 {title}의 목표와 병목은 어떤 순서로 확인하나요?"
+        if topic == "troubleshooting":
+            return f"KMSC 운영 문서에서 {title}의 증상과 근거는 어떤 순서로 확인하나요?"
+        if topic == "storage":
+            return f"KMSC 운영 문서에서 {title}의 볼륨 상태는 어떤 순서로 확인하나요?"
+        if topic == "network":
+            return f"KMSC 운영 문서에서 {title}의 연결 흐름은 어디부터 확인하나요?"
+        if topic == "deploy":
+            return f"KMSC 운영 문서에서 {title}의 배포 상태는 어떤 기준으로 확인하나요?"
+        return f"KMSC 운영 문서에서 {title}는 어떤 항목부터 확인하나요?"
+
     return _compose_beginner_question(
         lane="operations",
         title=title,

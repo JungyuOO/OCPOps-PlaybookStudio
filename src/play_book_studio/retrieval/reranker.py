@@ -16,15 +16,35 @@ from .models import RetrievalHit
 
 DEFAULT_RERANKER_MODEL = "dragonkue/bge-reranker-v2-m3-ko"
 RERANKER_SOURCE = "hybrid_reranked"
-MAX_RERANK_DOCUMENT_CHARS = 1800
+MAX_RERANK_DOCUMENT_CHARS = 700
+MAX_RERANK_METADATA_CHARS = 180
+
+
+def _truncate_rerank_text(value: str, *, max_chars: int) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rsplit(" ", 1)[0].strip()
 
 
 def _build_rerank_document(hit: RetrievalHit) -> str:
     """Include source metadata so semantic rerankers can separate similar tokens."""
-    path = " > ".join(part for part in (*hit.toc_path, *hit.section_path) if part)
-    commands = ", ".join(command for command in hit.cli_commands if command)
-    objects = ", ".join(obj for obj in hit.k8s_objects if obj)
-    errors = ", ".join(error for error in hit.error_strings if error)
+    path = _truncate_rerank_text(
+        " > ".join(part for part in (*hit.toc_path, *hit.section_path) if part),
+        max_chars=MAX_RERANK_METADATA_CHARS,
+    )
+    commands = _truncate_rerank_text(
+        ", ".join(command for command in hit.cli_commands if command),
+        max_chars=MAX_RERANK_METADATA_CHARS,
+    )
+    objects = _truncate_rerank_text(
+        ", ".join(obj for obj in hit.k8s_objects if obj),
+        max_chars=MAX_RERANK_METADATA_CHARS,
+    )
+    errors = _truncate_rerank_text(
+        ", ".join(error for error in hit.error_strings if error),
+        max_chars=MAX_RERANK_METADATA_CHARS,
+    )
     content = hit.text.strip()
     if len(content) > MAX_RERANK_DOCUMENT_CHARS:
         content = content[:MAX_RERANK_DOCUMENT_CHARS].rsplit(" ", 1)[0].strip()

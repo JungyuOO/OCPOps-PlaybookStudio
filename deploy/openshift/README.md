@@ -100,14 +100,14 @@ docker run -d \
   -v ~/bge-reranker-cache:/data \
   ghcr.io/huggingface/text-embeddings-inference:cpu-latest \
   --model-id dragonkue/bge-reranker-v2-m3-ko \
-  --max-client-batch-size 1 \
+  --max-client-batch-size 16 \
   --max-batch-tokens 4096
 ```
 
-OpenShift sends one candidate per reranker request and allows up to four
-parallel requests through `RERANKER_MAX_PARALLEL_REQUESTS=5`. Keep the Docker
-client batch size at `1` unless the host-side latency and memory profile have
-been measured again.
+OpenShift batches reranker candidates into a single request by default
+(`RERANKER_BATCH_SIZE=16`) after pre-filtering low fused-score candidates. Keep
+the Docker client batch size aligned with the app batch size unless the
+host-side latency and memory profile have been measured again.
 
 Check host health before applying the OpenShift app:
 

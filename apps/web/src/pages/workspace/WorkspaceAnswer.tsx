@@ -192,7 +192,7 @@ function normalizeAssistantAnswer(text: string): string {
 }
 
 function parseInlineTokens(text: string, citationsByIndex: Map<number, ChatCitation>): InlineToken[] {
-  const chunks = String(text || '').split(/(`[^`]+`|\*\*[^*]+\*\*|\[\d+\])/g);
+  const chunks = String(text || '').split(/(`[^`]+`|\*\*[^*]+\*\*|\[\d+(?:\s*,\s*\d+)*\])/g);
   const tokens: InlineToken[] = [];
   chunks.forEach((chunk) => {
     if (!chunk) {
@@ -206,13 +206,18 @@ function parseInlineTokens(text: string, citationsByIndex: Map<number, ChatCitat
       tokens.push({ kind: 'strong', value: chunk.slice(2, -2) });
       return;
     }
-    const citationMatch = chunk.match(/^\[(\d+)\]$/);
+    const citationMatch = chunk.match(/^\[(\d+(?:\s*,\s*\d+)*)\]$/);
     if (citationMatch) {
-      const index = Number(citationMatch[1]);
-      tokens.push({
-        kind: 'citation',
-        index,
-        citation: citationsByIndex.get(index),
+      citationMatch[1].split(',').forEach((value) => {
+        const index = Number(value.trim());
+        if (!Number.isFinite(index)) {
+          return;
+        }
+        tokens.push({
+          kind: 'citation',
+          index,
+          citation: citationsByIndex.get(index),
+        });
       });
       return;
     }
@@ -409,7 +414,15 @@ function InlineParts({
           );
         }
         if (part.kind === 'citation') {
-          return <span key={`citation-text-${index}`}>[{part.index}]</span>;
+          return (
+            <span
+              key={`citation-text-${index}`}
+              className="inline-citation inline-citation-pending"
+              title="근거 정보를 불러오는 중입니다."
+            >
+              {part.index}
+            </span>
+          );
         }
         return <span key={`text-${index}`}>{part.value}</span>;
       })}
@@ -515,7 +528,7 @@ function AnswerCodeBlock({ code, language }: { code: string; language: string })
   );
 }
 
-export function ThinkingIndicator() {
+export function ThinkingIndicator({ status = '답변 준비 중' }: { status?: string }) {
   return (
     <div className="message-row assistant animate-in">
       <div className="message-bubble glass-panel thinking-bubble">
@@ -523,10 +536,8 @@ export function ThinkingIndicator() {
           <div className="assistant-avatar small">
             <Bot size={14} />
           </div>
-          <div className="typing-indicator-dots">
-            <div className="typing-dot"></div>
-            <div className="typing-dot"></div>
-            <div className="typing-dot"></div>
+          <div className="thinking-status" aria-live="polite">
+            {status}
           </div>
         </div>
       </div>

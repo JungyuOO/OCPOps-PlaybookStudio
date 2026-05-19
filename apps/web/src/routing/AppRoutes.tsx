@@ -2,12 +2,10 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import WorkspacePage from '../pages/WorkspacePage';
 import LlmWikiBookPage from '../pages/LlmWikiBookPage';
 import PlaybookLibraryPage from '../pages/PlaybookLibraryPage';
-import ProjectDetailsPage from '../pages/ProjectDetailsPage';
 import CourseTimelinePage from '../pages/CourseTimelinePage';
 import CourseStagePage from '../pages/CourseStagePage';
 import CourseChunkPage from '../pages/CourseChunkPage';
 import CourseAtlasPage from '../pages/CourseAtlasPage';
-import SharedLandingShell from '../shared/landing/SharedLandingShell';
 import { buildHandoffLocation } from './handoff';
 import { ROUTES } from './routes';
 
@@ -25,8 +23,7 @@ function AliasRedirect({ to }: { to: string }) {
 export default function AppRoutes() {
   return (
     <Routes>
-      <Route path={ROUTES.sharedHome} element={<SharedLandingShell />} />
-      <Route path={ROUTES.pbsDetails} element={<ProjectDetailsPage />} />
+      <Route path={ROUTES.sharedHome} element={<WorkspacePage />} />
       <Route path={ROUTES.pbsStudio} element={<WorkspacePage />} />
       <Route path={ROUTES.pbsWikiBook} element={<LlmWikiBookPage />} />
       <Route path={ROUTES.pbsWikiBookAlias} element={<AliasRedirect to={ROUTES.pbsWikiBook} />} />
@@ -45,7 +42,7 @@ export default function AppRoutes() {
       <Route path={ROUTES.opsLibrary} element={<AliasRedirect to={ROUTES.pbsPlaybookLibrary} />} />
       <Route path={ROUTES.opsChat} element={<AliasRedirect to={ROUTES.pbsStudio} />} />
       <Route path={ROUTES.opsActions} element={<AliasRedirect to={ROUTES.pbsStudio} />} />
-      <Route path="*" element={<Navigate replace to={ROUTES.sharedHome} />} />
+      <Route path="*" element={<Navigate replace to={ROUTES.pbsStudio} />} />
     </Routes>
   );
 }

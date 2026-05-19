@@ -33,7 +33,7 @@ def test_v015_query_signal_plan_handles_pvc_pending_one_shot() -> None:
     assert "oc describe pvc" in plan.search_signals["commands"]
     assert len(plan.embedding_queries) >= 2
     assert any("PersistentVolumeClaim" in query for query in plan.embedding_queries)
-    assert {"key": "classification.domain", "match": {"value": "storage"}} in plan.metadata_filter["must"]
+    assert plan.metadata_filter["_domain_filter_values"] == ("storage",)
     assert "search_signals.objects" not in _filter_keys(plan)
 
 
@@ -119,7 +119,7 @@ def test_v015_query_signal_plan_expands_install_compare_question() -> None:
     assert "compare_options" in plan.search_signals["intent_labels"]
     assert "decision_guide" in plan.search_signals["answer_shapes"]
     assert any("Agent-based Installer" in query for query in plan.embedding_queries)
-    assert {"key": "classification.domain", "match": {"value": "install"}} in plan.metadata_filter["must"]
+    assert plan.metadata_filter["_domain_filter_values"] == ("install",)
 
 
 def test_v015_query_signal_plan_normalizes_image_pull_backoff_alias() -> None:
@@ -147,10 +147,27 @@ def test_v015_query_signal_plan_normalizes_node_notready_alias() -> None:
     assert "oc describe node" in plan.search_signals["commands"]
     assert any("kubelet" in query for query in plan.embedding_queries)
     assert {"key": "classification.domain", "match": {"value": "node_ops"}} not in plan.metadata_filter["must"]
-    assert plan.metadata_filter["should"] == [
-        {"key": "classification.domain", "match": {"value": "node_ops"}},
-        {"key": "classification.domain", "match": {"value": "troubleshooting"}},
-    ]
+    assert plan.metadata_filter["_domain_boosts"] == ("node_ops", "troubleshooting")
+    assert plan.metadata_filter["_intent_signal_boosts"]["objects"] == ("Node",)
+    assert "oc get nodes" in plan.metadata_filter["_intent_signal_boosts"]["commands"]
+
+
+def test_query_signal_plan_expands_oc_login_command_alias() -> None:
+    plan = build_query_signal_plan("ocp 로그인 어떻게 함")
+
+    assert "command_lookup" in plan.search_signals["intent_labels"]
+    assert "oc login -u <username>" in plan.search_signals["commands"]
+    assert "oc whoami" in plan.search_signals["commands"]
+    assert any("oc login -u <username>" in query for query in plan.embedding_queries)
+
+
+def test_query_signal_plan_expands_pod_disruption_budget_alias() -> None:
+    plan = build_query_signal_plan("모든 프로젝트에서 pod 중단 예산 확인 어떻게해?")
+
+    assert "PodDisruptionBudget" in plan.search_signals["objects"]
+    assert "PDB" in plan.search_signals["objects"]
+    assert "oc get poddisruptionbudget --all-namespaces" in plan.search_signals["commands"]
+    assert any("poddisruptionbudget --all-namespaces" in query for query in plan.embedding_queries)
 
 
 def test_v015_query_signal_plan_uses_llm_one_shot_for_normalization_and_expansion() -> None:
@@ -192,11 +209,13 @@ def test_v015_query_signal_plan_uses_llm_one_shot_for_normalization_and_expansio
     plan = build_query_signal_plan("PVC가 Peding인데 뭐 확인해야 해?", llm_client=llm)
 
     assert llm.calls
-    assert llm.calls[0]["max_tokens"] == 900
+    assert llm.calls[0]["max_tokens"] == 300
     assert plan.normalized_query == "PVC가 Pending 상태인데 무엇을 확인해야 하나요?"
     assert plan.correction_notes[0].type == "typo"
-    assert plan.embedding_queries[0] == "PVC Pending 상태 확인 StorageClass PV Pod 이벤트"
-    assert {"key": "classification.domain", "match": {"value": "storage"}} in plan.metadata_filter["must"]
+    assert plan.embedding_queries[0] == plan.normalized_query
+    assert "PersistentVolumeClaim" in plan.embedding_queries[1]
+    assert "oc get pvc" in plan.embedding_queries[1]
+    assert plan.metadata_filter["_domain_filter_values"] == ("storage",)
 
 
 def test_v015_query_signal_plan_sanitizes_llm_output_before_filtering() -> None:
@@ -225,7 +244,7 @@ def test_v015_query_signal_plan_sanitizes_llm_output_before_filtering() -> None:
     assert "unsafe_new_label" not in plan.search_signals["intent_labels"]
     assert "novel_shape" not in plan.search_signals["answer_shapes"]
     assert "shell_everything" not in plan.search_signals["command_families"]
-    assert {"key": "classification.domain", "match": {"value": "storage"}} in plan.metadata_filter["must"]
+    assert plan.metadata_filter["_domain_filter_values"] == ("storage",)
 
 
 def test_v015_query_signal_plan_maps_troubleshooting_domain_to_object_area() -> None:
@@ -256,10 +275,31 @@ def test_v015_query_signal_plan_maps_troubleshooting_domain_to_object_area() -> 
     assert "troubleshoot" in plan.search_signals["intent_labels"]
     assert "check_status" in plan.search_signals["intent_labels"]
     assert {"key": "classification.domain", "match": {"value": "node_ops"}} not in plan.metadata_filter["must"]
-    assert plan.metadata_filter["should"] == [
-        {"key": "classification.domain", "match": {"value": "node_ops"}},
-        {"key": "classification.domain", "match": {"value": "troubleshooting"}},
-    ]
+    assert plan.metadata_filter["_domain_boosts"] == ("node_ops", "troubleshooting")
+    assert plan.metadata_filter["_intent_signal_boosts"]["objects"] == ("Node",)
+    assert "oc get nodes" in plan.metadata_filter["_intent_signal_boosts"]["commands"]
+
+
+def test_metadata_filter_drops_uniform_must_conditions() -> None:
+    plan = build_query_signal_plan("ocp 로그인 어떻게 함")
+    keys = _filter_keys(plan)
+
+    assert "source.enabled_for_chat" not in keys
+    assert "source.review_status" not in keys
+    assert "classification.locale" not in keys
+    assert "classification.ocp_version" not in keys
+    assert "chunk.navigation_only" not in keys
+
+
+def test_metadata_filter_keeps_chat_scope_correctness_conditions() -> None:
+    plan = build_query_signal_plan("ocp 로그인 어떻게 함")
+
+    assert {"key": "source.citation_eligible", "match": {"value": True}} in plan.metadata_filter["must"]
+    assert {"key": "source.corpus_scope", "match": {"value": "official_docs"}} in plan.metadata_filter["must"]
+    assert {
+        "key": "chunk.chunk_type",
+        "match": {"any": ["command", "procedure", "concept", "reference", "troubleshooting"]},
+    } in plan.metadata_filter["must"]
 
 
 def test_v015_query_signal_plan_falls_back_when_llm_fails() -> None:

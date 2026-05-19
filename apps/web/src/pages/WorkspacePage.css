@@ -2127,63 +2127,39 @@
   gap: 12px;
 }
 
-.typing-indicator-dots {
-  display: flex;
-  gap: 4px;
-  align-items: center;
+.thinking-status {
+  color: rgba(199, 218, 232, 0.62);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
-.typing-dot {
-  width: 5px;
-  height: 5px;
-  background: var(--pbs-accent-cyan);
-  border-radius: 50%;
-  animation: typing-wave 1.8s infinite;
-  animation-timing-function: cubic-bezier(0.45, 0.05, 0.55, 0.95);
-  opacity: 0.35;
+.thinking-status::after {
+  content: "";
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+  animation: thinking-status-dots 1.45s steps(4, end) infinite;
 }
 
-.typing-dot:nth-child(1) {
-  animation-delay: 0s;
-}
-
-.typing-dot:nth-child(2) {
-  animation-delay: 0.22s;
-}
-
-.typing-dot:nth-child(3) {
-  animation-delay: 0.44s;
-}
-
-@keyframes typing-wave {
+@keyframes thinking-status-dots {
   0% {
-    transform: translateY(0) scale(1);
-    opacity: 0.35;
-    box-shadow: none;
+    content: "";
   }
 
   25% {
-    transform: translateY(-6px) scale(1.15);
-    opacity: 1;
-    box-shadow: 0 0 8px var(--pbs-accent-cyan);
+    content: ".";
   }
 
   50% {
-    transform: translateY(0) scale(1);
-    opacity: 0.35;
-    box-shadow: none;
+    content: "..";
   }
 
-  75% {
-    transform: translateY(2px) scale(0.92);
-    opacity: 0.2;
-    box-shadow: none;
-  }
-
+  75%,
   100% {
-    transform: translateY(0) scale(1);
-    opacity: 0.35;
-    box-shadow: none;
+    content: "...";
   }
 }
 
@@ -2375,6 +2351,21 @@
   border-color: rgba(0, 209, 255, 0.34);
   color: #effcff;
   box-shadow: 0 0 12px rgba(0, 209, 255, 0.12);
+}
+
+.inline-citation-pending {
+  cursor: default;
+  opacity: 0.55;
+  border-color: rgba(159, 177, 201, 0.14);
+  background: rgba(159, 177, 201, 0.06);
+  box-shadow: none;
+}
+
+.inline-citation-pending:hover {
+  color: rgba(228, 238, 246, 0.86);
+  border-color: rgba(159, 177, 201, 0.14);
+  background: rgba(159, 177, 201, 0.06);
+  box-shadow: none;
 }
 
 .answer-code-block {

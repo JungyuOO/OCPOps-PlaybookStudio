@@ -1,4 +1,4 @@
-import { Cpu, FileText, LayoutDashboard, Library, Menu, Monitor, Sparkles } from 'lucide-react';
+import { Cpu, LayoutDashboard, Library, Menu, Monitor, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ClusterConnectionStatus } from '../lib/clusterProfile';
 import type { GlobalTheme } from '../lib/globalTheme';
@@ -118,10 +118,6 @@ export default function AppHeader({
                 <span>WIKI Library</span>
               </Link>
             )}
-            <Link className="app-header-menu-item" to={ROUTES.pbsDetails}>
-              <FileText size={15} />
-              <span>Details</span>
-            </Link>
             <div className="app-header-menu-divider" />
             <div className="app-header-menu-item app-header-menu-theme">
               <span>Theme</span>

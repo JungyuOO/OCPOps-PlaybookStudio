@@ -15,6 +15,7 @@ def fuse_ranked_hits(
     ranked_lists: dict[str, list[RetrievalHit]],
     *,
     context: SessionContext | None = None,
+    metadata_filter: dict[str, object] | None = None,
     top_k: int,
     rrf_k: int = 60,
     weights: dict[str, float] | None = None,
@@ -49,6 +50,7 @@ def fuse_ranked_hits(
             hit,
             signals=signals,
             book_source_count=len(book_sources.get(hit.book_slug, set())),
+            metadata_filter=metadata_filter,
         )
 
     return sort_and_diversify_hits(fused_hits, top_k=top_k, signals=signals)

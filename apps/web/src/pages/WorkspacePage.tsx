@@ -34,6 +34,7 @@ import {
   type ChatResponse,
   type ChatCitation,
   type ChatRelatedLink,
+  type ChatStreamTraceEnvelope,
   type CustomerPackBook,
   type CustomerPackDraft,
   type DocumentRepository,
@@ -106,7 +107,6 @@ import {
   type OpsChatSource,
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../routing/routes';
-import { sendCourseChatStream } from '../lib/courseApi';
 import {
   clusterConnectionStatusLabel,
   clusterProfileName,
@@ -127,7 +127,6 @@ import {
 } from './workspace/WorkspaceAnswer';
 import WorkspaceViewerPanel from './workspace/WorkspaceViewerPanel';
 import TerminalSessionPanel, { type TerminalConnectionState, type TerminalLearningContext } from './workspace/TerminalSessionPanel';
-import CourseChatArtifacts from './CourseChatArtifacts';
 import type {
   Message,
   SourceEntry,
@@ -482,7 +481,6 @@ type WelcomeQuestionGroup = {
 };
 
 type SendOptions = {
-  forceCourseMode?: boolean;
   routeKind?: Message['routeKind'];
   learningIndex?: number;
   categoryKey?: string;
@@ -505,10 +503,26 @@ function normalizeWelcomeLane(value: string): WelcomeQuestion['lane'] {
 }
 
 function normalizeWelcomeRouteKind(value?: string): Message['routeKind'] {
-  if (value === 'learning' || value === 'course' || value === 'official' || value === 'study_docs') {
-    return value;
+  if (value === 'study_docs') {
+    return 'study_docs';
+  }
+  if (value === 'learning' || value === 'official') {
+    return 'official';
+  }
+  if (value === 'course') {
+    return 'study_docs';
   }
   return undefined;
+}
+
+function backendRouteKindForChat(routeKind?: Message['routeKind']): 'official' | 'study_docs' | '' {
+  if (routeKind === 'study_docs') {
+    return 'study_docs';
+  }
+  if (routeKind === 'official' || routeKind === 'learning') {
+    return 'official';
+  }
+  return '';
 }
 
 function normalizeWelcomeQuestion(item: StudioStarterQuestion): WelcomeQuestion | null {
@@ -918,64 +932,122 @@ function citationScrollTarget(citation: ChatCitation, answerContent = ''): strin
 
 type MessageStateUpdater = (updater: (current: Message[]) => Message[]) => void;
 
-function createThrottledMessageContentUpdater(
+function createTypewriterMessageContentUpdater(
   messageId: string,
   updateMessages: MessageStateUpdater,
-  delayMs = 90,
-): { push: (content: string) => void; flush: () => void; cancel: () => void } {
-  let latestContent = '';
+  frameDelayMs = 38,
+): { push: (content: string) => void; finish: () => Promise<void>; cancel: () => void } {
+  let targetContent = '';
+  let renderedContent = '';
   let timerId = 0;
-  let frameId = 0;
+  let finishResolvers: Array<() => void> = [];
 
-  const applyLatest = (): void => {
+  const applyContent = (content: string): void => {
     updateMessages((current) => current.map((message) => (
       message.id === messageId
-        ? { ...message, content: latestContent }
+        ? { ...message, content }
         : message
     )));
   };
 
-  const clearScheduled = (): void => {
+  const resolveFinished = (): void => {
+    if (renderedContent.length < targetContent.length) {
+      return;
+    }
+    const resolvers = finishResolvers;
+    finishResolvers = [];
+    resolvers.forEach((resolve) => resolve());
+  };
+
+  const clearTimer = (): void => {
     if (timerId) {
       window.clearTimeout(timerId);
       timerId = 0;
     }
-    if (frameId) {
-      window.cancelAnimationFrame(frameId);
-      frameId = 0;
+  };
+
+  const tick = (): void => {
+    timerId = 0;
+    if (renderedContent.length >= targetContent.length) {
+      resolveFinished();
+      return;
     }
+    const remaining = targetContent.length - renderedContent.length;
+    const step = remaining > 240 ? 3 : 2;
+    renderedContent = targetContent.slice(0, renderedContent.length + step);
+    applyContent(renderedContent);
+    schedule();
+  };
+
+  const schedule = (): void => {
+    if (typeof window === 'undefined' || timerId) {
+      return;
+    }
+    timerId = window.setTimeout(tick, frameDelayMs);
   };
 
   return {
     push(content: string): void {
-      latestContent = content;
+      targetContent = content;
       if (typeof window === 'undefined') {
-        applyLatest();
+        renderedContent = targetContent;
+        applyContent(renderedContent);
+        resolveFinished();
         return;
       }
-      if (timerId || frameId) {
-        return;
-      }
-      timerId = window.setTimeout(() => {
-        timerId = 0;
-        frameId = window.requestAnimationFrame(() => {
-          frameId = 0;
-          applyLatest();
-        });
-      }, delayMs);
+      schedule();
     },
-    flush(): void {
-      if (typeof window !== 'undefined') {
-        clearScheduled();
+    finish(): Promise<void> {
+      if (renderedContent.length >= targetContent.length) {
+        return Promise.resolve();
       }
-      applyLatest();
+      return new Promise((resolve) => {
+        finishResolvers.push(resolve);
+        schedule();
+      });
     },
     cancel(): void {
       if (typeof window !== 'undefined') {
-        clearScheduled();
+        clearTimer();
       }
+      finishResolvers = [];
     },
   };
+}
+
+function chatTraceThinkingStatus(event: ChatStreamTraceEnvelope): string | null {
+  if (event.status !== 'running' && event.status !== 'done') {
+    return null;
+  }
+  const step = String(event.step || '');
+  if (step === 'request_received' || step === 'route_query') {
+    return '질문 접수 중';
+  }
+  if (step === 'normalize_query') {
+    return '질문 정규화 중';
+  }
+  if (step === 'rewrite_query' || step === 'query_expansion') {
+    return '검색 질의 준비 중';
+  }
+  if (step === 'retrieval' || step === 'bm25_search' || step === 'vector_search') {
+    return '문서 탐색 중';
+  }
+  if (step === 'fusion' || step === 'graph_expand' || step === 'rerank') {
+    return '근거 후보 정리 중';
+  }
+  if (step === 'context_assembly' || step === 'prompt_build') {
+    return '답변 근거 조립 중';
+  }
+  if (step === 'llm_generate') {
+    return '답변 생성 중';
+  }
+  if (step === 'citation_finalize') {
+    return '출처 정리 중';
+  }
+  if (step === 'grounding_guard') {
+    return '근거 검증 중';
+  }
+  return event.label ? String(event.label) : null;
 }
 
 function parseViewerHtml(viewerHtml: string): Document | null {
@@ -1220,6 +1292,7 @@ export default function WorkspacePage() {
   const [viewerPageMode, setViewerPageMode] = useState<ViewerPageMode>('single');
   const [isPanelResizing, setIsPanelResizing] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [thinkingStatus, setThinkingStatus] = useState('질문 접수 중');
   const [isCapturing, setIsCapturing] = useState(false);
   const [isNormalizing, setIsNormalizing] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
@@ -3224,11 +3297,9 @@ export default function WorkspacePage() {
     const resolvedLearningPathId = options.learningPathId ?? questionMeta?.learningPathId;
     const resolvedLearningStepId = options.learningStepId ?? questionMeta?.learningStepId;
     const resolvedLabTaskId = options.labTaskId ?? questionMeta?.labTaskId;
-    const shouldUseCourseMode = options.forceCourseMode || isCourseMode;
-    const shouldUseLiveClusterMode = !shouldUseCourseMode && currentMode === 'live_cluster' && isLiveClusterAvailable;
-    const messageRouteKind: Message['routeKind'] = shouldUseCourseMode
-      ? 'course'
-      : resolvedRouteKind || 'official';
+    const shouldUseLiveClusterMode = !isCourseMode && currentMode === 'live_cluster' && isLiveClusterAvailable;
+    const messageRouteKind: Message['routeKind'] = resolvedRouteKind || (isCourseMode ? 'study_docs' : undefined);
+    const requestRouteKind = backendRouteKindForChat(messageRouteKind);
     if (messageRouteKind === 'learning' && resolvedLabTaskId) {
       setTerminalLearningContext({
         learnerId: wikiOverlayUserId,
@@ -3251,6 +3322,7 @@ export default function WorkspacePage() {
       setQuery('');
     }
     setIsSending(true);
+    setThinkingStatus('질문 접수 중');
 
     try {
       const requestPayload = {
@@ -3260,7 +3332,7 @@ export default function WorkspacePage() {
         userId: wikiOverlayUserId,
         selectedDraftIds: activeDraft ? [activeDraft.draft_id] : [],
         restrictUploadedSources: Boolean(activeDraft),
-        routeKind: messageRouteKind,
+        routeKind: requestRouteKind,
         activeRepositoryId: activeRepositoryIdForRequest,
         activeDocumentId,
         learningIndex: resolvedLearningIndex,
@@ -3271,145 +3343,125 @@ export default function WorkspacePage() {
         learningTargetViewerPath: resolvedTargetViewerPath,
       };
       let response: ChatResponse;
-      let courseAssistantMessageId = '';
-      let courseStreamUpdater: ReturnType<typeof createThrottledMessageContentUpdater> | null = null;
       let assistantStreamMessageId = '';
-      let assistantStreamUpdater: ReturnType<typeof createThrottledMessageContentUpdater> | null = null;
-      if (shouldUseCourseMode) {
-        courseAssistantMessageId = makeId('assistant');
-        let streamedAnswer = '';
-        setMessages((current) => [
-          ...current,
-          {
-            id: courseAssistantMessageId,
-            role: 'assistant',
-            content: '',
-            citations: [],
-            suggestedQueries: [],
-            relatedLinks: [],
-            relatedSections: [],
-            artifacts: [],
-            responseKind: 'rag',
-            routeKind: 'course',
-          },
-        ]);
-        courseStreamUpdater = createThrottledMessageContentUpdater(courseAssistantMessageId, setMessages, 90);
-        response = await sendCourseChatStream({
-          message: trimmed,
+      let assistantStreamUpdater: ReturnType<typeof createTypewriterMessageContentUpdater> | null = null;
+      assistantStreamMessageId = makeId('assistant');
+      let streamedAnswer = '';
+      setMessages((current) => [
+        ...current,
+        {
+          id: assistantStreamMessageId,
+          role: 'assistant',
+          content: '',
+          citations: [],
+          suggestedQueries: [],
+          relatedLinks: [],
+          relatedSections: [],
+          artifacts: [],
+          responseKind: 'rag',
+          routeKind: messageRouteKind,
+          learningIndex: resolvedLearningIndex,
+        },
+      ]);
+      assistantStreamUpdater = createTypewriterMessageContentUpdater(assistantStreamMessageId, setMessages);
+      if (testMode) {
+        setActiveTestTrace({
+          query: trimmed,
           sessionId,
-          userId: wikiOverlayUserId,
+          events: [],
+          result: null,
+        });
+      }
+      if (shouldUseLiveClusterMode) {
+        const namespace = userWorkspaceNamespace || selectedResourceNamespace.trim() || activeFooterConnection?.default_namespace || 'default';
+        const liveResponse = await sendOpsChatStream({
+          message: trimmed,
+          connection_id: activeFooterConnection?.connection_id || undefined,
+          namespace,
+          history: messages.slice(-6).map((item) => ({ role: item.role, text: item.content })),
+          recent_terminal_actions: recentTerminalActions.map((item) => ({
+            command: item.command,
+            output_excerpt: item.outputExcerpt || undefined,
+            timestamp: item.timestamp,
+          })),
         }, (event) => {
           if (event.type === 'answer_delta') {
             streamedAnswer += event.delta;
-            courseStreamUpdater?.push(streamedAnswer);
+            setThinkingStatus('답변 작성 중');
+            assistantStreamUpdater?.push(streamedAnswer);
+          }
+          if (event.type === 'stage') {
+            setThinkingStatus(event.stage.label || '처리 중');
+          }
+          if (testMode && event.type === 'stage') {
+            setActiveTestTrace((current) => ({
+              query: current?.query ?? trimmed,
+              sessionId: current?.sessionId ?? sessionId,
+              events: [
+                ...(current?.events ?? []),
+                {
+                  type: 'trace',
+                  step: `live_cluster:${event.stage.key}`,
+                  label: event.stage.label,
+                  status: event.stage.status,
+                  detail: event.stage.detail,
+                },
+              ],
+              result: current?.result ?? null,
+            }));
+          }
+          if (testMode && event.type === 'result') {
+            setActiveTestTrace((current) => ({
+              query: current?.query ?? trimmed,
+              sessionId: current?.sessionId ?? sessionId,
+              events: current?.events ?? [],
+              result: opsChatResponseToChatResponse(event.response, sessionId),
+            }));
           }
         });
-        courseStreamUpdater.flush();
+        response = opsChatResponseToChatResponse(liveResponse, sessionId);
       } else {
-        assistantStreamMessageId = makeId('assistant');
-        let streamedAnswer = '';
-        setMessages((current) => [
-          ...current,
-          {
-            id: assistantStreamMessageId,
-            role: 'assistant',
-            content: '',
-            citations: [],
-            suggestedQueries: [],
-            relatedLinks: [],
-            relatedSections: [],
-            artifacts: [],
-            responseKind: 'rag',
-            routeKind: messageRouteKind,
-            learningIndex: resolvedLearningIndex,
-          },
-        ]);
-        assistantStreamUpdater = createThrottledMessageContentUpdater(assistantStreamMessageId, setMessages, 70);
-        if (testMode) {
-          setActiveTestTrace({
-            query: trimmed,
-            sessionId,
-            events: [],
-            result: null,
-          });
-        }
-        if (shouldUseLiveClusterMode) {
-          const namespace = userWorkspaceNamespace || selectedResourceNamespace.trim() || activeFooterConnection?.default_namespace || 'default';
-          const liveResponse = await sendOpsChatStream({
-            message: trimmed,
-            connection_id: activeFooterConnection?.connection_id || undefined,
-            namespace,
-            history: messages.slice(-6).map((item) => ({ role: item.role, text: item.content })),
-            recent_terminal_actions: recentTerminalActions.map((item) => ({
-              command: item.command,
-              output_excerpt: item.outputExcerpt || undefined,
-              timestamp: item.timestamp,
-            })),
-          }, (event) => {
-            if (event.type === 'answer_delta') {
-              streamedAnswer += event.delta;
-              assistantStreamUpdater?.push(streamedAnswer);
+        response = await sendChatStream(requestPayload, (event) => {
+          if (event.type === 'answer_delta') {
+            streamedAnswer += event.delta;
+            setThinkingStatus('답변 작성 중');
+            assistantStreamUpdater?.push(streamedAnswer);
+          }
+          if (event.type === 'trace') {
+            const nextThinkingStatus = chatTraceThinkingStatus(event);
+            if (nextThinkingStatus) {
+              setThinkingStatus(nextThinkingStatus);
             }
-            if (testMode && event.type === 'stage') {
-              setActiveTestTrace((current) => ({
-                query: current?.query ?? trimmed,
-                sessionId: current?.sessionId ?? sessionId,
-                events: [
-                  ...(current?.events ?? []),
-                  {
-                    type: 'trace',
-                    step: `live_cluster:${event.stage.key}`,
-                    label: event.stage.label,
-                    status: event.stage.status,
-                    detail: event.stage.detail,
-                  },
-                ],
-                result: current?.result ?? null,
-              }));
-            }
-            if (testMode && event.type === 'result') {
-              setActiveTestTrace((current) => ({
-                query: current?.query ?? trimmed,
-                sessionId: current?.sessionId ?? sessionId,
-                events: current?.events ?? [],
-                result: opsChatResponseToChatResponse(event.response, sessionId),
-              }));
-            }
-          });
-          response = opsChatResponseToChatResponse(liveResponse, sessionId);
-        } else {
-          response = await sendChatStream(requestPayload, (event) => {
-            if (event.type === 'answer_delta') {
-              streamedAnswer += event.delta;
-              assistantStreamUpdater?.push(streamedAnswer);
-            }
-            if (testMode && event.type === 'trace') {
-              setActiveTestTrace((current) => ({
-                query: current?.query ?? trimmed,
-                sessionId: current?.sessionId ?? sessionId,
-                events: [...(current?.events ?? []), event],
-                result: current?.result ?? null,
-              }));
-            }
-            if (testMode && event.type === 'result') {
-              setActiveTestTrace((current) => ({
-                query: current?.query ?? trimmed,
-                sessionId: event.payload.session_id || current?.sessionId || sessionId,
-                events: current?.events ?? [],
-                result: event.payload,
-              }));
-            }
-          });
-        }
-        assistantStreamUpdater.flush();
+          }
+          if (testMode && event.type === 'trace') {
+            setActiveTestTrace((current) => ({
+              query: current?.query ?? trimmed,
+              sessionId: current?.sessionId ?? sessionId,
+              events: [...(current?.events ?? []), event],
+              result: current?.result ?? null,
+            }));
+          }
+          if (testMode && event.type === 'result') {
+            setActiveTestTrace((current) => ({
+              query: current?.query ?? trimmed,
+              sessionId: event.payload.session_id || current?.sessionId || sessionId,
+              events: current?.events ?? [],
+              result: event.payload,
+            }));
+          }
+        });
       }
       const primaryTruth = primaryCitationTruth(response.citations);
+      const finalAnswer = response.answer ?? '';
+      const visibleAnswer = streamedAnswer.trim()
+        ? (finalAnswer && finalAnswer.startsWith(streamedAnswer) ? finalAnswer : streamedAnswer)
+        : finalAnswer;
 
       setSessionId(response.session_id || sessionId);
       const assistantMessage = {
           id: makeId('assistant'),
           role: 'assistant',
-          content: response.answer,
+          content: visibleAnswer,
           citations: response.citations ?? [],
           suggestedQueries: messageRouteKind === 'learning'
             ? mergeLearningFollowUps(response.suggested_queries ?? [], resolvedLearningIndex, welcomeLearningSequence)
@@ -3434,22 +3486,20 @@ export default function WorkspacePage() {
           pipelineTrace: response.pipeline_trace,
           traceEvents: response.pipeline_trace?.events ?? (testMode ? activeTestTrace?.events ?? [] : []),
         } satisfies Message;
-      if (courseAssistantMessageId) {
-        setMessages((current) => current.map((message) => (
-          message.id === courseAssistantMessageId
-            ? { ...assistantMessage, id: courseAssistantMessageId }
-            : message
-        )));
-      } else if (assistantStreamMessageId) {
+      if (assistantStreamMessageId) {
         setMessages((current) => current.map((message) => (
           message.id === assistantStreamMessageId
-            ? { ...assistantMessage, id: assistantStreamMessageId }
+            ? {
+                ...assistantMessage,
+                id: assistantStreamMessageId,
+                content: message.content || assistantMessage.content,
+              }
             : message
         )));
       } else {
         setMessages((current) => [...current, assistantMessage]);
       }
-      if (testMode && !shouldUseCourseMode) {
+      if (testMode) {
         setActiveTestTrace((current) => ({
           query: current?.query ?? trimmed,
           sessionId: response.session_id || current?.sessionId || sessionId,
@@ -3459,11 +3509,19 @@ export default function WorkspacePage() {
       }
 
       const primaryCitation = pickPrimaryPlaybookCitation(response.citations);
-      if (primaryCitation && !shouldUseCourseMode) {
+      if (primaryCitation) {
         const targetAssistantMessageId = assistantStreamMessageId || assistantMessage.id;
         setMessages((current) => current.map((message) => (
           message.id === targetAssistantMessageId
             ? { ...message, activeCitationIndex: primaryCitation.index }
+            : message
+        )));
+      }
+      await assistantStreamUpdater.finish();
+      if (assistantStreamMessageId) {
+        setMessages((current) => current.map((message) => (
+          message.id === assistantStreamMessageId
+            ? { ...message, content: visibleAnswer }
             : message
         )));
       }
@@ -4466,9 +4524,8 @@ export default function WorkspacePage() {
                                 type="button"
                                 className="welcome-question-card glass-panel"
                                 onClick={() => {
-                                  const starterRouteKind = item.routeKind || (item.lane === 'learning' ? 'learning' : 'official');
+                                  const starterRouteKind = item.routeKind || (item.lane === 'operations' ? 'study_docs' : 'official');
                                   void handleSend(item.question, {
-                                    forceCourseMode: false,
                                     routeKind: starterRouteKind,
                                     learningIndex: item.learningIndex,
                                     categoryKey: item.categoryKey,
@@ -4540,13 +4597,6 @@ export default function WorkspacePage() {
                                 return Boolean(target && overlayExists('check', target.ref));
                               }}
                             />
-                            {(isCourseMode || message.routeKind === 'course') && message.artifacts?.length ? (
-                              <CourseChatArtifacts
-                                artifacts={message.artifacts}
-                                includeKinds={['course_image_evidence']}
-                                disableLinks
-                              />
-                            ) : null}
                             {(() => {
                               const activeCitation = (message.citations ?? []).find(
                                 (citation) => citation.index === message.activeCitationIndex,
@@ -4619,8 +4669,7 @@ export default function WorkspacePage() {
                                     ? learningQuestionByText.get(suggestedQuery.trim())
                                     : undefined;
                                   void handleSend(suggestedQuery, {
-                                    forceCourseMode: false,
-                                    routeKind: message.routeKind === 'learning' ? 'learning' : undefined,
+                                    routeKind: message.routeKind === 'study_docs' ? 'study_docs' : undefined,
                                     learningIndex: suggestedMeta?.learningIndex,
                                     categoryKey: suggestedMeta?.categoryKey,
                                     categoryLabel: suggestedMeta?.categoryLabel,
@@ -4658,7 +4707,7 @@ export default function WorkspacePage() {
                   </div>
                 ))}
 
-                {showThinkingIndicator && <ThinkingIndicator />}
+                {showThinkingIndicator && <ThinkingIndicator status={thinkingStatus} />}
 
                 <div ref={scrollAnchorRef} />
               </div>

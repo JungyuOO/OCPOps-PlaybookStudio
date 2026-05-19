@@ -114,4 +114,3 @@ from .ambiguity import (
     has_security_doc_locator_ambiguity,
     has_update_doc_locator_ambiguity,
 )
-from .decompose import decompose_retrieval_queries

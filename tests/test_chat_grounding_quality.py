@@ -412,6 +412,45 @@ def test_korean_node_status_query_prefers_nodes_over_mcp_status() -> None:
     assert "intent_profile_command_mismatch_penalty" in hits[1].component_scores
 
 
+def test_simple_node_status_command_query_downranks_deep_troubleshooting_commands() -> None:
+    query = (
+        "Node \uc0c1\ud0dc\ub294 \uc5b4\ub5a4 \uba85\ub839\uc73c\ub85c "
+        "\uba3c\uc800 \ud655\uc778\ud558\ub098\uc694?"
+    )
+    support_hit = _hit(
+        "support-crio",
+        text=(
+            "If the OpenShift API is unavailable, connect to the node with oc ssh and "
+            "check CRI-O with systemctl is-active crio."
+        ),
+        cli_commands=("oc ssh core@<node>", "systemctl is-active crio"),
+        chunk_type="procedure",
+        book_slug="support",
+        section="Troubleshooting CRI-O",
+        raw_score=0.42,
+    )
+    node_hit = _hit(
+        "node-status",
+        text="Check node status first. STATUS should be Ready before you continue.",
+        cli_commands=("oc get nodes", "oc describe node <node-name>"),
+        chunk_type="command",
+        book_slug="nodes",
+        section="Reviewing node status",
+        raw_score=0.24,
+    )
+
+    hits = fuse_ranked_hits(
+        query,
+        {"bm25": [support_hit, node_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "node-status"
+    assert hits[0].component_scores["node_status_command_lookup_boost"] == 1.55
+    assert "node_status_deep_troubleshooting_penalty" in hits[1].component_scores
+
+
 def test_korean_node_status_rebalance_recovers_node_hit_after_reranker() -> None:
     query = "노드 상태는 처음에 어디서 확인하면 돼?"
     mcp_hit = _hit(

@@ -89,6 +89,31 @@ def test_remote_bge_reranker_uses_reranker_base_url_and_reorders(monkeypatch):
     assert reranked[0].component_scores["reranker_score"] == 0.91
 
 
+def test_remote_bge_reranker_sends_candidates_as_one_tei_texts_batch(monkeypatch):
+    calls: list[dict[str, Any]] = []
+
+    def fake_post(url: str, **kwargs: Any) -> _Response:
+        calls.append({"url": url, **kwargs})
+        texts = kwargs["json"]["texts"]
+        return _Response([{"index": index, "score": float(index)} for index, _ in enumerate(texts)])
+
+    monkeypatch.setattr("play_book_studio.retrieval.reranker.requests.post", fake_post)
+    reranker = RemoteBgeReranker(_settings(reranker_batch_size=16))
+
+    hits = [_hit(str(index), score=1.0 - index / 10) for index in range(10)]
+    reranked = reranker.rerank(
+        "original user question",
+        hits,
+        top_k=5,
+        top_n_override=10,
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["json"]["query"] == "original user question"
+    assert len(calls[0]["json"]["texts"]) == 10
+    assert [hit.chunk_id for hit in reranked[:3]] == ["9", "8", "7"]
+
+
 def test_remote_bge_reranker_falls_back_to_tei_texts_payload(monkeypatch):
     payload_keys: list[set[str]] = []
 
@@ -229,6 +254,65 @@ def test_maybe_rerank_hits_uses_configured_candidate_budget():
     assert trace["candidate_budget"] == 5
     assert trace["reranked_count"] == 5
     assert [hit.chunk_id for hit in hits] == ["4", "3", "2", "1", "0"]
+
+
+def test_maybe_rerank_hits_prefilters_low_score_candidates_before_model():
+    class CapturingReranker:
+        model_name = "capturing-reranker"
+        top_n = 6
+
+        def __init__(self) -> None:
+            self.top_n_override = 0
+            self.received_hit_ids: list[str] = []
+
+        def rerank(self, query: str, hits: list[RetrievalHit], **kwargs: Any) -> list[RetrievalHit]:
+            del query
+            self.top_n_override = int(kwargs["top_n_override"])
+            self.received_hit_ids = [hit.chunk_id for hit in hits]
+            budget = self.top_n_override
+            return list(reversed(hits[:budget])) + hits[budget:]
+
+    class Retriever:
+        reranker = CapturingReranker()
+        settings = _settings(
+            reranker_candidate_k=6,
+            reranker_min_relative_score=0.5,
+        )
+
+    hybrid_hits = [
+        _hit("strong-1", score=1.0),
+        _hit("strong-2", score=0.72),
+        _hit("weak-1", score=0.41),
+        _hit("weak-2", score=0.2),
+        _hit("weak-3", score=0.1),
+        _hit("weak-4", score=0.05),
+    ]
+
+    hits, trace = maybe_rerank_hits(
+        Retriever(),
+        query="How do I compare OpenShift Route and Ingress?",
+        hybrid_hits=hybrid_hits,
+        context=None,
+        top_k=2,
+        trace_callback=lambda _event: None,
+        timings_ms={},
+    )
+
+    assert Retriever.reranker.top_n_override == 2
+    assert Retriever.reranker.received_hit_ids == [
+        "strong-1",
+        "strong-2",
+        "weak-1",
+        "weak-2",
+        "weak-3",
+        "weak-4",
+    ]
+    assert trace["candidate_budget"] == 6
+    assert trace["reranked_count"] == 2
+    assert trace["prefilter"]["candidate_count_before"] == 6
+    assert trace["prefilter"]["candidate_count_after"] == 2
+    assert trace["prefilter"]["filtered_count"] == 4
+    assert [hit.chunk_id for hit in hits] == ["strong-2", "strong-1"]
 
 
 def test_maybe_rerank_hits_allows_candidate_budget_below_top_k():
