@@ -2317,6 +2317,21 @@
   box-shadow: 0 0 12px rgba(0, 209, 255, 0.12);
 }
 
+.inline-citation-pending {
+  cursor: default;
+  opacity: 0.55;
+  border-color: rgba(159, 177, 201, 0.14);
+  background: rgba(159, 177, 201, 0.06);
+  box-shadow: none;
+}
+
+.inline-citation-pending:hover {
+  color: rgba(228, 238, 246, 0.86);
+  border-color: rgba(159, 177, 201, 0.14);
+  background: rgba(159, 177, 201, 0.06);
+  box-shadow: none;
+}
+
 .answer-code-block {
   overflow: hidden;
   border-radius: 16px;

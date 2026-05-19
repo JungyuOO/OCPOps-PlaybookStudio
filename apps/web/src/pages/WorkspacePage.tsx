@@ -944,7 +944,7 @@ type MessageStateUpdater = (updater: (current: Message[]) => Message[]) => void;
 function createTypewriterMessageContentUpdater(
   messageId: string,
   updateMessages: MessageStateUpdater,
-  frameDelayMs = 16,
+  frameDelayMs = 38,
 ): { push: (content: string) => void; finish: () => Promise<void>; cancel: () => void } {
   let targetContent = '';
   let renderedContent = '';
@@ -982,7 +982,7 @@ function createTypewriterMessageContentUpdater(
       return;
     }
     const remaining = targetContent.length - renderedContent.length;
-    const step = Math.min(Math.max(4, Math.ceil(remaining / 18)), 12);
+    const step = remaining > 240 ? 3 : 2;
     renderedContent = targetContent.slice(0, renderedContent.length + step);
     applyContent(renderedContent);
     schedule();
@@ -3403,14 +3403,17 @@ export default function WorkspacePage() {
           }
         });
       }
-      await assistantStreamUpdater.finish();
       const primaryTruth = primaryCitationTruth(response.citations);
+      const finalAnswer = response.answer ?? '';
+      const visibleAnswer = streamedAnswer.trim()
+        ? (finalAnswer && finalAnswer.startsWith(streamedAnswer) ? finalAnswer : streamedAnswer)
+        : finalAnswer;
 
       setSessionId(response.session_id || sessionId);
       const assistantMessage = {
           id: makeId('assistant'),
           role: 'assistant',
-          content: response.answer,
+          content: visibleAnswer,
           citations: response.citations ?? [],
           suggestedQueries: messageRouteKind === 'learning'
             ? mergeLearningFollowUps(response.suggested_queries ?? [], resolvedLearningIndex, welcomeLearningSequence)
@@ -3438,7 +3441,11 @@ export default function WorkspacePage() {
       if (assistantStreamMessageId) {
         setMessages((current) => current.map((message) => (
           message.id === assistantStreamMessageId
-            ? { ...assistantMessage, id: assistantStreamMessageId }
+            ? {
+                ...assistantMessage,
+                id: assistantStreamMessageId,
+                content: message.content || assistantMessage.content,
+              }
             : message
         )));
       } else {
@@ -3459,6 +3466,14 @@ export default function WorkspacePage() {
         setMessages((current) => current.map((message) => (
           message.id === targetAssistantMessageId
             ? { ...message, activeCitationIndex: primaryCitation.index }
+            : message
+        )));
+      }
+      await assistantStreamUpdater.finish();
+      if (assistantStreamMessageId) {
+        setMessages((current) => current.map((message) => (
+          message.id === assistantStreamMessageId
+            ? { ...message, content: visibleAnswer }
             : message
         )));
       }

@@ -38,7 +38,12 @@ services:
     environment:
       PYTHONPATH: /app/src
       COURSE_CHAT_LLM_REWRITE: "true"
-      DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
+      RERANKER_ENABLED: "false"
+      RERANKER_CANDIDATE_K: "5"
+      VECTOR_MAX_PARALLEL_REQUESTS: "4"
+      VECTOR_DOMAIN_FILTER_ENABLED: "false"
+      QUERY_SIGNAL_LLM_ENABLED: "true"
+      DATABASE_URL: postgresql://admin:admin123@postgres:5432/playbookstudio
       QDRANT_URL: http://qdrant:6333
       TERMINAL_ENABLED: ${TERMINAL_ENABLED:-false}
       TERMINAL_HOST: 0.0.0.0
@@ -79,7 +84,7 @@ services:
       - .env
     environment:
       PYTHONPATH: /app/src
-      DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
+      DATABASE_URL: postgresql://admin:admin123@postgres:5432/playbookstudio
     depends_on:
       postgres:
         condition: service_healthy
@@ -95,7 +100,7 @@ services:
       - .env
     environment:
       PYTHONPATH: /app/src
-      DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
+      DATABASE_URL: postgresql://admin:admin123@postgres:5432/playbookstudio
     depends_on:
       postgres:
         condition: service_healthy

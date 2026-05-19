@@ -1,6 +1,5 @@
 export const ROUTES = {
   sharedHome: '/',
-  pbsDetails: '/details',
   pbsStudio: '/studio',
   pbsWorkspaceAlias: '/workspace',
   pbsWikiBook: '/llmwikibook',

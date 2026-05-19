@@ -161,6 +161,42 @@ def _apply_intent_profile_adjustments(hit: RetrievalHit, *, signals: ScoreSignal
         hit.component_scores["intent_profile_command_mismatch_penalty"] = 0.88
 
 
+def _metadata_signal_commands(metadata_filter: dict[str, object] | None) -> tuple[str, ...]:
+    if not metadata_filter:
+        return ()
+    boosts = metadata_filter.get("_intent_signal_boosts")
+    if not isinstance(boosts, dict):
+        return ()
+    commands = boosts.get("commands")
+    if not isinstance(commands, tuple | list):
+        return ()
+    return tuple(str(command or "").strip() for command in commands if str(command or "").strip())
+
+
+def _structured_signal_commands(
+    signals: ScoreSignals,
+    metadata_filter: dict[str, object] | None = None,
+) -> tuple[str, ...]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for command in _metadata_signal_commands(metadata_filter):
+        lowered = command.lower()
+        if lowered not in seen:
+            merged.append(command)
+            seen.add(lowered)
+    search_signals = signals.structured_query_signals.search_signals
+    commands = search_signals.get("commands", ()) if isinstance(search_signals, dict) else ()
+    if not isinstance(commands, tuple | list):
+        return tuple(merged)
+    for command in commands:
+        cleaned = str(command or "").strip()
+        lowered = cleaned.lower()
+        if cleaned and lowered not in seen:
+            merged.append(cleaned)
+            seen.add(lowered)
+    return tuple(merged)
+
+
 def _query_matches_hit_object(query: str, hit: RetrievalHit) -> bool:
     lowered_query = (query or "").lower()
     if not lowered_query:
@@ -215,6 +251,7 @@ def apply_hit_adjustments(
     *,
     signals: ScoreSignals,
     book_source_count: int,
+    metadata_filter: dict[str, object] | None = None,
 ) -> None:
     is_intake_doc = hit.viewer_path.startswith("/playbooks/customer-packs/")
     lowered_text = hit.text.lower()
@@ -254,6 +291,15 @@ def apply_hit_adjustments(
             hit.fused_score *= 0.82
 
     if signals.command_request_intent:
+        signal_commands = _structured_signal_commands(signals, metadata_filter)
+        has_command_surface = bool(hit.cli_commands or _has_shell_command_text(hit.text))
+        if signal_commands and any(_term_matches_text(command, _hit_search_text(hit)) for command in signal_commands):
+            hit.fused_score *= 2.25
+            hit.component_scores["structured_signal_command_exact_boost"] = 2.25
+        elif signal_commands and has_command_surface:
+            hit.fused_score *= 0.7
+            hit.component_scores["structured_signal_command_mismatch_penalty"] = 0.7
+
         if hit.cli_commands:
             hit.fused_score *= 1.35
             hit.component_scores["command_intent_cli_commands_boost"] = 1.35

@@ -414,7 +414,15 @@ function InlineParts({
           );
         }
         if (part.kind === 'citation') {
-          return <span key={`citation-text-${index}`}>[{part.index}]</span>;
+          return (
+            <span
+              key={`citation-text-${index}`}
+              className="inline-citation inline-citation-pending"
+              title="근거 정보를 불러오는 중입니다."
+            >
+              {part.index}
+            </span>
+          );
         }
         return <span key={`text-${index}`}>{part.value}</span>;
       })}

@@ -552,6 +552,9 @@ def handle_chat_stream(
         answer_log_started_at = time.perf_counter()
         active_answerer.append_log(result)
         server_timings_ms["answer_log_persist"] = (time.perf_counter() - answer_log_started_at) * 1000
+        answer_delta_started_at = time.perf_counter()
+        _stream_answer_delta(handler, str(result.answer or ""))
+        server_timings_ms["answer_delta_stream"] = (time.perf_counter() - answer_delta_started_at) * 1000
     except Exception as exc:  # noqa: BLE001
         handler._stream_event({"type": "error", "error": f"답변 생성 중 오류가 발생했습니다: {exc}"})
         return
@@ -629,7 +632,6 @@ def handle_chat_stream(
             server_timings_ms=server_timings_ms,
         )
     )
-    _stream_answer_delta(handler, str(response_payload.get("answer") or ""))
     handler._stream_event(
         {
             "type": "result",

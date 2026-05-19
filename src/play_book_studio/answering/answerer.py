@@ -421,6 +421,9 @@ def _citations_match_rbac_intent(citations: list) -> bool:
             "rolebinding",
             "role binding",
             "authorization",
+            "auth can-i",
+            "oc auth can-i",
+            "can-i",
             "권한",
             "사용자 역할",
             "clusterrole",
@@ -598,7 +601,8 @@ class ChatAnswerer:
     def from_settings(cls, settings: Settings) -> "ChatAnswerer":
         llm_client = LLMClient(settings)
         retriever = ChatRetriever.from_settings(settings, enable_vector=True)
-        retriever.query_signal_llm_client = llm_client
+        if settings.query_signal_llm_enabled:
+            retriever.query_signal_llm_client = llm_client
         return cls(
             settings=settings,
             retriever=retriever,

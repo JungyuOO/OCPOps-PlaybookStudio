@@ -266,6 +266,7 @@ def execute_retrieval_pipeline(
             "rewrite_reason": plan.rewrite_reason,
             "follow_up_detected": plan.follow_up_detected,
             "retrieval_query_count": len(plan.retrieval_queries),
+            "query_signal_debug": plan.query_signal_debug,
         },
     )
     if len(plan.retrieval_queries) > 1:
@@ -300,7 +301,9 @@ def execute_retrieval_pipeline(
                     "follow_up_detected": plan.follow_up_detected,
                     "decomposed_query_count": len(plan.decomposed_queries),
                     "retrieval_query_count": len(plan.retrieval_queries),
+                    "query_signal_debug": plan.query_signal_debug,
                 },
+                "query_signal_debug": plan.query_signal_debug,
                 "vector_runtime": {},
                 "ablation": {
                     "bm25_requested": use_bm25,
@@ -379,16 +382,17 @@ def execute_retrieval_pipeline(
     )
     fusion_output_k = max(top_k, min(effective_candidate_k, reranker_candidate_budget))
     hybrid_hits = fuse_ranked_hits(
-        plan.rewritten_query,
+        query,
         {
             "bm25": bm25_hits,
             "vector": vector_hits,
         },
         context=context,
+        metadata_filter=plan.metadata_filter or None,
         top_k=fusion_output_k,
     )
     hybrid_hits = _preserve_uploaded_customer_pack_candidate(
-        plan.rewritten_query,
+        query,
         hybrid_hits=hybrid_hits,
         overlay_hits=overlay_bm25_hits,
         context=context,
@@ -439,14 +443,14 @@ def execute_retrieval_pipeline(
         },
     )
     should_expand_graph, graph_reason = _should_expand_graph(
-        plan.rewritten_query,
+        query,
         follow_up_detected=plan.follow_up_detected,
         decomposed_query_count=len(plan.retrieval_queries),
         hits=hybrid_hits,
     )
     if should_expand_graph:
         graph_enriched_hits, graph_trace = retriever.graph_runtime.enrich_hits(
-            query=plan.rewritten_query,
+            query=query,
             hits=hybrid_hits,
             context=context,
             trace_callback=trace_callback,
@@ -467,7 +471,7 @@ def execute_retrieval_pipeline(
             },
         )
     graph_enriched_hits = _preserve_uploaded_customer_pack_candidate(
-        plan.rewritten_query,
+        query,
         hybrid_hits=graph_enriched_hits,
         overlay_hits=overlay_bm25_hits,
         context=context,
@@ -509,6 +513,7 @@ def execute_retrieval_pipeline(
         use_bm25=use_bm25,
         use_vector=use_vector,
         vector_runtime=vector_runtime,
+        query_signal_debug=plan.query_signal_debug,
     )
     return RetrievalResult(
         query=query,
