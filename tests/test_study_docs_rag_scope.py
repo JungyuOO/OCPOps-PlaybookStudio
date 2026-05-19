@@ -72,6 +72,20 @@ def test_enabled_source_scopes_override_route_preferred_scope() -> None:
     assert context.enabled_upload_document_ids == ["doc-a"]
 
 
+def test_study_docs_route_keeps_kmsc_scope_when_ui_source_scopes_are_sent() -> None:
+    context = context_with_request_overrides(
+        SessionContext(),
+        payload={
+            "route_kind": "study_docs",
+            "enabled_source_scopes": ["official_docs", "customer_docs", "user_upload"],
+        },
+        mode="ops",
+    )
+
+    assert context.preferred_source_scope == "study_docs"
+    assert context.enabled_source_scopes == []
+
+
 def test_course_route_is_not_main_chat_study_docs_scope() -> None:
     context = context_with_request_overrides(
         SessionContext(),
