@@ -47,6 +47,25 @@ GENERIC_CITATION_TOPICS = {
 }
 
 
+def _payload_string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        value = [
+            item.strip()
+            for item in value.replace(";", ",").split(",")
+            if item.strip()
+        ]
+    if not isinstance(value, list):
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in value:
+        normalized = str(item).strip()
+        if normalized and normalized not in seen:
+            result.append(normalized)
+            seen.add(normalized)
+    return result
+
+
 def _is_generic_citation_topic(topic: str) -> bool:
     normalized = strip_section_prefix(topic or "").strip().lower()
     return normalized in GENERIC_CITATION_TOPICS
@@ -102,6 +121,23 @@ def context_with_request_overrides(
         context.open_entities = [
             item for item in (target_title, target_slug, category_label) if item
         ]
+    if "enabled_source_scopes" in payload:
+        requested_source_scopes = payload.get("enabled_source_scopes") or []
+        parsed_source_scopes = _payload_string_list(requested_source_scopes)
+        if parsed_source_scopes:
+            context.enabled_source_scopes = parsed_source_scopes
+            if context.enabled_source_scopes:
+                context.preferred_source_scope = None
+        else:
+            context.enabled_source_scopes = []
+    if "enabled_official_book_slugs" in payload:
+        context.enabled_official_book_slugs = _payload_string_list(payload.get("enabled_official_book_slugs"))
+    if "enabled_customer_draft_ids" in payload:
+        context.enabled_customer_draft_ids = _payload_string_list(payload.get("enabled_customer_draft_ids"))
+    if "enabled_customer_document_ids" in payload:
+        context.enabled_customer_document_ids = _payload_string_list(payload.get("enabled_customer_document_ids"))
+    if "enabled_upload_document_ids" in payload:
+        context.enabled_upload_document_ids = _payload_string_list(payload.get("enabled_upload_document_ids"))
     return context
 
 def is_task_topic(topic: str) -> bool:

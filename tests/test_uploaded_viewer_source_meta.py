@@ -114,3 +114,48 @@ def test_uploaded_document_source_meta_uses_current_owner_scope(monkeypatch, tmp
     )
     assert payload["source_collection"] == "uploads"
     assert payload["boundary_truth"] == "private_user_upload_runtime"
+
+
+def test_uploaded_document_viewer_renders_kmsc_course_asset_figures():
+    html = server_routes_viewer._uploaded_document_course_asset_figures_html(
+        {
+            "metadata": {
+                "image_attachments": [
+                    {
+                        "asset_path": "data/course_pbs/assets/unit-test__img_01.png",
+                        "visual_summary": "OpenShift 콘솔에서 PV 상태를 확인하는 화면",
+                        "slide_no": 12,
+                        "instructional_role": "command_result_evidence",
+                        "is_default_visible": True,
+                    }
+                ]
+            }
+        }
+    )
+
+    assert 'class="upload-asset-figure upload-course-asset-figure"' in html
+    assert 'src="/api/v1/course/assets?path=data/course_pbs/assets/unit-test__img_01.png"' in html
+    assert 'loading="lazy"' in html
+    assert "OpenShift 콘솔에서 PV 상태를 확인하는 화면" in html
+
+
+def test_uploaded_document_viewer_ignores_unsafe_or_hidden_course_assets():
+    html = server_routes_viewer._uploaded_document_course_asset_figures_html(
+        {
+            "metadata": {
+                "image_attachments": [
+                    {
+                        "asset_path": "../../secrets.png",
+                        "visual_summary": "unsafe",
+                    },
+                    {
+                        "asset_path": "data/course_pbs/assets/hidden.png",
+                        "visual_summary": "hidden",
+                        "exclude_from_default": True,
+                    },
+                ]
+            }
+        }
+    )
+
+    assert html == ""

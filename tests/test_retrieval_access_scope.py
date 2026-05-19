@@ -138,6 +138,164 @@ def test_active_repository_filters_workspace_shared_hits():
     ] == ["repo-a-hit"]
 
 
+def test_enabled_combined_scope_keeps_official_and_selected_repository_uploads():
+    context = SessionContext(
+        owner_user_id="owner-a",
+        active_repository_id="repo-a",
+        enabled_source_scopes=["official_docs", "user_upload"],
+    )
+    visible_upload = _hit(
+        chunk_id="repo-a-hit",
+        repository_id="repo-a",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+    )
+    wrong_repository_upload = _hit(
+        chunk_id="repo-b-hit",
+        repository_id="repo-b",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+    )
+    official_without_repository = _hit(
+        chunk_id="official-hit",
+        visibility="workspace_shared",
+        source_scope="official_docs",
+    )
+
+    assert [
+        hit.chunk_id
+        for hit in filter_hits_by_session_scope(
+            [visible_upload, wrong_repository_upload, official_without_repository],
+            context=context,
+        )
+    ] == ["repo-a-hit", "official-hit"]
+
+
+def test_enabled_user_upload_scope_excludes_official_hits():
+    context = SessionContext(
+        owner_user_id="owner-a",
+        enabled_source_scopes=["user_upload"],
+    )
+    upload = _hit(
+        chunk_id="upload-hit",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+    )
+    official = _hit(
+        chunk_id="official-hit",
+        visibility="workspace_shared",
+        source_scope="official_docs",
+    )
+
+    assert [
+        hit.chunk_id
+        for hit in filter_hits_by_session_scope([upload, official], context=context)
+    ] == ["upload-hit"]
+
+
+def test_enabled_official_book_slugs_filter_official_hits():
+    context = SessionContext(
+        enabled_source_scopes=["official_docs"],
+        enabled_official_book_slugs=["ocp-storage"],
+    )
+    visible = _hit(
+        chunk_id="selected-book",
+        book_slug="ocp-storage",
+        visibility="workspace_shared",
+        source_scope="official_docs",
+    )
+    hidden = _hit(
+        chunk_id="unselected-book",
+        book_slug="ocp-networking",
+        visibility="workspace_shared",
+        source_scope="official_docs",
+    )
+
+    assert [hit.chunk_id for hit in filter_hits_by_session_scope([visible, hidden], context=context)] == [
+        "selected-book"
+    ]
+
+
+def test_enabled_customer_document_ids_filter_study_docs_hits():
+    context = SessionContext(
+        enabled_source_scopes=["customer_docs"],
+        enabled_customer_document_ids=["study-doc-a"],
+    )
+    visible = _hit(
+        chunk_id="study-doc-a-hit",
+        book_slug="kmsc-operations",
+        document_source_id="study-doc-a",
+        visibility="workspace_shared",
+        source_scope="study_docs",
+    )
+    hidden = _hit(
+        chunk_id="study-doc-b-hit",
+        book_slug="kmsc-operations",
+        document_source_id="study-doc-b",
+        visibility="workspace_shared",
+        source_scope="study_docs",
+    )
+
+    assert [hit.chunk_id for hit in filter_hits_by_session_scope([visible, hidden], context=context)] == [
+        "study-doc-a-hit"
+    ]
+
+
+def test_enabled_customer_draft_ids_filter_customer_hits():
+    context = SessionContext(
+        enabled_source_scopes=["customer_docs"],
+        enabled_customer_draft_ids=["draft-a"],
+    )
+    visible = _hit(
+        chunk_id="draft-a:section-1",
+        source_id="customer_pack:draft-a",
+        source_lane="customer_pack",
+        viewer_path="/playbooks/customer-packs/draft-a/index.html#section-1",
+    )
+    hidden = _hit(
+        chunk_id="draft-b:section-1",
+        source_id="customer_pack:draft-b",
+        source_lane="customer_pack",
+        viewer_path="/playbooks/customer-packs/draft-b/index.html#section-1",
+    )
+
+    assert [hit.chunk_id for hit in filter_hits_by_session_scope([visible, hidden], context=context)] == [
+        "draft-a:section-1"
+    ]
+
+
+def test_enabled_upload_document_ids_override_active_repository_filter():
+    context = SessionContext(
+        owner_user_id="owner-a",
+        active_repository_id="repo-a",
+        enabled_source_scopes=["user_upload"],
+        enabled_upload_document_ids=["doc-b"],
+    )
+    hidden = _hit(
+        chunk_id="doc-a-hit",
+        repository_id="repo-a",
+        document_source_id="doc-a",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+    )
+    visible = _hit(
+        chunk_id="doc-b-hit",
+        repository_id="repo-b",
+        document_source_id="doc-b",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+    )
+
+    assert [hit.chunk_id for hit in filter_hits_by_session_scope([hidden, visible], context=context)] == [
+        "doc-b-hit"
+    ]
+
+
 def test_active_document_still_requires_private_repository_scope():
     context = SessionContext(
         owner_user_id="owner-a",

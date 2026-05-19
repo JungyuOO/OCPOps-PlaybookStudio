@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import time
 from functools import lru_cache
 from pathlib import Path
 
+from .access_scope import (
+    SOURCE_GROUP_CUSTOMER_DOCS,
+    SOURCE_GROUP_USER_UPLOAD,
+    enabled_source_scope_set,
+    source_group_for_candidate,
+)
 from .intake_overlay import has_active_customer_pack_selection
 from .models import RetrievalHit, RetrievalResult, SessionContext
 from .retriever_plan import build_retrieval_plan
@@ -33,6 +40,11 @@ DERIVED_RUNTIME_SOURCE_TYPES = frozenset(
         "synthesized_playbook",
     }
 )
+_FILE_IDENTIFIER_RE = re.compile(
+    r"(?i)\b[\w.-]+\.(?:ya?ml|json|sh|ps1|txt|md|markdown|adoc|asciidoc|conf|ini|properties|xml)\b"
+)
+_DEMO_IDENTIFIER_RE = re.compile(r"(?i)\bdemo-[\w.-]+\b")
+_CUSTOMER_TEST_ID_RE = re.compile(r"(?i)\b(?:TEST|KMSC|COCP|RTER|RECR)-[A-Z0-9_-]+\b")
 
 
 def _is_customer_pack_explicit_query(query: str) -> bool:
@@ -105,6 +117,209 @@ def _preserve_uploaded_customer_pack_candidate(
     return preserved[: max(len(hybrid_hits), 1)]
 
 
+def _query_upload_identifier_tokens(query: str) -> tuple[str, ...]:
+    seen: set[str] = set()
+    tokens: list[str] = []
+    for pattern in (_FILE_IDENTIFIER_RE, _DEMO_IDENTIFIER_RE):
+        for match in pattern.finditer(query or ""):
+            token = match.group(0).strip().casefold()
+            if not token or token in seen:
+                continue
+            tokens.append(token)
+            seen.add(token)
+            if "." in token:
+                stem = token.rsplit(".", 1)[0]
+                if stem and stem not in seen:
+                    tokens.append(stem)
+                    seen.add(stem)
+    return tuple(tokens)
+
+
+def _upload_identifier_match_count(hit: RetrievalHit, tokens: tuple[str, ...]) -> int:
+    if not tokens:
+        return 0
+    haystack = "\n".join(
+        (
+            hit.text or "",
+            hit.section or "",
+            hit.heading_title or "",
+            hit.source_url or "",
+            " ".join(hit.cli_commands),
+        )
+    ).casefold()
+    return sum(1 for token in tokens if token and token in haystack)
+
+
+def _query_customer_scope_signal(query: str) -> bool:
+    lowered = (query or "").casefold()
+    return bool(
+        _CUSTOMER_TEST_ID_RE.search(query or "")
+        or any(
+            token in lowered
+            for token in (
+                "kmsc",
+                "komsco",
+                "고객문서",
+                "고객 문서",
+                "단위 테스트",
+                "단위테스트",
+                "통합 테스트",
+                "통합테스트",
+                "성능 테스트",
+                "성능테스트",
+                "테스트 케이스",
+                "test case",
+                "unit test",
+                "unit_test",
+                "chak-test",
+                "nfs-chak",
+                "komscochak",
+            )
+        )
+    )
+
+
+def _customer_signal_score(query: str, hit: RetrievalHit) -> int:
+    if not _query_customer_scope_signal(query):
+        return 0
+    lowered_query = (query or "").casefold()
+    haystack = "\n".join(
+        (
+            hit.book_slug or "",
+            hit.chapter or "",
+            hit.section or "",
+            hit.heading_title or "",
+            hit.source_id or "",
+            hit.source_url or "",
+            hit.text or "",
+        )
+    ).casefold()
+    score = 0
+    if "kmsc" in lowered_query and ("kmsc" in haystack or "kmsc-operations" in haystack):
+        score += 4
+    if any(token in lowered_query for token in ("단위 테스트", "단위테스트", "unit test", "unit_test")) and any(
+        token in haystack for token in ("unit_test", "단위 테스트", "단위테스트", "test-un-")
+    ):
+        score += 4
+    for match in _CUSTOMER_TEST_ID_RE.finditer(query or ""):
+        if match.group(0).casefold() in haystack:
+            score += 5
+    if ("pv" in lowered_query or "pvc" in lowered_query) and ("pv" in haystack or "pvc" in haystack):
+        score += 2
+    if "삭제" in lowered_query and "삭제" in haystack:
+        score += 2
+    if "확인" in lowered_query and "확인" in haystack:
+        score += 1
+    if any(token in lowered_query for token in ("chak-test", "nfs-chak", "komscochak")) and any(
+        token in haystack for token in ("chak-test", "nfs-chak", "komscochak")
+    ):
+        score += 5
+    return score
+
+
+def _preserve_specific_user_upload_candidate(
+    query: str,
+    *,
+    target_hits: list[RetrievalHit],
+    candidate_hits: list[RetrievalHit],
+    context: SessionContext | None,
+) -> list[RetrievalHit]:
+    enabled = enabled_source_scope_set(context)
+    if enabled and SOURCE_GROUP_USER_UPLOAD not in enabled:
+        return target_hits
+    tokens = _query_upload_identifier_tokens(query)
+    if not tokens or not candidate_hits:
+        return target_hits
+
+    candidates: list[tuple[int, int, RetrievalHit]] = []
+    for index, hit in enumerate(candidate_hits):
+        if source_group_for_candidate(hit) != SOURCE_GROUP_USER_UPLOAD:
+            continue
+        match_count = _upload_identifier_match_count(hit, tokens)
+        if match_count <= 0:
+            continue
+        candidates.append((match_count, index, hit))
+    if not candidates:
+        return target_hits
+
+    candidates.sort(
+        key=lambda item: (
+            -item[0],
+            item[1],
+            -float(item[2].fused_score or item[2].raw_score or 0.0),
+            item[2].chunk_id,
+        )
+    )
+    _match_count, _source_index, source_hit = candidates[0]
+    existing_ids = {hit.chunk_id for hit in target_hits}
+    if source_hit.chunk_id in existing_ids:
+        preserved_hit = next(hit for hit in target_hits if hit.chunk_id == source_hit.chunk_id)
+    else:
+        preserved_hit = copy.deepcopy(source_hit)
+        preserved_hit.source = "hybrid_user_upload_identifier_seeded"
+        preserved_hit.component_scores = dict(preserved_hit.component_scores)
+        preserved_hit.component_scores.setdefault("upload_identifier_seed", 1.0)
+        preserved_hit.fused_score = max(
+            float(preserved_hit.fused_score or 0.0),
+            float(preserved_hit.raw_score or 0.0),
+        )
+
+    preserved = [preserved_hit]
+    preserved.extend(hit for hit in target_hits if hit.chunk_id != preserved_hit.chunk_id)
+    return preserved[: max(len(target_hits), 1)]
+
+
+def _preserve_specific_customer_candidate(
+    query: str,
+    *,
+    target_hits: list[RetrievalHit],
+    candidate_hits: list[RetrievalHit],
+    context: SessionContext | None,
+) -> list[RetrievalHit]:
+    enabled = enabled_source_scope_set(context)
+    if enabled and SOURCE_GROUP_CUSTOMER_DOCS not in enabled:
+        return target_hits
+    if not _query_customer_scope_signal(query) or not candidate_hits:
+        return target_hits
+
+    candidates: list[tuple[int, int, RetrievalHit]] = []
+    for index, hit in enumerate(candidate_hits):
+        if source_group_for_candidate(hit) != SOURCE_GROUP_CUSTOMER_DOCS:
+            continue
+        signal_score = _customer_signal_score(query, hit)
+        if signal_score <= 0:
+            continue
+        candidates.append((signal_score, index, hit))
+    if not candidates:
+        return target_hits
+
+    candidates.sort(
+        key=lambda item: (
+            -item[0],
+            item[1],
+            -float(item[2].fused_score or item[2].raw_score or 0.0),
+            item[2].chunk_id,
+        )
+    )
+    _signal_score, _source_index, source_hit = candidates[0]
+    existing_ids = {hit.chunk_id for hit in target_hits}
+    if source_hit.chunk_id in existing_ids:
+        preserved_hit = next(hit for hit in target_hits if hit.chunk_id == source_hit.chunk_id)
+    else:
+        preserved_hit = copy.deepcopy(source_hit)
+        preserved_hit.source = "hybrid_customer_identifier_seeded"
+        preserved_hit.component_scores = dict(preserved_hit.component_scores)
+        preserved_hit.component_scores.setdefault("customer_identifier_seed", 1.0)
+        preserved_hit.fused_score = max(
+            float(preserved_hit.fused_score or 0.0),
+            float(preserved_hit.raw_score or 0.0),
+        )
+
+    preserved = [preserved_hit]
+    preserved.extend(hit for hit in target_hits if hit.chunk_id != preserved_hit.chunk_id)
+    return preserved[: max(len(target_hits), 1)]
+
+
 @lru_cache(maxsize=1)
 def _active_runtime_slug_set(manifest_path: str) -> frozenset[str]:
     path = Path(manifest_path)
@@ -155,6 +370,9 @@ def _filter_preferred_source_scope(
     hits: list[RetrievalHit],
     context: SessionContext,
 ) -> list[RetrievalHit]:
+    enabled = enabled_source_scope_set(context)
+    if enabled:
+        return [hit for hit in hits if source_group_for_candidate(hit) in enabled]
     preferred = str(getattr(context, "preferred_source_scope", "") or "").strip()
     if not preferred:
         return hits
@@ -391,6 +609,19 @@ def execute_retrieval_pipeline(
         metadata_filter=plan.metadata_filter or None,
         top_k=fusion_output_k,
     )
+    lexical_candidate_hits = [*bm25_hits, *overlay_bm25_hits, *vector_hits]
+    hybrid_hits = _preserve_specific_user_upload_candidate(
+        query,
+        target_hits=hybrid_hits,
+        candidate_hits=lexical_candidate_hits,
+        context=context,
+    )
+    hybrid_hits = _preserve_specific_customer_candidate(
+        query,
+        target_hits=hybrid_hits,
+        candidate_hits=lexical_candidate_hits,
+        context=context,
+    )
     hybrid_hits = _preserve_uploaded_customer_pack_candidate(
         query,
         hybrid_hits=hybrid_hits,
@@ -477,6 +708,19 @@ def execute_retrieval_pipeline(
         context=context,
     )
     graph_enriched_hits = _filter_latest_only_hits(retriever, graph_enriched_hits)
+    graph_enriched_hits = _filter_preferred_source_scope(graph_enriched_hits, context)
+    graph_enriched_hits = _preserve_specific_user_upload_candidate(
+        query,
+        target_hits=graph_enriched_hits,
+        candidate_hits=lexical_candidate_hits,
+        context=context,
+    )
+    graph_enriched_hits = _preserve_specific_customer_candidate(
+        query,
+        target_hits=graph_enriched_hits,
+        candidate_hits=lexical_candidate_hits,
+        context=context,
+    )
     hits, reranker_trace = maybe_rerank_hits(
         retriever,
         query=query,
@@ -487,6 +731,19 @@ def execute_retrieval_pipeline(
         timings_ms=timings_ms,
     )
     hits = _filter_latest_only_hits(retriever, hits)
+    hits = _filter_preferred_source_scope(hits, context)
+    hits = _preserve_specific_user_upload_candidate(
+        query,
+        target_hits=hits,
+        candidate_hits=lexical_candidate_hits,
+        context=context,
+    )
+    hits = _preserve_specific_customer_candidate(
+        query,
+        target_hits=hits,
+        candidate_hits=lexical_candidate_hits,
+        context=context,
+    )
     trace = build_retrieval_trace(
         warnings=warnings,
         bm25_hits=bm25_hits,

@@ -459,6 +459,7 @@ const VIEWER_READER_POLISH = `
     box-shadow: 0 4px 12px rgba(0,0,0,0.03) !important;
     border-radius: 12px !important;
     margin-bottom: 24px !important;
+    padding: 28px 32px !important;
     transition: border-color 0.3s ease, background-color 0.3s ease;
     content-visibility: auto;
     contain-intrinsic-size: 1px 520px;
@@ -970,6 +971,7 @@ export default function ViewerDocumentStage({
   onRemoveTextAnnotation,
   className,
   surfaceVariant = 'default',
+  surfaceTheme = 'auto',
 }: {
   viewerDocument: ViewerDocumentPayload;
   currentViewerPath?: string;
@@ -991,6 +993,7 @@ export default function ViewerDocumentStage({
   ) => void;
   className?: string;
   surfaceVariant?: 'default' | 'editorial';
+  surfaceTheme?: 'auto' | 'paper' | 'obsidian';
 }) {
   const shellRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -1026,9 +1029,11 @@ export default function ViewerDocumentStage({
       return;
     }
     host.dataset.viewerVariant = surfaceVariant;
-    host.dataset.viewerTheme = document.documentElement.getAttribute('data-theme') === 'light'
-      ? 'paper'
-      : 'obsidian';
+    host.dataset.viewerTheme = surfaceTheme !== 'auto'
+      ? surfaceTheme
+      : document.documentElement.getAttribute('data-theme') === 'light'
+        ? 'paper'
+        : 'obsidian';
     const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
     shadowRootRef.current = root;
     root.replaceChildren();
@@ -1278,7 +1283,7 @@ export default function ViewerDocumentStage({
       wrapperRef.current = null;
       root.removeEventListener('click', handleClick);
     };
-  }, [surfaceVariant, viewerDocument.bodyClassName, viewerDocument.html, inlineStylesKey]);
+  }, [surfaceTheme, surfaceVariant, viewerDocument.bodyClassName, viewerDocument.html, inlineStylesKey]);
 
   useEffect(() => {
     const host = hostRef.current;

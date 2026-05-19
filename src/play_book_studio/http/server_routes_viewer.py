@@ -6,7 +6,7 @@ import re
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urljoin, urlparse, urlunparse
+from urllib.parse import parse_qs, quote, urljoin, urlparse, urlunparse
 
 from play_book_studio.http.customer_pack_read_boundary import (
     customer_pack_draft_id_from_viewer_path,
@@ -349,6 +349,13 @@ def _json_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _short_viewer_text(value: Any, *, limit: int = 220) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit].rstrip()}..."
+
+
 def _asset_data_url(content: bytes, mime_type: str) -> str:
     encoded = base64.b64encode(content).decode("ascii")
     return f"data:{mime_type or 'application/octet-stream'};base64,{encoded}"
@@ -403,6 +410,64 @@ def _uploaded_document_asset_sources(root_dir: Path, document: dict[str, Any], a
         if parser_asset_id:
             result[parser_asset_id] = result[asset_id]
     return result
+
+
+def _course_asset_viewer_src(asset_path: str) -> str:
+    normalized = str(asset_path or "").strip().replace("\\", "/")
+    if not normalized.startswith("data/course_pbs/assets/"):
+        return ""
+    if not re.search(r"\.(?:png|jpe?g|webp|gif)$", normalized, re.IGNORECASE):
+        return ""
+    return f"/api/v1/course/assets?path={quote(normalized, safe='/._-()')}"
+
+
+def _uploaded_document_course_asset_figures_html(chunk: dict[str, Any]) -> str:
+    metadata = _json_dict(chunk.get("metadata"))
+    attachments = metadata.get("image_attachments")
+    if not isinstance(attachments, list):
+        return ""
+
+    candidates = [
+        attachment
+        for attachment in attachments
+        if isinstance(attachment, dict) and not bool(attachment.get("exclude_from_default"))
+    ]
+    candidates.sort(
+        key=lambda item: (
+            not bool(item.get("is_default_visible", True)),
+            int(item.get("default_visible_order") or item.get("image_rank_order") or 9999),
+            str(item.get("asset_id") or item.get("attachment_id") or ""),
+        )
+    )
+
+    figures: list[str] = []
+    seen_paths: set[str] = set()
+    for attachment in candidates[:6]:
+        asset_path = str(attachment.get("asset_path") or "").strip()
+        src = _course_asset_viewer_src(asset_path)
+        if not src or src in seen_paths:
+            continue
+        seen_paths.add(src)
+        caption = _short_viewer_text(
+            attachment.get("visual_summary")
+            or attachment.get("caption_text")
+            or attachment.get("ocr_text")
+            or attachment.get("instructional_role")
+            or "",
+            limit=220,
+        )
+        slide_no = int(attachment.get("slide_no") or 0)
+        role = str(attachment.get("instructional_role") or "").strip().replace("_", " ")
+        caption_parts = [part for part in [f"Slide {slide_no}" if slide_no else "", role, caption] if part]
+        caption_text = " - ".join(caption_parts)
+        alt_text = caption or caption_text or "고객문서 이미지"
+        figures.append(
+            '<figure class="upload-asset-figure upload-course-asset-figure">'
+            f'<img src="{html.escape(src, quote=True)}" alt="{html.escape(alt_text, quote=True)}" loading="lazy" />'
+            + (f"<figcaption>{html.escape(caption_text)}</figcaption>" if caption_text else "")
+            + "</figure>"
+        )
+    return "\n".join(figures)
 
 
 def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_user_id: str = "") -> str | None:
@@ -470,7 +535,9 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
                     markdown,
                     token_count,
                     page_start,
-                    page_end
+                    page_end,
+                    asset_ids,
+                    metadata
                 FROM document_chunks
                 WHERE parsed_document_id = %s::uuid
                   AND navigation_only = false
@@ -562,10 +629,12 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
             chunk_markdown = _strip_uploaded_document_title(str(row.get("markdown") or ""), title)
             chunk_markdown = _strip_uploaded_document_title(chunk_markdown, stored_title)
             chunk_html = _markdownish_to_html(chunk_markdown, asset_sources=asset_sources)
+            chunk_asset_html = _uploaded_document_course_asset_figures_html(row)
             chunk_sections.append(
                 f'<section id="{html.escape(section_id, quote=True)}" class="upload-chunk-section">'
                 + "".join(alias_parts)
                 + chunk_html
+                + chunk_asset_html
                 + "</section>"
             )
         document_body_html = "\n".join(chunk_sections)
@@ -720,10 +789,11 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
         }
         .upload-reader .upload-asset-figure figcaption {
           padding: 10px 12px;
-          color: #a8d7ee;
+          color: #334155;
           font-size: 0.86rem;
           line-height: 1.55;
-          border-top: 1px solid rgba(125, 211, 252, 0.14);
+          border-top: 1px solid rgba(148, 163, 184, 0.22);
+          background: #f8fafc;
         }
         .upload-reader .quality-notes {
           display: grid;
