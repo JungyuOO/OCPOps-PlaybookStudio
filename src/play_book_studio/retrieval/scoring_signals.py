@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from play_book_studio.answering.query_intents import IntentProfile, build_intent_profile
+
 from .models import SessionContext
-from .intent_profile import IntentProfile, build_intent_profile
-from .query_understanding import StructuredQuerySignals, understand_query_signals
 from .query import (
     OC_LOGIN_RE,
     has_backup_restore_intent,
@@ -32,6 +32,12 @@ from .query import (
     query_book_adjustments,
 )
 from .ranking import extract_structured_query_terms as _extract_structured_query_terms
+
+
+@dataclass(slots=True)
+class StructuredQuerySignals:
+    classification: dict[str, object]
+    confidence: dict[str, float]
 
 
 @dataclass(slots=True)
@@ -70,7 +76,16 @@ class ScoreSignals:
 
 def build_score_signals(query: str, *, context: SessionContext) -> ScoreSignals:
     intent_profile = build_intent_profile(query)
-    structured_signals = understand_query_signals(query)
+    lowered_query = (query or "").lower()
+    storage_terms = ("storage", "pvc", "pv", "storageclass", "vsphere", "vmware", "azure", "aws", "gcp", "스토리지")
+    structured_signals = StructuredQuerySignals(
+        classification=(
+            {"domain": "storage", "book_slug_candidates": ("storage",)}
+            if any(term in lowered_query for term in storage_terms)
+            else {}
+        ),
+        confidence={"domain": 0.9} if any(term in lowered_query for term in storage_terms) else {},
+    )
     structured_query_terms = tuple(_extract_structured_query_terms(query))
     book_boosts, book_penalties = query_book_adjustments(query, context=context)
     compare_intent = has_openshift_kubernetes_compare_intent(query)

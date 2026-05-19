@@ -124,6 +124,7 @@ class ChatRetriever:
             candidate_k=candidate_k,
             top_k=top_k,
             database_url=getattr(self.settings, "database_url", ""),
+            context=context,
         )
         hits = search.hits
         reranker_failed = False

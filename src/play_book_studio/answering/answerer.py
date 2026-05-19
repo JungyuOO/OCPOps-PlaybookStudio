@@ -276,6 +276,11 @@ def _is_low_confidence_retrieval(
         )
         for citation in citations
     ).lower()
+    max_fused = _selected_hit_score(selected_hits, "fused_score")
+    max_pre_rerank = _selected_hit_score(selected_hits, "pre_rerank_fused_score")
+    max_vector = _selected_hit_score(selected_hits, "vector_score")
+    if max_fused <= -4.5 and max(max_pre_rerank, max_vector) < 0.05:
+        return True
     if has_backup_restore_intent(query) and any(token in citation_haystack for token in ("etcd", "backup", "restore", "백업", "복원")):
         return False
     if ("route" in normalized_query or "ingress" in normalized_query) and any(
@@ -336,9 +341,6 @@ def _is_low_confidence_retrieval(
     ):
         return False
     coverage = _citation_token_coverage(query, citations)
-    max_fused = _selected_hit_score(selected_hits, "fused_score")
-    max_pre_rerank = _selected_hit_score(selected_hits, "pre_rerank_fused_score")
-    max_vector = _selected_hit_score(selected_hits, "vector_score")
     has_command_grounding = any(citation.cli_commands for citation in citations)
     if has_command_request(query) and has_command_grounding and coverage >= 0.2:
         return False

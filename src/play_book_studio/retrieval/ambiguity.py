@@ -165,6 +165,8 @@ def has_security_doc_locator_ambiguity(query: str) -> bool:
         return False
     if not has_doc_locator_intent(normalized):
         return False
+    if any(token in normalized for token in ("문제", "어디", "����", "���", "?대뵒")):
+        return True
     if SECURITY_SCOPE_RE.search(normalized):
         return False
     return any(

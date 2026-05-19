@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from play_book_studio.answering.answer_text import shape_beginner_grounded_answer
 from play_book_studio.answering.models import Citation
-from play_book_studio.retrieval.query_understanding import understand_query
+from play_book_studio.answering.query_intents import understand_query
 
 
 MOJIBAKE_MARKERS = ("?붿", "?ㅼ", "留", "濡", "寃", "쑝", "섎", "낅")

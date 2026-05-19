@@ -4,7 +4,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
-from .models import RetrievalHit
+from .models import RetrievalHit, SessionContext
 from .query_normalize import normalize_query
 from .ranking import rrf_merge_named_hit_lists
 
@@ -30,6 +30,17 @@ def hydrate_final_hits(hits: list[RetrievalHit], *, database_url: str) -> list[R
         return hydrate_retrieval_hits(connection, hits)
 
 
+def filter_preferred_source_scope(
+    hits: list[RetrievalHit],
+    context: SessionContext | None,
+) -> list[RetrievalHit]:
+    preferred = str(getattr(context, "preferred_source_scope", "") or "").strip()
+    if not preferred:
+        return hits
+    scoped_hits = [hit for hit in hits if str(hit.source_scope or "").strip() == preferred]
+    return scoped_hits or hits
+
+
 def hybrid_search(
     query: str,
     *,
@@ -38,6 +49,7 @@ def hybrid_search(
     candidate_k: int = 40,
     top_k: int = 8,
     database_url: str = "",
+    context: SessionContext | None = None,
 ) -> HybridSearchResult:
     normalized = normalize_query(query)
     vector_failed = False
@@ -63,6 +75,8 @@ def hybrid_search(
         bm25_hits = bm25_future.result()
         vector_hits = vector_future.result()
 
+    bm25_hits = filter_preferred_source_scope(bm25_hits, context)
+    vector_hits = filter_preferred_source_scope(vector_hits, context)
     merged = rrf_merge_named_hit_lists(
         {"bm25": bm25_hits, "vector": vector_hits},
         source_name="hybrid",

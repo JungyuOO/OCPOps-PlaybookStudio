@@ -63,18 +63,22 @@ def understand_query(query: str) -> QueryUnderstanding:
         intents.append("install_overview")
         answer_shape = "beginner_install_overview"
         terms.extend(("installation overview", "openshift-install", "pull secret", "kubeconfig"))
+
     if _contains_any(lowered, ("namespace", "namespaces", "project", "projects", "네임스페이스", "프로젝트")):
         intents.append("namespace_or_project")
         terms.extend(("namespace", "project", "oc get namespaces", "oc get projects"))
-        if _contains_any(lowered, ("create", "new", "make", "만들", "생성", "추가")):
+        if _contains_any(lowered, ("create", "new", "make", "만들", "만드", "생성", "추가")):
             intents.append("namespace_create")
             terms.extend(("oc create namespace", "oc new-project"))
+
     if re.search(r"(deployment|deploy|배포|디플로이먼트).*(yaml|manifest|매니페스트|작성|생성|만들|apply)", lowered):
         intents.append("deployment_yaml_authoring")
         terms.extend(("kind: Deployment", "oc apply -f", "deployment manifest"))
+
     if re.search(r"(pod|pods|파드).*(resource|usage|cpu|memory|메모리|리소스|사용량|top)", lowered):
         intents.append("pod_resource_inspection")
         terms.extend(("oc adm top pods", "cpu", "memory", "resource usage"))
+
     if _contains_any(lowered, ("resourcequota", "resourcequotas", "quota", "quotas", "쿼터")):
         intents.append("resourcequota_inspection")
         terms.extend(
@@ -88,13 +92,22 @@ def understand_query(query: str) -> QueryUnderstanding:
                 "requests.memory",
             )
         )
+
     if re.search(r"(service|svc|서비스).*(장애|오류|에러|안\s*됨|접속|연결|endpoint|selector|fail|error)", lowered):
         intents.append("service_failure_diagnosis")
         terms.extend(("service", "endpoint", "selector", "route"))
+
     if re.search(r"오류|에러|장애|문제|실패|안\s*돼|안\s*됨|trouble|fail|error|pending|crashloop", lowered):
         intents.append("troubleshooting")
         answer_shape = "troubleshooting_steps"
         terms.extend(("troubleshooting", "events", "describe", "logs"))
+
+    if _contains_any(lowered, ("secret", "configmap", "config map", "configuration", "config")) and (
+        "troubleshooting" in intents or _contains_any(lowered, ("error", "fail", "오류", "에러", "장애"))
+    ):
+        intents.append("secret_config_troubleshooting")
+        terms.extend(("Secret", "ConfigMap", "oc describe pod", "events"))
+
     if _contains_any(lowered, ("명령", "명령어", "command", "cli", " oc ", "확인")):
         intents.append("command_lookup")
         answer_shape = "command_with_judgement"
@@ -115,7 +128,7 @@ def build_intent_profile(query: str) -> IntentProfile:
     normalized = normalize_query(query)
     understanding = understand_query(normalized)
     query_terms = _dedupe_terms(tuple(understanding.retrieval_terms), tuple(normalized.split()))
-    primary_commands = tuple(term for term in query_terms if term.startswith("oc ") or term in {"oc"})
+    primary_commands = tuple(term for term in query_terms if term.startswith("oc ") or term == "oc")
     needs_command = understanding.has_intent("command_lookup") or bool(primary_commands)
     intent = understanding.intents[0] if understanding.intents else "unknown"
     target_object = "resourcequota" if understanding.has_intent("resourcequota_inspection") else ""

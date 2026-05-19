@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from .alias_table import expand_with_aliases, load_alias_table
-
 _ALIAS_TABLE = load_alias_table()
 
 

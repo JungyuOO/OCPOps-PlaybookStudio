@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from play_book_studio.http.session_flow import context_with_request_overrides
+from play_book_studio.retrieval.hybrid_search import filter_preferred_source_scope
 from play_book_studio.retrieval.models import RetrievalHit, SessionContext
-from play_book_studio.retrieval.retriever_pipeline import _filter_preferred_source_scope
 
 
 def _hit(chunk_id: str, source_scope: str) -> RetrievalHit:
@@ -55,7 +55,7 @@ def test_course_route_is_not_main_chat_study_docs_scope() -> None:
 def test_preferred_source_scope_filters_retrieval_hits_to_study_docs() -> None:
     context = SessionContext(preferred_source_scope="study_docs")
 
-    hits = _filter_preferred_source_scope(
+    hits = filter_preferred_source_scope(
         [_hit("official-1", "official_docs"), _hit("study-1", "study_docs")],
         context,
     )
