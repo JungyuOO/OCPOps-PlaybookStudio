@@ -14,6 +14,7 @@ on:
       - .github/workflows/publish-images.yml
       - deploy/Dockerfile
       - deploy/docker-compose.image.yml
+      - deploy/nginx/**
       - deploy/scripts/**
       - apps/web/**
       - corpus/**
