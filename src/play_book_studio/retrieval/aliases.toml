@@ -1,0 +1,11 @@
+# Natural Korean operator phrasing -> canonical retrieval terms.
+# Add new aliases here instead of adding per-query code branches.
+
+[aliases]
+"pod 중단 예산" = ["poddisruptionbudget", "PodDisruptionBudget"]
+"중단 예산" = ["poddisruptionbudget"]
+"모든 프로젝트" = ["--all-namespaces"]
+"로그인" = ["login", "oc login"]
+"로그아웃" = ["logout", "oc logout"]
+"노드 상태" = ["node status", "oc get nodes"]
+"네임스페이스" = ["namespace", "project"]
