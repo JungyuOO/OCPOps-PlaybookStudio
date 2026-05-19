@@ -4,7 +4,12 @@ import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
-from play_book_studio.http.session_owner import OWNER_COOKIE_NAME, resolve_session_owner
+from play_book_studio.http.session_owner import (
+    CLIENT_OWNER_COOKIE_NAME,
+    OWNER_COOKIE_NAME,
+    SINGLE_USER_OWNER_ENV,
+    resolve_session_owner,
+)
 from play_book_studio.http.sessions import SessionStore, Turn
 
 
@@ -103,6 +108,22 @@ def test_owner_cookie_is_issued_when_request_has_no_identity() -> None:
     assert "HttpOnly" in owner.set_cookie_header
 
 
+def test_single_user_owner_env_overrides_cookies_and_headers(monkeypatch) -> None:
+    monkeypatch.setenv(SINGLE_USER_OWNER_ENV, "local-playbookstudio-user")
+    handler = SimpleNamespace(
+        headers={
+            "X-Forwarded-User": "alice@example.com",
+            "Cookie": f"{OWNER_COOKIE_NAME}=browser-cookie-owner",
+        }
+    )
+
+    owner = resolve_session_owner(handler)
+
+    assert owner.source == SINGLE_USER_OWNER_ENV
+    assert owner.raw_owner == "single_user:local-playbookstudio-user"
+    assert owner.set_cookie_header == ""
+
+
 def test_proxy_header_owner_takes_precedence_over_cookie() -> None:
     cookie_handler = SimpleNamespace(headers={})
     cookie_owner = resolve_session_owner(cookie_handler)
@@ -118,3 +139,16 @@ def test_proxy_header_owner_takes_precedence_over_cookie() -> None:
     assert owner.source == "X-Forwarded-User"
     assert owner.owner_hash != cookie_owner.owner_hash
     assert owner.set_cookie_header == ""
+
+
+def test_frontend_owner_cookie_matches_x_user_scope_for_html_viewer() -> None:
+    owner_token = "browser-owner-for-uploaded-html-viewer"
+    header_owner = resolve_session_owner(SimpleNamespace(headers={"X-User": owner_token}))
+    cookie_owner = resolve_session_owner(
+        SimpleNamespace(headers={"Cookie": f"{CLIENT_OWNER_COOKIE_NAME}={owner_token}"})
+    )
+
+    assert f"{CLIENT_OWNER_COOKIE_NAME}={owner_token}" in header_owner.set_cookie_header
+    assert cookie_owner.source == CLIENT_OWNER_COOKIE_NAME
+    assert cookie_owner.owner_hash == header_owner.owner_hash
+    assert cookie_owner.set_cookie_header == ""

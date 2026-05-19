@@ -850,7 +850,7 @@ def _upload_ingest_summary(parsed, chunks, *, persisted=None) -> dict:
 def _run_upload_ingest(args: argparse.Namespace) -> int:
     from play_book_studio.db.document_repository import persist_parsed_upload_document
     from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
-    from play_book_studio.ingestion.vision import build_qwen_image_describer
+    from play_book_studio.ingestion.vision import build_company_llm_image_describer
 
     root_dir = args.root_dir.resolve()
     source_path = args.path
@@ -862,7 +862,7 @@ def _run_upload_ingest(args: argparse.Namespace) -> int:
         return 1
 
     settings = load_settings(root_dir)
-    parsed = parse_upload_document(source_path, image_describer=build_qwen_image_describer(settings))
+    parsed = parse_upload_document(source_path, image_describer=build_company_llm_image_describer(settings))
     chunks = build_document_chunks(
         parsed,
         max_chars=args.chunk_max_chars,

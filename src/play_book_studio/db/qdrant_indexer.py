@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,14 +26,29 @@ class QdrantChunkCandidate:
     payload_version: int = QDRANT_PAYLOAD_VERSION
 
 
+def _uuid_or_empty(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        return str(uuid.UUID(text))
+    except ValueError:
+        return ""
+
+
 def load_qdrant_chunk_candidates(
     connection,
     *,
     collection: str,
     source_scope: str = "",
+    document_source_id: str = "",
     limit: int = 100,
 ) -> tuple[QdrantChunkCandidate, ...]:
     scope = source_scope.strip()
+    raw_source_id = str(document_source_id or "").strip()
+    source_id = _uuid_or_empty(raw_source_id)
+    if raw_source_id and not source_id:
+        raise ValueError("document_source_id must be a valid UUID")
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -78,10 +94,11 @@ def load_qdrant_chunk_candidates(
                 ON q.chunk_id = c.id AND q.collection = %s
             WHERE q.chunk_id IS NULL
                 AND (%s = '' OR c.source_scope = %s)
+                AND (%s = '' OR ds.id = %s::uuid)
             ORDER BY c.created_at ASC, c.ordinal ASC
             LIMIT %s
             """,
-            (collection, scope, scope, int(limit)),
+            (collection, scope, scope, source_id, source_id or None, int(limit)),
         )
         rows = cursor.fetchall()
         columns = [item.name for item in cursor.description]
@@ -219,7 +236,7 @@ def qdrant_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
     viewer_path = str(
         chunk_metadata.get("viewer_path")
         or source_metadata.get("viewer_path")
-        or f"/uploads/documents/{document_source_id}/chunks/{chunk_id}"
+        or f"/uploads/documents/{document_source_id}/index.html#{chunk_id}"
     )
     learning_metadata = _learning_metadata(chunk_metadata, parsed_metadata, source_metadata)
     payload_text = _payload_text_from_row(row)
@@ -507,6 +524,7 @@ def index_pending_document_chunks(
     *,
     collection: str | None = None,
     source_scope: str = "",
+    document_source_id: str = "",
     limit: int = 100,
     embedding_client: EmbeddingClient | None = None,
 ) -> dict[str, Any]:
@@ -515,12 +533,14 @@ def index_pending_document_chunks(
         connection,
         collection=target_collection,
         source_scope=source_scope,
+        document_source_id=document_source_id,
         limit=limit,
     )
     if not candidates:
         return {
             "collection": target_collection,
             "source_scope": source_scope.strip(),
+            "document_source_id": _uuid_or_empty(document_source_id),
             "candidate_count": 0,
             "indexed_count": 0,
         }
@@ -538,6 +558,7 @@ def index_pending_document_chunks(
     return {
         "collection": target_collection,
         "source_scope": source_scope.strip(),
+        "document_source_id": _uuid_or_empty(document_source_id),
         "candidate_count": len(candidates),
         "indexed_count": len(candidates),
     }
@@ -700,6 +721,35 @@ def ensure_qdrant_collection(settings: Settings, collection: str) -> None:
         timeout=settings.request_timeout_seconds,
     )
     create.raise_for_status()
+
+
+def delete_qdrant_points(
+    settings: Settings,
+    *,
+    collection: str | None = None,
+    point_ids: list[str],
+) -> dict[str, Any]:
+    """Qdrant 컬렉션에서 지정된 point들을 삭제.
+
+    REST API `POST /collections/{collection}/points/delete` 호출.
+    collection 인자가 비어있으면 settings.qdrant_collection 사용.
+    """
+    if not point_ids:
+        return {"deleted": 0, "collection": collection or settings.qdrant_collection}
+
+    target_collection = (collection or "").strip() or settings.qdrant_collection
+    url = f"{settings.qdrant_url}/collections/{target_collection}/points/delete"
+    response = requests.post(
+        url,
+        json={"points": list(point_ids)},
+        timeout=settings.request_timeout_seconds,
+    )
+    response.raise_for_status()
+    return {
+        "deleted": len(point_ids),
+        "collection": target_collection,
+        "response": response.json() if response.content else {},
+    }
 
 
 def record_qdrant_index_entries(

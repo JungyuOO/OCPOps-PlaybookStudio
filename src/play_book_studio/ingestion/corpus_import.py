@@ -12,7 +12,7 @@ from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
 from play_book_studio.config.corpus_paths import OFFICIAL_IMPORTED_GOLD_DIR, STUDY_DOCS_DIR
 from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
 from play_book_studio.ingestion.learning_metadata import attach_learning_metadata, build_learning_document_index
-from play_book_studio.ingestion.vision import build_qwen_image_describer
+from play_book_studio.ingestion.vision import build_company_llm_image_describer
 
 
 SUPPORTED_CORPUS_SUFFIXES = {
@@ -142,7 +142,7 @@ def import_corpus_documents(
     skipped: list[dict[str, str]] = []
     failed: list[dict[str, str]] = []
     seen_sha256: dict[str, str] = {}
-    image_describer = build_qwen_image_describer(settings) if settings is not None else None
+    image_describer = build_company_llm_image_describer(settings) if settings is not None else None
     document_index = build_learning_document_index(
         tuple(path.relative_to(source_dir).as_posix() for path in files),
         corpus_kind=corpus_kind,

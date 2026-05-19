@@ -128,6 +128,7 @@ def route_non_rag(
     *,
     corpus_label: str = DEFAULT_CORE_PACK.product_label,
     corpus_version: str = DEFAULT_CORE_PACK.version,
+    allow_unsupported_product: bool = False,
 ) -> RoutedResponse | None:
     normalized = (query or "").strip()
     if not normalized:
@@ -223,7 +224,7 @@ def route_non_rag(
             ),
         )
     unsupported_product = detect_unsupported_product(normalized)
-    if unsupported_product is not None:
+    if unsupported_product is not None and not allow_unsupported_product:
         return RoutedResponse(
             route="no_answer",
             answer=(

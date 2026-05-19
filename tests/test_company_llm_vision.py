@@ -8,9 +8,9 @@ from pathlib import Path
 from play_book_studio.config.settings import Settings
 from play_book_studio.ingestion.document_parsing import DocumentAsset, build_document_chunks, parse_upload_document
 from play_book_studio.ingestion import vision
-from play_book_studio.ingestion.vision import QwenVisionClient, build_qwen_image_describer, load_asset_image_bytes
+from play_book_studio.ingestion.vision import CompanyLlmVisionClient, build_company_llm_image_describer, load_asset_image_bytes
 
-TEST_TMP = Path(__file__).resolve().parents[1] / "tmp" / "qwen_vision_tests"
+TEST_TMP = Path(__file__).resolve().parents[1] / "tmp" / "company_llm_vision_tests"
 
 
 class FakeResponse:
@@ -41,7 +41,7 @@ def _case_dir(name: str) -> Path:
     return path
 
 
-def test_qwen_vision_client_sends_openai_compatible_image_payload(monkeypatch):
+def test_company_llm_vision_client_sends_openai_compatible_image_payload(monkeypatch):
     image_path = _case_dir("client") / "diagram.png"
     image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
     asset = DocumentAsset(
@@ -62,49 +62,50 @@ def test_qwen_vision_client_sends_openai_compatible_image_payload(monkeypatch):
 
     monkeypatch.setattr(vision.request, "urlopen", fake_urlopen)
 
-    client = QwenVisionClient(
-        endpoint="http://qwen.internal:8000/v1",
-        model="qwen2.5-vl",
+    client = CompanyLlmVisionClient(
+        endpoint="http://cllm.cywell.co.kr/v1",
+        model="gemma-4-26b-a4b-it-awq-8bit",
         timeout_seconds=7,
     )
 
     description = client.describe_asset(image_path, asset)
 
     assert description == "OpenShift console topology diagram."
-    assert captured["url"] == "http://qwen.internal:8000/v1/chat/completions"
+    assert captured["url"] == "http://cllm.cywell.co.kr/v1/chat/completions"
     assert captured["timeout"] == 7
     assert "Authorization" not in captured["headers"]
-    assert captured["body"]["model"] == "qwen2.5-vl"
+    assert captured["body"]["model"] == "gemma-4-26b-a4b-it-awq-8bit"
     image_url = captured["body"]["messages"][0]["content"][1]["image_url"]["url"]
     assert image_url.startswith("data:image/png;base64,")
 
 
-def test_qwen_describer_factory_is_disabled_until_endpoint_and_model_exist():
+def test_company_llm_describer_factory_is_disabled_until_endpoint_and_model_exist():
     settings = Settings(root_dir=Path.cwd())
 
-    assert build_qwen_image_describer(settings) is None
+    assert build_company_llm_image_describer(settings) is None
 
 
-def test_qwen_describer_factory_uses_existing_llm_settings_by_default():
+def test_company_llm_describer_factory_uses_existing_llm_settings_by_default():
     settings = Settings(
         root_dir=Path.cwd(),
         llm_endpoint="http://cllm.cywell.co.kr/v1",
-        llm_model="Qwen/Qwen3.5-9B",
+        llm_model="gemma-4-26b-a4b-it-awq-8bit",
         request_timeout_seconds=11,
         request_retries=4,
         request_backoff_seconds=3,
     )
 
-    describer = build_qwen_image_describer(settings)
+    describer = build_company_llm_image_describer(settings)
 
     assert describer is not None
-    assert getattr(describer, "qwen_model") == "Qwen/Qwen3.5-9B"
-    assert getattr(describer, "qwen_timeout_seconds") == 11
-    assert getattr(describer, "qwen_max_attempts") == 4
-    assert getattr(describer, "qwen_backoff_seconds") == 3
+    assert getattr(describer, "vision_provider") == "company_llm"
+    assert getattr(describer, "vision_model") == "gemma-4-26b-a4b-it-awq-8bit"
+    assert getattr(describer, "vision_timeout_seconds") == 11
+    assert getattr(describer, "vision_max_attempts") == 4
+    assert getattr(describer, "vision_backoff_seconds") == 3
 
 
-def test_qwen_vision_client_retries_transient_url_errors(monkeypatch):
+def test_company_llm_vision_client_retries_transient_url_errors(monkeypatch):
     image_path = _case_dir("client_retry") / "diagram.png"
     image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
     asset = DocumentAsset(
@@ -129,9 +130,9 @@ def test_qwen_vision_client_retries_transient_url_errors(monkeypatch):
     monkeypatch.setattr(vision.request, "urlopen", fake_urlopen)
     monkeypatch.setattr(vision.time, "sleep", fake_sleep)
 
-    client = QwenVisionClient(
-        endpoint="http://qwen.internal:8000/v1",
-        model="qwen2.5-vl",
+    client = CompanyLlmVisionClient(
+        endpoint="http://cllm.cywell.co.kr/v1",
+        model="gemma-4-26b-a4b-it-awq-8bit",
         timeout_seconds=7,
         max_attempts=2,
         backoff_seconds=0.5,
@@ -143,57 +144,61 @@ def test_qwen_vision_client_retries_transient_url_errors(monkeypatch):
     assert calls == {"count": 2, "sleeps": [0.5]}
 
 
-def test_parse_image_document_injects_qwen_description_into_chunk_text():
+def test_parse_image_document_injects_company_llm_description_into_chunk_text():
     image_path = _case_dir("parser") / "diagram.png"
     image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
 
     def describe(_path, _asset):
         return "OpenShift router and service diagram"
 
-    setattr(describe, "qwen_model", "Qwen/Qwen3.5-9B")
+    setattr(describe, "vision_provider", "company_llm")
+    setattr(describe, "vision_model", "gemma-4-26b-a4b-it-awq-8bit")
 
     parsed = parse_upload_document(image_path, image_describer=describe)
     chunks = build_document_chunks(parsed)
 
     assert parsed.assets[0].description == "OpenShift router and service diagram"
-    assert parsed.assets[0].metadata["qwen_model"] == "Qwen/Qwen3.5-9B"
-    assert parsed.assets[0].metadata["qwen_status"] == "described"
+    assert parsed.assets[0].metadata["vision_provider"] == "company_llm"
+    assert parsed.assets[0].metadata["vision_model"] == "gemma-4-26b-a4b-it-awq-8bit"
+    assert parsed.assets[0].metadata["vision_status"] == "described"
     assert "OpenShift router and service diagram" in chunks[0].embedding_text
 
 
-def test_parse_image_document_preserves_qwen_failure_status():
+def test_parse_image_document_preserves_company_llm_failure_status():
     image_path = _case_dir("parser_failure") / "diagram.png"
     image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
 
     def describe(_path, _asset):
         raise RuntimeError("vision backend unavailable")
 
-    setattr(describe, "qwen_model", "Qwen/Qwen3.5-9B")
+    setattr(describe, "vision_provider", "company_llm")
+    setattr(describe, "vision_model", "gemma-4-26b-a4b-it-awq-8bit")
 
     parsed = parse_upload_document(image_path, image_describer=describe)
     chunks = build_document_chunks(parsed)
 
     assert parsed.assets[0].description == ""
-    assert parsed.assets[0].metadata["qwen_status"] == "failed"
-    assert parsed.assets[0].metadata["qwen_model"] == "Qwen/Qwen3.5-9B"
-    assert "vision backend unavailable" in parsed.assets[0].metadata["qwen_error"]
+    assert parsed.assets[0].metadata["vision_status"] == "failed"
+    assert parsed.assets[0].metadata["vision_model"] == "gemma-4-26b-a4b-it-awq-8bit"
+    assert "vision backend unavailable" in parsed.assets[0].metadata["vision_error"]
     assert "vision backend unavailable" not in chunks[0].embedding_text
 
 
-def test_parse_image_document_preserves_qwen_empty_status():
+def test_parse_image_document_preserves_company_llm_empty_status():
     image_path = _case_dir("parser_empty") / "diagram.png"
     image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
 
     def describe(_path, _asset):
         return "   "
 
-    setattr(describe, "qwen_model", "Qwen/Qwen3.5-9B")
+    setattr(describe, "vision_provider", "company_llm")
+    setattr(describe, "vision_model", "gemma-4-26b-a4b-it-awq-8bit")
 
     parsed = parse_upload_document(image_path, image_describer=describe)
 
     assert parsed.assets[0].description == ""
-    assert parsed.assets[0].metadata["qwen_status"] == "empty"
-    assert parsed.assets[0].metadata["qwen_model"] == "Qwen/Qwen3.5-9B"
+    assert parsed.assets[0].metadata["vision_status"] == "empty"
+    assert parsed.assets[0].metadata["vision_model"] == "gemma-4-26b-a4b-it-awq-8bit"
 
 
 def test_load_asset_image_bytes_reads_embedded_pptx_member():

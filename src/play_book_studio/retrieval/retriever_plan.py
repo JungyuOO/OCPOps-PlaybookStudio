@@ -58,15 +58,27 @@ def build_retrieval_plan(
     normalized_query = normalize_query(query)
     normalize_query_ms = round((time.perf_counter() - normalize_started_at) * 1000, 1)
     unsupported_product = detect_unsupported_product(normalized_query)
+    if (
+        str(getattr(context, "active_document_id", "") or "").strip()
+        or str(getattr(context, "active_repository_id", "") or "").strip()
+    ):
+        unsupported_product = None
     follow_up_detected = has_follow_up_reference(query)
 
     rewrite_started_at = time.perf_counter()
     rewrite_applied, rewrite_reason = rewrite_decision(normalized_query, context)
     rewritten_query = rewrite_query(normalized_query, context)
     signal_plan = build_query_signal_plan(query, llm_client=llm_client)
+    has_document_scope = bool(
+        str(getattr(context, "active_document_id", "") or "").strip()
+        or str(getattr(context, "active_repository_id", "") or "").strip()
+    )
     if _uses_study_docs_scope(context):
         retrieval_queries = _dedupe_queries((rewritten_query,), fallback=rewritten_query)
         metadata_filter: dict[str, Any] = {}
+    elif has_document_scope:
+        retrieval_queries = _dedupe_queries(signal_plan.embedding_queries, fallback=rewritten_query)
+        metadata_filter = {}
     else:
         retrieval_queries = _dedupe_queries(signal_plan.embedding_queries, fallback=rewritten_query)
         metadata_filter = signal_plan.metadata_filter
@@ -91,4 +103,3 @@ def build_retrieval_plan(
         rewrite_query_ms=rewrite_query_ms,
         query_signal_debug=dict(signal_plan.debug or {}),
     )
-

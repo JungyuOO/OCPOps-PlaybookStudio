@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from play_book_studio.answering.context import assemble_context
-from play_book_studio.retrieval.models import RetrievalHit
+from play_book_studio.retrieval.models import RetrievalHit, SessionContext
 
 
 def test_assemble_context_preserves_section_metadata_on_citations() -> None:
@@ -157,3 +157,51 @@ def test_assemble_context_demotes_navigation_only_hits() -> None:
     bundle = assemble_context([nav_hit, content_hit], query="bootstrap 상태 확인", max_chunks=1)
 
     assert bundle.citations[0].chunk_id == "chunk-content"
+
+
+def test_assemble_context_keeps_multiple_user_upload_hits_for_active_document() -> None:
+    service_hit = RetrievalHit(
+        chunk_id="chunk-service",
+        book_slug="uploaded-documents",
+        chapter="네트워킹",
+        section="Service",
+        anchor="service",
+        source_url="uploads/source.pdf",
+        viewer_path="/uploads/documents/doc-a/index.html#service",
+        text="Service는 Pod 집합에 대한 네트워크 접근을 추상화한다.",
+        source="hybrid",
+        raw_score=1.0,
+        fused_score=0.057,
+        document_source_id="doc-a",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+        source_collection="uploads",
+    )
+    type_hit = RetrievalHit(
+        chunk_id="chunk-types",
+        book_slug="uploaded-documents",
+        chapter="네트워킹",
+        section="타입",
+        anchor="types",
+        source_url="uploads/source.pdf",
+        viewer_path="/uploads/documents/doc-a/index.html#types",
+        text="NodePort는 외부에서 Node의 특정 포트로 접근하고, LoadBalancer는 클라우드 외부 로드밸런서를 생성한다.",
+        source="hybrid",
+        raw_score=1.0,
+        fused_score=0.046,
+        document_source_id="doc-a",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+        source_collection="uploads",
+    )
+
+    bundle = assemble_context(
+        [service_hit, type_hit],
+        query="NodePort와 LoadBalancer 차이 설명",
+        session_context=SessionContext(owner_user_id="owner-a", active_document_id="doc-a"),
+        max_chunks=4,
+    )
+
+    assert [citation.chunk_id for citation in bundle.citations] == ["chunk-service", "chunk-types"]

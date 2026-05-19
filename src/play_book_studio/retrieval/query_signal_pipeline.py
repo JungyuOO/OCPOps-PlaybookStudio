@@ -78,6 +78,13 @@ _NORMALIZATION_RULES: tuple[tuple[str, str, str], ...] = (
     (r"노트\s*레디|노트레디", "NotReady", "error_alias"),
     (r"\bnot\s+ready\b", "NotReady", "error_alias"),
     (r"\bimage\s+pull\s+back\s+off\b", "ImagePullBackOff", "error_alias"),
+    (
+        r"(?<![A-Za-z])peding(?![A-Za-z])|"
+        r"(?<![A-Za-z])pendding(?![A-Za-z])|"
+        r"(?<![A-Za-z])pendig(?![A-Za-z])",
+        "Pending",
+        "error_alias",
+    ),
 )
 
 _ALLOWED_DOMAINS = {

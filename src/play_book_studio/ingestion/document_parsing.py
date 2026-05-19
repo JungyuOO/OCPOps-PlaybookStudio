@@ -8,6 +8,9 @@ blocks, and surface image assets separately so a vision model can describe them.
 from __future__ import annotations
 
 import hashlib
+import contextlib
+import io
+import json
 import mimetypes
 import re
 import uuid
@@ -35,6 +38,7 @@ DocumentFormat = Literal[
 ]
 ParseStatus = Literal["parsed", "staged", "failed"]
 BlockType = Literal["heading", "paragraph", "table", "code", "image"]
+PdfLayoutBlockKind = Literal["heading", "paragraph", "table", "code", "image"]
 
 
 MARKDOWN_FORMATS = {"md", "asciidoc"}
@@ -152,6 +156,18 @@ class DocumentChunk:
         return payload
 
 
+@dataclass(frozen=True, slots=True)
+class PdfLayoutBlock:
+    kind: PdfLayoutBlockKind
+    text: str
+    bbox: tuple[float, float, float, float]
+    font_size: float = 0.0
+    language: str = ""
+    confidence: float = 0.0
+    reason: str = ""
+    visual_group: str = ""
+
+
 MarkdownConverter = Callable[[Path, DocumentFormat], str | ConvertedMarkdown]
 ImageDescriber = Callable[[Path, DocumentAsset], str]
 
@@ -180,6 +196,9 @@ _PPT_ROW_TAG = "{http://schemas.openxmlformats.org/drawingml/2006/main}tr"
 _PPT_CELL_TAG = "{http://schemas.openxmlformats.org/drawingml/2006/main}tc"
 _PAGE_MARKER_RE = re.compile(r"^<!--\s*(?:page|slide)\s*:\s*(\d+)\s*-->\s*$", re.IGNORECASE)
 _DRAWING_EMBED_RE = re.compile(r'r:embed="([^"]+)"')
+_PDF_LAYOUT_MARKER = "<!-- pbs-pdf-layout-v1 -->"
+_PDF_LAYOUT_BLOCK_START_RE = re.compile(r"^<!--\s*pbs-layout-block\s+(?P<payload>\{.*\})\s*-->\s*$")
+_PDF_LAYOUT_BLOCK_END = "<!-- /pbs-layout-block -->"
 
 
 def detect_document_format(path: Path, *, sample_size: int = 4096) -> DocumentFormat:
@@ -215,7 +234,12 @@ def parse_upload_document(
     *,
     markdown_converter: MarkdownConverter | None = None,
     image_describer: ImageDescriber | None = None,
+    progress: Callable[[str, str, dict[str, Any]], None] | None = None,
 ) -> ParsedUploadDocument:
+    def _emit(status: str, **detail: Any) -> None:
+        if progress is not None:
+            progress("parse", status, detail)
+
     path = path.resolve()
     content = path.read_bytes()
     document_format = detect_document_format(path)
@@ -223,18 +247,42 @@ def parse_upload_document(
     mime_type = _detect_mime_type(path, document_format)
     document_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{path.name}:{sha256}"))
 
+    _emit("info", note=f"포맷 감지: {document_format} · {len(content):,} bytes · sha256={sha256[:12]}…")
+
     warnings: list[str] = []
     assets: list[DocumentAsset] = []
     converter_metadata: dict[str, Any] = {}
 
     if document_format in MARKDOWN_FORMATS | TEXT_FORMATS:
+        _emit("info", note="텍스트/마크다운 직접 읽기")
         markdown = path.read_text(encoding="utf-8-sig").strip()
         if document_format == "txt":
             markdown = _plain_text_to_markdown(markdown, title=path.stem)
     elif document_format in IMAGE_FORMATS:
+        _emit("info", note="이미지 자산 처리")
         asset = _image_asset(path, sha256=sha256, mime_type=mime_type)
         if image_describer:
+            _emit(
+                "progress",
+                note=f"이미지 OCR/설명 처리 중: {asset.filename} (0/1)",
+                task_kind="image_ocr",
+                progress_key="image_ocr",
+                item_label=asset.filename,
+                progress_current=0,
+                progress_total=1,
+                progress_percent=0,
+            )
             asset = _describe_asset(path, asset, image_describer=image_describer)
+            _emit(
+                "progress",
+                note=f"이미지 OCR/설명 완료: {asset.filename} (1/1)",
+                task_kind="image_ocr",
+                progress_key="image_ocr",
+                item_label=asset.filename,
+                progress_current=1,
+                progress_total=1,
+                progress_percent=100,
+            )
         assets.append(asset)
         markdown = _image_markdown(asset)
     elif document_format in UNSUPPORTED_UPLOAD_FORMATS:
@@ -243,9 +291,14 @@ def parse_upload_document(
             "Use PDF, DOCX, PPTX, XLSX, text, Markdown, or image inputs."
         )
     elif document_format in CONVERTER_FORMATS:
-        if markdown_converter is None:
-            markdown_converter = _default_markdown_converter
-        converted = markdown_converter(path, document_format)
+        # PDF인 경우 progress callback 같이 흘려서 추출기 진행 상황을 emit
+        if document_format == "pdf" and markdown_converter is None:
+            converted = _convert_pdf_to_markdown(path, progress=progress)
+        else:
+            if markdown_converter is None:
+                markdown_converter = _default_markdown_converter
+            _emit("info", note=f"{document_format} 변환기 호출 (markitdown)")
+            converted = markdown_converter(path, document_format)
         if isinstance(converted, ConvertedMarkdown):
             markdown = converted.markdown.strip()
             assets.extend(converted.assets)
@@ -256,17 +309,41 @@ def parse_upload_document(
         if not markdown:
             raise ValueError(f"markdown converter produced empty output for {path.name}")
         if image_describer and assets:
-            assets = [
-                _describe_asset(path, asset, image_describer=image_describer)
-                for asset in assets
-            ]
-            markdown = _append_asset_descriptions(markdown, assets)
+            _emit("info", note=f"Company LLM 이미지 OCR/설명 생성 중 ({len(assets)}개 자산)...")
+            described_assets: list[DocumentAsset] = []
+            total_assets = len(assets)
+            for index, asset in enumerate(assets, start=1):
+                _emit(
+                    "progress",
+                    note=f"이미지 OCR/설명 처리 중: {asset.filename} ({index}/{total_assets})",
+                    task_kind="image_ocr",
+                    progress_key="image_ocr",
+                    item_label=asset.filename,
+                    progress_current=index - 1,
+                    progress_total=total_assets,
+                    progress_percent=round(((index - 1) / max(total_assets, 1)) * 100),
+                )
+                described = _describe_asset(path, asset, image_describer=image_describer)
+                described_assets.append(described)
+                _emit(
+                    "progress",
+                    note=f"이미지 OCR/설명 완료: {asset.filename} ({index}/{total_assets})",
+                    task_kind="image_ocr",
+                    progress_key="image_ocr",
+                    item_label=asset.filename,
+                    progress_current=index,
+                    progress_total=total_assets,
+                    progress_percent=round((index / max(total_assets, 1)) * 100),
+                )
+            assets = described_assets
     else:
         raise ValueError(f"unsupported document format for ingestion: {path.name}")
 
+    _emit("info", note=f"markdown 추출 완료: {len(markdown):,} 자, block 분해 시작")
     blocks = tuple(_markdown_to_blocks(markdown, assets=tuple(assets), document_id=document_id))
     if not blocks:
         warnings.append("no_blocks_detected")
+    _emit("info", note=f"block 분해 완료: {len(blocks)} blocks, {len(assets)} assets")
 
     return ParsedUploadDocument(
         document_id=document_id,
@@ -346,10 +423,20 @@ def build_document_chunks(
         chunk_key = f"{parsed.document_id}:{ordinal}"
         stripped_markdown = _strip_markdown(markdown)
         section_context = " > ".join(part for part in section_path if part)
-        embedding_text = (
-            f"{section_context}\n\n{stripped_markdown}"
-            if section_context and section_context not in stripped_markdown
+        asset_context = "\n\n".join(
+            asset.description
+            for asset in parsed.assets
+            if asset.asset_id in asset_ids and asset.description
+        ).strip()
+        stripped_with_asset_context = (
+            f"{stripped_markdown}\n\n[이미지 OCR/설명]\n{asset_context}"
+            if asset_context
             else stripped_markdown
+        )
+        embedding_text = (
+            f"{section_context}\n\n{stripped_with_asset_context}"
+            if section_context
+            else stripped_with_asset_context
         )
         chunks.append(
             DocumentChunk(
@@ -456,23 +543,30 @@ def _image_markdown(asset: DocumentAsset) -> str:
 
 
 def _describe_asset(path: Path, asset: DocumentAsset, *, image_describer: ImageDescriber) -> DocumentAsset:
-    qwen_model = str(getattr(image_describer, "qwen_model", "") or "").strip()
+    vision_model = str(getattr(image_describer, "vision_model", "") or "").strip()
+    vision_provider = str(getattr(image_describer, "vision_provider", "") or "").strip()
     try:
         description = image_describer(path, asset).strip()
     except Exception as exc:  # noqa: BLE001
-        metadata = {**dict(asset.metadata), "qwen_error": str(exc), "qwen_status": "failed"}
-        if qwen_model:
-            metadata.setdefault("qwen_model", qwen_model)
+        metadata = {**dict(asset.metadata), "vision_error": str(exc), "vision_status": "failed"}
+        if vision_model:
+            metadata.setdefault("vision_model", vision_model)
+        if vision_provider:
+            metadata.setdefault("vision_provider", vision_provider)
         return DocumentAsset(**{**asset.to_dict(), "metadata": metadata})
     if not description:
-        metadata = {**dict(asset.metadata), "qwen_status": "empty"}
-        if qwen_model:
-            metadata.setdefault("qwen_model", qwen_model)
+        metadata = {**dict(asset.metadata), "vision_status": "empty"}
+        if vision_model:
+            metadata.setdefault("vision_model", vision_model)
+        if vision_provider:
+            metadata.setdefault("vision_provider", vision_provider)
         return DocumentAsset(**{**asset.to_dict(), "metadata": metadata})
     metadata = {**dict(asset.metadata)}
-    metadata.setdefault("qwen_status", "described")
-    if qwen_model:
-        metadata.setdefault("qwen_model", qwen_model)
+    metadata.setdefault("vision_status", "described")
+    if vision_model:
+        metadata.setdefault("vision_model", vision_model)
+    if vision_provider:
+        metadata.setdefault("vision_provider", vision_provider)
     return DocumentAsset(**{**asset.to_dict(), "description": description, "metadata": metadata})
 
 
@@ -691,28 +785,1412 @@ def _convert_pptx_to_markdown(path: Path) -> ConvertedMarkdown:
     return ConvertedMarkdown(markdown=markdown, assets=tuple(assets), metadata={"slide_count": len(slide_names)})
 
 
-def _convert_pdf_to_markdown(path: Path) -> ConvertedMarkdown:
+def _looks_like_generated_upload_title(text: str) -> bool:
+    compact = re.sub(r"[\s._\-()]+", "", str(text or "")).strip()
+    if not compact:
+        return True
+    if re.fullmatch(r"\d{1,3}\d{2,4}", compact):
+        return True
+    if re.fullmatch(r"\d{1,3}\d{1,2}\d{1,2}", compact):
+        return True
+    return False
+
+
+def _pdf_title_from_pages(pages: list[str], fallback: str) -> str:
+    fallback_title = str(fallback or "").strip() or "Uploaded PDF"
+    for page in pages:
+        for raw_line in str(page or "").splitlines():
+            line = " ".join(raw_line.strip().split())
+            if not line:
+                continue
+            if line.startswith("<!--"):
+                continue
+            if len(line) > 80:
+                continue
+            if re.fullmatch(r"(?i)page\s+\d+", line):
+                continue
+            if _looks_like_generated_upload_title(line):
+                continue
+            return line
+    return fallback_title
+
+
+def _drop_duplicate_pdf_title_line(text: str, title: str) -> str:
+    lines = str(text or "").splitlines()
+    normalized_title = _normalize_pdf_title_for_compare(title)
+    for index, raw_line in enumerate(lines):
+        line = raw_line.strip()
+        if not line:
+            continue
+        if _normalize_pdf_title_for_compare(line) == normalized_title:
+            del lines[index]
+        break
+    return "\n".join(lines).strip()
+
+
+def _normalize_pdf_title_for_compare(text: str) -> str:
+    return re.sub(r"[\s._\-()]+", "", str(text or "").strip().lower())
+
+
+def _clean_pdf_line(raw_line: str) -> str:
+    return " ".join(str(raw_line or "").strip().split())
+
+
+_KNOWN_KOREAN_PDF_SECTION_HEADINGS = {
+    "개념 살펴보기",
+    "주요 개념",
+    "핵심 개념",
+    "실습 시나리오",
+    "확인 방법",
+    "체크리스트",
+    "출력 예상 결과",
+    "환경 변수와 볼륨 마운트 데모",
+    "리소스별 설명",
+    "동작 방식",
+    "사용 방법",
+    "구성 요소",
+    "역할",
+    "특징",
+    "타입",
+    "예시",
+    "실습",
+    "정리",
+    "요약",
+}
+
+
+_PDF_LANGUAGE_LABELS = {
+    "bash": "bash",
+    "shell": "bash",
+    "sh": "bash",
+    "yaml": "yaml",
+    "yml": "yaml",
+    "json": "json",
+}
+
+_PDF_YAML_KEYS = {
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec",
+    "storageClassName",
+    "selector",
+    "matchLabels",
+    "labels",
+    "annotations",
+    "data",
+    "stringData",
+    "type",
+    "namespace",
+    "replicas",
+    "template",
+    "containers",
+    "container",
+    "image",
+    "command",
+    "args",
+    "env",
+    "envFrom",
+    "value",
+    "valueFrom",
+    "configMapKeyRef",
+    "secretKeyRef",
+    "secretRef",
+    "configMapRef",
+    "volumeMounts",
+    "mountPath",
+    "readOnly",
+    "volumes",
+    "volume",
+    "accessModes",
+    "resources",
+    "source",
+    "repoURL",
+    "targetRevision",
+    "destination",
+    "syncPolicy",
+    "automated",
+    "prune",
+    "selfHeal",
+    "requests",
+    "storage",
+    "provisioner",
+    "parameters",
+    "reclaimPolicy",
+    "volumeBindingMode",
+    "persistentVolumeReclaimPolicy",
+    "volumeHandle",
+    "restartPolicy",
+    "ports",
+    "targetPort",
+    "port",
+    "host",
+    "server",
+    "services",
+    "http",
+    "paths",
+    "path",
+    "pathType",
+    "backend",
+    "service",
+    "name",
+    "app",
+    "number",
+    "tls",
+    "termination",
+    "to",
+    "weight",
+    "key",
+    "nfs",
+    "awsElasticBlockStore",
+    "volumeID",
+    "fsType",
+    "local",
+    "hostPath",
+    "nodeAffinity",
+    "required",
+    "nodeSelectorTerms",
+    "matchExpressions",
+    "operator",
+    "values",
+    "namePrefix",
+    "images",
+    "newName",
+    "newTag",
+}
+
+_PDF_SHELL_COMMAND_RE = re.compile(
+    r"^(?:"
+    r"oc|kubectl|curl|wget|podman|docker|helm|cat|ls|grep|echo|sleep|"
+    r"npm|npx|node|smee|git|gh|ssh|scp|tar|unzip|powershell|pwsh"
+    r")(?:\s+\S*|$)",
+    re.IGNORECASE,
+)
+
+
+def _is_pdf_repeated_header_or_footer(line: str, *, title: str) -> bool:
+    candidate = _clean_pdf_line(line)
+    if not candidate:
+        return True
+    if re.fullmatch(r"\d{1,3}", candidate):
+        return True
+    return _normalize_pdf_title_for_compare(candidate) == _normalize_pdf_title_for_compare(title)
+
+
+def _is_pdf_heading_candidate(line: str) -> bool:
+    candidate = _clean_pdf_line(line)
+    heading_label = candidate.rstrip(":：")
+    if not candidate or len(candidate) > 80:
+        return False
+    if re.fullmatch(r"(?i)page\s+\d+", candidate):
+        return False
+    if candidate.startswith(("#", "|", "!", "-", "*")):
+        return False
+    if re.match(r"^(?:Step\s*)?\d+[.)]\s+\S+", candidate, re.IGNORECASE):
+        return True
+    if re.match(r"^Step\s*\d+[.:]?\s+\S+", candidate, re.IGNORECASE):
+        return True
+    if re.search(r"[。.!?]$", candidate):
+        return False
+    if re.search(r"(다|요|니다|한다|된다|했다|있다|없다|한다\.)$", candidate):
+        return False
+    if "," in candidate or "，" in candidate or "、" in candidate:
+        return False
+    word_count = len(candidate.split())
+    if word_count > 8:
+        return False
+
+    if heading_label in _KNOWN_KOREAN_PDF_SECTION_HEADINGS:
+        return True
+    if ":" in candidate and not re.search(r"\([A-Z0-9]{2,}\)", candidate):
+        return False
+    if re.search(r"\([A-Z0-9]{2,}\)", candidate):
+        return True
+    if re.fullmatch(r"[A-Z][A-Za-z0-9/ +._-]{1,40}\s*\([^)]+\)", candidate):
+        return True
+    if re.fullmatch(r"[A-Z][A-Za-z0-9/ +._-]{2,50}", candidate):
+        return True
+    if heading_label in _KNOWN_KOREAN_PDF_SECTION_HEADINGS:
+        return True
+    return False
+
+
+def _pdf_language_label(line: str) -> str:
+    stripped = str(line or "").strip()
+    if not stripped:
+        return ""
+    return _PDF_LANGUAGE_LABELS.get(stripped.lower(), "")
+
+
+def _is_pdf_code_line(line: str) -> bool:
+    candidate = str(line or "").rstrip()
+    stripped = candidate.strip()
+    if not stripped:
+        return False
+    if candidate.startswith((" ", "\t")):
+        return True
+    if re.match(r"^#{1,6}\s+\S+", stripped):
+        return True
+    if stripped.startswith("$env:"):
+        return True
+    if _PDF_SHELL_COMMAND_RE.match(stripped):
+        return True
+    if stripped.startswith(("---", "-- [")):
+        return True
+    if re.match(r"^(?:Target API|Target URL|Auth Key|결과:|설명:)\b", stripped):
+        return True
+    if re.match(r"^[A-Z_][A-Z0-9_]*=", stripped):
+        return True
+    if re.match(r"^-+\s*[A-Za-z][A-Za-z0-9_.-]*:", stripped):
+        return True
+    key_match = re.match(r"^([A-Za-z][A-Za-z0-9_.-]*):(?:\s|$)", stripped)
+    if key_match and key_match.group(1) in _PDF_YAML_KEYS:
+        return True
+    compact_key_match = re.match(r"^([A-Za-z][A-Za-z0-9_.-]*):\S+", stripped)
+    if compact_key_match and compact_key_match.group(1) in _PDF_YAML_KEYS:
+        return True
+    if re.match(r"^[A-Z][A-Z0-9_]*:", stripped):
+        return True
+    return False
+
+
+def _pdf_line_has_sentence_end(line: str) -> bool:
+    stripped = str(line or "").rstrip()
+    if not stripped:
+        return False
+    if stripped.endswith(("다.", "요.", "니다.", ".", "?", "!", "。", ")", "]", "}", '"', "'")):
+        return True
+    return False
+
+
+def _pdf_code_line_looks_wrapped(previous: str, current: str) -> bool:
+    prev = str(previous or "").rstrip()
+    curr = str(current or "").strip()
+    if not prev or not curr:
+        return False
+    if _pdf_language_label(curr) or _is_pdf_heading_candidate(curr):
+        return False
+    if re.match(r"^(?:[-*]|\d+[.)])\s+\S+", curr):
+        return False
+    if prev.endswith("\\"):
+        return False
+    if prev.count('"') % 2 == 1 or prev.count("'") % 2 == 1:
+        return True
+    if prev.count("(") > prev.count(")") or prev.count("[") > prev.count("]") or prev.count("{") > prev.count("}"):
+        return True
+    if re.search(r"(?:==|!=|&&|\|\||[-+*/=])\s*$", prev):
+        return True
+    if re.search(r"[A-Za-z가-힣_]+$", prev) and re.match(r'^[A-Za-z가-힣_"}).]', curr):
+        return True
+    return False
+
+
+def _pdf_prose_line_looks_wrapped(previous: str, current: str) -> bool:
+    prev = str(previous or "").rstrip()
+    curr = str(current or "").strip()
+    if not prev or not curr:
+        return False
+    if _pdf_line_has_sentence_end(prev):
+        return False
+    if _is_pdf_heading_candidate(prev):
+        return False
+    if _pdf_language_label(curr):
+        return False
+    if _is_pdf_heading_candidate(curr):
+        return False
+    if re.match(r"^(?:[-*]|\d+[.)])\s+\S+", curr):
+        return False
+    if re.match(r"^[가-힣A-Za-z0-9\"'(]", curr):
+        return True
+    return False
+
+
+def _join_pdf_wrapped_line(previous: str, current: str) -> str:
+    prev = str(previous or "").rstrip()
+    curr = str(current or "").strip()
+    if not prev:
+        return curr
+    if not curr:
+        return prev
+    if re.search(r"[가-힣]$", prev) and re.match(r"^(?:다|답|록|능|일|P|e)", curr):
+        return f"{prev}{curr}"
+    if re.search(r"(?:은|는|이|가|을|를|와|과|의|로|으로|에|에서|에게|보다|처럼)$", prev):
+        return f"{prev} {curr}"
+    if re.search(r"[A-Za-z0-9_]$", prev) and re.match(r"^[A-Za-z0-9_]", curr):
+        return f"{prev}{curr}"
+    if re.search(r"[가-힣]$", prev) and re.match(r"^[가-힣]", curr):
+        return f"{prev}{curr}"
+    return f"{prev} {curr}"
+
+
+def _repair_pdf_wrapped_lines(lines: list[str]) -> list[str]:
+    repaired: list[str] = []
+    for raw_line in lines:
+        line = str(raw_line or "").rstrip()
+        if not line.strip():
+            if repaired and repaired[-1] != "":
+                repaired.append("")
+            continue
+        if not repaired:
+            repaired.append(line)
+            continue
+        previous = repaired[-1]
+        previous_is_code = _is_pdf_code_line(previous)
+        current_is_code = _is_pdf_code_line(line)
+        should_merge = False
+        if previous_is_code and not current_is_code:
+            should_merge = _pdf_code_line_looks_wrapped(previous, line)
+        elif not previous_is_code and not current_is_code:
+            should_merge = _pdf_prose_line_looks_wrapped(previous, line)
+        if should_merge:
+            repaired[-1] = _join_pdf_wrapped_line(previous, line)
+        else:
+            repaired.append(line)
+    return repaired
+
+
+def _split_pdf_code_and_prose(line: str) -> tuple[str, str]:
+    candidate = str(line or "").rstrip()
+    match = re.match(r"^(\s*[A-Za-z][A-Za-z0-9_.-]*:\s+\S+)\s+([가-힣].+)$", candidate)
+    if not match:
+        return candidate, ""
+    prose = match.group(2).strip()
+    if not re.search(r"(다|요|니다|한다|된다|했다|있다|없다|판단|할당)", prose):
+        return candidate, ""
+    return match.group(1).rstrip(), prose
+
+
+def _pdf_code_language_for_line(line: str, pending_language: str = "") -> str:
+    if pending_language:
+        return pending_language
+    stripped = str(line or "").strip()
+    if re.search(r"\.(?:ya?ml)\b", stripped, re.IGNORECASE):
+        return "yaml"
+    if stripped.startswith("#"):
+        return "bash"
+    if stripped.startswith("$env:"):
+        return "powershell"
+    if _PDF_SHELL_COMMAND_RE.match(stripped):
+        return "bash"
+    if stripped.startswith("#") and re.search(r"\b(?:oc|kubectl|curl|podman|docker|helm)\b", stripped, re.IGNORECASE):
+        return "bash"
+    return "yaml"
+
+
+def _pdf_line_looks_yaml_code(line: str) -> bool:
+    stripped = str(line or "").strip()
+    if not stripped or stripped.startswith("#"):
+        return False
+    if re.match(r"^-\s+\S+", stripped):
+        return True
+    key_match = re.match(r"^([A-Za-z][A-Za-z0-9_.-]*):(?:\s|$)", stripped)
+    if key_match and key_match.group(1) in _PDF_YAML_KEYS:
+        return True
+    compact_key_match = re.match(r"^([A-Za-z][A-Za-z0-9_.-]*):\S+", stripped)
+    return bool(compact_key_match and compact_key_match.group(1) in _PDF_YAML_KEYS)
+
+
+def _serialize_pdf_layout_blocks(blocks: list[PdfLayoutBlock]) -> str:
+    lines = [_PDF_LAYOUT_MARKER]
+    for block in blocks:
+        payload = {
+            "kind": block.kind,
+            "bbox": [round(value, 2) for value in block.bbox],
+            "font_size": round(float(block.font_size or 0.0), 2),
+            "language": block.language,
+            "confidence": round(float(block.confidence or 0.0), 3),
+            "reason": block.reason,
+            "visual_group": block.visual_group,
+        }
+        lines.append(f"<!-- pbs-layout-block {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))} -->")
+        lines.extend(str(block.text or "").rstrip("\n").splitlines())
+        lines.append(_PDF_LAYOUT_BLOCK_END)
+    return "\n".join(lines).strip()
+
+
+def _parse_pdf_layout_blocks_source(text: str) -> list[PdfLayoutBlock] | None:
+    lines = str(text or "").splitlines()
+    if not any(line.strip() == _PDF_LAYOUT_MARKER for line in lines[:3]):
+        return None
+    blocks: list[PdfLayoutBlock] = []
+    index = 0
+    while index < len(lines):
+        start_match = _PDF_LAYOUT_BLOCK_START_RE.match(lines[index].strip())
+        if start_match is None:
+            index += 1
+            continue
+        try:
+            payload = json.loads(start_match.group("payload"))
+        except json.JSONDecodeError:
+            index += 1
+            continue
+        body: list[str] = []
+        index += 1
+        while index < len(lines) and lines[index].strip() != _PDF_LAYOUT_BLOCK_END:
+            body.append(lines[index].rstrip())
+            index += 1
+        raw_bbox = payload.get("bbox") if isinstance(payload, dict) else None
+        bbox_values = raw_bbox if isinstance(raw_bbox, list) and len(raw_bbox) == 4 else [0, 0, 0, 0]
+        kind = str(payload.get("kind") or "paragraph") if isinstance(payload, dict) else "paragraph"
+        if kind not in {"heading", "paragraph", "table", "code", "image"}:
+            kind = "paragraph"
+        blocks.append(
+            PdfLayoutBlock(
+                kind=kind,  # type: ignore[arg-type]
+                text="\n".join(body).strip("\n"),
+                bbox=tuple(float(value or 0) for value in bbox_values),  # type: ignore[arg-type]
+                font_size=float(payload.get("font_size") or 0.0) if isinstance(payload, dict) else 0.0,
+                language=str(payload.get("language") or "") if isinstance(payload, dict) else "",
+                confidence=float(payload.get("confidence") or 0.0) if isinstance(payload, dict) else 0.0,
+                reason=str(payload.get("reason") or "") if isinstance(payload, dict) else "",
+                visual_group=str(payload.get("visual_group") or "") if isinstance(payload, dict) else "",
+            )
+        )
+        index += 1
+    return blocks
+
+
+def _pdf_noncode_lines_without_repeated(text: str, *, title: str) -> list[str]:
+    cleaned: list[str] = []
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.rstrip()
+        if not _clean_pdf_line(line):
+            if cleaned and cleaned[-1] != "":
+                cleaned.append("")
+            continue
+        if _is_pdf_repeated_header_or_footer(line, title=title):
+            continue
+        cleaned.append(line)
+    while cleaned and not cleaned[0].strip():
+        cleaned.pop(0)
+    while cleaned and not cleaned[-1].strip():
+        cleaned.pop()
+    return cleaned
+
+
+def _pdf_layout_blocks_to_markdown(blocks: list[PdfLayoutBlock], *, title: str, page_index: int) -> str:
+    output: list[str] = []
+
+    def append_blank() -> None:
+        if output and output[-1] != "":
+            output.append("")
+
+    for block in blocks:
+        text = str(block.text or "").strip("\n")
+        if not text.strip():
+            continue
+        if block.kind == "image":
+            append_blank()
+            output.append(text.strip())
+            output.append("")
+            continue
+        if block.kind == "table":
+            append_blank()
+            output.append(text.strip())
+            output.append("")
+            continue
+        if block.kind == "code":
+            code_lines = _repair_pdf_wrapped_lines([line.rstrip() for line in text.splitlines()])
+            while code_lines and not code_lines[0].strip():
+                code_lines.pop(0)
+            while code_lines and not code_lines[-1].strip():
+                code_lines.pop()
+            if not code_lines:
+                continue
+            first_code_line = next((line for line in code_lines if line.strip()), "")
+            language = block.language or _pdf_code_language_for_line(first_code_line)
+            append_blank()
+            output.append(f"```{language or 'text'}")
+            output.extend(code_lines)
+            output.append("```")
+            output.append("")
+            continue
+        lines = _pdf_noncode_lines_without_repeated(text, title=title)
+        if not lines:
+            continue
+        if block.kind == "heading":
+            for line in lines:
+                clean_line = _clean_pdf_line(line)
+                if not clean_line:
+                    continue
+                if page_index == 1 and _normalize_pdf_title_for_compare(clean_line) == _normalize_pdf_title_for_compare(title):
+                    continue
+                append_blank()
+                output.append(f"## {clean_line}")
+                output.append("")
+            continue
+        repaired_lines = _repair_pdf_wrapped_lines(lines)
+        paragraph_lines = [line for line in repaired_lines if line.strip()]
+        if paragraph_lines:
+            append_blank()
+            output.extend(_clean_pdf_line(line) for line in paragraph_lines)
+            output.append("")
+    return "\n".join(output).strip()
+
+
+def _pdf_asset_bbox(asset: DocumentAsset) -> tuple[float, float, float, float] | None:
+    metadata = asset.metadata if isinstance(asset.metadata, dict) else {}
+    raw_bbox = metadata.get("pdf_bbox")
+    if not isinstance(raw_bbox, (list, tuple)) or len(raw_bbox) != 4:
+        return None
     try:
-        from pypdf import PdfReader
+        return tuple(float(value) for value in raw_bbox)  # type: ignore[return-value]
+    except (TypeError, ValueError):
+        return None
+
+
+def _pdf_image_layout_blocks(assets: tuple[DocumentAsset, ...]) -> tuple[PdfLayoutBlock, ...]:
+    blocks: list[PdfLayoutBlock] = []
+    for asset in assets:
+        bbox = _pdf_asset_bbox(asset)
+        if bbox is None:
+            continue
+        blocks.append(
+            PdfLayoutBlock(
+                kind="image",
+                text=_image_markdown(asset),
+                bbox=bbox,
+                confidence=0.98,
+                reason="pymupdf_image_bbox",
+                visual_group="",
+            )
+        )
+    return tuple(blocks)
+
+
+def _pdf_opening_fence_language(line: str) -> str | None:
+    stripped = str(line or "").strip()
+    if not stripped.startswith("```") or stripped == "```":
+        return None
+    return stripped[3:].strip().lower()
+
+
+def _merge_continuation_code_fences(markdown: str) -> str:
+    lines = str(markdown or "").splitlines()
+    output: list[str] = []
+    active_language = ""
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        opening_language = _pdf_opening_fence_language(line)
+        if opening_language is not None:
+            active_language = opening_language
+            output.append(line)
+            index += 1
+            continue
+        if line.strip() != "```" or not active_language:
+            output.append(line)
+            index += 1
+            continue
+
+        lookahead = index + 1
+        while lookahead < len(lines) and not lines[lookahead].strip():
+            lookahead += 1
+        page_marker_index = -1
+        if lookahead < len(lines) and re.fullmatch(r"<!--\s*page:\s*\d+\s*-->", lines[lookahead].strip()):
+            page_marker_index = lookahead
+            lookahead += 1
+            while lookahead < len(lines) and not lines[lookahead].strip():
+                lookahead += 1
+        next_language = _pdf_opening_fence_language(lines[lookahead]) if lookahead < len(lines) else None
+        if next_language is not None and next_language == active_language and page_marker_index >= 0:
+            index = lookahead + 1
+            continue
+
+        output.append(line)
+        active_language = ""
+        index += 1
+    return "\n".join(output).strip()
+
+
+def _pdf_page_text_to_markdown(
+    text: str,
+    *,
+    title: str,
+    page_index: int,
+    assets: tuple[DocumentAsset, ...] = (),
+) -> str:
+    layout_blocks = _parse_pdf_layout_blocks_source(text)
+    if layout_blocks is not None:
+        image_blocks = _pdf_image_layout_blocks(assets)
+        placed_asset_ids = {
+            block.text.split("asset://", 1)[1].split(")", 1)[0]
+            for block in image_blocks
+            if "asset://" in block.text
+        }
+        if image_blocks:
+            layout_blocks = [*layout_blocks, *image_blocks]
+            layout_blocks.sort(key=lambda block: (round(block.bbox[1], 1), round(block.bbox[0], 1)))
+            layout_blocks = _merge_pdf_layout_blocks(layout_blocks)
+        markdown = _pdf_layout_blocks_to_markdown(layout_blocks, title=title, page_index=page_index)
+        unplaced_assets = tuple(asset for asset in assets if asset.asset_id not in placed_asset_ids)
+        if unplaced_assets:
+            asset_markdown = "\n\n".join(_image_markdown(asset) for asset in unplaced_assets)
+            markdown = f"{markdown}\n\n{asset_markdown}".strip() if markdown else asset_markdown
+        return markdown
+
+    page_lines: list[str] = []
+    for raw_line in str(text or "").splitlines():
+        line = str(raw_line or "").rstrip()
+        if not _clean_pdf_line(line):
+            page_lines.append("")
+            continue
+        if _is_pdf_repeated_header_or_footer(line, title=title):
+            continue
+        page_lines.append(line)
+    if page_index == 1:
+        joined = "\n".join(page_lines)
+        page_lines = _drop_duplicate_pdf_title_line(joined, title).splitlines()
+        page_lines = [
+            line.rstrip()
+            for line in page_lines
+            if not _clean_pdf_line(line) or not _is_pdf_repeated_header_or_footer(line, title=title)
+        ]
+    page_lines = _repair_pdf_wrapped_lines(page_lines)
+
+    output: list[str] = []
+    previous_was_heading = False
+    in_code = False
+    pending_language = ""
+
+    def close_code() -> None:
+        nonlocal in_code
+        if in_code:
+            output.append("```")
+            output.append("")
+            in_code = False
+
+    def next_nonempty_line(index: int) -> str:
+        for candidate in page_lines[index + 1:]:
+            if _clean_pdf_line(candidate):
+                return candidate
+        return ""
+
+    for index, line in enumerate(page_lines):
+        clean_line = _clean_pdf_line(line)
+        if not clean_line:
+            if in_code and _is_pdf_code_line(next_nonempty_line(index)):
+                output.append("")
+                continue
+            close_code()
+            if output and output[-1] != "":
+                output.append("")
+            previous_was_heading = False
+            continue
+        language_label = _pdf_language_label(clean_line)
+        if language_label:
+            close_code()
+            if clean_line != clean_line.lower():
+                if output and output[-1] != "":
+                    output.append("")
+                output.append(f"## {clean_line}")
+                output.append("")
+                previous_was_heading = True
+            pending_language = language_label
+            continue
+        if _is_pdf_code_line(line):
+            code_part, prose_part = _split_pdf_code_and_prose(line)
+            if not in_code:
+                if output and output[-1] != "":
+                    output.append("")
+                output.append(f"```{_pdf_code_language_for_line(code_part, pending_language)}")
+                in_code = True
+                pending_language = ""
+            output.append(code_part.rstrip())
+            if prose_part:
+                close_code()
+                output.append(prose_part)
+            previous_was_heading = False
+            continue
+        close_code()
+        if _is_pdf_heading_candidate(clean_line):
+            if output and output[-1] != "":
+                output.append("")
+            output.append(f"## {clean_line}")
+            output.append("")
+            if clean_line.rstrip(":：") == "출력 예상 결과":
+                pending_language = "text"
+            previous_was_heading = True
+            continue
+        if previous_was_heading and output and output[-1] != "":
+            output.append("")
+        output.append(clean_line)
+        previous_was_heading = False
+    close_code()
+    markdown = "\n".join(output).strip()
+    if assets:
+        asset_markdown = "\n\n".join(_image_markdown(asset) for asset in assets)
+        markdown = f"{markdown}\n\n{asset_markdown}".strip() if markdown else asset_markdown
+    return markdown
+
+
+def _pdf_pages_to_markdown(pages: list[str], stem: str, assets: tuple[DocumentAsset, ...] = ()) -> str:
+    title = _pdf_title_from_pages(pages, stem)
+    lines = [f"# {title}"]
+    assets_by_page: dict[int, list[DocumentAsset]] = {}
+    for asset in assets:
+        if asset.page_number is None:
+            continue
+        assets_by_page.setdefault(int(asset.page_number), []).append(asset)
+    for page_index, text in enumerate(pages, start=1):
+        page_assets = tuple(assets_by_page.get(page_index, []))
+        page_markdown = _pdf_page_text_to_markdown(
+            text,
+            title=title,
+            page_index=page_index,
+            assets=page_assets,
+        )
+        if page_markdown:
+            lines.extend(["", f"<!-- page: {page_index} -->", "", page_markdown])
+    joined = "\n".join(lines).strip()
+    if joined == f"# {title}":
+        return ""
+    return _merge_continuation_code_fences(joined)
+
+
+def _pdf_rects_overlap(first: tuple[float, float, float, float], second: tuple[float, float, float, float]) -> bool:
+    return not (first[2] <= second[0] or second[2] <= first[0] or first[3] <= second[1] or second[3] <= first[1])
+
+
+def _pdf_rect_area(bbox: tuple[float, float, float, float]) -> float:
+    return max(0.0, float(bbox[2] - bbox[0])) * max(0.0, float(bbox[3] - bbox[1]))
+
+
+def _pdf_rect_intersection_area(first: tuple[float, float, float, float], second: tuple[float, float, float, float]) -> float:
+    x0 = max(first[0], second[0])
+    y0 = max(first[1], second[1])
+    x1 = min(first[2], second[2])
+    y1 = min(first[3], second[3])
+    return _pdf_rect_area((x0, y0, x1, y1))
+
+
+def _pdf_bbox_center_in_rect(
+    bbox: tuple[float, float, float, float],
+    rect: tuple[float, float, float, float],
+    *,
+    padding: float = 2.0,
+) -> bool:
+    center_x = (bbox[0] + bbox[2]) / 2
+    center_y = (bbox[1] + bbox[3]) / 2
+    return rect[0] - padding <= center_x <= rect[2] + padding and rect[1] - padding <= center_y <= rect[3] + padding
+
+
+def _normalize_pdf_table_cell(value: Any) -> str:
+    text = " ".join(str(value or "").replace("\r", "\n").split())
+    return text.strip()
+
+
+def _markdown_escape_table_cell(value: Any) -> str:
+    return _normalize_pdf_table_cell(value).replace("|", r"\|")
+
+
+def _markdown_table_from_rows(rows: list[list[Any]]) -> str:
+    normalized = [
+        [_markdown_escape_table_cell(cell) for cell in row]
+        for row in rows
+        if any(_normalize_pdf_table_cell(cell) for cell in row)
+    ]
+    if len(normalized) < 2:
+        return ""
+    width = max(len(row) for row in normalized)
+    padded = [row + [""] * (width - len(row)) for row in normalized]
+    header = padded[0]
+    separator = ["---"] * width
+    body = padded[1:]
+    lines = [
+        "| " + " | ".join(header) + " |",
+        "| " + " | ".join(separator) + " |",
+    ]
+    lines.extend("| " + " | ".join(row) + " |" for row in body)
+    return "\n".join(lines)
+
+
+def _pdf_codeish_line_count(lines: list[str]) -> int:
+    count = 0
+    for line in lines:
+        stripped = line.strip()
+        if _is_pdf_code_line(line):
+            count += 1
+        elif stripped.startswith(("#", "---")):
+            count += 1
+        elif re.match(r"^[-]\s+\S+", stripped):
+            count += 1
+        elif re.match(r"^[A-Za-z][A-Za-z0-9_.-]*:\S+", stripped) and not re.match(r"^[a-z][a-z0-9+.-]*://", stripped, re.IGNORECASE):
+            count += 1
+    return count
+
+
+def _pdf_text_block_looks_like_code(text: str) -> bool:
+    lines = [line.rstrip() for line in str(text or "").splitlines() if line.strip()]
+    if not lines:
+        return False
+
+    codeish_count = _pdf_codeish_line_count(lines)
+    return codeish_count > 0 and codeish_count >= max(1, len(lines) // 2)
+
+
+def _pdf_text_block_looks_like_prose(text: str) -> bool:
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    if not lines:
+        return False
+    joined = " ".join(lines)
+    if not re.search(r"[가-힣]", joined):
+        return False
+    if re.search(r"(입니다|합니다|됩니다|합니다\.|됩니다\.|주세요|추천해요|유용합니다|선택하면|사용합니다|정합니다|찾습니다|넣어두고|준비해야)", joined):
+        return True
+    if any(re.search(r"[가-힣].*[:：]$", line) and not line.lstrip().startswith("#") for line in lines):
+        return True
+    if len(joined) >= 40 and re.search(r"[.?!)]$", joined):
+        return True
+    label_like_count = sum(1 for line in lines if re.match(r"^[A-Z][A-Za-z0-9 /_.()-]{1,40}:\s+", line))
+    return label_like_count > 0 and len(joined) >= 36
+
+
+def _pdf_layout_block_language(text: str) -> str:
+    lines = [line for line in str(text or "").splitlines() if line.strip()]
+    first_line = lines[0] if lines else ""
+    if not first_line:
+        return ""
+    if any(re.search(r"[├└│]", line) for line in lines):
+        return "text"
+    yamlish_count = sum(1 for line in lines if _pdf_line_looks_yaml_code(line))
+    if yamlish_count >= 2 or _pdf_line_looks_yaml_code(first_line):
+        return "yaml"
+    if any(str(line).strip().startswith("$env:") for line in lines):
+        return "powershell"
+    if any(_PDF_SHELL_COMMAND_RE.match(str(line).strip()) for line in lines):
+        return "bash"
+    return _pdf_code_language_for_line(first_line)
+
+
+def _pdf_classify_text_layout_block(
+    *,
+    text: str,
+    bbox: tuple[float, float, float, float],
+    font_size: float,
+    median_font_size: float,
+    font_names: list[str],
+    visual_group: str = "",
+) -> PdfLayoutBlock:
+    lines = [line.rstrip() for line in str(text or "").splitlines() if line.strip()]
+    joined = _clean_pdf_line(" ".join(lines))
+    mono_font = any(re.search(r"(?:mono|courier|consola|menlo|code)", font, re.IGNORECASE) for font in font_names)
+    codeish_count = _pdf_codeish_line_count(lines)
+    prose_like = _pdf_text_block_looks_like_prose(text)
+    if visual_group:
+        return PdfLayoutBlock(
+            kind="code",
+            text=text,
+            bbox=bbox,
+            font_size=font_size,
+            language=_pdf_layout_block_language(text),
+            confidence=0.96,
+            reason="visual_code_region",
+            visual_group=visual_group,
+        )
+    if lines and not prose_like and (
+        _pdf_text_block_looks_like_code(text)
+        or (mono_font and len(lines) >= 2)
+        or (codeish_count > 0 and len(lines) >= 2 and bbox[0] >= 72)
+    ):
+        confidence = min(0.96, 0.62 + 0.16 * codeish_count + (0.12 if mono_font else 0.0))
+        return PdfLayoutBlock(
+            kind="code",
+            text=text,
+            bbox=bbox,
+            font_size=font_size,
+            language=_pdf_layout_block_language(text),
+            confidence=confidence,
+            reason="codeish_lines_or_monospace_region",
+            visual_group=visual_group,
+        )
+    font_boost = median_font_size > 0 and font_size >= max(median_font_size + 1.2, median_font_size * 1.12)
+    if joined and len(lines) <= 2 and _is_pdf_heading_candidate(joined):
+        return PdfLayoutBlock(
+            kind="heading",
+            text=text,
+            bbox=bbox,
+            font_size=font_size,
+            confidence=0.88 if font_boost else 0.76,
+            reason="heading_candidate_with_layout",
+            visual_group=visual_group,
+        )
+    if joined and len(lines) <= 2 and font_boost and len(joined) <= 80 and not _pdf_line_has_sentence_end(joined):
+        return PdfLayoutBlock(
+            kind="heading",
+            text=text,
+            bbox=bbox,
+            font_size=font_size,
+            confidence=0.72,
+            reason="large_short_text",
+            visual_group=visual_group,
+        )
+    return PdfLayoutBlock(
+        kind="paragraph",
+        text=text,
+        bbox=bbox,
+        font_size=font_size,
+        confidence=0.7,
+        reason="default_text_region",
+        visual_group=visual_group,
+    )
+
+
+def _pdf_union_bbox(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    return (
+        min(first[0], second[0]),
+        min(first[1], second[1]),
+        max(first[2], second[2]),
+        max(first[3], second[3]),
+    )
+
+
+def _pdf_layout_blocks_should_merge_code(previous: PdfLayoutBlock, current: PdfLayoutBlock) -> bool:
+    if previous.kind != "code" or current.kind != "code":
+        return False
+    if previous.visual_group or current.visual_group:
+        return bool(previous.visual_group and previous.visual_group == current.visual_group)
+    if abs(previous.bbox[0] - current.bbox[0]) > 34:
+        return False
+    vertical_gap = float(current.bbox[1] - previous.bbox[3])
+    return -3 <= vertical_gap <= 36
+
+
+def _merge_pdf_layout_blocks(blocks: list[PdfLayoutBlock]) -> list[PdfLayoutBlock]:
+    merged: list[PdfLayoutBlock] = []
+    for block in blocks:
+        if merged and _pdf_layout_blocks_should_merge_code(merged[-1], block):
+            previous = merged[-1]
+            vertical_gap = float(block.bbox[1] - previous.bbox[3])
+            separator = "\n\n" if vertical_gap > 18 else "\n"
+            merged[-1] = PdfLayoutBlock(
+                kind="code",
+                text=f"{previous.text.rstrip()}{separator}{block.text.lstrip()}",
+                bbox=_pdf_union_bbox(previous.bbox, block.bbox),
+                font_size=max(previous.font_size, block.font_size),
+                language=_pdf_layout_block_language(f"{previous.text.rstrip()}{separator}{block.text.lstrip()}"),
+                confidence=max(previous.confidence, block.confidence),
+                reason=f"{previous.reason}+merged_layout_code",
+                visual_group=previous.visual_group or block.visual_group,
+            )
+            continue
+        merged.append(block)
+    return merged
+
+
+def _pdf_visual_code_regions_with_pymupdf(page: Any) -> list[tuple[str, tuple[float, float, float, float]]]:
+    regions: list[tuple[str, tuple[float, float, float, float]]] = []
+    try:
+        drawings = list(page.get_drawings() or [])
     except Exception:  # noqa: BLE001
-        return ConvertedMarkdown(
-            markdown=_convert_with_markitdown(path),
-            warnings=("pdf_used_markitdown_fallback",),
+        return regions
+
+    for index, drawing in enumerate(drawings):
+        rect = drawing.get("rect") if isinstance(drawing, dict) else None
+        fill = drawing.get("fill") if isinstance(drawing, dict) else None
+        if rect is None or fill is None:
+            continue
+        try:
+            bbox = (float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1))
+            fill_values = tuple(float(value) for value in fill[:3])
+        except Exception:  # noqa: BLE001
+            continue
+        width = bbox[2] - bbox[0]
+        height = bbox[3] - bbox[1]
+        if width < 160 or height < 30:
+            continue
+        if len(fill_values) != 3:
+            continue
+        # The source training PDFs use pale gray/beige filled rectangles for code examples.
+        # Small inline highlights and page separators are filtered out by size and luminance.
+        if not all(0.86 <= value <= 1.0 for value in fill_values):
+            continue
+        if max(fill_values) - min(fill_values) > 0.08:
+            continue
+        group_id = f"visual-code-{round(bbox[0])}-{round(bbox[1])}-{round(bbox[2])}-{round(bbox[3])}-{index}"
+        regions.append((group_id, bbox))
+    return regions
+
+
+def _pdf_visual_group_for_bbox(
+    bbox: tuple[float, float, float, float],
+    visual_code_regions: list[tuple[str, tuple[float, float, float, float]]],
+) -> str:
+    if not visual_code_regions:
+        return ""
+    text_area = _pdf_rect_area(bbox)
+    best_group = ""
+    best_overlap = 0.0
+    for group_id, region in visual_code_regions:
+        if _pdf_bbox_center_in_rect(bbox, region):
+            return group_id
+        overlap = _pdf_rect_intersection_area(bbox, region)
+        if overlap > best_overlap:
+            best_group = group_id
+            best_overlap = overlap
+    if text_area > 0 and best_overlap / text_area >= 0.55:
+        return best_group
+    return ""
+
+
+def _pdf_text_layout_blocks_with_pymupdf(
+    page: Any,
+    *,
+    table_bboxes: list[tuple[float, float, float, float]],
+    visual_code_regions: list[tuple[str, tuple[float, float, float, float]]] | None = None,
+) -> list[PdfLayoutBlock]:
+    raw_blocks: list[dict[str, Any]] = []
+    visual_code_regions = visual_code_regions or []
+    try:
+        page_dict = page.get_text("dict")
+        text_blocks = list(page_dict.get("blocks", []) or [])
+    except Exception:  # noqa: BLE001
+        text_blocks = []
+
+    for block in text_blocks:
+        if int(block.get("type", 0) or 0) != 0:
+            continue
+        raw_bbox = tuple(float(value) for value in block.get("bbox", ()) or ())
+        if len(raw_bbox) != 4:
+            continue
+        bbox = raw_bbox  # type: ignore[assignment]
+        if any(_pdf_rects_overlap(bbox, table_bbox) for table_bbox in table_bboxes):
+            continue
+        lines: list[str] = []
+        font_sizes: list[float] = []
+        font_names: list[str] = []
+        for line in list(block.get("lines", []) or []):
+            spans = list(line.get("spans", []) or [])
+            text_line = "".join(str(span.get("text") or "") for span in spans).rstrip()
+            if text_line.strip():
+                lines.append(text_line)
+            for span in spans:
+                span_text = str(span.get("text") or "")
+                if not span_text.strip():
+                    continue
+                font_sizes.append(float(span.get("size") or 0.0))
+                font_names.append(str(span.get("font") or ""))
+        text = "\n".join(lines).strip()
+        if not text:
+            continue
+        visual_group = _pdf_visual_group_for_bbox(bbox, visual_code_regions)
+        raw_blocks.append(
+            {
+                "text": text,
+                "bbox": bbox,
+                "font_size": max(font_sizes) if font_sizes else 0.0,
+                "font_names": font_names,
+                "visual_group": visual_group,
+            }
         )
 
-    reader = PdfReader(str(path))
-    lines = [f"# {path.stem}"]
-    for page_index, page in enumerate(reader.pages, start=1):
-        text = str(page.extract_text() or "").strip()
-        if text:
-            lines.extend(["", f"<!-- page: {page_index} -->", f"## Page {page_index}", "", text])
-    markdown = "\n".join(lines).strip()
-    if markdown == f"# {path.stem}":
+    if not raw_blocks:
+        try:
+            block_tuples = page.get_text("blocks")
+        except Exception:  # noqa: BLE001
+            block_tuples = []
+        for block in block_tuples:
+            if len(block) < 5:
+                continue
+            bbox = (float(block[0]), float(block[1]), float(block[2]), float(block[3]))
+            if any(_pdf_rects_overlap(bbox, table_bbox) for table_bbox in table_bboxes):
+                continue
+            text = str(block[4] or "").strip()
+            if not text:
+                continue
+            raw_blocks.append(
+                {
+                    "text": text,
+                    "bbox": bbox,
+                    "font_size": 0.0,
+                    "font_names": [],
+                    "visual_group": _pdf_visual_group_for_bbox(bbox, visual_code_regions),
+                }
+            )
+
+    font_sizes = sorted(float(block.get("font_size") or 0.0) for block in raw_blocks if float(block.get("font_size") or 0.0) > 0)
+    median_font_size = font_sizes[len(font_sizes) // 2] if font_sizes else 0.0
+    return [
+        _pdf_classify_text_layout_block(
+            text=str(block["text"]),
+            bbox=block["bbox"],
+            font_size=float(block.get("font_size") or 0.0),
+            median_font_size=median_font_size,
+            font_names=list(block.get("font_names") or []),
+            visual_group=str(block.get("visual_group") or ""),
+        )
+        for block in raw_blocks
+    ]
+
+
+def _extract_pdf_page_markdown_source_with_pymupdf(page: Any) -> str:
+    blocks: list[PdfLayoutBlock] = []
+    table_bboxes: list[tuple[float, float, float, float]] = []
+    visual_code_regions = _pdf_visual_code_regions_with_pymupdf(page)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            tables = page.find_tables()
+        table_items = list(getattr(tables, "tables", []) or [])
+    except Exception:  # noqa: BLE001
+        table_items = []
+    for table in table_items:
+        bbox_raw = tuple(float(value) for value in getattr(table, "bbox", ()) or ())
+        if len(bbox_raw) != 4:
+            continue
+        try:
+            markdown_table = _markdown_table_from_rows(table.extract())
+        except Exception:  # noqa: BLE001
+            markdown_table = ""
+        if not markdown_table:
+            continue
+        table_bboxes.append(bbox_raw)  # type: ignore[arg-type]
+        blocks.append(
+            PdfLayoutBlock(
+                kind="table",
+                text=markdown_table,
+                bbox=bbox_raw,  # type: ignore[arg-type]
+                confidence=0.96,
+                reason="pymupdf_table_detector",
+            )
+        )
+    blocks.extend(_pdf_text_layout_blocks_with_pymupdf(page, table_bboxes=table_bboxes, visual_code_regions=visual_code_regions))
+    blocks.sort(key=lambda block: (round(block.bbox[1], 1), round(block.bbox[0], 1)))
+    return _serialize_pdf_layout_blocks(_merge_pdf_layout_blocks(blocks))
+
+
+def _extract_pdf_pages_with_pymupdf(path: Path) -> list[str] | None:
+    try:
+        import fitz  # PyMuPDF
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        doc = fitz.open(str(path))
+        try:
+            return [_extract_pdf_page_markdown_source_with_pymupdf(page) for page in doc]
+        finally:
+            doc.close()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _extract_pdf_image_assets_with_pymupdf(path: Path, *, source_sha256: str) -> tuple[DocumentAsset, ...]:
+    try:
+        import fitz  # PyMuPDF
+    except Exception:  # noqa: BLE001
+        return ()
+    assets: list[DocumentAsset] = []
+    seen: set[tuple[int, int]] = set()
+    try:
+        doc = fitz.open(str(path))
+        try:
+            for page_number, page in enumerate(doc, start=1):
+                for image_index, image_ref in enumerate(page.get_images(full=True), start=1):
+                    xref = int(image_ref[0])
+                    key = (page_number, xref)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    image = doc.extract_image(xref)
+                    content = bytes(image.get("image") or b"")
+                    width = int(image.get("width") or 0)
+                    height = int(image.get("height") or 0)
+                    ext = str(image.get("ext") or "png").lower().lstrip(".") or "png"
+                    if not content or width < 48 or height < 48:
+                        continue
+                    bbox: list[float] = []
+                    try:
+                        rects = list(page.get_image_rects(xref) or [])
+                        if rects:
+                            rect = rects[0]
+                            bbox = [float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1)]
+                    except Exception:  # noqa: BLE001
+                        bbox = []
+                    media_name = f"pdf-page-{page_number:03d}-image-{image_index:02d}.{ext}"
+                    sha256 = hashlib.sha256(content).hexdigest()
+                    asset_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{path.name}:{source_sha256}:pdf:{page_number}:{xref}:{sha256}"))
+                    assets.append(
+                        DocumentAsset(
+                            asset_id=asset_id,
+                            asset_type="image",
+                            filename=media_name,
+                            mime_type=mimetypes.guess_type(media_name)[0] or f"image/{ext}",
+                            sha256=sha256,
+                            storage_key=f"uploads/assets/{asset_id}.{ext}",
+                            page_number=page_number,
+                            metadata={
+                                "source_member": f"pdf:xref:{xref}",
+                                "pdf_xref": xref,
+                                "pdf_image_index": image_index,
+                                "width": width,
+                                "height": height,
+                                "pdf_bbox": bbox,
+                            },
+                        )
+                    )
+        finally:
+            doc.close()
+    except Exception:  # noqa: BLE001
+        return ()
+    return tuple(assets)
+
+
+def _extract_pdf_pages_with_pdfplumber(path: Path) -> list[str] | None:
+    try:
+        import pdfplumber
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        with pdfplumber.open(str(path)) as pdf:
+            return [str(page.extract_text() or "").strip() for page in pdf.pages]
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _convert_pdf_to_markdown(
+    path: Path,
+    *,
+    progress: Callable[[str, str, dict[str, Any]], None] | None = None,
+) -> ConvertedMarkdown:
+    """PDF → markdown 변환.
+
+    한국어 PDF에서 폰트 매핑 깨짐 사례가 흔해서 — pymupdf(fitz)를 1차로 사용.
+    추출기 우선순위 (한국어/영어 모두 안정적):
+      1) pymupdf (fitz) — 한국어 폰트 매핑 가장 안정, 페이지·표 유지
+      2) pdfplumber — pdfminer 기반, pymupdf 부재 시 차순위
+      3) Docling — 영어/표 인식 강하지만 한국어 폰트 깨짐 잦음
+      4) extract_pdf_pages 폴백 체인 (pypdf → mdls → string_scan → RapidOCR 스캔본)
+      5) markitdown 최종 폴백
+
+    progress(stage, status, detail) 콜백이 주어지면 각 시도/결과를 흘려보낸다.
+    """
+
+    def emit(status: str, **detail: Any) -> None:
+        if progress is not None:
+            progress("parse", status, detail)
+
+    warnings: list[str] = []
+    extractor_used = ""
+    markdown = ""
+    page_count = 0
+    assets: tuple[DocumentAsset, ...] = _extract_pdf_image_assets_with_pymupdf(
+        path,
+        source_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
+
+    # 1) pymupdf
+    emit("info", note="pymupdf(fitz) 추출 시도 중 (한국어 폰트에 가장 안정)...")
+    pages = _extract_pdf_pages_with_pymupdf(path)
+    if pages:
+        total = sum(len(p) for p in pages)
+        if total >= 200:  # 최소 의미있는 분량
+            markdown = _pdf_pages_to_markdown(pages, path.stem, assets=assets)
+            if markdown:
+                extractor_used = "pymupdf"
+                page_count = len(pages)
+                emit("info", note=f"pymupdf 성공: {len(pages)} 페이지, {len(markdown):,} 자, {len(assets)} images")
+        else:
+            warnings.append(f"pymupdf_low_quality:{total}_chars")
+            emit("info", note=f"pymupdf 결과 부실 ({total} 자), pdfplumber로 폴백")
+    else:
+        warnings.append("pymupdf_unavailable_or_failed")
+        emit("info", note="pymupdf 사용 불가/실패, pdfplumber 폴백")
+
+    # 2) pdfplumber
+    if not markdown:
+        emit("info", note="pdfplumber 추출 시도 중...")
+        pages = _extract_pdf_pages_with_pdfplumber(path)
+        if pages:
+            total = sum(len(p) for p in pages)
+            if total >= 200:
+                markdown = _pdf_pages_to_markdown(pages, path.stem, assets=assets)
+                if markdown:
+                    extractor_used = "pdfplumber"
+                    page_count = len(pages)
+                    emit("info", note=f"pdfplumber 성공: {len(pages)} 페이지, {len(markdown):,} 자, {len(assets)} images")
+            else:
+                warnings.append(f"pdfplumber_low_quality:{total}_chars")
+                emit("info", note=f"pdfplumber 결과 부실 ({total} 자), Docling으로 폴백")
+        else:
+            warnings.append("pdfplumber_unavailable_or_failed")
+            emit("info", note="pdfplumber 사용 불가/실패, Docling 폴백")
+
+    # 3) Docling (영어/표 PDF 에 강함)
+    if not markdown:
+        try:
+            from play_book_studio.intake.normalization.pdf import (
+                extract_pdf_markdown_with_docling,
+                extract_pdf_markdown_with_docling_ocr,
+                extract_pdf_pages,
+            )
+        except Exception:  # noqa: BLE001
+            extract_pdf_markdown_with_docling = None  # type: ignore[assignment]
+            extract_pdf_markdown_with_docling_ocr = None  # type: ignore[assignment]
+            extract_pdf_pages = None  # type: ignore[assignment]
+            warnings.append("pdf_intake_pipeline_unavailable")
+
+        if extract_pdf_markdown_with_docling is not None:
+            emit("info", note="Docling 추출 시도 중 (영어/표 PDF)...")
+            try:
+                docling_md = extract_pdf_markdown_with_docling(path).strip()
+                if docling_md:
+                    markdown = docling_md
+                    extractor_used = "docling"
+                    emit("info", note=f"Docling 성공: {len(markdown):,} 자")
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"docling_failed:{type(exc).__name__}")
+                emit("info", note=f"Docling 실패: {type(exc).__name__}, Docling+OCR 폴백")
+
+        # 4) Docling + OCR (스캔본)
+        if not markdown and extract_pdf_markdown_with_docling_ocr is not None:
+            emit("info", note="Docling + 내장 OCR 시도 (스캔본 추정)...")
+            try:
+                docling_md = extract_pdf_markdown_with_docling_ocr(path).strip()
+                if docling_md:
+                    markdown = docling_md
+                    extractor_used = "docling_ocr"
+                    warnings.append("pdf_required_ocr")
+                    emit("info", note=f"Docling OCR 성공: {len(markdown):,} 자 (스캔본)")
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"docling_ocr_failed:{type(exc).__name__}")
+                emit("info", note=f"Docling OCR 실패: {type(exc).__name__}")
+
+        # 5) extract_pdf_pages 폴백 체인
+        if not markdown and extract_pdf_pages is not None:
+            emit("info", note="extract_pdf_pages 폴백 (pypdf → mdls → string_scan → RapidOCR)...")
+            try:
+                pages = extract_pdf_pages(path)
+                joined = _pdf_pages_to_markdown(pages, path.stem, assets=assets)
+                if joined:
+                    markdown = joined
+                    extractor_used = "extract_pdf_pages_chain"
+                    page_count = len(pages)
+                    emit("info", note=f"폴백 체인 성공: {len(pages)} 페이지, {len(markdown):,} 자")
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"extract_pdf_pages_failed:{type(exc).__name__}")
+                emit("info", note=f"폴백 체인 실패: {type(exc).__name__}")
+
+    # 6) markitdown 최종 폴백
+    if not markdown:
+        emit("info", note="모든 PDF 추출기 실패, markitdown 최종 폴백 시도")
         return ConvertedMarkdown(
             markdown=_convert_with_markitdown(path),
-            warnings=("pdf_used_markitdown_fallback",),
+            warnings=tuple(warnings + ["pdf_used_markitdown_fallback"]),
         )
-    return ConvertedMarkdown(markdown=markdown)
+
+    return ConvertedMarkdown(
+        markdown=markdown,
+        assets=assets,
+        warnings=tuple(warnings),
+        metadata={
+            "pdf_extractor": extractor_used,
+            "pdf_markdown_chars": len(markdown),
+            "pdf_page_count": page_count,
+            "pdf_image_count": len(assets),
+        },
+    )
 
 
 def _convert_with_markitdown(path: Path) -> str:

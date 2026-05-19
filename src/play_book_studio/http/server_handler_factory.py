@@ -25,7 +25,12 @@ from play_book_studio.http.ops_console_api import (
     handle_ops_console_post as _handle_ops_console_post_request,
     handle_ops_console_put as _handle_ops_console_put_request,
 )
-from play_book_studio.http.upload_api import handle_upload_ingest as _handle_upload_ingest_request
+from play_book_studio.http.upload_api import (
+    handle_upload_delete as _handle_upload_delete_request,
+    handle_upload_ingest as _handle_upload_ingest_request,
+    handle_upload_ingest_report as _handle_upload_ingest_report_request,
+    handle_upload_ingest_stream as _handle_upload_ingest_stream_request,
+)
 from play_book_studio.http.repository_api import handle_document_repositories as _handle_document_repositories_request
 from play_book_studio.http.document_status_api import handle_document_status as _handle_document_status_request
 from play_book_studio.http.signals_api import handle_signals as _handle_signals_request
@@ -156,13 +161,16 @@ def _build_handler(
                     content_type = mimetypes.guess_type(str(asset_path))[0] or "text/html; charset=utf-8"
                     self._send_bytes(asset_path.read_bytes(), content_type=content_type)
                     return
-            if request_path.startswith(("/playbooks/wiki-runtime/", "/playbooks/customer-packs/", "/docs/", "/wiki/entities/", "/wiki/figures/", "/buyer-packets/")):
-                viewer_html = _resolve_viewer_html(root_dir, self.path)
+            if request_path.startswith(("/playbooks/wiki-runtime/", "/playbooks/customer-packs/", "/docs/", "/wiki/entities/", "/wiki/figures/", "/buyer-packets/", "/uploads/documents/")):
+                viewer_html = _resolve_viewer_html(root_dir, self.path, owner_user_id=self._session_owner().owner_hash)
                 if viewer_html is not None:
                     self._send_bytes(
                         viewer_html.encode("utf-8"),
                         content_type="text/html; charset=utf-8",
                     )
+                    return
+                if request_path.startswith("/uploads/documents/"):
+                    self.send_error(HTTPStatus.NOT_FOUND, "Uploaded document viewer not found")
                     return
             if request_path.startswith("/playbooks/wiki-assets/"):
                 relative = request_path.removeprefix("/playbooks/wiki-assets/").strip("/")
@@ -248,6 +256,9 @@ def _build_handler(
             if request_path == "/api/documents/ingest-status":
                 self._handle_document_status(parsed_request.query)
                 return
+            if request_path == "/api/uploads/reports":
+                self._handle_upload_ingest_report(parsed_request.query)
+                return
             if request_path.startswith("/api/documents/") and request_path.endswith("/status"):
                 document_source_id = request_path.removeprefix("/api/documents/").removesuffix("/status").strip("/")
                 query = parsed_request.query
@@ -282,7 +293,7 @@ def _build_handler(
                 content_type = mimetypes.guess_type(str(frontend_fallback))[0] or "application/octet-stream"
                 self._send_bytes(frontend_fallback.read_bytes(), content_type=content_type)
                 return
-            if not request_path.startswith(("/api/", "/playbooks/", "/docs/", "/wiki/")):
+            if not request_path.startswith(("/api/", "/playbooks/", "/docs/", "/wiki/", "/uploads/")):
                 index_path = _resolve_frontend_asset(root_dir, "/index.html")
                 if index_path is not None:
                     self._send_bytes(index_path.read_bytes(), content_type="text/html; charset=utf-8")
@@ -318,6 +329,12 @@ def _build_handler(
                 return
             if parsed_request.path == "/api/uploads/ingest":
                 self._handle_upload_ingest(payload)
+                return
+            if parsed_request.path == "/api/uploads/ingest/stream":
+                self._handle_upload_ingest_stream(payload)
+                return
+            if parsed_request.path == "/api/uploads/delete":
+                self._handle_upload_delete(payload)
                 return
             if parsed_request.path == "/api/customer-packs/ingest":
                 self._handle_customer_pack_ingest(payload)
@@ -424,6 +441,7 @@ def _build_handler(
                 self,
                 query,
                 root_dir=root_dir,
+                owner_user_id=self._session_owner().owner_hash,
             )
 
         def _handle_signals(self, query: str) -> None:
@@ -555,6 +573,27 @@ def _build_handler(
             payload.setdefault("created_by", owner.owner_hash)
             _handle_upload_ingest_request(self, payload, root_dir=root_dir)
             data_control_room_cache.set("payload", None)
+        def _handle_upload_ingest_stream(self, payload: dict[str, Any]) -> None:
+            owner = self._session_owner()
+            payload.setdefault("created_by", owner.owner_hash)
+            _handle_upload_ingest_stream_request(self, payload, root_dir=root_dir)
+            data_control_room_cache.set("payload", None)
+        def _handle_upload_delete(self, payload: dict[str, Any]) -> None:
+            owner = self._session_owner()
+            _handle_upload_delete_request(
+                self,
+                payload,
+                root_dir=root_dir,
+                owner_user_id=owner.owner_hash,
+            )
+            data_control_room_cache.set("payload", None)
+        def _handle_upload_ingest_report(self, query: str) -> None:
+            _handle_upload_ingest_report_request(
+                self,
+                query,
+                root_dir=root_dir,
+                owner_user_id=self._session_owner().owner_hash,
+            )
         def _handle_repository_favorites_save(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_save_request(self, payload, root_dir=root_dir)
         def _handle_repository_favorites_remove(self, payload: dict[str, Any]) -> None: _handle_repository_favorites_remove_request(self, payload, root_dir=root_dir)
         def _handle_repository_official_materialize(self, payload: dict[str, Any]) -> None:

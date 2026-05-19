@@ -51,8 +51,8 @@ function toggleViewerCodeCollapse(button) {
   block.classList.toggle("is-collapsed");
   const collapsed = block.classList.contains("is-collapsed");
   button.textContent = collapsed
-    ? (button.dataset.labelCollapsed || "Show more")
-    : (button.dataset.labelExpanded || "Show less");
+    ? (button.dataset.labelCollapsed || "전체 보기")
+    : (button.dataset.labelExpanded || "접기");
   button.classList.toggle("is-collapsed", collapsed);
   button.setAttribute("aria-expanded", collapsed ? "false" : "true");
 }

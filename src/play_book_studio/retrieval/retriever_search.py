@@ -55,6 +55,55 @@ def _qdrant_query_filter(
     return clean_filter or None
 
 
+def _combine_qdrant_filters(*filters: dict[str, object] | None) -> dict[str, object] | None:
+    combined: dict[str, object] = {}
+    must: list[object] = []
+    for query_filter in filters:
+        if not query_filter:
+            continue
+        for key, value in query_filter.items():
+            if key == "must" and isinstance(value, list):
+                must.extend(value)
+            elif key not in combined:
+                combined[key] = value
+    if must:
+        combined["must"] = must
+    return combined or None
+
+
+def _session_scope_row_filter(context):
+    active_document_id = str(getattr(context, "active_document_id", "") or "").strip()
+    active_repository_id = str(getattr(context, "active_repository_id", "") or "").strip()
+    if not active_document_id and not active_repository_id:
+        return None
+
+    def predicate(row: dict[str, object]) -> bool:
+        if active_document_id:
+            document_source_id = str(row.get("document_source_id") or row.get("source_id") or "").strip()
+            if document_source_id != active_document_id:
+                return False
+        if active_repository_id:
+            repository_id = str(row.get("repository_id") or "").strip()
+            if repository_id != active_repository_id:
+                return False
+        return True
+
+    return predicate
+
+
+def _session_scope_qdrant_filter(context) -> dict[str, object] | None:
+    active_document_id = str(getattr(context, "active_document_id", "") or "").strip()
+    active_repository_id = str(getattr(context, "active_repository_id", "") or "").strip()
+    must: list[dict[str, object]] = []
+    if active_document_id:
+        must.append({"key": "document_source_id", "match": {"value": active_document_id}})
+    if active_repository_id:
+        must.append({"key": "repository_id", "match": {"value": active_repository_id}})
+    if not must:
+        return None
+    return {"must": must}
+
+
 def _domain_filter_values(metadata_filter: dict[str, object] | None) -> tuple[str, ...]:
     if not metadata_filter:
         return ()
@@ -180,6 +229,8 @@ def _vector_subquery_runtime(
         payload["metadata_filter_fallback"] = True
     if runtime.get("metadata_filter_pass"):
         payload["metadata_filter_pass"] = str(runtime["metadata_filter_pass"])
+    if runtime.get("session_scope_filter_applied"):
+        payload["session_scope_filter_applied"] = True
     if isinstance(runtime.get("filter_passes"), list):
         payload["filter_passes"] = list(runtime["filter_passes"])
     if isinstance(runtime.get("command_filter_passes"), list):
@@ -285,8 +336,9 @@ def search_bm25_candidates(
         status="running",
     )
     bm25_started_at = time.perf_counter()
+    scope_row_filter = _session_scope_row_filter(context)
     bm25_hit_sets = [
-        retriever.bm25_index.search(subquery, top_k=effective_candidate_k)
+        retriever.bm25_index.search(subquery, top_k=effective_candidate_k, row_filter=scope_row_filter)
         for subquery in rewritten_queries
     ]
     core_hits = _rrf_merge_hit_lists(
@@ -351,6 +403,7 @@ def search_bm25_candidates(
             "count": len(bm25_hits),
             "overlay_count": len(overlay_hits),
             "private_overlay_ready": private_index is not None,
+            "session_scope_filter_applied": scope_row_filter is not None,
             "summary": _summarize_hit_list(bm25_hits),
         },
     )
@@ -399,7 +452,12 @@ def search_vector_candidates(
         vector_subqueries: list[dict[str, object]] = []
         seen_embedding_queries: set[str] = set()
         embedding_query_items: list[tuple[int, str]] = []
-        base_qdrant_filter = _qdrant_query_filter(metadata_filter)
+        session_qdrant_filter = _session_scope_qdrant_filter(context)
+        session_scope_filter_applied = session_qdrant_filter is not None
+        base_qdrant_filter = _combine_qdrant_filters(
+            _qdrant_query_filter(metadata_filter),
+            session_qdrant_filter,
+        )
         domain_filters = (
             _domain_filter_values(metadata_filter)
             if bool(getattr(retriever.settings, "vector_domain_filter_enabled", False))
@@ -437,7 +495,10 @@ def search_vector_candidates(
                         domain_hit_sets: list[list[RetrievalHit]] = []
                         domain_runtimes: list[dict[str, object]] = []
                         for domain_value in domain_filters:
-                            domain_filter = _qdrant_query_filter(metadata_filter, domain_filter=domain_value)
+                            domain_filter = _combine_qdrant_filters(
+                                _qdrant_query_filter(metadata_filter, domain_filter=domain_value),
+                                session_qdrant_filter,
+                            )
                             domain_hits, domain_runtime = retriever.vector_retriever.search_with_trace(
                                 vector_query,
                                 top_k=effective_candidate_k,
@@ -477,6 +538,8 @@ def search_vector_candidates(
                     runtime["embedding_query_index"] = embedding_query_index
                     runtime["correction_notes"] = serialized_corrections
                     runtime["metadata_filter_pass"] = filter_pass
+                    if session_scope_filter_applied:
+                        runtime["session_scope_filter_applied"] = True
                     if applied_filter:
                         runtime["metadata_filter"] = applied_filter
                     if not official_hits and domain_filters:
@@ -496,7 +559,7 @@ def search_vector_candidates(
                             "embedding_query_index": embedding_query_index,
                             "correction_notes": serialized_corrections,
                         }
-                    if not official_hits and base_qdrant_filter:
+                    if not official_hits and base_qdrant_filter and not session_scope_filter_applied:
                         official_hits, fallback_runtime = retriever.vector_retriever.search_with_trace(
                             vector_query,
                             top_k=effective_candidate_k,
@@ -515,7 +578,10 @@ def search_vector_candidates(
                     command_filter_hits: list[list[RetrievalHit]] = []
                     command_filter_runtimes: list[dict[str, object]] = []
                     for command_value in _command_filter_values(metadata_filter):
-                        command_filter = _qdrant_command_filter(metadata_filter, command=command_value)
+                        command_filter = _combine_qdrant_filters(
+                            _qdrant_command_filter(metadata_filter, command=command_value),
+                            session_qdrant_filter,
+                        )
                         command_hits, command_runtime = retriever.vector_retriever.search_with_trace(
                             vector_query,
                             top_k=effective_candidate_k,
@@ -625,6 +691,7 @@ def search_vector_candidates(
         vector_runtime["parallel_workers"] = vector_workers
         vector_runtime["parallel_enabled"] = vector_workers > 1 and len(embedding_query_items) > 1
         vector_runtime["domain_filter_enabled"] = bool(domain_filters)
+        vector_runtime["session_scope_filter_applied"] = session_scope_filter_applied
         timings_ms["vector_search"] = _duration_ms(vector_started_at)
         _emit_trace_event(
             trace_callback,
@@ -639,6 +706,7 @@ def search_vector_candidates(
                 "endpoint_used": vector_runtime["endpoint_used"],
                 "endpoints_used": vector_runtime["endpoints_used"],
                 "empty_subqueries": vector_runtime["empty_subqueries"],
+                "session_scope_filter_applied": session_scope_filter_applied,
                 "summary": _summarize_hit_list(vector_hits),
             },
         )

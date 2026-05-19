@@ -13,9 +13,11 @@ def _status_message(status: str, indexed_count: int, chunk_count: int) -> str:
         return "문서 처리에 실패했습니다."
     if status not in {"completed", "done", "ready"}:
         return "문서 파싱중입니다."
+    if chunk_count <= 0:
+        return "파싱 결과 청크가 없어 검색 인덱싱을 확인할 수 없습니다."
     if chunk_count and indexed_count < chunk_count:
         return "인덱싱중입니다."
-    return "문서 준비가 완료되었습니다."
+    return "기본 텍스트 인덱싱이 완료되었습니다. 답변 품질 검수는 별도입니다."
 
 
 def _jsonable(value: Any) -> Any:
@@ -24,7 +26,7 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-def build_document_status_response(root_dir: Path, query: str) -> dict[str, Any]:
+def build_document_status_response(root_dir: Path, query: str, *, owner_user_id: str = "") -> dict[str, Any]:
     database_url = load_settings(root_dir).database_url.strip()
     if not database_url:
         return {"database": "disabled", "count": 0, "items": []}
@@ -41,6 +43,9 @@ def build_document_status_response(root_dir: Path, query: str) -> dict[str, Any]
     if document_source_id:
         where.append("ds.id = %s::uuid")
         values.append(document_source_id)
+    if owner_user_id:
+        where.append("(COALESCE(ds.visibility, '') <> 'private_user' OR COALESCE(ds.owner_user_id, '') = %s)")
+        values.append(owner_user_id)
     values.append(50)
 
     import psycopg
@@ -100,11 +105,13 @@ def build_document_status_response(root_dir: Path, query: str) -> dict[str, Any]
         status = str(row.get("parse_status") or "queued")
         chunk_count = int(row.get("chunk_count") or 0)
         indexed_count = int(row.get("indexed_count") or 0)
-        ready = status in {"completed", "done", "ready"} and (not chunk_count or indexed_count >= chunk_count)
+        ready = status in {"completed", "done", "ready"} and chunk_count > 0 and indexed_count >= chunk_count
         items.append({
             **{key: _jsonable(value) for key, value in dict(row).items()},
-            "ready": ready,
-            "status": "ready" if ready else status,
+            "ready": False,
+            "basic_index_ready": ready,
+            "answer_ready": False,
+            "status": "basic_index_ready" if ready else status,
             "message": _status_message(status, indexed_count, chunk_count),
         })
 
@@ -116,9 +123,9 @@ def build_document_status_response(root_dir: Path, query: str) -> dict[str, Any]
     }
 
 
-def handle_document_status(handler: Any, query: str, *, root_dir: Path) -> None:
+def handle_document_status(handler: Any, query: str, *, root_dir: Path, owner_user_id: str = "") -> None:
     try:
-        payload = build_document_status_response(root_dir, query)
+        payload = build_document_status_response(root_dir, query, owner_user_id=owner_user_id)
     except Exception as exc:  # noqa: BLE001
         handler._send_json({"error": f"document status load failed: {exc}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
         return

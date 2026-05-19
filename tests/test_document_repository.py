@@ -80,7 +80,7 @@ def _parsed_document() -> ParsedUploadDocument:
         sha256="asset-sha",
         storage_key="uploads/assets/image1.png",
         description="Architecture diagram",
-        metadata={"qwen_model": "Qwen2.5-VL"},
+        metadata={"vision_model": "gemma-4-26b-a4b-it-awq-8bit"},
     )
     blocks = (
         DocumentBlock(
@@ -152,11 +152,71 @@ def test_build_parsed_document_rows_maps_parser_output_to_schema_rows():
     assert rows.blocks[2]["source_anchor"] == "architecture"
     assert rows.assets[0]["block_id"] == "44444444-4444-4444-4444-444444444444"
     assert rows.assets[0]["qwen_description"] == "Architecture diagram"
-    assert rows.assets[0]["qwen_model"] == "Qwen2.5-VL"
+    assert rows.assets[0]["qwen_model"] == "gemma-4-26b-a4b-it-awq-8bit"
     assert rows.chunks[0]["section_path"] == ["Architecture"]
     assert rows.chunks[0]["heading_title"] == "Architecture"
     assert rows.chunks[0]["source_anchor"] == "architecture"
     assert rows.chunks[0]["token_count"] > 0
+
+
+def test_build_parsed_document_rows_strips_postgres_nul_characters():
+    asset = DocumentAsset(
+        asset_id="11111111-1111-1111-1111-111111111111",
+        asset_type="image",
+        filename="image1.png",
+        mime_type="image/png",
+        sha256="asset-sha",
+        storage_key="uploads/assets/image1.png",
+        description="Architecture\x00 diagram",
+        metadata={"vision_model": "gemma\x00"},
+    )
+    blocks = (
+        DocumentBlock(
+            block_id="22222222-2222-2222-2222-222222222222",
+            ordinal=0,
+            block_type="heading",
+            markdown="# Architecture\x00",
+            text="Architecture\x00",
+            heading_level=1,
+            section_path=("Architecture\x00",),
+            heading_title="Architecture\x00",
+            source_anchor="architecture",
+            toc_path=("Architecture\x00",),
+            metadata={"note": "bad\x00 metadata"},
+        ),
+        DocumentBlock(
+            block_id="33333333-3333-3333-3333-333333333333",
+            ordinal=1,
+            block_type="paragraph",
+            markdown="Router\x00 sends traffic to services.",
+            text="Router\x00 sends traffic to services.",
+            section_path=("Architecture\x00",),
+            heading_title="Architecture\x00",
+            source_anchor="architecture",
+            toc_path=("Architecture\x00",),
+        ),
+    )
+    parsed = ParsedUploadDocument(
+        document_id="55555555-5555-5555-5555-555555555555",
+        filename="deck.pptx",
+        document_format="pptx",
+        mime_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        sha256="source-sha",
+        markdown="# Architecture\x00\n\nRouter\x00 sends traffic to services.",
+        blocks=blocks,
+        assets=(asset,),
+        metadata={"byte_size": 1234, "source_path": "deck\x00.pptx", "nested": {"bad": "nul\x00"}},
+    )
+    chunks = build_document_chunks(parsed, max_chars=300, overlap_blocks=0)
+
+    rows = build_parsed_document_rows(parsed, chunks, created_by="tester")
+
+    assert not _contains_nul(rows)
+    assert rows.parsed_document["markdown"] == "# Architecture\n\nRouter sends traffic to services."
+    assert rows.blocks[0]["text"] == "Architecture"
+    assert rows.chunks[0]["embedding_text"].startswith("Architecture")
+    assert rows.assets[0]["qwen_description"] == "Architecture diagram"
+    assert rows.source["metadata"]["nested"]["bad"] == "nul"
 
 
 def test_build_document_chunks_keeps_section_context_in_embedding_text_after_split():
@@ -218,6 +278,26 @@ def test_persist_parsed_upload_document_executes_expected_insert_sequence():
     assert len(stored.block_ids) == 3
     assert len(stored.asset_ids) == 1
     assert len(stored.chunk_ids) == 1
+    block_call = next(call for call in connection.cursor_obj.calls if "INSERT INTO document_blocks" in call[0])
+    block_calls = [call for call in connection.cursor_obj.calls if "INSERT INTO document_blocks" in call[0]]
+    asset_call = next(call for call in connection.cursor_obj.calls if "INSERT INTO document_assets" in call[0])
+    chunk_call = next(call for call in connection.cursor_obj.calls if "INSERT INTO document_chunks" in call[0])
+    assert block_call[1][0] != "22222222-2222-2222-2222-222222222222"
+    assert asset_call[1][0] != "11111111-1111-1111-1111-111111111111"
+    assert asset_call[1][3] in {call[1][0] for call in block_calls}
+    assert chunk_call[1][0] != chunks[0].chunk_id
+
+
+def _contains_nul(value) -> bool:
+    if isinstance(value, str):
+        return "\x00" in value
+    if isinstance(value, dict):
+        return any(_contains_nul(key) or _contains_nul(item) for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_nul(item) for item in value)
+    if hasattr(value, "__dict__"):
+        return _contains_nul(value.__dict__)
+    return False
 
 
 def test_persist_parsed_upload_document_can_create_shared_study_repository():

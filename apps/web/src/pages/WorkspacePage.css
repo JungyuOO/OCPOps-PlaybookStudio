@@ -1808,6 +1808,42 @@
   padding-left: 26px;
 }
 
+.source-document-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding-left: 26px;
+}
+
+.source-document-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--pbs-text-muted);
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.source-document-item:hover,
+.source-document-item.selected {
+  border-color: rgba(0, 209, 255, 0.28);
+  background: rgba(0, 209, 255, 0.08);
+  color: var(--pbs-text-main);
+}
+
+.source-document-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .playbook-grade-badge {
   display: inline-flex;
   align-items: center;

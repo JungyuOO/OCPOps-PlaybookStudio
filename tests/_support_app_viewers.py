@@ -2506,9 +2506,10 @@ class AppViewersTestSupport(unittest.TestCase):
 
         self.assertIsNotNone(html)
         assert html is not None
-        self.assertIn('class="code-block is-collapsible overflow-toggle is-wrapped"', html)
+        self.assertIn('class="code-block is-collapsible is-collapsed overflow-toggle is-wrapped"', html)
         self.assertIn('class="collapse-button"', html)
-        self.assertIn('Show less', html)
+        self.assertIn('전체 보기', html)
+        self.assertIn('aria-expanded="false"', html)
         self.assertIn('&nbsp;&nbsp;<span class="code-token code-key">schedule:</span>', html)
         self.assertIn('class="code-token code-key">spec:</span>', html)
         self.assertIn('class="code-token code-string">&quot;True&quot;</span>', html)

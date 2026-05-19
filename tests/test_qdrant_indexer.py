@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from play_book_studio.cli import build_parser
 from play_book_studio.db.qdrant_indexer import (
     QdrantChunkCandidate,
     backfill_existing_qdrant_index_entries,
     fetch_existing_qdrant_point_ids,
+    index_pending_document_chunks,
+    load_qdrant_chunk_candidates,
     overwrite_qdrant_payloads,
     qdrant_candidate_from_row,
     qdrant_payload_from_row,
@@ -115,7 +119,7 @@ def test_qdrant_payload_from_row_matches_vector_retriever_contract():
     assert payload["chapter"] == "Architecture"
     assert payload["section"] == "Architecture"
     assert payload["viewer_path"] == (
-        "/uploads/documents/cccccccc-cccc-cccc-cccc-cccccccccccc/chunks/"
+        "/uploads/documents/cccccccc-cccc-cccc-cccc-cccccccccccc/index.html#"
         "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
     )
     assert payload["text"] == "Architecture\nRouter sends traffic."
@@ -313,6 +317,48 @@ def test_fetch_existing_qdrant_point_ids_reads_existing_points(monkeypatch):
     assert calls[0][0] == "http://qdrant/collections/openshift_docs/points"
     assert calls[0][1]["with_payload"] is False
     assert calls[0][1]["with_vector"] is False
+
+
+def test_load_qdrant_chunk_candidates_rejects_invalid_document_source_id():
+    with pytest.raises(ValueError, match="document_source_id"):
+        load_qdrant_chunk_candidates(
+            FakeConnection(),
+            collection="openshift_docs",
+            document_source_id="not-a-uuid",
+        )
+
+
+def test_index_pending_document_chunks_scopes_to_document_source_id(monkeypatch):
+    captured = {}
+
+    def fake_load(connection, **kwargs):
+        captured.update(kwargs)
+        return ()
+
+    monkeypatch.setattr("play_book_studio.db.qdrant_indexer.load_qdrant_chunk_candidates", fake_load)
+
+    result = index_pending_document_chunks(
+        SettingsStub(),
+        FakeConnection(),
+        collection="openshift_docs",
+        source_scope="user_upload",
+        document_source_id="cccccccc-cccc-cccc-cccc-cccccccccccc",
+        limit=25,
+    )
+
+    assert captured == {
+        "collection": "openshift_docs",
+        "source_scope": "user_upload",
+        "document_source_id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        "limit": 25,
+    }
+    assert result == {
+        "collection": "openshift_docs",
+        "source_scope": "user_upload",
+        "document_source_id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        "candidate_count": 0,
+        "indexed_count": 0,
+    }
 
 
 def test_backfill_existing_qdrant_index_entries_records_existing_candidates(monkeypatch):

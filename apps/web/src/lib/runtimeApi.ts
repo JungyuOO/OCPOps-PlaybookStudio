@@ -1,6 +1,84 @@
 export const RUNTIME_ORIGIN = (import.meta.env.VITE_RUNTIME_ORIGIN ?? '').trim().replace(/\/$/, '');
 export const RUNTIME_EXTERNAL_ORIGIN = RUNTIME_ORIGIN || 'http://127.0.0.1:8765';
 export const DOCUMENT_INGEST_UPLOAD_ACCEPT = '.pdf,.md,.markdown,.docx,.pptx,.xlsx,.txt,.adoc,.asciidoc,.png,.jpg,.jpeg,.webp';
+const FORCE_CLIENT_OWNER_HEADER = (import.meta.env.VITE_FORCE_CLIENT_OWNER_HEADER ?? '').trim().toLowerCase();
+
+const SESSION_OWNER_STORAGE_KEY = 'pbs.clientSessionOwner';
+const SESSION_OWNER_COOKIE_KEY = 'pbs_client_session_owner';
+let memoryClientSessionOwner = '';
+
+function createClientSessionOwner(): string {
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+  if (randomUuid) {
+    return randomUuid.replace(/-/g, '');
+  }
+  const randomPart = Math.random().toString(36).slice(2);
+  const timePart = Date.now().toString(36);
+  return `${timePart}${randomPart}`.replace(/[^A-Za-z0-9._-]+/g, '').slice(0, 64);
+}
+
+export function getClientSessionOwner(): string {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+  if (memoryClientSessionOwner) {
+    return memoryClientSessionOwner;
+  }
+  const rememberOwner = (owner: string): string => {
+    memoryClientSessionOwner = owner;
+    try {
+      window.localStorage?.setItem(SESSION_OWNER_STORAGE_KEY, owner);
+    } catch {
+      // Some embedded browser contexts disable localStorage. The cookie and memory fallback still keep the session stable.
+    }
+    try {
+      document.cookie = `${SESSION_OWNER_COOKIE_KEY}=${encodeURIComponent(owner)}; Max-Age=31536000; Path=/; SameSite=Lax`;
+    } catch {
+      // Cookie writes can also be blocked in hardened contexts; memory stability is still better than regenerating per request.
+    }
+    return owner;
+  };
+  try {
+    const existing = window.localStorage?.getItem(SESSION_OWNER_STORAGE_KEY)?.trim();
+    if (existing) {
+      return rememberOwner(existing);
+    }
+  } catch {
+    // Fall through to cookie/memory generation.
+  }
+  try {
+    const ownerCookie = document.cookie
+      .split(';')
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(`${SESSION_OWNER_COOKIE_KEY}=`));
+    const existing = ownerCookie
+      ? decodeURIComponent(ownerCookie.slice(SESSION_OWNER_COOKIE_KEY.length + 1)).trim()
+      : '';
+    if (existing) {
+      return rememberOwner(existing);
+    }
+  } catch {
+    // Fall through to a generated owner.
+  }
+  try {
+    const created = createClientSessionOwner();
+    return rememberOwner(created);
+  } catch {
+    memoryClientSessionOwner = createClientSessionOwner();
+    return memoryClientSessionOwner;
+  }
+}
+
+export function withSessionOwnerHeader(headers: Headers): Headers {
+  const shouldSendClientOwner = ['1', 'true', 'yes', 'on'].includes(FORCE_CLIENT_OWNER_HEADER);
+  if (shouldSendClientOwner && !headers.has('X-User')) {
+    const owner = getClientSessionOwner();
+    if (owner) {
+      headers.set('X-User', owner);
+    }
+  }
+  return headers;
+}
 
 export interface LibraryBookSourceOption {
   key: string;
@@ -115,8 +193,54 @@ export interface UploadIngestPersistedSummary {
 
 export interface UploadIngestIndexSummary {
   collection: string;
+  source_scope?: string;
+  document_source_id?: string;
   candidate_count: number;
   indexed_count: number;
+  status?: 'indexed' | 'partial' | 'no_candidates' | 'no_chunks' | 'failed' | 'not_requested' | 'duplicate_existing_indexed' | 'duplicate_existing_unindexed' | string;
+  error?: string;
+}
+
+export interface UploadQualityGate {
+  state?: string;
+  label?: string;
+  verified_for_answer?: boolean;
+  included_checks?: string[];
+  excluded_checks?: string[];
+}
+
+export interface UploadIngestReportPointer {
+  document_source_id: string;
+  storage_key: string;
+  available: boolean;
+}
+
+export interface UploadAssetMaterialization {
+  schema_version?: string;
+  generated_at?: string;
+  document_source_id?: string;
+  parsed_document_id?: string;
+  asset_root_storage_key?: string;
+  image_count?: number;
+  written_count?: number;
+  assets?: Array<{
+    asset_id?: string;
+    parser_asset_id?: string;
+    filename?: string;
+    mime_type?: string;
+    storage_key?: string;
+    ocr_storage_key?: string;
+    byte_size?: number;
+    sha256?: string;
+    source?: string;
+  }>;
+  warnings?: string[];
+}
+
+export interface UploadDebugArtifacts {
+  parsed_markdown?: string;
+  chunks_json?: string;
+  assets_manifest?: string;
 }
 
 export interface UploadIngestResponse {
@@ -138,6 +262,120 @@ export interface UploadIngestResponse {
   owner_user_id?: string;
   visibility?: string;
   source_scope?: string;
+  force_reingest?: boolean;
+  stage_events?: UploadIngestStreamStageEvent[];
+  report?: UploadIngestReportPointer;
+  asset_materialization?: UploadAssetMaterialization;
+  artifacts?: UploadDebugArtifacts;
+  quality_gate?: UploadQualityGate;
+  basic_index_ready?: boolean;
+  answer_ready?: boolean;
+  ready_for_chat?: boolean;
+  timings_ms?: {
+    store_ms?: number;
+    parse_ms?: number;
+    chunk_ms?: number;
+    persist_ms?: number;
+    index_ms?: number;
+    total_ms?: number;
+  };
+  duplicate?: {
+    exists: boolean;
+    document_source_id?: string;
+    repository_id?: string;
+    filename?: string;
+    title?: string;
+    chunk_count?: number;
+    indexed_count?: number;
+  };
+}
+
+export type UploadIngestStageName =
+  | 'received'
+  | 'store'
+  | 'parse'
+  | 'chunk'
+  | 'persist'
+  | 'index'
+  | 'scope'
+  | 'ready'
+  | string;
+
+export interface UploadIngestStreamStageEvent {
+  type: 'stage';
+  stage: UploadIngestStageName;
+  status: string;
+  message: string;
+  started_at?: string;
+  finished_at?: string;
+  duration_ms?: number;
+  counts?: Record<string, number>;
+  byte_size?: number;
+  block_count?: number;
+  asset_count?: number;
+  chunk_count?: number;
+  candidate_count?: number;
+  indexed_count?: number;
+  document_source_id?: string;
+  repository_id?: string;
+  owner_user_id?: string;
+  task_kind?: string;
+  progress_key?: string;
+  item_label?: string;
+  progress_current?: number;
+  progress_total?: number;
+  progress_percent?: number;
+  warning?: string;
+  error?: string;
+}
+
+export interface UploadIngestStreamResultEvent {
+  type: 'result';
+  payload: UploadIngestResponse;
+}
+
+export interface UploadIngestStreamErrorEvent {
+  type: 'error';
+  status_code?: number;
+  error: string;
+}
+
+export type UploadIngestStreamEvent =
+  | UploadIngestStreamStageEvent
+  | UploadIngestStreamResultEvent
+  | UploadIngestStreamErrorEvent;
+
+export interface UploadIngestReport {
+  schema_version: string;
+  generated_at: string;
+  report_reconstructed?: boolean;
+  document_source_id: string;
+  repository_id?: string;
+  owner_user_id?: string;
+  visibility?: string;
+  source_scope?: string;
+  filename?: string;
+  storage_key?: string;
+  byte_size?: number;
+  mime_type?: string;
+  document_format?: string;
+  sha256?: string;
+  counts?: Record<string, number>;
+  timings_ms?: Record<string, number>;
+  stages?: UploadIngestStreamStageEvent[];
+  index?: UploadIngestIndexSummary;
+  asset_materialization?: UploadAssetMaterialization;
+  artifacts?: UploadDebugArtifacts;
+  quality_gate?: UploadQualityGate;
+  warnings?: string[];
+  ready_for_chat?: boolean;
+  answer_ready?: boolean;
+  basic_index_ready?: boolean;
+  scope?: {
+    owner_user_id?: string;
+    repository_id?: string;
+    document_source_id?: string;
+  };
 }
 
 export interface DocumentRepositoryDocument {
@@ -822,6 +1060,8 @@ export interface DocumentIngestStatusItem {
   indexed_count: number;
   updated_at: string;
   ready: boolean;
+  basic_index_ready?: boolean;
+  answer_ready?: boolean;
   status: string;
   message: string;
 }
@@ -966,10 +1206,11 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (hasBody && !isFormData && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
+  withSessionOwnerHeader(headers);
   const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
+    ...init,
     credentials: 'include',
     headers,
-    ...init,
   });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -988,10 +1229,11 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 async function requestResponse(path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers ?? {});
+  withSessionOwnerHeader(headers);
   const response = await fetch(`${RUNTIME_ORIGIN}${path}`, {
+    ...init,
     credentials: 'include',
     headers,
-    ...init,
   });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -1208,9 +1450,9 @@ export async function sendChatStream(
   const response = await fetch(`${RUNTIME_ORIGIN}/api/chat/stream`, {
     method: 'POST',
     credentials: 'include',
-    headers: {
+    headers: withSessionOwnerHeader(new Headers({
       'Content-Type': 'application/json',
-    },
+    })),
     body: JSON.stringify({
       query: payload.query,
       session_id: payload.sessionId,
@@ -1317,7 +1559,7 @@ export async function loadCustomerPackCapturedPreview(
   };
 }
 
-export async function uploadDocumentIngestion(
+function buildUploadIngestFormData(
   file: File,
   options: {
     dryRun?: boolean;
@@ -1329,13 +1571,17 @@ export async function uploadDocumentIngestion(
     repositoryKind?: string;
     visibility?: string;
     sourceScope?: string;
+    forceReingest?: boolean;
   } = {},
-): Promise<UploadIngestResponse> {
+): FormData {
   const payload = new FormData();
   payload.append('file_name', file.name);
   payload.append('file', file, file.name);
   payload.append('dry_run', String(Boolean(options.dryRun)));
   payload.append('index', String(options.index ?? true));
+  if (typeof options.forceReingest === 'boolean') {
+    payload.append('force_reingest', String(options.forceReingest));
+  }
   if (options.createdBy) {
     payload.append('created_by', options.createdBy);
   }
@@ -1357,14 +1603,122 @@ export async function uploadDocumentIngestion(
   if (options.sourceScope) {
     payload.append('source_scope', options.sourceScope);
   }
+  return payload;
+}
+
+export async function uploadDocumentIngestion(
+  file: File,
+  options: {
+    dryRun?: boolean;
+    index?: boolean;
+    createdBy?: string;
+    repositoryId?: string;
+    repositorySlug?: string;
+    repositoryTitle?: string;
+    repositoryKind?: string;
+    visibility?: string;
+    sourceScope?: string;
+    forceReingest?: boolean;
+  } = {},
+): Promise<UploadIngestResponse> {
+  const payload = buildUploadIngestFormData(file, options);
   return requestJson<UploadIngestResponse>('/api/uploads/ingest', {
     method: 'POST',
     body: payload,
   });
 }
 
+export async function uploadDocumentIngestionStream(
+  file: File,
+  options: {
+    dryRun?: boolean;
+    index?: boolean;
+    createdBy?: string;
+    repositoryId?: string;
+    repositorySlug?: string;
+    repositoryTitle?: string;
+    repositoryKind?: string;
+    visibility?: string;
+    sourceScope?: string;
+    forceReingest?: boolean;
+  } = {},
+  onEvent?: (event: UploadIngestStreamEvent) => void,
+): Promise<UploadIngestResponse> {
+  const headers = withSessionOwnerHeader(new Headers());
+  const response = await fetch(`${RUNTIME_ORIGIN}/api/uploads/ingest/stream`, {
+    method: 'POST',
+    body: buildUploadIngestFormData(file, options),
+    credentials: 'include',
+    headers,
+  });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  if (!response.body) {
+    throw new Error('upload stream response body is empty');
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let resultPayload: UploadIngestResponse | null = null;
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const event = JSON.parse(trimmed) as UploadIngestStreamEvent;
+      onEvent?.(event);
+      if (event.type === 'error') {
+        throw new Error(event.error || 'upload ingestion stream failed');
+      }
+      if (event.type === 'result') {
+        resultPayload = event.payload;
+      }
+    }
+    if (done) {
+      break;
+    }
+  }
+  if (buffer.trim()) {
+    const event = JSON.parse(buffer.trim()) as UploadIngestStreamEvent;
+    onEvent?.(event);
+    if (event.type === 'error') {
+      throw new Error(event.error || 'upload ingestion stream failed');
+    }
+    if (event.type === 'result') {
+      resultPayload = event.payload;
+    }
+  }
+  if (!resultPayload) {
+    throw new Error('upload ingestion stream completed without result');
+  }
+  return resultPayload;
+}
+
 export async function loadDocumentRepositories(): Promise<DocumentRepositoriesResponse> {
   return requestJson<DocumentRepositoriesResponse>('/api/repositories/documents');
+}
+
+export interface UploadDeleteResponse {
+  deleted: boolean;
+  document_source_id: string;
+  filename: string;
+  postgres_rows_deleted: number;
+  qdrant_points_deleted: number;
+  qdrant_errors: string[];
+  storage_file_removed: boolean;
+  storage_error: string;
+  report_file_removed: boolean;
+}
+
+export async function deleteUploadedDocument(documentSourceId: string): Promise<UploadDeleteResponse> {
+  return requestJson<UploadDeleteResponse>('/api/uploads/delete', {
+    method: 'POST',
+    body: JSON.stringify({ document_source_id: documentSourceId }),
+  });
 }
 
 export async function loadDocumentIngestStatus(params: {
@@ -1376,6 +1730,12 @@ export async function loadDocumentIngestStatus(params: {
   if (params.documentSourceId) query.set('document_source_id', params.documentSourceId);
   const suffix = query.toString() ? `?${query.toString()}` : '';
   return requestJson<DocumentIngestStatusResponse>(`/api/documents/ingest-status${suffix}`);
+}
+
+export async function loadUploadIngestReport(documentSourceId: string): Promise<UploadIngestReport> {
+  return requestJson<UploadIngestReport>(
+    `/api/uploads/reports?document_source_id=${encodeURIComponent(documentSourceId)}`,
+  );
 }
 
 export async function loadSignals(limit = 50): Promise<SignalsResponse> {

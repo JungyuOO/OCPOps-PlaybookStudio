@@ -30,7 +30,7 @@ def test_health_payload_marks_seed_inputs_not_required_in_database_runtime(monke
                 "DATABASE_URL=postgresql://unit-test",
                 "ARTIFACTS_DIR=artifacts",
                 "LLM_ENDPOINT=http://llm.example/v1",
-                "LLM_MODEL=Qwen/Qwen3.5-9B",
+                "LLM_MODEL=gemma-4-26b-a4b-it-awq-8bit",
             ]
         ),
         encoding="utf-8",
@@ -65,7 +65,7 @@ def test_runtime_report_marks_legacy_files_as_seed_inputs_in_database_runtime(mo
                 "DATABASE_URL=postgresql://unit-test",
                 "ARTIFACTS_DIR=artifacts",
                 "LLM_ENDPOINT=http://llm.example/v1",
-                "LLM_MODEL=Qwen/Qwen3.5-9B",
+                "LLM_MODEL=gemma-4-26b-a4b-it-awq-8bit",
             ]
         ),
         encoding="utf-8",

@@ -55,6 +55,7 @@ import {
   type WikiOverlayTargetKind,
   type WikiTextAnnotation,
   type WikiTextAnnotationMode,
+  type UploadIngestStreamEvent,
   type ViewerPageMode,
   archiveDbChatSession,
   captureCustomerPackDraft,
@@ -83,7 +84,7 @@ import {
   saveWikiOverlay,
   sendChatStream,
   toRuntimeUrl,
-  uploadDocumentIngestion,
+  uploadDocumentIngestionStream,
 } from '../lib/runtimeApi';
 import {
   loadOcpStatus,
@@ -106,6 +107,13 @@ import {
   type OpsChatSource,
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../routing/routes';
+import {
+  clusterConnectionStatusLabel,
+  clusterProfileName,
+  normalizeClusterConnectionStatus,
+  type ClusterConnectionStatus,
+} from '../lib/clusterProfile';
+import { useGlobalTheme } from '../lib/globalTheme';
 import { loadStoredVisionMode, type VisionMode } from '../lib/wikiVision';
 import { resolveWorkspaceSourceBooks } from '../lib/workspaceSourceCatalog';
 import WorkspaceTracePanel from '../components/WorkspaceTracePanel';
@@ -242,7 +250,6 @@ function opsChatResponseToChatResponse(response: OpsChatResponse, sessionId: str
 type LeftPanelMode = 'history' | 'outline' | 'signals';
 type RightPanelMode = 'viewer' | 'terminal';
 type WorkspaceChatMode = 'document' | 'live_cluster';
-type ClusterConnectionStatus = 'not_connected' | 'connecting' | 'connected' | 'error';
 type SignalsFavoriteFilter = 'favorites' | 'edited';
 const CLUSTER_RESOURCE_OPTIONS = ['pods', 'deployments', 'services', 'routes', 'events'] as const;
 type ClusterResourceKind = typeof CLUSTER_RESOURCE_OPTIONS[number];
@@ -265,7 +272,7 @@ interface RecentTerminalAction {
 }
 
 interface IngestionStatusBanner {
-  status: 'recognizing' | 'parsing' | 'embedding' | 'indexing' | 'ready' | 'failed';
+  status: 'recognizing' | 'parsing' | 'embedding' | 'indexing' | 'basic_index_ready' | 'index_failed' | 'failed';
   message: string;
   filename?: string;
   repositoryId?: string;
@@ -801,22 +808,6 @@ function NoAnswerAcquisitionCard({
       </button>
     </div>
   );
-}
-
-const FALLBACK_CLUSTER_USER_LABEL = 'Undefined';
-
-function normalizeClusterConnectionStatus(connection?: OcpConnection | null): ClusterConnectionStatus {
-  const status = connection?.status?.toLowerCase().trim();
-  if (!connection || !status || status === 'disconnected' || status === 'not_connected') {
-    return 'not_connected';
-  }
-  if (status === 'connected' || status === 'ready' || status === 'active') {
-    return 'connected';
-  }
-  if (status === 'connecting' || status === 'pending' || status === 'testing') {
-    return 'connecting';
-  }
-  return 'error';
 }
 
 function detectClusterSignal(command: string): Omit<ClusterSignalEvent, 'id' | 'timestamp' | 'status'> | null {
@@ -1363,10 +1354,7 @@ export default function WorkspacePage() {
   const [viewerActiveSection, setViewerActiveSection] = useState<ViewerActiveSection | null>(null);
   const [signalsFavoriteFilter, setSignalsFavoriteFilter] = useState<SignalsFavoriteFilter>('favorites');
 
-  const [globalTheme, setGlobalTheme] = useState<'dark' | 'light'>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    return (window.localStorage.getItem('pbs.globalTheme') as 'dark' | 'light') || 'dark';
-  });
+  const { globalTheme, toggleGlobalTheme } = useGlobalTheme();
   const [opsWorkspaceId, setOpsWorkspaceId] = useState(() => {
     if (typeof window === 'undefined') {
       return 'ws_default';
@@ -1455,22 +1443,13 @@ export default function WorkspacePage() {
     [footerConnections, opsConnectionId],
   );
   const footerProfileName = useMemo(() => {
-    const username = activeFooterConnection?.username_hint?.trim();
-    const displayName = activeFooterConnection?.display_name?.trim();
-    return username || displayName || FALLBACK_CLUSTER_USER_LABEL;
+    return clusterProfileName(activeFooterConnection);
   }, [activeFooterConnection]);
   const wikiOverlayUserId = footerProfileName;
   const isClusterConnected = clusterConnectionStatus === 'connected';
   const isTerminalConnected = terminalConnectionState === 'connected';
   const isLiveClusterAvailable = isClusterConnected && isTerminalConnected;
-  const clusterStatusLabel =
-    clusterConnectionStatus === 'connected'
-      ? 'Connected'
-      : clusterConnectionStatus === 'connecting'
-        ? 'Connecting'
-        : clusterConnectionStatus === 'error'
-          ? 'Error'
-          : 'Not connected';
+  const clusterStatusLabel = clusterConnectionStatusLabel(clusterConnectionStatus);
 
   const refreshFooterProfile = useCallback(async () => {
     setIsFooterProfileLoading(true);
@@ -1785,7 +1764,7 @@ export default function WorkspacePage() {
           return;
         }
         const nextBanner: IngestionStatusBanner = {
-          status: latest.ready ? 'ready' : latest.status === 'failed' ? 'failed' : 'indexing',
+          status: latest.basic_index_ready ? 'basic_index_ready' : latest.status === 'failed' ? 'failed' : 'indexing',
           message: latest.message,
           filename: latest.original_filename || latest.title,
           repositoryId: latest.repository_id,
@@ -2345,6 +2324,9 @@ export default function WorkspacePage() {
     [activeSourceId, documentRepositories],
   );
 
+  const activeRepositoryIdForRequest = activeRepository?.repository_id
+    || (activeSourceId?.startsWith('repository:') ? activeSourceId.slice('repository:'.length) : '');
+
   const activeRepositoryDocument = useMemo(
     () => activeRepository?.documents?.find((document) => document.document_source_id === activeDocumentId) ?? null,
     [activeDocumentId, activeRepository],
@@ -2671,16 +2653,6 @@ export default function WorkspacePage() {
   useEffect(() => {
     setQuickNavOpen(false);
   }, [currentViewerPath, viewerPageMode]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    document.documentElement.setAttribute('data-theme', globalTheme);
-    window.localStorage.setItem('pbs.globalTheme', globalTheme);
-  }, [globalTheme]);
-
-  const handleToggleGlobalTheme = useCallback(() => {
-    setGlobalTheme((current) => (current === 'dark' ? 'light' : 'dark'));
-  }, []);
 
   useEffect(() => {
     if (!quickNavOpen) {
@@ -3163,20 +3135,94 @@ export default function WorkspacePage() {
         filename: file.name,
         updatedAt: new Date().toISOString(),
       });
-      const uploaded = await uploadDocumentIngestion(file, {
+      const handleUploadStageEvent = (event: UploadIngestStreamEvent) => {
+        if (event.type !== 'stage') {
+          return;
+        }
+        const stageStatus =
+          event.status === 'failed'
+            ? 'failed'
+            : event.stage === 'parse' || event.stage === 'chunk'
+              ? 'parsing'
+              : event.stage === 'persist' || event.stage === 'index' || event.stage === 'scope'
+                ? 'indexing'
+                : event.stage === 'ready' && (event.status === 'done' || event.status === 'duplicate')
+                  ? 'basic_index_ready'
+                  : event.stage === 'ready' && event.status === 'failed'
+                    ? 'index_failed'
+                    : 'recognizing';
+        const nextBanner: IngestionStatusBanner = {
+          status: stageStatus,
+          message: event.message,
+          filename: file.name,
+          repositoryId: event.repository_id,
+          documentSourceId: event.document_source_id,
+          updatedAt: new Date().toISOString(),
+        };
+        setIngestionStatusBanner(nextBanner);
+        window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
+      };
+      let uploaded = await uploadDocumentIngestionStream(file, {
         index: true,
         repositoryId: activeRepository?.repository_id,
-      });
+        forceReingest: false,
+      }, handleUploadStageEvent);
+      if (uploaded.duplicate?.exists) {
+        const shouldReingest = window.confirm(
+          `'${uploaded.duplicate.title || uploaded.duplicate.filename || file.name}' 문서는 이미 업로드되어 있습니다.\n\n같은 문서를 새 버전으로 다시 처리할까요?`,
+        );
+        if (!shouldReingest) {
+          const duplicateBasicReady = Boolean(uploaded.basic_index_ready);
+          const nextBanner: IngestionStatusBanner = {
+            status: duplicateBasicReady ? 'basic_index_ready' : 'indexing',
+            message: duplicateBasicReady
+              ? '기존 문서의 기본 인덱싱 결과를 재사용합니다. 답변 품질 검수는 별도입니다.'
+              : '기존 문서가 있지만 검색 인덱싱 확인이 필요합니다.',
+            filename: uploaded.duplicate.filename || file.name,
+            repositoryId: uploaded.duplicate.repository_id || uploaded.repository_id || '',
+            documentSourceId: uploaded.duplicate.document_source_id || uploaded.persisted?.document_source_id || '',
+            updatedAt: new Date().toISOString(),
+          };
+          setIngestionStatusBanner(nextBanner);
+          window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
+          return;
+        }
+        uploaded = await uploadDocumentIngestionStream(file, {
+          index: true,
+          repositoryId: activeRepository?.repository_id,
+          forceReingest: true,
+        }, handleUploadStageEvent);
+      }
+      const indexFailed = uploaded.index?.status === 'failed';
+      const basicIndexReady = Boolean(uploaded.basic_index_ready || uploaded.index?.status === 'indexed' || uploaded.index?.status === 'duplicate_existing_indexed');
       const repositoryPayload = await loadDocumentRepositories().catch(() => ({ repositories: [] }));
       const repositoryId = uploaded.repository_id || uploaded.persisted?.repository_id || activeRepository?.repository_id || '';
       const documentSourceId = uploaded.persisted?.document_source_id || '';
-      setDocumentRepositories(repositoryPayload.repositories ?? []);
+      const nextRepositories = repositoryPayload.repositories ?? [];
+      const uploadedDocument = nextRepositories
+        .find((repository) => repository.repository_id === repositoryId)
+        ?.documents?.find((document) => document.document_source_id === documentSourceId);
+      setDocumentRepositories(nextRepositories);
       if (repositoryId) {
         setActiveSourceId(`repository:${repositoryId}`);
       }
+      if (documentSourceId) {
+        setActiveDocumentId(documentSourceId);
+        setActiveDocumentTitle(uploadedDocument?.title || uploadedDocument?.filename || uploaded.filename || file.name);
+        const categoryKey = workspaceMetadataString(uploadedDocument?.metadata, 'category_key');
+        const categoryLabel = workspaceMetadataString(uploadedDocument?.metadata, 'category_label');
+        setActiveCategoryKey(categoryKey);
+        setActiveCategoryLabel(categoryLabel || categoryKey);
+      } else {
+        clearActiveDocumentScope();
+      }
       const nextBanner: IngestionStatusBanner = {
-        status: 'ready',
-        message: '문서 준비가 완료되었습니다.',
+        status: indexFailed ? 'index_failed' : basicIndexReady ? 'basic_index_ready' : 'indexing',
+        message: indexFailed
+          ? '문서 저장은 완료됐지만 검색 인덱싱에 실패했습니다.'
+          : basicIndexReady
+            ? '기본 텍스트 인덱싱이 완료되었습니다. 답변 품질 검수는 별도입니다.'
+            : '문서 저장은 완료됐지만 검색 인덱싱 확인이 더 필요합니다.',
         filename: uploaded.filename || file.name,
         repositoryId,
         documentSourceId,
@@ -3184,6 +3230,9 @@ export default function WorkspacePage() {
       };
       setIngestionStatusBanner(nextBanner);
       window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
+      if (indexFailed) {
+        window.alert(`문서는 저장됐지만 검색 인덱싱에 실패했습니다: ${uploaded.index?.error || 'embedding service unavailable'}`);
+      }
       setPreview({ kind: 'empty' });
     } catch (error) {
       console.error(error);
@@ -3285,7 +3334,7 @@ export default function WorkspacePage() {
         selectedDraftIds: activeDraft ? [activeDraft.draft_id] : [],
         restrictUploadedSources: Boolean(activeDraft),
         routeKind: requestRouteKind,
-        activeRepositoryId: activeRepository?.repository_id,
+        activeRepositoryId: activeRepositoryIdForRequest,
         activeDocumentId,
         learningIndex: resolvedLearningIndex,
         learningCategoryKey: resolvedCategoryKey,
@@ -3826,7 +3875,11 @@ export default function WorkspacePage() {
         globalTheme={globalTheme}
         onOpenDashboard={() => setDashboardOpen(true)}
         onOpenLibrary={() => navigate('/playbook-library')}
-        onToggleGlobalTheme={handleToggleGlobalTheme}
+        onToggleGlobalTheme={toggleGlobalTheme}
+        profileName={footerProfileName}
+        profileStatus={clusterConnectionStatus}
+        profileStatusLabel={clusterStatusLabel}
+        isProfileLoading={isFooterProfileLoading}
       />
 
       <main className="workspace-content">
@@ -4835,7 +4888,7 @@ export default function WorkspacePage() {
                   <button className="section-header-btn" onClick={() => toggleSection('repositories')} type="button">
                     <div className="header-label-group">
                       {collapsedSections.repositories ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                      <span className="list-title">Document Repositories</span>
+                      <span className="list-title">My Uploads</span>
                     </div>
                     <span className="item-count-badge">{repositorySources.length}</span>
                   </button>
@@ -4845,9 +4898,9 @@ export default function WorkspacePage() {
                         <div className="source-item source-item-muted">
                           <div className="item-main">
                             <BookOpen size={16} className="file-icon" />
-                            <span className="file-name">No DB repositories</span>
+                            <span className="file-name">No uploaded documents</span>
                           </div>
-                          <div className="item-meta">Upload documents from Playbook Library.</div>
+                          <div className="item-meta">Upload a document here or from Playbook Library.</div>
                         </div>
                       ) : repositorySources.map((file) => (
                         <div
@@ -4860,6 +4913,28 @@ export default function WorkspacePage() {
                             <span className="file-name">{file.name}</span>
                           </div>
                           <div className="item-meta">{file.meta}</div>
+                          {file.repository?.documents?.length ? (
+                            <div className="source-document-list" aria-label={`${file.name} documents`}>
+                              {file.repository.documents.slice(0, 5).map((document) => (
+                                <button
+                                  key={document.document_source_id}
+                                  type="button"
+                                  className={`source-document-item ${activeDocumentId === document.document_source_id ? 'selected' : ''}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setActiveSourceId(file.id);
+                                    selectActiveDocumentScope(document);
+                                    setPreview({ kind: 'empty' });
+                                    animatePreviewPanel();
+                                  }}
+                                  title="이 문서만 Chat 범위로 선택합니다"
+                                >
+                                  <FileText size={13} />
+                                  <span>{document.title || document.filename || 'Uploaded document'}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       ))}
                     </div>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import uuid
 from dataclasses import dataclass
@@ -36,6 +37,30 @@ class StoredParsedDocument:
     chunk_ids: tuple[str, ...]
 
 
+def scoped_document_sha256(
+    sha256: str,
+    *,
+    owner_user_id: str = "",
+    visibility: str = "",
+    source_scope: str = "user_upload",
+) -> str:
+    """Return the DB uniqueness hash for a document source.
+
+    The original file sha256 is still preserved in metadata. For private user
+    uploads, the database-level unique key must include the owner scope so that
+    two browser/session owners can upload the same source file without sharing
+    a private document row.
+    """
+
+    digest = str(sha256 or "").strip()
+    owner = str(owner_user_id or "").strip()
+    visibility_value = str(visibility or "").strip() or ("private_user" if owner else "workspace_shared")
+    scope = str(source_scope or "user_upload").strip() or "user_upload"
+    if digest and owner and visibility_value == "private_user" and scope == "user_upload":
+        return hashlib.sha256(f"user-upload-owner-scope-v1:{owner}:{digest}".encode("utf-8")).hexdigest()
+    return digest
+
+
 def build_parsed_document_rows(
     parsed: ParsedUploadDocument,
     chunks: tuple[DocumentChunk, ...] | None = None,
@@ -49,21 +74,31 @@ def build_parsed_document_rows(
     document_chunks = chunks if chunks is not None else build_document_chunks(parsed)
     block_id_by_asset_id = _block_id_by_asset_id(parsed)
     storage_key = storage_key or f"uploads/sources/{parsed.document_id}/{parsed.filename}"
+    effective_visibility = visibility or ("private_user" if created_by else "workspace_shared")
+    effective_source_scope = source_scope or "user_upload"
+    db_sha256 = scoped_document_sha256(
+        parsed.sha256,
+        owner_user_id=created_by,
+        visibility=effective_visibility,
+        source_scope=effective_source_scope,
+    )
     source = {
         "source_kind": "upload",
         "filename": parsed.filename,
         "mime_type": parsed.mime_type,
-        "sha256": parsed.sha256,
+        "sha256": db_sha256,
         "storage_key": storage_key,
         "byte_size": int(parsed.metadata.get("byte_size") or 0),
         "access_policy": {},
         "repository_id": repository_id,
         "owner_user_id": created_by,
-        "visibility": visibility or ("private_user" if created_by else "workspace_shared"),
-        "source_scope": source_scope or "user_upload",
+        "visibility": effective_visibility,
+        "source_scope": effective_source_scope,
         "metadata": {
             "document_id": parsed.document_id,
             "document_format": parsed.document_format,
+            "original_sha256": parsed.sha256,
+            "db_sha256_scope": "owner" if db_sha256 != parsed.sha256 else "workspace",
             **dict(parsed.metadata),
         },
         "created_by": created_by,
@@ -120,7 +155,7 @@ def build_parsed_document_rows(
             "caption_text": asset.metadata.get("caption_text") or "",
             "ocr_text": asset.ocr_text,
             "qwen_description": asset.description,
-            "qwen_model": asset.metadata.get("qwen_model") or "",
+            "qwen_model": asset.metadata.get("vision_model") or asset.metadata.get("qwen_model") or "",
             "metadata": {
                 **dict(asset.metadata),
                 "filename": asset.filename,
@@ -153,11 +188,11 @@ def build_parsed_document_rows(
         for chunk in document_chunks
     )
     return ParsedDocumentRows(
-        source=source,
-        parsed_document=parsed_document,
-        blocks=blocks,
-        assets=assets,
-        chunks=chunk_rows,
+        source=_sanitize_pg_row(source),
+        parsed_document=_sanitize_pg_row(parsed_document),
+        blocks=tuple(_sanitize_pg_row(row) for row in blocks),
+        assets=tuple(_sanitize_pg_row(row) for row in assets),
+        chunks=tuple(_sanitize_pg_row(row) for row in chunk_rows),
     )
 
 
@@ -230,6 +265,7 @@ def persist_parsed_upload_document(
                 parse_job_id=parse_job_id,
                 row=rows.parsed_document,
             )
+            rows = _scope_rows_to_parsed_document(rows, parsed_document_id=parsed_document_id)
             block_ids = tuple(
                 _insert_document_block(cursor, parsed_document_id=parsed_document_id, row=row)
                 for row in rows.blocks
@@ -259,12 +295,83 @@ def persist_parsed_upload_document(
     )
 
 
+def _scope_rows_to_parsed_document(rows: ParsedDocumentRows, *, parsed_document_id: str) -> ParsedDocumentRows:
+    block_id_map = {
+        str(row["id"]): str(uuid.uuid5(uuid.NAMESPACE_URL, f"{parsed_document_id}:block:{row['id']}"))
+        for row in rows.blocks
+    }
+    asset_id_map = {
+        str(row["id"]): str(uuid.uuid5(uuid.NAMESPACE_URL, f"{parsed_document_id}:asset:{row['id']}"))
+        for row in rows.assets
+    }
+
+    blocks = []
+    for row in rows.blocks:
+        scoped = dict(row)
+        original_id = str(scoped["id"])
+        metadata = dict(scoped.get("metadata") or {})
+        metadata.setdefault("parser_block_id", original_id)
+        metadata["asset_ids"] = [asset_id_map.get(str(asset_id), str(asset_id)) for asset_id in metadata.get("asset_ids", [])]
+        scoped["id"] = block_id_map[original_id]
+        scoped["metadata"] = metadata
+        blocks.append(scoped)
+
+    assets = []
+    for row in rows.assets:
+        scoped = dict(row)
+        original_id = str(scoped["id"])
+        metadata = dict(scoped.get("metadata") or {})
+        metadata.setdefault("parser_asset_id", original_id)
+        scoped["id"] = asset_id_map[original_id]
+        scoped["block_id"] = block_id_map.get(str(scoped.get("block_id") or ""), scoped.get("block_id"))
+        scoped["metadata"] = metadata
+        assets.append(scoped)
+
+    chunks = []
+    for row in rows.chunks:
+        scoped = dict(row)
+        original_id = str(scoped["id"])
+        metadata = dict(scoped.get("metadata") or {})
+        metadata.setdefault("parser_chunk_id", original_id)
+        scoped["id"] = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{parsed_document_id}:chunk:{original_id}"))
+        scoped["asset_ids"] = [asset_id_map.get(str(asset_id), str(asset_id)) for asset_id in scoped.get("asset_ids", [])]
+        scoped["metadata"] = metadata
+        chunks.append(scoped)
+
+    return ParsedDocumentRows(
+        source=rows.source,
+        parsed_document=rows.parsed_document,
+        blocks=tuple(blocks),
+        assets=tuple(assets),
+        chunks=tuple(chunks),
+    )
+
+
 def _block_id_by_asset_id(parsed: ParsedUploadDocument) -> dict[str, str]:
     mapping: dict[str, str] = {}
     for block in parsed.blocks:
         for asset_id in block.asset_ids:
             mapping.setdefault(asset_id, block.block_id)
     return mapping
+
+
+def _sanitize_pg_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, dict):
+        return {
+            str(_sanitize_pg_value(key)): _sanitize_pg_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, tuple):
+        return tuple(_sanitize_pg_value(item) for item in value)
+    if isinstance(value, list):
+        return [_sanitize_pg_value(item) for item in value]
+    return value
+
+
+def _sanitize_pg_row(row: dict[str, Any]) -> dict[str, Any]:
+    return _sanitize_pg_value(row)
 
 
 def _title_from_parsed(parsed: ParsedUploadDocument) -> str:
@@ -293,6 +400,44 @@ def _outline_from_blocks(parsed: ParsedUploadDocument) -> list[dict[str, Any]]:
 
 def _approx_token_count(text: str) -> int:
     return len([part for part in text.split() if part])
+
+
+def _normalize_upload_title(text: str) -> str:
+    return re.sub(r"[\s._\-()]+", "", str(text or "").strip().lower())
+
+
+def _looks_like_generated_upload_title(text: str) -> bool:
+    compact = _normalize_upload_title(text)
+    if not compact:
+        return True
+    if re.fullmatch(r"\d{1,3}\d{2,4}", compact):
+        return True
+    if re.fullmatch(r"\d{1,3}\d{1,2}\d{1,2}", compact):
+        return True
+    return False
+
+
+def _display_upload_title(title: str, markdown: str, filename: str) -> str:
+    current = str(title or filename or "").strip()
+    if not _looks_like_generated_upload_title(current):
+        return current
+    current_normalized = _normalize_upload_title(current)
+    for raw_line in str(markdown or "").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("<!--"):
+            continue
+        heading_match = re.match(r"^#{1,3}\s+(.+?)\s*$", line)
+        candidate = heading_match.group(1).strip() if heading_match else line
+        if re.fullmatch(r"(?i)page\s+\d+", candidate):
+            continue
+        if _normalize_upload_title(candidate) == current_normalized:
+            continue
+        if _looks_like_generated_upload_title(candidate):
+            continue
+        if len(candidate) > 80:
+            continue
+        return candidate
+    return current or "Uploaded document"
 
 
 def _json(value: Any) -> str:
@@ -424,6 +569,151 @@ def _upsert_document_source(cursor, *, tenant_id: str, workspace_id: str, row: d
         ),
     )
     return _fetch_id(cursor)
+
+
+def find_document_source_by_sha(
+    connection,
+    *,
+    tenant_slug: str = "public",
+    workspace_slug: str = "default",
+    sha256: str,
+    owner_user_id: str = "",
+) -> dict[str, Any] | None:
+    owner = str(owner_user_id or "").strip()
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                ds.id::text,
+                COALESCE(ds.repository_id::text, ''),
+                ds.filename,
+                ds.storage_key,
+                COALESCE(ds.owner_user_id, '') AS owner_user_id,
+                ds.visibility,
+                ds.source_scope,
+                COALESCE(pd.id::text, '') AS parsed_document_id,
+                COALESCE(NULLIF(pd.title, ''), ds.filename) AS title,
+                COALESCE(chunk_counts.chunk_count, 0)::int AS chunk_count,
+                COALESCE(index_counts.indexed_count, 0)::int AS indexed_count
+            FROM document_sources ds
+            JOIN workspaces w ON w.id = ds.workspace_id
+            JOIN tenants t ON t.id = ds.tenant_id
+            LEFT JOIN LATERAL (
+                SELECT parsed_documents.*
+                FROM parsed_documents
+                WHERE parsed_documents.document_source_id = ds.id
+                ORDER BY parsed_documents.created_at DESC
+                LIMIT 1
+            ) pd ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT count(*) AS chunk_count
+                FROM document_chunks dc
+                WHERE dc.parsed_document_id = pd.id
+            ) chunk_counts ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT count(qie.chunk_id) AS indexed_count
+                FROM document_chunks dc
+                JOIN qdrant_index_entries qie ON qie.chunk_id = dc.id
+                WHERE dc.parsed_document_id = pd.id
+            ) index_counts ON TRUE
+            WHERE t.slug = %s
+                AND w.slug = %s
+                AND ds.sha256 = %s
+                AND (%s = '' OR COALESCE(ds.owner_user_id, '') = %s)
+            ORDER BY ds.created_at DESC
+            LIMIT 1
+            """,
+            (tenant_slug, workspace_slug, sha256, owner, owner),
+        )
+        row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        "document_source_id": str(row[0]),
+        "repository_id": str(row[1] or ""),
+        "filename": str(row[2] or ""),
+        "storage_key": str(row[3] or ""),
+        "owner_user_id": str(row[4] or ""),
+        "visibility": str(row[5] or ""),
+        "source_scope": str(row[6] or ""),
+        "parsed_document_id": str(row[7] or ""),
+        "title": str(row[8] or ""),
+        "chunk_count": int(row[9] or 0),
+        "indexed_count": int(row[10] or 0),
+    }
+
+
+def delete_document_source(
+    connection,
+    *,
+    document_source_id: str,
+    owner_user_id: str = "",
+) -> dict[str, Any] | None:
+    """document_source 한 건 삭제. owner_user_id 일치 검증.
+
+    FK 가 ON DELETE CASCADE 로 걸려있어 document_versions/parse_jobs/parsed_documents/
+    document_blocks/document_chunks/document_assets/qdrant_index_entries 가 자동으로 따라
+    지워진다. 호출자는 별도로 Qdrant point 와 디스크 원본을 청소해야 한다.
+
+    삭제 전 storage_key, chunk_ids, qdrant_point_ids 등을 모아서 반환 → 후속 cleanup 용.
+    """
+    document_source_id = str(document_source_id or "").strip()
+    if not document_source_id:
+        raise ValueError("document_source_id is required")
+    owner = str(owner_user_id or "").strip()
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT ds.id::text,
+                   ds.storage_key,
+                   COALESCE(ds.owner_user_id, '') AS owner_user_id,
+                   ds.visibility,
+                   ds.source_scope,
+                   ds.filename
+            FROM document_sources ds
+            WHERE ds.id = %s::uuid
+              AND (%s = '' OR COALESCE(ds.owner_user_id, '') = %s)
+            """,
+            (document_source_id, owner, owner),
+        )
+        head = cursor.fetchone()
+        if head is None:
+            return None
+
+        cursor.execute(
+            """
+            SELECT qie.point_id, qie.collection
+            FROM qdrant_index_entries qie
+            JOIN document_chunks dc ON dc.id = qie.chunk_id
+            JOIN parsed_documents pd ON pd.id = dc.parsed_document_id
+            WHERE pd.document_source_id = %s::uuid
+            """,
+            (document_source_id,),
+        )
+        qdrant_points: list[dict[str, str]] = []
+        for row in cursor.fetchall():
+            point_id = str(row[0] or "").strip()
+            collection = str(row[1] or "").strip()
+            if point_id:
+                qdrant_points.append({"point_id": point_id, "collection": collection})
+
+        cursor.execute(
+            "DELETE FROM document_sources WHERE id = %s::uuid",
+            (document_source_id,),
+        )
+        deleted_rows = cursor.rowcount or 0
+
+    return {
+        "document_source_id": str(head[0]),
+        "storage_key": str(head[1] or ""),
+        "owner_user_id": str(head[2] or ""),
+        "visibility": str(head[3] or ""),
+        "source_scope": str(head[4] or ""),
+        "filename": str(head[5] or ""),
+        "qdrant_points": qdrant_points,
+        "deleted_rows": int(deleted_rows),
+    }
 
 
 def _insert_document_version(cursor, *, source_id: str, row: dict[str, Any]) -> str:
@@ -694,6 +984,7 @@ def list_document_repositories(
                     ds.id::text,
                     COALESCE(pd.id::text, '') AS parsed_document_id,
                     COALESCE(NULLIF(pd.title, ''), ds.filename) AS title,
+                    COALESCE(pd.markdown, '') AS markdown,
                     ds.filename,
                     ds.source_kind,
                     ds.mime_type,
@@ -728,6 +1019,7 @@ def list_document_repositories(
                     ds.id,
                     pd.id,
                     pd.title,
+                    pd.markdown,
                     ds.filename,
                     ds.source_kind,
                     ds.mime_type,
@@ -746,18 +1038,18 @@ def list_document_repositories(
                     {
                         "document_source_id": str(doc_row[1]),
                         "parsed_document_id": str(doc_row[2] or ""),
-                        "title": str(doc_row[3] or ""),
-                        "filename": str(doc_row[4] or ""),
-                        "source_kind": str(doc_row[5] or ""),
-                        "mime_type": str(doc_row[6] or ""),
-                        "source_scope": str(doc_row[7] or ""),
-                        "visibility": str(doc_row[8] or ""),
-                        "metadata": dict(doc_row[9] or {}),
-                        "parse_status": str(doc_row[10] or ""),
-                        "chunk_count": int(doc_row[11] or 0),
-                        "indexed_chunk_count": int(doc_row[12] or 0),
-                        "created_at": doc_row[13].isoformat() if doc_row[13] is not None else "",
-                        "updated_at": doc_row[14].isoformat() if doc_row[14] is not None else "",
+                        "title": _display_upload_title(str(doc_row[3] or ""), str(doc_row[4] or ""), str(doc_row[5] or "")),
+                        "filename": str(doc_row[5] or ""),
+                        "source_kind": str(doc_row[6] or ""),
+                        "mime_type": str(doc_row[7] or ""),
+                        "source_scope": str(doc_row[8] or ""),
+                        "visibility": str(doc_row[9] or ""),
+                        "metadata": dict(doc_row[10] or {}),
+                        "parse_status": str(doc_row[11] or ""),
+                        "chunk_count": int(doc_row[12] or 0),
+                        "indexed_chunk_count": int(doc_row[13] or 0),
+                        "created_at": doc_row[14].isoformat() if doc_row[14] is not None else "",
+                        "updated_at": doc_row[15].isoformat() if doc_row[15] is not None else "",
                     }
                 )
     return [
@@ -782,6 +1074,8 @@ __all__ = [
     "ParsedDocumentRows",
     "StoredParsedDocument",
     "build_parsed_document_rows",
+    "find_document_source_by_sha",
     "list_document_repositories",
     "persist_parsed_upload_document",
+    "scoped_document_sha256",
 ]

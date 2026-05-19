@@ -6,10 +6,19 @@ from pathlib import Path
 import pytest
 
 from play_book_studio.ingestion.document_parsing import (
+    DocumentAsset,
+    PdfLayoutBlock,
+    _merge_pdf_layout_blocks,
+    _pdf_classify_text_layout_block,
+    _pdf_layout_block_language,
+    _pdf_layout_blocks_to_markdown,
+    _pdf_pages_to_markdown,
+    _serialize_pdf_layout_blocks,
     build_document_chunks,
     detect_document_format,
     parse_upload_document,
 )
+from play_book_studio.http.server_routes_viewer import _markdownish_to_html
 
 TEST_TMP = Path(__file__).resolve().parents[1] / "tmp" / "document_parsing_tests"
 
@@ -158,13 +167,14 @@ def test_markdown_sections_store_toc_metadata_outside_body_text():
 def test_parse_image_document_keeps_asset_and_description():
     image_path = _case_dir("image_asset") / "diagram.png"
     image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    progress_events = []
 
     def describe(path, asset):
         assert path == image_path.resolve()
         assert asset.mime_type == "image/png"
         return "OpenShift topology image"
 
-    parsed = parse_upload_document(image_path, image_describer=describe)
+    parsed = parse_upload_document(image_path, image_describer=describe, progress=lambda stage, status, detail: progress_events.append((stage, status, detail)))
 
     assert parsed.document_format == "image"
     assert len(parsed.assets) == 1
@@ -172,6 +182,8 @@ def test_parse_image_document_keeps_asset_and_description():
     assert parsed.blocks[0].block_type == "image"
     assert parsed.blocks[0].asset_ids == (parsed.assets[0].asset_id,)
     assert "OpenShift topology image" in parsed.markdown
+    image_progress = [detail for _stage, status, detail in progress_events if status == "progress" and detail.get("task_kind") == "image_ocr"]
+    assert image_progress[-1]["progress_percent"] == 100
 
 
 def test_converter_formats_use_injected_markdown_adapter():
@@ -188,6 +200,360 @@ def test_converter_formats_use_injected_markdown_adapter():
     assert parsed.document_format == "pdf"
     assert parsed.blocks[0].block_type == "heading"
     assert parsed.blocks[1].text == "Body"
+
+
+def test_pdf_markdown_uses_first_meaningful_korean_line_as_title():
+    asset = DocumentAsset(
+        asset_id="11111111-1111-1111-1111-111111111111",
+        asset_type="image",
+        filename="pdf-page-002-image-01.png",
+        mime_type="image/png",
+        sha256="asset-sha",
+        page_number=2,
+    )
+    markdown = _pdf_pages_to_markdown(
+        [
+            "스토리지\n개념 살펴보기\nPersistentVolume (PV)\n클러스터 내에서 관리되는 스토리지 리소스",
+            "스토리지\n2\nStorageClass (SC)\n# demo-svc.yaml\napiVersion: v1\nkind: Service\nmetadata:\n  name: demo-svc",
+        ],
+        "02.-03.19",
+        assets=(asset,),
+    )
+
+    assert markdown.startswith("# 스토리지")
+    assert "# 02.-03.19" not in markdown
+    assert "## Page 1" not in markdown
+    assert "\n## 스토리지\n" not in markdown
+    assert "## 개념 살펴보기" in markdown
+    assert "## PersistentVolume (PV)" in markdown
+    assert "## StorageClass (SC)" in markdown
+    assert "```yaml\n# demo-svc.yaml\napiVersion: v1\nkind: Service\nmetadata:\n  name: demo-svc\n```" in markdown
+    assert "![pdf-page-002-image-01.png](asset://11111111-1111-1111-1111-111111111111)" in markdown
+
+
+def test_pdf_markdown_repairs_wrapped_korean_and_keeps_real_code_blocks():
+    markdown = _pdf_pages_to_markdown(
+        [
+            "\n".join(
+                [
+                    "실습",
+                    "1. 클러스터 내부에서 즉시 확인 가능한 리얼 데모",
+                    "실습 시나리오",
+                    "ConfigMap: OpenShift 클러스터 내부의 Kubernetes API 서비스 주소를 저장합니",
+                    "다. ( https://kubernetes.default.svc )",
+                    "Secret: 내부 통신에 필요한 ServiceAccount 토큰을 사용하는 대신, 테스트용으로",
+                    "임의의 API Key를 생성해 넣습니다.",
+                    "검증: Pod이 실행되면서 ConfigMap에 저장된 주소로 curl 을 날려 실제 네트워크 응",
+                    "답(200 OK 또는 403 Forbidden 등)이 오는지 확인합니다.",
+                    "Step 1. 리소스 생성 (현실적인 값 주입)",
+                    "yaml",
+                    "apiVersion: v1",
+                    "kind: ConfigMap",
+                    "metadata:",
+                    "  name: app-config",
+                ]
+            ),
+            "\n".join(
+                [
+                    "실습",
+                    "3",
+                    '          # ConfigMap에서 가져온 TARGET_URL로 접속 시도 (-k는',
+                    "인증서 검증 무시)",
+                    '          RESPONSE=$(curl -k -s -o /dev/null -w "%{http_cod',
+                    'e}" $TARGET_URL)',
+                    '          if [ "$RESPONSE" ==',
+                    '"200" ]; then',
+                    '            echo "결과: 성공! $TARGET_URL 에 도달했습니다. (HTT',
+                    'P 응답 코드: $RESPONSE)"',
+                ]
+            ),
+        ],
+        "07. 실습(03.23)",
+    )
+
+    assert "## 1. 클러스터 내부에서 즉시 확인 가능한 리얼 데모" in markdown
+    assert "## 실습 시나리오" in markdown
+    assert "## Step 1. 리소스 생성 (현실적인 값 주입)" in markdown
+    assert "ConfigMap: OpenShift 클러스터 내부의 Kubernetes API 서비스 주소를 저장합니다." in markdown
+    assert "네트워크 응답(200 OK 또는 403 Forbidden 등)" in markdown
+    assert "```yaml\nConfigMap:" not in markdown
+    assert "```yaml\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app-config\n```" in markdown
+    assert "# ConfigMap에서 가져온 TARGET_URL로 접속 시도 (-k는 인증서 검증 무시)" in markdown
+    assert 'RESPONSE=$(curl -k -s -o /dev/null -w "%{http_code}" $TARGET_URL)' in markdown
+    assert 'if [ "$RESPONSE" == "200" ]; then' in markdown
+    assert "HTTP 응답 코드: $RESPONSE" in markdown
+
+
+def test_pdf_markdown_preserves_powershell_command_line_breaks():
+    markdown = _pdf_pages_to_markdown(
+        [
+            "\n".join(
+                [
+                    "폐쇄망 외부에서 접근하기(github)",
+                    "3. windows powershell 실행",
+                    "# smee-client 설치",
+                    "npm install --global smee-client",
+                    "# GitHub 신호를 받아서 내 OCP 주소로 쏴주기",
+                ]
+            ),
+            "\n".join(
+                [
+                    '$env:NODE_TLS_REJECT_UNAUTHORIZED = "0"',
+                    "smee --url https://smee.io/esRZDPmzzYd87BN8 --target http",
+                    "s://pipelines-as-code-controller-openshift-pipelines.apps.o",
+                    "cp.test.com/",
+                    "4. 혹시 webhook secrets 생각안난다?",
+                    'oc patch secret demo-token -n demo -p \'{"stringData":{"w',
+                    'ebhook.secret":"mysecret1234"}}\'',
+                    "",
+                    "## 예 demo-token-2csgx",
+                ]
+            ),
+        ],
+        "11. 폐쇄망_외부에서_접근하기(github)(03.24)",
+    )
+
+    assert (
+        "```bash\n"
+        "# smee-client 설치\n"
+        "npm install --global smee-client\n"
+        "# GitHub 신호를 받아서 내 OCP 주소로 쏴주기\n"
+        "```"
+    ) in markdown
+    assert (
+        "```powershell\n"
+        '$env:NODE_TLS_REJECT_UNAUTHORIZED = "0"\n'
+        "smee --url https://smee.io/esRZDPmzzYd87BN8 --target "
+        "https://pipelines-as-code-controller-openshift-pipelines.apps.ocp.test.com/\n"
+        "```"
+    ) in markdown
+    assert (
+        "```bash\n"
+        'oc patch secret demo-token -n demo -p \'{"stringData":{"webhook.secret":"mysecret1234"}}\'\n'
+        "\n"
+        "## 예 demo-token-2csgx\n"
+        "```"
+    ) in markdown
+
+
+def test_upload_viewer_code_blocks_render_copy_and_wrap_controls():
+    rendered = _markdownish_to_html(
+        "\n".join(
+            [
+                "```bash",
+                "# smee-client 설치",
+                "npm install --global smee-client",
+                "# GitHub 신호를 받아서 내 OCP 주소로 쏴주기",
+                "```",
+            ]
+        )
+    )
+
+    assert 'class="code-block overflow-toggle"' in rendered
+    assert 'class="copy-button icon-button"' in rendered
+    assert 'class="wrap-button icon-button"' in rendered
+    assert "줄바꿈" in rendered
+
+
+def test_pdf_layout_classifier_keeps_urls_as_text_and_literal_hashes_as_code():
+    url_block = _pdf_classify_text_layout_block(
+        text="https://nodejs.org/ko/download",
+        bbox=(72, 190, 250, 205),
+        font_size=12,
+        median_font_size=12,
+        font_names=["Courier New"],
+    )
+    assert url_block.kind == "paragraph"
+
+    merged = _merge_pdf_layout_blocks(
+        [
+            PdfLayoutBlock(
+                kind="heading",
+                text="4. 혹시 webhook secrets 생각안난다?",
+                bbox=(72, 282, 322, 304),
+                font_size=15,
+            ),
+            PdfLayoutBlock(
+                kind="code",
+                text='oc patch secret demo-token -n demo -p \'{"stringData":{"webhook.secret":"mysecret1234"}}\'',
+                bbox=(84, 322, 505, 355),
+                font_size=12,
+                language="bash",
+            ),
+            PdfLayoutBlock(
+                kind="code",
+                text="## 예 demo-token-2csgx",
+                bbox=(84, 376, 240, 392),
+                font_size=12,
+                language="bash",
+            ),
+        ]
+    )
+    markdown = _pdf_layout_blocks_to_markdown(merged, title="폐쇄망 외부에서 접근하기(github)", page_index=2)
+
+    assert "## 4. 혹시 webhook secrets 생각안난다?" in markdown
+    assert (
+        "```bash\n"
+        'oc patch secret demo-token -n demo -p \'{"stringData":{"webhook.secret":"mysecret1234"}}\'\n'
+        "\n"
+        "## 예 demo-token-2csgx\n"
+        "```"
+    ) in markdown
+    assert "\n## 예 demo-token-2csgx\n\n" not in markdown
+
+
+def test_pdf_layout_visual_code_region_keeps_spaced_yaml_box_together():
+    merged = _merge_pdf_layout_blocks(
+        [
+            PdfLayoutBlock(
+                kind="code",
+                text="apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization",
+                bbox=(84, 585, 395, 617),
+                font_size=12,
+                language="yaml",
+                visual_group="box-dev",
+            ),
+            PdfLayoutBlock(
+                kind="code",
+                text="resources:\n  - ../../base",
+                bbox=(84, 639, 185, 671),
+                font_size=12,
+                language="yaml",
+                visual_group="box-dev",
+            ),
+            PdfLayoutBlock(
+                kind="code",
+                text="namePrefix: dev-",
+                bbox=(84, 711, 199, 725),
+                font_size=12,
+                language="yaml",
+                visual_group="box-dev",
+            ),
+            PdfLayoutBlock(
+                kind="code",
+                text="# 개발 환경용 이미지 태그 고정",
+                bbox=(84, 746, 271, 762),
+                font_size=12,
+                language="bash",
+                visual_group="box-dev",
+            ),
+        ]
+    )
+
+    markdown = _pdf_layout_blocks_to_markdown(merged, title="CD", page_index=10)
+
+    assert markdown.count("```yaml") == 1
+    assert "namePrefix: dev-" in markdown
+    assert "# 개발 환경용 이미지 태그 고정" in markdown
+    assert "```bash" not in markdown
+
+
+def test_pdf_layout_classifier_keeps_explanatory_label_lines_as_paragraph():
+    block = _pdf_classify_text_layout_block(
+        text="Project Name: 애플리케이션이 속할 그룹입니다. default 를 선택하면 됩니다.",
+        bbox=(72, 320, 500, 338),
+        font_size=12,
+        median_font_size=12,
+        font_names=["Arial"],
+    )
+
+    assert block.kind == "paragraph"
+
+
+def test_pdf_layout_visual_code_region_overrides_prose_guard():
+    block = _pdf_classify_text_layout_block(
+        text="# 개발 환경용 이미지 태그 고정",
+        bbox=(84, 746, 271, 762),
+        font_size=12,
+        median_font_size=12,
+        font_names=["Arial"],
+        visual_group="box-dev",
+    )
+
+    assert block.kind == "code"
+    assert block.visual_group == "box-dev"
+
+
+def test_pdf_layout_places_images_by_bbox_and_merges_code_across_pages():
+    asset = DocumentAsset(
+        asset_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        asset_type="image",
+        filename="page-001-image-01.png",
+        mime_type="image/png",
+        sha256="asset-sha",
+        page_number=1,
+        metadata={"pdf_bbox": [72, 72, 524, 295]},
+    )
+    page_1 = _serialize_pdf_layout_blocks(
+        [
+            PdfLayoutBlock(
+                kind="heading",
+                text="CI 순서",
+                bbox=(72, 48, 180, 92),
+                font_size=30,
+            ),
+            PdfLayoutBlock(
+                kind="heading",
+                text="4. git source에 파이프라인 yaml 구성",
+                bbox=(72, 343, 314, 365),
+                font_size=16,
+            ),
+            PdfLayoutBlock(
+                kind="code",
+                text="apiVersion: tekton.dev/v1\nkind: PipelineRun\nmetadata:\n  annotations:",
+                bbox=(127, 659, 481, 763),
+                font_size=12,
+                language="yaml",
+            ),
+        ]
+    )
+    page_2 = _serialize_pdf_layout_blocks(
+        [
+            PdfLayoutBlock(
+                kind="code",
+                text='pipelinesascode.tekton.dev/on-target-branch: "[main]"\nspec:\n  params:',
+                bbox=(127, 73, 519, 753),
+                font_size=12,
+                language="yaml",
+            ),
+        ]
+    )
+
+    markdown = _pdf_pages_to_markdown([page_1, page_2], "CI 순서", assets=(asset,))
+
+    assert markdown.index("![page-001-image-01.png]") < markdown.index("## 4. git source에 파이프라인 yaml 구성")
+    assert markdown.count("```yaml") == 1
+    assert "kind: PipelineRun\nmetadata:" in markdown
+    assert 'pipelinesascode.tekton.dev/on-target-branch: "[main]"' in markdown
+    assert "```\n\n<!-- page: 2 -->\n\n```yaml" not in markdown
+
+
+def test_pdf_layout_language_prefers_yaml_for_pipeline_blocks_with_shell_script_lines():
+    assert _pdf_layout_block_language(
+        "\n".join(
+            [
+                "workspace: source",
+                "- name: update-gitops",
+                "  params:",
+                "  - name: GIT_SCRIPT",
+                "    value: |",
+                "      git clone $(params.gitops_repo_url) gitops-repo",
+            ]
+        )
+    ) == "yaml"
+
+
+def test_pdf_layout_language_uses_text_for_directory_trees():
+    assert _pdf_layout_block_language(
+        "\n".join(
+            [
+                "gitops-repo/",
+                "├── pandas-bot/           # 첫 번째 서비스",
+                "│   ├── base/",
+                "└── infra-common/         # 모든 서비스가 공통으로 쓰는 것들",
+            ]
+        )
+    ) == "text"
 
 
 def test_docx_default_pipeline_extracts_markdown_blocks_and_chunks():
