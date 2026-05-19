@@ -332,11 +332,80 @@ def rewrite_query(query: str, context: SessionContext | None = None) -> str:
     return " | ".join(hints)
 
 
-from .ambiguity import (  # noqa: E402
-    has_follow_up_entity_ambiguity,
-    has_logging_ambiguity,
-    has_multiple_entity_ambiguity,
-    has_postinstall_doc_locator_ambiguity,
-    has_security_doc_locator_ambiguity,
-    has_update_doc_locator_ambiguity,
-)
+def has_logging_ambiguity(query: str) -> bool:
+    normalized = query or ""
+    if not LOGGING_RE.search(normalized):
+        return False
+    if AUDIT_RE.search(normalized) or EVENT_RE.search(normalized):
+        return False
+    if APP_RE.search(normalized) or INFRA_RE.search(normalized):
+        return False
+    return "어디" in normalized or "보" in normalized or "?대뵒" in normalized
+
+
+def has_multiple_entity_ambiguity(query: str) -> bool:
+    normalized = query or ""
+    entities = [
+        name
+        for name, pattern in (
+            ("OpenShift", OPENSHIFT_RE),
+            ("Kubernetes", KUBERNETES_RE),
+            ("MCO", MCO_RE),
+            ("etcd", ETCD_RE),
+            ("RBAC", RBAC_RE),
+            ("Operator", OPERATOR_RE),
+            ("Logging", LOGGING_RE),
+            ("Monitoring", MONITORING_RE),
+        )
+        if pattern.search(normalized)
+    ]
+    if len(entities) < 2 or has_openshift_kubernetes_compare_intent(normalized):
+        return False
+    if _token_count(normalized) > 12:
+        return False
+    return bool(EXPLAINER_RE.search(normalized))
+
+
+def has_update_doc_locator_ambiguity(query: str) -> bool:
+    normalized = query or ""
+    if not UPDATE_RE.search(normalized) or not has_doc_locator_intent(normalized):
+        return False
+    return not any(token in normalized.lower() for token in ("4.20", "4.21", "eus", "hypershift", "rosa", "microshift"))
+
+
+def has_postinstall_doc_locator_ambiguity(query: str) -> bool:
+    normalized = _collapse_spaces(query)
+    lowered = normalized.lower()
+    if not any(token in lowered for token in ("post-install", "postinstall", "post installation", "설치 후", "?ㅼ튂")):
+        return False
+    if not any(token in normalized for token in ("먼저", "처음", "뭐", "어디", "癒쇱?", "萸?")):
+        return False
+    return not has_explicit_topic_signal(normalized)
+
+
+def has_security_doc_locator_ambiguity(query: str) -> bool:
+    normalized = query or ""
+    if not SECURITY_RE.search(normalized) or not has_doc_locator_intent(normalized):
+        return False
+    if any(token in normalized for token in ("문제", "어디", "����", "���", "?대뵒")):
+        return True
+    if SECURITY_SCOPE_RE.search(normalized):
+        return False
+    return any(token in normalized for token in ("기본 문서", "중요", "뭐", "어디", "湲곕낯 臾몄꽌", "?대뵒"))
+
+
+def has_follow_up_entity_ambiguity(query: str, context: SessionContext | None = None) -> bool:
+    normalized = _collapse_spaces(query)
+    context = context or SessionContext()
+    entity_roots = {str(entity or "").strip().lower().replace(" ", "") for entity in context.open_entities if str(entity or "").strip()}
+    if len(entity_roots) < 2:
+        return False
+    if not has_follow_up_reference(normalized):
+        return False
+    if has_explicit_topic_signal(normalized):
+        return False
+    if context.current_topic:
+        current_topic = _collapse_spaces(context.current_topic)
+        if current_topic and not GENERIC_CONTEXT_TOPIC_RE.search(current_topic) and _token_count(current_topic) >= 3:
+            return False
+    return has_command_request(normalized) or has_doc_locator_intent(normalized) or _token_count(normalized) <= 6
