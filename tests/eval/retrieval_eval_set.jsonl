@@ -8,3 +8,23 @@
 {"id": "must-gather", "query": "장애 분석 자료 어떻게 모아", "expect_command": "oc adm must-gather"}
 {"id": "pod-logs", "query": "파드 로그 보는 법", "expect_command": "oc logs"}
 {"id": "csr-approve", "query": "csr 승인 명령어", "expect_command": "oc adm certificate approve"}
+{"id": "pods-list-all-ns", "query": "show all pods across namespaces", "expect_command": "oc get pods"}
+{"id": "pod-describe", "query": "how do I inspect one pod events and status", "expect_command": "oc describe pod"}
+{"id": "route-list", "query": "list routes in a namespace", "expect_command": "oc get route"}
+{"id": "pvc-describe", "query": "pvc pending describe volume claim", "expect_command": "oc describe pvc"}
+{"id": "top-pods", "query": "oc adm top pod command for cpu memory usage", "expect_command": "oc adm top pod"}
+{"id": "networkpolicy-list", "query": "check network policies in namespace", "expect_command": "oc get networkpolicy"}
+{"id": "hpa-list", "query": "show horizontal pod autoscalers", "expect_section_contains": "Horizontal Pod Autoscaler"}
+{"id": "deployment-list", "query": "list deployments in namespace", "expect_command": "oc get deployment"}
+{"id": "deployment-scale", "query": "scale deployment replicas", "expect_command": "oc scale deployment"}
+{"id": "mcp-status", "query": "check machine config pool status", "expect_command": "oc get mcp"}
+{"id": "clusterversion-status", "query": "check cluster version resource status", "expect_command": "oc get clusterversion"}
+{"id": "whoami", "query": "which user am I logged in as", "expect_command": "oc whoami"}
+{"id": "current-project", "query": "show current selected project", "expect_command": "oc project"}
+{"id": "api-resources", "query": "list supported api resources", "expect_command": "oc api-resources"}
+{"id": "new-project", "query": "create a new openshift project", "expect_command": "oc new-project"}
+{"id": "oc-status", "query": "show project deployment service status summary", "expect_command": "oc status"}
+{"id": "project-list", "query": "list OpenShift projects", "expect_command": "oc get projects"}
+{"id": "pods-wide", "query": "list pods with node and IP details", "expect_command": "oc get pods -o wide"}
+{"id": "logs-follow", "query": "follow pod logs continuously", "expect_command": "oc logs -f"}
+{"id": "inspect-clusteroperator", "query": "collect debugging data for openshift apiserver clusteroperator", "expect_command": "oc adm inspect clusteroperator"}
