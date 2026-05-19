@@ -413,6 +413,18 @@ def _requires_rbac_grounding(query: str) -> bool:
     )
 
 
+def _grounding_caveat_note(reason: str) -> str:
+    return (
+        "\n\n참고: 이 답변은 검색된 근거와 질문이 일부만 일치할 수 있습니다. "
+        "명령을 실행하기 전 연결된 공식 문서 근거를 직접 확인하세요."
+        f" ({reason})"
+    )
+
+
+def _has_grounding_soft_degrade_warning(warnings: list[str]) -> bool:
+    return any(str(warning).startswith("insufficient ") and "grounding coverage" in str(warning) for warning in warnings)
+
+
 def _citations_match_rbac_intent(citations: list) -> bool:
     return _citation_matches_keywords(
         citations,
@@ -910,37 +922,10 @@ class ChatAnswerer:
             emit(
                 {
                     "step": "grounding_guard",
-                    "label": "근거 검증 차단",
-                    "status": "error",
-                    "detail": "명령형 질문을 뒷받침하는 근거 범위가 부족합니다",
+                    "label": "근거 검증 주의",
+                    "status": "warning",
+                    "detail": "명령형 질문을 뒷받침하는 근거 범위가 부족해 주의 문구를 추가합니다",
                 }
-            )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
-            emit(
-                {
-                    "step": "pipeline_complete",
-                    "label": "답변 생성 중단",
-                    "status": "done",
-                    "detail": f"총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
-                }
-            )
-            return self._build_grounding_blocked_result(
-                query=query,
-                mode=mode,
-                rewritten_query=retrieval.rewritten_query,
-                answer=(
-                    "답변: 현재 Playbook Library에 해당 자료가 없습니다. "
-                    "자료 추가가 필요합니다."
-                ),
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
             )
         if _requires_monitoring_backup_grounding(query) and not _citation_matches_keywords(
             context_bundle.citations,
@@ -950,37 +935,10 @@ class ChatAnswerer:
             emit(
                 {
                     "step": "grounding_guard",
-                    "label": "근거 검증 차단",
-                    "status": "error",
-                    "detail": "비교형 질문을 뒷받침하는 monitoring/backup 근거가 부족합니다",
+                    "label": "근거 검증 주의",
+                    "status": "warning",
+                    "detail": "비교형 질문을 뒷받침하는 monitoring/backup 근거가 부족해 주의 문구를 추가합니다",
                 }
-            )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
-            emit(
-                {
-                    "step": "pipeline_complete",
-                    "label": "답변 생성 중단",
-                    "status": "done",
-                    "detail": f"총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
-                }
-            )
-            return self._build_grounding_blocked_result(
-                query=query,
-                mode=mode,
-                rewritten_query=retrieval.rewritten_query,
-                answer=(
-                    "답변: 현재 Playbook Library에 해당 자료가 없습니다. "
-                    "자료 추가가 필요합니다."
-                ),
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
             )
 
         if _is_low_confidence_retrieval(
@@ -1213,77 +1171,24 @@ class ChatAnswerer:
             emit(
                 {
                     "step": "grounding_guard",
-                    "label": "근거 검증 차단",
-                    "status": "error",
-                    "detail": "웹 콘솔 질문을 뒷받침하는 근거가 부족합니다",
+                    "label": "근거 검증 주의",
+                    "status": "warning",
+                    "detail": "웹 콘솔 질문을 뒷받침하는 근거가 부족해 주의 문구를 추가합니다",
                 }
-            )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
-            emit(
-                {
-                    "step": "pipeline_complete",
-                    "label": "답변 생성 중단",
-                    "status": "done",
-                    "detail": f"총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
-                }
-            )
-            return self._build_grounding_blocked_result(
-                query=query,
-                mode=mode,
-                rewritten_query=retrieval.rewritten_query,
-                answer=(
-                    "답변: 현재 Playbook Library에 해당 자료가 없습니다. "
-                    "자료 추가가 필요합니다."
-                ),
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
-                llm_runtime_meta=llm_runtime_meta,
             )
         if _requires_rbac_grounding(query) and not _citations_match_rbac_intent(final_citations):
             warnings.append("insufficient rbac grounding coverage")
             emit(
                 {
                     "step": "grounding_guard",
-                    "label": "근거 검증 차단",
-                    "status": "error",
-                    "detail": "RBAC 질문을 뒷받침하는 근거가 부족합니다",
+                    "label": "근거 검증 주의",
+                    "status": "warning",
+                    "detail": "RBAC 질문을 뒷받침하는 근거가 부족해 주의 문구를 추가합니다",
                 }
             )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
-            emit(
-                {
-                    "step": "pipeline_complete",
-                    "label": "답변 생성 중단",
-                    "status": "done",
-                    "detail": f"총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
-                }
-            )
-            return self._build_grounding_blocked_result(
-                query=query,
-                mode=mode,
-                rewritten_query=retrieval.rewritten_query,
-                answer=(
-                    "답변: 현재 Playbook Library에 해당 자료가 없습니다. "
-                    "자료 추가가 필요합니다."
-                ),
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
-                llm_runtime_meta=llm_runtime_meta,
-            )
+
+        if _has_grounding_soft_degrade_warning(warnings):
+            answer_text += _grounding_caveat_note("; ".join(warnings))
 
         if _looks_like_missing_coverage_answer(answer_text):
             warnings.append("answer indicates missing corpus coverage")
