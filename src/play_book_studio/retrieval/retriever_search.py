@@ -3,7 +3,12 @@ from __future__ import annotations
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from .access_scope import filter_hits_by_session_scope
+from .access_scope import (
+    SOURCE_GROUP_USER_UPLOAD,
+    enabled_source_scope_set,
+    filter_hits_by_session_scope,
+    source_group_for_candidate,
+)
 from .intake_overlay import (
     filter_customer_pack_hits_by_selection,
     has_active_customer_pack_selection,
@@ -74,15 +79,22 @@ def _combine_qdrant_filters(*filters: dict[str, object] | None) -> dict[str, obj
 def _session_scope_row_filter(context):
     active_document_id = str(getattr(context, "active_document_id", "") or "").strip()
     active_repository_id = str(getattr(context, "active_repository_id", "") or "").strip()
-    if not active_document_id and not active_repository_id:
+    explicit_upload_document_ids = [
+        str(item).strip()
+        for item in (getattr(context, "enabled_upload_document_ids", []) or [])
+        if str(item).strip()
+    ]
+    if explicit_upload_document_ids or (not active_document_id and not active_repository_id):
         return None
+    enabled = enabled_source_scope_set(context)
 
     def predicate(row: dict[str, object]) -> bool:
-        if active_document_id:
+        apply_active_scope = not enabled or source_group_for_candidate(row) == SOURCE_GROUP_USER_UPLOAD
+        if active_document_id and apply_active_scope:
             document_source_id = str(row.get("document_source_id") or row.get("source_id") or "").strip()
             if document_source_id != active_document_id:
                 return False
-        if active_repository_id:
+        if active_repository_id and apply_active_scope:
             repository_id = str(row.get("repository_id") or "").strip()
             if repository_id != active_repository_id:
                 return False
@@ -94,6 +106,16 @@ def _session_scope_row_filter(context):
 def _session_scope_qdrant_filter(context) -> dict[str, object] | None:
     active_document_id = str(getattr(context, "active_document_id", "") or "").strip()
     active_repository_id = str(getattr(context, "active_repository_id", "") or "").strip()
+    explicit_upload_document_ids = [
+        str(item).strip()
+        for item in (getattr(context, "enabled_upload_document_ids", []) or [])
+        if str(item).strip()
+    ]
+    if explicit_upload_document_ids:
+        return None
+    enabled = enabled_source_scope_set(context)
+    if enabled and enabled != {SOURCE_GROUP_USER_UPLOAD}:
+        return None
     must: list[dict[str, object]] = []
     if active_document_id:
         must.append({"key": "document_source_id", "match": {"value": active_document_id}})

@@ -44,6 +44,8 @@ def _dedupe_queries(queries: tuple[str, ...], *, fallback: str) -> list[str]:
 
 
 def _uses_study_docs_scope(context: SessionContext) -> bool:
+    if getattr(context, "enabled_source_scopes", None):
+        return False
     return str(getattr(context, "preferred_source_scope", "") or "").strip() == "study_docs"
 
 
