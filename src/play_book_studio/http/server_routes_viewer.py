@@ -836,6 +836,26 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
           font-weight: 700;
           cursor: pointer;
         }
+        .upload-reader .collapse-button:hover,
+        .upload-reader .collapse-button.is-collapsed {
+          color: #7dd3fc;
+        }
+        .upload-reader .code-block.is-collapsible pre {
+          position: relative;
+        }
+        .upload-reader .code-block.is-collapsible.is-collapsed pre {
+          max-height: 14rem;
+          overflow: auto;
+          scrollbar-width: thin;
+        }
+        .upload-reader .code-block.is-collapsible.is-collapsed pre::after {
+          content: "";
+          position: absolute;
+          inset: auto 0 0 0;
+          height: 4.5rem;
+          background: linear-gradient(to bottom, rgba(2, 6, 23, 0), rgba(2, 6, 23, 0.98));
+          pointer-events: none;
+        }
         .upload-reader .code-token.code-key {
           color: #93c5fd;
         }
@@ -980,8 +1000,8 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
               button.classList.toggle("is-collapsed", collapsed);
               button.setAttribute("aria-expanded", collapsed ? "false" : "true");
               button.textContent = collapsed
-                ? (button.dataset.labelCollapsed || "Show more")
-                : (button.dataset.labelExpanded || "Show less");
+                ? (button.dataset.labelCollapsed || "전체 보기")
+                : (button.dataset.labelExpanded || "접기");
             }
             </script>
             """,

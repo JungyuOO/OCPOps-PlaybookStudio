@@ -402,6 +402,78 @@ def test_pdf_layout_classifier_keeps_urls_as_text_and_literal_hashes_as_code():
     assert "\n## 예 demo-token-2csgx\n\n" not in markdown
 
 
+def test_pdf_layout_visual_code_region_keeps_spaced_yaml_box_together():
+    merged = _merge_pdf_layout_blocks(
+        [
+            PdfLayoutBlock(
+                kind="code",
+                text="apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization",
+                bbox=(84, 585, 395, 617),
+                font_size=12,
+                language="yaml",
+                visual_group="box-dev",
+            ),
+            PdfLayoutBlock(
+                kind="code",
+                text="resources:\n  - ../../base",
+                bbox=(84, 639, 185, 671),
+                font_size=12,
+                language="yaml",
+                visual_group="box-dev",
+            ),
+            PdfLayoutBlock(
+                kind="code",
+                text="namePrefix: dev-",
+                bbox=(84, 711, 199, 725),
+                font_size=12,
+                language="yaml",
+                visual_group="box-dev",
+            ),
+            PdfLayoutBlock(
+                kind="code",
+                text="# 개발 환경용 이미지 태그 고정",
+                bbox=(84, 746, 271, 762),
+                font_size=12,
+                language="bash",
+                visual_group="box-dev",
+            ),
+        ]
+    )
+
+    markdown = _pdf_layout_blocks_to_markdown(merged, title="CD", page_index=10)
+
+    assert markdown.count("```yaml") == 1
+    assert "namePrefix: dev-" in markdown
+    assert "# 개발 환경용 이미지 태그 고정" in markdown
+    assert "```bash" not in markdown
+
+
+def test_pdf_layout_classifier_keeps_explanatory_label_lines_as_paragraph():
+    block = _pdf_classify_text_layout_block(
+        text="Project Name: 애플리케이션이 속할 그룹입니다. default 를 선택하면 됩니다.",
+        bbox=(72, 320, 500, 338),
+        font_size=12,
+        median_font_size=12,
+        font_names=["Arial"],
+    )
+
+    assert block.kind == "paragraph"
+
+
+def test_pdf_layout_visual_code_region_overrides_prose_guard():
+    block = _pdf_classify_text_layout_block(
+        text="# 개발 환경용 이미지 태그 고정",
+        bbox=(84, 746, 271, 762),
+        font_size=12,
+        median_font_size=12,
+        font_names=["Arial"],
+        visual_group="box-dev",
+    )
+
+    assert block.kind == "code"
+    assert block.visual_group == "box-dev"
+
+
 def test_pdf_layout_places_images_by_bbox_and_merges_code_across_pages():
     asset = DocumentAsset(
         asset_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -469,6 +541,19 @@ def test_pdf_layout_language_prefers_yaml_for_pipeline_blocks_with_shell_script_
             ]
         )
     ) == "yaml"
+
+
+def test_pdf_layout_language_uses_text_for_directory_trees():
+    assert _pdf_layout_block_language(
+        "\n".join(
+            [
+                "gitops-repo/",
+                "├── pandas-bot/           # 첫 번째 서비스",
+                "│   ├── base/",
+                "└── infra-common/         # 모든 서비스가 공통으로 쓰는 것들",
+            ]
+        )
+    ) == "text"
 
 
 def test_docx_default_pipeline_extracts_markdown_blocks_and_chunks():

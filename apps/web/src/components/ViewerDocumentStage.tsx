@@ -986,8 +986,8 @@ export default function ViewerDocumentStage({
         button.classList.toggle('is-collapsed', collapsed);
         button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         button.textContent = collapsed
-          ? button.getAttribute('data-label-collapsed') ?? 'Show more'
-          : button.getAttribute('data-label-expanded') ?? 'Show less';
+          ? button.getAttribute('data-label-collapsed') ?? '전체 보기'
+          : button.getAttribute('data-label-expanded') ?? '접기';
       }
     };
 

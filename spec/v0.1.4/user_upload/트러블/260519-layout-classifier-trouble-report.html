@@ -450,6 +450,32 @@ pelines.apps.ocp.test.com/</code></pre>
             OCR 텍스트는 검색 보조 맥락으로만 쓰고, 사람용 본문에는 원문 구조를 우선한다는 기준을 유지해야 한다.
           </p>
         </article>
+
+        <article class="trouble">
+          <div class="status-row">
+            <span class="badge fixed">FIXED IN WORKTREE</span>
+            <span class="badge info">Parser</span>
+          </div>
+          <h3>F-004. 페이지가 갈라진 회색 코드 박스가 여러 코드블록으로 찢어지던 문제</h3>
+          <p>
+            PyMuPDF drawing rect에서 원문 회색 코드 박스를 감지해 <code>visual_group</code>으로 묶는다.
+            같은 시각 박스 안의 <code>namePrefix</code>, 주석, 다음 페이지 <code>images</code> 조각은 하나의 YAML 코드블록으로 유지하고,
+            회색 박스 밖의 <code>Project Name</code>, <code>INCLUDE / EXCLUDE</code>, <code>path</code> 설명문은 문단으로 둔다.
+          </p>
+        </article>
+
+        <article class="trouble">
+          <div class="status-row">
+            <span class="badge fixed">FIXED IN WORKTREE</span>
+            <span class="badge info">Retrieval</span>
+          </div>
+          <h3>F-005. active upload 질문이 외부 제품명 때문에 검색 전 차단되던 문제</h3>
+          <p>
+            <code>ArgoCD</code> 같은 단어는 공식 OCP 코퍼스 기준으로는 외부 제품 차단 대상이지만,
+            사용자가 업로드 문서를 명시적으로 선택한 상태에서는 그 문서 내부를 먼저 검색해야 한다.
+            active document/repository scope가 있으면 unsupported product gate를 우회하도록 조정했다.
+          </p>
+        </article>
       </div>
     </section>
 
@@ -459,10 +485,10 @@ pelines.apps.ocp.test.com/</code></pre>
         <div class="card">
           <h3>테스트</h3>
           <pre><code>uv run pytest tests/test_document_parsing.py -q
-20 passed
+26 passed
 
-uv run pytest tests/test_document_parsing.py tests/test_document_repository.py tests/test_company_llm_vision.py tests/test_session_owner_scoping.py -q
-43 passed
+uv run pytest tests/test_retriever_plan.py tests/test_answer_router.py tests/test_document_parsing.py tests/test_upload_api.py tests/test_document_repository.py tests/test_company_llm_vision.py tests/test_session_owner_scoping.py -q
+74 passed
 
 npm --prefix apps/web run build
 passed</code></pre>
@@ -485,6 +511,7 @@ passed</code></pre>
               <tr><td>02. 스토리지</td><td>153</td><td>42</td><td>25</td><td>2</td><td>1</td></tr>
               <tr><td>03. 네트워킹</td><td>99</td><td>34</td><td>22</td><td>2</td><td>6</td></tr>
               <tr><td>11. 폐쇄망 외부에서 접근하기</td><td>15</td><td>5</td><td>3</td><td>0</td><td>3</td></tr>
+              <tr><td>12. CD(ArgoCD)</td><td>93</td><td>미업로드 재검증 전</td><td>7 YAML / 2 text / 1 bash</td><td>1</td><td>4</td></tr>
             </tbody>
           </table>
         </div>

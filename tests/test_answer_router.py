@@ -27,6 +27,14 @@ def test_short_operational_status_question_is_not_smalltalk() -> None:
     assert route_non_rag("PVC가 Pending인데 뭐 확인해야 해?") is None
 
 
+def test_active_uploaded_document_questions_can_mention_external_product_names() -> None:
+    assert route_non_rag("ArgoCD에서 path 설정 방법은?", allow_unsupported_product=True) is None
+
+    routed = route_non_rag("ArgoCD에서 path 설정 방법은?")
+    assert routed is not None
+    assert routed.route == "no_answer"
+
+
 def test_korean_only_operational_questions_are_not_smalltalk() -> None:
     for query in (
         "디플로이먼트 상태 어떻게봐?",

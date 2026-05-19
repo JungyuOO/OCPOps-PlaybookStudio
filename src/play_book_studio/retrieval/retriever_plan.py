@@ -44,6 +44,11 @@ def build_retrieval_plan(
     normalized_query = normalize_query(query)
     normalize_query_ms = round((time.perf_counter() - normalize_started_at) * 1000, 1)
     unsupported_product = detect_unsupported_product(normalized_query)
+    if (
+        str(getattr(context, "active_document_id", "") or "").strip()
+        or str(getattr(context, "active_repository_id", "") or "").strip()
+    ):
+        unsupported_product = None
     decomposed_queries = decompose_retrieval_queries(query)
     follow_up_detected = has_follow_up_reference(query)
     rewrite_started_at = time.perf_counter()

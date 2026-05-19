@@ -165,6 +165,7 @@ class PdfLayoutBlock:
     language: str = ""
     confidence: float = 0.0
     reason: str = ""
+    visual_group: str = ""
 
 
 MarkdownConverter = Callable[[Path, DocumentFormat], str | ConvertedMarkdown]
@@ -903,6 +904,14 @@ _PDF_YAML_KEYS = {
     "volume",
     "accessModes",
     "resources",
+    "source",
+    "repoURL",
+    "targetRevision",
+    "destination",
+    "syncPolicy",
+    "automated",
+    "prune",
+    "selfHeal",
     "requests",
     "storage",
     "provisioner",
@@ -944,6 +953,10 @@ _PDF_YAML_KEYS = {
     "matchExpressions",
     "operator",
     "values",
+    "namePrefix",
+    "images",
+    "newName",
+    "newTag",
 }
 
 _PDF_SHELL_COMMAND_RE = re.compile(
@@ -1187,6 +1200,7 @@ def _serialize_pdf_layout_blocks(blocks: list[PdfLayoutBlock]) -> str:
             "language": block.language,
             "confidence": round(float(block.confidence or 0.0), 3),
             "reason": block.reason,
+            "visual_group": block.visual_group,
         }
         lines.append(f"<!-- pbs-layout-block {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))} -->")
         lines.extend(str(block.text or "").rstrip("\n").splitlines())
@@ -1229,6 +1243,7 @@ def _parse_pdf_layout_blocks_source(text: str) -> list[PdfLayoutBlock] | None:
                 language=str(payload.get("language") or "") if isinstance(payload, dict) else "",
                 confidence=float(payload.get("confidence") or 0.0) if isinstance(payload, dict) else 0.0,
                 reason=str(payload.get("reason") or "") if isinstance(payload, dict) else "",
+                visual_group=str(payload.get("visual_group") or "") if isinstance(payload, dict) else "",
             )
         )
         index += 1
@@ -1337,6 +1352,7 @@ def _pdf_image_layout_blocks(assets: tuple[DocumentAsset, ...]) -> tuple[PdfLayo
                 bbox=bbox,
                 confidence=0.98,
                 reason="pymupdf_image_bbox",
+                visual_group="",
             )
         )
     return tuple(blocks)
@@ -1378,8 +1394,6 @@ def _merge_continuation_code_fences(markdown: str) -> str:
                 lookahead += 1
         next_language = _pdf_opening_fence_language(lines[lookahead]) if lookahead < len(lines) else None
         if next_language is not None and next_language == active_language and page_marker_index >= 0:
-            if output and output[-1] != "":
-                output.append("")
             index = lookahead + 1
             continue
 
@@ -1538,6 +1552,29 @@ def _pdf_rects_overlap(first: tuple[float, float, float, float], second: tuple[f
     return not (first[2] <= second[0] or second[2] <= first[0] or first[3] <= second[1] or second[3] <= first[1])
 
 
+def _pdf_rect_area(bbox: tuple[float, float, float, float]) -> float:
+    return max(0.0, float(bbox[2] - bbox[0])) * max(0.0, float(bbox[3] - bbox[1]))
+
+
+def _pdf_rect_intersection_area(first: tuple[float, float, float, float], second: tuple[float, float, float, float]) -> float:
+    x0 = max(first[0], second[0])
+    y0 = max(first[1], second[1])
+    x1 = min(first[2], second[2])
+    y1 = min(first[3], second[3])
+    return _pdf_rect_area((x0, y0, x1, y1))
+
+
+def _pdf_bbox_center_in_rect(
+    bbox: tuple[float, float, float, float],
+    rect: tuple[float, float, float, float],
+    *,
+    padding: float = 2.0,
+) -> bool:
+    center_x = (bbox[0] + bbox[2]) / 2
+    center_y = (bbox[1] + bbox[3]) / 2
+    return rect[0] - padding <= center_x <= rect[2] + padding and rect[1] - padding <= center_y <= rect[3] + padding
+
+
 def _normalize_pdf_table_cell(value: Any) -> str:
     text = " ".join(str(value or "").replace("\r", "\n").split())
     return text.strip()
@@ -1592,11 +1629,30 @@ def _pdf_text_block_looks_like_code(text: str) -> bool:
     return codeish_count > 0 and codeish_count >= max(1, len(lines) // 2)
 
 
+def _pdf_text_block_looks_like_prose(text: str) -> bool:
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    if not lines:
+        return False
+    joined = " ".join(lines)
+    if not re.search(r"[가-힣]", joined):
+        return False
+    if re.search(r"(입니다|합니다|됩니다|합니다\.|됩니다\.|주세요|추천해요|유용합니다|선택하면|사용합니다|정합니다|찾습니다|넣어두고|준비해야)", joined):
+        return True
+    if any(re.search(r"[가-힣].*[:：]$", line) and not line.lstrip().startswith("#") for line in lines):
+        return True
+    if len(joined) >= 40 and re.search(r"[.?!)]$", joined):
+        return True
+    label_like_count = sum(1 for line in lines if re.match(r"^[A-Z][A-Za-z0-9 /_.()-]{1,40}:\s+", line))
+    return label_like_count > 0 and len(joined) >= 36
+
+
 def _pdf_layout_block_language(text: str) -> str:
     lines = [line for line in str(text or "").splitlines() if line.strip()]
     first_line = lines[0] if lines else ""
     if not first_line:
         return ""
+    if any(re.search(r"[├└│]", line) for line in lines):
+        return "text"
     yamlish_count = sum(1 for line in lines if _pdf_line_looks_yaml_code(line))
     if yamlish_count >= 2 or _pdf_line_looks_yaml_code(first_line):
         return "yaml"
@@ -1614,12 +1670,25 @@ def _pdf_classify_text_layout_block(
     font_size: float,
     median_font_size: float,
     font_names: list[str],
+    visual_group: str = "",
 ) -> PdfLayoutBlock:
     lines = [line.rstrip() for line in str(text or "").splitlines() if line.strip()]
     joined = _clean_pdf_line(" ".join(lines))
     mono_font = any(re.search(r"(?:mono|courier|consola|menlo|code)", font, re.IGNORECASE) for font in font_names)
     codeish_count = _pdf_codeish_line_count(lines)
-    if lines and (
+    prose_like = _pdf_text_block_looks_like_prose(text)
+    if visual_group:
+        return PdfLayoutBlock(
+            kind="code",
+            text=text,
+            bbox=bbox,
+            font_size=font_size,
+            language=_pdf_layout_block_language(text),
+            confidence=0.96,
+            reason="visual_code_region",
+            visual_group=visual_group,
+        )
+    if lines and not prose_like and (
         _pdf_text_block_looks_like_code(text)
         or (mono_font and len(lines) >= 2)
         or (codeish_count > 0 and len(lines) >= 2 and bbox[0] >= 72)
@@ -1633,6 +1702,7 @@ def _pdf_classify_text_layout_block(
             language=_pdf_layout_block_language(text),
             confidence=confidence,
             reason="codeish_lines_or_monospace_region",
+            visual_group=visual_group,
         )
     font_boost = median_font_size > 0 and font_size >= max(median_font_size + 1.2, median_font_size * 1.12)
     if joined and len(lines) <= 2 and _is_pdf_heading_candidate(joined):
@@ -1643,6 +1713,7 @@ def _pdf_classify_text_layout_block(
             font_size=font_size,
             confidence=0.88 if font_boost else 0.76,
             reason="heading_candidate_with_layout",
+            visual_group=visual_group,
         )
     if joined and len(lines) <= 2 and font_boost and len(joined) <= 80 and not _pdf_line_has_sentence_end(joined):
         return PdfLayoutBlock(
@@ -1652,6 +1723,7 @@ def _pdf_classify_text_layout_block(
             font_size=font_size,
             confidence=0.72,
             reason="large_short_text",
+            visual_group=visual_group,
         )
     return PdfLayoutBlock(
         kind="paragraph",
@@ -1660,6 +1732,7 @@ def _pdf_classify_text_layout_block(
         font_size=font_size,
         confidence=0.7,
         reason="default_text_region",
+        visual_group=visual_group,
     )
 
 
@@ -1678,6 +1751,8 @@ def _pdf_union_bbox(
 def _pdf_layout_blocks_should_merge_code(previous: PdfLayoutBlock, current: PdfLayoutBlock) -> bool:
     if previous.kind != "code" or current.kind != "code":
         return False
+    if previous.visual_group or current.visual_group:
+        return bool(previous.visual_group and previous.visual_group == current.visual_group)
     if abs(previous.bbox[0] - current.bbox[0]) > 34:
         return False
     vertical_gap = float(current.bbox[1] - previous.bbox[3])
@@ -1699,18 +1774,76 @@ def _merge_pdf_layout_blocks(blocks: list[PdfLayoutBlock]) -> list[PdfLayoutBloc
                 language=_pdf_layout_block_language(f"{previous.text.rstrip()}{separator}{block.text.lstrip()}"),
                 confidence=max(previous.confidence, block.confidence),
                 reason=f"{previous.reason}+merged_layout_code",
+                visual_group=previous.visual_group or block.visual_group,
             )
             continue
         merged.append(block)
     return merged
 
 
+def _pdf_visual_code_regions_with_pymupdf(page: Any) -> list[tuple[str, tuple[float, float, float, float]]]:
+    regions: list[tuple[str, tuple[float, float, float, float]]] = []
+    try:
+        drawings = list(page.get_drawings() or [])
+    except Exception:  # noqa: BLE001
+        return regions
+
+    for index, drawing in enumerate(drawings):
+        rect = drawing.get("rect") if isinstance(drawing, dict) else None
+        fill = drawing.get("fill") if isinstance(drawing, dict) else None
+        if rect is None or fill is None:
+            continue
+        try:
+            bbox = (float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1))
+            fill_values = tuple(float(value) for value in fill[:3])
+        except Exception:  # noqa: BLE001
+            continue
+        width = bbox[2] - bbox[0]
+        height = bbox[3] - bbox[1]
+        if width < 160 or height < 30:
+            continue
+        if len(fill_values) != 3:
+            continue
+        # The source training PDFs use pale gray/beige filled rectangles for code examples.
+        # Small inline highlights and page separators are filtered out by size and luminance.
+        if not all(0.86 <= value <= 1.0 for value in fill_values):
+            continue
+        if max(fill_values) - min(fill_values) > 0.08:
+            continue
+        group_id = f"visual-code-{round(bbox[0])}-{round(bbox[1])}-{round(bbox[2])}-{round(bbox[3])}-{index}"
+        regions.append((group_id, bbox))
+    return regions
+
+
+def _pdf_visual_group_for_bbox(
+    bbox: tuple[float, float, float, float],
+    visual_code_regions: list[tuple[str, tuple[float, float, float, float]]],
+) -> str:
+    if not visual_code_regions:
+        return ""
+    text_area = _pdf_rect_area(bbox)
+    best_group = ""
+    best_overlap = 0.0
+    for group_id, region in visual_code_regions:
+        if _pdf_bbox_center_in_rect(bbox, region):
+            return group_id
+        overlap = _pdf_rect_intersection_area(bbox, region)
+        if overlap > best_overlap:
+            best_group = group_id
+            best_overlap = overlap
+    if text_area > 0 and best_overlap / text_area >= 0.55:
+        return best_group
+    return ""
+
+
 def _pdf_text_layout_blocks_with_pymupdf(
     page: Any,
     *,
     table_bboxes: list[tuple[float, float, float, float]],
+    visual_code_regions: list[tuple[str, tuple[float, float, float, float]]] | None = None,
 ) -> list[PdfLayoutBlock]:
     raw_blocks: list[dict[str, Any]] = []
+    visual_code_regions = visual_code_regions or []
     try:
         page_dict = page.get_text("dict")
         text_blocks = list(page_dict.get("blocks", []) or [])
@@ -1743,12 +1876,14 @@ def _pdf_text_layout_blocks_with_pymupdf(
         text = "\n".join(lines).strip()
         if not text:
             continue
+        visual_group = _pdf_visual_group_for_bbox(bbox, visual_code_regions)
         raw_blocks.append(
             {
                 "text": text,
                 "bbox": bbox,
                 "font_size": max(font_sizes) if font_sizes else 0.0,
                 "font_names": font_names,
+                "visual_group": visual_group,
             }
         )
 
@@ -1766,7 +1901,15 @@ def _pdf_text_layout_blocks_with_pymupdf(
             text = str(block[4] or "").strip()
             if not text:
                 continue
-            raw_blocks.append({"text": text, "bbox": bbox, "font_size": 0.0, "font_names": []})
+            raw_blocks.append(
+                {
+                    "text": text,
+                    "bbox": bbox,
+                    "font_size": 0.0,
+                    "font_names": [],
+                    "visual_group": _pdf_visual_group_for_bbox(bbox, visual_code_regions),
+                }
+            )
 
     font_sizes = sorted(float(block.get("font_size") or 0.0) for block in raw_blocks if float(block.get("font_size") or 0.0) > 0)
     median_font_size = font_sizes[len(font_sizes) // 2] if font_sizes else 0.0
@@ -1777,6 +1920,7 @@ def _pdf_text_layout_blocks_with_pymupdf(
             font_size=float(block.get("font_size") or 0.0),
             median_font_size=median_font_size,
             font_names=list(block.get("font_names") or []),
+            visual_group=str(block.get("visual_group") or ""),
         )
         for block in raw_blocks
     ]
@@ -1785,6 +1929,7 @@ def _pdf_text_layout_blocks_with_pymupdf(
 def _extract_pdf_page_markdown_source_with_pymupdf(page: Any) -> str:
     blocks: list[PdfLayoutBlock] = []
     table_bboxes: list[tuple[float, float, float, float]] = []
+    visual_code_regions = _pdf_visual_code_regions_with_pymupdf(page)
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             tables = page.find_tables()
@@ -1811,7 +1956,7 @@ def _extract_pdf_page_markdown_source_with_pymupdf(page: Any) -> str:
                 reason="pymupdf_table_detector",
             )
         )
-    blocks.extend(_pdf_text_layout_blocks_with_pymupdf(page, table_bboxes=table_bboxes))
+    blocks.extend(_pdf_text_layout_blocks_with_pymupdf(page, table_bboxes=table_bboxes, visual_code_regions=visual_code_regions))
     blocks.sort(key=lambda block: (round(block.bbox[1], 1), round(block.bbox[0], 1)))
     return _serialize_pdf_layout_blocks(_merge_pdf_layout_blocks(blocks))
 

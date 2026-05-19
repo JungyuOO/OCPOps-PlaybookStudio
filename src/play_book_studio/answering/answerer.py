@@ -685,10 +685,18 @@ class ChatAnswerer:
         is_follow_up = has_follow_up_reference(query)
         routed_response = None
         if not is_follow_up:
+            allow_unsupported_product = bool(
+                context
+                and (
+                    str(getattr(context, "active_document_id", "") or "").strip()
+                    or str(getattr(context, "active_repository_id", "") or "").strip()
+                )
+            )
             routed_response = route_non_rag(
                 query,
                 corpus_label=self.settings.active_pack.product_label,
                 corpus_version=self.settings.active_pack.version,
+                allow_unsupported_product=allow_unsupported_product,
             )
         pipeline_timings_ms["route_query"] = round(
             (time.perf_counter() - route_started_at) * 1000,

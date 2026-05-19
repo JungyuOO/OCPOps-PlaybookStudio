@@ -19,6 +19,7 @@ from .viewer_blocks_text import (
 
 YAML_KEY_VALUE_RE = re.compile(r"^(?P<indent>\s*)(?P<dash>-\s+)?(?P<key>[A-Za-z0-9_.-]+:)(?P<spacing>\s*)(?P<value>.*)$")
 YAML_COMMENT_RE = re.compile(r"^(?P<indent>\s*)(?P<comment>#.*)$")
+CODE_COLLAPSE_MIN_LINES = 20
 
 
 def _render_note_card_html(*, variant: str, title: str, body_html: str) -> str:
@@ -59,8 +60,10 @@ def _render_code_block_html(
         else ""
     )
     classes = ["code-block"]
-    if len(code_text.splitlines()) >= 14:
+    line_count = len(str(code_text or "").splitlines())
+    if line_count >= CODE_COLLAPSE_MIN_LINES:
         classes.append("is-collapsible")
+        classes.append("is-collapsed")
     normalized_overflow_hint = (overflow_hint or "toggle").strip().lower() or "toggle"
     if preserve_layout:
         classes.append("preserve-layout")
@@ -91,11 +94,16 @@ def _render_code_block_html(
         )
     collapse_button_html = ""
     if "is-collapsible" in classes:
+        collapsed_label = f"전체 보기 ({line_count}줄)"
+        expanded_label = f"접기 ({line_count}줄)"
         collapse_button_html = """
       <div class="code-footer">
-        <button type="button" class="collapse-button" aria-expanded="true" onclick="toggleViewerCodeCollapse(this)" data-label-collapsed="Show more" data-label-expanded="Show less">Show less</button>
+        <button type="button" class="collapse-button is-collapsed" aria-expanded="false" onclick="toggleViewerCodeCollapse(this)" data-label-collapsed="{collapsed_label}" data-label-expanded="{expanded_label}">{collapsed_label}</button>
       </div>
-        """
+        """.format(
+            collapsed_label=html.escape(collapsed_label, quote=True),
+            expanded_label=html.escape(expanded_label, quote=True),
+        )
     return """
     <section class="{classes}">
       {caption_html}
