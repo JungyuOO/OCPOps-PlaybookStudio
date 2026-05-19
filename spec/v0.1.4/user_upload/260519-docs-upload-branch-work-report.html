@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>feat/docs_uploads_S_v1 Branch Work Report</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07101d;
+      --panel: #0d1727;
+      --panel-2: #111d30;
+      --line: #263a57;
+      --text: #edf6ff;
+      --muted: #9fb0c4;
+      --cyan: #20d5ff;
+      --green: #2ce1a2;
+      --amber: #ffd15c;
+      --violet: #b48cff;
+      --code: #050a14;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, Pretendard, "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.66;
+    }
+    main {
+      width: min(1200px, calc(100vw - 48px));
+      margin: 0 auto;
+      padding: 48px 0 80px;
+    }
+    header {
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 30px;
+      padding-bottom: 28px;
+    }
+    .eyebrow {
+      color: var(--cyan);
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 8px 0 12px;
+      font-size: clamp(34px, 5vw, 64px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 38px 0 16px;
+      font-size: 24px;
+    }
+    h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+    p { margin: 0 0 12px; }
+    code {
+      border-radius: 5px;
+      padding: 0.12rem 0.32rem;
+      background: rgba(32, 213, 255, 0.11);
+      color: #dff8ff;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: .92em;
+    }
+    pre {
+      margin: 14px 0 0;
+      overflow: auto;
+      border: 1px solid rgba(148, 163, 184, .2);
+      border-radius: 12px;
+      background: var(--code);
+      padding: 16px 18px;
+      color: #e2e8f0;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    pre code { display: block; background: transparent; padding: 0; color: inherit; }
+    .lead {
+      max-width: 980px;
+      color: #c7d6e7;
+      font-size: 18px;
+    }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .badge {
+      display: inline-flex;
+      border: 1px solid rgba(148, 163, 184, .22);
+      border-radius: 999px;
+      padding: 5px 9px;
+      color: #c7d6e7;
+      background: rgba(148, 163, 184, .08);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .badge.done {
+      border-color: rgba(44, 225, 162, .35);
+      color: #b9f8df;
+      background: rgba(44, 225, 162, .1);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      padding: 18px;
+    }
+    .section-label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+    }
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, .18);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: var(--cyan);
+      background: rgba(32, 213, 255, .06);
+      font-size: 12px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    tr:last-child td { border-bottom: 0; }
+    ul { margin: 8px 0 0; padding-left: 20px; }
+    li { margin: 6px 0; color: #d8e6f3; }
+    .callout {
+      border: 1px solid rgba(44, 225, 162, .32);
+      border-left: 4px solid var(--green);
+      border-radius: 14px;
+      background: rgba(44, 225, 162, .08);
+      padding: 16px 18px;
+    }
+    .muted { color: var(--muted); }
+    .file-list td:first-child { white-space: nowrap; }
+    @media (max-width: 760px) {
+      main { width: min(100% - 28px, 1200px); }
+      .file-list td:first-child { white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Branch Work Report</div>
+      <h1>feat/docs_uploads_S_v1 작업 설명서</h1>
+      <p class="lead">
+        이 문서는 <code>cfb7895..8c4d34d</code> 범위에서 수행된 전체 변경을 제품 영역별로 정리한다.
+        전체 diff 원문 대신 수정 파일, 변경 목적, 검증 결과, 남은 고도화 방향을 기록한다.
+      </p>
+      <div class="badge-row">
+        <span class="badge done">HEAD: 8c4d34d</span>
+        <span class="badge">61 files</span>
+        <span class="badge">+13,836 / -796</span>
+        <span class="badge">작성일: 2026-05-19</span>
+      </div>
+    </header>
+
+    <section>
+      <h2>커밋 범위</h2>
+      <table>
+        <thead>
+          <tr><th>Commit</th><th>제목</th><th>핵심 의미</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>553493e</code></td><td>harden user upload ingestion pipeline</td><td>ingest, DB 저장, Qdrant, owner scope, stage event 기반 강화</td></tr>
+          <tr><td><code>bf290b7</code></td><td>harden upload ingestion viewer pipeline</td><td>viewer, asset materialization, OCR JSON, debug artifact, progress UX 강화</td></tr>
+          <tr><td><code>c061283</code></td><td>improve upload PDF layout and stage completion</td><td>PDF layout, image/code placement, page-cross merge, stage completion 개선</td></tr>
+          <tr><td><code>8c4d34d</code></td><td>finalize user upload document pipeline</td><td>visual code box parser, active upload RAG, 긴 코드 접기 UX, 완료 보고서 정리</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>제품 변화 요약</h2>
+      <div class="grid">
+        <article class="card">
+          <span class="section-label">Upload</span>
+          <h3>8단계 진행 경험</h3>
+          <p>요청 접수, 원본 저장, 파싱, 청크, DB 저장, Qdrant, 스코프 확인, 완료 판정을 stage event와 로그로 보여준다.</p>
+        </article>
+        <article class="card">
+          <span class="section-label">Parser</span>
+          <h3>PDF 구조 보존</h3>
+          <p>텍스트, 표, 이미지 bbox, 회색 코드 박스 rect를 사용해 문서 구조를 복원한다.</p>
+        </article>
+        <article class="card">
+          <span class="section-label">Viewer</span>
+          <h3>HTML reader</h3>
+          <p>업로드 문서는 HTML viewer에서 본문, 이미지, 코드, 표, 청크 진단을 확인한다.</p>
+        </article>
+        <article class="card">
+          <span class="section-label">RAG</span>
+          <h3>Active document grounding</h3>
+          <p>업로드 문서 선택 상태에서는 외부 제품명 때문에 검색 전 차단하지 않고, private source를 citation으로 사용한다.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>닫은 주요 문제</h2>
+      <table>
+        <thead>
+          <tr><th>문제</th><th>해결</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>업로드가 빠르게 성공처럼 보이지만 내용이 빈약함</td><td>stage event, report artifact, parse/chunk/index 상태를 명확히 남김</td></tr>
+          <tr><td>PDF 코드블록이 페이지 경계에서 찢어짐</td><td>visual code region을 <code>visual_group</code>으로 묶어 병합</td></tr>
+          <tr><td>설명문이 코드로 과분류됨</td><td>한글 서술형 label line prose guard 추가</td></tr>
+          <tr><td>디렉토리 트리가 YAML처럼 표시됨</td><td>box drawing 문자가 있으면 <code>text</code> 코드블록으로 표시</td></tr>
+          <tr><td>OCR dump가 본문에 노출됨</td><td>OCR은 검색 보조 JSON으로 저장하고 viewer 본문에는 원문 구조를 우선</td></tr>
+          <tr><td>ArgoCD 질문이 외부 제품으로 차단됨</td><td>active document/repository scope가 있으면 unsupported product gate 우회</td></tr>
+          <tr><td>Show more/less가 기준 없이 보임</td><td>20줄 이상만 접기, <code>전체 보기 (N줄)</code>/<code>접기 (N줄)</code>로 표시</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>검증 증거</h2>
+      <div class="callout">
+        <p>대표 문서 <code>12. CD(ArgoCD)(03.25).pdf</code>는 <code>3ce81bf3-6261-4788-a3b6-bfc21ef24b14</code>로 저장되었고, blocks <code>93</code>, chunks <code>26</code>, assets <code>4</code>, Qdrant <code>26/26 indexed</code> 상태를 확인했다.</p>
+        <p>챗봇 질문 “개발 서버 배포 시 path 값은?”에 <code>path: 'overlays/dev'</code>로 답하고 <code>ArgoCD에서 연결하는 방법</code> chunk를 citation으로 사용했다.</p>
+        <pre><code>uv run pytest tests/test_retriever_plan.py tests/test_answer_router.py tests/test_document_parsing.py tests/test_viewer_code_blocks.py tests/test_upload_api.py tests/test_document_repository.py tests/test_company_llm_vision.py tests/test_session_owner_scoping.py -q
+77 passed
+
+npm --prefix apps/web run build
+passed
+
+git diff --check
+passed</code></pre>
+      </div>
+    </section>
+
+    <section>
+      <h2>파일별 변경 요약</h2>
+      <table class="file-list">
+        <thead>
+          <tr><th>파일</th><th>변경 요약</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>apps/web/src/components/AppHeader.css</code></td><td>공통 앱 헤더 스타일 추가</td></tr>
+          <tr><td><code>apps/web/src/components/AppHeader.tsx</code></td><td>공통 AppHeader 컴포넌트 추가</td></tr>
+          <tr><td><code>apps/web/src/components/ThemeToggleButton.tsx</code></td><td>light/dark theme toggle 추가</td></tr>
+          <tr><td><code>apps/web/src/components/ViewerDocumentStage.tsx</code></td><td>viewer copy/wrap/collapse fallback label과 동작 보정</td></tr>
+          <tr><td><code>apps/web/src/lib/clusterProfile.ts</code></td><td>cluster/runtime profile helper 추가</td></tr>
+          <tr><td><code>apps/web/src/lib/courseApi.ts</code></td><td>runtime API 계약 변화 반영</td></tr>
+          <tr><td><code>apps/web/src/lib/globalTheme.ts</code></td><td>전역 테마 상태 관리 추가</td></tr>
+          <tr><td><code>apps/web/src/lib/opsConsoleApi.ts</code></td><td>runtime/session payload 처리 보강</td></tr>
+          <tr><td><code>apps/web/src/lib/runtimeApi.ts</code></td><td>health/runtime payload 타입 확장</td></tr>
+          <tr><td><code>apps/web/src/pages/PlaybookLibraryPage.css</code></td><td>업로드 stage, progress, logs, theme 스타일 대폭 개선</td></tr>
+          <tr><td><code>apps/web/src/pages/PlaybookLibraryPage.tsx</code></td><td>8단계 업로드 UI, progress log, viewer/report 연동 구현</td></tr>
+          <tr><td><code>apps/web/src/pages/WorkspacePage.tsx</code></td><td>workspace header/theme 구조 반영</td></tr>
+          <tr><td><code>apps/web/src/pages/workspace/WorkspaceHeader.tsx</code></td><td>workspace header와 runtime profile 표시 보강</td></tr>
+          <tr><td><code>docker-compose.yml</code></td><td>app runtime path/env 반영 보강</td></tr>
+          <tr><td><code>src/play_book_studio/http/upload_api.py</code></td><td>파일 저장, parse progress, DB 저장, asset materialization, Qdrant, report, delete cleanup 강화</td></tr>
+          <tr><td><code>src/play_book_studio/ingestion/document_parsing.py</code></td><td>PDF layout parser, visual code region, prose guard, image/table/code handling 구현</td></tr>
+          <tr><td><code>src/play_book_studio/ingestion/vision.py</code></td><td>Company LLM/Gemma4 OCR 경로로 정리</td></tr>
+          <tr><td><code>src/play_book_studio/http/server_routes_viewer.py</code></td><td>업로드 문서 HTML viewer, asset source, chunk diagnostic, code controls 추가</td></tr>
+          <tr><td><code>src/play_book_studio/http/viewer_blocks_rich.py</code></td><td>code block copy/wrap/collapse, 20줄 이상 접기 기준 적용</td></tr>
+          <tr><td><code>src/play_book_studio/http/viewer_page.js</code></td><td>viewer button label fallback 정리</td></tr>
+          <tr><td><code>src/play_book_studio/db/document_repository.py</code></td><td>owner, visibility, repository, source_scope 저장과 삭제 조회 보강</td></tr>
+          <tr><td><code>src/play_book_studio/db/qdrant_indexer.py</code></td><td>Qdrant payload와 index entry 계약 강화</td></tr>
+          <tr><td><code>src/play_book_studio/retrieval/access_scope.py</code></td><td>active document/repository owner scope filtering 정리</td></tr>
+          <tr><td><code>src/play_book_studio/retrieval/retriever_plan.py</code></td><td>active upload 질문의 unsupported product gate 우회</td></tr>
+          <tr><td><code>src/play_book_studio/answering/answerer.py</code></td><td>active context를 router로 전달해 검색 전 차단을 완화</td></tr>
+          <tr><td><code>src/play_book_studio/answering/router.py</code></td><td><code>allow_unsupported_product</code> 옵션 추가</td></tr>
+          <tr><td><code>src/play_book_studio/answering/context.py</code></td><td>uploaded source와 context metadata 보강</td></tr>
+          <tr><td><code>src/play_book_studio/http/session_owner.py</code></td><td>single-user owner/cookie/header owner 해시 처리 개선</td></tr>
+          <tr><td><code>src/play_book_studio/http/server_handler_factory.py</code></td><td>upload/viewer/chat handler에 session owner 연결</td></tr>
+          <tr><td><code>src/play_book_studio/http/document_status_api.py</code></td><td>visibility/owner 기준 status 조회 보강</td></tr>
+          <tr><td><code>src/play_book_studio/http/data_control_room_buckets.py</code></td><td>runtime bucket 표시 보강</td></tr>
+          <tr><td><code>src/play_book_studio/runtime_catalog_registry.py</code></td><td>runtime catalog path와 seed input 판단 보강</td></tr>
+          <tr><td><code>src/play_book_studio/cli.py</code></td><td>runtime maintenance/seed path 계약 보정</td></tr>
+          <tr><td><code>src/play_book_studio/ingestion/corpus_import.py</code></td><td>corpus import path 계약 보정</td></tr>
+          <tr><td><code>tests/test_upload_api.py</code></td><td>upload ingest/report/delete/index 테스트 확장</td></tr>
+          <tr><td><code>tests/test_document_parsing.py</code></td><td>PDF parser, visual code, prose guard, directory tree 테스트 확장</td></tr>
+          <tr><td><code>tests/test_document_repository.py</code></td><td>repository/document owner 저장 테스트 보강</td></tr>
+          <tr><td><code>tests/test_qdrant_indexer.py</code></td><td>Qdrant payload 테스트 보강</td></tr>
+          <tr><td><code>tests/test_retrieval_access_scope.py</code></td><td>private upload scope 테스트 보강</td></tr>
+          <tr><td><code>tests/test_session_owner_scoping.py</code></td><td>session owner scoping 테스트 보강</td></tr>
+          <tr><td><code>tests/test_answer_context_metadata.py</code></td><td>answer context metadata 테스트 보강</td></tr>
+          <tr><td><code>tests/test_answer_router.py</code></td><td>active upload external product bypass 테스트 추가</td></tr>
+          <tr><td><code>tests/test_retriever_plan.py</code></td><td>retrieval plan unsupported product gate 테스트 추가</td></tr>
+          <tr><td><code>tests/test_viewer_code_blocks.py</code></td><td>viewer code controls와 collapse 기준 테스트 추가</td></tr>
+          <tr><td><code>tests/test_company_llm_vision.py</code></td><td>Company LLM vision/OCR 테스트로 갱신</td></tr>
+          <tr><td><code>tests/_support_app_viewers.py</code></td><td>viewer HTML expectation 갱신</td></tr>
+          <tr><td><code>tests/test_runtime_catalog_registry.py</code></td><td>runtime catalog registry 테스트 추가</td></tr>
+          <tr><td><code>tests/test_runtime_seed_inputs.py</code></td><td>seed input 계약 테스트 조정</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Spec 문서 산출물</h2>
+      <table>
+        <thead>
+          <tr><th>문서</th><th>목적</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>260519-user-upload-8-stage-runtime-map.html</code></td><td>유저 업로드 8단계 런타임 안내도</td></tr>
+          <tr><td><code>260519-user-upload-pipeline-explained.md</code></td><td>파이프라인 설명</td></tr>
+          <tr><td><code>260519-user-upload-ingestion-report-plan.html</code></td><td>ingestion report 설계</td></tr>
+          <tr><td><code>260519-codex-user-upload-change-handoff.html</code></td><td>Codex 작업 handoff</td></tr>
+          <tr><td><code>트러블/260519-layout-classifier-trouble-report.html</code></td><td>layout classifier trouble report</td></tr>
+          <tr><td><code>260519-user-upload-v014-completion-report.html</code></td><td>유저 업로드 v0.1.4 완료 보고서</td></tr>
+          <tr><td><code>260519-docs-upload-branch-work-report.md</code></td><td>브랜치 전체 작업 Markdown 보고서</td></tr>
+          <tr><td><code>260519-docs-upload-branch-work-report.html</code></td><td>브랜치 전체 작업 HTML 보고서</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>남은 고도화</h2>
+      <ul>
+        <li>ambiguous block을 Gemma4 judge로 넘기는 layout classifier 고도화</li>
+        <li>active document 질문의 document-local retry와 citation coverage check 강화</li>
+        <li>시각 구조가 약한 PDF의 code/prose/table 분류 정확도 개선</li>
+        <li>stale upload source/report/assets cleanup maintenance task</li>
+        <li>대표 PDF regression corpus와 업로드 후 자동 질문지 생성</li>
+        <li>private upload를 위키문서화하는 manifest/relation index 생성</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
