@@ -5,14 +5,17 @@ from pathlib import Path
 
 import pytest
 
+from play_book_studio.ingestion import document_parsing
 from play_book_studio.ingestion.document_parsing import (
     DocumentAsset,
     PdfLayoutBlock,
+    _convert_pdf_to_markdown,
     _merge_pdf_layout_blocks,
     _pdf_classify_text_layout_block,
     _pdf_layout_block_language,
     _pdf_layout_blocks_to_markdown,
     _pdf_pages_to_markdown,
+    render_pdf_page_image_bytes,
     _serialize_pdf_layout_blocks,
     build_document_chunks,
     detect_document_format,
@@ -200,6 +203,33 @@ def test_converter_formats_use_injected_markdown_adapter():
     assert parsed.document_format == "pdf"
     assert parsed.blocks[0].block_type == "heading"
     assert parsed.blocks[1].text == "Body"
+
+
+def test_pdf_converter_renders_page_assets_when_pymupdf_is_unavailable(monkeypatch):
+    from pypdf import PdfWriter
+
+    pdf_path = _case_dir("pdfium_render_fallback") / "manual.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=320, height=240)
+    with pdf_path.open("wb") as handle:
+        writer.write(handle)
+
+    monkeypatch.setattr(document_parsing, "_extract_pdf_image_assets_with_pymupdf", lambda path, *, source_sha256: ())
+    monkeypatch.setattr(document_parsing, "_extract_pdf_pages_with_pymupdf", lambda path: None)
+    monkeypatch.setattr(
+        document_parsing,
+        "_extract_pdf_pages_with_pdfplumber",
+        lambda path: ["스토리지\n개념 살펴보기\n" + ("PersistentVolume 설명 " * 20)],
+    )
+
+    converted = _convert_pdf_to_markdown(pdf_path)
+
+    assert len(converted.assets) == 1
+    assert converted.assets[0].metadata["rendered_by"] == "pypdfium2"
+    assert converted.assets[0].metadata["rendered_pdf_page"] == 1
+    assert f"asset://{converted.assets[0].asset_id}" in converted.markdown
+    assert "pdf_used_pypdfium2_rendered_page_assets" in converted.warnings
+    assert render_pdf_page_image_bytes(pdf_path, page_number=1).startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_pdf_markdown_uses_first_meaningful_korean_line_as_title():

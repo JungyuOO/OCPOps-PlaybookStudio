@@ -23,7 +23,7 @@ from play_book_studio.db.document_repository import (
     scoped_document_sha256,
 )
 from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
-from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
+from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document, render_pdf_page_image_bytes
 from play_book_studio.ingestion.vision import build_company_llm_image_describer
 
 
@@ -125,6 +125,15 @@ def _asset_extension(asset: Any) -> str:
 
 def _extract_asset_bytes(source_path: Path, asset: Any) -> tuple[bytes, str]:
     metadata = getattr(asset, "metadata", {}) if isinstance(getattr(asset, "metadata", {}), dict) else {}
+    rendered_pdf_page = _metadata_int(metadata.get("rendered_pdf_page"))
+    if rendered_pdf_page:
+        content = render_pdf_page_image_bytes(
+            source_path,
+            page_number=rendered_pdf_page,
+            scale=_metadata_float(metadata.get("rendered_pdf_scale"), default=2.0),
+        )
+        return content, "pdfium_rendered_page"
+
     pdf_xref = str(metadata.get("pdf_xref") or "").strip()
     if pdf_xref:
         try:
@@ -154,6 +163,20 @@ def _extract_asset_bytes(source_path: Path, asset: Any) -> tuple[bytes, str]:
             return b"", "source_file"
 
     return b"", "unknown"
+
+
+def _metadata_int(value: Any) -> int:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return 0
+
+
+def _metadata_float(value: Any, *, default: float) -> float:
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return default
 
 
 def _materialize_upload_assets(

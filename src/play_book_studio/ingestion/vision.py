@@ -12,7 +12,7 @@ from typing import Any
 from urllib import error, request
 
 from play_book_studio.config.settings import Settings
-from play_book_studio.ingestion.document_parsing import DocumentAsset, ImageDescriber
+from play_book_studio.ingestion.document_parsing import DocumentAsset, ImageDescriber, render_pdf_page_image_bytes
 
 
 DEFAULT_IMAGE_PROMPT = (
@@ -107,6 +107,16 @@ def build_company_llm_image_describer(settings: Settings) -> ImageDescriber | No
 def load_asset_image_bytes(document_path: Path, asset: DocumentAsset) -> bytes:
     source_member = str(asset.metadata.get("source_member") or "").strip()
     pdf_xref = str(asset.metadata.get("pdf_xref") or "").strip()
+    rendered_pdf_page = _metadata_int(asset.metadata.get("rendered_pdf_page"))
+    if rendered_pdf_page:
+        content = render_pdf_page_image_bytes(
+            document_path,
+            page_number=rendered_pdf_page,
+            scale=_metadata_float(asset.metadata.get("rendered_pdf_scale"), default=2.0),
+        )
+        if content:
+            return content
+        raise RuntimeError(f"failed to render PDF page image {rendered_pdf_page}")
     if pdf_xref:
         try:
             import fitz  # PyMuPDF
@@ -126,6 +136,20 @@ def load_asset_image_bytes(document_path: Path, asset: DocumentAsset) -> bytes:
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(f"failed to read embedded image asset {source_member}") from exc
     return document_path.read_bytes()
+
+
+def _metadata_int(value: Any) -> int:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return 0
+
+
+def _metadata_float(value: Any, *, default: float) -> float:
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return default
 
 
 def _chat_completions_url(endpoint: str) -> str:

@@ -7,11 +7,13 @@ from urllib.parse import parse_qs
 
 from play_book_studio.config.settings import load_settings
 
+COMPLETED_PARSE_STATUSES = {"parsed", "completed", "complete", "done", "ready", "ok", "success"}
+
 
 def _status_message(status: str, indexed_count: int, chunk_count: int) -> str:
     if status in {"failed", "error"}:
         return "문서 처리에 실패했습니다."
-    if status not in {"completed", "done", "ready"}:
+    if status not in COMPLETED_PARSE_STATUSES:
         return "문서 파싱중입니다."
     if chunk_count <= 0:
         return "파싱 결과 청크가 없어 검색 인덱싱을 확인할 수 없습니다."
@@ -102,10 +104,10 @@ def build_document_status_response(root_dir: Path, query: str, *, owner_user_id:
 
     items = []
     for row in rows:
-        status = str(row.get("parse_status") or "queued")
+        status = str(row.get("parse_status") or "queued").strip().lower()
         chunk_count = int(row.get("chunk_count") or 0)
         indexed_count = int(row.get("indexed_count") or 0)
-        ready = status in {"completed", "done", "ready"} and chunk_count > 0 and indexed_count >= chunk_count
+        ready = status in COMPLETED_PARSE_STATUSES and chunk_count > 0 and indexed_count >= chunk_count
         items.append({
             **{key: _jsonable(value) for key, value in dict(row).items()},
             "ready": False,
