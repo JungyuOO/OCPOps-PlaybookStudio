@@ -81,17 +81,16 @@ def test_starter_questions_are_loaded_from_manifests() -> None:
     assert groups["faq"]["questions"][0]["target_book_slug"] in {"installing", "monitoring"}
     assert groups["learning"]["questions"][0]["source"] == "ocp420_repo_wide_source_manifest"
     assert groups["learning"]["questions"][0]["route_kind"] == "learning"
-    assert groups["operations"]["questions"][0]["source"].endswith("ops_learning_chunks_v1.jsonl")
-    assert groups["operations"]["questions"][0]["route_kind"] == "study_docs"
+    assert groups["operations"]["questions"][0]["source"] == "official.advanced_starters"
+    assert groups["operations"]["questions"][0]["route_kind"] == "official"
     assert groups["operations"]["questions"][0]["question"].endswith("?")
-    assert groups["operations"]["questions"][0]["question"] != groups["operations"]["questions"][0]["title"] if "title" in groups["operations"]["questions"][0] else True
-    assert "병목은 어디부터" not in groups["operations"]["questions"][0]["question"]
-    assert "성능 목표와 조건 먼저 보기" in groups["operations"]["questions"][0]["question"]
+    assert groups["operations"]["questions"][0]["target_book_slug"]
+    assert "KMSC" not in groups["operations"]["questions"][0]["question"]
     assert payload["learning_sequence"][0]["learning_index"] == 0
     assert payload["sources"]["faq"] == "official.source_manifest"
 
 
-def test_operations_starter_questions_use_existing_file_copy_when_database_is_configured(monkeypatch) -> None:
+def test_operations_starter_questions_use_official_advanced_copy_when_database_is_configured(monkeypatch) -> None:
     root = TEST_TMP / "db_configured"
     course_manifests = root / "corpus" / "sources" / "kmsc" / "parsed-preview" / "course_pbs" / "manifests"
     course_manifests.mkdir(parents=True, exist_ok=True)
@@ -115,8 +114,8 @@ def test_operations_starter_questions_use_existing_file_copy_when_database_is_co
     payload = build_studio_starter_questions(root, seed="stable")
     groups = {group["key"]: group for group in payload["groups"]}
 
-    assert groups["operations"]["questions"][0]["source"].endswith("ops_learning_chunks_v1.jsonl")
-    assert groups["operations"]["questions"][0]["route_kind"] == "study_docs"
+    assert groups["operations"]["questions"][0]["source"] == "official.advanced_starters"
+    assert groups["operations"]["questions"][0]["route_kind"] == "official"
     assert groups["operations"]["questions"][0]["question"] != "This file question should not leak"
 
 
@@ -151,6 +150,19 @@ def test_starter_questions_use_postgres_official_metadata_when_database_is_confi
     assert "What should" not in groups["faq"]["questions"][0]["question"]
     assert "문서를 기준으로" not in groups["faq"]["questions"][0]["question"]
     assert payload["learning_sequence"][2]["target_viewer_path"] == "/playbooks/wiki-runtime/active/machine_configuration/index.html"
+
+
+def test_operations_group_is_official_advanced_questions() -> None:
+    payload = build_studio_starter_questions(TEST_TMP, seed="advanced")
+    groups = {group["key"]: group for group in payload["groups"]}
+    questions = groups["operations"]["questions"]
+
+    assert questions
+    assert groups["operations"]["title"] == "OCP 심화 질문"
+    assert all(item["route_kind"] == "official" for item in questions)
+    assert all(item["source"] == "official.advanced_starters" for item in questions)
+    assert all("KMSC" not in item["question"] for item in questions)
+    assert payload["sources"]["operations"] == "official.advanced_starters"
 
 
 def test_starter_question_preserves_target_anchor() -> None:

@@ -24,7 +24,7 @@ def test_starter_group_labels_are_readable_korean() -> None:
 
     assert groups["faq"]["title"] == "자주 묻는 질문"
     assert groups["learning"]["title"] == "단계별 학습 질문"
-    assert groups["operations"]["title"] == "실운영 문서 질문"
+    assert groups["operations"]["title"] == "OCP 심화 질문"
 
 
 def test_official_faq_questions_are_composed_as_beginner_language() -> None:
@@ -94,7 +94,7 @@ def test_empty_starter_payload_keeps_readable_group_titles(tmp_path: Path) -> No
     groups = {str(group["key"]): group for group in payload["groups"]}
 
     assert groups["faq"]["title"] == "자주 묻는 질문"
-    assert groups["operations"]["description"] == "KMSC 운영 문서 기반 질문"
+    assert groups["operations"]["description"] == "공식 문서 기반 심화 질문"
 
 
 def test_learning_starter_questions_rotate_by_seed(tmp_path: Path) -> None:

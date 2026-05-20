@@ -41,7 +41,7 @@ STARTER_CATEGORY_RULES: tuple[StarterCategoryRule, ...] = (
 STARTER_GROUPS = (
     {"key": "faq", "title": "자주 묻는 질문", "description": "공식 문서 기반 시작 질문"},
     {"key": "learning", "title": "단계별 학습 질문", "description": "OCP를 처음 익히는 흐름"},
-    {"key": "operations", "title": "실운영 문서 질문", "description": "KMSC 운영 문서 기반 질문"},
+    {"key": "operations", "title": "OCP 심화 질문", "description": "공식 문서 기반 심화 질문"},
 )
 
 LEARNING_TARGET_BOOK_SLUGS: dict[str, str] = {
@@ -105,6 +105,65 @@ STARTER_QUESTION_COPY: dict[str, dict[str, str]] = {
         "default": "KMSC 운영 문서 근거로 확인할 항목과 판단 기준은 무엇인가요?",
     },
 }
+
+ADVANCED_OFFICIAL_QUESTIONS: tuple[dict[str, str], ...] = (
+    {
+        "question": "LVMCluster CR을 CLI로 생성할 때 storageClass와 deviceSelector는 어떻게 지정하나요?",
+        "category_key": "operations",
+        "category_label": "Operations",
+        "target_book_slug": "storage",
+        "target_title": "CLI를 사용하여 LVMCluster CR 생성",
+    },
+    {
+        "question": "MachineConfigPool 업데이트가 멈췄을 때 어떤 상태와 이벤트를 확인하나요?",
+        "category_key": "operations",
+        "category_label": "Operations",
+        "target_book_slug": "machine_configuration",
+        "target_title": "Machine Config Operator 운영",
+    },
+    {
+        "question": "etcd 백업과 복원 절차에서 사전에 확인해야 할 조건은 무엇인가요?",
+        "category_key": "storage",
+        "category_label": "Storage",
+        "target_book_slug": "etcd",
+        "target_title": "etcd 백업 및 복원",
+    },
+    {
+        "question": "passthrough Route를 생성할 때 TLS termination 설정은 어떻게 확인하나요?",
+        "category_key": "networking",
+        "category_label": "Networking",
+        "target_book_slug": "ingress_and_load_balancing",
+        "target_title": "패스스루 라우팅 생성",
+    },
+    {
+        "question": "NetworkPolicy를 적용한 뒤 Pod 간 통신이 막히면 무엇을 먼저 확인하나요?",
+        "category_key": "networking",
+        "category_label": "Networking",
+        "target_book_slug": "networking",
+        "target_title": "NetworkPolicy 문제 해결",
+    },
+    {
+        "question": "RoleBinding과 ClusterRoleBinding은 권한 범위가 어떻게 다르고 언제 각각 사용하나요?",
+        "category_key": "security",
+        "category_label": "Security",
+        "target_book_slug": "authentication_and_authorization",
+        "target_title": "RBAC 권한 범위",
+    },
+    {
+        "question": "글로벌 pull secret에 레지스트리 인증 정보를 추가할 때 어떤 절차를 따르나요?",
+        "category_key": "operations",
+        "category_label": "Operations",
+        "target_book_slug": "images",
+        "target_title": "이미지 레지스트리 인증 정보 구성",
+    },
+    {
+        "question": "Insights Operator 아카이브를 다운로드하고 업로드하는 절차는 어떻게 진행하나요?",
+        "category_key": "observability",
+        "category_label": "Observability",
+        "target_book_slug": "support",
+        "target_title": "Insights Operator 아카이브 전송",
+    },
+)
 
 
 def _safe_read_json(path: Path) -> dict[str, Any]:
@@ -527,25 +586,20 @@ def _compose_beginner_question(
 
 
 def _operations_questions(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
-    chunks, source_label = _load_ops_learning_chunks_payload(root_dir)
-    candidates: list[dict[str, Any]] = []
-    for chunk in chunks:
-        if not isinstance(chunk, dict):
-            continue
-        question = _ops_chunk_question(chunk).strip()
-        if not question:
-            continue
-        candidates.append(
-            _starter_question(
-                lane="operations",
-                question=question,
-                route_kind="study_docs",
-                source=source_label,
-                category_key=str(chunk.get("stage_id") or ""),
-                category_label=str(chunk.get("course_title") or ""),
-            )
+    del root_dir
+    return [
+        _starter_question(
+            lane="operations",
+            question=str(item["question"]),
+            route_kind="official",
+            source="official.advanced_starters",
+            category_key=str(item.get("category_key") or ""),
+            category_label=str(item.get("category_label") or ""),
+            target_book_slug=str(item.get("target_book_slug") or ""),
+            target_title=str(item.get("target_title") or ""),
         )
-    return candidates, source_label
+        for item in ADVANCED_OFFICIAL_QUESTIONS
+    ], "official.advanced_starters"
 
 
 def build_studio_starter_questions(root_dir: Path, *, seed: str = "") -> dict[str, Any]:
