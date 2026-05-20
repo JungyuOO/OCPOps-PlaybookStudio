@@ -500,9 +500,10 @@ function uploadDocumentViewerPath(document: DocumentRepositoryDocument): string 
 
 function formatDurationMs(value: number | undefined): string {
   const ms = Number(value || 0);
-  if (!Number.isFinite(ms) || ms <= 0) {
+  if (!Number.isFinite(ms)) {
     return '0 ms';
   }
+  if (ms <= 0) return '<1 ms';
   if (ms < 1000) {
     return `${Math.round(ms)} ms`;
   }

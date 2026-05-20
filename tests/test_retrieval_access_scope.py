@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from play_book_studio.retrieval.access_scope import filter_hits_by_session_scope, hit_visible_to_session
 from play_book_studio.retrieval.models import RetrievalHit, SessionContext
+from play_book_studio.retrieval.retriever_search import _session_scope_qdrant_filter, _session_scope_row_filter
 from play_book_studio.retrieval.vector import hit_from_payload
 
 
@@ -294,6 +295,45 @@ def test_enabled_upload_document_ids_override_active_repository_filter():
     assert [hit.chunk_id for hit in filter_hits_by_session_scope([hidden, visible], context=context)] == [
         "doc-b-hit"
     ]
+
+
+def test_enabled_upload_document_ids_are_prefiltered_for_bm25_and_qdrant():
+    context = SessionContext(
+        owner_user_id="owner-a",
+        enabled_source_scopes=["user_upload"],
+        enabled_upload_document_ids=["doc-b"],
+    )
+
+    row_filter = _session_scope_row_filter(context)
+    assert row_filter is not None
+    assert row_filter({"document_source_id": "doc-b", "source_scope": "user_upload"})
+    assert not row_filter({"document_source_id": "doc-a", "source_scope": "user_upload"})
+
+    assert _session_scope_qdrant_filter(context) == {
+        "must": [{"key": "document_source_id", "match": {"value": "doc-b"}}]
+    }
+
+
+def test_enabled_upload_document_ids_keep_other_enabled_scopes_in_qdrant_filter():
+    context = SessionContext(
+        owner_user_id="owner-a",
+        enabled_source_scopes=["official_docs", "user_upload"],
+        enabled_upload_document_ids=["doc-b"],
+    )
+
+    row_filter = _session_scope_row_filter(context)
+    assert row_filter is not None
+    assert row_filter({"document_source_id": "doc-b", "source_scope": "user_upload"})
+    assert not row_filter({"document_source_id": "doc-a", "source_scope": "user_upload"})
+    assert row_filter({"book_slug": "storage", "source_scope": "official_docs"})
+
+    qdrant_filter = _session_scope_qdrant_filter(context)
+    assert qdrant_filter == {
+        "should": [
+            {"key": "document_source_id", "match": {"value": "doc-b"}},
+            {"key": "source_scope", "match": {"value": "official_docs"}},
+        ]
+    }
 
 
 def test_active_document_still_requires_private_repository_scope():

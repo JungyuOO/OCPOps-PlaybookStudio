@@ -41,6 +41,7 @@ from play_book_studio.http.viewer_paths import _viewer_path_to_local_html
 from play_book_studio.http.viewers import _parse_viewer_path
 from play_book_studio.http.viewer_blocks_rich import _render_code_block_html
 from play_book_studio.config.settings import load_settings
+from play_book_studio.ingestion.document_parsing import render_pdf_page_image_bytes
 from play_book_studio.source_provenance import source_provenance_payload
 
 from .runtime_truth import official_runtime_truth_payload
@@ -362,6 +363,14 @@ def _asset_data_url(content: bytes, mime_type: str) -> str:
 
 
 def _pdf_asset_bytes(source_path: Path, metadata: dict[str, Any]) -> bytes:
+    rendered_pdf_page = _metadata_int(metadata.get("rendered_pdf_page"))
+    if rendered_pdf_page:
+        return render_pdf_page_image_bytes(
+            source_path,
+            page_number=rendered_pdf_page,
+            scale=_metadata_float(metadata.get("rendered_pdf_scale"), default=2.0),
+        )
+
     pdf_xref = str(metadata.get("pdf_xref") or "").strip()
     if not pdf_xref:
         return b""
@@ -376,6 +385,20 @@ def _pdf_asset_bytes(source_path: Path, metadata: dict[str, Any]) -> bytes:
             doc.close()
     except Exception:  # noqa: BLE001
         return b""
+
+
+def _metadata_int(value: Any) -> int:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return 0
+
+
+def _metadata_float(value: Any, *, default: float) -> float:
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return default
 
 
 def _uploaded_document_asset_sources(root_dir: Path, document: dict[str, Any], asset_rows: list[dict[str, Any]]) -> dict[str, dict[str, str]]:

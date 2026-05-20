@@ -2037,6 +2037,89 @@ def _extract_pdf_image_assets_with_pymupdf(path: Path, *, source_sha256: str) ->
     return tuple(assets)
 
 
+def _render_pdf_page_png_with_pypdfium2(
+    path: Path,
+    *,
+    page_number: int,
+    scale: float = 2.0,
+) -> tuple[bytes, int, int] | None:
+    try:
+        import pypdfium2 as pdfium
+    except Exception:  # noqa: BLE001
+        return None
+    if page_number < 1:
+        return None
+    try:
+        doc = pdfium.PdfDocument(str(path))
+        try:
+            if page_number > len(doc):
+                return None
+            page = doc[page_number - 1]
+            try:
+                bitmap = page.render(scale=max(float(scale), 0.5))
+                image = bitmap.to_pil()
+                buffer = io.BytesIO()
+                image.save(buffer, format="PNG")
+                return buffer.getvalue(), int(image.width), int(image.height)
+            finally:
+                close_page = getattr(page, "close", None)
+                if callable(close_page):
+                    close_page()
+        finally:
+            close_doc = getattr(doc, "close", None)
+            if callable(close_doc):
+                close_doc()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def render_pdf_page_image_bytes(path: Path, *, page_number: int, scale: float = 2.0) -> bytes:
+    rendered = _render_pdf_page_png_with_pypdfium2(path, page_number=page_number, scale=scale)
+    if rendered is None:
+        return b""
+    return rendered[0]
+
+
+def _extract_pdf_page_render_assets_with_pypdfium2(
+    path: Path,
+    *,
+    source_sha256: str,
+    page_count: int,
+    scale: float = 2.0,
+) -> tuple[DocumentAsset, ...]:
+    assets: list[DocumentAsset] = []
+    for page_number in range(1, max(int(page_count), 0) + 1):
+        rendered = _render_pdf_page_png_with_pypdfium2(path, page_number=page_number, scale=scale)
+        if rendered is None:
+            continue
+        content, width, height = rendered
+        if not content:
+            continue
+        sha256 = hashlib.sha256(content).hexdigest()
+        filename = f"pdf-page-{page_number:03d}-render.png"
+        asset_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{path.name}:{source_sha256}:pdf-render:{page_number}:{sha256}"))
+        assets.append(
+            DocumentAsset(
+                asset_id=asset_id,
+                asset_type="image",
+                filename=filename,
+                mime_type="image/png",
+                sha256=sha256,
+                storage_key=f"uploads/assets/{asset_id}.png",
+                page_number=page_number,
+                metadata={
+                    "source_member": f"pdf:rendered-page:{page_number}",
+                    "rendered_pdf_page": page_number,
+                    "rendered_pdf_scale": scale,
+                    "rendered_by": "pypdfium2",
+                    "width": width,
+                    "height": height,
+                },
+            )
+        )
+    return tuple(assets)
+
+
 def _extract_pdf_pages_with_pdfplumber(path: Path) -> list[str] | None:
     try:
         import pdfplumber
@@ -2075,10 +2158,29 @@ def _convert_pdf_to_markdown(
     extractor_used = ""
     markdown = ""
     page_count = 0
+    source_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
     assets: tuple[DocumentAsset, ...] = _extract_pdf_image_assets_with_pymupdf(
         path,
-        source_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        source_sha256=source_sha256,
     )
+
+    def ensure_rendered_page_assets(pages: list[str]) -> tuple[DocumentAsset, ...]:
+        nonlocal assets
+        if assets:
+            return assets
+        rendered_assets = _extract_pdf_page_render_assets_with_pypdfium2(
+            path,
+            source_sha256=source_sha256,
+            page_count=len(pages),
+        )
+        if rendered_assets:
+            assets = rendered_assets
+            warnings.append("pdf_used_pypdfium2_rendered_page_assets")
+            emit("info", note=f"pypdfium2 페이지 렌더 이미지 생성: {len(rendered_assets)} pages")
+        else:
+            warnings.append("pdf_rendered_page_assets_unavailable")
+            emit("info", note="pypdfium2 페이지 렌더 이미지 생성 실패/불가")
+        return assets
 
     # 1) pymupdf
     emit("info", note="pymupdf(fitz) 추출 시도 중 (한국어 폰트에 가장 안정)...")
@@ -2105,6 +2207,7 @@ def _convert_pdf_to_markdown(
         if pages:
             total = sum(len(p) for p in pages)
             if total >= 200:
+                assets = ensure_rendered_page_assets(pages)
                 markdown = _pdf_pages_to_markdown(pages, path.stem, assets=assets)
                 if markdown:
                     extractor_used = "pdfplumber"
@@ -2162,6 +2265,7 @@ def _convert_pdf_to_markdown(
             emit("info", note="extract_pdf_pages 폴백 (pypdf → mdls → string_scan → RapidOCR)...")
             try:
                 pages = extract_pdf_pages(path)
+                assets = ensure_rendered_page_assets(pages)
                 joined = _pdf_pages_to_markdown(pages, path.stem, assets=assets)
                 if joined:
                     markdown = joined
@@ -2175,8 +2279,33 @@ def _convert_pdf_to_markdown(
     # 6) markitdown 최종 폴백
     if not markdown:
         emit("info", note="모든 PDF 추출기 실패, markitdown 최종 폴백 시도")
+        fallback_markdown = _convert_with_markitdown(path)
+        if not assets:
+            try:
+                import pypdfium2 as pdfium
+
+                doc = pdfium.PdfDocument(str(path))
+                try:
+                    page_count = len(doc)
+                finally:
+                    close_doc = getattr(doc, "close", None)
+                    if callable(close_doc):
+                        close_doc()
+            except Exception:  # noqa: BLE001
+                page_count = 0
+            if page_count:
+                assets = _extract_pdf_page_render_assets_with_pypdfium2(
+                    path,
+                    source_sha256=source_sha256,
+                    page_count=page_count,
+                )
+                if assets:
+                    warnings.append("pdf_used_pypdfium2_rendered_page_assets")
+                    asset_markdown = "\n\n".join(_image_markdown(asset) for asset in assets)
+                    fallback_markdown = f"{fallback_markdown.strip()}\n\n{asset_markdown}".strip()
         return ConvertedMarkdown(
-            markdown=_convert_with_markitdown(path),
+            markdown=fallback_markdown,
+            assets=assets,
             warnings=tuple(warnings + ["pdf_used_markitdown_fallback"]),
         )
 

@@ -4,6 +4,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from .access_scope import (
+    SOURCE_GROUP_CUSTOMER_DOCS,
+    SOURCE_GROUP_OFFICIAL_DOCS,
     SOURCE_GROUP_USER_UPLOAD,
     enabled_source_scope_set,
     filter_hits_by_session_scope,
@@ -63,17 +65,40 @@ def _qdrant_query_filter(
 def _combine_qdrant_filters(*filters: dict[str, object] | None) -> dict[str, object] | None:
     combined: dict[str, object] = {}
     must: list[object] = []
+    should: list[object] = []
+    must_not: list[object] = []
     for query_filter in filters:
         if not query_filter:
             continue
         for key, value in query_filter.items():
             if key == "must" and isinstance(value, list):
                 must.extend(value)
+            elif key == "should" and isinstance(value, list):
+                should.extend(value)
+            elif key == "must_not" and isinstance(value, list):
+                must_not.extend(value)
             elif key not in combined:
                 combined[key] = value
     if must:
         combined["must"] = must
+    if should:
+        combined["should"] = should
+    if must_not:
+        combined["must_not"] = must_not
     return combined or None
+
+
+def _qdrant_match_value(key: str, value: str) -> dict[str, object]:
+    return {"key": key, "match": {"value": value}}
+
+
+def _qdrant_match_any_filter(key: str, values: list[str]) -> dict[str, object] | None:
+    cleaned = [str(value).strip() for value in values if str(value).strip()]
+    if not cleaned:
+        return None
+    if len(cleaned) == 1:
+        return {"must": [_qdrant_match_value(key, cleaned[0])]}
+    return {"should": [_qdrant_match_value(key, value) for value in cleaned]}
 
 
 def _session_scope_row_filter(context):
@@ -84,12 +109,21 @@ def _session_scope_row_filter(context):
         for item in (getattr(context, "enabled_upload_document_ids", []) or [])
         if str(item).strip()
     ]
-    if explicit_upload_document_ids or (not active_document_id and not active_repository_id):
+    if not explicit_upload_document_ids and not active_document_id and not active_repository_id:
         return None
     enabled = enabled_source_scope_set(context)
+    explicit_upload_document_id_set = set(explicit_upload_document_ids)
 
     def predicate(row: dict[str, object]) -> bool:
-        apply_active_scope = not enabled or source_group_for_candidate(row) == SOURCE_GROUP_USER_UPLOAD
+        source_group = source_group_for_candidate(row)
+        if explicit_upload_document_id_set:
+            if enabled and source_group not in enabled:
+                return False
+            if source_group == SOURCE_GROUP_USER_UPLOAD:
+                document_source_id = str(row.get("document_source_id") or row.get("source_id") or "").strip()
+                return document_source_id in explicit_upload_document_id_set
+            return True
+        apply_active_scope = not enabled or source_group == SOURCE_GROUP_USER_UPLOAD
         if active_document_id and apply_active_scope:
             document_source_id = str(row.get("document_source_id") or row.get("source_id") or "").strip()
             if document_source_id != active_document_id:
@@ -112,7 +146,19 @@ def _session_scope_qdrant_filter(context) -> dict[str, object] | None:
         if str(item).strip()
     ]
     if explicit_upload_document_ids:
-        return None
+        enabled = enabled_source_scope_set(context)
+        if not enabled or enabled == {SOURCE_GROUP_USER_UPLOAD}:
+            return _qdrant_match_any_filter("document_source_id", explicit_upload_document_ids)
+        should: list[dict[str, object]] = []
+        if SOURCE_GROUP_USER_UPLOAD in enabled:
+            upload_filter = _qdrant_match_any_filter("document_source_id", explicit_upload_document_ids)
+            if upload_filter:
+                should.extend(upload_filter.get("must") or upload_filter.get("should") or [])
+        if SOURCE_GROUP_OFFICIAL_DOCS in enabled:
+            should.append(_qdrant_match_value("source_scope", "official_docs"))
+        if SOURCE_GROUP_CUSTOMER_DOCS in enabled:
+            should.append(_qdrant_match_value("source_scope", "study_docs"))
+        return {"should": should} if should else None
     enabled = enabled_source_scope_set(context)
     if enabled and enabled != {SOURCE_GROUP_USER_UPLOAD}:
         return None
