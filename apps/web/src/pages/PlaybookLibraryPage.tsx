@@ -82,6 +82,8 @@ const WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY = 'workspace.activeDocumentId';
 const WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY = 'workspace.activeDocumentTitle';
 const WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY = 'workspace.activeCategoryKey';
 const WORKSPACE_ACTIVE_CATEGORY_LABEL_STORAGE_KEY = 'workspace.activeCategoryLabel';
+const WORKSPACE_RAG_SOURCE_SCOPES_STORAGE_KEY = 'workspace.ragSourceScopes';
+const WORKSPACE_RAG_SCOPE_DETAILS_STORAGE_KEY = 'workspace.ragScopeDetails';
 
 interface LogEntry {
   time: string;
@@ -1039,9 +1041,33 @@ const PlaybookLibraryPage: React.FC = () => {
     categoryKey?: WikiCategoryKey,
   ) => {
     if (typeof window !== 'undefined') {
+      const sourceScope = document.source_scope || (
+        repository.repository_kind === 'personal'
+          ? 'user_upload'
+          : repository.repository_kind === 'study'
+            ? 'study_docs'
+            : 'official_docs'
+      );
+      const metadata = document.metadata && typeof document.metadata === 'object' && !Array.isArray(document.metadata)
+        ? document.metadata as Record<string, unknown>
+        : {};
+      const bookSlug = typeof metadata.book_slug === 'string' ? metadata.book_slug.trim() : '';
+      const ragScopeDetails = {
+        officialBookSlugs: sourceScope === 'official_docs' && bookSlug ? [bookSlug] : [],
+        customerDraftIds: [],
+        customerDocumentIds: sourceScope === 'study_docs' ? [document.document_source_id] : [],
+        uploadDocumentIds: sourceScope === 'user_upload' ? [document.document_source_id] : [],
+      };
+      const ragSourceScopes = sourceScope === 'user_upload'
+        ? ['user_upload']
+        : sourceScope === 'study_docs'
+          ? ['customer_docs']
+          : ['official_docs'];
       window.localStorage.setItem('workspace.activeSourceId', `repository:${repository.repository_id}`);
       window.localStorage.setItem(WORKSPACE_ACTIVE_DOCUMENT_STORAGE_KEY, document.document_source_id);
       window.localStorage.setItem(WORKSPACE_ACTIVE_DOCUMENT_TITLE_STORAGE_KEY, document.title || document.filename || 'Scoped document');
+      window.localStorage.setItem(WORKSPACE_RAG_SOURCE_SCOPES_STORAGE_KEY, JSON.stringify(ragSourceScopes));
+      window.localStorage.setItem(WORKSPACE_RAG_SCOPE_DETAILS_STORAGE_KEY, JSON.stringify(ragScopeDetails));
       if (categoryKey) {
         const category = WIKI_CATEGORIES.find((item) => item.key === categoryKey);
         window.localStorage.setItem(WORKSPACE_ACTIVE_CATEGORY_KEY_STORAGE_KEY, categoryKey);

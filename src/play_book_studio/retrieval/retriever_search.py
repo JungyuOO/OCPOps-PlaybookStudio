@@ -7,6 +7,7 @@ from .access_scope import (
     SOURCE_GROUP_CUSTOMER_DOCS,
     SOURCE_GROUP_OFFICIAL_DOCS,
     SOURCE_GROUP_USER_UPLOAD,
+    active_document_scope_selected,
     enabled_source_scope_set,
     filter_hits_by_session_scope,
     source_group_for_candidate,
@@ -116,6 +117,9 @@ def _session_scope_row_filter(context):
 
     def predicate(row: dict[str, object]) -> bool:
         source_group = source_group_for_candidate(row)
+        if active_document_scope_selected(context):
+            document_source_id = str(row.get("document_source_id") or row.get("source_id") or "").strip()
+            return document_source_id == active_document_id
         if explicit_upload_document_id_set:
             if enabled and source_group not in enabled:
                 return False
@@ -145,6 +149,8 @@ def _session_scope_qdrant_filter(context) -> dict[str, object] | None:
         for item in (getattr(context, "enabled_upload_document_ids", []) or [])
         if str(item).strip()
     ]
+    if active_document_scope_selected(context):
+        return {"must": [_qdrant_match_value("document_source_id", active_document_id)]}
     if explicit_upload_document_ids:
         enabled = enabled_source_scope_set(context)
         if not enabled or enabled == {SOURCE_GROUP_USER_UPLOAD}:
