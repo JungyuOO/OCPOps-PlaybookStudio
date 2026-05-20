@@ -108,20 +108,45 @@ def _active_upload_scope_applies(candidate: RetrievalHit | dict[str, object], co
     return source_group_for_candidate(candidate) == SOURCE_GROUP_USER_UPLOAD
 
 
+def active_document_scope_selected(context: SessionContext | None) -> bool:
+    active_document_id = str(getattr(context, "active_document_id", "") or "").strip()
+    if not active_document_id:
+        return False
+    enabled = enabled_source_scope_set(context)
+    if not enabled:
+        return True
+
+    upload_document_ids = _context_id_set(context, "enabled_upload_document_ids")
+    if SOURCE_GROUP_USER_UPLOAD in enabled and (
+        len(upload_document_ids) == 1 and active_document_id in upload_document_ids
+    ):
+        return True
+
+    customer_document_ids = _context_id_set(context, "enabled_customer_document_ids")
+    if (
+        SOURCE_GROUP_CUSTOMER_DOCS in enabled
+        and len(customer_document_ids) == 1
+        and active_document_id in customer_document_ids
+    ):
+        return True
+
+    return False
+
+
 def hit_visible_to_session(hit: RetrievalHit, context: SessionContext | None) -> bool:
     if not _source_scope_enabled(hit, context):
         return False
     if not _detail_scope_enabled(hit, context):
         return False
 
-    explicit_upload_document_ids = _context_id_set(context, "enabled_upload_document_ids")
     active_document_id = str(getattr(context, "active_document_id", "") or "").strip()
-    if active_document_id and _active_upload_scope_applies(hit, context) and not explicit_upload_document_ids:
+    if active_document_scope_selected(context):
         hit_document_id = str(getattr(hit, "document_source_id", "") or getattr(hit, "source_id", "") or "").strip()
         if hit_document_id != active_document_id:
             return False
 
     active_repository_id = str(getattr(context, "active_repository_id", "") or "").strip()
+    explicit_upload_document_ids = _context_id_set(context, "enabled_upload_document_ids")
     if active_repository_id and _active_upload_scope_applies(hit, context) and not explicit_upload_document_ids:
         hit_repository_id = str(getattr(hit, "repository_id", "") or "").strip()
         if hit_repository_id != active_repository_id:
@@ -154,6 +179,7 @@ __all__ = [
     "SOURCE_GROUP_CUSTOMER_DOCS",
     "SOURCE_GROUP_OFFICIAL_DOCS",
     "SOURCE_GROUP_USER_UPLOAD",
+    "active_document_scope_selected",
     "enabled_source_scope_set",
     "filter_hits_by_session_scope",
     "hit_visible_to_session",

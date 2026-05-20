@@ -2698,6 +2698,28 @@ export default function WorkspacePage() {
     ? activeRepositoryDocument?.title || activeRepositoryDocument?.filename || activeDocumentTitle || 'Scoped document'
     : '';
 
+  const activeDocumentIdForRequest = useMemo(() => {
+    if (!activeDocumentId) {
+      return '';
+    }
+    const activeUploadDocumentSelected = (
+      enabledRagSourceScopeSet.has('user_upload')
+      && selectedUploadDocumentIds.length === 1
+      && selectedUploadDocumentIds[0] === activeDocumentId
+    );
+    const activeCustomerDocumentSelected = (
+      enabledRagSourceScopeSet.has('customer_docs')
+      && selectedCustomerDocumentIds.length === 1
+      && selectedCustomerDocumentIds[0] === activeDocumentId
+    );
+    return activeUploadDocumentSelected || activeCustomerDocumentSelected ? activeDocumentId : '';
+  }, [
+    activeDocumentId,
+    enabledRagSourceScopeSet,
+    selectedCustomerDocumentIds,
+    selectedUploadDocumentIds,
+  ]);
+
   const selectActiveDocumentScope = useCallback((document: DocumentRepositoryDocument) => {
     setActiveDocumentId(document.document_source_id);
     setActiveDocumentTitle(document.title || document.filename || 'Scoped document');
@@ -3753,7 +3775,7 @@ export default function WorkspacePage() {
         restrictUploadedSources: enabledCustomerDraftIdsForRequest.length > 0,
         routeKind: requestRouteKind,
         activeRepositoryId: activeRepositoryIdForRequest,
-        activeDocumentId,
+        activeDocumentId: activeDocumentIdForRequest,
         enabledSourceScopes: enabledRagSourceScopes,
         enabledOfficialBookSlugs: enabledOfficialBookSlugsForRequest,
         enabledCustomerDraftIds: enabledCustomerDraftIdsForRequest,
