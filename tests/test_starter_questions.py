@@ -158,6 +158,7 @@ def test_operations_group_is_official_advanced_questions() -> None:
     questions = groups["operations"]["questions"]
 
     assert questions
+    assert len(starter_questions.ADVANCED_OFFICIAL_QUESTIONS) == 15
     assert groups["operations"]["title"] == "OCP 심화 질문"
     assert all(item["route_kind"] == "official" for item in questions)
     assert all(item["source"] == "official.advanced_starters" for item in questions)
