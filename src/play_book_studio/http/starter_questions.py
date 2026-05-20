@@ -41,7 +41,7 @@ STARTER_CATEGORY_RULES: tuple[StarterCategoryRule, ...] = (
 STARTER_GROUPS = (
     {"key": "faq", "title": "자주 묻는 질문", "description": "공식 문서 기반 시작 질문"},
     {"key": "learning", "title": "단계별 학습 질문", "description": "OCP를 처음 익히는 흐름"},
-    {"key": "operations", "title": "실운영 문서 질문", "description": "KMSC 운영 문서 기반 질문"},
+    {"key": "operations", "title": "OCP 심화 질문", "description": "공식 문서 기반 심화 질문"},
 )
 
 LEARNING_TARGET_BOOK_SLUGS: dict[str, str] = {
@@ -105,6 +105,114 @@ STARTER_QUESTION_COPY: dict[str, dict[str, str]] = {
         "default": "KMSC 운영 문서 근거로 확인할 항목과 판단 기준은 무엇인가요?",
     },
 }
+
+ADVANCED_OFFICIAL_QUESTIONS: tuple[dict[str, str], ...] = (
+    {
+        "question": "MachineConfigPool 업데이트에서 작업자 풀 카나리아 머신 구성이 멈췄을 때 어떤 상태를 확인하나요?",
+        "category_key": "operations",
+        "category_label": "Operations",
+        "target_book_slug": "updating_clusters",
+        "target_title": "작업자 풀 카나리아에 대한 머신 구성 상속 관리",
+    },
+    {
+        "question": "etcd 백업을 복원하기 전에 클러스터 상태와 정적 Pod 조건을 무엇부터 확인해야 하나요?",
+        "category_key": "storage",
+        "category_label": "Storage",
+        "target_book_slug": "backup_and_restore",
+        "target_title": "Backing up etcd data",
+    },
+    {
+        "question": "새 프로젝트 템플릿에 기본 NetworkPolicy를 추가할 때 어떤 리소스와 적용 범위를 확인해야 하나요?",
+        "category_key": "networking",
+        "category_label": "Networking",
+        "target_book_slug": "postinstallation_configuration",
+        "target_title": "새 프로젝트 템플릿에 네트워크 정책 추가",
+    },
+    {
+        "question": "ServiceAccount에 필요한 권한을 부여할 때 RoleBinding subject와 roleRef는 어떻게 확인하나요?",
+        "category_key": "security",
+        "category_label": "Security",
+        "target_book_slug": "authentication_and_authorization",
+        "target_title": "서비스 계정에 역할 부여",
+    },
+    {
+        "question": "글로벌 클러스터 pull secret을 업데이트할 때 인증 정보 병합과 적용 절차는 어떻게 진행하나요?",
+        "category_key": "operations",
+        "category_label": "Operations",
+        "target_book_slug": "images",
+        "target_title": "글로벌 클러스터 풀 시크릿 업데이트",
+    },
+    {
+        "question": "passthrough Route를 생성할 때 TLS termination과 대상 서비스 포트는 어떻게 확인하나요?",
+        "category_key": "networking",
+        "category_label": "Networking",
+        "target_book_slug": "ingress_and_load_balancing",
+        "target_title": "경로를 생성하여 서비스 노출",
+    },
+    {
+        "question": "LVMCluster CR을 CLI로 생성할 때 storageClass와 deviceSelector는 어떻게 지정하나요?",
+        "category_key": "storage",
+        "category_label": "Storage",
+        "target_book_slug": "storage",
+        "target_title": "CLI를 사용하여 LVMCluster CR 생성",
+    },
+    {
+        "question": "Insights Operator 아카이브를 다운로드하고 제한된 네트워크 환경에서 업로드하는 절차는 어떻게 진행하나요?",
+        "category_key": "observability",
+        "category_label": "Observability",
+        "target_book_slug": "support",
+        "target_title": "네트워크가 제한된 환경에서 원격 상태 보고 사용",
+    },
+    {
+        "question": "노드를 drain할 때 PodDisruptionBudget 때문에 축출이 막히면 어떤 설정을 확인하나요?",
+        "category_key": "operations",
+        "category_label": "Operations",
+        "target_book_slug": "nodes",
+        "target_title": "Pod 중단 예산을 사용하여 실행 중인 pod 수를 지정하는 방법",
+    },
+    {
+        "question": "Operator 설치 후 CSV가 정상 전환되지 않을 때 Subscription, InstallPlan, ClusterServiceVersion 상태를 어떤 순서로 확인하나요?",
+        "category_key": "operations",
+        "category_label": "Operations",
+        "target_book_slug": "support",
+        "target_title": "실패한 서브스크립션 새로 고침",
+    },
+    {
+        "question": "기본 StorageClass를 변경하거나 확인할 때 annotation과 provisioner는 어떻게 확인하나요?",
+        "category_key": "storage",
+        "category_label": "Storage",
+        "target_book_slug": "storage",
+        "target_title": "OpenStack Cinder CSI를 기본 스토리지 클래스로 설정",
+    },
+    {
+        "question": "실패한 Operator Subscription을 새로 고침할 때 어떤 리소스 상태와 설치 계획을 확인하나요?",
+        "category_key": "operations",
+        "category_label": "Operations",
+        "target_book_slug": "operators",
+        "target_title": "실패한 서브스크립션 새로 고침",
+    },
+    {
+        "question": "IngressController endpoint publishing strategy를 바꿀 때 내부 게시 범위와 DNS 영향을 어떻게 확인하나요?",
+        "category_key": "networking",
+        "category_label": "Networking",
+        "target_book_slug": "ingress_and_load_balancing",
+        "target_title": "수동 DNS 관리를 위한 Ingress 컨트롤러 생성",
+    },
+    {
+        "question": "Insights Operator 수집 기간을 확인할 때 어떤 설정과 상태를 봐야 하나요?",
+        "category_key": "observability",
+        "category_label": "Observability",
+        "target_book_slug": "support",
+        "target_title": "Insights Operator 사용",
+    },
+    {
+        "question": "SCC가 Pod 실행을 막을 때 serviceaccount에 연결된 SCC와 허용 capability를 어떻게 확인하나요?",
+        "category_key": "security",
+        "category_label": "Security",
+        "target_book_slug": "authentication_and_authorization",
+        "target_title": "보안 컨텍스트 제약 조건 나열",
+    },
+)
 
 
 def _safe_read_json(path: Path) -> dict[str, Any]:
@@ -527,25 +635,20 @@ def _compose_beginner_question(
 
 
 def _operations_questions(root_dir: Path) -> tuple[list[dict[str, Any]], str]:
-    chunks, source_label = _load_ops_learning_chunks_payload(root_dir)
-    candidates: list[dict[str, Any]] = []
-    for chunk in chunks:
-        if not isinstance(chunk, dict):
-            continue
-        question = _ops_chunk_question(chunk).strip()
-        if not question:
-            continue
-        candidates.append(
-            _starter_question(
-                lane="operations",
-                question=question,
-                route_kind="study_docs",
-                source=source_label,
-                category_key=str(chunk.get("stage_id") or ""),
-                category_label=str(chunk.get("course_title") or ""),
-            )
+    del root_dir
+    return [
+        _starter_question(
+            lane="operations",
+            question=str(item["question"]),
+            route_kind="official",
+            source="official.advanced_starters",
+            category_key=str(item.get("category_key") or ""),
+            category_label=str(item.get("category_label") or ""),
+            target_book_slug=str(item.get("target_book_slug") or ""),
+            target_title=str(item.get("target_title") or ""),
         )
-    return candidates, source_label
+        for item in ADVANCED_OFFICIAL_QUESTIONS
+    ], "official.advanced_starters"
 
 
 def build_studio_starter_questions(root_dir: Path, *, seed: str = "") -> dict[str, Any]:

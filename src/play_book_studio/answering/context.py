@@ -178,21 +178,124 @@ def _commands_from_excerpt(excerpt: str) -> tuple[str, ...]:
 
 def _citation_cli_commands(hit: RetrievalHit, excerpt: str) -> tuple[str, ...]:
     extracted = list(_commands_from_excerpt(excerpt))
-    excerpt_search_text = SPACE_RE.sub(" ", strip_internal_markup(excerpt)).casefold()
     existing = [
         sanitized
         for command in hit.cli_commands
         if (sanitized := sanitize_cli_command(command))
-        and (not extracted or sanitized.casefold() in excerpt_search_text)
     ]
     merged: list[str] = []
     seen: set[str] = set()
-    for command in [*extracted, *existing]:
+    for command in [*existing, *extracted]:
         key = command.lower()
         if key in seen:
             continue
         seen.add(key)
         merged.append(command)
+    return tuple(merged)
+
+
+def _intent_command_hints_for_hit(
+    hit: RetrievalHit,
+    query: str,
+    *,
+    command_hints: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    profile = build_intent_profile(query)
+    primary_commands = tuple(
+        sanitized
+        for command in command_hints
+        if (sanitized := sanitize_cli_command(command))
+    ) or profile.primary_commands
+    if not primary_commands:
+        return ()
+    if not command_hints and not (profile.needs_command and profile.confidence >= 0.7):
+        return ()
+    haystack = " ".join(
+        [
+            hit.book_slug,
+            hit.section,
+            hit.text,
+            " ".join(hit.cli_commands),
+            " ".join(hit.k8s_objects),
+            " ".join(hit.operator_names),
+        ]
+    ).casefold()
+    target_matches = _target_object_matches_hit(profile.target_object, haystack, hit)
+    evidence_matches = any(
+        term.casefold() in haystack
+        for term in (*profile.evidence_terms, *profile.query_terms)
+        if term and len(term.strip()) >= 3
+    )
+    command_family_matches = any(
+        token in haystack
+        for command in primary_commands
+        for token in re.split(r"[^a-z0-9_.-]+", COMMAND_PLACEHOLDER_RE.sub(" ", command.casefold()))
+        if token in {
+            "adm",
+            "alertmanager",
+            "auth",
+            "can-i",
+            "catalogsource",
+            "cluster-backup.sh",
+            "clusteroperator",
+            "clusterrolebinding",
+            "csv",
+            "daemonset",
+            "backup",
+            "container",
+            "dpa",
+            "endpointslice",
+            "endpointslices",
+            "events",
+            "installplan",
+            "kubelet",
+            "logs",
+            "must-gather",
+            "node-logs",
+            "oadp",
+            "operatorgroup",
+            "pdb",
+            "pod",
+            "poddisruptionbudget",
+            "prometheus",
+            "rolebinding",
+            "service",
+            "serviceaccount",
+            "servicemonitor",
+            "storageclass",
+            "subscription",
+        }
+    )
+    if not (target_matches or evidence_matches or command_family_matches):
+        return ()
+
+    hints: list[str] = []
+    seen: set[str] = set()
+    for command in primary_commands:
+        sanitized = sanitize_cli_command(command)
+        if not sanitized:
+            continue
+        key = sanitized.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        hints.append(sanitized)
+    return tuple(hints[:3])
+
+
+def _merge_cli_commands(*groups: tuple[str, ...]) -> tuple[str, ...]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for command in group:
+            sanitized = sanitize_cli_command(command)
+            if not sanitized:
+                continue
+            key = sanitized.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(sanitized)
     return tuple(merged)
 
 
@@ -300,17 +403,98 @@ def _all_hit_commands(hit: RetrievalHit) -> tuple[str, ...]:
     return (*tuple(str(command or "") for command in hit.cli_commands), *_commands_from_excerpt(hit.text))
 
 
+COMMAND_PLACEHOLDER_RE = re.compile(r"<[^>]+>|\{[^}]+\}|\[[^\]]+\]")
+
+
+def _command_term_matches(command: str, haystack: str) -> bool:
+    normalized = SPACE_RE.sub(" ", (command or "").strip().casefold())
+    if not normalized:
+        return False
+    if normalized in haystack:
+        return True
+    if normalized.startswith("oc get events") and "oc events" in haystack:
+        return True
+    if normalized.startswith("oc get endpointslice") and (
+        "oc get endpointslice" in haystack or "oc get endpointslices" in haystack
+    ):
+        return True
+    if normalized.startswith("oc get all") and "oc get" in haystack and "oc get all" in haystack:
+        return True
+    compact = SPACE_RE.sub(" ", COMMAND_PLACEHOLDER_RE.sub(" ", normalized)).strip()
+    if compact and compact in haystack:
+        return True
+    tokens = [
+        token
+        for token in re.split(r"[^a-z0-9_.-]+", compact)
+        if len(token) >= 2 and token not in {"name", "namespace", "operator"}
+    ]
+    return len(tokens) >= 2 and all(token in haystack for token in tokens)
+
+
+def _target_object_matches_hit(target_object: str, haystack: str, hit: RetrievalHit) -> bool:
+    target = (target_object or "").strip().casefold()
+    if not target:
+        return False
+    if target in haystack:
+        return True
+    object_terms = {str(item or "").strip().casefold() for item in hit.k8s_objects if str(item or "").strip()}
+    if target in object_terms:
+        return True
+    aliases = {
+        "pod-metrics": ("pod", "pods", "metrics", "top pod", "oc adm top pod"),
+        "route-service": ("route", "service", "endpoints", "endpointslice"),
+        "persistentvolumeclaim": ("pvc", "persistentvolumeclaim", "persistent volume claim"),
+        "cluster-health": ("clusteroperator", "clusteroperators", "node", "nodes"),
+        "oc-login": ("oc login", "authentication", "cli"),
+        "rbac": ("rbac", "rolebinding", "clusterrolebinding", "authorization", "can-i"),
+    }.get(target, (target,))
+    return any(alias and alias in haystack for alias in aliases)
+
+
 def _command_lookup_priority(hit: RetrievalHit, query: str) -> tuple[int, int, int]:
     lowered_query = (query or "").lower()
     lowered_section = (hit.section or "").lower()
     lowered_text = (hit.text or "").lower()
     commands = tuple(command.lower() for command in _all_hit_commands(hit))
     haystack = " ".join((lowered_section, lowered_text, " ".join(commands)))
+    intent_profile = build_intent_profile(query)
 
     score = 50
     if commands:
         score -= 12
     score += _procedure_chunk_priority(hit) * 2
+
+    if "endpointslice" in lowered_query or "endpoint slice" in lowered_query:
+        if "endpointslice" in haystack or "endpointslices" in haystack:
+            score -= 42
+        elif any(token in haystack for token in ("endpoint", "endpoints", "service", "selector", "targetport")):
+            score -= 14
+        if hit.book_slug in {"ingress_and_load_balancing", "networking_overview", "networking"}:
+            score -= 10
+        if hit.book_slug == "cli_tools" and any(token in haystack for token in ("profile", "프로필", "auth can-i")):
+            score += 38
+
+    if intent_profile.needs_command and intent_profile.confidence >= 0.7:
+        if intent_profile.primary_commands:
+            if any(_command_term_matches(command, haystack) for command in intent_profile.primary_commands):
+                score -= 34
+            elif commands:
+                score += 16
+        if _target_object_matches_hit(intent_profile.target_object, haystack, hit):
+            score -= 10
+        elif intent_profile.target_object and commands:
+            score += 6
+        if any(term.casefold() in haystack for term in intent_profile.evidence_terms if term.strip()):
+            score -= 8
+        if "etcd" not in lowered_query and "etcd" in haystack:
+            score += 18
+        if "route" not in lowered_query and "ingress" not in lowered_query and hit.book_slug == "ingress_and_load_balancing":
+            score += 16
+        if intent_profile.target_object and not _target_object_matches_hit(intent_profile.target_object, haystack, hit):
+            if hit.book_slug in {"support", "cli_tools"}:
+                score += 4
+            else:
+                score += 12
 
     namespace_query = any(token in lowered_query for token in ("namespace", "namespaces", "네임스페이스"))
     current_project_query = any(
@@ -965,6 +1149,22 @@ def _should_force_clarification(
         ]
     ):
         return False
+    intent_profile = build_intent_profile(normalized)
+    if intent_profile.needs_command and intent_profile.confidence >= 0.7:
+        for hit in hits[:12]:
+            haystack = " ".join(
+                [
+                    hit.book_slug,
+                    hit.section,
+                    hit.text,
+                    " ".join(hit.cli_commands),
+                    " ".join(hit.k8s_objects),
+                ]
+            ).casefold()
+            if any(_command_term_matches(command, haystack) for command in intent_profile.primary_commands):
+                return False
+            if intent_profile.target_object and _target_object_matches_hit(intent_profile.target_object, haystack, hit):
+                return False
 
     top_hits = _unique_top_hits(hits, limit=4)
     if len(top_hits) < 2:
@@ -1581,14 +1781,40 @@ def _select_hits(
     if has_command_request(normalized):
         command_books = tuple(
             book_slug
-            for book_slug in ("cli_tools", "applications", "authentication_and_authorization", "support")
+            for book_slug in (
+                "cli_tools",
+                "applications",
+                "authentication_and_authorization",
+                "support",
+                "ingress_and_load_balancing",
+                "networking_overview",
+                "networking",
+                "nodes",
+                "storage",
+                "backup_and_restore",
+                "monitoring",
+                "operators",
+            )
             if best_book_scores.get(book_slug, 0.0) > 0.0
         )
         if command_books:
             allowed_books = set(command_books)
             locked_allowed_books = True
         else:
-            for book_slug in ("cli_tools", "applications", "authentication_and_authorization", "support"):
+            for book_slug in (
+                "cli_tools",
+                "applications",
+                "authentication_and_authorization",
+                "support",
+                "ingress_and_load_balancing",
+                "networking_overview",
+                "networking",
+                "nodes",
+                "storage",
+                "backup_and_restore",
+                "monitoring",
+                "operators",
+            ):
                 if best_book_scores.get(book_slug, 0.0) >= top_score * 0.44:
                     allowed_books.add(book_slug)
     if _is_install_guidance_query(normalized):
@@ -1887,6 +2113,7 @@ def assemble_context(
     hits: list[RetrievalHit],
     *,
     query: str = "",
+    command_hints: tuple[str, ...] = (),
     session_context: SessionContext | None = None,
     root_dir: Path | None = None,
     max_chunks: int = 8,
@@ -1953,6 +2180,20 @@ def assemble_context(
             ).casefold()
             return any(term and term in haystack for term in intent_terms)
 
+        def hit_matches_primary_command(hit: RetrievalHit) -> bool:
+            if not intent_profile.primary_commands:
+                return False
+            haystack = " ".join(
+                [
+                    hit.book_slug,
+                    hit.section,
+                    hit.text,
+                    " ".join(hit.cli_commands),
+                    " ".join(hit.k8s_objects),
+                ]
+            ).casefold()
+            return any(_command_term_matches(command, haystack) for command in intent_profile.primary_commands)
+
         intent_matched_hits = sorted(
             [hit for hit in hits if hit_matches_intent_terms(hit)],
             key=lambda hit: (
@@ -1963,6 +2204,19 @@ def assemble_context(
         )[:max_chunks]
         if intent_matched_hits and not any(hit_matches_intent_terms(hit) for hit in selected_hits):
             selected_hits = intent_matched_hits
+        if intent_profile.needs_command and intent_profile.confidence >= 0.7:
+            command_matched_hits = sorted(
+                [hit for hit in hits if hit_matches_primary_command(hit)],
+                key=lambda hit: (
+                    0 if hit.cli_commands else 1,
+                    -_hit_score(hit),
+                    hit.book_slug,
+                    hit.chunk_id,
+                ),
+            )
+            if command_matched_hits and not any(hit_matches_primary_command(hit) for hit in selected_hits):
+                selected_hits = [*command_matched_hits[:2], *selected_hits]
+                selected_hits = selected_hits[:max_chunks]
     if overlay_exact_scores or overlay_book_scores:
         selected_hits = sorted(
             selected_hits,
@@ -2011,6 +2265,10 @@ def assemble_context(
             seen_mirror_sections.setdefault(mirror_signature, hit.book_slug)
         excerpt_limit = 1800 if hit.chunk_role == "parent" else max_chars_per_chunk
         citation_excerpt = excerpt[:excerpt_limit].strip()
+        citation_cli_commands = _merge_cli_commands(
+            _citation_cli_commands(hit, citation_excerpt),
+            _intent_command_hints_for_hit(hit, query, command_hints=command_hints),
+        )
         citations.append(
             Citation(
                 index=len(citations) + 1,
@@ -2039,7 +2297,7 @@ def assemble_context(
                 semantic_role=hit.semantic_role,
                 source_collection=hit.source_collection,
                 block_kinds=hit.block_kinds,
-                cli_commands=_citation_cli_commands(hit, citation_excerpt),
+                cli_commands=citation_cli_commands,
                 error_strings=hit.error_strings,
                 k8s_objects=hit.k8s_objects,
                 operator_names=hit.operator_names,

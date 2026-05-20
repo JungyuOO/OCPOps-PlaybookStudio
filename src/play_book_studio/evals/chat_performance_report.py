@@ -219,6 +219,7 @@ def run_query(
     default_route_kind: str,
     default_mode: str,
     verbose: bool,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     query = str(case.get("query") or "").strip()
     case_id = str(case.get("id") or f"case-{index:03d}")
@@ -230,7 +231,7 @@ def run_query(
         "query": query,
         "route_kind": route_kind,
         "mode": mode,
-        "session_id": f"perf-{index:03d}",
+        "session_id": session_id or f"perf-{index:03d}",
     }
     if verbose:
         print(f"\n[{index:03d}] {case_id} category={category or '-'} route={route_kind} mode={mode}")
@@ -254,6 +255,11 @@ def run_query(
         "response_kind": result.get("response_kind"),
         "answer": _answer_from_events(events, result),
         "warnings": result.get("warnings") or [],
+        "suggested_queries": [
+            str(item)
+            for item in (result.get("suggested_queries") or [])
+            if str(item).strip()
+        ],
         "stage_timings_ms": {
             "retrieval": retrieval_trace.get("timings_ms") or {},
             "pipeline": pipeline_trace.get("timings_ms") or {},
@@ -366,6 +372,9 @@ def _print_result_summary(item: dict[str, Any]) -> None:
         print(f"  citations: {citations[:4]}")
     answer = str(item.get("answer") or "").replace("\n", " ").strip()
     print(f"  answer: {answer[:320]}")
+    suggestions = [str(item) for item in item.get("suggested_queries") or [] if str(item).strip()]
+    if suggestions:
+        print(f"  suggested_queries: {suggestions[:3]}")
 
 
 def _write_markdown(report: dict[str, Any], output_path: Path) -> None:
@@ -425,6 +434,11 @@ def _write_markdown(report: dict[str, Any], output_path: Path) -> None:
             )
         answer = str(item.get("answer") or "").strip()
         lines.extend(["", "### Answer", "", answer[:2000] or "(empty)", ""])
+        suggestions = [str(value) for value in item.get("suggested_queries") or [] if str(value).strip()]
+        if suggestions:
+            lines.extend(["### Suggested Questions", ""])
+            lines.extend(f"- {suggestion}" for suggestion in suggestions[:5])
+            lines.append("")
     output_path.write_text("\n".join(lines), encoding="utf-8")
 
 

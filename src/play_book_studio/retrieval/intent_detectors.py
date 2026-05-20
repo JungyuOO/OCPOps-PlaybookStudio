@@ -189,9 +189,97 @@ def has_deployment_scaling_intent(query: str) -> bool:
     )
 
 
+_KOREAN_COMMAND_REQUEST_TOKENS = (
+    "명령",
+    "명령어",
+    "커맨드",
+    "어떤 명령",
+    "무슨 명령",
+    "뭐 입력",
+    "뭘 입력",
+    "옵션",
+    "jsonpath",
+)
+_KOREAN_OPERATIONAL_CHECK_TOKENS = (
+    "어떻게 확인",
+    "어디서 확인",
+    "확인하려면",
+    "확인하나요",
+    "확인해",
+    "확인하는 방법",
+    "빠르게 확인",
+    "목록",
+    "상태",
+    "로그",
+    "이벤트",
+    "리소스",
+    "전환",
+)
+_OPERATIONAL_RESOURCE_TOKENS = (
+    "pod",
+    "node",
+    "route",
+    "service",
+    "endpointslice",
+    "storageclass",
+    "serviceaccount",
+    "operator",
+    "installplan",
+    "subscription",
+    "csv",
+    "clusteroperator",
+    "alertmanager",
+    "prometheus",
+    "thanos",
+    "daemonset",
+    "volumesnapshot",
+    "oauth",
+    "secret",
+    "pvc",
+    "pv",
+    "namespace",
+    "project",
+    "api",
+    "etcd",
+    "oadp",
+    "odf",
+    "ovn",
+    "kubelet",
+    "journal",
+    "oc-mirror",
+    "프로젝트",
+    "네임스페이스",
+    "노드",
+    "서비스",
+    "라우트",
+    "이벤트",
+    "로그",
+    "스토리지",
+    "권한",
+    "인증",
+    "중단 예산",
+    "프로젝트",
+    "네임스페이스",
+    "노드",
+    "서비스",
+    "이벤트",
+    "로그",
+    "스토리지",
+    "권한",
+    "인증서",
+    "라우트",
+)
+
+
 def has_command_request(query: str) -> bool:
     normalized = query or ""
     lowered = normalized.lower()
+    if any(token in lowered for token in _KOREAN_COMMAND_REQUEST_TOKENS):
+        return True
+    if any(token in lowered for token in _KOREAN_OPERATIONAL_CHECK_TOKENS) and any(
+        token in lowered for token in _OPERATIONAL_RESOURCE_TOKENS
+    ):
+        return True
     if any(
         token in lowered
         for token in (

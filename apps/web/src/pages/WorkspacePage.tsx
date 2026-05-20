@@ -5151,7 +5151,7 @@ export default function WorkspacePage() {
                                 type="button"
                                 className="welcome-question-card glass-panel"
                                 onClick={() => {
-                                  const starterRouteKind = item.routeKind || (item.lane === 'operations' ? 'study_docs' : 'official');
+                                  const starterRouteKind = item.routeKind || 'official';
                                   void handleSend(item.question, {
                                     routeKind: starterRouteKind,
                                     learningIndex: item.learningIndex,

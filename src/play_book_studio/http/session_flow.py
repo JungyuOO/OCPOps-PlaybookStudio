@@ -124,7 +124,9 @@ def context_with_request_overrides(
     if "enabled_source_scopes" in payload:
         requested_source_scopes = payload.get("enabled_source_scopes") or []
         parsed_source_scopes = _payload_string_list(requested_source_scopes)
-        if parsed_source_scopes:
+        if route_kind == "study_docs":
+            context.enabled_source_scopes = []
+        elif parsed_source_scopes:
             context.enabled_source_scopes = parsed_source_scopes
             if context.enabled_source_scopes:
                 context.preferred_source_scope = None
