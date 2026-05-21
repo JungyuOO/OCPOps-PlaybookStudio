@@ -37,6 +37,7 @@ corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl
 | Search signals | `intent_labels`, `best_for_questions`, `primary_topics`, `answer_shapes` 없음 | 운영 질문과 chunk 의미 매칭이 약함 |
 | Semantic role | `semantic_role`이 비어 있음 | 절차/개념/경고/검증/명령 역할 구분이 약함 |
 | Command metadata | `oc\n[/CODE]` 같은 dirty command 반복 | command boost와 search signal에 noise 유입 |
+| Kubernetes object metadata | `k8s_objects`는 regex 기반이며 `PVC`, `PV`, `Pods`, `Nodes`, `Deployments` 같은 alias/plural 값이 canonical object처럼 섞임 | query/chunk object 매칭과 metadata filter가 불안정 |
 | Corpus mixing | official doc와 `manual_synthesis`가 섞임 | source scope/trust/citation 정책 불명확 |
 | Fixed metadata | `product`, `version`, `locale`, `tenant_id`, `workspace_id` 등 대부분 고정 | 검색 품질에는 거의 기여하지 않음 |
 
@@ -79,6 +80,7 @@ v0.2.2에서 구현할 audit tool의 기준을 확정한다.
 - empty `normalized_text`
 - empty `semantic_role`
 - dirty command count
+- k8s object canonicalization/alias count
 - source_url/viewer_path validity
 - source_lane/source_type distribution
 - official/manual synthesis mixing
@@ -240,6 +242,7 @@ v0.2.1에서 남길 문서:
 - `spec/v0.2.1/rag-data-audit.md`
 - `spec/v0.2.1/llm-enrichment-contract.md`
 - `spec/v0.2.1/runtime-context-erd-draft.md`
+- `spec/v0.2.1/k8s-object-signal-audit.md`
 
 현재 파일은 전체 v0.2.x 로드맵이 아니라 v0.2.1 작업 범위만 정의한다. 이후 구현 계획은 각 버전 planner를 따른다.
 
@@ -275,3 +278,38 @@ v0.2.1에서 남길 문서:
 ## Completion Check
 
 v0.2.1은 구현 버전이 아니라 준비 버전이다. 완료 기준은 v0.2.2 구현자가 audit tool과 enrichment prototype을 만들 수 있을 정도로 기준, schema, contract, 판단 조건이 정리되는 것이다.
+
+## Completion Result
+
+Status: complete
+
+v0.2.1은 production 동작을 바꾸지 않고 RAG data foundation 기준을 정리했다.
+
+Acceptance result:
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| 범위가 계획/스키마/판단 기준으로 제한됨 | pass | 구현 파일, DB migration, corpus artifact 변경 없음 |
+| 구현 작업은 v0.2.2 이후로 분리됨 | pass | `rag-data-audit.md`, v0.2.2 handoff |
+| 기존 `chunks.jsonl` 문제와 audit 기준 명확화 | pass | `rag-data-audit.md` |
+| enriched corpus 구조 초안 존재 | pass | `enriched-corpus-schema.md` |
+| LLM enrichment와 validator 역할 분리 | pass | `llm-enrichment-contract.md` |
+| official corpus 재사용/재수집 판단 기준 존재 | pass | `rag-data-audit.md` |
+| runtime context ERD 범위 초안화 | pass | `runtime-context-erd-draft.md` |
+| `k8s_objects` object signal 검증 기준 존재 | pass | `k8s-object-signal-audit.md`, `rag-data-audit.md` |
+
+Carry-forward:
+
+- v0.2.2 should implement the audit CLI and sample enrichment prototype from these contracts.
+- v0.2.3 should choose full enrichment, source recollection, corpus split, or partial rebuild based on v0.2.2 evidence.
+- v0.2.4 should compare Qdrant and pgvector only after enriched retrieval artifacts exist.
+
+v0.2.2 execution guard:
+
+- Start with a read-only audit CLI before LLM enrichment.
+- Keep generated audit/enrichment artifacts out of git unless promoted to `spec/v0.2.2/evidence/`.
+- Use `v022_` or `v0.2.2/` artifact naming for v0.2.2 outputs.
+- Include `k8s_objects` canonicalization, alias, plural, and grounding metrics in the first audit report.
+- Do not reindex Qdrant, insert pgvector rows, or rewrite production corpus in v0.2.2.
+
+Before starting v0.2.2 implementation, update the v0.2.2 planner if it still references `v021_` generated report names. v0.2.1 is a planning version and must not own generated audit/enrichment artifacts.
