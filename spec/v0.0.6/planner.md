@@ -132,7 +132,7 @@ python -m play_book_studio.evals.studio_live_smoke `
   --manifest-limit 0 `
   --followups-per-case 0 `
   --limit 0 `
-  --report-path reports/ocp_command_learning_v006_live_smoke.json
+  --report-path spec/v0.0.6/evidence/ocp_command_learning_v006_live_smoke.json
 ```
 
 ### Step 3. Intent Profile 추가
@@ -242,6 +242,6 @@ reasons
 - 2026-05-11: `intent_profile`을 query expansion과 retrieval scoring에 연결했다. 목표 명령과 hit의 실제 `text`/`cli_commands`/`verification_hints`가 맞으면 boost하고, 무관한 command chunk는 약하게 penalty를 준다.
 - 2026-05-11: 회귀 테스트 `pytest tests/test_chat_grounding_quality.py tests/test_answer_text_commands.py -q` 결과 `40 passed`.
 - 2026-05-11: app 컨테이너 rebuild 후 `/api/health` 200 OK를 확인했다.
-- 2026-05-11: v0.0.6 live smoke 최종 기록은 `10/20`, `pass_rate=0.50`이다. report는 `reports/ocp_command_learning_v006_live_smoke.json`에 남겼다.
+- 2026-05-11: v0.0.6 live smoke 최종 기록은 `10/20`, `pass_rate=0.50`이다. report는 `spec/v0.0.6/evidence/ocp_command_learning_v006_live_smoke.json`에 남겼다.
 - 2026-05-11: 남은 실패는 고정 답변으로 해결하지 않고, 다음 작업에서 retrieval trace 기반으로 candidate generation/reranker/citation/answer stripping 중 어디 문제인지 분류해야 한다.
 - 2026-05-11: 커밋 `979650d Ground OCP command learning on retrieval evidence`로 v0.0.6 진행분을 저장하고 원격 브랜치 `origin/feat/v0.0.6/ocp-command-learning-eval`에 push했다.

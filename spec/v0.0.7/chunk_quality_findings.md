@@ -6,8 +6,8 @@
 
 - Source: `corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl`
 - Report:
-  - `reports/v007_official_chunk_quality_baseline.json`
-  - `reports/v007_official_chunk_quality_baseline.md`
+  - `spec/v0.0.7/evidence/v007_official_chunk_quality_baseline.json`
+  - `spec/v0.0.7/evidence/v007_official_chunk_quality_baseline.md`
 - Chunks: `27907`
 - Token p50/p90/p95/max: `181 / 219 / 229 / 363`
 - Char p50/p90/max: `436 / 659 / 1305`
@@ -30,8 +30,8 @@
 
 - Source: `corpus/sources/kmsc/parsed-preview/course_pbs/chunks.jsonl`
 - Report:
-  - `reports/v007_user_study_chunk_quality_baseline.json`
-  - `reports/v007_user_study_chunk_quality_baseline.md`
+  - `spec/v0.0.7/evidence/v007_user_study_chunk_quality_baseline.json`
+  - `spec/v0.0.7/evidence/v007_user_study_chunk_quality_baseline.md`
 - Chunks: `523`
 - Token p50/p90/p95/max: `25 / 62 / 72 / 125`
 - Char p50/p90/max: `171 / 423 / 623`
