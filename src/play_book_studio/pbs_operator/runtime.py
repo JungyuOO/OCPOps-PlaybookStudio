@@ -139,10 +139,14 @@ def handle_watch_event(
             f"appliedResources={len(applied)} statusPhase={status['phase']}"
         )
         return True
+    status_patch = "skipped"
+    if config and headers.get("Authorization"):
+        patch_custom_resource_status(custom_resource, status, config, headers, write_transport)
+        status_patch = "patched"
     logger(
         "pbs-operator detected "
         f"{event_type.lower()} PlaybookStudio namespace={namespace} name={name} "
-        f"desiredResources={len(desired)} dryRunPhase={status['phase']}"
+        f"desiredResources={len(desired)} dryRunPhase={status['phase']} statusPatch={status_patch}"
     )
     return True
 

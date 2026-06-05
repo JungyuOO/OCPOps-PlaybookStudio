@@ -114,6 +114,40 @@ def test_operator_runtime_applies_desired_resources_when_enabled() -> None:
     assert any(item[2] == "application/merge-patch+json" for item in writes)
 
 
+def test_operator_runtime_patches_status_without_applying_resources_in_dry_run() -> None:
+    logs: list[str] = []
+    writes: list[tuple[str, str, str]] = []
+
+    def fake_write(method: str, url: str, _headers: dict[str, str], body: bytes, content_type: str, _timeout: float):
+        assert body
+        writes.append((method, url, content_type))
+        return 200, b"{}"
+
+    handled = handle_watch_event(
+        {"type": "ADDED", "object": SAMPLE_CR},
+        logs.append,
+        OperatorRuntimeConfig(
+            mode="dry-run",
+            namespace="pbs-ocpops",
+            api_server="https://kubernetes.default.svc:443",
+            apply_enabled=False,
+        ),
+        {"Authorization": "Bearer token"},
+        fake_write,
+    )
+
+    assert handled is True
+    assert writes == [
+        (
+            "PATCH",
+            "https://kubernetes.default.svc:443/apis/pbs.ocpops.io/v1alpha1/namespaces/pbs-ocpops/playbookstudios/pbs/status",
+            "application/merge-patch+json",
+        )
+    ]
+    assert any("statusPatch=patched" in entry for entry in logs)
+    assert not any("application/apply-patch+yaml" in item[2] for item in writes)
+
+
 def test_operator_runtime_apply_helpers_target_supported_resource_urls() -> None:
     writes: list[tuple[str, str, str]] = []
 
