@@ -383,6 +383,29 @@ export interface ActionAuditItem {
   created_at: string;
 }
 
+export interface AIOpsTimelineEvent {
+  event_id: string;
+  event_type: string;
+  source: string;
+  summary: string;
+  timestamp: string;
+  session_id?: string;
+  connection_id?: string;
+  namespace?: string;
+  resource_type?: string;
+  resource_name?: string;
+  command_text?: string;
+  stdout?: string;
+  stderr?: string;
+  exit_code?: number | null;
+  yaml_diff?: string;
+  apply_result?: Record<string, unknown>;
+  related_events?: Array<Record<string, unknown>>;
+  logs?: string[];
+  resource_snapshot?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
 export interface LearnerWorkspaceStatus {
   available: boolean;
   namespace: string;
@@ -736,5 +759,10 @@ export async function listActionExecutions(limit = 20): Promise<ActionExecution[
 
 export async function listActionAudit(limit = 20): Promise<ActionAuditItem[]> {
   const payload = await requestJson<{ items: ActionAuditItem[] }>(`/api/v1/actions/audit?limit=${encodeURIComponent(String(limit))}`);
+  return payload.items;
+}
+
+export async function loadAiopsTimelineEvents(limit = 40): Promise<AIOpsTimelineEvent[]> {
+  const payload = await requestJson<{ items: AIOpsTimelineEvent[] }>(`/api/v1/aiops/events?limit=${encodeURIComponent(String(limit))}`);
   return payload.items;
 }

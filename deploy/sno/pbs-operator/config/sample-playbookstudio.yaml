@@ -1,0 +1,37 @@
+apiVersion: pbs.ocpops.io/v1alpha1
+kind: PlaybookStudio
+metadata:
+  name: pbs
+  namespace: pbs-ocpops
+spec:
+  image: ghcr.io/jungyuoo/ocpops-playbookstudio-app:v0.3.0
+  ui:
+    shellMode: aiops-workbench
+  route:
+    enabled: true
+  chat:
+    provider: lightspeed
+  lightspeed:
+    detectOperator: true
+    manageOLSConfig: true
+    auth:
+      mode: service-account
+      secretName: pbs-ols-auth
+    byoKnowledge:
+      enabled: true
+      imageRepository: image-registry.openshift-image-registry.svc:5000/pbs-ocpops/pbs-knowledge
+      registrySecret: pbs-byok-registry
+      updateMode: manualApproval
+    mcp:
+      enabled: true
+      registerWithOLS: true
+      serverName: pbs-tools
+  console:
+    enabled: true
+    executorMode: service-account
+  namespaceMode:
+    autoCreate: false
+  library:
+    ingestion:
+      outputFormat: lightspeed-byok-markdown
+      qdrantEnabled: false

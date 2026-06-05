@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode
 
+from play_book_studio.aiops.event_timeline import append_timeline_event, read_timeline_events
 from play_book_studio.config.corpus_paths import (
     resolve_official_manualbook_playbooks_dir,
     resolve_official_manualbook_root_dir,
@@ -2438,6 +2439,38 @@ def _append_audit(state: dict[str, Any], entry: dict[str, Any]) -> None:
     state["action_audit"] = state["action_audit"][:100]
 
 
+def _related_resource_events(inventory: dict[str, Any], namespace: str, resource_name: str) -> list[dict[str, Any]]:
+    events = inventory.get("resources", {}).get("events", [])
+    if not isinstance(events, list):
+        return []
+    related: list[dict[str, Any]] = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_namespace = str(event.get("namespace") or "")
+        event_text = json.dumps(event, ensure_ascii=False).lower()
+        if event_namespace == namespace and resource_name.lower() in event_text:
+            related.append(event)
+    return related[:8]
+
+
+def _resource_snapshot_for_timeline(
+    inventory: dict[str, Any],
+    resource_type: str,
+    namespace: str,
+    resource_name: str,
+) -> dict[str, Any]:
+    resources = inventory.get("resources", {}).get(resource_type, [])
+    if not isinstance(resources, list):
+        return {}
+    for resource in resources:
+        if not isinstance(resource, dict):
+            continue
+        if str(resource.get("namespace") or "") == namespace and str(resource.get("name") or "") == resource_name:
+            return dict(resource)
+    return {}
+
+
 def _execute_request(root_dir: Path, state: dict[str, Any], request_row: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
     preview = request_row.get("preview") if isinstance(request_row.get("preview"), dict) else {}
     action_type = str(preview.get("action_type") or request_row.get("action_type") or "")
@@ -2527,6 +2560,21 @@ def _execute_request(root_dir: Path, state: dict[str, Any], request_row: dict[st
                 "created_at": execution["created_at"],
             },
         )
+        append_timeline_event(
+            root_dir,
+            event_type="yaml_apply" if action_type == "yaml_apply" else "action_execute",
+            source="ops_console",
+            summary=execution["summary"],
+            connection_id=connection_id,
+            namespace=namespace,
+            resource_type=resource_type,
+            resource_name=resource_name,
+            yaml_diff=str(preview.get("diff_unified") or ""),
+            apply_result=execution,
+            related_events=_related_resource_events(inventory, namespace, resource_name),
+            resource_snapshot=_resource_snapshot_for_timeline(inventory, resource_type, namespace, resource_name),
+            metadata={"mode": "live-ocp-api", "action_type": action_type},
+        )
         return execution
     if action_type == "scale_deployment":
         replicas = int(request_row.get("replicas") or 0)
@@ -2588,6 +2636,21 @@ def _execute_request(root_dir: Path, state: dict[str, Any], request_row: dict[st
             "summary": execution["summary"],
             "created_at": execution["created_at"],
         },
+    )
+    append_timeline_event(
+        root_dir,
+        event_type="yaml_apply" if action_type == "yaml_apply" else "action_execute",
+        source="ops_console",
+        summary=execution["summary"],
+        connection_id=connection_id,
+        namespace=namespace,
+        resource_type=resource_type,
+        resource_name=resource_name,
+        yaml_diff=str(preview.get("diff_unified") or ""),
+        apply_result=execution,
+        related_events=_related_resource_events(inventory, namespace, resource_name),
+        resource_snapshot=_resource_snapshot_for_timeline(inventory, resource_type, namespace, resource_name),
+        metadata={"mode": "local-simulated", "action_type": action_type},
     )
     return execution
 
@@ -3066,6 +3129,12 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
         params = parse_qs(query, keep_blank_values=False)
         limit = int(str((params.get("limit") or ["20"])[0]).strip() or "20")
         handler._send_json({"items": state["action_audit"][: max(1, limit)]})
+        return True
+
+    if path == "/api/v1/aiops/events":
+        params = parse_qs(query, keep_blank_values=False)
+        limit = int(str((params.get("limit") or ["50"])[0]).strip() or "50")
+        handler._send_json({"items": read_timeline_events(root_dir, limit=limit)})
         return True
 
     oauth_callback_match = re.fullmatch(r"/api/v1/oauth/([^/]+)/callback", path)

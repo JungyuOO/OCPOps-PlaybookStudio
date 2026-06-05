@@ -1,0 +1,24 @@
+schema: olm.package
+name: playbookstudio-operator
+defaultChannel: alpha
+---
+schema: olm.channel
+package: playbookstudio-operator
+name: alpha
+entries:
+  - name: playbookstudio-operator.v0.3.0
+---
+schema: olm.bundle
+name: playbookstudio-operator.v0.3.0
+package: playbookstudio-operator
+image: ghcr.io/jungyuoo/ocpops-playbookstudio-operator-bundle:v0.3.0
+properties:
+  - type: olm.package
+    value:
+      packageName: playbookstudio-operator
+      version: 0.3.0
+  - type: olm.gvk
+    value:
+      group: pbs.ocpops.io
+      kind: PlaybookStudio
+      version: v1alpha1

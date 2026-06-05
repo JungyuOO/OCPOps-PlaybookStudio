@@ -151,9 +151,24 @@ class Settings(SettingsPathMixin):
     surya_ocr_endpoint: str = ""
     surya_health_endpoint: str = ""
     surya_timeout_seconds: float = 30.0
+    chat_provider: str = "internal"
+    ols_base_url: str = ""
+    ols_auth_mode: str = "service-account"
+    ols_auth_secret_name: str = ""
+    ols_auth_token: str = ""
+    ols_timeout_seconds: float = 30.0
     ocp_api_base_url: str = ""
     ocp_api_token: str = ""
     ocp_default_namespace: str = ""
+    pbs_auto_create_namespace: bool = False
+    pbs_namespace_mode: str = "disabled"
+    console_executor_mode: str = "local"
+    byok_pipeline_enabled: bool = False
+    byok_output_mode: str = "dry-run"
+    byok_image_repository: str = ""
+    byok_registry_secret_name: str = ""
+    pbs_operator_ready_mode: bool = False
+    pbs_operator_manifest_profile: str = "sno"
     terminal_enabled: bool = False
     terminal_host: str = "127.0.0.1"
     terminal_ws_port: int = 8770
@@ -392,9 +407,27 @@ def load_settings(root_dir: str | Path) -> Settings:
         surya_ocr_endpoint=effective_env.get("SURYA_OCR", "").strip().rstrip("/"),
         surya_health_endpoint=effective_env.get("SURYA_HEALTH", "").strip().rstrip("/"),
         surya_timeout_seconds=float(effective_env.get("SURYA_TIMEOUT_SECONDS", "30")),
+        chat_provider=effective_env.get("CHAT_PROVIDER", "internal").strip().lower() or "internal",
+        ols_base_url=effective_env.get("OLS_BASE_URL", "").strip().rstrip("/"),
+        ols_auth_mode=effective_env.get("OLS_AUTH_MODE", "service-account").strip().lower() or "service-account",
+        ols_auth_secret_name=effective_env.get("OLS_AUTH_SECRET_NAME", "").strip(),
+        ols_auth_token=effective_env.get("OLS_AUTH_TOKEN", "").strip(),
+        ols_timeout_seconds=float(effective_env.get("OLS_TIMEOUT_SECONDS", "30")),
         ocp_api_base_url=effective_env.get("OCP_API_BASE_URL", "").strip().rstrip("/"),
         ocp_api_token=effective_env.get("OCP_API_TOKEN", "").strip(),
         ocp_default_namespace=effective_env.get("OCP_DEFAULT_NAMESPACE", "").strip(),
+        pbs_auto_create_namespace=effective_env.get("PBS_AUTO_CREATE_NAMESPACE", "false").lower()
+        in {"1", "true", "yes", "on"},
+        pbs_namespace_mode=effective_env.get("PBS_NAMESPACE_MODE", "disabled").strip().lower() or "disabled",
+        console_executor_mode=effective_env.get("CONSOLE_EXECUTOR_MODE", "local").strip().lower() or "local",
+        byok_pipeline_enabled=effective_env.get("BYOK_PIPELINE_ENABLED", "false").lower()
+        in {"1", "true", "yes", "on"},
+        byok_output_mode=effective_env.get("BYOK_OUTPUT_MODE", "dry-run").strip().lower() or "dry-run",
+        byok_image_repository=effective_env.get("BYOK_IMAGE_REPOSITORY", "").strip(),
+        byok_registry_secret_name=effective_env.get("BYOK_REGISTRY_SECRET_NAME", "").strip(),
+        pbs_operator_ready_mode=effective_env.get("PBS_OPERATOR_READY_MODE", "false").lower()
+        in {"1", "true", "yes", "on"},
+        pbs_operator_manifest_profile=effective_env.get("PBS_OPERATOR_MANIFEST_PROFILE", "sno").strip().lower() or "sno",
         terminal_enabled=effective_env.get("TERMINAL_ENABLED", "false").lower()
         in {"1", "true", "yes", "on"},
         terminal_host=effective_env.get("TERMINAL_HOST", "127.0.0.1").strip() or "127.0.0.1",

@@ -1,0 +1,85 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: playbookstudio-operator.v0.3.0
+  namespace: pbs-ocpops
+  annotations:
+    alm-examples: |
+      [
+        {
+          "apiVersion": "pbs.ocpops.io/v1alpha1",
+          "kind": "PlaybookStudio",
+          "metadata": {"name": "pbs", "namespace": "pbs-ocpops"},
+          "spec": {
+            "chat": {"provider": "lightspeed"},
+            "namespaceMode": {"autoCreate": false},
+            "lightspeed": {
+              "detectOperator": true,
+              "manageOLSConfig": true,
+              "byoKnowledge": {"enabled": true, "updateMode": "manualApproval"},
+              "mcp": {"enabled": true, "registerWithOLS": true, "serverName": "pbs-tools"}
+            }
+          }
+        }
+      ]
+spec:
+  displayName: Playbook Studio Operator
+  description: Operator-ready preview for managing PBS AIOps Workbench resources.
+  version: 0.3.0
+  maturity: alpha
+  provider:
+    name: OCPOps
+  installModes:
+    - type: OwnNamespace
+      supported: true
+    - type: SingleNamespace
+      supported: true
+    - type: MultiNamespace
+      supported: false
+    - type: AllNamespaces
+      supported: false
+  customresourcedefinitions:
+    owned:
+      - name: playbookstudios.pbs.ocpops.io
+        version: v1alpha1
+        kind: PlaybookStudio
+        displayName: PlaybookStudio
+        description: PBS AIOps Workbench instance.
+  install:
+    strategy: deployment
+    spec:
+      deployments:
+        - name: pbs-operator
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: pbs-operator
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: pbs-operator
+              spec:
+                serviceAccountName: pbs-operator
+                containers:
+                  - name: operator
+                    image: ghcr.io/jungyuoo/ocpops-playbookstudio-operator:v0.3.0
+                    command: ["python", "-m", "play_book_studio.pbs_operator.runtime"]
+                    env:
+                      - name: PBS_OPERATOR_MODE
+                        value: dry-run
+                      - name: PBS_OPERATOR_WATCH_ENABLED
+                        value: "true"
+                      - name: PBS_OPERATOR_APPLY_ENABLED
+                        value: "false"
+                      - name: PBS_OPERATOR_RECONNECT_SECONDS
+                        value: "10"
+      permissions:
+        - serviceAccountName: pbs-operator
+          rules:
+            - apiGroups: ["pbs.ocpops.io"]
+              resources: ["playbookstudios", "playbookstudios/status"]
+              verbs: ["get", "list", "watch", "patch", "update"]
+            - apiGroups: ["", "apps", "route.openshift.io", "rbac.authorization.k8s.io"]
+              resources: ["configmaps", "services", "serviceaccounts", "deployments", "routes", "roles", "rolebindings"]
+              verbs: ["get", "list", "watch", "create", "update", "patch"]

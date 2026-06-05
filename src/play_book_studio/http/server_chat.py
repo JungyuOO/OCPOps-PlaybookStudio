@@ -11,6 +11,11 @@ from datetime import datetime
 import time
 
 from play_book_studio.config.settings import load_settings
+from play_book_studio.answering.lightspeed_provider import (
+    LightspeedChatContext,
+    lightspeed_enabled,
+    query_lightspeed,
+)
 from play_book_studio.db.chat_repository import persist_chat_turn
 from play_book_studio.retrieval.models import SessionContext
 from play_book_studio.http.sessions import RUNTIME_CHAT_MODE, Turn
@@ -117,6 +122,28 @@ def _selected_source_scopes(response_payload: dict[str, Any]) -> list[str]:
         if scope and scope not in scopes:
             scopes.append(scope)
     return scopes
+
+
+def _lightspeed_context_from_payload(payload: dict[str, Any]) -> LightspeedChatContext:
+    attachments = payload.get("attachments")
+    recent_events = payload.get("recent_events")
+    cluster_context = payload.get("cluster_context")
+    return LightspeedChatContext(
+        conversation_id=str(payload.get("conversation_id") or "").strip(),
+        library_scope=str(
+            payload.get("library_scope")
+            or payload.get("preferred_source_scope")
+            or payload.get("source_scope")
+            or ""
+        ).strip(),
+        cluster_context=cluster_context if isinstance(cluster_context, dict) else {},
+        recent_events=[item for item in recent_events if isinstance(item, dict)]
+        if isinstance(recent_events, list)
+        else [],
+        attachments=[item for item in attachments if isinstance(item, dict)]
+        if isinstance(attachments, list)
+        else [],
+    )
 
 
 def _vector_runtime_ms(vector_runtime: dict[str, Any], key: str) -> float:
@@ -365,18 +392,26 @@ def handle_chat(
     server_timings_ms: dict[str, float] = {}
     try:
         answer_started_at = time.perf_counter()
-        result = active_answerer.answer(
-            query,
-            mode=mode,
-            context=request_context,
-            top_k=5,
-            candidate_k=10,
-            max_context_chunks=5,
-        )
+        if lightspeed_enabled(active_answerer.settings):
+            result = query_lightspeed(
+                active_answerer.settings,
+                query,
+                context=_lightspeed_context_from_payload(scoped_payload),
+            )
+        else:
+            result = active_answerer.answer(
+                query,
+                mode=mode,
+                context=request_context,
+                top_k=5,
+                candidate_k=10,
+                max_context_chunks=5,
+            )
         server_timings_ms["answerer_runtime"] = (time.perf_counter() - answer_started_at) * 1000
-        answer_log_started_at = time.perf_counter()
-        active_answerer.append_log(result)
-        server_timings_ms["answer_log_persist"] = (time.perf_counter() - answer_log_started_at) * 1000
+        if not lightspeed_enabled(active_answerer.settings):
+            answer_log_started_at = time.perf_counter()
+            active_answerer.append_log(result)
+            server_timings_ms["answer_log_persist"] = (time.perf_counter() - answer_log_started_at) * 1000
     except Exception as exc:  # noqa: BLE001
         handler._send_json(
             {"error": f"답변 생성 중 오류가 발생했습니다: {exc}"},
@@ -539,19 +574,43 @@ def handle_chat_stream(
     server_timings_ms: dict[str, float] = {}
     try:
         answer_started_at = time.perf_counter()
-        result = active_answerer.answer(
-            query,
-            mode=mode,
-            context=request_context,
-            top_k=5,
-            candidate_k=10,
-            max_context_chunks=5,
-            trace_callback=emit_trace,
-        )
+        if lightspeed_enabled(active_answerer.settings):
+            handler._stream_event(
+                {
+                    "type": "trace",
+                    "step": "lightspeed_provider",
+                    "label": "OpenShift Lightspeed 요청 중",
+                    "status": "running",
+                }
+            )
+            result = query_lightspeed(
+                active_answerer.settings,
+                query,
+                context=_lightspeed_context_from_payload(scoped_payload),
+            )
+            handler._stream_event(
+                {
+                    "type": "trace",
+                    "step": "lightspeed_provider",
+                    "label": "OpenShift Lightspeed 응답 수신",
+                    "status": "done",
+                }
+            )
+        else:
+            result = active_answerer.answer(
+                query,
+                mode=mode,
+                context=request_context,
+                top_k=5,
+                candidate_k=10,
+                max_context_chunks=5,
+                trace_callback=emit_trace,
+            )
         server_timings_ms["answerer_runtime"] = (time.perf_counter() - answer_started_at) * 1000
-        answer_log_started_at = time.perf_counter()
-        active_answerer.append_log(result)
-        server_timings_ms["answer_log_persist"] = (time.perf_counter() - answer_log_started_at) * 1000
+        if not lightspeed_enabled(active_answerer.settings):
+            answer_log_started_at = time.perf_counter()
+            active_answerer.append_log(result)
+            server_timings_ms["answer_log_persist"] = (time.perf_counter() - answer_log_started_at) * 1000
         answer_delta_started_at = time.perf_counter()
         _stream_answer_delta(handler, str(result.answer or ""))
         server_timings_ms["answer_delta_stream"] = (time.perf_counter() - answer_delta_started_at) * 1000

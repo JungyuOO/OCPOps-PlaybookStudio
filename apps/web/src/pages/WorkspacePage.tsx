@@ -25,6 +25,7 @@ import {
   X,
   Pin,
   RotateCcw,
+  ScrollText,
 } from 'lucide-react';
 import gsap from 'gsap';
 import './WorkspacePage.css';
@@ -93,6 +94,7 @@ import {
   loadResourceDetail,
   loadResources,
   loadLearnerWorkspaceStatus,
+  loadAiopsTimelineEvents,
   listOcpProfiles,
   resetLearnerWorkspace,
   sendOpsChatStream,
@@ -105,6 +107,7 @@ import {
   type LearnerWorkspaceStatus,
   type OpsChatResponse,
   type OpsChatSource,
+  type AIOpsTimelineEvent,
 } from '../lib/opsConsoleApi';
 import { ROUTES } from '../routing/routes';
 import {
@@ -379,6 +382,30 @@ interface RecentTerminalAction {
   command: string;
   outputExcerpt: string;
   timestamp: string;
+}
+
+function formatTimelineEventTime(value?: string): string {
+  if (!value) {
+    return '';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return date.toLocaleTimeString('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
+function timelineEventResourceLabel(event: AIOpsTimelineEvent): string {
+  return [
+    event.resource_type,
+    event.resource_name,
+    event.namespace ? `ns/${event.namespace}` : '',
+  ].filter(Boolean).join(' / ');
 }
 
 interface IngestionStatusBanner {
@@ -1497,6 +1524,9 @@ export default function WorkspacePage() {
   const [isResourceYamlLoading, setIsResourceYamlLoading] = useState(false);
   const [signalEvents, setSignalEvents] = useState<ClusterSignalEvent[]>([]);
   const [recentTerminalActions, setRecentTerminalActions] = useState<RecentTerminalAction[]>([]);
+  const [aiopsTimelineEvents, setAiopsTimelineEvents] = useState<AIOpsTimelineEvent[]>([]);
+  const [isAiopsTimelineLoading, setIsAiopsTimelineLoading] = useState(false);
+  const [aiopsTimelineError, setAiopsTimelineError] = useState('');
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [dashboardOverview, setDashboardOverview] = useState<OcpOverview | null>(null);
   const [dashboardMetrics, setDashboardMetrics] = useState<OcpMetricsResponse | null>(null);
@@ -1695,11 +1725,26 @@ export default function WorkspacePage() {
     }
   }, []);
 
+  const refreshAiopsTimelineEvents = useCallback(async () => {
+    setIsAiopsTimelineLoading(true);
+    setAiopsTimelineError('');
+    try {
+      const events = await loadAiopsTimelineEvents(40);
+      setAiopsTimelineEvents(events);
+    } catch (error) {
+      console.error(error);
+      setAiopsTimelineError('AIOps timeline is unavailable.');
+    } finally {
+      setIsAiopsTimelineLoading(false);
+    }
+  }, []);
+
   const handleTerminalCommandSubmitted = useCallback((command: string) => {
     setRecentTerminalActions((current) => [
       { command, outputExcerpt: '', timestamp: new Date().toISOString() },
       ...current.filter((item) => item.command !== command),
     ].slice(0, 6));
+    window.setTimeout(() => { void refreshAiopsTimelineEvents(); }, 350);
     const signal = detectClusterSignal(command);
     if (!signal) {
       return;
@@ -1715,7 +1760,7 @@ export default function WorkspacePage() {
     if (isClusterConnected) {
       void refreshClusterResources();
     }
-  }, [isClusterConnected, refreshClusterResources, refreshSignalEvents]);
+  }, [isClusterConnected, refreshAiopsTimelineEvents, refreshClusterResources, refreshSignalEvents]);
 
   const handleTerminalOutputChunk = useCallback((chunk: string) => {
     if (!chunk) {
@@ -1869,6 +1914,20 @@ export default function WorkspacePage() {
   useEffect(() => {
     void refreshSignalEvents();
   }, [refreshSignalEvents]);
+
+  useEffect(() => {
+    void refreshAiopsTimelineEvents();
+  }, [refreshAiopsTimelineEvents]);
+
+  useEffect(() => {
+    if (rightPanelMode !== 'terminal') {
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      void refreshAiopsTimelineEvents();
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [refreshAiopsTimelineEvents, rightPanelMode]);
 
   useEffect(() => {
     if (!ingestionStatusBanner?.repositoryId && !ingestionStatusBanner?.documentSourceId) {
@@ -4327,6 +4386,24 @@ export default function WorkspacePage() {
         isProfileLoading={isFooterProfileLoading}
       />
 
+      <section className="aiops-workbench-statusbar" aria-label="AIOps workbench connection status">
+        <div className="aiops-statusbar-section">
+          <span className={`aiops-status-dot aiops-status-dot--${clusterConnectionStatus}`} />
+          <strong>{footerProfileName || 'No OCP profile'}</strong>
+          <span>{activeFooterConnection?.cluster_url || 'https://api.ocp.cywell.local:6443'}</span>
+        </div>
+        <div className="aiops-statusbar-section">
+          <TerminalIcon size={14} />
+          <strong>{isTerminalConnected ? 'Terminal connected' : 'Terminal offline'}</strong>
+          <span>{learnerWorkspaceStatus?.namespace || userWorkspaceNamespace || 'namespace auto-create disabled for v0.3.0 test'}</span>
+        </div>
+        <div className="aiops-statusbar-section">
+          <ScrollText size={14} />
+          <strong>{aiopsTimelineEvents.length} events</strong>
+          <span>CLI, YAML, apply, logs, and snapshots</span>
+        </div>
+      </section>
+
       <main className="workspace-content">
         <Group
           orientation="horizontal"
@@ -5148,6 +5225,24 @@ export default function WorkspacePage() {
                   {isTerminalConnected ? clusterStatusLabel : 'Terminal offline'}
                 </span>
               </div>
+              <section className="aiops-workspace-strip" aria-label="AIOps workspace context">
+                <div>
+                  <span>Workbench</span>
+                  <strong>{currentMode === 'live_cluster' ? 'Live cluster chat' : 'Lightspeed document chat'}</strong>
+                </div>
+                <div>
+                  <span>Resource</span>
+                  <strong>{selectedResourceKind} / {selectedResourceNamespace}</strong>
+                </div>
+                <div>
+                  <span>YAML editor</span>
+                  <strong>{resourceYamlDetail ? `${resourceYamlDetail.kind}/${resourceYamlDetail.name}` : 'Open from left resource list'}</strong>
+                </div>
+                <div>
+                  <span>Event rail</span>
+                  <strong>{aiopsTimelineEvents[0]?.summary || 'Waiting for CLI or YAML activity'}</strong>
+                </div>
+              </section>
               <div className="chat-messages" ref={chatMessagesRef}>
                 {messages.length === 0 && (
                   <div className="chat-welcome">
@@ -5611,13 +5706,56 @@ export default function WorkspacePage() {
                     </button>
                   </div>
                 </div>
-                <TerminalSessionPanel
-                  learningContext={terminalLearningContext}
-                  onCommandSubmitted={handleTerminalCommandSubmitted}
-                  onOutputChunk={handleTerminalOutputChunk}
-                  onSessionStateChange={setTerminalConnectionState}
-                  onWorkspaceReady={handleTerminalWorkspaceReady}
-                />
+                <div className="aiops-terminal-workbench">
+                  <TerminalSessionPanel
+                    learningContext={terminalLearningContext}
+                    onCommandSubmitted={handleTerminalCommandSubmitted}
+                    onOutputChunk={handleTerminalOutputChunk}
+                    onSessionStateChange={setTerminalConnectionState}
+                    onWorkspaceReady={handleTerminalWorkspaceReady}
+                  />
+                  <aside className="aiops-event-rail" aria-label="AIOps event timeline">
+                    <div className="aiops-event-rail-head">
+                      <div>
+                        <span>Event Timeline</span>
+                        <strong>CLI / YAML / Apply</strong>
+                      </div>
+                      <button type="button" onClick={() => { void refreshAiopsTimelineEvents(); }} disabled={isAiopsTimelineLoading}>
+                        {isAiopsTimelineLoading ? 'Loading' : 'Refresh'}
+                      </button>
+                    </div>
+                    {aiopsTimelineError ? <p className="aiops-event-error">{aiopsTimelineError}</p> : null}
+                    <div className="aiops-event-list">
+                      {aiopsTimelineEvents.length === 0 && !isAiopsTimelineLoading ? (
+                        <div className="aiops-event-empty">No CLI or YAML events captured yet.</div>
+                      ) : aiopsTimelineEvents.slice(0, 10).map((event) => (
+                        <article key={event.event_id} className={`aiops-event-card aiops-event-card--${event.event_type}`}>
+                          <div className="aiops-event-card-head">
+                            <span>{event.event_type}</span>
+                            <time>{formatTimelineEventTime(event.timestamp)}</time>
+                          </div>
+                          <strong>{event.summary}</strong>
+                          {event.command_text ? <code>{event.command_text}</code> : null}
+                          {timelineEventResourceLabel(event) ? <small>{timelineEventResourceLabel(event)}</small> : null}
+                          {event.exit_code !== undefined && event.exit_code !== null ? <small>exit {event.exit_code}</small> : null}
+                          {event.yaml_diff ? <pre>{event.yaml_diff.slice(0, 420)}</pre> : null}
+                          {event.stderr ? <pre>{event.stderr.slice(0, 420)}</pre> : null}
+                        </article>
+                      ))}
+                    </div>
+                    <div className="aiops-event-rail-section">
+                      <div className="aiops-event-rail-title">Recent terminal context</div>
+                      {recentTerminalActions.length === 0 ? (
+                        <span className="aiops-event-muted">No commands in this browser session.</span>
+                      ) : recentTerminalActions.slice(0, 4).map((action) => (
+                        <div key={`${action.command}-${action.timestamp}`} className="aiops-terminal-action">
+                          <code>{action.command}</code>
+                          {action.outputExcerpt ? <pre>{action.outputExcerpt.slice(-360)}</pre> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </aside>
+                </div>
               </>
             ) : (
               <>

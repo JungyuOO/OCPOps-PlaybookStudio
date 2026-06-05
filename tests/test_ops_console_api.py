@@ -222,6 +222,80 @@ def test_ops_console_actions_execute_scale_updates_resource_manifest() -> None:
             assert "replicas: 5" in detail_payload["manifest_yaml"]
 
 
+def test_ops_console_action_execution_writes_aiops_timeline() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        with _test_server(root) as base_url:
+            connect_response = requests.post(
+                f"{base_url}/api/v1/auth/ocp/connect",
+                json={
+                    "workspace_id": "ws_default",
+                    "cluster_url": "https://api.cluster.example.com:6443",
+                    "auth_mode": "token",
+                    "verify_ssl": True,
+                    "default_namespace": "default",
+                    "display_name": "dev-cluster",
+                    "save_profile": True,
+                    "token": "sha256~demo-token",
+                },
+                timeout=10,
+            )
+            connect_response.raise_for_status()
+            connection_id = connect_response.json()["connection"]["connection_id"]
+
+            detail_response = requests.get(
+                f"{base_url}/api/v1/ocp/resource-detail/{connection_id}?resource=deployments&namespace=payments&name=payments-api",
+                timeout=10,
+            )
+            detail_response.raise_for_status()
+            manifest_yaml = detail_response.json()["manifest_yaml"].replace("replicas: 3", "replicas: 4")
+
+            request_response = requests.post(
+                f"{base_url}/api/v1/actions/requests",
+                json={
+                    "connection_id": connection_id,
+                    "actor_id": "alice",
+                    "actor_roles": ["operator"],
+                    "action_type": "yaml_apply",
+                    "namespace": "payments",
+                    "resource_type": "deployments",
+                    "resource_name": "payments-api",
+                    "manifest_yaml": manifest_yaml,
+                    "reason": "edit yaml",
+                },
+                timeout=10,
+            )
+            request_response.raise_for_status()
+            request_id = request_response.json()["request_id"]
+
+            approve_response = requests.post(
+                f"{base_url}/api/v1/actions/requests/{request_id}/approve",
+                json={"actor_id": "alice", "actor_roles": ["operator"], "decision_note": "approved"},
+                timeout=10,
+            )
+            approve_response.raise_for_status()
+
+            execute_response = requests.post(
+                f"{base_url}/api/v1/actions/requests/{request_id}/execute",
+                json={"actor_id": "alice", "actor_roles": ["operator"], "execution_note": "run", "force": False},
+                timeout=10,
+            )
+            execute_response.raise_for_status()
+
+            events_response = requests.get(f"{base_url}/api/v1/aiops/events?limit=5", timeout=10)
+            events_response.raise_for_status()
+            events = events_response.json()["items"]
+
+            assert events[0]["event_type"] == "yaml_apply"
+            assert events[0]["source"] == "ops_console"
+            assert events[0]["namespace"] == "payments"
+            assert events[0]["resource_type"] == "deployments"
+            assert events[0]["resource_name"] == "payments-api"
+            assert "replicas: 4" in events[0]["yaml_diff"]
+            assert events[0]["apply_result"]["status"] == "succeeded"
+            assert events[0]["metadata"]["mode"] == "local-simulated"
+
+
 def test_ops_console_document_rows_are_built_from_postgres_records() -> None:
     rows = ops_console_api._document_rows_from_database_records(
         [

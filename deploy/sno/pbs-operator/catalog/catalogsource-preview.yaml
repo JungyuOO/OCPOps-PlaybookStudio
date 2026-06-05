@@ -1,0 +1,14 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: playbookstudio-operator-preview
+  namespace: openshift-marketplace
+  labels:
+    app.kubernetes.io/part-of: playbookstudio
+    pbs.ocpops.io/gitops-stage: phase2-preview
+    pbs.ocpops.io/requires-approval: "true"
+spec:
+  sourceType: grpc
+  image: ghcr.io/jungyuoo/ocpops-playbookstudio-operator-catalog:v0.3.0
+  displayName: Playbook Studio Operator Preview
+  publisher: OCPOps

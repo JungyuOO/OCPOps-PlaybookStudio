@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from typing import Any
 from urllib.parse import parse_qs
 
+from play_book_studio.aiops.event_timeline import append_timeline_event
 from play_book_studio.cluster.workspace_models import WorkspaceHandle
 from play_book_studio.cluster.workspace_provisioner import (
     enforce_active_workspace_limit,
@@ -75,6 +76,10 @@ def build_workspace_terminal_session_config(
     )
 
 
+def terminal_workspace_auto_create_enabled(settings: Settings) -> bool:
+    return bool(settings.terminal_user_workspace_enabled and settings.pbs_auto_create_namespace)
+
+
 def _context_from_message(message: dict[str, Any]) -> TerminalLearningContext:
     return TerminalLearningContext(
         learner_id=str(message.get("learner_id") or message.get("learnerId") or ""),
@@ -109,7 +114,15 @@ def _owner_hash_from_websocket(websocket) -> str:
 
 
 class TerminalEventRecorder:
-    def __init__(self, *, database_url: str, session: TerminalSession, context: TerminalLearningContext) -> None:
+    def __init__(
+        self,
+        *,
+        root_dir: Path = Path("."),
+        database_url: str,
+        session: TerminalSession,
+        context: TerminalLearningContext,
+    ) -> None:
+        self.root_dir = root_dir
         self.database_url = database_url
         self.session = session
         self.context = context
@@ -119,6 +132,10 @@ class TerminalEventRecorder:
         self.input_buffer = ""
         self.connection = None
         self.pending_output_checks: list[dict[str, Any]] = []
+
+    @property
+    def session_id(self) -> str:
+        return str(getattr(self.session, "session_id", "") or "")
 
     @property
     def enabled(self) -> bool:
@@ -175,6 +192,15 @@ class TerminalEventRecorder:
             )
 
     def record_output(self, *, stream: str, data: str) -> list[dict[str, Any]]:
+        append_timeline_event(
+            self.root_dir,
+            event_type="cli_output",
+            source="terminal",
+            summary=f"Terminal {stream} output captured.",
+            session_id=self.session_id,
+            stdout=data if stream != "stderr" else "",
+            stderr=data if stream == "stderr" else "",
+        )
         if not self.connection or not self.terminal_session_id or not data:
             return []
         self.event_ordinal += 1
@@ -240,6 +266,14 @@ class TerminalEventRecorder:
         return result_events
 
     def record_exit_code(self, exit_code: int) -> list[dict[str, Any]]:
+        append_timeline_event(
+            self.root_dir,
+            event_type="cli_exit",
+            source="terminal",
+            summary=f"Terminal process exited with code {exit_code}.",
+            session_id=self.session_id,
+            exit_code=exit_code,
+        )
         if not self.connection or not self.terminal_session_id:
             return []
         self.event_ordinal += 1
@@ -254,6 +288,14 @@ class TerminalEventRecorder:
         return self._record_output_check_results(stream="stdout", data="", exit_code=exit_code)
 
     def record_error(self, message: str) -> None:
+        append_timeline_event(
+            self.root_dir,
+            event_type="cli_error",
+            source="terminal",
+            summary=message,
+            session_id=self.session_id,
+            stderr=message,
+        )
         if not self.connection or not self.terminal_session_id:
             return
         self.event_ordinal += 1
@@ -278,6 +320,14 @@ class TerminalEventRecorder:
         return result_events
 
     def record_command(self, command: str) -> list[dict[str, Any]]:
+        append_timeline_event(
+            self.root_dir,
+            event_type="cli_command",
+            source="terminal",
+            summary=f"Command submitted: {command}",
+            session_id=self.session_id,
+            command_text=command,
+        )
         if not self.connection or not self.terminal_session_id:
             return []
         result_events: list[dict[str, Any]] = []
@@ -364,6 +414,7 @@ async def _handle_terminal_connection(
     websocket,
     *args: object,
     config: TerminalSessionConfig,
+    root_dir: Path,
     database_url: str = "",
     cluster_server: str = "",
     workspace: WorkspaceHandle | None = None,
@@ -371,6 +422,7 @@ async def _handle_terminal_connection(
 ) -> None:
     session = TerminalSession(config).start()
     recorder = TerminalEventRecorder(
+        root_dir=root_dir,
         database_url=database_url,
         session=session,
         context=_context_from_path(_websocket_path(websocket, args)),
@@ -525,7 +577,18 @@ def start_terminal_websocket_server(*, settings: Settings, root_dir: Path) -> th
             session_config = config
             workspace: WorkspaceHandle | None = None
             owner_hash = ""
-            if settings.terminal_user_workspace_enabled:
+            if settings.terminal_user_workspace_enabled and not terminal_workspace_auto_create_enabled(settings):
+                await websocket.send(
+                    _json_event(
+                        {
+                            "type": "bootstrap_stage",
+                            "stage": "namespace_auto_create_disabled",
+                            "message": "User workspace namespace auto-create is disabled.",
+                            "namespace_mode": settings.pbs_namespace_mode,
+                        }
+                    )
+                )
+            if terminal_workspace_auto_create_enabled(settings):
                 try:
                     await websocket.send(
                         _json_event(
@@ -590,6 +653,7 @@ def start_terminal_websocket_server(*, settings: Settings, root_dir: Path) -> th
                 websocket,
                 *args,
                 config=session_config,
+                root_dir=root_dir,
                 database_url=database_url,
                 cluster_server=cluster_server,
                 workspace=workspace,
@@ -616,4 +680,5 @@ __all__ = [
     "build_terminal_session_config",
     "build_workspace_terminal_session_config",
     "start_terminal_websocket_server",
+    "terminal_workspace_auto_create_enabled",
 ]

@@ -57,6 +57,15 @@ EXPOSE 8765 8770
 CMD ["python", "-m", "play_book_studio.cli", "ui", "--no-browser", "--host", "0.0.0.0", "--port", "8765"]
 
 
+FROM app AS operator
+
+ENV PBS_OPERATOR_MODE=dry-run \
+    PBS_OPERATOR_WATCH_ENABLED=true \
+    PBS_OPERATOR_APPLY_ENABLED=false
+
+CMD ["python", "-m", "play_book_studio.pbs_operator.runtime"]
+
+
 FROM nginx:1.27-alpine AS web
 
 COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
@@ -110,3 +119,21 @@ WORKDIR /home/learner
 USER 1001
 
 CMD ["/bin/bash", "-lc", "sleep infinity"]
+
+
+FROM scratch AS operator-bundle
+
+LABEL operators.operatorframework.io.bundle.package.v1="playbookstudio-operator" \
+      operators.operatorframework.io.bundle.channels.v1="alpha" \
+      operators.operatorframework.io.bundle.channel.default.v1="alpha" \
+      operators.operatorframework.io.bundle.mediatype.v1="registry+v1"
+
+COPY deploy/sno/pbs-operator/bundle/manifests /manifests
+COPY deploy/sno/pbs-operator/bundle/metadata /metadata
+
+
+FROM quay.io/operator-framework/opm:latest AS operator-catalog
+
+COPY deploy/sno/pbs-operator/catalog /configs
+
+CMD ["serve", "/configs", "--cache-dir=/tmp/cache"]

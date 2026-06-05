@@ -322,6 +322,103 @@
   overscroll-behavior: none;
 }
 
+.aiops-workbench-statusbar {
+  flex: 0 0 auto;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(8, 12, 19, 0.96);
+  color: rgba(239, 252, 255, 0.72);
+  overflow: hidden;
+}
+
+.aiops-statusbar-section {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 0.73rem;
+}
+
+.aiops-statusbar-section strong,
+.aiops-statusbar-section span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aiops-statusbar-section strong {
+  color: #effcff;
+  font-weight: 760;
+}
+
+.aiops-statusbar-section span {
+  color: rgba(239, 252, 255, 0.54);
+}
+
+.aiops-status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.72);
+}
+
+.aiops-status-dot--connected {
+  background: #22c55e;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.48);
+}
+
+.aiops-status-dot--error,
+.aiops-status-dot--expired {
+  background: #fb7185;
+}
+
+.aiops-workspace-strip {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 18px 12px;
+}
+
+.aiops-workspace-strip > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.026);
+}
+
+.aiops-workspace-strip span {
+  color: rgba(0, 209, 255, 0.78);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.aiops-workspace-strip strong {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(239, 252, 255, 0.78);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .main-panel-group {
   flex: 1 1 0;
   width: 100%;
@@ -5512,6 +5609,187 @@
   color: #dbe8ef;
 }
 
+.aiops-terminal-workbench {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 32%);
+  background: #070b12;
+}
+
+.aiops-terminal-workbench .terminal-session-shell {
+  border-right: 1px solid rgba(96, 165, 250, 0.12);
+}
+
+.aiops-event-rail {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: rgba(9, 14, 23, 0.98);
+  color: #dbe8ef;
+}
+
+.aiops-event-rail-head {
+  flex: 0 0 auto;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border-bottom: 1px solid rgba(96, 165, 250, 0.12);
+}
+
+.aiops-event-rail-head div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.aiops-event-rail-head span,
+.aiops-event-rail-title {
+  color: rgba(56, 189, 248, 0.82);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aiops-event-rail-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #effcff;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aiops-event-rail-head button {
+  flex: 0 0 auto;
+  height: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #dbe8ef;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.aiops-event-rail-head button:disabled {
+  cursor: wait;
+  opacity: 0.56;
+}
+
+.aiops-event-error {
+  flex: 0 0 auto;
+  margin: 10px;
+  color: #fecdd3;
+  font-size: 0.74rem;
+}
+
+.aiops-event-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.aiops-event-card {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.aiops-event-card--yaml_apply,
+.aiops-event-card--action_execute {
+  border-color: rgba(56, 189, 248, 0.26);
+  background: rgba(8, 47, 73, 0.42);
+}
+
+.aiops-event-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.aiops-event-card-head span,
+.aiops-event-card-head time,
+.aiops-event-card small,
+.aiops-event-muted,
+.aiops-event-empty {
+  color: rgba(219, 232, 239, 0.58);
+  font-size: 0.68rem;
+}
+
+.aiops-event-card-head span {
+  color: #7dd3fc;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.aiops-event-card strong {
+  min-width: 0;
+  color: rgba(239, 252, 255, 0.9);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.aiops-event-card code,
+.aiops-terminal-action code {
+  min-width: 0;
+  overflow: hidden;
+  color: #bbf7d0;
+  font-family: "Cascadia Mono", "Fira Code", Consolas, monospace;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aiops-event-card pre,
+.aiops-terminal-action pre {
+  max-height: 120px;
+  margin: 0;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(219, 232, 239, 0.78);
+  font-family: "Cascadia Mono", "Fira Code", Consolas, monospace;
+  font-size: 0.66rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.aiops-event-rail-section {
+  flex: 0 0 auto;
+  max-height: 34%;
+  display: grid;
+  gap: 8px;
+  overflow: auto;
+  padding: 10px;
+  border-top: 1px solid rgba(96, 165, 250, 0.12);
+}
+
+.aiops-terminal-action {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
 .terminal-workspace-toolbar {
   flex: 0 0 auto;
   min-height: 38px;
@@ -7141,6 +7419,32 @@
 }
 
 @media (max-width: 760px) {
+  .aiops-workbench-statusbar,
+  .aiops-workspace-strip {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .aiops-workbench-statusbar {
+    height: auto;
+    flex-wrap: wrap;
+    padding-block: 8px;
+  }
+
+  .aiops-statusbar-section {
+    width: 100%;
+  }
+
+  .aiops-terminal-workbench {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(320px, 1fr) minmax(220px, 38%);
+  }
+
+  .aiops-terminal-workbench .terminal-session-shell {
+    border-right: 0;
+    border-bottom: 1px solid rgba(96, 165, 250, 0.12);
+  }
+
   .evidence-drawer {
     top: 12px;
     right: 12px;
