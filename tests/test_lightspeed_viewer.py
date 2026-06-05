@@ -125,6 +125,43 @@ def test_lightspeed_external_answer_isolates_internal_gold_citations(tmp_path):
     assert "Gold Playbook fallback citation" not in payload_text
 
 
+def test_pbs_gold_answer_keeps_internal_gold_citations_without_lightspeed_boundary(tmp_path):
+    result = AnswerResult(
+        query="CRI-O 스토리지 정리 절차 알려줘",
+        mode="chat",
+        answer="답변: CRI-O 스토리지 정리는 Gold Playbook 절차를 따릅니다. [1]",
+        rewritten_query="CRI-O 스토리지 정리 절차 알려줘",
+        citations=[
+            Citation(
+                index=1,
+                chunk_id="gold-1",
+                book_slug="support",
+                section="지원",
+                anchor="cleaning-crio-storage",
+                source_url="",
+                viewer_path="/playbooks/wiki-runtime/active/support/index.html#cleaning-crio-storage",
+                excerpt="Gold Playbook citation",
+                section_path=("지원", "CRI-O 스토리지 정리"),
+            )
+        ],
+        cited_indices=[1],
+        pipeline_trace={"answer_source": "pbs_rag"},
+    )
+    session = ChatSession(
+        session_id="session-1",
+        context=SessionContext(user_id="tester"),
+    )
+
+    payload = _build_chat_payload(root_dir=tmp_path, session=session, result=result)
+    payload_text = json.dumps(payload, ensure_ascii=False)
+
+    assert payload["answer_source"] == "pbs_rag"
+    assert payload["citations"][0]["viewer_path"] == "/playbooks/wiki-runtime/active/support/index.html#cleaning-crio-storage"
+    assert payload["citations"][0]["href"] == "/playbooks/wiki-runtime/active/support/index.html#cleaning-crio-storage"
+    assert payload["citations"][0]["source_collection"] != "external_tool"
+    assert "/external/lightspeed" not in payload_text
+
+
 def test_lightspeed_artifact_opens_in_viewer(tmp_path):
     artifact_dir = tmp_path / "artifacts" / "external_answers" / "lightspeed"
     artifact_dir.mkdir(parents=True)
