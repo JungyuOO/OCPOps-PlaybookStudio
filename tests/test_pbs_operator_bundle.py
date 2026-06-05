@@ -67,3 +67,18 @@ def test_operator_catalog_fbc_references_bundle_image() -> None:
     assert "playbookstudio-operator.v0.3.0" in catalog
     assert "ghcr.io/jungyuoo/ocpops-playbookstudio-operator-bundle:v0.3.0" in catalog
     assert "ghcr.io/jungyuoo/ocpops-playbookstudio-operator-catalog:v0.3.0" in catalog_source
+
+
+def test_operator_olm_install_preview_is_manual_approval() -> None:
+    kustomization = read("deploy/sno/pbs-operator/olm-install/kustomization.yaml")
+    subscription = read("deploy/sno/pbs-operator/olm-install/subscription.yaml")
+    operator_group = read("deploy/sno/pbs-operator/olm-install/operatorgroup.yaml")
+
+    assert "catalogsource-preview.yaml" in kustomization
+    assert "subscription.yaml" in kustomization
+    assert "operatorgroup.yaml" in kustomization
+    assert "installPlanApproval: Manual" in subscription
+    assert "source: playbookstudio-operator-preview" in subscription
+    assert "sourceNamespace: openshift-marketplace" in subscription
+    assert "targetNamespaces:" in operator_group
+    assert "pbs-ocpops" in operator_group

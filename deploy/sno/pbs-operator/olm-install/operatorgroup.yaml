@@ -1,0 +1,10 @@
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: pbs-operator-group
+  namespace: pbs-ocpops
+  labels:
+    app.kubernetes.io/part-of: playbookstudio
+spec:
+  targetNamespaces:
+    - pbs-ocpops
