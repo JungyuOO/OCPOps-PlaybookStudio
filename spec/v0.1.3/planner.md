@@ -251,7 +251,7 @@ ClusterRole: pbs-terminal-broker
 ClusterRoleBinding: pbs-terminal-broker
 ```
 
-PBS backend Pod의 SA를 이 broker SA로 운영하고, `admin/admin123` 등 cluster-admin 사용은 즉시 폐기.
+PBS backend Pod의 SA를 이 broker SA로 운영하고, 공유 관리자 계정 기반 cluster-admin 사용은 즉시 폐기.
 
 ### 4. sandbox 이미지
 
@@ -508,7 +508,7 @@ src/play_book_studio/cluster/k8s_client.py
 ```
 deploy/openshift/app.yaml
   - app Deployment의 serviceAccountName을 broker SA로 변경
-  - admin/admin123 사용 제거
+  - 공유 관리자 계정 사용 제거
 ```
 
 테스트: `tests/test_broker_rbac_smoke.py`(클러스터 없이 manifest schema 검증).
@@ -760,7 +760,7 @@ oc rollout status deployment/web -n pbs-ocpops
 8. 최근 터미널 명령/결과가 Live chat 답변에 근거로 인용될 수 있다.
 9. 30분 idle 시 Pod replicas=0(동면)되고, 재접속 시 동일 PVC가 마운트되어 어제 파일이 그대로 있다.
 10. 14일 미사용 + `pbs.pinned=false` 시 namespace가 자동 삭제된다. `pbs.pinned=true`면 카운터가 정지한다.
-11. backend가 사용하는 클러스터 권한은 broker SA로 한정되며, `admin/admin123`은 더 이상 사용되지 않는다.
+11. backend가 사용하는 클러스터 권한은 broker SA로 한정되며, 공유 관리자 계정은 더 이상 사용되지 않는다.
 12. 사용자별 ResourceQuota/NetworkPolicy가 자동 부착된다.
 13. 첫 접속 시 1회용 안내 메시지가 chat에 system 메시지로 표시된다.
 14. backend focused tests가 통과한다.
