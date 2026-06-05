@@ -25,7 +25,8 @@ OPENSHIFT_OPERATION_RE = re.compile(
     r"event|이벤트|log|로그|pending|"
     r"crashloopbackoff|notready|스케줄|스케줄링|"
     r"quota|쿼터|limitrange|limit\s*range|리밋|"
-    r"rbac|rolebinding|롤\s*바인딩|clusterrole|클러스터\s*롤|"
+    r"rbac|authorization|권한|auth\s+can-i|can-i|"
+    r"rolebinding|롤\s*바인딩|clusterrole|클러스터\s*롤|"
     r"csr|certificate|인증서|registry|레지스트리|monitoring|모니터링"
     r")",
     re.IGNORECASE,

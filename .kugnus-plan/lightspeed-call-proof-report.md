@@ -35,6 +35,14 @@ Pod Pending 상태면 무엇을 먼저 확인해야 해?
 
 위 값은 endpoint URL과 token 값을 노출하지 않는다.
 
+## 추가 회귀 확인
+
+권한 확인 질문도 OpenShift 운영 질문으로 분류되어 OpenShift Lightspeed를 호출한다.
+
+| 질문 | answer_source | OpenShift Lightspeed status | Viewer path | related link |
+|---|---|---|---|---|
+| `사용자 권한은 어떤 명령으로 확인해?` | `lightspeed_with_pbs_rag` | `used` | `/external/lightspeed/53ab1ab5c718090f0417` | `OpenShift Lightspeed 공식 답변` |
+
 ## 증명 파일
 
 | 파일 | 용도 | 확인할 값 |

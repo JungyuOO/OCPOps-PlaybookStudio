@@ -144,11 +144,11 @@ def _load_playbook_book_from_database(root_dir: Path, book_slug: str) -> dict[st
 
 def _load_playbook_book(root_dir: Path, book_slug: str) -> dict[str, Any] | None:
     settings = load_settings(root_dir)
+    if settings.database_url.strip():
+        return _load_playbook_book_from_database(root_dir, book_slug)
     for path in _playbook_book_candidates(root_dir, book_slug):
         if path.exists():
             return json.loads(path.read_text(encoding="utf-8"))
-    if settings.database_url.strip():
-        return _load_playbook_book_from_database(root_dir, book_slug)
     return None
 
 
