@@ -67,12 +67,12 @@ spec:
                     imagePullPolicy: Always
                     command: ["python", "-m", "play_book_studio.pbs_operator.runtime"]
                     env:
-                      - name: PBS_OPERATOR_MODE
-                        value: dry-run
+                        - name: PBS_OPERATOR_MODE
+                          value: reconcile
                       - name: PBS_OPERATOR_WATCH_ENABLED
                         value: "true"
-                      - name: PBS_OPERATOR_APPLY_ENABLED
-                        value: "false"
+                        - name: PBS_OPERATOR_APPLY_ENABLED
+                          value: "true"
                       - name: PBS_OPERATOR_RECONNECT_SECONDS
                         value: "10"
       permissions:

@@ -29,11 +29,11 @@ spec:
             - play_book_studio.pbs_operator.runtime
           env:
             - name: PBS_OPERATOR_MODE
-              value: dry-run
+              value: reconcile
             - name: PBS_OPERATOR_WATCH_ENABLED
               value: "true"
             - name: PBS_OPERATOR_APPLY_ENABLED
-              value: "false"
+              value: "true"
             - name: PBS_OPERATOR_RECONNECT_SECONDS
               value: "10"
             - name: WATCH_NAMESPACE

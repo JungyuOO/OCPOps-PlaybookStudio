@@ -11,4 +11,4 @@ spec:
   name: playbookstudio-operator
   source: playbookstudio-operator-preview
   sourceNamespace: openshift-marketplace
-  installPlanApproval: Manual
+  installPlanApproval: Automatic

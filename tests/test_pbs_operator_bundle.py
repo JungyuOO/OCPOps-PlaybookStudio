@@ -20,7 +20,8 @@ def test_operator_config_includes_runtime_deployment_and_rbac() -> None:
     assert "PBS_OPERATOR_MODE" in deployment
     assert "PBS_OPERATOR_WATCH_ENABLED" in deployment
     assert "PBS_OPERATOR_APPLY_ENABLED" in deployment
-    assert "value: \"false\"" in deployment
+    assert "value: reconcile" in deployment
+    assert "value: \"true\"" in deployment
     assert "playbookstudios/status" in rbac
     assert "resources:" in rbac
 
@@ -69,7 +70,7 @@ def test_operator_catalog_fbc_references_bundle_image() -> None:
     assert "ghcr.io/jungyuoo/ocpops-playbookstudio-operator-catalog:v0.3.0" in catalog_source
 
 
-def test_operator_olm_install_preview_is_manual_approval() -> None:
+def test_operator_olm_install_preview_is_automatic_for_one_click_install() -> None:
     kustomization = read("deploy/sno/pbs-operator/olm-install/kustomization.yaml")
     subscription = read("deploy/sno/pbs-operator/olm-install/subscription.yaml")
     operator_group = read("deploy/sno/pbs-operator/olm-install/operatorgroup.yaml")
@@ -77,7 +78,7 @@ def test_operator_olm_install_preview_is_manual_approval() -> None:
     assert "catalogsource-preview.yaml" in kustomization
     assert "subscription.yaml" in kustomization
     assert "operatorgroup.yaml" in kustomization
-    assert "installPlanApproval: Manual" in subscription
+    assert "installPlanApproval: Automatic" in subscription
     assert "source: playbookstudio-operator-preview" in subscription
     assert "sourceNamespace: openshift-marketplace" in subscription
     assert "targetNamespaces:" in operator_group
