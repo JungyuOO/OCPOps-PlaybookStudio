@@ -16,8 +16,8 @@ def test_dockerfile_declares_operator_bundle_and_catalog_targets() -> None:
     assert "FROM scratch AS operator-bundle" in dockerfile
     assert "COPY deploy/sno/pbs-operator/bundle/manifests /manifests" in dockerfile
     assert "FROM quay.io/operator-framework/opm:latest AS operator-catalog" in dockerfile
-    assert "COPY deploy/sno/pbs-operator/catalog /configs" in dockerfile
-    assert 'CMD ["serve", "/configs", "--cache-dir=/tmp/cache"]' in dockerfile
+    assert "COPY deploy/sno/pbs-operator/catalog/catalog.yaml /configs/catalog.yaml" in dockerfile
+    assert 'CMD ["serve", "/configs"]' in dockerfile
 
 
 def test_publish_workflow_builds_operator_images() -> None:

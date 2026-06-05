@@ -134,6 +134,6 @@ COPY deploy/sno/pbs-operator/bundle/metadata /metadata
 
 FROM quay.io/operator-framework/opm:latest AS operator-catalog
 
-COPY deploy/sno/pbs-operator/catalog /configs
+COPY deploy/sno/pbs-operator/catalog/catalog.yaml /configs/catalog.yaml
 
-CMD ["serve", "/configs", "--cache-dir=/tmp/cache"]
+CMD ["serve", "/configs"]
