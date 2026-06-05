@@ -121,6 +121,13 @@ class Settings(SettingsPathMixin):
     llm_model: str = ""
     llm_temperature: float = 0.2
     llm_max_tokens: int = 1100
+    openshift_lightspeed_base_url: str = ""
+    openshift_lightspeed_api_token: str = ""
+    openshift_lightspeed_provider: str = ""
+    openshift_lightspeed_model: str = ""
+    openshift_lightspeed_system_prompt: str = ""
+    openshift_lightspeed_timeout_seconds: float = 20.0
+    openshift_lightspeed_verify_tls: bool = True
     question_candidate_llm_client: Any | None = None
     reranker_enabled: bool = False
     reranker_base_url: str = ""
@@ -249,6 +256,14 @@ class Settings(SettingsPathMixin):
     def graph_sidecar_compact_path(self) -> Path:
         return self.graph_sidecar_path.with_name("graph_sidecar_compact.json")
 
+
+def _clean_optional_env_value(value: str | None) -> str:
+    cleaned = str(value or "").strip()
+    if cleaned.startswith("<") and cleaned.endswith(">"):
+        return ""
+    return cleaned
+
+
 def load_effective_env(root_dir: str | Path) -> dict[str, str]:
     """`.env` overlay를 반영한 환경 맵을 반환한다.
 
@@ -343,6 +358,30 @@ def load_settings(root_dir: str | Path) -> Settings:
         llm_model=effective_env.get("LLM_MODEL", "").strip(),
         llm_temperature=float(effective_env.get("LLM_TEMPERATURE", "0.2")),
         llm_max_tokens=int(effective_env.get("LLM_MAX_TOKENS", "1100")),
+        openshift_lightspeed_base_url=_clean_optional_env_value(effective_env.get(
+            "OPENSHIFT_LIGHTSPEED_BASE_URL",
+            "",
+        )).rstrip("/"),
+        openshift_lightspeed_api_token=_clean_optional_env_value(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_API_TOKEN", "")
+        ),
+        openshift_lightspeed_provider=_clean_optional_env_value(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_PROVIDER", "")
+        ),
+        openshift_lightspeed_model=_clean_optional_env_value(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_MODEL", "")
+        ),
+        openshift_lightspeed_system_prompt=_clean_optional_env_value(effective_env.get(
+            "OPENSHIFT_LIGHTSPEED_SYSTEM_PROMPT",
+            "",
+        )),
+        openshift_lightspeed_timeout_seconds=float(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS", "20")
+        ),
+        openshift_lightspeed_verify_tls=not (
+            effective_env.get("OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY", "false").lower()
+            in {"1", "true", "yes", "on"}
+        ),
         reranker_enabled=effective_env.get("RERANKER_ENABLED", "false").lower()
         in {"1", "true", "yes", "on"},
         reranker_base_url=effective_env.get("RERANKER_BASE_URL", "").strip().rstrip("/"),

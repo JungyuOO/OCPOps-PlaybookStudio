@@ -1361,6 +1361,21 @@ function buildOverlayTargetFromViewerPath(
   return null;
 }
 
+function metadataString(metadata: Record<string, unknown> | undefined, key: string): string {
+  const value = metadata?.[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function metadataObjectArray<T>(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): T[] {
+  const value = metadata?.[key];
+  return Array.isArray(value)
+    ? value.filter((item) => typeof item === 'object' && item !== null) as T[]
+    : [];
+}
+
 export default function WorkspacePage() {
   const [manualBooks, setManualBooks] = useState<WorkspaceManualBook[]>([]);
   const [drafts, setDrafts] = useState<CustomerPackDraft[]>([]);
@@ -1542,6 +1557,12 @@ export default function WorkspacePage() {
           updated_at: session.updated_at,
           first_query: session.title,
           history_source: 'db',
+          primary_source_lane: metadataString(session.metadata, 'primary_source_lane'),
+          primary_boundary_truth: metadataString(session.metadata, 'primary_boundary_truth'),
+          primary_runtime_truth_label: metadataString(session.metadata, 'primary_runtime_truth_label'),
+          primary_boundary_badge: metadataString(session.metadata, 'primary_boundary_badge'),
+          primary_publication_state: metadataString(session.metadata, 'primary_publication_state'),
+          primary_approval_state: metadataString(session.metadata, 'primary_approval_state'),
         })));
         return;
       }
@@ -2218,16 +2239,25 @@ export default function WorkspacePage() {
         setSessionId(targetSessionId);
         setMessages(history.messages.map((message) => {
           const metadata = message.metadata || {};
-          const citations = Array.isArray(metadata.citations)
-            ? metadata.citations.filter((item): item is ChatCitation => typeof item === 'object' && item !== null)
-            : [];
+          const citations = metadataObjectArray<ChatCitation>(metadata, 'citations');
+          const relatedLinks = metadataObjectArray<ChatRelatedLink>(metadata, 'related_links');
+          const relatedSections = metadataObjectArray<ChatRelatedLink>(metadata, 'related_sections');
           return {
             id: message.message_id || makeId(message.role === 'user' ? 'u' : 'a'),
             role: message.role === 'assistant' ? 'assistant' as const : 'user' as const,
             content: message.content,
             citations,
+            relatedLinks,
+            relatedSections,
+            answerSource: metadataString(metadata, 'answer_source'),
             responseKind: typeof metadata.response_kind === 'string' ? metadata.response_kind : undefined,
             rewrittenQuery: typeof metadata.rewritten_query === 'string' ? metadata.rewritten_query : undefined,
+            primarySourceLane: metadataString(metadata, 'primary_source_lane'),
+            primaryBoundaryTruth: metadataString(metadata, 'primary_boundary_truth'),
+            primaryRuntimeTruthLabel: metadataString(metadata, 'primary_runtime_truth_label'),
+            primaryBoundaryBadge: metadataString(metadata, 'primary_boundary_badge'),
+            primaryPublicationState: metadataString(metadata, 'primary_publication_state'),
+            primaryApprovalState: metadataString(metadata, 'primary_approval_state'),
           };
         }));
         return;
@@ -2241,6 +2271,12 @@ export default function WorkspacePage() {
             id: makeId('a'),
             role: 'assistant' as const,
             content: turn.answer,
+            citations: turn.citations ?? [],
+            relatedLinks: turn.related_links ?? [],
+            relatedSections: turn.related_sections ?? [],
+            answerSource: turn.answer_source,
+            responseKind: turn.response_kind,
+            rewrittenQuery: turn.rewritten_query,
             primarySourceLane: turn.primary_source_lane,
             primaryBoundaryTruth: turn.primary_boundary_truth,
             primaryRuntimeTruthLabel: turn.primary_runtime_truth_label,
@@ -3898,6 +3934,8 @@ export default function WorkspacePage() {
         });
       }
       const primaryTruth = primaryCitationTruth(response.citations);
+      const answerSource = String(response.answer_source || response.pipeline_trace?.answer_source || '').trim();
+      const usesLightspeed = answerSource === 'lightspeed_with_pbs_rag';
       const finalAnswer = response.answer ?? '';
       const visibleAnswer = streamedAnswer.trim()
         ? (finalAnswer && finalAnswer.startsWith(streamedAnswer) ? finalAnswer : streamedAnswer)
@@ -3918,11 +3956,12 @@ export default function WorkspacePage() {
             ? ((response as { artifacts?: Array<Record<string, unknown>> }).artifacts ?? [])
             : [],
           responseKind: response.response_kind,
+          answerSource,
           acquisition: response.acquisition,
-          primarySourceLane: primaryTruth?.sourceLane,
-          primaryBoundaryTruth: primaryTruth?.boundaryTruth,
-          primaryRuntimeTruthLabel: primaryTruth?.runtimeTruthLabel,
-          primaryBoundaryBadge: primaryTruth?.boundaryBadge,
+          primarySourceLane: usesLightspeed ? 'openshift_lightspeed' : primaryTruth?.sourceLane,
+          primaryBoundaryTruth: usesLightspeed ? 'external_openshift_lightspeed' : primaryTruth?.boundaryTruth,
+          primaryRuntimeTruthLabel: usesLightspeed ? 'OpenShift Lightspeed' : primaryTruth?.runtimeTruthLabel,
+          primaryBoundaryBadge: usesLightspeed ? 'Lightspeed' : primaryTruth?.boundaryBadge,
           primaryPublicationState: primaryTruth?.publicationState,
           primaryApprovalState: primaryTruth?.approvalState,
           routeKind: messageRouteKind,

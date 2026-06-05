@@ -83,6 +83,46 @@ def test_delete_all_removes_only_current_owner_scope() -> None:
         _cleanup_owner_dirs(root)
 
 
+def test_session_summary_preserves_lightspeed_primary_badge() -> None:
+    root = Path.cwd()
+    _cleanup_owner_dirs(root)
+    try:
+        store = SessionStore(root, load_persisted=False).for_owner(OWNER_A)
+        session = store.get("lightspeed-session")
+        session.history.append(
+            Turn(
+                query="Pod Pending 상태면 무엇을 먼저 확인해야 해?",
+                mode="chat",
+                answer="답변: Events를 먼저 확인합니다.",
+                answer_source="lightspeed_with_pbs_rag",
+                related_links=[
+                    {
+                        "label": "OpenShift Lightspeed 공식 답변",
+                        "href": "/external/lightspeed/unit-test",
+                        "boundary_badge": "Lightspeed",
+                    }
+                ],
+                primary_source_lane="openshift_lightspeed",
+                primary_boundary_truth="external_openshift_lightspeed",
+                primary_runtime_truth_label="OpenShift Lightspeed",
+                primary_boundary_badge="Lightspeed",
+            )
+        )
+        session.revision += 1
+        store.update(session)
+
+        summaries = store.list_summaries()
+        loaded = store.peek("lightspeed-session")
+
+        assert summaries[0]["primary_boundary_badge"] == "Lightspeed"
+        assert summaries[0]["primary_source_lane"] == "openshift_lightspeed"
+        assert loaded is not None
+        assert loaded.history[0].answer_source == "lightspeed_with_pbs_rag"
+        assert loaded.history[0].related_links[0]["boundary_badge"] == "Lightspeed"
+    finally:
+        _cleanup_owner_dirs(root)
+
+
 def test_session_id_is_sanitized_before_snapshot_path_use() -> None:
     root = Path.cwd()
     _cleanup_owner_dirs(root)

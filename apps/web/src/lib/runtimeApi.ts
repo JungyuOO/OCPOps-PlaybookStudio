@@ -791,6 +791,7 @@ export type ViewerPageMode = 'single' | 'multi';
 
 export interface ChatResponse {
   answer: string;
+  answer_source?: string;
   rewritten_query?: string;
   citations: ChatCitation[];
   warnings: string[];
@@ -1147,6 +1148,12 @@ export interface SessionTurnSnapshot {
   answer: string;
   turn_id: string;
   created_at: string;
+  answer_source?: string;
+  citations?: ChatCitation[];
+  related_links?: ChatRelatedLink[];
+  related_sections?: ChatRelatedLink[];
+  response_kind?: string;
+  rewritten_query?: string;
   primary_source_lane?: string;
   primary_boundary_truth?: string;
   primary_runtime_truth_label?: string;

@@ -5,8 +5,8 @@
 | 항목 | 값 |
 |---|---|
 | branch | `dev` |
-| base head | `f2fb312` |
-| 목적 | PostgreSQL pgvector 전환, RAG 기초 안정화, 업로드 실패 기록 정리 |
+| base head | `7dde93d` |
+| 목적 | OpenShift Lightspeed 호출 연동, PBS RAG 근거 결합, Viewer 표시, smoke 검증 |
 | 실행 서비스 | `postgres`, `app`, `web` |
 | 제외 서비스 | Qdrant |
 
@@ -17,21 +17,39 @@
 
 | 영역 | 대표 파일 |
 |---|---|
-| 환경/설정 | `.env.production.example`, `.gitignore`, `src/play_book_studio/config/settings.py`, `src/play_book_studio/config/validation.py` |
+| 환경/설정 | `.env.production.example`, `src/play_book_studio/config/settings.py`, `docker-compose.yml` |
+| OpenShift Lightspeed client | `src/play_book_studio/integrations/lightspeed.py`, `src/play_book_studio/integrations/__init__.py` |
+| OpenShift Lightspeed answer path | `src/play_book_studio/answering/answerer.py`, `src/play_book_studio/answering/prompt.py`, `src/play_book_studio/answering/pipeline_helpers.py` |
+| OpenShift Lightspeed Viewer | `src/play_book_studio/http/server_routes_viewer.py`, `src/play_book_studio/http/server_support.py`, `src/play_book_studio/http/presenters_runtime.py` |
+| OpenShift Lightspeed CLI smoke | `src/play_book_studio/cli.py`, `scripts/mock_lightspeed_server.py` |
 | DB migration | `db/migrations/0010_pgvector_chunk_embeddings.sql`, `db/migrations/0011_drop_legacy_qdrant_index_entries.sql` |
 | DB 상태 확인 | `src/play_book_studio/db/corpus_status.py`, `src/play_book_studio/db/document_repository.py`, `src/play_book_studio/db/embedding_indexer.py` |
 | 검색 | `src/play_book_studio/retrieval/vector.py`, `src/play_book_studio/retrieval/payload.py`, `src/play_book_studio/retrieval/retriever_search.py`, `src/play_book_studio/retrieval/retriever_pipeline.py` |
 | 검색 신호 | `src/play_book_studio/retrieval/query_signal_pipeline.py`, `src/play_book_studio/retrieval/query_understanding.py`, `src/play_book_studio/retrieval/intent_profile.py` |
 | course 검색 | `src/play_book_studio/course/chunk_loader.py`, `src/play_book_studio/course/search_payload.py`, `src/play_book_studio/course/build_index.py` |
 | ingestion | `src/play_book_studio/ingestion/corpus_import.py`, `src/play_book_studio/ingestion/kmsc_course_import.py`, `src/play_book_studio/ingestion/pipeline.py`, `src/play_book_studio/ingestion/runtime_catalog_library.py` |
-| HTTP/API | `src/play_book_studio/http/course_api.py`, `src/play_book_studio/http/runtime_report.py`, `src/play_book_studio/http/server_routes_viewer.py`, `src/play_book_studio/http/upload_api.py` |
-| answer | `src/play_book_studio/answering/context.py` |
+| HTTP/API | `src/play_book_studio/http/server_routes_viewer.py`, `src/play_book_studio/http/server_support.py`, `src/play_book_studio/http/source_books_viewer_resolver.py` |
+| answer | `src/play_book_studio/answering/answerer.py`, `src/play_book_studio/answering/prompt.py`, `src/play_book_studio/answering/pipeline_helpers.py` |
 | evaluation | `src/play_book_studio/evals/answer_viewer_audit.py`, `src/play_book_studio/evals/rag_foundation_audit.py`, `src/play_book_studio/evals/chunk_quality_audit.py` |
-| deploy/runtime | `docker-compose.yml`, `deploy/docker-compose.prod.yml`, `deploy/docker-compose.image.yml`, `deploy/openshift/core.yaml`, `deploy/openshift/kustomization.yaml` |
-| web | `apps/web/src/lib/runtimeApi.ts`, `apps/web/src/pages/PlaybookLibraryPage.tsx` |
+| deploy/runtime | `docker-compose.yml`, `deploy/docker-compose.prod.yml`, `deploy/docker-compose.image.yml`, `deploy/openshift/core.yaml`, `deploy/openshift/app.yaml`, `deploy/openshift/apply-playbookstudio.sh`, `deploy/openshift/README.md` |
+| web | `apps/web/src/lib/runtimeApi.ts`, `apps/web/src/pages/WorkspacePage.tsx`, `apps/web/src/pages/workspace/WorkspaceAnswer.tsx`, `apps/web/src/pages/workspaceTypes.ts` |
 | CLI | `src/play_book_studio/cli.py` |
-| docs | `README.md`, `corpus/README.md`, `deploy/DEPLOY.md`, `deploy/openshift/README.md`, `.kugnus-plan/*.md`, `.kugnus-plan/rag-foundation/*.md` |
-| tests | `tests/test_embedding_indexer.py`, `tests/test_course_search_payload.py`, `tests/test_vector_retriever.py`, `tests/test_corpus_status.py`, `tests/test_deploy_seed_commands.py` |
+| docs | `.kugnus-plan/lightspeed-call-proof-report.md`, `.kugnus-plan/lightspeed-pbs-chat-integration.md`, `.kugnus-plan/company-openshift-lightspeed-next.md`, `.kugnus-plan/macbook-crc-lightspeed-runbook.md`, `deploy/openshift/README.md` |
+| tests | `tests/test_lightspeed_client.py`, `tests/test_lightspeed_viewer.py`, `tests/test_answerer_llm_final.py`, `tests/test_app_server.py`, `tests/test_runtime_seed_inputs.py`, `apps/web/src/pages/workspace/WorkspaceAnswer.test.tsx` |
+
+## OpenShift Lightspeed 연동
+
+| 항목 | 처리 |
+|---|---|
+| 호출 방향 | PBS Backend에서 OpenShift 운영 질문을 감지하면 OpenShift Lightspeed `POST /v1/query` 호출 |
+| 공식 답변 처리 | OpenShift Lightspeed 답변을 공식 기준 답변으로 prompt에 포함 |
+| PBS 근거 처리 | 최종 citation은 PBS RAG 검색 결과만 사용 |
+| Viewer 처리 | OpenShift Lightspeed 응답은 `/external/lightspeed/{artifact_id}` artifact로 저장하고 PBS Viewer에서 표시 |
+| 배지 | 답변 헤더와 related link에 `Lightspeed` 표시 |
+| 미설정 상태 | endpoint가 없으면 PBS 내부 근거 답변으로 계속 동작하고 미연결 상태 문구 표시 |
+| 권한 확인 | `lightspeed-auth-smoke`로 `/authorized` 결과와 token 권한 확인 |
+| 통합 확인 | `lightspeed-integration-smoke`로 auth, query, chat, source-meta, Viewer API 확인 |
+| mock 확인 | `scripts/mock_lightspeed_server.py`로 회사 endpoint 없이 app container 경로 검증 |
 
 ## 업로드 예외 처리
 
@@ -59,6 +77,13 @@
 
 | 파일 | 용도 |
 |---|---|
+| `.kugnus-plan/lightspeed-call-proof-report.md` | OpenShift Lightspeed API 호출 증명, 코드 위치, 질문 처리 흐름 보고 |
+| `.kugnus-plan/lightspeed-pbs-chat-integration.md` | OpenShift Lightspeed PBS Chat 연동 범위와 검증 순서 |
+| `src/play_book_studio/integrations/lightspeed.py` | OpenShift Lightspeed API client, auth check, 응답 정규화 |
+| `scripts/mock_lightspeed_server.py` | 로컬 통합 smoke용 mock endpoint |
+| `tests/test_lightspeed_client.py` | client, auth smoke, integration smoke 검증 |
+| `tests/test_lightspeed_viewer.py` | 외부 답변 related link와 Viewer/source-meta 검증 |
+| `apps/web/src/pages/workspace/WorkspaceAnswer.test.tsx` | Lightspeed 배지/카드 표시 검증 |
 | `db/migrations/0010_pgvector_chunk_embeddings.sql` | `chunk_embeddings`와 pgvector index 생성 |
 | `db/migrations/0011_drop_legacy_qdrant_index_entries.sql` | legacy Qdrant index table 제거 |
 | `src/play_book_studio/db/embedding_indexer.py` | pending/stale embedding upsert |
@@ -92,9 +117,11 @@
 
 | 검증 | 현재 결과 |
 |---|---|
-| Python 전체 테스트 | `568 passed`, `1 skipped` |
-| Web test | `16 passed` |
+| Lightspeed 핵심 Python 테스트 | `37 passed` |
+| WorkspaceAnswer Web test | `2 passed` |
 | Web build | pass |
-| RAG foundation | `13/13 pass`, `decision=go` |
-| answer / Viewer audit | `8/8 pass` |
-| host route | API/Web 접근 OK |
+| `git diff --check` | pass |
+| local runtime | `app`, `postgres`, `web` healthy |
+| Lightspeed runtime | 실제 endpoint 설정 상태, `configured=true` |
+| Lightspeed chat smoke | `answer_source=lightspeed_with_pbs_rag`, `external_answer_status=used`, Viewer path 생성 |
+| Lightspeed Viewer API | `200`, code block 렌더링, raw bold marker 없음 |

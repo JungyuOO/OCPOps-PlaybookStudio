@@ -20,6 +20,12 @@ SYSTEM_PROMPT = """당신은 OpenShift(OCP) 운영을 돕는 기술 가이드입
 - 근거가 질문의 일부만 다루면, 다루는 데까지만 설명하고 나머지는 '제공된 문서는 여기까지 다룹니다'라고 솔직히 밝히세요.
 - 핵심 문장이나 문단 끝에만 [1], [2]처럼 근거 번호를 답니다. 모든 문장에 반복하지 마세요.
 
+[OpenShift Lightspeed 사용 규칙]
+- OpenShift Lightspeed 공식 답변 블록이 제공되면 OpenShift 공식 기준 설명으로 참고하세요.
+- 최종 답변은 PBS 근거와 함께 다시 작성하세요.
+- citation은 PBS 근거 번호만 사용하세요. OpenShift Lightspeed 응답이나 referenced document를 citation으로 직접 쓰지 마세요.
+- PBS 근거가 고객사 기준을 제공하면 그 기준을 함께 반영하세요.
+
 [형식]
 - 답변은 '답변:'으로 시작합니다.
 - 명령어나 절차가 근거에 있으면 ```bash 코드 블록으로 보여주고, 그 명령이 무엇을 하는지와 결과에서 무엇을 봐야 하는지를 설명으로 함께 씁니다.
@@ -42,16 +48,36 @@ def build_messages(
     mode: str,
     context_bundle: ContextBundle,
     session_summary: str = "",
+    openshift_lightspeed_answer: str = "",
 ) -> list[dict[str, str]]:
     del mode
     session_block = f"세션 맥락:\n{session_summary}\n\n" if session_summary else ""
+    lightspeed_answer = str(openshift_lightspeed_answer or "").strip()
+    lightspeed_block = (
+        "OpenShift Lightspeed 공식 답변:\n"
+        f"{lightspeed_answer}\n\n"
+        "위 내용은 OpenShift 공식 기준 답변입니다. 최종 답변은 아래 PBS 근거와 함께 다시 작성하고, "
+        "citation은 PBS 근거 번호만 사용하세요.\n\n"
+        if lightspeed_answer
+        else ""
+    )
+    answer_instruction = (
+        "OpenShift Lightspeed 공식 답변과 PBS 근거를 함께 사용해 질문에 직접 답하세요. "
+        "근거에 명령이나 절차가 있으면 코드 블록이나 번호 단계를 포함하고, "
+        "citation은 PBS 근거 번호만 사용하세요."
+        if lightspeed_answer
+        else (
+            "위 근거만으로, 질문에 직접 답하세요. 근거에 명령이나 절차가 있으면\n"
+            "코드 블록이나 번호 단계를 포함하고, 평문 요약으로만 끝내지 마세요."
+        )
+    )
     user = (
         f"질문: {query}\n\n"
         f"{session_block}"
+        f"{lightspeed_block}"
         "근거:\n"
         f"{context_bundle.prompt_context}\n\n"
-        "위 근거만으로, 질문에 직접 답하세요. 근거에 명령이나 절차가 있으면\n"
-        "코드 블록이나 번호 단계를 포함하고, 평문 요약으로만 끝내지 마세요."
+        f"{answer_instruction}"
     )
     return [
         {"role": "system", "content": SYSTEM_PROMPT},

@@ -102,6 +102,15 @@ export function truthSurfaceCopy(payload?: TruthSurfacePayload): {
     };
   }
 
+  if (boundaryTruth === 'external_openshift_lightspeed' || sourceLane === 'openshift_lightspeed') {
+    return {
+      label: 'Lightspeed',
+      meta: [
+        runtimeTruthLabel || 'OpenShift Lightspeed',
+      ].filter(Boolean),
+    };
+  }
+
   return {
     label: payload.boundary_badge || runtimeTruthLabel || sourceLane || '',
     meta: [

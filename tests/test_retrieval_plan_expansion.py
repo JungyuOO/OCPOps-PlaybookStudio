@@ -72,6 +72,40 @@ class _InstallSignalClient:
         """
 
 
+class _GenericIntroDriftSignalClient:
+    def generate(self, _messages: list[dict[str, str]], *, max_tokens: int) -> str:
+        return """
+        {
+          "normalized_query": "OpenShift route ingress load balancing",
+          "classification": {
+            "domain": "networking",
+            "book_slug_candidates": ["ingress_and_load_balancing"],
+            "platform": "any_platform",
+            "ocp_version": "4.20",
+            "locale": "ko"
+          },
+          "search_signals": {
+            "objects": ["Route"],
+            "error_states": [],
+            "intent_labels": ["explain_concept"],
+            "answer_shapes": ["short_explanation"],
+            "command_families": [],
+            "primary_topics": ["Route ingress"],
+            "cluster_phase": [],
+            "execution_target": [],
+            "commands": [],
+            "secondary_topics": [],
+            "components": []
+          },
+          "confidence": {"domain": 0.96},
+          "embedding_queries": [
+            "OpenShift route ingress load balancing",
+            "Router ingress controller configuration"
+          ]
+        }
+        """
+
+
 def _must_keys(metadata_filter: dict[str, object]) -> set[str]:
     must = metadata_filter.get("must")
     if not isinstance(must, list):
@@ -215,3 +249,18 @@ def test_mixed_scope_removes_official_only_metadata_filter() -> None:
     assert "source.corpus_scope" not in keys
     assert "source.citation_eligible" not in keys
     assert "chunk.chunk_type" not in keys
+
+
+def test_generic_intro_uses_local_rewrite_when_llm_signal_drifts() -> None:
+    plan = build_retrieval_plan(
+        "오픈시프트가뭐야",
+        context=SessionContext(enabled_source_scopes=["official_docs", "customer_docs", "user_upload"]),
+        candidate_k=10,
+        llm_client=_GenericIntroDriftSignalClient(),
+    )
+
+    assert plan.retrieval_queries == [plan.rewritten_query]
+    assert "OpenShift Container Platform" in plan.retrieval_queries[0]
+    keys = _must_keys(plan.metadata_filter)
+    assert "source.corpus_scope" in keys
+    assert "source.citation_eligible" in keys

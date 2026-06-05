@@ -9,7 +9,9 @@ from pathlib import Path
 
 from .access_scope import (
     SOURCE_GROUP_CUSTOMER_DOCS,
+    SOURCE_GROUP_OFFICIAL_DOCS,
     SOURCE_GROUP_USER_UPLOAD,
+    active_document_scope_selected,
     enabled_source_scope_set,
     source_group_for_candidate,
 )
@@ -27,6 +29,7 @@ from .query import (
     has_pod_lifecycle_concept_intent,
     has_route_ingress_compare_intent,
     is_generic_intro_query,
+    is_openshift_product_intro_query,
 )
 from .scoring import fuse_ranked_hits
 from .trace import build_retrieval_trace, duration_ms as _duration_ms, emit_trace_event as _emit_trace_event
@@ -395,6 +398,28 @@ def _filter_preferred_source_scope(
     return hits
 
 
+def _prefer_official_hits_for_product_intro(
+    query: str,
+    hits: list[RetrievalHit],
+    context: SessionContext,
+) -> list[RetrievalHit]:
+    if not hits or not is_openshift_product_intro_query(query):
+        return hits
+    enabled = enabled_source_scope_set(context)
+    if enabled and SOURCE_GROUP_OFFICIAL_DOCS not in enabled:
+        return hits
+    if active_document_scope_selected(context):
+        return hits
+    if str(getattr(context, "active_repository_id", "") or "").strip():
+        return hits
+    official_hits = [
+        hit
+        for hit in hits
+        if source_group_for_candidate(hit) == SOURCE_GROUP_OFFICIAL_DOCS
+    ]
+    return official_hits or hits
+
+
 def _graph_worthy_intent(query: str) -> bool:
     return any(
         (
@@ -585,6 +610,12 @@ def execute_retrieval_pipeline(
         overlay_bm25_hits = _filter_latest_only_hits(retriever, overlay_bm25_hits)
         bm25_hits = _filter_preferred_source_scope(bm25_hits, context)
         overlay_bm25_hits = _filter_preferred_source_scope(overlay_bm25_hits, context)
+        bm25_hits = _prefer_official_hits_for_product_intro(query, bm25_hits, context)
+        overlay_bm25_hits = _prefer_official_hits_for_product_intro(
+            query,
+            overlay_bm25_hits,
+            context,
+        )
     vector_hits: list[RetrievalHit] = []
     vector_runtime: dict[str, object] = {}
     if use_vector:
@@ -602,6 +633,7 @@ def execute_retrieval_pipeline(
         vector_runtime = vector_search["runtime"]
         vector_hits = _filter_latest_only_hits(retriever, vector_hits)
         vector_hits = _filter_preferred_source_scope(vector_hits, context)
+        vector_hits = _prefer_official_hits_for_product_intro(query, vector_hits, context)
 
     _emit_trace_event(
         trace_callback,

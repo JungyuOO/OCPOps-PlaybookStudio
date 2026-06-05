@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import html
+import json
 import re
 from http import HTTPStatus
 from pathlib import Path
@@ -61,6 +62,7 @@ _ENTITY_DIRECTORY_VIEWER_PATH_RE = re.compile(r"^/wiki/entities/[^/]+$")
 _FIGURE_DIRECTORY_VIEWER_PATH_RE = re.compile(r"^/wiki/figures/[^/]+/[^/]+$")
 _UPLOAD_DOCUMENT_DIRECTORY_VIEWER_PATH_RE = re.compile(r"^/uploads/documents/[0-9a-fA-F-]{36}$")
 _UPLOAD_DOCUMENT_VIEWER_PATH_RE = re.compile(r"^/uploads/documents/(?P<document_source_id>[0-9a-fA-F-]{36})(?:/index\.html)?$")
+_LIGHTSPEED_VIEWER_PATH_RE = re.compile(r"^/external/lightspeed/(?P<artifact_id>[A-Za-z0-9_-]+)$")
 
 
 def _scope_viewer_style(style_text: str) -> str:
@@ -105,6 +107,336 @@ def _owner_hash_from_handler(handler: Any) -> str:
     except Exception:  # noqa: BLE001
         return ""
     return str(getattr(owner, "owner_hash", "") or "").strip()
+
+
+def _lightspeed_artifact(root_dir: Path, viewer_path: str) -> dict[str, Any] | None:
+    match = _LIGHTSPEED_VIEWER_PATH_RE.fullmatch(urlparse(str(viewer_path or "").strip()).path)
+    if match is None:
+        return None
+    artifact_id = match.group("artifact_id")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", artifact_id):
+        return None
+    settings = load_settings(root_dir)
+    path = settings.artifacts_dir / "external_answers" / "lightspeed" / f"{artifact_id}.json"
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _render_lightspeed_answer_html(answer: str) -> str:
+    text = str(answer or "").strip()
+    if not text:
+        return '<p class="wiki-empty">OpenShift Lightspeed 응답이 비어 있습니다.</p>'
+    fragments: list[str] = []
+    cursor = 0
+    for match in re.finditer(r"```(?P<lang>[A-Za-z0-9_-]*)\s*\n(?P<code>[\s\S]*?)```", text):
+        before = text[cursor:match.start()].strip()
+        if before:
+            fragments.extend(_render_lightspeed_text_segment_html(before))
+        fragments.append(
+            _render_code_block_html(
+                str(match.group("code") or "").strip(),
+                language=str(match.group("lang") or "text").strip() or "text",
+            )
+        )
+        cursor = match.end()
+    tail = text[cursor:].strip()
+    if tail:
+        fragments.extend(_render_lightspeed_text_segment_html(tail))
+    return "\n".join(fragments)
+
+
+def _render_lightspeed_text_segment_html(text: str) -> list[str]:
+    fragments: list[str] = []
+    for block in re.split(r"\n{2,}", str(text or "").strip()):
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if not lines:
+            continue
+        if len(lines) == 1:
+            heading = re.match(r"^(#{1,3})\s+(.+)$", lines[0])
+            if heading:
+                level = min(3, max(2, len(heading.group(1)) + 1))
+                fragments.append(f"<h{level}>{_render_lightspeed_inline_html(heading.group(2))}</h{level}>")
+                continue
+        ordered_items: list[str] = []
+        unordered_items: list[str] = []
+        for line in lines:
+            ordered_match = re.match(r"^\d+[.)]\s+(.+)$", line)
+            unordered_match = re.match(r"^[-*]\s+(.+)$", line)
+            if ordered_match:
+                ordered_items.append(ordered_match.group(1))
+            if unordered_match:
+                unordered_items.append(unordered_match.group(1))
+        if ordered_items and len(ordered_items) == len(lines):
+            fragments.append(
+                "<ol>"
+                + "".join(f"<li>{_render_lightspeed_inline_html(item)}</li>" for item in ordered_items)
+                + "</ol>"
+            )
+            continue
+        if unordered_items and len(unordered_items) == len(lines):
+            fragments.append(
+                "<ul>"
+                + "".join(f"<li>{_render_lightspeed_inline_html(item)}</li>" for item in unordered_items)
+                + "</ul>"
+            )
+            continue
+        paragraph = "<br />".join(_render_lightspeed_inline_html(line) for line in lines)
+        fragments.append(f"<p>{paragraph}</p>")
+    return fragments
+
+
+def _render_lightspeed_inline_html(text: str) -> str:
+    parts = re.split(r"(`[^`\n]+`|\*\*[^*\n][^*\n]*(?:\*[^*\n]+)*\*\*)", str(text or ""))
+    rendered: list[str] = []
+    for part in parts:
+        if not part:
+            continue
+        if part.startswith("`") and part.endswith("`") and len(part) >= 2:
+            rendered.append(f"<code>{html.escape(part[1:-1])}</code>")
+            continue
+        if part.startswith("**") and part.endswith("**") and len(part) >= 4:
+            rendered.append(f"<strong>{html.escape(part[2:-2])}</strong>")
+            continue
+        rendered.append(html.escape(part))
+    return "".join(rendered)
+
+
+def _external_lightspeed_viewer_html(root_dir: Path, viewer_path: str) -> str | None:
+    payload = _lightspeed_artifact(root_dir, viewer_path)
+    if payload is None:
+        return None
+    query = str(payload.get("query") or "").strip()
+    answer = str(payload.get("answer") or "").strip()
+    created_at = str(payload.get("created_at") or "").strip()
+    referenced_documents = [
+        item for item in (payload.get("referenced_documents") or [])
+        if isinstance(item, dict)
+    ]
+    reference_items = "".join(
+        """
+        <div class="wiki-links">
+          <a href="{url}">{title}</a>
+          <span>{summary}</span>
+        </div>
+        """.format(
+            url=html.escape(str(item.get("url") or item.get("source_url") or "#"), quote=True),
+            title=html.escape(str(item.get("title") or item.get("doc_title") or "Referenced document")),
+            summary=html.escape(str(item.get("summary") or item.get("content") or ""))[:500],
+        ).strip()
+        for item in referenced_documents[:8]
+    )
+    body_html = _render_lightspeed_answer_html(answer)
+    return """
+    <!doctype html>
+    <html lang="ko">
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        body.is-embedded.external-lightspeed-viewer {{
+          margin: 0;
+          font-family: Inter, "Noto Sans KR", system-ui, sans-serif;
+          color: #102033;
+          background: #f7fafc;
+        }}
+        .lightspeed-page {{
+          display: grid;
+          gap: 16px;
+          padding: 20px;
+        }}
+        .lightspeed-hero,
+        .lightspeed-card {{
+          border: 1px solid #dbe5ef;
+          border-radius: 8px;
+          background: #ffffff;
+          box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+          padding: 18px;
+        }}
+        .lightspeed-badge {{
+          display: inline-flex;
+          align-items: center;
+          width: fit-content;
+          border-radius: 999px;
+          background: #e6f4ff;
+          color: #075985;
+          font-size: 12px;
+          font-weight: 800;
+          padding: 4px 10px;
+        }}
+        .lightspeed-title {{
+          margin: 10px 0 4px;
+          font-size: 24px;
+          line-height: 1.25;
+        }}
+        .lightspeed-meta {{
+          color: #5c6b7b;
+          font-size: 13px;
+        }}
+        .lightspeed-question {{
+          margin-top: 12px;
+          border-left: 3px solid #38bdf8;
+          padding-left: 12px;
+          color: #334155;
+        }}
+        .section-body p {{
+          line-height: 1.7;
+          margin: 0 0 12px;
+        }}
+        .section-body ul,
+        .section-body ol {{
+          margin: 0 0 14px;
+          padding-left: 22px;
+          color: #334155;
+          line-height: 1.72;
+        }}
+        .section-body li + li {{
+          margin-top: 6px;
+        }}
+        .section-body code:not(pre code) {{
+          border: 1px solid rgba(14, 116, 144, 0.15);
+          border-radius: 5px;
+          background: rgba(236, 254, 255, 0.9);
+          color: #0f6471;
+          padding: 1px 5px;
+          font-family: "SF Mono", "Menlo", "Consolas", monospace;
+          font-size: 0.88em;
+        }}
+        .code-block {{
+          margin: 16px 0;
+          overflow: hidden;
+          border: 1px solid rgba(15, 23, 42, 0.1);
+          border-radius: 8px;
+          background: #0f172a;
+          box-shadow: none;
+        }}
+        .code-header {{
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+          background: #111827;
+          padding: 10px 12px;
+        }}
+        .code-label {{
+          color: #cbd5e1;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }}
+        .code-actions {{
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }}
+        .icon-button {{
+          display: inline-grid;
+          place-items: center;
+          width: 28px;
+          height: 28px;
+          border: 1px solid rgba(148, 163, 184, 0.22);
+          border-radius: 6px;
+          background: rgba(255, 255, 255, 0.06);
+          color: #cbd5e1;
+          padding: 0;
+          cursor: pointer;
+        }}
+        .icon-button:hover,
+        .icon-button[aria-pressed="true"] {{
+          border-color: rgba(56, 189, 248, 0.4);
+          background: rgba(14, 116, 144, 0.24);
+          color: #f8fafc;
+        }}
+        .sr-only,
+        .icon-button .action-label {{
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+        }}
+        .copy-button .copy-icon-success {{
+          display: none;
+        }}
+        .copy-button.is-copied .copy-icon-idle {{
+          display: none;
+        }}
+        .copy-button.is-copied .copy-icon-success {{
+          display: block;
+        }}
+        .code-block pre {{
+          margin: 0;
+          overflow-x: auto;
+          background: #0f172a;
+          color: #dbeafe;
+          padding: 15px 16px;
+          font-family: "SF Mono", "Menlo", "Consolas", monospace;
+          font-size: 13px;
+          line-height: 1.6;
+          tab-size: 2;
+        }}
+        .code-block code {{
+          background: transparent;
+          color: inherit;
+          padding: 0;
+          white-space: inherit;
+        }}
+        .code-block.overflow-toggle.is-wrapped pre,
+        .code-block.overflow-wrap pre {{
+          overflow-x: hidden;
+          white-space: pre-wrap;
+          overflow-wrap: break-word;
+        }}
+        .wiki-links {{
+          display: grid;
+          gap: 4px;
+          border-top: 1px solid #edf2f7;
+          padding: 10px 0;
+        }}
+        .wiki-links a {{
+          color: #0f5ea8;
+          font-weight: 700;
+          text-decoration: none;
+        }}
+        .wiki-links span {{
+          color: #64748b;
+          font-size: 13px;
+        }}
+      </style>
+    </head>
+    <body class="is-embedded external-lightspeed-viewer">
+      <main class="lightspeed-page">
+        <section class="lightspeed-hero">
+          <span class="lightspeed-badge">Lightspeed</span>
+          <h1 class="lightspeed-title">OpenShift Lightspeed 공식 답변</h1>
+          <div class="lightspeed-meta">{created_at}</div>
+          <div class="lightspeed-question">{query}</div>
+        </section>
+        <section class="lightspeed-card">
+          <h2>답변</h2>
+          <div class="section-body">{body_html}</div>
+        </section>
+        <section class="lightspeed-card">
+          <h2>OpenShift Lightspeed 참조 문서</h2>
+          {reference_items}
+        </section>
+      </main>
+    </body>
+    </html>
+    """.format(
+        created_at=html.escape(created_at or "timestamp unavailable"),
+        query=html.escape(query or "질문 정보 없음"),
+        body_html=body_html,
+        reference_items=reference_items or '<div class="wiki-empty">참조 문서 정보가 응답에 포함되지 않았습니다.</div>',
+    )
 
 
 def _normalize_internal_viewer_markup(markdown: str) -> str:
@@ -1390,7 +1722,8 @@ def _viewer_html_for_path(
 ) -> str | None:
     viewer_path = _canonicalize_viewer_path(viewer_path)
     internal_html = (
-        _uploaded_document_viewer_html(root_dir, viewer_path, owner_user_id=owner_user_id)
+        _external_lightspeed_viewer_html(root_dir, viewer_path)
+        or _uploaded_document_viewer_html(root_dir, viewer_path, owner_user_id=owner_user_id)
         or course_viewer_html(root_dir, viewer_path)
         or
         _internal_buyer_packet_viewer_html(root_dir, viewer_path)
@@ -1520,6 +1853,30 @@ def _official_runtime_source_meta(
 
 def _viewer_source_meta(root_dir: Path, viewer_path: str) -> dict[str, Any] | None:
     viewer_path = _canonicalize_viewer_path(viewer_path)
+    lightspeed_payload = _lightspeed_artifact(root_dir, viewer_path)
+    if lightspeed_payload is not None:
+        return {
+            "book_slug": "openshift-lightspeed",
+            "title": "OpenShift Lightspeed 공식 답변",
+            "book_title": "OpenShift Lightspeed 공식 답변",
+            "anchor": str(lightspeed_payload.get("artifact_id") or ""),
+            "section": "OpenShift Lightspeed 공식 답변",
+            "section_path": ["External Tool", "OpenShift Lightspeed"],
+            "section_path_label": "External Tool > OpenShift Lightspeed",
+            "source_label": "OpenShift Lightspeed 공식 답변",
+            "source_url": "",
+            "viewer_path": viewer_path,
+            "section_match_exact": True,
+            "source_collection": "external_tool",
+            "pack_label": "OpenShift Lightspeed",
+            "source_lane": "openshift_lightspeed",
+            "approval_state": "external",
+            "publication_state": "runtime",
+            "parser_backend": "openshift_lightspeed_api",
+            "boundary_truth": "external_openshift_lightspeed",
+            "runtime_truth_label": "OpenShift Lightspeed",
+            "boundary_badge": "Lightspeed",
+        }
     uploaded_meta = _uploaded_document_source_meta(root_dir, viewer_path)
     if uploaded_meta is not None:
         return uploaded_meta

@@ -41,6 +41,7 @@ def serialize_turn(turn: "Turn") -> dict[str, Any]:
         "chatbot": turn.answer,
         "rewritten_query": turn.rewritten_query,
         "response_kind": turn.response_kind,
+        "answer_source": turn.answer_source,
         "citations": list(turn.citations),
         "related_links": list(turn.related_links),
         "related_sections": list(turn.related_sections),
@@ -88,6 +89,7 @@ def deserialize_turn(payload: dict[str, Any]) -> "Turn":
         answer=answer,
         rewritten_query=str(payload.get("rewritten_query") or ""),
         response_kind=str(payload.get("response_kind") or ""),
+        answer_source=str(payload.get("answer_source") or ""),
         citations=[dict(item) for item in citations if isinstance(item, dict)],
         related_links=[dict(item) for item in related_links if isinstance(item, dict)],
         related_sections=[dict(item) for item in related_sections if isinstance(item, dict)],
@@ -110,6 +112,7 @@ class Turn:
     answer: str
     rewritten_query: str = ""
     response_kind: str = ""
+    answer_source: str = ""
     citations: list[dict[str, Any]] = field(default_factory=list)
     related_links: list[dict[str, Any]] = field(default_factory=list)
     related_sections: list[dict[str, Any]] = field(default_factory=list)

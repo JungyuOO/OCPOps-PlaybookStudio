@@ -157,7 +157,9 @@ curl.exe -k https://127.0.0.1:9443/
 | timeout | `<seconds>` |
 | error handling | unreachable, unauthorized, no_answer 분리 |
 
-이 값이 채워지기 전에는 PBS 코드에 OpenShift Lightspeed 호출 로직을 추가하지 않는다.
+이 값이 채워지기 전에는 실제 OpenShift Lightspeed 연동 완료로 보지 않는다.
+
+PBS 코드는 endpoint 미설정, 호출 실패, 빈 응답을 분리해 표시하고 내부 답변 경로를 유지한다.
 
 ## 중단 조건
 

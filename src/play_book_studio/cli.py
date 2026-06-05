@@ -7,7 +7,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
+import time
 from pathlib import Path
 
 from play_book_studio.console_encoding import force_utf8_stdio
@@ -131,6 +134,49 @@ def build_parser() -> argparse.ArgumentParser:
         "--query",
         default="OpenShift architecture overview",
     )
+
+    lightspeed_smoke_parser = subparsers.add_parser(
+        "lightspeed-smoke",
+        help="Check the configured OpenShift Lightspeed /v1/query endpoint",
+    )
+    lightspeed_smoke_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    lightspeed_smoke_parser.add_argument(
+        "--query",
+        default="Pod Pending 상태면 무엇을 먼저 확인해야 해?",
+    )
+    lightspeed_smoke_parser.add_argument("--conversation-id", default="")
+
+    lightspeed_auth_smoke_parser = subparsers.add_parser(
+        "lightspeed-auth-smoke",
+        help="Check the configured OpenShift Lightspeed /authorized endpoint",
+    )
+    lightspeed_auth_smoke_parser.add_argument("--root-dir", type=Path, default=ROOT)
+
+    lightspeed_integration_smoke_parser = subparsers.add_parser(
+        "lightspeed-integration-smoke",
+        help="Run OpenShift Lightspeed auth, query, chat, source-meta, and Viewer checks",
+    )
+    lightspeed_integration_smoke_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    lightspeed_integration_smoke_parser.add_argument("--ui-base-url", default=DEFAULT_PLAYBOOK_UI_BASE_URL)
+    lightspeed_integration_smoke_parser.add_argument(
+        "--query",
+        default="Pod Pending 상태면 무엇을 먼저 확인해야 해?",
+    )
+    lightspeed_integration_smoke_parser.add_argument("--conversation-id", default="")
+    lightspeed_integration_smoke_parser.add_argument("--session-id", default="lightspeed-integration-smoke")
+    lightspeed_integration_smoke_parser.add_argument("--timeout-seconds", type=float, default=90.0)
+
+    lightspeed_chat_smoke_parser = subparsers.add_parser(
+        "lightspeed-chat-smoke",
+        help="Check PBS /api/chat/stream uses OpenShift Lightspeed in the final payload",
+    )
+    lightspeed_chat_smoke_parser.add_argument("--ui-base-url", default=DEFAULT_PLAYBOOK_UI_BASE_URL)
+    lightspeed_chat_smoke_parser.add_argument(
+        "--query",
+        default="Pod Pending 상태면 무엇을 먼저 확인해야 해?",
+    )
+    lightspeed_chat_smoke_parser.add_argument("--session-id", default="lightspeed-chat-smoke")
+    lightspeed_chat_smoke_parser.add_argument("--timeout-seconds", type=float, default=90.0)
 
     private_lane_smoke_parser = subparsers.add_parser(
         "private-lane-smoke",
@@ -437,6 +483,355 @@ def _run_ui(args: argparse.Namespace) -> int:
         open_browser=not args.no_browser,
     )
     return 0
+
+
+def _run_lightspeed_smoke(args: argparse.Namespace) -> int:
+    from play_book_studio.integrations.lightspeed import OpenShiftLightspeedClient
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    client = OpenShiftLightspeedClient(settings)
+    report: dict[str, object] = {
+        "configured": client.is_configured,
+        "query_url": client.query_url if client.is_configured else "",
+        "token_present": bool(settings.openshift_lightspeed_api_token),
+        "provider": settings.openshift_lightspeed_provider,
+        "model": settings.openshift_lightspeed_model,
+        "timeout_seconds": settings.openshift_lightspeed_timeout_seconds,
+        "verify_tls": settings.openshift_lightspeed_verify_tls,
+        "status": "disabled",
+        "query": args.query,
+    }
+    if not client.is_configured:
+        report["message"] = "OPENSHIFT_LIGHTSPEED_BASE_URL is not configured"
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 2
+
+    started = time.perf_counter()
+    try:
+        result = client.query(args.query, conversation_id=args.conversation_id)
+    except Exception as exc:  # noqa: BLE001
+        report.update(
+            {
+                "status": "error",
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+            }
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 1
+
+    answer = result.answer.strip()
+    report.update(
+        {
+            "status": "success",
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+            "answer_length": len(answer),
+            "answer_preview": answer[:300],
+            "referenced_document_count": len(result.referenced_documents),
+            "truncated": result.truncated,
+        }
+    )
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_lightspeed_auth_smoke(args: argparse.Namespace) -> int:
+    from play_book_studio.integrations.lightspeed import OpenShiftLightspeedClient
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    client = OpenShiftLightspeedClient(settings)
+    report: dict[str, object] = {
+        "configured": client.is_configured,
+        "authorized_url": client.authorized_url if client.is_configured else "",
+        "token_present": bool(settings.openshift_lightspeed_api_token),
+        "timeout_seconds": settings.openshift_lightspeed_timeout_seconds,
+        "verify_tls": settings.openshift_lightspeed_verify_tls,
+        "status": "disabled",
+    }
+    if not client.is_configured:
+        report["message"] = "OPENSHIFT_LIGHTSPEED_BASE_URL is not configured"
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 2
+
+    started = time.perf_counter()
+    try:
+        result = client.check_authorized()
+    except Exception as exc:  # noqa: BLE001
+        report.update(
+            {
+                "status": "error",
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+            }
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 1
+
+    report.update(
+        {
+            "status": "success" if result.authorized else "not_authorized",
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+            "status_code": result.status_code,
+            "detail": result.detail,
+        }
+    )
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0 if result.authorized else 3
+
+
+def _capture_smoke_json(func, args: argparse.Namespace) -> tuple[int, dict[str, object]]:
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        exit_code = func(args)
+    output = buffer.getvalue().strip()
+    try:
+        payload = json.loads(output) if output else {}
+    except json.JSONDecodeError:
+        payload = {"raw_output": output}
+    if not isinstance(payload, dict):
+        payload = {"raw_output": output}
+    return exit_code, payload
+
+
+def _run_lightspeed_integration_smoke(args: argparse.Namespace) -> int:
+    import requests
+
+    root_dir = args.root_dir.resolve()
+    base_url = str(args.ui_base_url or DEFAULT_PLAYBOOK_UI_BASE_URL).rstrip("/")
+    query = str(args.query or "").strip()
+    report: dict[str, object] = {
+        "ui_base_url": base_url,
+        "query": query,
+        "status": "error",
+        "steps": {},
+    }
+    steps: dict[str, object] = {}
+    report["steps"] = steps
+
+    auth_exit, auth_payload = _capture_smoke_json(
+        _run_lightspeed_auth_smoke,
+        argparse.Namespace(root_dir=root_dir),
+    )
+    steps["auth"] = {"exit_code": auth_exit, "payload": auth_payload}
+    if auth_exit == 2:
+        report["status"] = "disabled"
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 2
+    if auth_exit != 0:
+        report["status"] = "auth_failed"
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 3
+
+    query_exit, query_payload = _capture_smoke_json(
+        _run_lightspeed_smoke,
+        argparse.Namespace(root_dir=root_dir, query=query, conversation_id=str(args.conversation_id or "")),
+    )
+    steps["query"] = {"exit_code": query_exit, "payload": query_payload}
+    if query_exit != 0:
+        report["status"] = "query_failed"
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 4
+
+    chat_exit, chat_payload = _capture_smoke_json(
+        _run_lightspeed_chat_smoke,
+        argparse.Namespace(
+            ui_base_url=base_url,
+            query=query,
+            session_id=str(args.session_id or "lightspeed-integration-smoke"),
+            timeout_seconds=float(args.timeout_seconds),
+        ),
+    )
+    steps["chat"] = {"exit_code": chat_exit, "payload": chat_payload}
+    if chat_exit != 0:
+        report["status"] = "chat_not_lightspeed"
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 5
+
+    viewer_path = str(chat_payload.get("external_viewer_path") or "").strip()
+    viewer_report: dict[str, object] = {
+        "viewer_path": viewer_path,
+        "source_meta_ready": False,
+        "viewer_document_ready": False,
+    }
+    steps["viewer"] = viewer_report
+    if not viewer_path:
+        report["status"] = "viewer_missing"
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 6
+
+    try:
+        source_meta = requests.get(
+            f"{base_url}/api/source-meta",
+            params={"viewer_path": viewer_path},
+            timeout=20,
+        )
+        viewer_report["source_meta_status_code"] = source_meta.status_code
+        source_meta.raise_for_status()
+        source_meta_payload = source_meta.json()
+        if not isinstance(source_meta_payload, dict):
+            source_meta_payload = {}
+        viewer_report["source_meta_ready"] = (
+            str(source_meta_payload.get("boundary_badge") or "") == "Lightspeed"
+            and str(source_meta_payload.get("source_lane") or "") == "openshift_lightspeed"
+        )
+        viewer_report["source_meta_title"] = str(
+            source_meta_payload.get("title")
+            or source_meta_payload.get("book_title")
+            or ""
+        )
+
+        viewer_document = requests.get(
+            f"{base_url}/api/viewer-document",
+            params={"viewer_path": viewer_path},
+            timeout=20,
+        )
+        viewer_report["viewer_document_status_code"] = viewer_document.status_code
+        viewer_document.raise_for_status()
+        viewer_document_payload = viewer_document.json()
+        if not isinstance(viewer_document_payload, dict):
+            viewer_document_payload = {}
+        html_text = str(viewer_document_payload.get("html") or "")
+        viewer_report["viewer_document_ready"] = (
+            "OpenShift Lightspeed 공식 답변" in html_text
+            and "Lightspeed" in html_text
+        )
+        viewer_report["viewer_html_chars"] = len(html_text)
+    except Exception as exc:  # noqa: BLE001
+        viewer_report["error_type"] = type(exc).__name__
+        viewer_report["message"] = str(exc)
+        report["status"] = "viewer_failed"
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 6
+
+    if not viewer_report["source_meta_ready"] or not viewer_report["viewer_document_ready"]:
+        report["status"] = "viewer_failed"
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 6
+
+    report["status"] = "success"
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_lightspeed_chat_smoke(args: argparse.Namespace) -> int:
+    import requests
+
+    base_url = str(args.ui_base_url or DEFAULT_PLAYBOOK_UI_BASE_URL).rstrip("/")
+    query = str(args.query or "").strip()
+    report: dict[str, object] = {
+        "ui_base_url": base_url,
+        "query": query,
+        "session_id": args.session_id,
+        "status": "error",
+    }
+    if not query:
+        report["message"] = "query is required"
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 1
+
+    started = time.perf_counter()
+    try:
+        response = requests.post(
+            f"{base_url}/api/chat/stream",
+            json={
+                "query": query,
+                "session_id": str(args.session_id or "lightspeed-chat-smoke"),
+                "mode": "ops",
+            },
+            timeout=float(args.timeout_seconds),
+            stream=True,
+        )
+        response.raise_for_status()
+        trace_count = 0
+        answer_delta_chars = 0
+        result_payload: dict[str, object] | None = None
+        error_event: dict[str, object] | None = None
+        for raw_line in response.iter_lines(decode_unicode=True):
+            line = str(raw_line or "").strip()
+            if not line:
+                continue
+            event = json.loads(line)
+            if not isinstance(event, dict):
+                continue
+            event_type = str(event.get("type") or "")
+            if event_type == "trace":
+                trace_count += 1
+            elif event_type == "answer_delta":
+                answer_delta_chars += len(str(event.get("delta") or ""))
+            elif event_type == "error":
+                error_event = event
+                break
+            elif event_type == "result" and isinstance(event.get("payload"), dict):
+                result_payload = event["payload"]
+    except Exception as exc:  # noqa: BLE001
+        report.update(
+            {
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+            }
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 1
+
+    report["duration_ms"] = round((time.perf_counter() - started) * 1000, 2)
+    report["trace_count"] = trace_count
+    report["answer_delta_chars"] = answer_delta_chars
+    if error_event is not None:
+        report["status"] = "error"
+        report["message"] = str(error_event.get("error") or error_event.get("message") or "stream error")
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 1
+    if result_payload is None:
+        report["status"] = "error"
+        report["message"] = "stream completed without result payload"
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 1
+
+    pipeline_trace = result_payload.get("pipeline_trace")
+    answer_source = str(result_payload.get("answer_source") or "").strip()
+    if not answer_source and isinstance(pipeline_trace, dict):
+        answer_source = str(pipeline_trace.get("answer_source") or "").strip()
+    external_answer = (
+        pipeline_trace.get("external_answer")
+        if isinstance(pipeline_trace, dict) and isinstance(pipeline_trace.get("external_answer"), dict)
+        else {}
+    )
+    related_links = result_payload.get("related_links")
+    related_link_rows = [item for item in related_links if isinstance(item, dict)] if isinstance(related_links, list) else []
+    lightspeed_related_link = next(
+        (
+            item
+            for item in related_link_rows
+            if str(item.get("boundary_badge") or "") == "Lightspeed"
+            or str(item.get("source_lane") or "") == "openshift_lightspeed"
+        ),
+        None,
+    )
+    answer = str(result_payload.get("answer") or "")
+    report.update(
+        {
+            "answer_source": answer_source,
+            "external_answer_status": str(external_answer.get("status") or ""),
+            "external_viewer_path": str(external_answer.get("viewer_path") or ""),
+            "related_link_count": len(related_link_rows),
+            "lightspeed_related_link_present": lightspeed_related_link is not None,
+            "answer_preview": answer[:300],
+        }
+    )
+    if answer_source == "lightspeed_with_pbs_rag" and lightspeed_related_link is not None:
+        report["status"] = "success"
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+
+    report["status"] = "not_lightspeed"
+    report["message"] = "PBS chat completed, but final payload did not use OpenShift Lightspeed"
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 2
 
 
 def _run_ask(args: argparse.Namespace) -> int:
@@ -1347,6 +1742,14 @@ def main() -> int:
         return _run_runtime(args)
     if args.command == "maintenance-smoke":
         return _run_maintenance_smoke(args)
+    if args.command == "lightspeed-smoke":
+        return _run_lightspeed_smoke(args)
+    if args.command == "lightspeed-auth-smoke":
+        return _run_lightspeed_auth_smoke(args)
+    if args.command == "lightspeed-integration-smoke":
+        return _run_lightspeed_integration_smoke(args)
+    if args.command == "lightspeed-chat-smoke":
+        return _run_lightspeed_chat_smoke(args)
     if args.command == "private-lane-smoke":
         return _run_private_lane_smoke(args)
     if args.command == "graph-compact":

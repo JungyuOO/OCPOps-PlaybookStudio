@@ -4,11 +4,14 @@
 
 | 항목 | 값 |
 |---|---|
-| 단계 | 다음 단계 |
+| 단계 | PBS 연동 검증 완료 |
 | 선행 조건 | PBS pgvector 수용 기준 고정 |
-| 대상 | 회사 OpenShift 클러스터 |
-| 대체 실험 환경 | MacBook 32GB + CRC |
-| 현재 처리 | 아직 연동하지 않음 |
+| 대상 | MacBook OpenShift Lightspeed endpoint |
+| 대체 실험 환경 | 회사 OpenShift 클러스터 |
+| 현재 처리 | PBS 호출 경로 구현, 실제 endpoint auth/query/chat/source-meta/Viewer 통합 smoke 성공 |
+| provider | `cywell-llm` |
+| 모델 | `gemma-4-26b-a4b-it-awq-8bit` |
+| TLS | self-signed chain으로 로컬 검증 시 TLS 검증 우회 필요 |
 
 ## 선행 조건
 
@@ -21,9 +24,9 @@ PBS RAG 기초는 독립 검증된 상태다.
 | RAG gate | `13/13 pass` |
 | answer / Viewer audit | `8/8 pass` |
 
-회사 OpenShift Lightspeed 연동은 이 상태를 고정한 뒤 진행한다. 그래야 문제 발생 시 PBS 검색, 클러스터 인증, OpenShift Lightspeed 동작, 네트워크 경로를 분리해서 확인할 수 있다.
+OpenShift Lightspeed 연동은 이 상태를 고정한 뒤 진행한다. 그래야 문제 발생 시 PBS 검색, 클러스터 인증, OpenShift Lightspeed 동작, 네트워크 경로를 분리해서 확인할 수 있다.
 
-회사 OpenShift 클러스터의 OpenShift Lightspeed 설치를 다른 작업자가 진행 중이면, MacBook 32GB에서 CRC와 OpenShift Lightspeed를 별도 실험 환경으로 구성한다. 이 경로는 회사 서버 작업을 방해하지 않고 PBS 연동 가능성만 검증하기 위한 용도다.
+회사 OpenShift 클러스터의 OpenShift Lightspeed 설치를 다른 작업자가 진행 중이면, MacBook 32GB 환경의 OpenShift Lightspeed endpoint를 별도 실험 환경으로 사용한다. 이 경로는 회사 서버 작업을 방해하지 않고 PBS 연동 가능성만 검증하기 위한 용도다.
 
 ## 회사 클러스터 확인 항목
 
@@ -72,9 +75,34 @@ PBS RAG 기초는 독립 검증된 상태다.
 | 호출 방향 | endpoint 확인 후 PBS에서 OpenShift Lightspeed 호출 |
 | 권한 | 읽기 전용 우선 |
 | 사용자 흐름 | PBS chat에서 OpenShift 운영 질문 전달, 답변 히스토리 저장 |
-| Viewer | PBS 문서는 기존 Viewer 방식 유지 |
-| 답변 표시 | source metadata 확인 전까지 외부 운영 답변으로 구분 표시 |
+| Viewer | PBS 문서는 기존 Viewer 방식 유지, OpenShift Lightspeed 응답은 외부 공식 답변 artifact로 Viewer 표시 |
+| 답변 표시 | OpenShift Lightspeed 사용 시 답변과 관련 문서 영역에 `Lightspeed` 배지 표시 |
 | 실행 작업 | 자동 apply, update, delete 없음 |
+
+## 확인된 API 설정
+
+| 항목 | 값 |
+|---|---|
+| provider/model 미지정 | 성공. OpenShift Lightspeed 기본 설정 사용 |
+| model만 지정 | 실패. HTTP 422, provider 필요 |
+| provider=`openai` + model 지정 | 실패. 유효 provider 아님 |
+| provider=`cywell-llm` + model 지정 | 성공 |
+
+## SNO 연결 실행 순서
+
+| 순서 | 작업 | 확인 |
+|---|---|---|
+| 1 | OpenShift Lightspeed route 또는 내부 service URL 확인 | `POST /v1/query` 호출 가능 |
+| 2 | token 필요 여부 확인 | bearer token 또는 무인증 조건 확인 |
+| 3 | PBS `playbookstudio-config`에 endpoint 설정 | `OPENSHIFT_LIGHTSPEED_BASE_URL` 값 반영 |
+| 4 | 필요한 경우 secret에 token 설정 | `OPENSHIFT_LIGHTSPEED_API_TOKEN` 값 반영 |
+| 5 | PBS app 재시작 | `oc rollout status deploy/app -n pbs-ocpops` |
+| 6 | PBS app container에서 권한 smoke 실행 | `python -m play_book_studio.cli lightspeed-auth-smoke --root-dir /app` |
+| 7 | PBS app container에서 endpoint smoke 실행 | `python -m play_book_studio.cli lightspeed-smoke --root-dir /app` |
+| 8 | PBS app container에서 chat stream smoke 실행 | `python -m play_book_studio.cli lightspeed-chat-smoke --ui-base-url http://127.0.0.1:8765` |
+| 9 | PBS app container에서 통합 smoke 실행 | `python -m play_book_studio.cli lightspeed-integration-smoke --root-dir /app --ui-base-url http://127.0.0.1:8765` |
+| 10 | PBS chat 질문 검증 | `/api/chat/stream` 최종 payload에 `answer_source=lightspeed_with_pbs_rag` |
+| 11 | 화면 검증 | 답변 헤더와 관련 문서에 `Lightspeed` 배지 표시 |
 
 ## 중단 조건
 

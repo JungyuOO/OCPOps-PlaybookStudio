@@ -4,6 +4,7 @@ set -euo pipefail
 NAMESPACE="${NAMESPACE:-pbs-ocpops}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 OCP_API_TOKEN="${OCP_API_TOKEN:-}"
+OPENSHIFT_LIGHTSPEED_API_TOKEN="${OPENSHIFT_LIGHTSPEED_API_TOKEN:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ -z "${POSTGRES_PASSWORD}" ]]; then
@@ -23,10 +24,17 @@ oc apply -f "${SCRIPT_DIR}/core.yaml"
 oc adm policy add-scc-to-user anyuid -z playbookstudio -n "${NAMESPACE}" >/dev/null || true
 oc adm policy add-scc-to-user anyuid -z terminal-broker -n "${NAMESPACE}" >/dev/null || true
 
+secret_args=(
+  --from-literal=POSTGRES_PASSWORD="${POSTGRES_PASSWORD}"
+  --from-literal=OCP_API_TOKEN="${OCP_API_TOKEN}"
+)
+if [[ -n "${OPENSHIFT_LIGHTSPEED_API_TOKEN}" ]]; then
+  secret_args+=(--from-literal=OPENSHIFT_LIGHTSPEED_API_TOKEN="${OPENSHIFT_LIGHTSPEED_API_TOKEN}")
+fi
+
 oc create secret generic playbookstudio-secret \
   -n "${NAMESPACE}" \
-  --from-literal=POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
-  --from-literal=OCP_API_TOKEN="${OCP_API_TOKEN}" \
+  "${secret_args[@]}" \
   --dry-run=client -o yaml | oc apply -f -
 
 oc rollout status deployment/postgres -n "${NAMESPACE}" --timeout=300s

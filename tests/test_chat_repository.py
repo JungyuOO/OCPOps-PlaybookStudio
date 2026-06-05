@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 from play_book_studio.db.chat_repository import (
@@ -71,6 +72,11 @@ def test_persist_chat_turn_upserts_session_and_messages():
             {"chunk_id": "chunk-a", "asset_id": "asset-a"},
             {"chunk_id": "chunk-b"},
         ],
+        metadata={
+            "answer_source": "lightspeed_with_pbs_rag",
+            "related_links": [{"label": "OpenShift Lightspeed 공식 답변", "boundary_badge": "Lightspeed"}],
+            "primary_boundary_badge": "Lightspeed",
+        },
     )
 
     sql_text = "\n".join(sql for sql, _params in connection.cursor_obj.calls)
@@ -86,6 +92,10 @@ def test_persist_chat_turn_upserts_session_and_messages():
     assert assistant_params[1] == "assistant"
     assert assistant_params[3] == '["chunk-a", "chunk-b"]'
     assert assistant_params[4] == '["asset-a"]'
+    assistant_metadata = json.loads(assistant_params[5])
+    assert assistant_metadata["answer_source"] == "lightspeed_with_pbs_rag"
+    assert assistant_metadata["related_links"][0]["boundary_badge"] == "Lightspeed"
+    assert assistant_metadata["primary_boundary_badge"] == "Lightspeed"
 
 
 def test_persist_chat_turn_extracts_cited_asset_ids_from_asset_id_lists():

@@ -13,6 +13,7 @@ from .models import SessionContext
 from .query import (
     detect_unsupported_product,
     has_follow_up_reference,
+    is_openshift_product_intro_query,
     normalize_query,
     rewrite_query,
 )
@@ -111,6 +112,7 @@ def build_retrieval_plan(
     rewrite_applied, rewrite_reason = rewrite_decision(normalized_query, context)
     rewritten_query = rewrite_query(normalized_query, context)
     signal_plan = build_query_signal_plan(query, llm_client=llm_client)
+    product_intro_query = is_openshift_product_intro_query(query)
     enabled_scopes = enabled_source_scope_set(context)
     has_legacy_repository_scope = bool(
         str(getattr(context, "active_repository_id", "") or "").strip()
@@ -123,6 +125,9 @@ def build_retrieval_plan(
     elif has_document_scope:
         retrieval_queries = _dedupe_queries(signal_plan.embedding_queries, fallback=rewritten_query)
         metadata_filter = {}
+    elif product_intro_query:
+        retrieval_queries = _dedupe_queries((rewritten_query,), fallback=rewritten_query)
+        metadata_filter = signal_plan.metadata_filter
     else:
         retrieval_queries = _dedupe_queries(signal_plan.embedding_queries, fallback=rewritten_query)
         metadata_filter = _scope_compatible_metadata_filter(signal_plan.metadata_filter, context)

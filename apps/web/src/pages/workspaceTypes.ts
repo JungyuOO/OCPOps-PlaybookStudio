@@ -25,6 +25,7 @@ export interface Message {
   relatedSections?: ChatRelatedLink[];
   artifacts?: Array<Record<string, unknown>>;
   responseKind?: string;
+  answerSource?: string;
   acquisition?: {
     kind: string;
     title: string;
