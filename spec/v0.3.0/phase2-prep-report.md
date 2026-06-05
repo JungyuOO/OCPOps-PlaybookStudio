@@ -38,7 +38,7 @@ AI resources.
     credentials.
 - `src/play_book_studio/pbs_operator/reconciler.py`
   - Renders Operator-managed desired resources from a `PlaybookStudio` CR without live mutation.
-  - Maps CR fields to PBS runtime config, MCP, BYOK RBAC, Route, and OLSConfig preview resources.
+  - Maps CR fields to PBS runtime config, MCP, Route, and OLSConfig preview resources.
 - `src/play_book_studio/pbs_operator/runtime.py`
   - Provides a dry-run Operator process that can list/watch `PlaybookStudio` CRs through the
     in-cluster Kubernetes API and render desired state when changes are detected.
@@ -100,7 +100,7 @@ Result:
 - The PBS Operator now has reconcile core, in-cluster CR watch detection, gated server-side apply,
   status patch paths, Operator Deployment/RBAC, bundle preview, and catalog preview. Live validation
   against the SNO cluster remains future work.
-- Lightspeed BYOK has repository-side document conversion/export/patch-preview support, but live
-  BYOK ingestion must be validated against the installed OpenShift Lightspeed version later.
+- Private document context has repository-side routing into PBS retrieval and Lightspeed request
+  context; live validation must confirm the installed Lightspeed endpoint accepts the context shape.
 - SNO SSH read-only probe confirmed `oc` client availability on `192.168.119.27` and current server
   target `https://api.ocp.cywell.local:6443`; live mutation has not been executed.

@@ -12,16 +12,12 @@ spec:
   chat:
     provider: lightspeed
   lightspeed:
+    knowledgeMode: lightspeed-rag-with-pbs-private-context
     detectOperator: true
     manageOLSConfig: true
     auth:
       mode: service-account
       secretName: pbs-ols-auth
-    byoKnowledge:
-      enabled: true
-      imageRepository: image-registry.openshift-image-registry.svc:5000/pbs-ocpops/pbs-knowledge
-      registrySecret: pbs-byok-registry
-      updateMode: manualApproval
     mcp:
       enabled: true
       registerWithOLS: true
@@ -33,5 +29,5 @@ spec:
     autoCreate: false
   library:
     ingestion:
-      outputFormat: lightspeed-byok-markdown
-      qdrantEnabled: false
+      outputFormat: pbs-private-context-markdown
+      qdrantEnabled: true

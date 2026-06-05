@@ -22,7 +22,6 @@ def render_desired_resources(custom_resource: dict[str, Any]) -> list[dict[str, 
     resources: list[dict[str, Any]] = [
         _service_account("playbookstudio", namespace),
         _service_account("pbs-console-executor", namespace),
-        _service_account("pbs-byok-builder", namespace),
         _config_map(name, namespace, spec),
         _service("playbookstudio-app", namespace, 8765, "http"),
         _service("playbookstudio-web", namespace, 8080, "http"),
@@ -41,9 +40,6 @@ def render_desired_resources(custom_resource: dict[str, Any]) -> list[dict[str, 
             ]
         )
 
-    if _byok_enabled(spec):
-        resources.extend(_byok_rbac(namespace))
-
     if _manage_ols_config(spec):
         resources.append(_olsconfig_preview(namespace, spec))
 
@@ -55,7 +51,6 @@ def render_status(custom_resource: dict[str, Any]) -> dict[str, Any]:
     return {
         "phase": "Rendered",
         "lightspeedReady": False,
-        "byokLastBuild": "",
         "mcpRegistered": False,
         "conditions": [
             {
@@ -98,7 +93,6 @@ def main(argv: list[str] | None = None) -> int:
 def _config_map(name: str, namespace: str, spec: dict[str, Any]) -> dict[str, Any]:
     lightspeed = spec.get("lightspeed") or {}
     auth = lightspeed.get("auth") or {}
-    byok = lightspeed.get("byoKnowledge") or {}
     console = spec.get("console") or {}
     namespace_mode = spec.get("namespaceMode") or {}
     chat = spec.get("chat") or {}
@@ -110,20 +104,19 @@ def _config_map(name: str, namespace: str, spec: dict[str, Any]) -> dict[str, An
         "metadata": _metadata(f"{name}-config", namespace, "playbookstudio"),
         "data": {
             "CHAT_PROVIDER": str(chat.get("provider") or "lightspeed"),
+            "LIGHTSPEED_KNOWLEDGE_MODE": str(
+                lightspeed.get("knowledgeMode") or "lightspeed-rag-with-pbs-private-context"
+            ),
             "OLS_BASE_URL": str(lightspeed.get("baseUrl") or DEFAULT_OLS_BASE_URL),
             "OLS_AUTH_MODE": str(auth.get("mode") or "service-account"),
             "OLS_AUTH_SECRET_NAME": str(auth.get("secretName") or "pbs-ols-auth"),
             "PBS_AUTO_CREATE_NAMESPACE": _bool_text(namespace_mode.get("autoCreate", False)),
             "PBS_NAMESPACE_MODE": "auto" if namespace_mode.get("autoCreate", False) else "disabled",
             "CONSOLE_EXECUTOR_MODE": str(console.get("executorMode") or "service-account"),
-            "BYOK_PIPELINE_ENABLED": _bool_text(byok.get("enabled", True)),
-            "BYOK_OUTPUT_MODE": str(byok.get("updateMode") or "manualApproval"),
-            "BYOK_IMAGE_REPOSITORY": str(byok.get("imageRepository") or "image-registry.openshift-image-registry.svc:5000/pbs-ocpops/pbs-knowledge"),
-            "BYOK_REGISTRY_SECRET_NAME": str(byok.get("registrySecret") or "pbs-byok-registry"),
             "PBS_OPERATOR_READY_MODE": "true",
             "PBS_OPERATOR_MANIFEST_PROFILE": "sno",
-            "QDRANT_ENABLED": _bool_text(ingestion.get("qdrantEnabled", False)),
-            "LIBRARY_OUTPUT_FORMAT": str(ingestion.get("outputFormat") or "lightspeed-byok-markdown"),
+            "QDRANT_ENABLED": _bool_text(ingestion.get("qdrantEnabled", True)),
+            "LIBRARY_OUTPUT_FORMAT": str(ingestion.get("outputFormat") or "pbs-private-context-markdown"),
         },
     }
 
@@ -186,40 +179,15 @@ def _service_account(name: str, namespace: str) -> dict[str, Any]:
     return {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": _metadata(name, namespace, name)}
 
 
-def _byok_rbac(namespace: str) -> list[dict[str, Any]]:
-    role_name = "pbs-byok-builder"
-    role = {
-        "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "Role",
-        "metadata": _metadata(role_name, namespace, role_name),
-        "rules": [
-            {"apiGroups": [""], "resources": ["configmaps", "secrets", "persistentvolumeclaims"], "verbs": ["get", "list", "watch"]},
-            {"apiGroups": ["batch"], "resources": ["jobs"], "verbs": ["create", "get", "list", "watch"]},
-            {"apiGroups": ["image.openshift.io"], "resources": ["imagestreams", "imagestreamtags"], "verbs": ["get", "list", "watch", "create", "update", "patch"]},
-        ],
-    }
-    binding = {
-        "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "RoleBinding",
-        "metadata": _metadata(role_name, namespace, role_name),
-        "roleRef": {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": role_name},
-        "subjects": [{"kind": "ServiceAccount", "name": role_name, "namespace": namespace}],
-    }
-    return [role, binding]
-
-
 def _olsconfig_preview(namespace: str, spec: dict[str, Any]) -> dict[str, Any]:
     lightspeed = spec.get("lightspeed") or {}
     mcp = lightspeed.get("mcp") or {}
-    byok = lightspeed.get("byoKnowledge") or {}
     server_name = str(mcp.get("serverName") or "pbs-tools")
-    image_repository = str(byok.get("imageRepository") or "image-registry.openshift-image-registry.svc:5000/pbs-ocpops/pbs-knowledge")
     preview = {
         "apiVersion": "ols.openshift.io/v1alpha1",
         "kind": "OLSConfig",
         "metadata": {"name": "cluster", "namespace": "openshift-lightspeed"},
         "spec": {
-            "byoKnowledge": {"image": f"{image_repository}:v0.3.0"},
             "featureGates": ["MCPServer"],
             "mcpServers": [
                 {
@@ -256,10 +224,6 @@ def _route_enabled(spec: dict[str, Any]) -> bool:
 
 def _mcp_enabled(spec: dict[str, Any]) -> bool:
     return bool(((spec.get("lightspeed") or {}).get("mcp") or {}).get("enabled", False))
-
-
-def _byok_enabled(spec: dict[str, Any]) -> bool:
-    return bool(((spec.get("lightspeed") or {}).get("byoKnowledge") or {}).get("enabled", False))
 
 
 def _manage_ols_config(spec: dict[str, Any]) -> bool:

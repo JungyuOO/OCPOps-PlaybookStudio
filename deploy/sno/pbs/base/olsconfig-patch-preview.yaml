@@ -18,8 +18,6 @@ data:
         conversationCache:
           type: memory
       additionalCAConfigMapRef: ""
-      byoKnowledge:
-        image: image-registry.openshift-image-registry.svc:5000/pbs-ocpops/pbs-knowledge:v0.3.0
       featureGates:
         - MCPServer
       mcpServers:

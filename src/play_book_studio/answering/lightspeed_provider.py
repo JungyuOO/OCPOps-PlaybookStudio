@@ -8,7 +8,7 @@ from urllib import request
 
 from play_book_studio.config.settings import Settings
 
-from .models import AnswerResult
+from .models import AnswerResult, Citation
 
 
 LightspeedTransport = Callable[[str, dict[str, Any], dict[str, str], float], dict[str, Any]]
@@ -21,6 +21,7 @@ class LightspeedChatContext:
     cluster_context: dict[str, Any] = field(default_factory=dict)
     recent_events: list[dict[str, Any]] = field(default_factory=list)
     attachments: list[dict[str, Any]] = field(default_factory=list)
+    pbs_rag: dict[str, Any] = field(default_factory=dict)
 
 
 def lightspeed_enabled(settings: Settings) -> bool:
@@ -42,9 +43,65 @@ def build_lightspeed_payload(query: str, context: LightspeedChatContext | None =
         pbs_context["cluster_context"] = dict(context.cluster_context)
     if context.recent_events:
         pbs_context["recent_events"] = list(context.recent_events)
+    if context.pbs_rag:
+        pbs_context["rag"] = dict(context.pbs_rag)
     if pbs_context:
         payload["pbs_context"] = pbs_context
     return payload
+
+
+def is_private_pbs_citation(citation: Citation) -> bool:
+    """Return true when a citation represents PBS user/customer uploaded knowledge."""
+
+    source_collection = (citation.source_collection or "").lower()
+    book_slug = (citation.book_slug or "").lower()
+    viewer_path = citation.viewer_path or ""
+    source_url = citation.source_url or ""
+    return (
+        source_collection
+        in {"uploaded", "uploads", "customer", "customer_docs", "customer-pack", "customer_pack"}
+        or book_slug == "uploaded-documents"
+        or viewer_path.startswith("/uploads/")
+        or "uploads/" in source_url
+        or source_url.startswith("internal://customer")
+        or source_url.startswith("customer_pack")
+    )
+
+
+def build_pbs_rag_context(result: AnswerResult, *, max_citations: int = 5, max_excerpt_chars: int = 900) -> dict[str, Any]:
+    citations: list[dict[str, Any]] = []
+    private_citations = [citation for citation in result.citations if is_private_pbs_citation(citation)]
+    for citation in private_citations[: max(0, max_citations)]:
+        citations.append(
+            {
+                "index": citation.index,
+                "source_collection": citation.source_collection,
+                "book_slug": citation.book_slug,
+                "section": citation.section,
+                "source_url": citation.source_url,
+                "viewer_path": citation.viewer_path,
+                "excerpt": citation.excerpt[:max_excerpt_chars],
+                "cli_commands": list(citation.cli_commands),
+                "k8s_objects": list(citation.k8s_objects),
+                "operator_names": list(citation.operator_names),
+            }
+        )
+    return {
+        "mode": "lightspeed-rag-with-pbs-private-context",
+        "private_context_available": bool(citations),
+        "pbs_retrieval_mode": result.mode,
+        "response_kind": result.response_kind,
+        "rewritten_query": result.rewritten_query,
+        "answer_preview": str(result.answer or "")[:1200],
+        "citations": citations,
+        "warnings": list(result.warnings),
+        "retrieval_trace": dict(result.retrieval_trace),
+        "instruction": (
+            "Use OpenShift Lightspeed's built-in knowledge and cluster analysis as the primary "
+            "source for official OpenShift guidance. Treat this PBS context only as supplemental "
+            "private/customer-uploaded evidence for this environment."
+        ),
+    }
 
 
 def build_lightspeed_headers(settings: Settings) -> dict[str, str]:
@@ -158,6 +215,8 @@ __all__ = [
     "LightspeedTransport",
     "build_lightspeed_headers",
     "build_lightspeed_payload",
+    "build_pbs_rag_context",
+    "is_private_pbs_citation",
     "default_lightspeed_transport",
     "lightspeed_enabled",
     "query_lightspeed",

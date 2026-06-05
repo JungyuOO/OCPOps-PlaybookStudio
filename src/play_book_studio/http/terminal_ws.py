@@ -8,16 +8,10 @@ import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs
 
 from play_book_studio.aiops.event_timeline import append_timeline_event
-from play_book_studio.cluster.workspace_models import WorkspaceHandle
-from play_book_studio.cluster.workspace_provisioner import (
-    enforce_active_workspace_limit,
-    ensure_user_workspace,
-    touch_last_active,
-)
 from play_book_studio.config.settings import Settings
 from play_book_studio.db.terminal_learning_repository import (
     TerminalLearningContext,
@@ -34,6 +28,9 @@ from play_book_studio.db.terminal_learning_repository import (
 
 from .session_owner import resolve_session_owner
 from .terminal_session import TerminalSession, TerminalSessionConfig
+
+if TYPE_CHECKING:
+    from play_book_studio.cluster.workspace_models import WorkspaceHandle
 
 
 def _json_event(event: dict[str, Any]) -> str:
@@ -510,6 +507,8 @@ async def _handle_terminal_connection(
             return
         last_workspace_touch = current
         try:
+            from play_book_studio.cluster.workspace_provisioner import touch_last_active
+
             await asyncio.to_thread(touch_last_active, workspace_owner_hash)
         except Exception as exc:  # noqa: BLE001
             print(f"[server] workspace activity touch failed for {workspace_owner_hash[:8]}: {exc}")
@@ -590,6 +589,11 @@ def start_terminal_websocket_server(*, settings: Settings, root_dir: Path) -> th
                 )
             if terminal_workspace_auto_create_enabled(settings):
                 try:
+                    from play_book_studio.cluster.workspace_provisioner import (
+                        enforce_active_workspace_limit,
+                        ensure_user_workspace,
+                    )
+
                     await websocket.send(
                         _json_event(
                             {

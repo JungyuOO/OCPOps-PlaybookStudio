@@ -6,9 +6,12 @@ from play_book_studio.answering.lightspeed_provider import (
     LightspeedChatContext,
     build_lightspeed_headers,
     build_lightspeed_payload,
+    build_pbs_rag_context,
+    is_private_pbs_citation,
     lightspeed_enabled,
     query_lightspeed,
 )
+from play_book_studio.answering.models import AnswerResult, Citation
 from play_book_studio.config.settings import Settings
 
 
@@ -35,6 +38,50 @@ def test_build_lightspeed_payload_includes_pbs_context_and_attachments() -> None
     assert payload["pbs_context"]["library_scope"] == "customer:koscom"
     assert payload["pbs_context"]["cluster_context"] == {"namespace": "demo"}
     assert payload["pbs_context"]["recent_events"] == [{"event_type": "apply", "status": "failed"}]
+
+
+def test_build_pbs_rag_context_keeps_only_private_uploaded_context() -> None:
+    official = Citation(
+        index=1,
+        chunk_id="official-1",
+        book_slug="openshift-docs",
+        section="PVC",
+        anchor="pvc",
+        source_url="https://docs.openshift.com/container-platform/latest/storage/pvc.html",
+        viewer_path="/docs/openshift/storage/pvc",
+        excerpt="Official OpenShift PVC guidance",
+        source_collection="core",
+    )
+    uploaded = Citation(
+        index=2,
+        chunk_id="upload-1",
+        book_slug="uploaded-documents",
+        section="KOSCOM PVC",
+        anchor="koscom-pvc",
+        source_url="internal://customer/koscom/pvc-pending",
+        viewer_path="/uploads/koscom/pvc-pending.md",
+        excerpt="KOSCOM cluster uses a custom storage class named managed-nfs-storage.",
+        source_collection="uploaded",
+        cli_commands=("oc describe pvc <pvc-name> -n <namespace>",),
+        k8s_objects=("PersistentVolumeClaim",),
+    )
+    result = AnswerResult(
+        query="PVC Pending",
+        mode="rag",
+        answer="Use the customer storage class note.",
+        rewritten_query="PVC Pending",
+        citations=[official, uploaded],
+        retrieval_trace={"retriever": "pbs"},
+    )
+
+    context = build_pbs_rag_context(result)
+
+    assert is_private_pbs_citation(uploaded) is True
+    assert is_private_pbs_citation(official) is False
+    assert context["mode"] == "lightspeed-rag-with-pbs-private-context"
+    assert context["private_context_available"] is True
+    assert [item["index"] for item in context["citations"]] == [2]
+    assert "OpenShift Lightspeed's built-in knowledge" in context["instruction"]
 
 
 def test_build_lightspeed_headers_adds_bearer_token(tmp_path: Path) -> None:

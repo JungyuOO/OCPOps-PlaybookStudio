@@ -5,7 +5,7 @@ and PBS Operator work. Phase 1 does not apply these manifests to a live cluster.
 
 ## Boundaries
 
-- `pbs/base`: Operator-ready PBS app, MCP, BYOK, OLS integration, Service, Route, and RBAC manifests.
+- `pbs/base`: Operator-ready PBS app, MCP, OLS integration, Service, Route, and RBAC manifests.
 - `pbs-operator/config`: CRD and sample `PlaybookStudio` custom resource sketch for a future operator.
 - `lightspeed/base`: PBS-owned `OLSConfig` integration preview only. The Lightspeed Operator remains owned by its own lifecycle.
 - `openshift-ai/base`: Reserved boundary for OpenShift AI install/inference manifests owned outside PBS.

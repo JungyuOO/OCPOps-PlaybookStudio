@@ -14,7 +14,7 @@ This directory intentionally contains no live cluster credentials or destination
 
 ## Phase 2 Preview Applications
 
-- `pbs-base-application.yaml` points Argo CD at the Operator-ready PBS app, BYOK, MCP, Route, Service,
+- `pbs-base-application.yaml` points Argo CD at the Operator-ready PBS app, MCP, Route, Service,
   and RBAC base.
 - `pbs-operator-application.yaml` points Argo CD at the future PBS Operator CRD/sample config.
 - `pbs-lightspeed-integration-application.yaml` points Argo CD at the PBS-generated Lightspeed

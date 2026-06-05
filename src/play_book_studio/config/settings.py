@@ -157,16 +157,13 @@ class Settings(SettingsPathMixin):
     ols_auth_secret_name: str = ""
     ols_auth_token: str = ""
     ols_timeout_seconds: float = 30.0
+    lightspeed_knowledge_mode: str = "lightspeed-rag-with-pbs-private-context"
     ocp_api_base_url: str = ""
     ocp_api_token: str = ""
     ocp_default_namespace: str = ""
     pbs_auto_create_namespace: bool = False
     pbs_namespace_mode: str = "disabled"
     console_executor_mode: str = "local"
-    byok_pipeline_enabled: bool = False
-    byok_output_mode: str = "dry-run"
-    byok_image_repository: str = ""
-    byok_registry_secret_name: str = ""
     pbs_operator_ready_mode: bool = False
     pbs_operator_manifest_profile: str = "sno"
     terminal_enabled: bool = False
@@ -413,6 +410,11 @@ def load_settings(root_dir: str | Path) -> Settings:
         ols_auth_secret_name=effective_env.get("OLS_AUTH_SECRET_NAME", "").strip(),
         ols_auth_token=effective_env.get("OLS_AUTH_TOKEN", "").strip(),
         ols_timeout_seconds=float(effective_env.get("OLS_TIMEOUT_SECONDS", "30")),
+        lightspeed_knowledge_mode=effective_env.get(
+            "LIGHTSPEED_KNOWLEDGE_MODE",
+            "lightspeed-rag-with-pbs-private-context",
+        ).strip().lower()
+        or "lightspeed-rag-with-pbs-private-context",
         ocp_api_base_url=effective_env.get("OCP_API_BASE_URL", "").strip().rstrip("/"),
         ocp_api_token=effective_env.get("OCP_API_TOKEN", "").strip(),
         ocp_default_namespace=effective_env.get("OCP_DEFAULT_NAMESPACE", "").strip(),
@@ -420,11 +422,6 @@ def load_settings(root_dir: str | Path) -> Settings:
         in {"1", "true", "yes", "on"},
         pbs_namespace_mode=effective_env.get("PBS_NAMESPACE_MODE", "disabled").strip().lower() or "disabled",
         console_executor_mode=effective_env.get("CONSOLE_EXECUTOR_MODE", "local").strip().lower() or "local",
-        byok_pipeline_enabled=effective_env.get("BYOK_PIPELINE_ENABLED", "false").lower()
-        in {"1", "true", "yes", "on"},
-        byok_output_mode=effective_env.get("BYOK_OUTPUT_MODE", "dry-run").strip().lower() or "dry-run",
-        byok_image_repository=effective_env.get("BYOK_IMAGE_REPOSITORY", "").strip(),
-        byok_registry_secret_name=effective_env.get("BYOK_REGISTRY_SECRET_NAME", "").strip(),
         pbs_operator_ready_mode=effective_env.get("PBS_OPERATOR_READY_MODE", "false").lower()
         in {"1", "true", "yes", "on"},
         pbs_operator_manifest_profile=effective_env.get("PBS_OPERATOR_MANIFEST_PROFILE", "sno").strip().lower() or "sno",

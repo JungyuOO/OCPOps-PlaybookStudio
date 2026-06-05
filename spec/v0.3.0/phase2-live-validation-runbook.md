@@ -28,7 +28,7 @@ files. Do not commit them to this repository.
 3. Confirm local verification still passes:
 
 ```bash
-.venv/Scripts/python.exe -m pytest tests/test_v030_config_boundaries.py tests/test_lightspeed_provider.py tests/test_byok_operational_markdown.py tests/test_aiops_event_timeline.py tests/test_ops_console_api.py tests/test_terminal_session.py tests/test_terminal_ws_learning_events.py tests/test_mcp_boundary.py tests/test_operator_ready_manifests.py tests/test_upload_api.py tests/test_app_server.py
+.venv/Scripts/python.exe -m pytest tests/test_v030_config_boundaries.py tests/test_lightspeed_provider.py tests/test_aiops_event_timeline.py tests/test_ops_console_api.py tests/test_terminal_session.py tests/test_terminal_ws_learning_events.py tests/test_mcp_boundary.py tests/test_operator_ready_manifests.py tests/test_upload_api.py tests/test_app_server.py
 cd apps/web && npm run build && npm test
 kubectl kustomize deploy/sno/pbs/base
 kubectl kustomize deploy/sno/pbs-operator/config
@@ -78,13 +78,13 @@ Classify every live resource as:
 3. Update desired manifests or overlays to point to the approved immutable image tags.
 4. Do not use mutable `dev` tags for final validation unless the validation is explicitly a dev smoke.
 
-### Stage 4: Lightspeed And BYOK Readiness
+### Stage 4: Lightspeed And Private Context Readiness
 
 1. Inventory installed OpenShift Lightspeed Operator resources.
 2. Confirm the expected OLS app server service or route.
 3. Validate PBS `OLS_BASE_URL` against that endpoint.
-4. Build or dry-run the BYOK corpus image from PBS-generated Markdown.
-5. Prepare `OLSConfig` patch from repository preview.
+4. Upload a test private document and confirm PBS private retrieval can return it.
+5. Prepare `OLSConfig` MCP patch from repository preview.
 6. Register MCP only if the installed Lightspeed version supports the MCP feature gate.
 
 ### Stage 5: PBS Deployment Validation
@@ -96,7 +96,7 @@ Only after explicit live approval:
 3. Watch rollout status for PBS app, web, and optional MCP server.
 4. Verify the route and `/api/health`.
 5. Verify `CHAT_PROVIDER=lightspeed`, namespace auto-create disabled, and terminal event capture.
-6. Upload a test document, generate BYOK Markdown, and confirm exported artifacts.
+6. Upload a test document, confirm private retrieval, and verify it can be attached to Lightspeed context.
 7. Ask Lightspeed a question using official docs, customer docs, and recent CLI/YAML context.
 
 ### Stage 6: Operator Demonstration Path
@@ -104,7 +104,7 @@ Only after explicit live approval:
 The PBS Operator demonstration is not complete until:
 
 1. The `PlaybookStudio` CRD is installed.
-2. A controller reconciles Deployment, Service, Route, ConfigMap, Secret references, RBAC, BYOK, MCP,
+2. A controller reconciles Deployment, Service, Route, ConfigMap, Secret references, RBAC, MCP,
    and OLS integration status.
 3. Deleting/recreating the custom resource produces the expected PBS state.
 4. OpenShift Lightspeed removal/reinstall/reconnect is demonstrated in a controlled window.
@@ -128,4 +128,4 @@ Use these gates before mutation:
 - No SSH command execution.
 - No `oc apply`, `oc patch`, `oc delete`, `oc create`, `oc adm policy`, `oc scale`, or equivalent mutation.
 - No secret data export.
-- No claim that Operator E2E or live BYOK succeeded.
+- No claim that Operator E2E succeeded.

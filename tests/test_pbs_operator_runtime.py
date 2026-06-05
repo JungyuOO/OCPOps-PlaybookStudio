@@ -20,7 +20,6 @@ SAMPLE_CR = {
         "namespaceMode": {"autoCreate": False},
         "lightspeed": {
             "manageOLSConfig": True,
-            "byoKnowledge": {"enabled": True, "updateMode": "manualApproval"},
             "mcp": {"enabled": True, "serverName": "pbs-tools"},
         },
         "console": {"executorMode": "service-account"},

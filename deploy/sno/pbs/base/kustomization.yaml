@@ -7,5 +7,4 @@ resources:
   - configmap.yaml
   - app.yaml
   - mcp.yaml
-  - byok-builder-rbac.yaml
   - olsconfig-patch-preview.yaml

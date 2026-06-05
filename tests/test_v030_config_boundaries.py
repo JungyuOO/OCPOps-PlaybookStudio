@@ -6,11 +6,12 @@ from play_book_studio.config.settings import Settings, load_settings
 from play_book_studio.http.terminal_ws import terminal_workspace_auto_create_enabled
 
 
-def test_v030_lightspeed_byok_and_operator_settings_load_from_env(tmp_path: Path) -> None:
+def test_v030_lightspeed_and_operator_settings_load_from_env(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text(
         "\n".join(
             [
                 "CHAT_PROVIDER=lightspeed",
+                "LIGHTSPEED_KNOWLEDGE_MODE=lightspeed-rag-with-pbs-private-context",
                 "OLS_BASE_URL=https://ols.apps.example.test",
                 "OLS_AUTH_MODE=test-admin-secret",
                 "OLS_AUTH_SECRET_NAME=pbs-ols-token",
@@ -19,10 +20,6 @@ def test_v030_lightspeed_byok_and_operator_settings_load_from_env(tmp_path: Path
                 "PBS_AUTO_CREATE_NAMESPACE=false",
                 "PBS_NAMESPACE_MODE=disabled",
                 "CONSOLE_EXECUTOR_MODE=test-admin-secret",
-                "BYOK_PIPELINE_ENABLED=true",
-                "BYOK_OUTPUT_MODE=dry-run",
-                "BYOK_IMAGE_REPOSITORY=registry.example.test/pbs/byok",
-                "BYOK_REGISTRY_SECRET_NAME=pbs-registry",
                 "PBS_OPERATOR_READY_MODE=true",
                 "PBS_OPERATOR_MANIFEST_PROFILE=sno",
             ]
@@ -33,6 +30,7 @@ def test_v030_lightspeed_byok_and_operator_settings_load_from_env(tmp_path: Path
     settings = load_settings(tmp_path)
 
     assert settings.chat_provider == "lightspeed"
+    assert settings.lightspeed_knowledge_mode == "lightspeed-rag-with-pbs-private-context"
     assert settings.ols_base_url == "https://ols.apps.example.test"
     assert settings.ols_auth_mode == "test-admin-secret"
     assert settings.ols_auth_secret_name == "pbs-ols-token"
@@ -41,10 +39,7 @@ def test_v030_lightspeed_byok_and_operator_settings_load_from_env(tmp_path: Path
     assert settings.pbs_auto_create_namespace is False
     assert settings.pbs_namespace_mode == "disabled"
     assert settings.console_executor_mode == "test-admin-secret"
-    assert settings.byok_pipeline_enabled is True
-    assert settings.byok_output_mode == "dry-run"
-    assert settings.byok_image_repository == "registry.example.test/pbs/byok"
-    assert settings.byok_registry_secret_name == "pbs-registry"
+    assert not hasattr(settings, "byok_pipeline_enabled")
     assert settings.pbs_operator_ready_mode is True
     assert settings.pbs_operator_manifest_profile == "sno"
 

@@ -45,6 +45,13 @@ spec:
                 lightspeed:
                   type: object
                   properties:
+                    knowledgeMode:
+                      type: string
+                      enum:
+                        - lightspeed-rag
+                        - lightspeed-rag-with-pbs-private-context
+                        - pbs-rag
+                        - hybrid
                     detectOperator:
                       type: boolean
                     manageOLSConfig:
@@ -57,18 +64,6 @@ spec:
                           enum: ["test-admin-secret", "service-account", "user-token"]
                         secretName:
                           type: string
-                    byoKnowledge:
-                      type: object
-                      properties:
-                        enabled:
-                          type: boolean
-                        imageRepository:
-                          type: string
-                        registrySecret:
-                          type: string
-                        updateMode:
-                          type: string
-                          enum: ["dryRun", "manualApproval", "automatic"]
                     mcp:
                       type: object
                       properties:
@@ -108,8 +103,6 @@ spec:
                   type: string
                 lightspeedReady:
                   type: boolean
-                byokLastBuild:
-                  type: string
                 mcpRegistered:
                   type: boolean
       subresources:

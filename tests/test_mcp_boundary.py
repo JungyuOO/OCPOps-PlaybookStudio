@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import pytest
@@ -16,8 +15,8 @@ def test_pbs_mcp_tool_catalog_is_read_only_and_complete() -> None:
     assert "generate_remediation_plan" in {tool.name for tool in tools}
 
 
-def test_search_and_read_generated_byok_markdown(tmp_path: Path) -> None:
-    document_path = tmp_path / "storage" / "byok" / "generated" / "koscom" / "storage" / "pvc.md"
+def test_search_and_read_generated_private_markdown(tmp_path: Path) -> None:
+    document_path = tmp_path / "storage" / "private-rag" / "generated" / "koscom" / "storage" / "pvc.md"
     document_path.parent.mkdir(parents=True)
     document_path.write_text(
         "# KOSCOM PVC Pending Troubleshooting\n\nUse `oc describe pvc` for pending PVC checks.\n",
@@ -29,13 +28,13 @@ def test_search_and_read_generated_byok_markdown(tmp_path: Path) -> None:
 
     document_result = execute_read_only_tool(
         "get_pbs_document",
-        {"path": "storage/byok/generated/koscom/storage/pvc.md"},
+        {"path": "storage/private-rag/generated/koscom/storage/pvc.md"},
         root_dir=tmp_path,
     )
     assert "oc describe pvc" in document_result["content"]
 
 
-def test_get_pbs_document_rejects_paths_outside_generated_byok(tmp_path: Path) -> None:
+def test_get_pbs_document_rejects_paths_outside_generated_private_docs(tmp_path: Path) -> None:
     outside = tmp_path / "notes.md"
     outside.write_text("# private\n", encoding="utf-8")
 
@@ -43,17 +42,7 @@ def test_get_pbs_document_rejects_paths_outside_generated_byok(tmp_path: Path) -
         execute_read_only_tool("get_pbs_document", {"path": "notes.md"}, root_dir=tmp_path)
 
 
-def test_byok_builds_and_timeline_tools(tmp_path: Path) -> None:
-    manifest_dir = tmp_path / "storage" / "byok" / "manifests"
-    manifest_dir.mkdir(parents=True)
-    (manifest_dir / "byok-export-manifest.json").write_text(
-        json.dumps({"documents": [{"title": "PVC"}]}),
-        encoding="utf-8",
-    )
-    (manifest_dir / "byok-build-request.json").write_text(
-        json.dumps({"image": "example.com/pbs/pbs-knowledge:v0.3.0"}),
-        encoding="utf-8",
-    )
+def test_timeline_tools(tmp_path: Path) -> None:
     append_timeline_event(
         tmp_path,
         event_type="yaml_apply",
@@ -74,9 +63,6 @@ def test_byok_builds_and_timeline_tools(tmp_path: Path) -> None:
         session_id="session-1",
         stdout="pod/api running",
     )
-
-    builds = execute_read_only_tool("list_byok_builds", root_dir=tmp_path)
-    assert builds["build_request"]["image"].endswith(":v0.3.0")
 
     events = execute_read_only_tool("list_recent_pbs_events", {"limit": 5}, root_dir=tmp_path)
     assert len(events["items"]) == 2

@@ -16,7 +16,6 @@ from typing import Any, Callable
 from urllib.parse import parse_qs
 
 from play_book_studio.config.settings import load_settings
-from play_book_studio.byok.operational_markdown import build_byok_export
 from play_book_studio.db.document_repository import (
     delete_document_source,
     find_document_source_by_sha,
@@ -1021,28 +1020,6 @@ def build_upload_ingest_response(
         )
         result["asset_materialization"] = asset_manifest
         result["artifacts"] = debug_artifacts
-        if settings.byok_pipeline_enabled:
-            try:
-                byok_export = build_byok_export(
-                    root_dir=root_dir,
-                    document_id=persisted.document_source_id,
-                    source_text=str(getattr(parsed, "markdown", "") or ""),
-                    title=str(getattr(parsed, "title", "") or result.get("filename") or "PBS Uploaded Document"),
-                    customer=str(payload.get("tenant_slug") or payload.get("customer") or "default"),
-                    topic=str(payload.get("topic") or payload.get("repository_slug") or "operations"),
-                    image_repository=settings.byok_image_repository,
-                )
-                result["byok"] = byok_export.to_dict()
-                debug_artifacts["byok_markdown"] = byok_export.markdown_path
-                debug_artifacts["byok_manifest"] = byok_export.manifest_path
-                debug_artifacts["byok_build_request"] = byok_export.build_request_path
-                debug_artifacts["byok_olsconfig_patch_preview"] = byok_export.olsconfig_patch_preview_path
-            except Exception as exc:  # noqa: BLE001
-                result["byok"] = {
-                    "status": "failed",
-                    "error": str(exc),
-                }
-                result.setdefault("warnings", []).append(f"BYOK export failed: {exc}")
         if asset_manifest.get("warnings"):
             result.setdefault("warnings", []).extend(str(item) for item in asset_manifest.get("warnings") or [])
         if asset_manifest.get("image_count"):

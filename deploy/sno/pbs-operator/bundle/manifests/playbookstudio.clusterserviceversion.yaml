@@ -16,7 +16,7 @@ metadata:
             "lightspeed": {
               "detectOperator": true,
               "manageOLSConfig": true,
-              "byoKnowledge": {"enabled": true, "updateMode": "manualApproval"},
+              "knowledgeMode": "lightspeed-rag-with-pbs-private-context",
               "mcp": {"enabled": true, "registerWithOLS": true, "serverName": "pbs-tools"}
             }
           }

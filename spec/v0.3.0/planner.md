@@ -12,7 +12,7 @@ criteria in this plan before OCP-side deployment work begins.
 
 ## Branch
 
-- Working branch: `feat/v0.3.0/lightspeed`
+- Working branch: `v3.0.0/lightspeed`
 - Version/spec folder: `spec/v0.3.0`
 
 ## Out Of Scope For Phase 1
@@ -52,15 +52,16 @@ OpenShift Secrets, GitHub Actions Secrets, SSH key material, or protected server
 files.
 
 Phase 1 must create code and manifests that are ready for this environment, but it must not claim
-that the live route, live CLI, live BYOK, live Operator lifecycle, or live cluster reconciliation has
-been verified.
+that the live route, live CLI, live Operator lifecycle, or live cluster reconciliation has been
+verified.
 
 ## Product Goal
 
 PBS should provide one primary workbench where an operator can:
 
 - Ask Lightspeed-backed questions in the central chat.
-- Upload customer documents into the PBS Library and convert them into Lightspeed BYO Knowledge.
+- Upload customer documents into the PBS Library, process them into PBS private RAG context, and
+  attach that context to Lightspeed requests.
 - Browse OpenShift resources in a left navigation model similar to the OCP Console.
 - Open resource lists and details without leaving the main Playbook Studio shell.
 - Edit YAML for resources in-context and capture the resulting apply event.
@@ -76,7 +77,8 @@ The current menu/modal-oriented layout should move toward a single AIOps workben
 
 Target layout:
 
-- Top bar: cluster connection, Lightspeed status, BYOK status, Operator-readiness status.
+- Top bar: cluster connection, Lightspeed status, private-document context status, Operator-readiness
+  status.
 - Left rail: OCP Console-style navigation.
 - Center: Lightspeed chat, resource lists, resource detail, YAML editor, analysis results.
 - Right rail: terminal, event timeline, logs, apply output, context inspector.
@@ -98,7 +100,7 @@ Left navigation should include at least:
 - Installed Operators
 - Library
 - Customer Docs
-- BYOK Builds
+- Private Context
 - AIOps
 - Events
 - Apply History
@@ -110,16 +112,22 @@ panel, or central chat-level control.
 
 ## Lightspeed Integration
 
-PBS should not treat the existing internal chatbot as the primary path for v0.3.0. It should introduce
-a provider boundary:
+PBS should not treat the existing internal chatbot as the primary answer-generation path for v0.3.0.
+Lightspeed remains the primary source for OpenShift official documentation, built-in RAG, and cluster
+analysis. PBS still keeps its internal retrieval path for user-uploaded/private customer documents and
+uses those results as supplemental request context for Lightspeed.
 
-- `internal`: existing PBS RAG/chat path, retained as legacy/fallback.
-- `lightspeed`: OpenShift Lightspeed API path.
+It should introduce a provider boundary:
+
+- `internal`: existing PBS RAG/chat path, retained for fallback and private uploaded document retrieval.
+- `lightspeed`: OpenShift Lightspeed API path, primary for official OpenShift guidance and cluster
+  reasoning.
 
 Configuration shape:
 
 ```text
 CHAT_PROVIDER=lightspeed
+LIGHTSPEED_KNOWLEDGE_MODE=lightspeed-rag-with-pbs-private-context
 OLS_BASE_URL=<lightspeed service or route>
 OLS_AUTH_MODE=test-admin-secret|service-account|user-token
 PBS_AUTO_CREATE_NAMESPACE=false
@@ -134,12 +142,14 @@ Expected backend responsibilities:
 - Support non-streaming and streaming response paths when available.
 - Attach relevant context from library scope, CLI events, YAML diffs, apply results, logs, and cluster
   snapshots.
+- Attach PBS user-upload/private document excerpts as supplemental context, while leaving official
+  OpenShift knowledge and cluster reasoning to Lightspeed.
 - Preserve enough conversation metadata for later replay and troubleshooting.
 
-## BYO Knowledge Document Pipeline
+## PBS Private Document Pipeline
 
-The main knowledge feature is not generic Qdrant ingestion. PBS Library uploads should become
-Lightspeed BYO Knowledge-ready Markdown.
+PBS Library uploads should become operational Markdown and private PBS retrieval context that can be
+injected into Lightspeed requests. v0.3.0 must not expose or execute an external knowledge-image path.
 
 Pipeline:
 
@@ -148,11 +158,11 @@ Pipeline:
 3. Rewrite or normalize into detailed operational Markdown.
 4. Add front matter metadata.
 5. Run a quality gate.
-6. Export to BYO Knowledge corpus.
-7. Build/push a knowledge image or produce the job inputs needed for that operation.
-8. Prepare or patch `OLSConfig` registration data.
+6. Index the Markdown into PBS private retrieval for user/customer-document context.
+7. Attach the best matching private excerpts to Lightspeed requests as supplemental context.
+8. Record deterministic private-context metadata for search, audit, and traceability.
 
-The output must be useful to OpenShift Lightspeed BYO Knowledge, not merely converted to Markdown.
+The output must be useful as operational context for Lightspeed, not merely converted to Markdown.
 The transformer must produce operationally dense documents with enough explicit language for RAG
 retrieval:
 
@@ -162,7 +172,7 @@ retrieval:
 - Convert tables into Markdown tables or decision lists.
 - Split vague source text into explicit situation, symptoms, checks, decision criteria, and remediation
   direction.
-- Add internal source URLs that remain stable across BYOK image rebuilds.
+- Add internal source URLs that remain stable across PBS private indexing.
 - Avoid dumping raw extracted text without operational rewrite.
 
 Canonical Markdown shape:
@@ -240,35 +250,22 @@ Quality gate:
   resource names.
 - Each troubleshooting document includes at least one observable signal, one command to inspect it, and
   one decision rule.
-- The BYOK export produces a deterministic manifest that maps source document IDs to generated Markdown
-  files and future knowledge-image tags.
+- The default PBS private export produces deterministic metadata that maps source document IDs to
+  generated Markdown files and retrievable private context.
 
-Qdrant should be isolated behind the legacy `internal` provider path. The Lightspeed path should not
-depend on Qdrant for its primary knowledge workflow.
+Qdrant/internal retrieval remains available for PBS user-upload/private documents. The Lightspeed path
+must not use Qdrant to replace Lightspeed official OpenShift knowledge; it may use PBS private retrieval
+only to attach customer-specific context.
 
-### BYOK Build And Registration Model
+### Private Context Artifact Model
 
-OpenShift Lightspeed BYO Knowledge is image-oriented. The expected v0.3.0 design must therefore
-produce artifacts that can later be used by a live BYOK builder and `OLSConfig` registration process:
-
-```text
-PBS Library upload
-  -> generated operational Markdown corpus
-  -> byok-export-manifest.json
-  -> BYOK builder job input
-  -> knowledge image tag
-  -> OLSConfig knowledge image registration
-  -> Lightspeed rollout/reconcile check
-```
-
-Phase 1 may implement the builder integration as a dry-run artifact or job specification if live
-registry and cluster credentials are unavailable. It must still define the exact files, image names,
-and status records that Phase 2 will use.
+The expected v0.3.0 design should produce artifacts that can be searched by PBS and attached to
+Lightspeed requests without registering a knowledge image:
 
 Suggested artifact layout:
 
 ```text
-storage/byok/
+storage/private-rag/
   sources/
     <document-id>/
       original.<ext>
@@ -277,9 +274,7 @@ storage/byok/
   generated/
     <customer>/<topic>/<slug>.md
   manifests/
-    byok-export-manifest.json
-    byok-build-request.json
-    olsconfig-patch-preview.yaml
+    private-context-manifest.json
 ```
 
 The generated manifest should include:
@@ -294,9 +289,7 @@ The generated manifest should include:
 - source type
 - quality gate result
 - content hash
-- target knowledge image repository
-- target knowledge image tag
-- OLSConfig patch preview path
+- private retrieval collection/scope
 
 ## Cluster And Action Context
 
@@ -357,14 +350,13 @@ YAML editor flow:
 
 ## PBS MCP Server Path
 
-BYO Knowledge is the main document knowledge path. MCP is the secondary integration path for allowing
-OpenShift Console Lightspeed to call PBS capabilities.
+PBS private document context is the customer-document path. MCP is the secondary integration path for
+allowing OpenShift Console Lightspeed to call PBS capabilities directly.
 
 PBS should prepare an MCP server boundary with tools such as:
 
 - `search_pbs_library`
 - `get_pbs_document`
-- `list_byok_builds`
 - `list_recent_pbs_events`
 - `get_cli_session_output`
 - `get_yaml_apply_history`
@@ -455,10 +447,10 @@ the desired cluster state. The GitHub repository remains the source of truth.
 OpenShift AI, OpenShift Lightspeed, and PBS must be separated because their lifecycle differs:
 
 - OpenShift AI owns model serving, LLM provider endpoints, inference services, and provider credentials.
-- OpenShift Lightspeed owns `OLSConfig`, BYOK images, MCP server registration, telemetry/redaction, and
-  the Lightspeed Operator lifecycle.
-- PBS owns the workbench UI/backend, Library, BYOK pipeline, console executor, event timeline, MCP
-  tools, and future PBS Operator.
+- OpenShift Lightspeed owns `OLSConfig`, MCP server registration, telemetry/redaction, and the
+  Lightspeed Operator lifecycle.
+- PBS owns the workbench UI/backend, Library, private document context pipeline, console executor,
+  event timeline, MCP tools, and future PBS Operator.
 
 ## Live Cluster Cleanup And Reinstall Plan Boundary
 
@@ -470,15 +462,15 @@ Phase 2 live cleanup plan must include:
 
 - Inventory current OpenShift AI Operator, operands, model serving resources, routes, Secrets, and
   namespaces.
-- Inventory current OpenShift Lightspeed Operator, `OLSConfig`, app server, BYOK settings, MCP settings,
-  routes, Secrets, and related namespaces.
+- Inventory current OpenShift Lightspeed Operator, `OLSConfig`, app server, MCP settings, routes,
+  Secrets, and related namespaces.
 - Inventory current PBS Deployment, Service, Route, ConfigMap, Secret references, image tag, and RBAC.
 - Identify resources created only by temporary `oc patch` or manual test commands.
 - Back up current YAML before deletion or replacement.
 - Remove unused or conflicting resources only during an explicit live execution window.
 - Reinstall OpenShift AI and Lightspeed from declarative manifests.
 - Reconnect PBS to the reinstalled Lightspeed endpoint.
-- Re-register BYOK knowledge images and PBS MCP server.
+- Re-register PBS MCP server if the MCP path is enabled.
 
 This planner does not authorize destructive cleanup. It defines the required future plan shape.
 
@@ -501,7 +493,7 @@ PR merge to dev or release branch
   -> GitHub Actions builds PBS Operator/bundle/catalog images when operator code exists
   -> GitHub Actions updates declarative image references or release manifests
   -> OpenShift GitOps/Argo CD watches the repository
-  -> SNO cluster reconciles PBS, Lightspeed config, BYOK registration, and PBS Operator resources
+  -> SNO cluster reconciles PBS, Lightspeed config, MCP registration, and PBS Operator resources
 ```
 
 The implementation should prepare for this by keeping all deployable state declarative, reviewable,
@@ -533,11 +525,6 @@ spec:
     manageOLSConfig: true
     auth:
       mode: serviceAccount
-    byoKnowledge:
-      enabled: true
-      imageRepository: registry.example.com/pbs/pbs-knowledge
-      registrySecret: pbs-registry
-      updateMode: manualApproval
     mcp:
       enabled: true
       registerWithOLS: true
@@ -549,8 +536,8 @@ spec:
     autoCreate: false
   library:
     ingestion:
-      outputFormat: lightspeed-byok-markdown
-      qdrantEnabled: false
+      outputFormat: pbs-private-context-markdown
+      qdrantEnabled: true
 ```
 
 Operator-managed resources expected later:
@@ -560,7 +547,6 @@ Operator-managed resources expected later:
 - ConfigMap for provider and feature flags.
 - Secret references, not hardcoded credentials.
 - ServiceAccount and RBAC.
-- BYOK builder Job/CronJob permissions.
 - PBS MCP Server Deployment/Service.
 - Optional OLSConfig patch/registration workflow.
 - Optional OpenShift Lightspeed readiness checks and reconnection status.
@@ -568,15 +554,16 @@ Operator-managed resources expected later:
 
 The future PBS Operator should not attempt to own the full lifecycle of OpenShift AI by default.
 OpenShift AI and Lightspeed should be managed by their own Operators or GitOps manifests. PBS Operator
-may detect and configure integration points, such as OLS endpoint, BYOK image reference, and MCP
-registration, when explicitly enabled.
+may detect and configure integration points, such as OLS endpoint and MCP registration, when explicitly
+enabled.
 
 ## Implementation Milestones
 
 ### M1: Foundation
 
 - Confirm branch and baseline structure.
-- Add feature flags for Lightspeed, namespace behavior, console executor mode, and BYOK pipeline.
+- Add feature flags for Lightspeed, namespace behavior, console executor mode, and private document
+  context.
 - Disable namespace auto-create for v0.3.0 test mode.
 
 ### M2: UI Shell
@@ -593,13 +580,13 @@ registration, when explicitly enabled.
 - Add health/status checks.
 - Add context composer for selected library scope, CLI events, YAML diffs, and cluster snapshots.
 
-### M4: BYOK Library Pipeline
+### M4: Private Document Context Pipeline
 
 - Convert uploaded documents into detailed operational Markdown.
 - Add front matter metadata and internal URLs.
 - Add quality gate.
-- Add BYOK corpus export.
-- Add build/push/OLSConfig patch planning hooks or dry-run artifacts.
+- Add deterministic private-context metadata and indexing.
+- Attach matching private excerpts to Lightspeed requests.
 
 ### M5: Console And YAML Events
 
@@ -625,13 +612,13 @@ registration, when explicitly enabled.
 - Document required CRD spec, managed resources, and RBAC.
 - Ensure runtime configuration maps to future CR fields.
 - Avoid code paths that require manual cluster mutation outside configured providers.
-- Add deploy/GitOps manifest structure or dry-run generation plan for PBS, BYOK, MCP, and Lightspeed
+- Add deploy/GitOps manifest structure or dry-run generation plan for PBS, MCP, and Lightspeed
   integration.
 - Keep OpenShift AI and Lightspeed ownership boundaries explicit.
 
 ### M9: Verification And Score Loop
 
-- Add focused unit tests for provider selection, namespace disabled behavior, BYOK Markdown quality,
+- Add focused unit tests for provider selection, namespace disabled behavior, private Markdown quality,
   event timeline capture, and context composition.
 - Run available frontend/backend tests.
 - Run static/type checks where available.
@@ -644,7 +631,7 @@ Target: 90 or higher before marking v0.3.0 phase 1 complete.
 
 - UI workbench coherence: 15
 - Lightspeed provider architecture: 15
-- BYOK document pipeline quality: 20
+- Private document context quality: 20
 - Console/YAML event capture: 15
 - Cluster context composition: 10
 - Operator-ready configuration boundaries: 10
@@ -658,8 +645,8 @@ Automatic fail conditions:
 - Lightspeed path still depends on Qdrant as the primary knowledge source.
 - CLI/YAML actions are not recorded as events.
 - UI still requires modal/menu jumping for the main workbench flow.
-- BYOK output is only raw Markdown conversion and lacks operational rewrite, metadata, quality gates,
-  and registration artifacts.
+- Private document output is only raw Markdown conversion and lacks operational rewrite, metadata,
+  quality gates, and retrieval metadata.
 - Live cluster success is claimed without evidence from actual SNO/OCP commands.
 
 ## Completion Criteria
@@ -667,10 +654,10 @@ Automatic fail conditions:
 Phase 1 is complete when:
 
 - PBS can run with `CHAT_PROVIDER=lightspeed` and namespace auto-create disabled.
-- Central chat, left resource navigation, right terminal/event rail, and Library/BYOK status have a
+- Central chat, left resource navigation, right terminal/event rail, and Library/private context status have a
   coherent one-screen workbench design.
-- Uploaded documents can be transformed into BYOK-ready operational Markdown with metadata and quality
-  validation.
+- Uploaded documents can be transformed into private operational Markdown with metadata and quality
+  validation, then attached to Lightspeed as supplemental context.
 - CLI and YAML actions produce structured events that can be included in Lightspeed analysis context.
 - Operator-ready configuration and CR sketch are represented in docs and reflected in code boundaries.
 - The planner includes a separate live SNO/GitOps/Operator validation path that does not blur local

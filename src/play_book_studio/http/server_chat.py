@@ -1,4 +1,4 @@
-# chat / chat-stream 처리 흐름을 server.py 밖으로 분리한다.
+﻿# chat / chat-stream 泥섎━ ?먮쫫??server.py 諛뽰쑝濡?遺꾨━?쒕떎.
 from __future__ import annotations
 
 import json
@@ -13,6 +13,8 @@ import time
 from play_book_studio.config.settings import load_settings
 from play_book_studio.answering.lightspeed_provider import (
     LightspeedChatContext,
+    build_pbs_rag_context,
+    is_private_pbs_citation,
     lightspeed_enabled,
     query_lightspeed,
 )
@@ -393,10 +395,38 @@ def handle_chat(
     try:
         answer_started_at = time.perf_counter()
         if lightspeed_enabled(active_answerer.settings):
+            rag_result = active_answerer.answer(
+                query,
+                mode=mode,
+                context=request_context,
+                top_k=5,
+                candidate_k=10,
+                max_context_chunks=5,
+            )
+            lightspeed_context = _lightspeed_context_from_payload(scoped_payload)
+            lightspeed_context = LightspeedChatContext(
+                conversation_id=lightspeed_context.conversation_id,
+                library_scope=lightspeed_context.library_scope,
+                cluster_context=lightspeed_context.cluster_context,
+                recent_events=lightspeed_context.recent_events,
+                attachments=lightspeed_context.attachments,
+                pbs_rag=build_pbs_rag_context(rag_result),
+            )
             result = query_lightspeed(
                 active_answerer.settings,
                 query,
-                context=_lightspeed_context_from_payload(scoped_payload),
+                context=lightspeed_context,
+            )
+            private_citations = [
+                citation for citation in rag_result.citations if is_private_pbs_citation(citation)
+            ]
+            result.citations = private_citations
+            result.cited_indices = [citation.index for citation in private_citations]
+            result.warnings = list(dict.fromkeys([*rag_result.warnings, *result.warnings]))
+            result.retrieval_trace["pbs_private_context_attached"] = bool(private_citations)
+            result.retrieval_trace["pbs_private_context_citations"] = len(private_citations)
+            result.retrieval_trace["lightspeed_knowledge_mode"] = (
+                active_answerer.settings.lightspeed_knowledge_mode
             )
         else:
             result = active_answerer.answer(
@@ -414,7 +444,7 @@ def handle_chat(
             server_timings_ms["answer_log_persist"] = (time.perf_counter() - answer_log_started_at) * 1000
     except Exception as exc:  # noqa: BLE001
         handler._send_json(
-            {"error": f"답변 생성 중 오류가 발생했습니다: {exc}"},
+            {"error": f"?듬? ?앹꽦 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎: {exc}"},
             HTTPStatus.INTERNAL_SERVER_ERROR,
         )
         return
@@ -562,7 +592,7 @@ def handle_chat_stream(
         {
             "type": "trace",
             "step": "request_received",
-            "label": "질문 접수 완료",
+            "label": "吏덈Ц ?묒닔 ?꾨즺",
             "status": "done",
             "detail": query[:180],
         }
@@ -578,21 +608,66 @@ def handle_chat_stream(
             handler._stream_event(
                 {
                     "type": "trace",
+                    "step": "pbs_private_context",
+                    "label": "PBS private document context retrieval",
+                    "status": "running",
+                }
+            )
+            rag_result = active_answerer.answer(
+                query,
+                mode=mode,
+                context=request_context,
+                top_k=5,
+                candidate_k=10,
+                max_context_chunks=5,
+                trace_callback=emit_trace,
+            )
+            handler._stream_event(
+                {
+                    "type": "trace",
+                    "step": "pbs_private_context",
+                    "label": "PBS private document context ready",
+                    "status": "done",
+                }
+            )
+            lightspeed_context = _lightspeed_context_from_payload(scoped_payload)
+            lightspeed_context = LightspeedChatContext(
+                conversation_id=lightspeed_context.conversation_id,
+                library_scope=lightspeed_context.library_scope,
+                cluster_context=lightspeed_context.cluster_context,
+                recent_events=lightspeed_context.recent_events,
+                attachments=lightspeed_context.attachments,
+                pbs_rag=build_pbs_rag_context(rag_result),
+            )
+            handler._stream_event(
+                {
+                    "type": "trace",
                     "step": "lightspeed_provider",
-                    "label": "OpenShift Lightspeed 요청 중",
+                    "label": "OpenShift Lightspeed request",
                     "status": "running",
                 }
             )
             result = query_lightspeed(
                 active_answerer.settings,
                 query,
-                context=_lightspeed_context_from_payload(scoped_payload),
+                context=lightspeed_context,
+            )
+            private_citations = [
+                citation for citation in rag_result.citations if is_private_pbs_citation(citation)
+            ]
+            result.citations = private_citations
+            result.cited_indices = [citation.index for citation in private_citations]
+            result.warnings = list(dict.fromkeys([*rag_result.warnings, *result.warnings]))
+            result.retrieval_trace["pbs_private_context_attached"] = bool(private_citations)
+            result.retrieval_trace["pbs_private_context_citations"] = len(private_citations)
+            result.retrieval_trace["lightspeed_knowledge_mode"] = (
+                active_answerer.settings.lightspeed_knowledge_mode
             )
             handler._stream_event(
                 {
                     "type": "trace",
                     "step": "lightspeed_provider",
-                    "label": "OpenShift Lightspeed 응답 수신",
+                    "label": "OpenShift Lightspeed response",
                     "status": "done",
                 }
             )
@@ -615,7 +690,7 @@ def handle_chat_stream(
         _stream_answer_delta(handler, str(result.answer or ""))
         server_timings_ms["answer_delta_stream"] = (time.perf_counter() - answer_delta_started_at) * 1000
     except Exception as exc:  # noqa: BLE001
-        handler._stream_event({"type": "error", "error": f"답변 생성 중 오류가 발생했습니다: {exc}"})
+        handler._stream_event({"type": "error", "error": f"?듬? ?앹꽦 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎: {exc}"})
         return
 
     session.mode = RUNTIME_CHAT_MODE
@@ -711,3 +786,4 @@ def handle_chat_stream(
         owner_user_id=owner_user_id,
         active_repository_id=active_repository_id,
     )
+

@@ -57,11 +57,22 @@ EXPOSE 8765 8770
 CMD ["python", "-m", "play_book_studio.cli", "ui", "--no-browser", "--host", "0.0.0.0", "--port", "8765"]
 
 
-FROM app AS operator
+FROM python:3.11-slim AS operator
 
-ENV PBS_OPERATOR_MODE=dry-run \
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src \
+    PBS_OPERATOR_MODE=dry-run \
     PBS_OPERATOR_WATCH_ENABLED=true \
     PBS_OPERATOR_APPLY_ENABLED=false
+
+WORKDIR /app
+
+COPY src/play_book_studio /app/src/play_book_studio
+
+RUN mkdir -p /app/tmp \
+    && chgrp -R 0 /app \
+    && chmod -R g=u /app
 
 CMD ["python", "-m", "play_book_studio.pbs_operator.runtime"]
 

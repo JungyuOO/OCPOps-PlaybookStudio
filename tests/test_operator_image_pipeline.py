@@ -11,7 +11,9 @@ def read(relative_path: str) -> str:
 def test_dockerfile_declares_operator_bundle_and_catalog_targets() -> None:
     dockerfile = read("deploy/Dockerfile")
 
-    assert "FROM app AS operator" in dockerfile
+    assert "FROM python:3.11-slim AS operator" in dockerfile
+    assert "PYTHONPATH=/app/src" in dockerfile
+    assert "COPY src/play_book_studio /app/src/play_book_studio" in dockerfile
     assert "play_book_studio.pbs_operator.runtime" in dockerfile
     assert "FROM scratch AS operator-bundle" in dockerfile
     assert "COPY deploy/sno/pbs-operator/bundle/manifests /manifests" in dockerfile
