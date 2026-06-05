@@ -188,7 +188,7 @@ def test_grounded_command_answer_is_rewritten_by_answer_llm(tmp_path: Path) -> N
     assert any(event.get("step") == "llm_runtime" for event in result.pipeline_trace["events"])
 
 
-def test_openshift_lightspeed_answer_is_used_as_pbs_answer_material(tmp_path: Path) -> None:
+def test_openshift_lightspeed_answer_is_returned_without_pbs_llm_rewrite(tmp_path: Path) -> None:
     llm = FakeLlmClient()
     lightspeed = FakeLightspeedClient()
     answerer = ChatAnswerer(
@@ -204,12 +204,31 @@ def test_openshift_lightspeed_answer_is_used_as_pbs_answer_material(tmp_path: Pa
     assert result.pipeline_trace["answer_source"] == "lightspeed_with_pbs_rag"
     assert result.pipeline_trace["external_answer"]["status"] == "used"
     assert result.citations
-    prompt_text = "\n".join(message["content"] for message in llm.calls[0])
-    assert "OpenShift Lightspeed 공식 답변" in prompt_text
-    assert "citation은 PBS 근거 번호만 사용하세요" in prompt_text
-    assert "Events에서 scheduling 또는 binding 실패 사유" in prompt_text
+    assert not llm.calls
+    assert "LLM 최종 답변입니다" not in result.answer
+    assert "Events에서 scheduling 또는 binding 실패 사유" in result.answer
+    assert "[1]" in result.answer
     steps = [event.get("step") for event in result.pipeline_trace["events"]]
     assert steps.index("openshift_lightspeed") < steps.index("retrieval")
+    assert "lightspeed_answer_passthrough" in steps
+
+
+def test_openshift_lightspeed_query_normalizes_common_korean_typo(tmp_path: Path) -> None:
+    llm = FakeLlmClient()
+    lightspeed = FakeLightspeedClient()
+    answerer = ChatAnswerer(
+        Settings(root_dir=tmp_path),
+        retriever=FakeRetriever(),  # type: ignore[arg-type]
+        llm_client=llm,  # type: ignore[arg-type]
+        lightspeed_client=lightspeed,  # type: ignore[arg-type]
+    )
+
+    result = answerer.answer("클러스터 이벤트중 워닝만 필터링할수잇어?")
+
+    assert lightspeed.calls == ["클러스터 이벤트중 워닝만 필터링할수있어?"]
+    assert result.pipeline_trace["answer_source"] == "lightspeed_with_pbs_rag"
+    assert result.pipeline_trace["external_answer"]["normalized_query"] == "클러스터 이벤트중 워닝만 필터링할수있어?"
+    assert not llm.calls
 
 
 def test_lightspeed_success_is_not_blocked_by_pbs_rbac_grounding_guard(tmp_path: Path) -> None:
@@ -271,8 +290,7 @@ def test_answerer_calls_configured_lightspeed_http_endpoint_before_pbs_retrieval
     assert LocalLightspeedHandler.calls
     assert LocalLightspeedHandler.calls[0]["path"] == "/v1/query"
     assert LocalLightspeedHandler.calls[0]["authorization"] == "Bearer unit-token"
-    assert LocalLightspeedHandler.calls[0]["payload"]["query"].startswith("Pod Pending 상태면 무엇을 먼저 확인해야 해?")
-    assert "공식 문서의 제목과 URL" in LocalLightspeedHandler.calls[0]["payload"]["query"]
+    assert LocalLightspeedHandler.calls[0]["payload"]["query"] == "Pod Pending 상태면 무엇을 먼저 확인해야 해?"
     assert result.pipeline_trace["answer_source"] == "lightspeed_with_pbs_rag"
     assert result.pipeline_trace["external_answer"]["status"] == "used"
     assert result.pipeline_trace["external_answer"]["conversation_id"] == "conv-local-1"
@@ -290,7 +308,9 @@ def test_answerer_calls_configured_lightspeed_http_endpoint_before_pbs_retrieval
     assert artifact["conversation_id"] == "conv-local-1"
     assert artifact["input_tokens"] == 10
     assert artifact["output_tokens"] == 20
-    prompt_text = "\n".join(message["content"] for message in llm.calls[0])
-    assert "FailedScheduling" in prompt_text
+    assert not llm.calls
+    assert "FailedScheduling" in result.answer
+    assert "[1]" in result.answer
     steps = [event.get("step") for event in result.pipeline_trace["events"]]
     assert steps.index("openshift_lightspeed") < steps.index("retrieval")
+    assert "lightspeed_answer_passthrough" in steps

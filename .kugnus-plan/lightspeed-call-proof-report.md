@@ -75,7 +75,7 @@ OpenShift Lightspeed 호출 성공과 참조 문서 목록 반환은 별도 항�
 
 일부 OpenShift Lightspeed 응답은 답변 본문, conversation_id, token 사용량은 반환하지만 `referenced_documents` 배열은 비어 있을 수 있다. 이 경우 PBS Viewer는 문서 목록을 임의로 만들지 않고 `OpenShift Lightspeed 참조 문서 (0)`으로 표시한다.
 
-현재 PBS는 OpenShift Lightspeed에 질문을 보낼 때 `답변에 사용한 OpenShift 공식 문서의 제목과 URL을 함께 알려줘.` 문장을 함께 전달한다. 이 지시를 추가한 뒤 동일 질문에서 `referenced_documents=5`가 반환되는 것을 확인했다.
+후속 검증에서 참조 문서 요청 문장을 사용자 질문에 덧붙이면 Lightspeed 답변 본문이 달라질 수 있음을 확인했다. 현재 PBS는 답변 원문 보존을 우선하며, `referenced_documents`는 OpenShift Lightspeed API가 실제 반환한 값만 기록하고 표시한다.
 
 이 상태는 OpenShift Lightspeed 미호출이 아니다. 호출 여부는 다음 값으로 확인한다.
 
@@ -128,8 +128,8 @@ OpenShift Lightspeed 호출 성공과 참조 문서 목록 반환은 별도 항�
 | 파일 | 역할 |
 |---|---|
 | `src/play_book_studio/config/settings.py` | `OPENSHIFT_LIGHTSPEED_BASE_URL`, token, provider, model, timeout, TLS 설정 로드 |
-| `src/play_book_studio/integrations/lightspeed.py` | OpenShift Lightspeed `/v1/query`, `/authorized` 호출 client, 공식 문서 제목/URL 반환 요청 |
-| `src/play_book_studio/answering/answerer.py` | 운영 질문 판별 후 OpenShift Lightspeed를 먼저 호출하고 PBS RAG와 결합 |
+| `src/play_book_studio/integrations/lightspeed.py` | OpenShift Lightspeed `/v1/query`, `/authorized` 호출 client, 운영 질문 판별, 한글 오타 보정 |
+| `src/play_book_studio/answering/answerer.py` | 운영 질문 판별 후 OpenShift Lightspeed를 먼저 호출하고, 성공 시 원문 답변을 반환 |
 | `src/play_book_studio/http/server_support.py` | 최종 `/api/chat`, `/api/chat/stream` payload에 `answer_source`, `related_links`, `primary_*`, Lightspeed citation `[1]` 값 반영 |
 | `src/play_book_studio/http/server_chat.py` | 채팅 처리 후 `lightspeed_calls.jsonl`, DB metadata, chat audit 저장 |
 | `src/play_book_studio/http/server_routes_viewer.py` | `/external/lightspeed/{artifact_id}` Viewer 문서 생성 |
@@ -140,10 +140,10 @@ OpenShift Lightspeed 호출 성공과 참조 문서 목록 반환은 별도 항�
 
 | 기능 | 위치 |
 |---|---|
-| 공식 문서 제목/URL 요청 지시 | `src/play_book_studio/integrations/lightspeed.py:35` |
-| 운영 질문 판별 | `src/play_book_studio/integrations/lightspeed.py:117` |
-| API client | `src/play_book_studio/integrations/lightspeed.py:130` |
-| `/v1/query` 호출 | `src/play_book_studio/integrations/lightspeed.py:214` |
+| 한글 오타 보정 | `src/play_book_studio/integrations/lightspeed.py` |
+| 운영 질문 판별 | `src/play_book_studio/integrations/lightspeed.py` |
+| API client | `src/play_book_studio/integrations/lightspeed.py` |
+| `/v1/query` 호출 | `src/play_book_studio/integrations/lightspeed.py` |
 | OpenShift Lightspeed 호출 분기 | `src/play_book_studio/answering/answerer.py:680` |
 | OpenShift Lightspeed 호출 후 PBS RAG 검색 | `src/play_book_studio/answering/answerer.py:1021` |
 | OpenShift Lightspeed 답변을 최종 프롬프트에 반영 | `src/play_book_studio/answering/answerer.py:1328` |

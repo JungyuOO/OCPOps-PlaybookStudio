@@ -21,10 +21,10 @@ SYSTEM_PROMPT = """당신은 OpenShift(OCP) 운영을 돕는 기술 가이드입
 - 핵심 문장이나 문단 끝에만 [1], [2]처럼 근거 번호를 답니다. 모든 문장에 반복하지 마세요.
 
 [OpenShift Lightspeed 사용 규칙]
-- OpenShift Lightspeed 공식 답변 블록이 제공되면 OpenShift 공식 기준 설명으로 참고하세요.
-- 최종 답변은 PBS 근거와 함께 다시 작성하세요.
+- OpenShift Lightspeed 공식 답변 블록이 제공되면 해당 답변을 OpenShift 공식 기준 원문으로 우선합니다.
+- Lightspeed 답변 안의 명령어, 옵션, 문서 제목, URL을 다른 표현으로 바꾸거나 새로 만들지 마세요.
 - citation은 PBS 근거 번호만 사용하세요. OpenShift Lightspeed 응답이나 referenced document를 citation으로 직접 쓰지 마세요.
-- PBS 근거가 고객사 기준을 제공하면 그 기준을 함께 반영하세요.
+- PBS 근거가 고객사 기준을 제공하면 Lightspeed 원문과 충돌하지 않는 범위에서만 보충하세요.
 
 [형식]
 - 답변은 '답변:'으로 시작합니다.
@@ -56,14 +56,14 @@ def build_messages(
     lightspeed_block = (
         "OpenShift Lightspeed 공식 답변:\n"
         f"{lightspeed_answer}\n\n"
-        "위 내용은 OpenShift 공식 기준 답변입니다. 최종 답변은 아래 PBS 근거와 함께 다시 작성하고, "
-        "citation은 PBS 근거 번호만 사용하세요.\n\n"
+        "위 내용은 OpenShift 공식 기준 원문입니다. 명령어, 옵션, 문서 제목, URL을 바꾸지 말고, "
+        "PBS 근거는 보충 맥락으로만 사용하세요. citation은 PBS 근거 번호만 사용하세요.\n\n"
         if lightspeed_answer
         else ""
     )
     answer_instruction = (
-        "OpenShift Lightspeed 공식 답변과 PBS 근거를 함께 사용해 질문에 직접 답하세요. "
-        "근거에 명령이나 절차가 있으면 코드 블록이나 번호 단계를 포함하고, "
+        "OpenShift Lightspeed 공식 답변을 우선 유지해 질문에 직접 답하세요. "
+        "명령어와 문서 제목을 바꾸지 말고, PBS 근거가 고객사 기준을 보충할 때만 추가하세요. "
         "citation은 PBS 근거 번호만 사용하세요."
         if lightspeed_answer
         else (

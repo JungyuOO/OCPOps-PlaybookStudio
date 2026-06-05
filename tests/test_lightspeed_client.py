@@ -17,7 +17,7 @@ from play_book_studio.integrations.lightspeed import (
     OpenShiftLightspeedApiError,
     OpenShiftLightspeedClient,
     is_openshift_operation_question,
-    with_reference_document_request,
+    normalize_lightspeed_query,
 )
 
 
@@ -140,21 +140,35 @@ def test_lightspeed_client_posts_to_query_endpoint(monkeypatch: pytest.MonkeyPat
     assert result.tool_calls == [{"name": "cluster_status"}]
     assert result.tool_results == [{"name": "cluster_status", "status": "ok"}]
     assert calls[0]["url"] == "https://lightspeed.example.test/v1/query"
-    assert calls[0]["json"]["query"].startswith("Pod Pending이면?")
-    assert "공식 문서의 제목과 URL" in calls[0]["json"]["query"]
+    assert calls[0]["json"]["query"] == "Pod Pending이면?"
     assert calls[0]["json"]["provider"] == "provider-a"
     assert calls[0]["json"]["model"] == "model-a"
     assert calls[0]["headers"]["Authorization"] == "Bearer token-value"
     assert calls[0]["verify"] is True
 
 
-def test_lightspeed_client_reference_document_request_is_idempotent() -> None:
-    query = "Pod Pending이면?"
+def test_lightspeed_client_normalizes_common_korean_typo_before_request(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[dict[str, Any]] = []
 
-    augmented = with_reference_document_request(query)
+    def fake_post(url: str, **kwargs: Any) -> FakeResponse:
+        calls.append({"url": url, **kwargs})
+        return FakeResponse()
 
-    assert augmented.startswith(query)
-    assert with_reference_document_request(augmented) == augmented
+    monkeypatch.setattr("play_book_studio.integrations.lightspeed.requests.post", fake_post)
+    client = OpenShiftLightspeedClient(
+        Settings(
+            root_dir=tmp_path,
+            openshift_lightspeed_base_url="https://lightspeed.example.test",
+        )
+    )
+
+    client.query("클러스터 이벤트중 워닝만 필터링할수잇어?")
+
+    assert normalize_lightspeed_query("클러스터 이벤트중 워닝만 필터링할수잇어?") == "클러스터 이벤트중 워닝만 필터링할수있어?"
+    assert calls[0]["json"]["query"].startswith("클러스터 이벤트중 워닝만 필터링할수있어?")
 
 
 @pytest.mark.parametrize(
@@ -329,6 +343,7 @@ def test_openshift_operation_question_detector() -> None:
     assert is_openshift_operation_question("ServiceAccount가 어떤 권한을 갖는지 확인하려면?")
     assert is_openshift_operation_question("다른 사용자 기준으로 권한을 테스트하려면 oc auth can-i에 뭘 붙여?")
     assert is_openshift_operation_question("루트와 서비스 연결 상태를 확인하고 싶어")
+    assert is_openshift_operation_question("클러스터 이벤트중 워닝만 필터링할수잇어?")
     assert not is_openshift_operation_question("안녕 오늘 날씨 어때?")
     assert not is_openshift_operation_question("서비스 기획 회의 안건 정리해줘")
 

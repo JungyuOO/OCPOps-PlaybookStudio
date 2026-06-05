@@ -32,9 +32,18 @@ OPENSHIFT_OPERATION_RE = re.compile(
     re.IGNORECASE,
 )
 
-REFERENCE_DOCUMENT_REQUEST = (
-    "답변에 사용한 OpenShift 공식 문서의 제목과 URL을 함께 알려줘."
-)
+def normalize_lightspeed_query(query: str) -> str:
+    """Normalize common Korean chat typos before sending a query to Lightspeed."""
+
+    normalized = str(query or "").strip()
+    if not normalized:
+        return normalized
+    normalized = re.sub(
+        r"잇(?=(?:어|나|냐|니|는|을|으|습|고|지|죠|다|게|나요|습니까|으면))",
+        "있",
+        normalized,
+    )
+    return normalized
 
 
 @dataclass(slots=True)
@@ -115,16 +124,7 @@ def _error_detail(response: requests.Response) -> str:
 
 
 def is_openshift_operation_question(query: str) -> bool:
-    return bool(OPENSHIFT_OPERATION_RE.search(str(query or "")))
-
-
-def with_reference_document_request(query: str) -> str:
-    cleaned = str(query or "").strip()
-    if not cleaned:
-        return cleaned
-    if REFERENCE_DOCUMENT_REQUEST in cleaned:
-        return cleaned
-    return f"{cleaned}\n\n{REFERENCE_DOCUMENT_REQUEST}"
+    return bool(OPENSHIFT_OPERATION_RE.search(normalize_lightspeed_query(query)))
 
 
 class OpenShiftLightspeedClient:
@@ -201,7 +201,7 @@ class OpenShiftLightspeedClient:
         if not self.is_configured:
             raise ValueError("OPENSHIFT_LIGHTSPEED_BASE_URL is not configured")
 
-        payload: dict[str, Any] = {"query": with_reference_document_request(query)}
+        payload: dict[str, Any] = {"query": normalize_lightspeed_query(query)}
         if conversation_id:
             payload["conversation_id"] = conversation_id
         if self.provider:

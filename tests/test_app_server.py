@@ -62,10 +62,10 @@ class _FakeAnswerer:
         return AnswerResult(
             query=query,
             mode="chat",
-            answer="답변: OpenShift Lightspeed 공식 답변과 PBS 근거를 함께 반영했습니다.",
+            answer="답변: OpenShift Lightspeed 원문 답변입니다. oc events --types=Warning [1]",
             rewritten_query=query,
             citations=[],
-            cited_indices=[],
+            cited_indices=[1],
             pipeline_trace={
                 "answer_source": "lightspeed_with_pbs_rag",
                 "external_answer": {
@@ -223,6 +223,8 @@ def test_chat_payload_exposes_lightspeed_answer_source_and_related_link() -> Non
         assert response.status_code == 200
         payload = response.json()
         assert payload["answer_source"] == "lightspeed_with_pbs_rag"
+        assert payload["answer"] == "답변: OpenShift Lightspeed 원문 답변입니다. oc events --types=Warning [1]"
+        assert payload["cited_indices"] == [1]
         assert payload["pipeline_trace"]["external_answer"]["status"] == "used"
         assert payload["primary_source_lane"] == "openshift_lightspeed"
         assert payload["primary_boundary_truth"] == "external_openshift_lightspeed"
@@ -272,6 +274,8 @@ def test_chat_stream_result_exposes_lightspeed_answer_source_and_related_link() 
         assert payload_events
         payload = payload_events[-1]["payload"]
         assert payload["answer_source"] == "lightspeed_with_pbs_rag"
+        assert payload["answer"] == "답변: OpenShift Lightspeed 원문 답변입니다. oc events --types=Warning [1]"
+        assert payload["cited_indices"] == [1]
         assert payload["pipeline_trace"]["external_answer"]["status"] == "used"
         assert payload["primary_source_lane"] == "openshift_lightspeed"
         assert payload["primary_boundary_truth"] == "external_openshift_lightspeed"

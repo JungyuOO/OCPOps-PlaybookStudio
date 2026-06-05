@@ -19,6 +19,7 @@ from play_book_studio.integrations.lightspeed import (
     OpenShiftLightspeedClient,
     OpenShiftLightspeedResult,
     is_openshift_operation_question,
+    normalize_lightspeed_query,
 )
 from play_book_studio.retrieval import ChatRetriever, SessionContext
 from play_book_studio.retrieval.query import (
@@ -640,6 +641,18 @@ def _prepend_status_note(answer_text: str, note: str) -> str:
     return f"{clean_note}\n\n{answer}"
 
 
+def _lightspeed_answer_for_chat(answer_text: str) -> str:
+    answer = str(answer_text or "").strip()
+    if not answer:
+        return ""
+    answer = re.sub(r"\[\d+\]", "[1]", answer)
+    if not answer.startswith("답변:"):
+        answer = f"답변: {answer}"
+    if "[1]" not in answer:
+        answer = inject_single_citation(answer, citation_index=1)
+    return answer
+
+
 class ChatAnswerer:
     """CLI, UI, eval 파이프라인이 공통으로 쓰는 최상위 answer 서비스."""
 
@@ -702,16 +715,20 @@ class ChatAnswerer:
             )
             return None, meta
 
+        lightspeed_query = normalize_lightspeed_query(query)
+        if lightspeed_query != str(query or "").strip():
+            meta["normalized_query"] = lightspeed_query
         started_at = time.perf_counter()
         emit(
             {
                 "step": "openshift_lightspeed",
                 "label": "OpenShift Lightspeed 호출 중",
                 "status": "running",
+                "meta": {"normalized_query": lightspeed_query} if "normalized_query" in meta else {},
             }
         )
         try:
-            result = self.lightspeed_client.query(query)
+            result = self.lightspeed_client.query(lightspeed_query)
         except Exception as exc:
             duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
             meta.update(
@@ -779,7 +796,11 @@ class ChatAnswerer:
                 "tool_results": len(result.tool_results),
             }
         )
-        artifact_id = self._write_lightspeed_artifact(query=query, result=result)
+        artifact_id = self._write_lightspeed_artifact(
+            query=query,
+            normalized_query=lightspeed_query,
+            result=result,
+        )
         if artifact_id:
             meta.update(
                 {
@@ -812,7 +833,13 @@ class ChatAnswerer:
         )
         return result, meta
 
-    def _write_lightspeed_artifact(self, *, query: str, result: OpenShiftLightspeedResult) -> str:
+    def _write_lightspeed_artifact(
+        self,
+        *,
+        query: str,
+        normalized_query: str,
+        result: OpenShiftLightspeedResult,
+    ) -> str:
         created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         digest = hashlib.sha256(
             f"{created_at}\n{query}\n{result.answer}".encode("utf-8", errors="replace")
@@ -825,6 +852,7 @@ class ChatAnswerer:
             "created_at": created_at,
             "provider": "OpenShift Lightspeed",
             "query": query,
+            "normalized_query": normalized_query if normalized_query != query else "",
             "answer": result.answer,
             "conversation_id": result.conversation_id,
             "referenced_documents": result.referenced_documents,
@@ -1099,6 +1127,45 @@ class ChatAnswerer:
             warnings.append("no context citations assembled")
             if lightspeed_used:
                 warnings.append("pbs citations unavailable for lightspeed answer")
+                emit(
+                    {
+                        "step": "lightspeed_answer_passthrough",
+                        "label": "Lightspeed 원문 답변 사용",
+                        "status": "done",
+                        "detail": "PBS citation 없이 OpenShift Lightspeed 원문을 반환합니다",
+                    }
+                )
+                pipeline_timings_ms["total"] = round(
+                    (time.perf_counter() - answer_started_at) * 1000,
+                    1,
+                )
+                emit(
+                    {
+                        "step": "pipeline_complete",
+                        "label": "답변 생성 완료",
+                        "status": "done",
+                        "detail": f"총 {pipeline_timings_ms['total']}ms",
+                        "duration_ms": pipeline_timings_ms["total"],
+                    }
+                )
+                return build_answer_result(
+                    query=query,
+                    mode=mode,
+                    answer=_lightspeed_answer_for_chat(
+                        lightspeed_result.answer if lightspeed_result else ""
+                    ),
+                    rewritten_query=retrieval.rewritten_query,
+                    response_kind="rag",
+                    citations=[],
+                    cited_indices=[1],
+                    warnings=warnings,
+                    retrieval_trace=retrieval.trace,
+                    pipeline_events=pipeline_events,
+                    pipeline_timings_ms=pipeline_timings_ms,
+                    selected_hits=[],
+                    answer_source=answer_source,
+                    external_answer_meta=external_answer_meta,
+                )
             else:
                 if status_note:
                     warnings.append("openshift lightspeed unavailable")
@@ -1167,6 +1234,46 @@ class ChatAnswerer:
         )
         if not context_bundle.citations:
             selected_hits = []
+        if lightspeed_used:
+            emit(
+                {
+                    "step": "lightspeed_answer_passthrough",
+                    "label": "Lightspeed 원문 답변 사용",
+                    "status": "done",
+                    "detail": "PBS LLM 재작성 없이 OpenShift Lightspeed 원문을 반환합니다",
+                }
+            )
+            pipeline_timings_ms["total"] = round(
+                (time.perf_counter() - answer_started_at) * 1000,
+                1,
+            )
+            emit(
+                {
+                    "step": "pipeline_complete",
+                    "label": "답변 생성 완료",
+                    "status": "done",
+                    "detail": f"총 {pipeline_timings_ms['total']}ms",
+                    "duration_ms": pipeline_timings_ms["total"],
+                }
+            )
+            return build_answer_result(
+                query=query,
+                mode=mode,
+                answer=_lightspeed_answer_for_chat(
+                    lightspeed_result.answer if lightspeed_result else ""
+                ),
+                rewritten_query=retrieval.rewritten_query,
+                response_kind="rag",
+                citations=context_bundle.citations,
+                cited_indices=[1],
+                warnings=warnings,
+                retrieval_trace=retrieval.trace,
+                pipeline_events=pipeline_events,
+                pipeline_timings_ms=pipeline_timings_ms,
+                selected_hits=selected_hits,
+                answer_source=answer_source,
+                external_answer_meta=external_answer_meta,
+            )
         actionable_command_query = has_command_request(query) or has_corrective_follow_up(query)
         if (
             not lightspeed_used
