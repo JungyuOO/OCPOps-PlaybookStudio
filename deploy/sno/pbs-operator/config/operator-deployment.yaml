@@ -22,7 +22,7 @@ spec:
       containers:
         - name: operator
           image: ghcr.io/jungyuoo/ocpops-playbookstudio-operator:v0.3.0
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command:
             - python
             - -m
