@@ -23,20 +23,13 @@ data:
   PLAYBOOKSTUDIO_APP_IMAGE: ghcr.io/jungyuoo/ocpops-playbookstudio-app:dev
   PLAYBOOKSTUDIO_WEB_IMAGE: ghcr.io/jungyuoo/ocpops-playbookstudio-web:dev
   POSTGRES_DB: playbookstudio
-  POSTGRES_USER: admin
+  POSTGRES_USER: playbookstudio
   EMBEDDING_BASE_URL: http://tei.cywell.co.kr/v1
   EMBEDDING_MODEL: dragonkue/bge-m3-ko
   EMBEDDING_DEVICE: auto
   EMBEDDING_BATCH_SIZE: "32"
   EMBEDDING_TIMEOUT_SECONDS: "8"
-  QDRANT_URL: http://qdrant:6333
-  QDRANT_COLLECTION: openshift_docs
-  QDRANT_VECTOR_SIZE: "1024"
-  QDRANT_DISTANCE: Cosine
-  QDRANT_UPSERT_BATCH_SIZE: "128"
-  QDRANT_RECREATE_COLLECTION: "false"
   OFFICIAL_CORPUS_INDEX_LIMIT: "50000"
-  OFFICIAL_CORPUS_REFRESH_LIMIT: "50000"
   LLM_ENDPOINT: http://cllm.cywell.co.kr/v1
   LLM_MODEL: gemma-4-26b-a4b-it-awq-8bit
   OCP_API_BASE_URL: https://api.ocp.cywell.local:6443
@@ -82,18 +75,6 @@ spec:
   resources:
     requests:
       storage: 20Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: qdrant-storage
-  namespace: pbs-ocpops
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 30Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -186,7 +167,7 @@ spec:
               mountPath: /var/lib/postgresql/data
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "admin", "-d", "playbookstudio"]
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
@@ -211,65 +192,3 @@ spec:
       port: 5432
       targetPort: 5432
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: qdrant
-  namespace: pbs-ocpops
-  labels:
-    app.kubernetes.io/name: qdrant
-    app.kubernetes.io/part-of: playbookstudio
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: qdrant
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: qdrant
-        app.kubernetes.io/part-of: playbookstudio
-    spec:
-      serviceAccountName: playbookstudio
-      containers:
-        - name: qdrant
-          image: qdrant/qdrant:latest
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 6333
-              name: http
-            - containerPort: 6334
-              name: grpc
-          volumeMounts:
-            - name: qdrant-storage
-              mountPath: /qdrant/storage
-          readinessProbe:
-            httpGet:
-              path: /collections
-              port: 6333
-            initialDelaySeconds: 20
-            periodSeconds: 10
-            timeoutSeconds: 5
-      volumes:
-        - name: qdrant-storage
-          persistentVolumeClaim:
-            claimName: qdrant-storage
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: qdrant
-  namespace: pbs-ocpops
-  labels:
-    app.kubernetes.io/name: qdrant
-    app.kubernetes.io/part-of: playbookstudio
-spec:
-  selector:
-    app.kubernetes.io/name: qdrant
-  ports:
-    - name: http
-      port: 6333
-      targetPort: 6333
-    - name: grpc
-      port: 6334
-      targetPort: 6334

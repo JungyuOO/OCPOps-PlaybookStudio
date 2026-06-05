@@ -196,7 +196,6 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_ingest_parser.add_argument("--chunk-max-chars", type=int, default=1800)
     corpus_ingest_parser.add_argument("--chunk-overlap-blocks", type=int, default=1)
     corpus_ingest_parser.add_argument("--index", action="store_true")
-    corpus_ingest_parser.add_argument("--collection", default="")
     corpus_ingest_parser.add_argument("--dry-run", action="store_true")
 
     corpus_quality_audit_parser = subparsers.add_parser(
@@ -208,44 +207,23 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_quality_audit_parser.add_argument("--max-examples", type=int, default=5)
     corpus_quality_audit_parser.add_argument("--fail-on-mojibake-ratio", type=float, default=None)
 
-    db_qdrant_index_parser = subparsers.add_parser(
-        "db-qdrant-index",
-        help="Embed pending PostgreSQL document chunks and upsert them to Qdrant",
+    db_vector_index_parser = subparsers.add_parser(
+        "db-vector-index",
+        help="Embed pending PostgreSQL document chunks into chunk_embeddings",
     )
-    db_qdrant_index_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    db_qdrant_index_parser.add_argument("--database-url", default="")
-    db_qdrant_index_parser.add_argument("--collection", default="")
-    db_qdrant_index_parser.add_argument("--source-scope", default="")
-    db_qdrant_index_parser.add_argument("--limit", type=int, default=100)
-
-    db_qdrant_backfill_parser = subparsers.add_parser(
-        "db-qdrant-backfill",
-        help="Record qdrant_index_entries for PostgreSQL chunks whose Qdrant points already exist",
-    )
-    db_qdrant_backfill_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    db_qdrant_backfill_parser.add_argument("--database-url", default="")
-    db_qdrant_backfill_parser.add_argument("--collection", default="")
-    db_qdrant_backfill_parser.add_argument("--limit", type=int, default=1000)
-    db_qdrant_backfill_parser.add_argument("--batch-size", type=int, default=256)
-
-    db_qdrant_refresh_parser = subparsers.add_parser(
-        "db-qdrant-refresh-payloads",
-        help="Refresh Qdrant payloads whose PostgreSQL-derived payload hash changed",
-    )
-    db_qdrant_refresh_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    db_qdrant_refresh_parser.add_argument("--database-url", default="")
-    db_qdrant_refresh_parser.add_argument("--collection", default="")
-    db_qdrant_refresh_parser.add_argument("--source-scope", default="")
-    db_qdrant_refresh_parser.add_argument("--limit", type=int, default=1000)
-    db_qdrant_refresh_parser.add_argument("--batch-size", type=int, default=256)
+    db_vector_index_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    db_vector_index_parser.add_argument("--database-url", default="")
+    db_vector_index_parser.add_argument("--source-scope", default="")
+    db_vector_index_parser.add_argument("--document-source-id", default="")
+    db_vector_index_parser.add_argument("--limit", type=int, default=100)
 
     db_corpus_status_parser = subparsers.add_parser(
         "db-corpus-status",
-        help="Report PostgreSQL corpus and qdrant_index_entries readiness",
+        help="Report PostgreSQL corpus and chunk_embeddings readiness",
     )
     db_corpus_status_parser.add_argument("--root-dir", type=Path, default=ROOT)
     db_corpus_status_parser.add_argument("--database-url", default="")
-    db_corpus_status_parser.add_argument("--collection", default="")
+    db_corpus_status_parser.add_argument("--embedding-model", default="")
 
     course_runtime_status_parser = subparsers.add_parser(
         "course-runtime-status",
@@ -273,10 +251,6 @@ def build_parser() -> argparse.ArgumentParser:
     official_gold_import_parser.add_argument("--limit", type=int, default=0)
     official_gold_import_parser.add_argument("--index", action="store_true")
     official_gold_import_parser.add_argument("--index-limit", type=int, default=0)
-    official_gold_import_parser.add_argument("--refresh-qdrant-payloads", action="store_true")
-    official_gold_import_parser.add_argument("--collection", default="")
-    official_gold_import_parser.add_argument("--refresh-limit", type=int, default=0)
-    official_gold_import_parser.add_argument("--refresh-batch-size", type=int, default=256)
     official_gold_import_parser.add_argument("--enrich-runtime-metadata", action="store_true")
     official_gold_import_parser.add_argument("--bm25-path", type=Path, default=None)
     official_gold_import_parser.add_argument(
@@ -299,24 +273,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     official_gold_import_parser.add_argument("--dry-run", action="store_true")
-
-    official_embedding_qdrant_parser = subparsers.add_parser(
-        "official-embedding-qdrant-upsert",
-        help="Embed official embedding-only chunks and upsert them to Qdrant",
-    )
-    official_embedding_qdrant_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    official_embedding_qdrant_parser.add_argument("--chunks-path", type=Path, default=OFFICIAL_GOLD_CHUNKS_PATH)
-    official_embedding_qdrant_parser.add_argument(
-        "--embedding-chunks-path",
-        type=Path,
-        default=OFFICIAL_GOLD_EMBEDDING_CHUNKS_PATH,
-    )
-    official_embedding_qdrant_parser.add_argument("--collection", default="")
-    official_embedding_qdrant_parser.add_argument("--limit", type=int, default=0)
-    official_embedding_qdrant_parser.add_argument("--delete-skipped", action="store_true")
-    official_embedding_qdrant_parser.add_argument("--sync-db", action="store_true")
-    official_embedding_qdrant_parser.add_argument("--database-url", default="")
-    official_embedding_qdrant_parser.add_argument("--dry-run", action="store_true")
 
     learning_seed_parser = subparsers.add_parser(
         "learning-seed-import",
@@ -361,7 +317,6 @@ def build_parser() -> argparse.ArgumentParser:
     kmsc_course_import_parser.add_argument("--workspace-name", default="Default")
     kmsc_course_import_parser.add_argument("--limit", type=int, default=0)
     kmsc_course_import_parser.add_argument("--index", action="store_true")
-    kmsc_course_import_parser.add_argument("--collection", default="")
     kmsc_course_import_parser.add_argument("--dry-run", action="store_true")
 
     course_qa_parser = subparsers.add_parser(
@@ -380,16 +335,6 @@ def build_parser() -> argparse.ArgumentParser:
     course_qa_parser.add_argument("--verbose-results", action="store_true")
     course_qa_parser.add_argument("--generate", action="store_true")
     course_qa_parser.add_argument("--run", action="store_true")
-
-    course_qdrant_parser = subparsers.add_parser(
-        "course-qdrant-upsert",
-        help="Upsert existing Study-docs course and ops learning chunks into Qdrant",
-    )
-    course_qdrant_parser.add_argument("--root-dir", type=Path, default=ROOT)
-    course_qdrant_parser.add_argument("--course-dir", type=Path, default=COURSE_PBS_DIR)
-    course_qdrant_parser.add_argument("--limit", type=int, default=0)
-    course_qdrant_parser.add_argument("--skip-course", action="store_true")
-    course_qdrant_parser.add_argument("--skip-ops-learning", action="store_true")
 
     course_visual_audit_parser = subparsers.add_parser(
         "course-visual-audit",
@@ -934,14 +879,13 @@ def _run_corpus_ingest(args: argparse.Namespace) -> int:
             chunk_overlap_blocks=args.chunk_overlap_blocks,
             index=bool(args.index),
             settings=settings,
-            collection=args.collection,
         )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if int(result.get("failed_count") or 0) == 0 else 1
 
 
-def _run_db_qdrant_index(args: argparse.Namespace) -> int:
-    from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
+def _run_db_vector_index(args: argparse.Namespace) -> int:
+    from play_book_studio.db.embedding_indexer import index_pending_document_chunks
 
     root_dir = args.root_dir.resolve()
     settings = load_settings(root_dir)
@@ -956,58 +900,9 @@ def _run_db_qdrant_index(args: argparse.Namespace) -> int:
         result = index_pending_document_chunks(
             settings,
             connection,
-            collection=args.collection.strip() or None,
             source_scope=args.source_scope,
+            document_source_id=args.document_source_id,
             limit=args.limit,
-        )
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
-
-
-def _run_db_qdrant_backfill(args: argparse.Namespace) -> int:
-    from play_book_studio.db.qdrant_indexer import backfill_existing_qdrant_index_entries
-
-    root_dir = args.root_dir.resolve()
-    settings = load_settings(root_dir)
-    database_url = (args.database_url or settings.database_url).strip()
-    if not database_url:
-        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
-        return 1
-
-    import psycopg
-
-    with psycopg.connect(database_url) as connection:
-        result = backfill_existing_qdrant_index_entries(
-            settings,
-            connection,
-            collection=args.collection.strip() or None,
-            limit=args.limit,
-            batch_size=args.batch_size,
-        )
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
-
-
-def _run_db_qdrant_refresh_payloads(args: argparse.Namespace) -> int:
-    from play_book_studio.db.qdrant_indexer import refresh_stale_qdrant_payloads
-
-    root_dir = args.root_dir.resolve()
-    settings = load_settings(root_dir)
-    database_url = (args.database_url or settings.database_url).strip()
-    if not database_url:
-        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
-        return 1
-
-    import psycopg
-
-    with psycopg.connect(database_url) as connection:
-        result = refresh_stale_qdrant_payloads(
-            settings,
-            connection,
-            collection=args.collection.strip() or None,
-            source_scope=args.source_scope,
-            limit=args.limit,
-            batch_size=args.batch_size,
         )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
@@ -1021,7 +916,7 @@ def _run_db_corpus_status(args: argparse.Namespace) -> int:
     database_url = (args.database_url or settings.database_url).strip()
     payload = build_corpus_status(
         database_url=database_url,
-        collection=args.collection.strip() or settings.qdrant_collection,
+        embedding_model=args.embedding_model.strip() or settings.embedding_model,
     )
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if bool(payload.get("ready")) else 1
@@ -1146,94 +1041,15 @@ def _run_official_gold_import(args: argparse.Namespace) -> int:
         if enrich_report is not None:
             payload["official_gold_enrichment"] = enrich_report
         if args.index:
-            from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
+            from play_book_studio.db.embedding_indexer import index_pending_document_chunks
 
             index_limit = args.index_limit or max(result.imported_chunk_count, 1000)
-            payload["qdrant_index"] = index_pending_document_chunks(
+            payload["vector_index"] = index_pending_document_chunks(
                 settings,
                 connection,
-                collection=args.collection.strip() or None,
                 source_scope="official_docs",
                 limit=index_limit,
             )
-        if args.refresh_qdrant_payloads:
-            from play_book_studio.db.qdrant_indexer import refresh_stale_qdrant_payloads
-
-            refresh_limit = args.refresh_limit or max(result.imported_chunk_count, 1000)
-            payload["qdrant_refresh"] = refresh_stale_qdrant_payloads(
-                settings,
-                connection,
-                collection=args.collection.strip() or None,
-                source_scope="official_docs",
-                limit=refresh_limit,
-                batch_size=args.refresh_batch_size,
-            )
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0
-
-
-def _run_official_embedding_qdrant_upsert(args: argparse.Namespace) -> int:
-    from play_book_studio.ingestion.official_embedding_qdrant import (
-        record_official_embedding_qdrant_index_entries,
-        sync_official_embedding_chunks_to_database,
-        upsert_official_embedding_chunks_to_qdrant,
-    )
-
-    root_dir = args.root_dir.resolve()
-    chunks_path = args.chunks_path
-    if not chunks_path.is_absolute():
-        chunks_path = root_dir / chunks_path
-    chunks_path = chunks_path.resolve()
-    embedding_chunks_path = args.embedding_chunks_path
-    if not embedding_chunks_path.is_absolute():
-        embedding_chunks_path = root_dir / embedding_chunks_path
-    embedding_chunks_path = embedding_chunks_path.resolve()
-    settings = load_settings(root_dir)
-
-    def _progress(stage: str, completed: int, total: int) -> None:
-        print(f"[official-embedding-qdrant-upsert] {stage}: {completed}/{total}", flush=True)
-
-    db_sync_payload = None
-    index_entries_payload = None
-    database_url = (args.database_url or settings.database_url).strip()
-    if args.sync_db and not args.dry_run:
-        if not database_url:
-            print("DATABASE_URL is required for --sync-db. Set it in .env or pass --database-url.")
-            return 1
-        import psycopg
-
-        with psycopg.connect(database_url) as connection:
-            db_sync_payload = sync_official_embedding_chunks_to_database(
-                connection,
-                chunks_path=chunks_path,
-                embedding_chunks_path=embedding_chunks_path,
-            )
-
-    payload = upsert_official_embedding_chunks_to_qdrant(
-        settings,
-        chunks_path=chunks_path,
-        embedding_chunks_path=embedding_chunks_path,
-        collection=args.collection.strip() or None,
-        limit=args.limit,
-        delete_skipped=bool(args.delete_skipped),
-        dry_run=bool(args.dry_run),
-        progress_callback=None if args.dry_run else _progress,
-    )
-    if args.sync_db:
-        if args.dry_run:
-            payload["db_sync"] = {"dry_run": True, "status": "skipped"}
-        else:
-            payload["db_sync"] = db_sync_payload
-            with psycopg.connect(database_url) as connection:
-                index_entries_payload = record_official_embedding_qdrant_index_entries(
-                    connection,
-                    settings,
-                    chunks_path=chunks_path,
-                    embedding_chunks_path=embedding_chunks_path,
-                    collection=payload["collection"],
-                    limit=args.limit,
-                )
-            payload["qdrant_index_entries"] = index_entries_payload
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
@@ -1302,7 +1118,7 @@ def _run_learning_seed_import(args: argparse.Namespace) -> int:
 
 
 def _run_course_chunk_import(args: argparse.Namespace) -> int:
-    from play_book_studio.course.qdrant_course import load_course_chunks
+    from play_book_studio.course.chunk_loader import load_course_chunks
     from play_book_studio.db.course_repository import (
         build_course_asset_record,
         import_course_manifest,
@@ -1468,7 +1284,7 @@ def _resolve_course_asset_file(root_dir: Path, course_dir: Path, asset_path: str
 
 
 def _run_kmsc_course_import(args: argparse.Namespace) -> int:
-    from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
+    from play_book_studio.db.embedding_indexer import index_pending_document_chunks
     from play_book_studio.ingestion.kmsc_course_import import (
         build_kmsc_course_import_plan,
         import_kmsc_course_chunks,
@@ -1504,10 +1320,9 @@ def _run_kmsc_course_import(args: argparse.Namespace) -> int:
             limit=limit,
         ).to_dict()
         if args.index:
-            summary["qdrant_index"] = index_pending_document_chunks(
+            summary["vector_index"] = index_pending_document_chunks(
                 settings,
                 connection,
-                collection=args.collection.strip() or None,
                 source_scope="study_docs",
                 limit=max(100, int(summary.get("imported_chunk_count") or 0)),
             )
@@ -1560,20 +1375,14 @@ def main() -> int:
                 if ratio > float(threshold):
                     return 1
         return 0
-    if args.command == "db-qdrant-index":
-        return _run_db_qdrant_index(args)
-    if args.command == "db-qdrant-backfill":
-        return _run_db_qdrant_backfill(args)
-    if args.command == "db-qdrant-refresh-payloads":
-        return _run_db_qdrant_refresh_payloads(args)
+    if args.command == "db-vector-index":
+        return _run_db_vector_index(args)
     if args.command == "db-corpus-status":
         return _run_db_corpus_status(args)
     if args.command == "course-runtime-status":
         return _run_course_runtime_status(args)
     if args.command == "official-gold-import":
         return _run_official_gold_import(args)
-    if args.command == "official-embedding-qdrant-upsert":
-        return _run_official_embedding_qdrant_upsert(args)
     if args.command == "learning-seed-import":
         return _run_learning_seed_import(args)
     if args.command == "course-chunk-import":
@@ -1584,47 +1393,6 @@ def main() -> int:
         from play_book_studio.course.quality_eval import run_quality_eval
 
         return run_quality_eval(args, default_root=ROOT)
-    if args.command == "course-qdrant-upsert":
-        from play_book_studio.course.qdrant_course import (
-            COURSE_QDRANT_COLLECTION,
-            COURSE_OPS_LEARNING_QDRANT_COLLECTION,
-            load_course_chunks,
-            load_ops_learning_chunks,
-            upsert_course_chunks,
-            upsert_ops_learning_chunks,
-        )
-
-        root_dir = args.root_dir.resolve()
-        course_dir = (root_dir / args.course_dir).resolve() if not args.course_dir.is_absolute() else args.course_dir.resolve()
-        settings = load_settings(root_dir)
-        course_chunks = [] if args.skip_course else load_course_chunks(course_dir)
-        ops_learning_chunks = [] if args.skip_ops_learning else load_ops_learning_chunks(course_dir)
-        if int(args.limit or 0) > 0:
-            limit = int(args.limit)
-            course_chunks = course_chunks[:limit]
-            ops_learning_chunks = ops_learning_chunks[:limit]
-        course_upserted = 0 if args.skip_course else upsert_course_chunks(settings, course_chunks)
-        ops_learning_upserted = (
-            0 if args.skip_ops_learning else upsert_ops_learning_chunks(settings, ops_learning_chunks)
-        )
-        print(
-            json.dumps(
-                {
-                    "course_dir": str(course_dir),
-                    "course_collection": COURSE_QDRANT_COLLECTION,
-                    "course_chunk_count": len(course_chunks),
-                    "course_qdrant_upserted": course_upserted,
-                    "ops_learning_collection": COURSE_OPS_LEARNING_QDRANT_COLLECTION,
-                    "ops_learning_chunk_count": len(ops_learning_chunks),
-                    "ops_learning_qdrant_upserted": ops_learning_upserted,
-                    "qdrant_upserted": course_upserted + ops_learning_upserted,
-                    "qdrant_url": settings.qdrant_url,
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
-        return 0
     if args.command == "course-visual-audit":
         from play_book_studio.course.visual_audit import capture_visual_audit, generate_visual_audit
 

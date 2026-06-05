@@ -178,10 +178,17 @@ def _commands_from_excerpt(excerpt: str) -> tuple[str, ...]:
 
 def _citation_cli_commands(hit: RetrievalHit, excerpt: str) -> tuple[str, ...]:
     extracted = list(_commands_from_excerpt(excerpt))
+    extracted_keys = {command.casefold() for command in extracted}
+    normalized_excerpt = SPACE_RE.sub(" ", strip_internal_markup(excerpt)).casefold()
     existing = [
         sanitized
         for command in hit.cli_commands
         if (sanitized := sanitize_cli_command(command))
+        and (
+            not extracted
+            or sanitized.casefold() in extracted_keys
+            or sanitized.casefold() in normalized_excerpt
+        )
     ]
     merged: list[str] = []
     seen: set[str] = set()
@@ -2265,9 +2272,10 @@ def assemble_context(
             seen_mirror_sections.setdefault(mirror_signature, hit.book_slug)
         excerpt_limit = 1800 if hit.chunk_role == "parent" else max_chars_per_chunk
         citation_excerpt = excerpt[:excerpt_limit].strip()
+        base_cli_commands = _citation_cli_commands(hit, citation_excerpt)
         citation_cli_commands = _merge_cli_commands(
-            _citation_cli_commands(hit, citation_excerpt),
-            _intent_command_hints_for_hit(hit, query, command_hints=command_hints),
+            base_cli_commands,
+            () if base_cli_commands else _intent_command_hints_for_hit(hit, query, command_hints=command_hints),
         )
         citations.append(
             Citation(

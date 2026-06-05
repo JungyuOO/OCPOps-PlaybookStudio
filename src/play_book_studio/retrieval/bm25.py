@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from play_book_studio.db.qdrant_indexer import qdrant_payload_from_row
+from play_book_studio.retrieval.payload import retrieval_payload_from_row
 
 from .korean_text import tokenize_normalized_text
 from .models import RetrievalHit
@@ -197,6 +197,6 @@ def load_bm25_rows_from_connection(connection) -> list[dict[str, Any]]:
         rows = cursor.fetchall()
         columns = [item.name for item in cursor.description]
     return [
-        qdrant_payload_from_row(dict(zip(columns, row, strict=True)))
+        retrieval_payload_from_row(dict(zip(columns, row, strict=True)))
         for row in rows
     ]

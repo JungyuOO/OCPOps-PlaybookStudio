@@ -16,7 +16,6 @@ DEFAULT_PRODUCT_LABEL = "OpenShift"
 DEFAULT_DOCS_PRODUCT_SLUG = "openshift_container_platform"
 DEFAULT_DOCS_LANGUAGE = "ko"
 DEFAULT_OCP_VERSION = "4.20"
-DEFAULT_QDRANT_COLLECTION = "openshift_docs"
 DEFAULT_SOURCE_KIND = "source-first"
 GLOBAL_SOURCE_CATALOG_NAME = "ocp_multiversion_html_single_catalog.json"
 SUPPORTED_OCP_CORE_VERSIONS = ("4.20", "4.18", "4.16")
@@ -42,7 +41,6 @@ class PackConfig:
     docs_index_url_template: str
     book_url_template: str
     viewer_path_template: str
-    qdrant_collection: str
 
     @property
     def viewer_path_prefix(self) -> str:
@@ -111,7 +109,6 @@ def resolve_ocp_core_pack(
         docs_index_url_template=docs_index_url_template,
         book_url_template=book_url_template,
         viewer_path_template=viewer_path_template,
-        qdrant_collection=DEFAULT_QDRANT_COLLECTION,
     )
 
 

@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-playbookstudio}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_BIND:-127.0.0.1:5432}:5432"
     volumes:
       - postgres_storage:/var/lib/postgresql/data
     healthcheck:
@@ -18,15 +18,6 @@ services:
       retries: 10
       start_period: 20s
     restart: unless-stopped
-
-  qdrant:
-    image: qdrant/qdrant:latest
-    volumes:
-      - qdrant_storage:/qdrant/storage
-    restart: unless-stopped
-    ports:
-      - "6335:6333"
-      - "6336:6334"
 
   app:
     build:
@@ -43,8 +34,7 @@ services:
       VECTOR_MAX_PARALLEL_REQUESTS: "4"
       VECTOR_DOMAIN_FILTER_ENABLED: "false"
       QUERY_SIGNAL_LLM_ENABLED: "true"
-      DATABASE_URL: postgresql://admin:admin123@postgres:5432/playbookstudio
-      QDRANT_URL: http://qdrant:6333
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
       PBS_SINGLE_USER_OWNER: ${PBS_SINGLE_USER_OWNER:-local-playbookstudio-user}
       TERMINAL_ENABLED: ${TERMINAL_ENABLED:-false}
       TERMINAL_HOST: 0.0.0.0
@@ -53,8 +43,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      qdrant:
-        condition: service_started
       db-migrate:
         condition: service_completed_successfully
     extra_hosts:
@@ -69,6 +57,7 @@ services:
       - ./reports:/app/reports
       - ./storage:/app/storage
       - ./tmp:/app/tmp
+      - ./.kugnus-plan:/app/.kugnus-plan
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=5)"]
       interval: 15s
@@ -86,10 +75,12 @@ services:
       - .env
     environment:
       PYTHONPATH: /app/src
-      DATABASE_URL: postgresql://admin:admin123@postgres:5432/playbookstudio
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - ./db:/app/db
     command: ["python", "-m", "play_book_studio.cli", "db-migrate", "--root-dir", "/app"]
     restart: "no"
 
@@ -102,7 +93,7 @@ services:
       - .env
     environment:
       PYTHONPATH: /app/src
-      DATABASE_URL: postgresql://admin:admin123@postgres:5432/playbookstudio
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
     depends_on:
       postgres:
         condition: service_healthy
@@ -125,13 +116,10 @@ services:
       - .env
     environment:
       PYTHONPATH: /app/src
-      DATABASE_URL: ${DATABASE_URL:-postgresql://playbookstudio:change-me@postgres:5432/playbookstudio}
-      QDRANT_URL: http://qdrant:6333
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
     depends_on:
       postgres:
         condition: service_healthy
-      qdrant:
-        condition: service_started
       db-migrate:
         condition: service_completed_successfully
     extra_hosts:
@@ -148,12 +136,14 @@ services:
         --root-dir /app
         --index
         --index-limit ${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}
-        --refresh-qdrant-payloads
-        --refresh-limit ${OFFICIAL_CORPUS_REFRESH_LIMIT:-50000}
-        --collection ${QDRANT_COLLECTION:-openshift_docs}
+        &&
+        python -m play_book_studio.cli kmsc-course-import
+        --root-dir /app
+        --course-dir ${KMSC_COURSE_SOURCE_DIR:-/app/corpus/sources/kmsc/parsed-preview/course_pbs}
+        --index
     restart: "no"
 
-  qdrant-seed:
+  kmsc-corpus-seed:
     profiles:
       - seed
     build:
@@ -164,19 +154,18 @@ services:
       - .env
     environment:
       PYTHONPATH: /app/src
-      QDRANT_URL: http://qdrant:6333
-      QDRANT_RECREATE_COLLECTION: "false"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
     depends_on:
-      - qdrant
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./src:/app/src
-      - ./artifacts:/app/artifacts
       - ./corpus:/app/corpus
-      - ./reports:/app/reports
-      - ./tmp:/app/tmp
-    command: ["python", "-m", "play_book_studio.cli", "course-qdrant-upsert", "--root-dir", "/app", "--course-dir", "corpus/sources/kmsc/parsed-preview/course_pbs"]
+    command: ["python", "-m", "play_book_studio.cli", "kmsc-course-import", "--root-dir", "/app", "--course-dir", "${KMSC_COURSE_SOURCE_DIR:-/app/corpus/sources/kmsc/parsed-preview/course_pbs}", "--index"]
     restart: "no"
 
   web:
@@ -200,5 +189,3 @@ services:
 volumes:
   postgres_storage:
     name: ${POSTGRES_VOLUME_NAME:-ocp-rag-chatbot_postgres_storage}
-  qdrant_storage:
-    name: ${QDRANT_VOLUME_NAME:-ocp-rag-chatbot_qdrant_storage}

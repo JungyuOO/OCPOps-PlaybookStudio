@@ -1580,6 +1580,13 @@ def _apply_domain_specific_enrichment(
         any(token in lowered for token in ("route", "routes", "라우트", "경로"))
         and any(token in lowered for token in ("http", "header", "headers", "헤더", "요청", "응답"))
     )
+    network_policy_query = (
+        any(token in lowered for token in ("networkpolicy", "network policy", "네트워크 정책", "네트워크정책"))
+        or (
+            any(token in lowered for token in ("pod 통신", "pods 통신", "파드 통신", "통신 제한", "통신 차단", "통신이 막"))
+            and any(token in lowered for token in ("pod", "pods", "파드", "네트워크"))
+        )
+    )
     objects = search_signals.setdefault("objects", [])
     commands = search_signals.setdefault("commands", [])
     command_families = search_signals.setdefault("command_families", [])
@@ -1620,6 +1627,25 @@ def _apply_domain_specific_enrichment(
         confidence["domain"] = max(confidence.get("domain", 0.0), 0.93)
         confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
         confidence["commands"] = max(confidence.get("commands", 0.0), 0.9)
+
+    if network_policy_query:
+        classification["domain"] = "networking"
+        classification["book_slug_candidates"] = _tuple_append(
+            classification.get("book_slug_candidates", ()),
+            "advanced_networking",
+            "networking_overview",
+            "network_security",
+        )
+        _append(objects, "NetworkPolicy", "Pod")
+        _append(primary_topics, "NetworkPolicy", "pod communication policy")
+        _append(secondary_topics, "podSelector", "ingress", "egress")
+        _append(intent_labels, "troubleshoot", "network_policy")
+        _append(answer_shapes, "step_by_step")
+        _append(commands, "oc get networkpolicy -n <namespace>", "oc describe networkpolicy <policy-name> -n <namespace>")
+        _append(command_families, "oc_get", "oc_describe")
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.9)
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
+        confidence["commands"] = max(confidence.get("commands", 0.0), 0.84)
 
     storage_lexicon = DOMAIN_LEXICONS["storage"]
     if query_matches_domain(normalized_query, "storage"):

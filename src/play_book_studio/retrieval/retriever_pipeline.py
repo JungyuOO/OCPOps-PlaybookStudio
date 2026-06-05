@@ -179,6 +179,22 @@ def _query_customer_scope_signal(query: str) -> bool:
     )
 
 
+def _context_with_query_source_scope(query: str, context: SessionContext) -> SessionContext:
+    if not _query_customer_scope_signal(query):
+        return context
+    if (
+        enabled_source_scope_set(context)
+        or str(getattr(context, "preferred_source_scope", "") or "").strip()
+        or str(getattr(context, "active_document_id", "") or "").strip()
+        or str(getattr(context, "active_repository_id", "") or "").strip()
+    ):
+        return context
+    scoped = copy.copy(context)
+    scoped.preferred_source_scope = "study_docs"
+    scoped.enabled_source_scopes = [SOURCE_GROUP_CUSTOMER_DOCS]
+    return scoped
+
+
 def _customer_signal_score(query: str, hit: RetrievalHit) -> int:
     if not _query_customer_scope_signal(query):
         return 0
@@ -374,9 +390,9 @@ def _filter_preferred_source_scope(
     if enabled:
         return [hit for hit in hits if source_group_for_candidate(hit) in enabled]
     preferred = str(getattr(context, "preferred_source_scope", "") or "").strip()
-    if not preferred:
-        return hits
-    return [hit for hit in hits if str(hit.source_scope or "").strip() == preferred]
+    if preferred:
+        return [hit for hit in hits if str(hit.source_scope or "").strip() == preferred]
+    return hits
 
 
 def _graph_worthy_intent(query: str) -> bool:
@@ -453,6 +469,7 @@ def execute_retrieval_pipeline(
 ) -> RetrievalResult:
     retrieve_started_at = time.perf_counter()
     context = context or SessionContext()
+    context = _context_with_query_source_scope(query, context)
     timings_ms: dict[str, float] = {}
     plan = build_retrieval_plan(
         query,

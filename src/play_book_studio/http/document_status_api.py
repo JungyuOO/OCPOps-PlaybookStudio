@@ -91,7 +91,7 @@ def build_document_status_response(root_dir: Path, query: str, *, owner_user_id:
                     SELECT count(*)::int AS indexed_count
                     FROM parsed_documents pd
                     JOIN document_chunks dc ON dc.parsed_document_id = pd.id
-                    JOIN qdrant_index_entries q ON q.chunk_id = dc.id
+                    JOIN chunk_embeddings ce ON ce.chunk_id = dc.id
                     WHERE pd.document_source_id = ds.id
                 ) index_counts ON TRUE
                 WHERE {' AND '.join(where)}

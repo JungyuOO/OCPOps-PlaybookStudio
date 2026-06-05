@@ -15,8 +15,8 @@ Login:
 
 ```bash
 oc login https://api.ocp.cywell.local:6443 \
-  -u admin \
-  -p admin123 \
+  -u <ocp-user> \
+  -p <ocp-password-or-token> \
   --insecure-skip-tls-verify=true
 ```
 
@@ -25,12 +25,11 @@ Create or update the runtime secret. Keep these values out of Git:
 ```bash
 oc create namespace pbs-ocpops --dry-run=client -o yaml | oc apply -f -
 
-export POSTGRES_PASSWORD="admin123"
+export POSTGRES_PASSWORD="<set-strong-password>"
 
 oc create secret generic playbookstudio-secret \
   -n pbs-ocpops \
   --from-literal=POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
-  --from-literal=DATABASE_URL="postgresql://admin:${POSTGRES_PASSWORD}@postgres:5432/playbookstudio" \
   --from-literal=OCP_API_TOKEN="$(oc whoami -t)" \
   --dry-run=client -o yaml | oc apply -f -
 
@@ -48,7 +47,7 @@ For one-shot seed Jobs, delete completed Jobs before re-applying if the seed
 must run again:
 
 ```bash
-oc delete job db-migrate official-corpus-seed kmsc-corpus-seed learning-seed course-runtime-seed qdrant-seed \
+oc delete job db-migrate official-corpus-seed kmsc-corpus-seed learning-seed course-runtime-seed \
   -n pbs-ocpops \
   --ignore-not-found=true
 
@@ -163,4 +162,4 @@ Use a wider case set when the quick v0.1.2 beginner set is clean:
 
 This verifies local RAG quality with the same `/rerank` API shape. It does not
 replace in-cluster performance testing because local eval still uses the local
-runtime, local database/Qdrant settings, and SSH/port-forward networking.
+runtime, local database settings, and SSH/port-forward networking.

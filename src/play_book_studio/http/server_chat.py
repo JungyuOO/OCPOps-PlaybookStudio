@@ -171,7 +171,7 @@ def _build_chat_latency_log(
         "bm25_ms": _round_ms(retrieval_timings.get("bm25_search")),
         "vector_ms": _round_ms(retrieval_timings.get("vector_search")),
         "embedding_ms": _vector_runtime_ms(vector_runtime, "embedding_ms"),
-        "qdrant_ms": _vector_runtime_ms(vector_runtime, "qdrant_ms"),
+        "vector_db_ms": _vector_runtime_ms(vector_runtime, "vector_db_ms"),
         "hydrate_ms": _vector_runtime_ms(vector_runtime, "hydrate_ms"),
         "rerank_ms": _round_ms(retrieval_timings.get("rerank")),
         "llm_ms": _round_ms(pipeline_timings.get("llm_generate_total")),

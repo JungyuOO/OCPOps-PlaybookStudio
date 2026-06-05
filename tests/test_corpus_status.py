@@ -47,47 +47,77 @@ def test_disabled_corpus_status_is_not_ready():
     assert payload["total_chunks"] == 0
 
 
-def test_load_corpus_status_reports_ready_when_chunks_and_index_entries_match():
+def test_load_corpus_status_reports_ready_when_chunks_and_embedding_entries_match():
     connection = FakeConnection(
         [
             [("official_docs", 29), ("study_docs", 10)],
             [("official_docs", 27907), ("study_docs", 602)],
             [(28509,)],
             [(28509,)],
+            [(28509,)],
+            [(0,)],
             [(0,)],
         ]
     )
 
-    payload = load_corpus_status(connection, collection="openshift_docs")
+    payload = load_corpus_status(connection, embedding_model="bge-m3")
 
     assert payload["database"] == "postgres"
-    assert payload["collection"] == "openshift_docs"
+    assert payload["vector_backend"] == "pgvector"
+    assert payload["embedding_model"] == "bge-m3"
     assert payload["source_counts"] == {"official_docs": 29, "study_docs": 10}
     assert payload["chunk_counts"] == {"official_docs": 27907, "study_docs": 602}
     assert payload["total_sources"] == 39
     assert payload["total_chunks"] == 28509
-    assert payload["qdrant_index_entries"] == 28509
-    assert payload["missing_qdrant_index_entries"] == 0
-    assert payload["qdrant_index_parity"] is True
+    assert payload["indexable_chunks"] == 28509
+    assert payload["non_indexable_chunks"] == 0
+    assert payload["embedding_index_entries"] == 28509
+    assert payload["missing_embedding_index_entries"] == 0
+    assert payload["stale_embedding_index_entries"] == 0
+    assert payload["embedding_index_parity"] is True
     assert payload["ready"] is True
 
 
-def test_load_corpus_status_reports_not_ready_when_qdrant_entries_are_missing():
+def test_load_corpus_status_reports_not_ready_when_embedding_entries_are_missing():
     connection = FakeConnection(
         [
             [("official_docs", 29), ("study_docs", 10)],
             [("official_docs", 27907), ("study_docs", 602)],
             [(28509,)],
+            [(28509,)],
             [(100,)],
             [(28409,)],
+            [(0,)],
         ]
     )
 
-    payload = load_corpus_status(connection, collection="openshift_docs")
+    payload = load_corpus_status(connection, embedding_model="bge-m3")
 
-    assert payload["qdrant_index_parity"] is False
+    assert payload["embedding_index_parity"] is False
     assert payload["ready"] is False
-    assert payload["missing_qdrant_index_entries"] == 28409
+    assert payload["missing_embedding_index_entries"] == 28409
+
+
+def test_load_corpus_status_allows_non_indexable_chunks_when_indexable_chunks_match():
+    connection = FakeConnection(
+        [
+            [("official_docs", 29), ("study_docs", 10)],
+            [("official_docs", 27907), ("study_docs", 602)],
+            [(28599,)],
+            [(28509,)],
+            [(28509,)],
+            [(0,)],
+            [(0,)],
+        ]
+    )
+
+    payload = load_corpus_status(connection, embedding_model="bge-m3")
+
+    assert payload["total_chunks"] == 28599
+    assert payload["indexable_chunks"] == 28509
+    assert payload["non_indexable_chunks"] == 90
+    assert payload["embedding_index_parity"] is True
+    assert payload["ready"] is True
 
 
 def test_db_corpus_status_parser_accepts_args():
@@ -96,10 +126,10 @@ def test_db_corpus_status_parser_accepts_args():
             "db-corpus-status",
             "--root-dir",
             str(REPO_ROOT),
-            "--collection",
-            "openshift_docs",
+            "--embedding-model",
+            "bge-m3",
         ]
     )
 
     assert args.command == "db-corpus-status"
-    assert args.collection == "openshift_docs"
+    assert args.embedding_model == "bge-m3"

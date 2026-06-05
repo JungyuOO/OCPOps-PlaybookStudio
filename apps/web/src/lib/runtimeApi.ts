@@ -1727,11 +1727,11 @@ export interface UploadDeleteResponse {
   document_source_id: string;
   filename: string;
   postgres_rows_deleted: number;
-  qdrant_points_deleted: number;
-  qdrant_errors: string[];
+  embedding_rows_deleted: number;
   storage_file_removed: boolean;
   storage_error: string;
   report_file_removed: boolean;
+  asset_dir_removed: boolean;
 }
 
 export async function deleteUploadedDocument(documentSourceId: string): Promise<UploadDeleteResponse> {

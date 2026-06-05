@@ -54,7 +54,7 @@ def _stage_name(step: str) -> str:
         "rewrite_query": "query signal extraction / expansion planning",
         "query_expansion": "embedding query generation",
         "bm25_search": "BM25 keyword retrieval",
-        "vector_search": "parallel vector retrieval + Qdrant metadata filter",
+        "vector_search": "parallel vector retrieval + pgvector metadata filter",
         "fusion": "retrieval fusion / dedup",
         "graph_expand": "graph evidence expansion",
         "context_assembly": "LLM citation context assembly",
@@ -201,7 +201,7 @@ def _vector_pass_summary(vector_runtime: dict[str, Any]) -> list[dict[str, Any]]
                 "hit_count": subquery.get("hit_count"),
                 "top_score": subquery.get("top_score"),
                 "embedding_ms": subquery.get("embedding_ms"),
-                "qdrant_ms": subquery.get("qdrant_ms"),
+                "vector_db_ms": subquery.get("vector_db_ms"),
                 "hydrate_ms": subquery.get("hydrate_ms"),
                 "metadata_filter": subquery.get("metadata_filter"),
                 "filter_passes": subquery.get("filter_passes") or [],
@@ -359,7 +359,7 @@ def _print_result_summary(item: dict[str, Any]) -> None:
             f"filter_pass={subquery.get('metadata_filter_pass')} "
             f"hits={subquery.get('hit_count')} "
             f"embed={float(subquery.get('embedding_ms') or 0.0) / 1000:.2f}s "
-            f"qdrant={float(subquery.get('qdrant_ms') or 0.0) / 1000:.2f}s "
+            f"vector_db={float(subquery.get('vector_db_ms') or 0.0) / 1000:.2f}s "
             f"hydrate={float(subquery.get('hydrate_ms') or 0.0) / 1000:.2f}s"
         )
         print(f"      query: {str(subquery.get('query') or '')[:180]}")
@@ -429,7 +429,7 @@ def _write_markdown(report: dict[str, Any], output_path: Path) -> None:
                 "- "
                 f"pass={row.get('metadata_filter_pass')} "
                 f"hits={row.get('hit_count')} "
-                f"qdrant={float(row.get('qdrant_ms') or 0.0) / 1000:.2f}s "
+                f"vector_db={float(row.get('vector_db_ms') or 0.0) / 1000:.2f}s "
                 f"query={row.get('query')}"
             )
         answer = str(item.get("answer") or "").strip()

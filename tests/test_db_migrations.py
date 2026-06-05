@@ -13,7 +13,7 @@ def test_list_migrations_includes_ingestion_foundation():
 
     versions = [migration.version for migration in migrations]
 
-    assert versions == [
+    assert versions[:9] == [
         "0000_schema_migrations",
         "0001_ingestion_foundation",
         "0002_learning_foundation",
@@ -23,8 +23,10 @@ def test_list_migrations_includes_ingestion_foundation():
         "0006_course_runtime_assets",
         "0007_course_runtime_manifest",
         "0008_chunk_runtime_enrichment",
-        "0009_qdrant_payload_contract",
     ]
+    assert versions[9].startswith("0009_")
+    assert versions[10] == "0010_pgvector_chunk_embeddings"
+    assert versions[11].startswith("0011_")
     assert all(len(migration.checksum) == 64 for migration in migrations)
     assert "document_chunks" in migrations[1].sql
     assert "qwen_description" in migrations[1].sql
@@ -40,6 +42,9 @@ def test_list_migrations_includes_ingestion_foundation():
     assert "course_manifests" in migrations[7].sql
     assert "navigation_only" in migrations[8].sql
     assert "payload_version" in migrations[9].sql
+    assert "chunk_embeddings" in migrations[10].sql
+    assert "vector(1024)" in migrations[10].sql
+    assert "DROP TABLE IF EXISTS" in migrations[11].sql
     assert "starter_question_candidates" in migrations[8].sql
 
 
@@ -89,8 +94,6 @@ def test_kmsc_course_import_parser_accepts_dry_run_args():
             "--course-dir",
             "corpus/sources/kmsc/parsed-preview/course_pbs",
             "--index",
-            "--collection",
-            "openshift_docs",
             "--dry-run",
         ]
     )
@@ -99,5 +102,4 @@ def test_kmsc_course_import_parser_accepts_dry_run_args():
     assert args.root_dir == REPO_ROOT
     assert args.course_dir == Path("corpus/sources/kmsc/parsed-preview/course_pbs")
     assert args.index is True
-    assert args.collection == "openshift_docs"
     assert args.dry_run is True

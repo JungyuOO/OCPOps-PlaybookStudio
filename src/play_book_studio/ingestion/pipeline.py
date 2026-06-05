@@ -1,7 +1,7 @@
 """ingestion 전체를 오케스트레이션하는 진입점.
 
 ingestion 순서는 여기서 고정된다:
-manifest -> collect -> normalize -> chunk -> embed -> qdrant
+manifest -> collect -> normalize -> chunk -> graph
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from .audit_rules import (
 )
 from .chunking import chunk_sections
 from .collector import collect_entry, entry_with_collected_metadata, raw_html_path
-from .embedding import EmbeddingClient
 from .graph_sidecar import refresh_active_runtime_graph_artifacts
 from .manifest import (
     build_source_catalog_entries,
@@ -44,7 +43,6 @@ from .playbook_materialization import (
     load_approved_playbook_payload,
     project_playbook_payload_sections,
 )
-from .qdrant_store import ensure_collection, upsert_chunks
 from play_book_studio.config.settings import HIGH_VALUE_SLUGS, Settings
 
 
@@ -218,8 +216,6 @@ def run_ingestion_pipeline(
     collect_limit: int | None = None,
     process_limit: int | None = None,
     force_collect: bool = False,
-    skip_embeddings: bool = False,
-    skip_qdrant: bool = False,
 ) -> PipelineLog:
     log = PipelineLog()
     # 1단계: source manifest를 확정한다.
@@ -391,38 +387,6 @@ def run_ingestion_pipeline(
         f"books={log.graph_book_count} relations={log.graph_relation_count}"
     )
     _save_log(settings, log)
-
-    if chunks and not skip_embeddings:
-        try:
-            # 5/6단계: embedding을 만들고, 그 결과를 Qdrant에 적재한다.
-            log.stage = "embed"
-            client = EmbeddingClient(settings)
-            vectors = client.embed_texts(
-                (chunk.text for chunk in chunks),
-                progress_callback=lambda done, total: (
-                    _progress(f"[embed {done}/{total}]"),
-                    _save_log(settings, log),
-                ),
-            )
-            log.embedded_count = len(vectors)
-            _progress(f"[embed] total_vectors={len(vectors)}")
-            _save_log(settings, log)
-            if not skip_qdrant:
-                log.stage = "qdrant"
-                ensure_collection(settings)
-                log.qdrant_upserted_count = upsert_chunks(
-                    settings,
-                    chunks,
-                    vectors,
-                    progress_callback=lambda done, total: (
-                        _progress(f"[qdrant {done}/{total}]"),
-                        _save_log(settings, log),
-                    ),
-                )
-                _progress(f"[qdrant] upserted={log.qdrant_upserted_count}")
-        except Exception as exc:  # noqa: BLE001
-            log.add_error("embed_or_qdrant", "pipeline", str(exc))
-            _save_log(settings, log)
 
     log.stage = "done"
     _save_log(settings, log)

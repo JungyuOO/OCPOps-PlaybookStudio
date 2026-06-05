@@ -1,7 +1,7 @@
 """Shared local seed/import paths.
 
 These paths describe local corpus inputs only. Runtime code should prefer
-PostgreSQL/Qdrant/storage after the seed data has been imported.
+PostgreSQL, pgvector, and object storage after the seed data has been imported.
 """
 
 from __future__ import annotations

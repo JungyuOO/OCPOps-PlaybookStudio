@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from play_book_studio.course.qdrant_course import (
+from play_book_studio.course.search_payload import (
     course_embedding_text,
-    course_point_payload,
+    course_search_payload,
     ops_learning_embedding_text,
-    ops_learning_point_payload,
+    ops_learning_search_payload,
 )
 
 
@@ -27,7 +27,7 @@ def test_course_embedding_text_includes_image_evidence_fields() -> None:
     }
 
     text = course_embedding_text(chunk)
-    payload = course_point_payload(chunk)
+    payload = course_search_payload(chunk)
 
     assert "CrashLoopBackOff" in text
     assert "failure_state" in text
@@ -36,7 +36,7 @@ def test_course_embedding_text_includes_image_evidence_fields() -> None:
     assert "CrashLoopBackOff" in payload["text"]
 
 
-def test_course_point_payload_keeps_image_text_separate() -> None:
+def test_course_search_payload_keeps_image_text_separate() -> None:
     chunk = {
         "chunk_id": "chunk-running",
         "stage_id": "integration_test",
@@ -50,13 +50,13 @@ def test_course_point_payload_keeps_image_text_separate() -> None:
         ],
     }
 
-    payload = course_point_payload(chunk)
+    payload = course_search_payload(chunk)
 
     assert payload["image_text"]
     assert "Running" in payload["image_text"]
 
 
-def test_ops_learning_point_payload_preserves_step_source_and_suggestions() -> None:
+def test_ops_learning_search_payload_preserves_step_source_and_suggestions() -> None:
     learning_chunk = {
         "learning_chunk_id": "cicd::flow",
         "chunk_type": "ops_learning_step",
@@ -77,7 +77,7 @@ def test_ops_learning_point_payload_preserves_step_source_and_suggestions() -> N
     }
 
     text = ops_learning_embedding_text(learning_chunk)
-    payload = ops_learning_point_payload(learning_chunk)
+    payload = ops_learning_search_payload(learning_chunk)
 
     assert "GitOps" in text
     assert "Pipeline Succeeded" in text

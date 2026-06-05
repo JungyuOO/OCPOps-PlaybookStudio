@@ -34,5 +34,5 @@ Migration targets:
 Operational rule:
 
 - Import from `corpus/**` into PostgreSQL.
-- Rebuild Qdrant from PostgreSQL chunks.
-- Serve runtime answers from PostgreSQL/Qdrant/storage, not from this folder.
+- Rebuild pgvector embeddings from PostgreSQL chunks.
+- Serve runtime answers from PostgreSQL/pgvector/storage, not from this folder.

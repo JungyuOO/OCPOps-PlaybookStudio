@@ -20,8 +20,6 @@ from play_book_studio.ingestion.validation import (
     REQUIRED_ROW_SECURITY_FIELDS,
     REQUIRED_SECTION_KEYS,
     build_validation_report,
-    qdrant_count,
-    qdrant_id_inventory,
     read_jsonl,
 )
 
@@ -40,7 +38,5 @@ __all__ = [
     "REQUIRED_ROW_SECURITY_FIELDS",
     "REQUIRED_SECTION_KEYS",
     "build_validation_report",
-    "qdrant_count",
-    "qdrant_id_inventory",
     "read_jsonl",
 ]

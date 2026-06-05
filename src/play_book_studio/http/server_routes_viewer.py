@@ -107,8 +107,24 @@ def _owner_hash_from_handler(handler: Any) -> str:
     return str(getattr(owner, "owner_hash", "") or "").strip()
 
 
+def _normalize_internal_viewer_markup(markdown: str) -> str:
+    text = str(markdown or "")
+
+    def code_open(match: re.Match[str]) -> str:
+        attrs = html.unescape(str(match.group(1) or ""))
+        language_match = re.search(r'language=["\']?([A-Za-z0-9_+-]+)', attrs)
+        language = language_match.group(1) if language_match else "text"
+        return f"\n```{language}\n"
+
+    text = re.sub(r"\[CODE([^\]]*)\]\s*", code_open, text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*\[/CODE\]\s*", "\n```\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[TABLE[^\]]*\]\s*", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*\[/TABLE\]\s*", "\n", text, flags=re.IGNORECASE)
+    return text
+
+
 def _markdownish_to_html(markdown: str, asset_sources: dict[str, dict[str, str]] | None = None) -> str:
-    text = str(markdown or "").strip()
+    text = _normalize_internal_viewer_markup(str(markdown or "")).strip()
     if not text:
         return ""
     asset_sources = asset_sources or {}
@@ -1420,6 +1436,15 @@ def _normalize_viewer_resource_urls(html_text: str, viewer_path: str) -> str:
     return _RESOURCE_ATTR_RE.sub(_replace, html_text)
 
 
+def _strip_internal_viewer_markers(html_text: str) -> str:
+    text = str(html_text or "")
+    text = re.sub(r"\[CODE[^\]]*\]\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*\[/CODE\]\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[TABLE[^\]]*\]\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*\[/TABLE\]\s*", "", text, flags=re.IGNORECASE)
+    return text
+
+
 def _build_viewer_document_payload(html_text: str, viewer_path: str) -> dict[str, Any]:
     body_match = _BODY_RE.search(html_text)
     body_attrs = body_match.group("attrs") if body_match else ""
@@ -1431,7 +1456,9 @@ def _build_viewer_document_payload(html_text: str, viewer_path: str) -> dict[str
         for match in _STYLE_RE.finditer(html_text)
         if str(match.group("css") or "").strip()
     ]
-    normalized_body_html = _normalize_viewer_resource_urls(_SCRIPT_RE.sub("", body_html), viewer_path)
+    normalized_body_html = _strip_internal_viewer_markers(
+        _normalize_viewer_resource_urls(_SCRIPT_RE.sub("", body_html), viewer_path)
+    )
     return {
         "viewer_path": viewer_path,
         "body_class_name": body_class_name,
@@ -1558,7 +1585,18 @@ def _viewer_source_meta(root_dir: Path, viewer_path: str) -> dict[str, Any] | No
         if asset is None:
             return None
         settings = load_settings(root_dir)
-        truth = official_runtime_truth_payload(settings=settings, manifest_entry=_manifest_entry_for_book(root_dir, slug))
+        manifest_entry = _manifest_entry_for_book(root_dir, slug)
+        truth = official_runtime_truth_payload(settings=settings, manifest_entry=manifest_entry)
+        truth = {
+            **truth,
+            "source_lane": "official_source_first_candidate",
+            "approval_state": "",
+            "publication_state": str(manifest_entry.get("publication_state") or "published"),
+            "parser_backend": str(manifest_entry.get("parser_backend") or ""),
+            "boundary_truth": "official_candidate_runtime",
+            "runtime_truth_label": "Source-First Candidate",
+            "boundary_badge": "Source-First Candidate",
+        }
         caption = str(asset.get("caption") or asset.get("alt") or asset_name).strip() or asset_name
         section_match = _figure_section_match(slug, asset_name) or {}
         section_path = [str(section_match.get("section_heading") or "").strip(), caption]

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import fields
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -18,14 +17,12 @@ from play_book_studio.ingestion.validation import (
 
 from .audit_rules import hangul_ratio
 from .data_quality import build_playbook_reader_grade_audit_for_dirs
-from .embedding import EmbeddingClient
 from .graph_sidecar import (
     graph_sidecar_compact_artifact_status,
     refresh_active_runtime_graph_artifacts,
 )
 from .manifest import read_manifest, write_manifest
-from .models import ChunkRecord, SourceManifestEntry
-from .qdrant_store import upsert_chunks
+from .models import SourceManifestEntry
 from .synthesis_lane import synthesis_lane_report_path, write_synthesis_lane_outputs
 from .translation_draft_generation import generate_translation_drafts
 
@@ -169,21 +166,6 @@ def _bm25_row(chunk_row: dict[str, object]) -> dict[str, object]:
         "operator_names": list(chunk_row.get("operator_names", [])),
         "verification_hints": list(chunk_row.get("verification_hints", [])),
     }
-
-
-def _chunk_records(rows: list[dict[str, object]]) -> list[ChunkRecord]:
-    allowed = {field.name for field in fields(ChunkRecord)}
-    records: list[ChunkRecord] = []
-    for row in rows:
-        payload = {key: value for key, value in row.items() if key in allowed}
-        payload["section_path"] = tuple(payload.get("section_path", []))
-        payload["cli_commands"] = tuple(payload.get("cli_commands", []))
-        payload["error_strings"] = tuple(payload.get("error_strings", []))
-        payload["k8s_objects"] = tuple(payload.get("k8s_objects", []))
-        payload["operator_names"] = tuple(payload.get("operator_names", []))
-        payload["verification_hints"] = tuple(payload.get("verification_hints", []))
-        records.append(ChunkRecord(**payload))
-    return records
 
 
 def _missing_fields(row: dict[str, object], required_fields: tuple[str, ...]) -> list[str]:
@@ -458,7 +440,6 @@ def promote_translation_gold(
     force_collect: bool = False,
     force_regenerate: bool = False,
     refresh_synthesis_report: bool = True,
-    sync_qdrant: bool = False,
     manifest_path: Path | None = None,
 ) -> dict[str, object]:
     generation_report = None
@@ -681,37 +662,6 @@ def promote_translation_gold(
             dossier_promoted_count=dossier_promoted_count,
         )
 
-    qdrant_upserted_count = 0
-    if sync_qdrant and promoted_chunks:
-        _emit_progress(
-            "gold_qdrant_start",
-            chunk_count=len(promoted_chunks),
-        )
-        chunk_records = _chunk_records(promoted_chunks)
-        client = EmbeddingClient(settings)
-        vectors = client.embed_texts(
-            (chunk.text for chunk in chunk_records),
-            progress_callback=lambda done, total: _emit_progress(
-                "gold_embed_progress",
-                completed_batches=done,
-                total_batches=total,
-            ),
-        )
-        qdrant_upserted_count = upsert_chunks(
-            settings,
-            chunk_records,
-            vectors,
-            progress_callback=lambda done, total: _emit_progress(
-                "gold_qdrant_progress",
-                completed_batches=done,
-                total_batches=total,
-            ),
-        )
-        _emit_progress(
-            "gold_qdrant_complete",
-            qdrant_upserted_count=qdrant_upserted_count,
-        )
-
     synthesis_report = None
     if refresh_synthesis_report and settings.source_catalog_path.exists():
         synthesis_report_path = synthesis_lane_report_path(settings)
@@ -730,7 +680,6 @@ def promote_translation_gold(
             "promoted_count": len(promoted_entries),
             "error_count": len(errors),
             "dossier_promoted_count": dossier_promoted_count,
-            "qdrant_upserted_count": qdrant_upserted_count,
             "graph_compact_ready": bool(graph_sidecar_compact_artifact_status(settings).get("ready")),
         },
         "books": reports,

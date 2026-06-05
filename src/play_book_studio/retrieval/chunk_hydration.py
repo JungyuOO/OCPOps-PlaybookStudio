@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from play_book_studio.db.qdrant_indexer import qdrant_payload_from_row
+from play_book_studio.retrieval.payload import retrieval_payload_from_row
 
 from .models import RetrievalHit
 from .vector import hit_from_payload
@@ -28,7 +28,7 @@ def hydrate_retrieval_hits(connection, hits: list[RetrievalHit]) -> list[Retriev
             hydrated.append(hit)
             continue
         canonical = hit_from_payload(
-            qdrant_payload_from_row(row),
+            retrieval_payload_from_row(row),
             source=hit.source,
             score=hit.raw_score,
         )
@@ -47,7 +47,7 @@ def load_document_chunk_payload_rows(
     *,
     chunk_ids: list[str],
 ) -> dict[str, dict[str, Any]]:
-    """Load qdrant-payload-compatible chunk rows keyed by chunk id."""
+    """Load retrieval-payload-compatible chunk rows keyed by chunk id."""
     clean_chunk_ids = _ordered_unique_text_values(chunk_ids)
     if not clean_chunk_ids:
         return {}

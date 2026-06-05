@@ -8,7 +8,6 @@ from play_book_studio.config.corpus_paths import COURSE_PBS_DIR, STUDY_DOCS_DIR
 from play_book_studio.config.settings import load_settings
 
 from .ops_learning import DEFAULT_GOLDEN_PATH, DEFAULT_GUIDES_PATH, DEFAULT_LEARNING_CHUNKS_PATH, write_initial_guides_and_golden
-from .qdrant_course import upsert_course_chunks, upsert_ops_learning_chunks
 from .pipeline.canonical import attach_course_tour_metadata, build_course_manifest, write_course_outputs
 from .pipeline.chunk_normalization import normalize_course_chunks
 from .pipeline.image_annotation import annotate_slide_graph_attachments, summarize_attachment_coverage
@@ -61,7 +60,6 @@ def build_parser() -> argparse.ArgumentParser:
         default="unit_test",
     )
     parser.add_argument("--limit", type=int, default=1, help="How many matching PPTX decks to process for the spike.")
-    parser.add_argument("--skip-qdrant", action="store_true")
     return parser
 
 
@@ -306,16 +304,6 @@ def main() -> int:
         json.dumps(checkpoints, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    qdrant_upserted = 0
-    qdrant_ops_learning_upserted = 0
-    if not args.skip_qdrant:
-        try:
-            qdrant_upserted = upsert_course_chunks(settings, parsed_chunks)
-            qdrant_ops_learning_upserted = upsert_ops_learning_chunks(settings, ops_learning_result.get("learning_chunks", []))
-        except Exception as exc:  # noqa: BLE001
-            qdrant_upserted = 0
-            qdrant_ops_learning_upserted = 0
-            print(json.dumps({"warning": f"course qdrant upsert skipped: {exc}"}, ensure_ascii=False))
     coverage = summarize_attachment_coverage(slide_graphs)
 
     print(
@@ -325,8 +313,6 @@ def main() -> int:
                 "output_dir": str(output_dir),
                 "deck_count": len(deck_summaries),
                 "chunk_count": len(parsed_chunks),
-                "qdrant_upserted": qdrant_upserted,
-                "qdrant_ops_learning_upserted": qdrant_ops_learning_upserted,
                 "ops_learning_chunk_count": len(ops_learning_result.get("learning_chunks", [])),
                 "families": sorted({item.get("template_family") for item in deck_summaries}),
                 "attachment_ocr": coverage,

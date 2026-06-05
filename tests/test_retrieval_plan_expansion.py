@@ -111,6 +111,19 @@ def test_retrieval_plan_does_not_expand_simple_node_status_into_logs() -> None:
     assert "node-logs" not in combined
 
 
+def test_korean_network_policy_query_adds_network_policy_signals() -> None:
+    plan = build_retrieval_plan(
+        "OpenShift 네트워크 정책과 pod 통신 제한을 확인하고 싶어",
+        context=SessionContext(),
+        candidate_k=10,
+    )
+
+    combined = " ".join(plan.retrieval_queries)
+    assert "NetworkPolicy" in combined
+    assert plan.metadata_filter.get("_domain_boosts") == ("networking",)
+    assert "NetworkPolicy" in plan.metadata_filter["_intent_signal_boosts"]["objects"]
+
+
 def test_study_docs_scope_keeps_user_query_and_skips_official_metadata_filter() -> None:
     plan = build_retrieval_plan(
         "운영 장애 분석에서 증상과 근거는 어떤 순서로 정리하나요?",

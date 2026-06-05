@@ -82,7 +82,7 @@
 ## 실행
 
 ```powershell
-docker compose up -d --build app web qdrant
+docker compose up -d --build postgres app web
 ```
 
 ## Remote SNO 터미널 연결

@@ -427,8 +427,6 @@ def _run_high_value_ingestion(settings: Settings, report_dir: Path, _: str) -> d
         refresh_manifest=False,
         collect_subset="high-value",
         process_subset="high-value",
-        skip_embeddings=True,
-        skip_qdrant=True,
     )
     payload = log.to_dict()
     payload["output_targets"] = {
@@ -445,15 +443,12 @@ def _run_approved_runtime_rebuild(settings: Settings, report_dir: Path, _: str) 
     curated_gold_refresh = apply_all_curated_gold(
         rebuild_settings,
         refresh_synthesis_report=False,
-        sync_qdrant=False,
     )
     log = run_ingestion_pipeline(
         rebuild_settings,
         refresh_manifest=False,
         collect_subset="all",
         process_subset="all",
-        skip_embeddings=True,
-        skip_qdrant=True,
     )
     payload = log.to_dict()
     payload["curated_gold_refresh"] = {
@@ -467,15 +462,10 @@ def _run_approved_runtime_rebuild(settings: Settings, report_dir: Path, _: str) 
     }
     runtime_corpus = materialize_runtime_corpus_from_playbooks(
         rebuild_settings,
-        sync_qdrant=True,
-        recreate_qdrant=True,
     )
     payload["runtime_corpus_materialization"] = runtime_corpus
     payload["graph_build_backend"] = rebuild_settings.graph_backend
     payload["chunk_count"] = int(runtime_corpus.get("runtime_chunk_count", payload.get("chunk_count", 0)) or 0)
-    payload["qdrant_upserted_count"] = int(
-        runtime_corpus.get("qdrant_upserted_count", payload.get("qdrant_upserted_count", 0)) or 0
-    )
     payload["output_targets"] = {
         "normalized_docs_path": str(settings.normalized_docs_path),
         "chunks_path": str(settings.chunks_path),
@@ -483,7 +473,6 @@ def _run_approved_runtime_rebuild(settings: Settings, report_dir: Path, _: str) 
         "playbook_documents_path": str(settings.playbook_documents_path),
         "playbook_books_dir": str(settings.playbook_books_dir),
         "preprocessing_log_path": str(settings.preprocessing_log_path),
-        "qdrant_collection": settings.qdrant_collection,
     }
     return payload
 
@@ -682,7 +671,6 @@ def _run_translation_gold_promotion(settings: Settings, report_dir: Path, _: str
         settings,
         generate_first=False,
         refresh_synthesis_report=True,
-        sync_qdrant=True,
     )
     report_path = _write_job_report(report_dir, "translation_gold_promotion_report", payload)
     payload["output_targets"] = {
@@ -697,7 +685,6 @@ def _run_validation_gate(settings: Settings, report_dir: Path, _: str) -> dict[s
         settings,
         expected_process_subset="high-value",
         artifact_expectation_mode="runtime_baseline",
-        include_qdrant_id_check=True,
     )
     report_path = _write_job_report(report_dir, "validation_report", payload)
     payload["output_targets"] = {"report_path": str(report_path)}
@@ -781,7 +768,6 @@ def build_release_verdict(job_results: list[dict[str, Any]]) -> dict[str, Any]:
         "artifact_books_match_expected_subset",
         "chunks_have_unique_ids",
         "bm25_matches_chunks",
-        "qdrant_matches_chunks_by_count",
         "required_keys_present",
         "manifest_metadata_complete",
         "normalized_metadata_complete",
@@ -797,11 +783,6 @@ def build_release_verdict(job_results: list[dict[str, Any]]) -> dict[str, Any]:
         for check_name in required_validation_checks
         if validation_checks.get(check_name) is not True
     ]
-    failed_validation_checks.extend(
-        check_name
-        for check_name in ("qdrant_matches_chunks_by_ids", "qdrant_books_match_chunks")
-        if check_name in validation_checks and validation_checks.get(check_name) is False
-    )
     if failed_validation_checks:
         reasons.append("validation_failed:" + ",".join(failed_validation_checks))
 
@@ -828,9 +809,6 @@ def build_release_verdict(job_results: list[dict[str, Any]]) -> dict[str, Any]:
     embedding = dict(runtime_probes.get("embedding", {}))
     if embedding and "error" in embedding:
         runtime_errors.append("embedding")
-    qdrant = dict(runtime_probes.get("qdrant", {}))
-    if qdrant and ("error" in qdrant or not bool(qdrant.get("collection_present", True))):
-        runtime_errors.append("qdrant")
     if runtime_errors:
         reasons.append("runtime_smoke_failed:" + ",".join(runtime_errors))
 

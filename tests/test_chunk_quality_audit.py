@@ -88,6 +88,27 @@ def test_chunk_quality_audit_reads_course_index_text_schema() -> None:
     assert payload["command_chunks"]["count"] == 1
 
 
+def test_chunk_quality_audit_reports_effective_and_source_token_counts() -> None:
+    payload = build_chunk_quality_audit(
+        [
+            {
+                "chunk_id": "course-zero-source-token",
+                "token_count": 0,
+                "index_texts": {
+                    "dense_text": " ".join(["운영"] * 10),
+                },
+            }
+        ]
+    )
+
+    sample = payload["issue_samples"].get("undersized_chunk", [{}])[0]
+
+    assert payload["source_token_count"]["zero_count"] == 1
+    assert payload["source_token_count"]["zero_rate"] == 1.0
+    assert sample.get("token_count", 0) != 0
+    assert sample.get("source_token_count") == 0
+
+
 def test_v004_readable_eval_manifests_are_valid_jsonl() -> None:
     root = Path(__file__).resolve().parents[1]
     paths = [

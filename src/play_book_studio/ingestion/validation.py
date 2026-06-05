@@ -5,8 +5,6 @@ import json
 import re
 from collections import Counter
 
-import requests
-
 from play_book_studio.config.settings import Settings
 
 from .manifest import read_manifest
@@ -181,64 +179,11 @@ def _expected_subset_slugs(manifest, subset: str) -> list[str]:
     return [entry.book_slug for entry in manifest]
 
 
-def qdrant_count(base_url: str, collection: str, timeout: int) -> int | None:
-    try:
-        response = requests.post(
-            f"{base_url}/collections/{collection}/points/count",
-            json={"exact": True},
-            timeout=timeout,
-        )
-        if not response.ok:
-            return None
-        return int(response.json()["result"]["count"])
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def qdrant_id_inventory(
-    base_url: str,
-    collection: str,
-    timeout: int,
-) -> tuple[set[str] | None, Counter[str] | None]:
-    try:
-        point_ids: set[str] = set()
-        book_counts: Counter[str] = Counter()
-        offset = None
-        while True:
-            payload: dict[str, object] = {
-                "limit": 256,
-                "with_payload": True,
-                "with_vector": False,
-            }
-            if offset is not None:
-                payload["offset"] = offset
-            response = requests.post(
-                f"{base_url}/collections/{collection}/points/scroll",
-                json=payload,
-                timeout=max(timeout, 30),
-            )
-            response.raise_for_status()
-            result = response.json()["result"]
-            for point in result["points"]:
-                point_ids.add(str(point["id"]))
-                payload_row = point.get("payload") or {}
-                book_slug = payload_row.get("book_slug")
-                if book_slug:
-                    book_counts[str(book_slug)] += 1
-            offset = result.get("next_page_offset")
-            if offset is None:
-                break
-        return point_ids, book_counts
-    except Exception:  # noqa: BLE001
-        return None, None
-
-
 def build_validation_report(
     settings: Settings,
     *,
     expected_process_subset: str = "high-value",
     artifact_expectation_mode: str = "runtime_baseline",
-    include_qdrant_id_check: bool = True,
 ) -> dict:
     manifest_payload = json.loads(settings.source_manifest_path.read_text(encoding="utf-8"))
     manifest_rows = list(manifest_payload.get("entries", []))
@@ -362,20 +307,6 @@ def build_validation_report(
     bm25_id_set = {str(row["chunk_id"]) for row in bm25_rows}
     missing_bm25_ids = len(chunk_id_set - bm25_id_set)
 
-    qdrant_points = qdrant_count(
-        settings.qdrant_url,
-        settings.qdrant_collection,
-        settings.request_timeout_seconds,
-    )
-    qdrant_ids: set[str] | None = None
-    qdrant_book_counts: Counter[str] | None = None
-    if include_qdrant_id_check and qdrant_points is not None:
-        qdrant_ids, qdrant_book_counts = qdrant_id_inventory(
-            settings.qdrant_url,
-            settings.qdrant_collection,
-            settings.request_timeout_seconds,
-        )
-
     hangul_sections = sum(1 for row in normalized_docs if _text_has_hangul(str(row["text"])))
     hangul_chunks = sum(1 for row in chunks if _text_has_hangul(str(row["text"])))
 
@@ -416,15 +347,6 @@ def build_validation_report(
     missing_expected_books = sorted(expected_artifact_slug_set - chunk_book_set)
     unexpected_books = sorted(chunk_book_set - expected_artifact_slug_set)
 
-    qdrant_missing_ids = None
-    qdrant_extra_ids = None
-    qdrant_books_match_chunks = None
-    if qdrant_ids is not None:
-        qdrant_missing_ids = len(chunk_id_set - qdrant_ids)
-        qdrant_extra_ids = len(qdrant_ids - chunk_id_set)
-    if qdrant_book_counts is not None:
-        qdrant_books_match_chunks = dict(qdrant_book_counts) == dict(chunk_book_counts)
-
     return {
         "expected_process_subset": expected_process_subset,
         "artifact_expectation_mode": artifact_expectation_mode,
@@ -443,9 +365,6 @@ def build_validation_report(
         "bm25_book_count": len(bm25_book_set),
         "playbook_document_count": len(playbook_rows),
         "playbook_book_count": len(playbook_book_set),
-        "qdrant_count": qdrant_points,
-        "qdrant_missing_ids": qdrant_missing_ids,
-        "qdrant_extra_ids": qdrant_extra_ids,
         "section_key_errors": section_key_errors,
         "chunk_key_errors": chunk_key_errors,
         "bm25_key_errors": bm25_key_errors,
@@ -500,13 +419,6 @@ def build_validation_report(
             ),
             "chunks_have_unique_ids": unique_chunk_ids == len(chunks),
             "bm25_matches_chunks": len(bm25_rows) == len(chunks) and missing_bm25_ids == 0,
-            "qdrant_matches_chunks_by_count": qdrant_points == len(chunks),
-            "qdrant_matches_chunks_by_ids": (
-                qdrant_missing_ids == 0 and qdrant_extra_ids == 0
-                if qdrant_missing_ids is not None and qdrant_extra_ids is not None
-                else None
-            ),
-            "qdrant_books_match_chunks": qdrant_books_match_chunks,
             "required_keys_present": (
                 section_key_errors == 0
                 and chunk_key_errors == 0

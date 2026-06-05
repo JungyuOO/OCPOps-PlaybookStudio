@@ -20,12 +20,12 @@ def test_chat_latency_log_flattens_answer_retrieval_and_payload_timings() -> Non
                 "subqueries": [
                     {
                         "embedding_ms": 5.2,
-                        "qdrant_ms": 3.0,
+                        "vector_db_ms": 3.0,
                         "hydrate_ms": 1.0,
                     },
                     {
                         "embedding_ms": 6.3,
-                        "qdrant_ms": 2.0,
+                        "vector_db_ms": 2.0,
                         "hydrate_ms": 0.5,
                     },
                 ],
@@ -82,7 +82,7 @@ def test_chat_latency_log_flattens_answer_retrieval_and_payload_timings() -> Non
     assert payload["bm25_ms"] == 4.4
     assert payload["vector_ms"] == 20.0
     assert payload["embedding_ms"] == 11.5
-    assert payload["qdrant_ms"] == 5.0
+    assert payload["vector_db_ms"] == 5.0
     assert payload["hydrate_ms"] == 1.5
     assert payload["rerank_ms"] == 7.1
     assert payload["llm_ms"] == 40.0

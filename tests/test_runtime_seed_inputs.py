@@ -75,7 +75,6 @@ def test_runtime_report_marks_legacy_files_as_seed_inputs_in_database_runtime(mo
     monkeypatch.setattr(runtime_report, "graph_sidecar_compact_artifact_status", lambda _settings: {"ready": False})
     monkeypatch.setattr(runtime_report, "_probe_llm", lambda _settings, *, sample: {"sample": sample})
     monkeypatch.setattr(runtime_report, "_probe_embedding", lambda _settings, *, sample: {"sample": sample})
-    monkeypatch.setattr(runtime_report, "_probe_qdrant", lambda _settings: {"ok": True})
 
     payload = runtime_report.build_runtime_report(root, ui_base_url=None, sample=False)
 

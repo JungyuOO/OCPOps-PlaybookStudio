@@ -84,15 +84,26 @@ def append_operation_project_node_deployment_terms(normalized: str, terms: list[
                 "openshift-dns",
             ]
         )
-    if "networkpolicy" in normalized or "network policy" in normalized:
+    if (
+        "networkpolicy" in normalized
+        or "network policy" in normalized
+        or "네트워크 정책" in normalized
+        or "네트워크정책" in normalized
+        or "통신 제한" in normalized
+        or "pod 통신" in normalized
+        or "파드 통신" in normalized
+    ):
         terms.extend(
             [
                 "NetworkPolicy",
+                "네트워크 정책",
                 "network policy",
                 "podSelector",
                 "namespaceSelector",
                 "ingress",
                 "egress",
+                "pod communication blocked",
+                "네트워크 정책 pod 통신 제한",
                 "oc get networkpolicy",
             ]
         )

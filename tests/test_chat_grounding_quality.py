@@ -568,6 +568,7 @@ def test_beginner_ops_profiles_do_not_collapse_to_namespace_lookup() -> None:
     node = build_intent_profile("Node 확인하려면 어떤 명령어부터 쓰면 돼?")
     namespace = build_intent_profile("네임스페이스 확인하는 명령어가 뭐야?")
     network = build_intent_profile("NetworkPolicy 때문에 Pod 통신이 막힌 건지 확인하려면 뭘 봐야 해?")
+    network_ko = build_intent_profile("네트워크 정책 때문에 Pod 통신 제한이 걸린 건지 확인하려면?")
     dns = build_intent_profile("클러스터 DNS 문제가 의심되면 어떤 리소스 상태부터 확인해야 해?")
     mco = build_intent_profile("Machine Config Operator 상태를 먼저 확인하는 명령을 알려줘")
     cvo = build_intent_profile("Cluster Version Operator가 업데이트를 못 하고 있으면 어디부터 확인해?")
@@ -593,6 +594,8 @@ def test_beginner_ops_profiles_do_not_collapse_to_namespace_lookup() -> None:
     assert namespace.primary_commands[0] == "oc project"
     assert network.target_object == "networkpolicy"
     assert "NetworkPolicy" in network.evidence_terms
+    assert network_ko.target_object == "networkpolicy"
+    assert "NetworkPolicy" in network_ko.evidence_terms
     assert dns.target_object == "dns"
     assert "openshift-dns" in dns.evidence_terms
     assert mco.target_object == "machineconfigpool"

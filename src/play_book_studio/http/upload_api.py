@@ -22,9 +22,15 @@ from play_book_studio.db.document_repository import (
     persist_parsed_upload_document,
     scoped_document_sha256,
 )
-from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
+from play_book_studio.db.embedding_indexer import index_pending_document_chunks
 from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document, render_pdf_page_image_bytes
 from play_book_studio.ingestion.vision import build_company_llm_image_describer
+
+
+class UploadIngestError(ValueError):
+    def __init__(self, message: str, *, failure_report: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.failure_report = failure_report or {}
 
 
 def _bool_payload(value: Any, *, default: bool = False) -> bool:
@@ -113,6 +119,79 @@ def _storage_path_for_key(settings, storage_key: str) -> Path:
     if target == storage_root or storage_root not in target.parents:
         raise ValueError(f"invalid storage_key outside object storage: {storage_key}")
     return target
+
+
+def _write_upload_failure_report(
+    settings,
+    *,
+    payload: dict[str, Any],
+    stage: str,
+    error: str,
+    stage_events: list[dict[str, Any]],
+    timings: dict[str, int],
+    source_path: Path | None = None,
+    storage_key: str = "",
+    byte_size: int = 0,
+    sha256: str = "",
+    db_sha256: str = "",
+    document_format: str = "",
+    mime_type: str = "",
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
+    failure_id = uuid.uuid4().hex
+    filename = _safe_upload_name(str(payload.get("file_name") or (source_path.name if source_path else "upload")))
+    exception_source_key = ""
+    storage_error = ""
+    if source_path is not None and source_path.is_file():
+        try:
+            if not byte_size:
+                byte_size = source_path.stat().st_size
+            exception_source_key = f"uploads/exceptions/{failure_id}/{filename}"
+            target = _storage_path_for_key(settings, exception_source_key)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source_path), str(target))
+            try:
+                source_path.parent.rmdir()
+            except OSError:
+                pass
+        except Exception as exc:  # noqa: BLE001
+            storage_error = str(exc)
+            exception_source_key = ""
+
+    report_storage_key = f"uploads/exceptions/{failure_id}/failure-report.json"
+    report = {
+        "schema_version": "user_upload_failure_report_v1",
+        "generated_at": _now_iso(),
+        "failure_id": failure_id,
+        "stage": stage,
+        "error": error,
+        "filename": filename,
+        "original_storage_key": storage_key,
+        "exception_source_storage_key": exception_source_key,
+        "storage_error": storage_error,
+        "byte_size": byte_size,
+        "document_format": document_format,
+        "mime_type": mime_type,
+        "sha256": sha256,
+        "db_sha256": db_sha256,
+        "owner_user_id": str(payload.get("created_by") or "").strip(),
+        "repository_id": str(payload.get("repository_id") or "").strip(),
+        "visibility": str(payload.get("visibility") or "").strip(),
+        "source_scope": str(payload.get("source_scope") or "user_upload").strip() or "user_upload",
+        "timings_ms": dict(timings),
+        "stages": stage_events,
+        "warnings": list(warnings or []),
+    }
+    report_path = _storage_path_for_key(settings, report_storage_key)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {
+        "failure_id": failure_id,
+        "storage_key": report_storage_key,
+        "source_storage_key": exception_source_key,
+        "stage": stage,
+        "error": error,
+    }
 
 
 def _asset_extension(asset: Any) -> str:
@@ -555,7 +634,7 @@ def _reconstruct_upload_ingestion_report(root_dir: Path, document_source_id: str
                         SELECT count(*)
                         FROM parsed_documents pd
                         JOIN document_chunks dc ON dc.parsed_document_id = pd.id
-                        JOIN qdrant_index_entries qie ON qie.chunk_id = dc.id
+                        JOIN chunk_embeddings ce ON ce.chunk_id = dc.id
                         WHERE pd.document_source_id = ds.id
                     ), 0) AS indexed_count
                 FROM document_sources ds
@@ -608,7 +687,7 @@ def _reconstruct_upload_ingestion_report(root_dir: Path, document_source_id: str
             "label": "기본 텍스트 인덱싱",
             "verified_for_answer": False,
         },
-        "warnings": ["저장된 ingestion-report.json이 없어 DB/Qdrant 기록으로 재구성했습니다."],
+        "warnings": ["저장된 ingestion-report.json이 없어 DB 기록으로 재구성했습니다."],
         "ready_for_chat": False,
         "answer_ready": False,
         "basic_index_ready": chunk_count > 0 and indexed_count >= chunk_count,
@@ -670,7 +749,20 @@ def build_upload_ingest_response(
     emit("received", "running", "업로드 요청을 접수하는 중입니다.")
     emit("received", "done", "업로드 요청을 접수했습니다.", duration_ms=0)
     emit("store", "running", "업로드 파일을 서버 저장소에 기록하는 중입니다.")
-    source_path, storage_key, byte_size = _store_uploaded_file(root_dir, payload)
+    try:
+        source_path, storage_key, byte_size = _store_uploaded_file(root_dir, payload)
+    except Exception as exc:
+        timings["store_ms"] = int((time.perf_counter() - started_at) * 1000)
+        emit("store", "failed", f"업로드 파일 저장에 실패했습니다: {exc}", duration_ms=timings["store_ms"])
+        failure_report = _write_upload_failure_report(
+            settings,
+            payload=payload,
+            stage="store",
+            error=str(exc),
+            stage_events=stage_events,
+            timings=timings,
+        )
+        raise UploadIngestError(str(exc), failure_report=failure_report) from exc
     timings["store_ms"] = int((time.perf_counter() - started_at) * 1000)
     emit("store", "done", "업로드 파일 저장이 완료되었습니다.", duration_ms=timings["store_ms"], byte_size=byte_size)
     dry_run = _bool_payload(payload.get("dry_run"), default=False)
@@ -758,7 +850,7 @@ def build_upload_ingest_response(
                     "chunk_count": existing_chunk_count,
                 },
                 "index": {
-                    "collection": str(payload.get("collection") or settings.qdrant_collection),
+                    "vector_backend": "pgvector",
                     "source_scope": existing.get("source_scope") or source_scope,
                     "document_source_id": existing.get("document_source_id") or "",
                     "candidate_count": existing_chunk_count,
@@ -782,13 +874,41 @@ def build_upload_ingest_response(
         extra = {key: value for key, value in detail.items() if key != "note"}
         emit("parse", "progress" if status == "progress" else "info", note, **extra)
 
-    parsed = parse_upload_document(
-        source_path,
-        image_describer=build_company_llm_image_describer(settings),
-        progress=_parse_progress,
-    )
+    try:
+        parsed = parse_upload_document(
+            source_path,
+            image_describer=build_company_llm_image_describer(settings),
+            progress=_parse_progress,
+        )
+    except Exception as exc:
+        timings["parse_ms"] = int((time.perf_counter() - parse_started_at) * 1000)
+        emit(
+            "parse",
+            "failed",
+            f"문서 파싱에 실패했습니다: {exc}",
+            duration_ms=timings["parse_ms"],
+        )
+        failure_report = _write_upload_failure_report(
+            settings,
+            payload=payload,
+            stage="parse",
+            error=str(exc),
+            stage_events=stage_events,
+            timings=timings,
+            source_path=source_path,
+            storage_key=storage_key,
+            byte_size=byte_size,
+            sha256=uploaded_sha256,
+            db_sha256=db_sha256,
+        )
+        raise UploadIngestError(f"문서 파싱에 실패했습니다: {exc}", failure_report=failure_report) from exc
     timings["parse_ms"] = int((time.perf_counter() - parse_started_at) * 1000)
     if not parsed.blocks:
+        error_message = (
+            f"문서 파싱이 빈 결과를 만들었습니다: {parsed.filename}. "
+            "스캔 PDF/이미지 기반/암호화된 문서이거나 지원되지 않는 형식일 수 있습니다. "
+            f"파서 경고: {list(parsed.warnings) or 'none'}"
+        )
         emit(
             "parse",
             "failed",
@@ -797,11 +917,23 @@ def build_upload_ingest_response(
             block_count=0,
             warnings=list(parsed.warnings),
         )
-        raise ValueError(
-            f"문서 파싱이 빈 결과를 만들었습니다: {parsed.filename}. "
-            "스캔 PDF/이미지 기반/암호화된 문서이거나 지원되지 않는 형식일 수 있습니다. "
-            f"파서 경고: {list(parsed.warnings) or 'none'}"
+        failure_report = _write_upload_failure_report(
+            settings,
+            payload=payload,
+            stage="parse",
+            error=error_message,
+            stage_events=stage_events,
+            timings=timings,
+            source_path=source_path,
+            storage_key=storage_key,
+            byte_size=byte_size,
+            sha256=uploaded_sha256,
+            db_sha256=db_sha256,
+            document_format=str(parsed.document_format),
+            mime_type=str(parsed.mime_type),
+            warnings=list(parsed.warnings),
         )
+        raise UploadIngestError(error_message, failure_report=failure_report)
     emit(
         "parse",
         "done",
@@ -812,13 +944,43 @@ def build_upload_ingest_response(
     )
     chunk_started_at = time.perf_counter()
     emit("chunk", "running", "챗봇 검색에 사용할 청크를 생성하는 중입니다.")
-    chunks = build_document_chunks(
-        parsed,
-        max_chars=_int_payload(payload.get("chunk_max_chars"), default=1800),
-        overlap_blocks=_int_payload(payload.get("chunk_overlap_blocks"), default=1),
-    )
+    try:
+        chunks = build_document_chunks(
+            parsed,
+            max_chars=_int_payload(payload.get("chunk_max_chars"), default=1800),
+            overlap_blocks=_int_payload(payload.get("chunk_overlap_blocks"), default=1),
+        )
+    except Exception as exc:
+        timings["chunk_ms"] = int((time.perf_counter() - chunk_started_at) * 1000)
+        emit(
+            "chunk",
+            "failed",
+            f"검색용 청크 생성에 실패했습니다: {exc}",
+            duration_ms=timings["chunk_ms"],
+        )
+        failure_report = _write_upload_failure_report(
+            settings,
+            payload=payload,
+            stage="chunk",
+            error=str(exc),
+            stage_events=stage_events,
+            timings=timings,
+            source_path=source_path,
+            storage_key=storage_key,
+            byte_size=byte_size,
+            sha256=parsed.sha256,
+            db_sha256=db_sha256,
+            document_format=str(parsed.document_format),
+            mime_type=str(parsed.mime_type),
+            warnings=list(parsed.warnings),
+        )
+        raise UploadIngestError(f"검색용 청크 생성에 실패했습니다: {exc}", failure_report=failure_report) from exc
     timings["chunk_ms"] = int((time.perf_counter() - chunk_started_at) * 1000)
     if not chunks:
+        error_message = (
+            f"청크 생성이 0건이 되었습니다: {parsed.filename} (blocks={len(parsed.blocks)}). "
+            "검색에 쓸 수 있는 의미 단위가 없어 적재를 거부합니다."
+        )
         emit(
             "chunk",
             "failed",
@@ -826,10 +988,23 @@ def build_upload_ingest_response(
             duration_ms=timings["chunk_ms"],
             chunk_count=0,
         )
-        raise ValueError(
-            f"청크 생성이 0건이 되었습니다: {parsed.filename} (blocks={len(parsed.blocks)}). "
-            "검색에 쓸 수 있는 의미 단위가 없어 적재를 거부합니다."
+        failure_report = _write_upload_failure_report(
+            settings,
+            payload=payload,
+            stage="chunk",
+            error=error_message,
+            stage_events=stage_events,
+            timings=timings,
+            source_path=source_path,
+            storage_key=storage_key,
+            byte_size=byte_size,
+            sha256=parsed.sha256,
+            db_sha256=db_sha256,
+            document_format=str(parsed.document_format),
+            mime_type=str(parsed.mime_type),
+            warnings=list(parsed.warnings),
         )
+        raise UploadIngestError(error_message, failure_report=failure_report)
     emit("chunk", "done", "청크 생성이 완료되었습니다.", duration_ms=timings["chunk_ms"], chunk_count=len(chunks))
     result: dict[str, Any] = {
         "dry_run": dry_run,
@@ -859,7 +1034,7 @@ def build_upload_ingest_response(
                 "basic_text_extract",
                 "chunk_create",
                 "postgres_persist",
-                "qdrant_index",
+                "vector_index",
                 "session_scope_link",
             ],
             "excluded_checks": [
@@ -879,7 +1054,24 @@ def build_upload_ingest_response(
         return result
 
     if not database_url:
-        raise ValueError("DATABASE_URL is required for upload ingestion")
+        emit("persist", "failed", "DATABASE_URL이 없어 PostgreSQL 저장을 진행할 수 없습니다.")
+        failure_report = _write_upload_failure_report(
+            settings,
+            payload=payload,
+            stage="persist",
+            error="DATABASE_URL is required for upload ingestion",
+            stage_events=stage_events,
+            timings=timings,
+            source_path=source_path,
+            storage_key=storage_key,
+            byte_size=byte_size,
+            sha256=parsed.sha256,
+            db_sha256=db_sha256,
+            document_format=str(parsed.document_format),
+            mime_type=str(parsed.mime_type),
+            warnings=list(parsed.warnings),
+        )
+        raise UploadIngestError("DATABASE_URL is required for upload ingestion", failure_report=failure_report)
 
     import psycopg
 
@@ -928,7 +1120,7 @@ def build_upload_ingest_response(
                 "chunk_count": int(existing.get("chunk_count") or 0),
             }
             result["index"] = {
-                "collection": str(payload.get("collection") or settings.qdrant_collection),
+                "vector_backend": "pgvector",
                 "source_scope": existing.get("source_scope") or source_scope,
                 "document_source_id": existing.get("document_source_id") or "",
                 "candidate_count": existing_chunk_count,
@@ -1041,12 +1233,11 @@ def build_upload_ingest_response(
         )
         if _bool_payload(payload.get("index"), default=False):
             index_started_at = time.perf_counter()
-            emit("index", "running", "Qdrant 검색 인덱스를 생성하는 중입니다.")
+            emit("index", "running", "검색 인덱스를 생성하는 중입니다.")
             try:
                 result["index"] = index_pending_document_chunks(
                     settings,
                     connection,
-                    collection=str(payload.get("collection") or "").strip() or None,
                     source_scope=source_scope,
                     document_source_id=persisted.document_source_id,
                     limit=_int_payload(payload.get("index_limit"), default=max(100, len(chunks))),
@@ -1057,9 +1248,9 @@ def build_upload_ingest_response(
                 )
                 index_event_status = "done" if result["index"]["status"] == "indexed" else "warning"
                 index_message = (
-                    "Qdrant 인덱싱이 완료되었습니다."
+                    "검색 인덱싱이 완료되었습니다."
                     if result["index"]["status"] == "indexed"
-                    else "Qdrant 인덱싱이 일부만 완료되었거나 후보 청크를 찾지 못했습니다."
+                    else "검색 인덱싱이 일부만 완료되었거나 후보 청크를 찾지 못했습니다."
                 )
                 emit(
                     "index",
@@ -1071,7 +1262,7 @@ def build_upload_ingest_response(
                 )
             except Exception as exc:  # noqa: BLE001
                 result["index"] = {
-                    "collection": str(payload.get("collection") or settings.qdrant_collection),
+                    "vector_backend": "pgvector",
                     "source_scope": source_scope,
                     "document_source_id": persisted.document_source_id,
                     "candidate_count": 0,
@@ -1080,19 +1271,19 @@ def build_upload_ingest_response(
                     "error": str(exc),
                 }
                 result.setdefault("warnings", []).append(f"검색 인덱싱 실패: {exc}")
-                emit("index", "failed", f"Qdrant 인덱싱에 실패했습니다: {exc}")
+                emit("index", "failed", f"검색 인덱싱에 실패했습니다: {exc}")
             finally:
                 timings["index_ms"] = int((time.perf_counter() - index_started_at) * 1000)
         else:
             result["index"] = {
-                "collection": str(payload.get("collection") or settings.qdrant_collection),
+                "vector_backend": "pgvector",
                 "source_scope": source_scope,
                 "document_source_id": persisted.document_source_id,
                 "candidate_count": len(chunks),
                 "indexed_count": 0,
                 "status": "not_requested",
             }
-            emit("index", "skipped", "요청에서 Qdrant 인덱싱이 비활성화되어 있습니다.", candidate_count=len(chunks))
+            emit("index", "skipped", "요청에서 검색 인덱싱이 비활성화되어 있습니다.", candidate_count=len(chunks))
         index_status = str(result.get("index", {}).get("status") or "")
         scope_status = "done" if result.get("repository_id") and _document_source_id_from_result(result) else "warning"
         emit(
@@ -1108,7 +1299,7 @@ def build_upload_ingest_response(
         if index_status == "indexed":
             emit("ready", "done", "기본 텍스트 인덱싱이 완료되었습니다. 답변 품질 검수는 별도입니다.")
         elif index_status == "failed":
-            emit("ready", "warning", "문서 저장은 완료됐지만 Qdrant 인덱싱 실패로 검색에는 바로 사용할 수 없습니다.")
+            emit("ready", "warning", "문서 저장은 완료됐지만 검색 인덱싱 실패로 검색에는 바로 사용할 수 없습니다.")
         else:
             emit("ready", "warning", "문서 저장은 완료됐지만 검색 인덱싱은 완료되지 않았습니다.")
     timings["total_ms"] = int((time.perf_counter() - started_at) * 1000)
@@ -1122,6 +1313,12 @@ def build_upload_ingest_response(
 def handle_upload_ingest(handler: Any, payload: dict[str, Any], *, root_dir: Path) -> None:
     try:
         result = build_upload_ingest_response(root_dir, payload)
+    except UploadIngestError as exc:
+        response = {"error": str(exc)}
+        if exc.failure_report:
+            response["failure_report"] = exc.failure_report
+        handler._send_json(response, HTTPStatus.BAD_REQUEST)
+        return
     except ValueError as exc:
         handler._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         return
@@ -1139,6 +1336,12 @@ def handle_upload_ingest_stream(handler: Any, payload: dict[str, Any], *, root_d
 
     try:
         result = build_upload_ingest_response(root_dir, payload, progress_callback=emit)
+    except UploadIngestError as exc:
+        event = {"type": "error", "status_code": HTTPStatus.BAD_REQUEST, "error": str(exc)}
+        if exc.failure_report:
+            event["failure_report"] = exc.failure_report
+        emit(event)
+        return
     except ValueError as exc:
         emit({"type": "error", "status_code": HTTPStatus.BAD_REQUEST, "error": str(exc)})
         return
@@ -1157,7 +1360,7 @@ def handle_upload_delete(
 ) -> None:
     """업로드된 문서를 완전 삭제.
 
-    PostgreSQL row(cascade) + Qdrant points + 디스크 원본 파일을 모두 정리한다.
+    PostgreSQL row(cascade) + 검색 embedding + 디스크 원본 파일을 모두 정리한다.
     owner_user_id 가 비어있지 않으면 그 owner 의 문서만 삭제 가능.
     """
     document_source_id = str(payload.get("document_source_id") or payload.get("id") or "").strip()
@@ -1195,32 +1398,6 @@ def handle_upload_delete(
             HTTPStatus.NOT_FOUND,
         )
         return
-
-    # Qdrant points 청소
-    qdrant_deleted = 0
-    qdrant_errors: list[str] = []
-    points_by_collection: dict[str, list[str]] = {}
-    for entry in deleted_info.get("qdrant_points", []):
-        collection = str(entry.get("collection") or "").strip()
-        point_id = str(entry.get("point_id") or "").strip()
-        if not point_id:
-            continue
-        points_by_collection.setdefault(collection, []).append(point_id)
-
-    if points_by_collection:
-        try:
-            from play_book_studio.db.qdrant_indexer import delete_qdrant_points  # type: ignore
-        except Exception:
-            delete_qdrant_points = None  # type: ignore[assignment]
-        if delete_qdrant_points is not None:
-            for collection, point_ids in points_by_collection.items():
-                try:
-                    delete_qdrant_points(settings, collection=collection or None, point_ids=point_ids)
-                    qdrant_deleted += len(point_ids)
-                except Exception as exc:  # noqa: BLE001
-                    qdrant_errors.append(f"{collection}: {exc}")
-        else:
-            qdrant_errors.append("qdrant_indexer.delete_qdrant_points not available")
 
     # 디스크 원본 파일 청소
     storage_removed = False
@@ -1267,8 +1444,7 @@ def handle_upload_delete(
         "document_source_id": deleted_info["document_source_id"],
         "filename": deleted_info.get("filename", ""),
         "postgres_rows_deleted": deleted_info.get("deleted_rows", 0),
-        "qdrant_points_deleted": qdrant_deleted,
-        "qdrant_errors": qdrant_errors,
+        "embedding_rows_deleted": deleted_info.get("embedding_rows", 0),
         "storage_file_removed": storage_removed,
         "storage_error": storage_error,
         "report_file_removed": report_removed,
