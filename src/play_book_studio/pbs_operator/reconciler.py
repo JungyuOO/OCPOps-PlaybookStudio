@@ -23,9 +23,11 @@ def render_desired_resources(custom_resource: dict[str, Any]) -> list[dict[str, 
         _service_account("playbookstudio", namespace),
         _service_account("pbs-console-executor", namespace),
         _config_map(name, namespace, spec),
+        _app_compat_service(namespace),
+        _service("web", namespace, 8080, "http", selector_name="playbookstudio-web"),
         _service("playbookstudio-app", namespace, 8765, "http"),
         _service("playbookstudio-web", namespace, 8080, "http"),
-        _deployment("playbookstudio-app", namespace, _app_image(spec), 8765, ["python", "-m", "play_book_studio.http.server"]),
+        _deployment("playbookstudio-app", namespace, _app_image(spec), 8765, None, extra_ports=[{"containerPort": 8770, "name": "terminal-ws"}]),
         _deployment("playbookstudio-web", namespace, _web_image(spec), 8080, None),
     ]
 
@@ -121,12 +123,23 @@ def _config_map(name: str, namespace: str, spec: dict[str, Any]) -> dict[str, An
     }
 
 
-def _deployment(name: str, namespace: str, image: str, port: int, command: list[str] | None) -> dict[str, Any]:
+def _deployment(
+    name: str,
+    namespace: str,
+    image: str,
+    port: int,
+    command: list[str] | None,
+    *,
+    extra_ports: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     container: dict[str, Any] = {
         "name": name.removeprefix("playbookstudio-"),
         "image": image,
         "imagePullPolicy": "IfNotPresent",
-        "ports": [{"containerPort": port, "name": "http" if name != "pbs-mcp" else "mcp"}],
+        "ports": [
+            {"containerPort": port, "name": "http" if name != "pbs-mcp" else "mcp"},
+            *(extra_ports or []),
+        ],
     }
     if command:
         container["command"] = command
@@ -150,16 +163,31 @@ def _deployment(name: str, namespace: str, image: str, port: int, command: list[
     }
 
 
-def _service(name: str, namespace: str, port: int, port_name: str) -> dict[str, Any]:
+def _service(
+    name: str,
+    namespace: str,
+    port: int,
+    port_name: str,
+    *,
+    selector_name: str | None = None,
+) -> dict[str, Any]:
     return {
         "apiVersion": "v1",
         "kind": "Service",
         "metadata": _metadata(name, namespace, name),
         "spec": {
-            "selector": {"app.kubernetes.io/name": name},
+            "selector": {"app.kubernetes.io/name": selector_name or name},
             "ports": [{"name": port_name, "port": port, "targetPort": port_name}],
         },
     }
+
+
+def _app_compat_service(namespace: str) -> dict[str, Any]:
+    service = _service("app", namespace, 8765, "http", selector_name="playbookstudio-app")
+    service["spec"]["ports"].append(
+        {"name": "terminal-ws", "port": 8770, "targetPort": "terminal-ws"}
+    )
+    return service
 
 
 def _route(name: str, namespace: str, service_name: str) -> dict[str, Any]:

@@ -70,6 +70,7 @@ def test_pbs_operator_reconciler_yaml_dump_contains_expected_documents() -> None
 
     assert "kind: Deployment" in output
     assert "name: playbookstudio-app" in output
-    assert "play_book_studio.http.server" in output
+    assert "name: app" in output
+    assert "name: terminal-ws" in output
     assert "play_book_studio.mcp.server" in output
     assert "kind: OLSConfig" in output
