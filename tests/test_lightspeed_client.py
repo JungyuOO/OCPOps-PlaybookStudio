@@ -17,6 +17,7 @@ from play_book_studio.integrations.lightspeed import (
     OpenShiftLightspeedApiError,
     OpenShiftLightspeedClient,
     is_openshift_operation_question,
+    with_reference_document_request,
 )
 
 
@@ -139,11 +140,21 @@ def test_lightspeed_client_posts_to_query_endpoint(monkeypatch: pytest.MonkeyPat
     assert result.tool_calls == [{"name": "cluster_status"}]
     assert result.tool_results == [{"name": "cluster_status", "status": "ok"}]
     assert calls[0]["url"] == "https://lightspeed.example.test/v1/query"
-    assert calls[0]["json"]["query"] == "Pod Pending이면?"
+    assert calls[0]["json"]["query"].startswith("Pod Pending이면?")
+    assert "공식 문서의 제목과 URL" in calls[0]["json"]["query"]
     assert calls[0]["json"]["provider"] == "provider-a"
     assert calls[0]["json"]["model"] == "model-a"
     assert calls[0]["headers"]["Authorization"] == "Bearer token-value"
     assert calls[0]["verify"] is True
+
+
+def test_lightspeed_client_reference_document_request_is_idempotent() -> None:
+    query = "Pod Pending이면?"
+
+    augmented = with_reference_document_request(query)
+
+    assert augmented.startswith(query)
+    assert with_reference_document_request(augmented) == augmented
 
 
 @pytest.mark.parametrize(

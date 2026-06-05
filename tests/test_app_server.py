@@ -231,6 +231,10 @@ def test_chat_payload_exposes_lightspeed_answer_source_and_related_link() -> Non
         assert payload["related_links"][0]["href"] == "/external/lightspeed/http-test"
         assert payload["related_links"][0]["boundary_badge"] == "Lightspeed"
         assert payload["related_links"][0]["source_lane"] == "openshift_lightspeed"
+        assert payload["citations"][0]["index"] == 1
+        assert payload["citations"][0]["viewer_path"] == "/external/lightspeed/http-test"
+        assert payload["citations"][0]["boundary_badge"] == "Lightspeed"
+        assert payload["citations"][0]["source_lane"] == "openshift_lightspeed"
         log_path = load_settings(root).lightspeed_call_log_path
         log_payload = json.loads(log_path.read_text(encoding="utf-8").splitlines()[-1])
         assert log_payload["record_kind"] == "openshift_lightspeed_call_audit"
@@ -276,6 +280,10 @@ def test_chat_stream_result_exposes_lightspeed_answer_source_and_related_link() 
         assert payload["related_links"][0]["href"] == "/external/lightspeed/http-test"
         assert payload["related_links"][0]["boundary_badge"] == "Lightspeed"
         assert payload["related_links"][0]["source_lane"] == "openshift_lightspeed"
+        assert payload["citations"][0]["index"] == 1
+        assert payload["citations"][0]["viewer_path"] == "/external/lightspeed/http-test"
+        assert payload["citations"][0]["boundary_badge"] == "Lightspeed"
+        assert payload["citations"][0]["source_lane"] == "openshift_lightspeed"
         log_path = load_settings(root).lightspeed_call_log_path
         log_payload = json.loads(log_path.read_text(encoding="utf-8").splitlines()[-1])
         assert log_payload["status"] == "used"

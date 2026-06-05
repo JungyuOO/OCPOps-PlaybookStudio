@@ -32,6 +32,10 @@ OPENSHIFT_OPERATION_RE = re.compile(
     re.IGNORECASE,
 )
 
+REFERENCE_DOCUMENT_REQUEST = (
+    "답변에 사용한 OpenShift 공식 문서의 제목과 URL을 함께 알려줘."
+)
+
 
 @dataclass(slots=True)
 class OpenShiftLightspeedResult:
@@ -114,6 +118,15 @@ def is_openshift_operation_question(query: str) -> bool:
     return bool(OPENSHIFT_OPERATION_RE.search(str(query or "")))
 
 
+def with_reference_document_request(query: str) -> str:
+    cleaned = str(query or "").strip()
+    if not cleaned:
+        return cleaned
+    if REFERENCE_DOCUMENT_REQUEST in cleaned:
+        return cleaned
+    return f"{cleaned}\n\n{REFERENCE_DOCUMENT_REQUEST}"
+
+
 class OpenShiftLightspeedClient:
     def __init__(self, settings: Settings) -> None:
         self.base_url = settings.openshift_lightspeed_base_url.rstrip("/")
@@ -188,7 +201,7 @@ class OpenShiftLightspeedClient:
         if not self.is_configured:
             raise ValueError("OPENSHIFT_LIGHTSPEED_BASE_URL is not configured")
 
-        payload: dict[str, Any] = {"query": query}
+        payload: dict[str, Any] = {"query": with_reference_document_request(query)}
         if conversation_id:
             payload["conversation_id"] = conversation_id
         if self.provider:

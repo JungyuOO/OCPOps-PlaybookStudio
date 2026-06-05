@@ -367,6 +367,7 @@ def _append_lightspeed_call_audit(
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True), flush=True)
 
 
 def _persist_chat_turn_to_db(

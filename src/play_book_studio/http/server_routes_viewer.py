@@ -154,41 +154,69 @@ def _render_lightspeed_answer_html(answer: str) -> str:
 
 def _render_lightspeed_text_segment_html(text: str) -> list[str]:
     fragments: list[str] = []
-    for block in re.split(r"\n{2,}", str(text or "").strip()):
-        lines = [line.strip() for line in block.splitlines() if line.strip()]
-        if not lines:
-            continue
-        if len(lines) == 1:
-            heading = re.match(r"^(#{1,3})\s+(.+)$", lines[0])
-            if heading:
-                level = min(3, max(2, len(heading.group(1)) + 1))
-                fragments.append(f"<h{level}>{_render_lightspeed_inline_html(heading.group(2))}</h{level}>")
-                continue
-        ordered_items: list[str] = []
-        unordered_items: list[str] = []
-        for line in lines:
-            ordered_match = re.match(r"^\d+[.)]\s+(.+)$", line)
-            unordered_match = re.match(r"^[-*]\s+(.+)$", line)
-            if ordered_match:
-                ordered_items.append(ordered_match.group(1))
-            if unordered_match:
-                unordered_items.append(unordered_match.group(1))
-        if ordered_items and len(ordered_items) == len(lines):
-            fragments.append(
-                "<ol>"
-                + "".join(f"<li>{_render_lightspeed_inline_html(item)}</li>" for item in ordered_items)
-                + "</ol>"
-            )
-            continue
-        if unordered_items and len(unordered_items) == len(lines):
-            fragments.append(
-                "<ul>"
-                + "".join(f"<li>{_render_lightspeed_inline_html(item)}</li>" for item in unordered_items)
-                + "</ul>"
-            )
-            continue
-        paragraph = "<br />".join(_render_lightspeed_inline_html(line) for line in lines)
+    paragraph_lines: list[str] = []
+    ordered_items: list[str] = []
+    unordered_items: list[str] = []
+
+    def flush_paragraph() -> None:
+        if not paragraph_lines:
+            return
+        paragraph = "<br />".join(_render_lightspeed_inline_html(line) for line in paragraph_lines)
         fragments.append(f"<p>{paragraph}</p>")
+        paragraph_lines.clear()
+
+    def flush_ordered() -> None:
+        if not ordered_items:
+            return
+        fragments.append(
+            "<ol>"
+            + "".join(f"<li>{_render_lightspeed_inline_html(item)}</li>" for item in ordered_items)
+            + "</ol>"
+        )
+        ordered_items.clear()
+
+    def flush_unordered() -> None:
+        if not unordered_items:
+            return
+        fragments.append(
+            "<ul>"
+            + "".join(f"<li>{_render_lightspeed_inline_html(item)}</li>" for item in unordered_items)
+            + "</ul>"
+        )
+        unordered_items.clear()
+
+    def flush_all() -> None:
+        flush_paragraph()
+        flush_ordered()
+        flush_unordered()
+
+    for raw_line in str(text or "").strip().splitlines():
+        line = raw_line.strip()
+        if not line:
+            flush_all()
+            continue
+        heading = re.match(r"^(#{1,4})\s+(.+)$", line)
+        if heading:
+            flush_all()
+            level = min(4, max(2, len(heading.group(1)) + 1))
+            fragments.append(f"<h{level}>{_render_lightspeed_inline_html(heading.group(2))}</h{level}>")
+            continue
+        ordered_match = re.match(r"^\d+[.)]\s+(.+)$", line)
+        if ordered_match:
+            flush_paragraph()
+            flush_unordered()
+            ordered_items.append(ordered_match.group(1))
+            continue
+        unordered_match = re.match(r"^[-*]\s+(.+)$", line)
+        if unordered_match:
+            flush_paragraph()
+            flush_ordered()
+            unordered_items.append(unordered_match.group(1))
+            continue
+        flush_ordered()
+        flush_unordered()
+        paragraph_lines.append(line)
+    flush_all()
     return fragments
 
 
@@ -219,6 +247,10 @@ def _external_lightspeed_viewer_html(root_dir: Path, viewer_path: str) -> str | 
         item for item in (payload.get("referenced_documents") or [])
         if isinstance(item, dict)
     ]
+    reference_count = len(referenced_documents)
+    conversation_id = str(payload.get("conversation_id") or "").strip()
+    input_tokens = payload.get("input_tokens")
+    output_tokens = payload.get("output_tokens")
     reference_items = "".join(
         """
         <div class="wiki-links">
@@ -226,11 +258,17 @@ def _external_lightspeed_viewer_html(root_dir: Path, viewer_path: str) -> str | 
           <span>{summary}</span>
         </div>
         """.format(
-            url=html.escape(str(item.get("url") or item.get("source_url") or "#"), quote=True),
+            url=html.escape(str(item.get("url") or item.get("source_url") or item.get("doc_url") or "#"), quote=True),
             title=html.escape(str(item.get("title") or item.get("doc_title") or "Referenced document")),
             summary=html.escape(str(item.get("summary") or item.get("content") or ""))[:500],
         ).strip()
         for item in referenced_documents[:8]
+    )
+    empty_reference_html = (
+        '<div class="wiki-empty">'
+        "이번 OpenShift Lightspeed API 응답에는 참조 문서 목록이 포함되지 않았습니다. "
+        "답변 artifact와 conversation_id는 위 호출 증거에서 확인할 수 있습니다."
+        "</div>"
     )
     body_html = _render_lightspeed_answer_html(answer)
     return """
@@ -283,6 +321,21 @@ def _external_lightspeed_viewer_html(root_dir: Path, viewer_path: str) -> str | 
           border-left: 3px solid #38bdf8;
           padding-left: 12px;
           color: #334155;
+        }}
+        .lightspeed-call-evidence {{
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 12px;
+        }}
+        .lightspeed-call-evidence span {{
+          border: 1px solid #dbeafe;
+          border-radius: 999px;
+          background: #f8fafc;
+          color: #334155;
+          font-size: 12px;
+          font-weight: 700;
+          padding: 4px 9px;
         }}
         .section-body p {{
           line-height: 1.7;
@@ -372,22 +425,41 @@ def _external_lightspeed_viewer_html(root_dir: Path, viewer_path: str) -> str | 
         .copy-button.is-copied .copy-icon-success {{
           display: block;
         }}
-        .code-block pre {{
+        body.external-lightspeed-viewer .code-block pre {{
           margin: 0;
           overflow-x: auto;
           background: #0f172a;
-          color: #dbeafe;
+          color: #e2e8f0 !important;
           padding: 15px 16px;
           font-family: "SF Mono", "Menlo", "Consolas", monospace;
           font-size: 13px;
           line-height: 1.6;
           tab-size: 2;
         }}
-        .code-block code {{
-          background: transparent;
-          color: inherit;
-          padding: 0;
+        body.external-lightspeed-viewer .code-block pre code,
+        body.external-lightspeed-viewer .code-block pre code span {{
+          background: transparent !important;
+          color: #e2e8f0 !important;
+          padding: 0 !important;
           white-space: inherit;
+        }}
+        body.external-lightspeed-viewer .code-block .code-token.code-key {{
+          color: #93c5fd !important;
+        }}
+        body.external-lightspeed-viewer .code-block .code-token.code-string {{
+          color: #86efac !important;
+        }}
+        body.external-lightspeed-viewer .code-block .code-token.code-number {{
+          color: #c4b5fd !important;
+        }}
+        body.external-lightspeed-viewer .code-block .code-token.code-atom {{
+          color: #fbbf24 !important;
+        }}
+        body.external-lightspeed-viewer .code-block .code-token.code-comment {{
+          color: #cbd5e1 !important;
+        }}
+        body.external-lightspeed-viewer .code-block .code-token.code-punctuation {{
+          color: #e2e8f0 !important;
         }}
         .code-block.overflow-toggle.is-wrapped pre,
         .code-block.overflow-wrap pre {{
@@ -419,13 +491,18 @@ def _external_lightspeed_viewer_html(root_dir: Path, viewer_path: str) -> str | 
           <h1 class="lightspeed-title">OpenShift Lightspeed 공식 답변</h1>
           <div class="lightspeed-meta">{created_at}</div>
           <div class="lightspeed-question">{query}</div>
+          <div class="lightspeed-call-evidence">
+            <span>conversation_id: {conversation_id}</span>
+            <span>referenced_documents: {reference_count}</span>
+            <span>tokens: {input_tokens}/{output_tokens}</span>
+          </div>
         </section>
         <section class="lightspeed-card">
           <h2>답변</h2>
           <div class="section-body">{body_html}</div>
         </section>
         <section class="lightspeed-card">
-          <h2>OpenShift Lightspeed 참조 문서</h2>
+          <h2>OpenShift Lightspeed 참조 문서 ({reference_count})</h2>
           {reference_items}
         </section>
       </main>
@@ -434,8 +511,12 @@ def _external_lightspeed_viewer_html(root_dir: Path, viewer_path: str) -> str | 
     """.format(
         created_at=html.escape(created_at or "timestamp unavailable"),
         query=html.escape(query or "질문 정보 없음"),
+        conversation_id=html.escape(conversation_id or "unavailable"),
+        reference_count=reference_count,
+        input_tokens=html.escape(str(input_tokens if input_tokens is not None else "unknown")),
+        output_tokens=html.escape(str(output_tokens if output_tokens is not None else "unknown")),
         body_html=body_html,
-        reference_items=reference_items or '<div class="wiki-empty">참조 문서 정보가 응답에 포함되지 않았습니다.</div>',
+        reference_items=reference_items or empty_reference_html,
     )
 
 

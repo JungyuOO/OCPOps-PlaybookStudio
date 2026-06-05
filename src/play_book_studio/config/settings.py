@@ -126,7 +126,7 @@ class Settings(SettingsPathMixin):
     openshift_lightspeed_provider: str = ""
     openshift_lightspeed_model: str = ""
     openshift_lightspeed_system_prompt: str = ""
-    openshift_lightspeed_timeout_seconds: float = 20.0
+    openshift_lightspeed_timeout_seconds: float = 25.0
     openshift_lightspeed_verify_tls: bool = True
     question_candidate_llm_client: Any | None = None
     reranker_enabled: bool = False
@@ -376,7 +376,7 @@ def load_settings(root_dir: str | Path) -> Settings:
             "",
         )),
         openshift_lightspeed_timeout_seconds=float(
-            effective_env.get("OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS", "20")
+            effective_env.get("OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS", "25")
         ),
         openshift_lightspeed_verify_tls=not (
             effective_env.get("OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY", "false").lower()

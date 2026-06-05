@@ -271,7 +271,8 @@ def test_answerer_calls_configured_lightspeed_http_endpoint_before_pbs_retrieval
     assert LocalLightspeedHandler.calls
     assert LocalLightspeedHandler.calls[0]["path"] == "/v1/query"
     assert LocalLightspeedHandler.calls[0]["authorization"] == "Bearer unit-token"
-    assert LocalLightspeedHandler.calls[0]["payload"]["query"] == "Pod Pending 상태면 무엇을 먼저 확인해야 해?"
+    assert LocalLightspeedHandler.calls[0]["payload"]["query"].startswith("Pod Pending 상태면 무엇을 먼저 확인해야 해?")
+    assert "공식 문서의 제목과 URL" in LocalLightspeedHandler.calls[0]["payload"]["query"]
     assert result.pipeline_trace["answer_source"] == "lightspeed_with_pbs_rag"
     assert result.pipeline_trace["external_answer"]["status"] == "used"
     assert result.pipeline_trace["external_answer"]["conversation_id"] == "conv-local-1"

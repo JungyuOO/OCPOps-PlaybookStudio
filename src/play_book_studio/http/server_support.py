@@ -138,6 +138,39 @@ def _external_answer_related_link(result: AnswerResult) -> dict[str, Any] | None
     }
 
 
+def _external_answer_citation(result: AnswerResult) -> dict[str, Any] | None:
+    external_answer = result.pipeline_trace.get("external_answer")
+    if not isinstance(external_answer, dict):
+        return None
+    if external_answer.get("status") != "used":
+        return None
+    viewer_path = str(external_answer.get("viewer_path") or "").strip()
+    if not viewer_path:
+        return None
+    label = str(external_answer.get("label") or "OpenShift Lightspeed 공식 답변")
+    return {
+        "index": 1,
+        "book_slug": "openshift_lightspeed",
+        "book_title": "OpenShift Lightspeed",
+        "section": label,
+        "section_path": [label],
+        "section_path_label": label,
+        "heading_title": label,
+        "viewer_path": viewer_path,
+        "excerpt": "OpenShift Lightspeed가 반환한 OpenShift 공식 기준 답변",
+        "source_label": label,
+        "source_collection": "external_tool",
+        "source_lane": str(external_answer.get("source_lane") or "openshift_lightspeed"),
+        "approval_state": "external",
+        "publication_state": "external",
+        "boundary_truth": str(external_answer.get("boundary_truth") or "external_openshift_lightspeed"),
+        "runtime_truth_label": str(external_answer.get("runtime_truth_label") or "OpenShift Lightspeed"),
+        "boundary_badge": str(external_answer.get("boundary_badge") or "Lightspeed"),
+        "cli_commands": [],
+        "verification_hints": [],
+    }
+
+
 def _primary_response_truth(result: AnswerResult, serialized_citations: list[dict[str, Any]]) -> dict[str, str]:
     answer_source = str(result.pipeline_trace.get("answer_source") or "").strip()
     external_answer = result.pipeline_trace.get("external_answer")
@@ -186,6 +219,13 @@ def _build_chat_payload(
         )
         for citation in result.citations
     ]
+    external_citation = _external_answer_citation(result)
+    if external_citation is not None:
+        shifted_citations = [
+            {**citation, "index": index + 2}
+            for index, citation in enumerate(serialized_citations)
+        ]
+        serialized_citations = [external_citation, *shifted_citations]
     if timings_sink is not None:
         timings_sink["payload_citation_serialize"] = (time.perf_counter() - citation_started_at) * 1000
     related_links_started_at = time.perf_counter()

@@ -56,11 +56,25 @@ def test_lightspeed_artifact_opens_in_viewer(tmp_path):
                 "query": "Pod Pending이면?",
                 "answer": (
                     "Events에서 **FailedScheduling** 여부를 확인합니다.\n\n"
+                    "### 1. `kubectl describe pod` 명령으로 이벤트 확인\n"
+                    "가장 먼저 파드의 상세 정보를 확인합니다.\n\n"
                     "```bash\noc describe pod my-pod -n demo\n```\n\n"
+                    "Events 섹션에서 찾아야 할 주요 메시지:\n"
+                    "* **FailedScheduling**: 스케줄러가 노드를 할당하지 못했습니다.\n"
+                    "* `nodes are unavailable`: 노드가 NotReady 상태입니다.\n\n"
                     "1. `Events`를 확인합니다.\n"
                     "2. 리소스 요청량을 확인합니다."
                 ),
-                "referenced_documents": [{"title": "Pods", "summary": "Pod scheduling guide"}],
+                "conversation_id": "conv-viewer-1",
+                "input_tokens": 10,
+                "output_tokens": 20,
+                "referenced_documents": [
+                    {
+                        "doc_title": "Pods",
+                        "doc_url": "https://docs.openshift.example/pods",
+                        "summary": "Pod scheduling guide",
+                    }
+                ],
                 "truncated": False,
             },
             ensure_ascii=False,
@@ -79,9 +93,20 @@ def test_lightspeed_artifact_opens_in_viewer(tmp_path):
 
     assert viewer_html is not None
     assert "OpenShift Lightspeed 공식 답변" in viewer_html
+    assert "conversation_id: conv-viewer-1" in viewer_html
+    assert "referenced_documents: 1" in viewer_html
+    assert "tokens: 10/20" in viewer_html
+    assert "OpenShift Lightspeed 참조 문서 (1)" in viewer_html
+    assert 'href="https://docs.openshift.example/pods"' in viewer_html
     assert "Events에서 <strong>FailedScheduling</strong> 여부를 확인합니다." in viewer_html
+    assert "### 1." not in viewer_html
+    assert "<h4>1. <code>kubectl describe pod</code> 명령으로 이벤트 확인</h4>" in viewer_html
     assert 'class="code-block' in viewer_html
     assert "oc describe pod my-pod -n demo" in viewer_html
+    assert "body.external-lightspeed-viewer .code-block pre code" in viewer_html
+    assert "color: #e2e8f0 !important;" in viewer_html
+    assert "* <strong>FailedScheduling</strong>" not in viewer_html
+    assert "<ul><li><strong>FailedScheduling</strong>: 스케줄러가 노드를 할당하지 못했습니다.</li><li><code>nodes are unavailable</code>: 노드가 NotReady 상태입니다.</li></ul>" in viewer_html
     assert "<code>Events</code>" in viewer_html
     assert "<ol><li><code>Events</code>를 확인합니다.</li><li>리소스 요청량을 확인합니다.</li></ol>" in viewer_html
     assert "**FailedScheduling**" not in viewer_html
@@ -93,3 +118,37 @@ def test_lightspeed_artifact_opens_in_viewer(tmp_path):
     assert source_meta["source_label"] == "OpenShift Lightspeed 공식 답변"
     assert source_meta["boundary_badge"] == "Lightspeed"
     assert source_meta["source_collection"] == "external_tool"
+
+
+def test_lightspeed_viewer_shows_when_references_are_not_provided(tmp_path):
+    artifact_dir = tmp_path / "artifacts" / "external_answers" / "lightspeed"
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "no-refs-unit.json").write_text(
+        json.dumps(
+            {
+                "schema": "pbs.external_answer.lightspeed.v1",
+                "artifact_id": "no-refs-unit",
+                "created_at": "2026-06-05T00:00:00Z",
+                "provider": "OpenShift Lightspeed",
+                "query": "사용자 권한은 어떤 명령으로 확인해?",
+                "answer": "권한 확인은 `oc auth can-i` 명령을 사용합니다.",
+                "conversation_id": "conv-no-refs",
+                "referenced_documents": [],
+                "input_tokens": 5,
+                "output_tokens": 6,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    viewer_html = server_routes_viewer._viewer_html_for_path(
+        tmp_path,
+        "/external/lightspeed/no-refs-unit",
+    )
+
+    assert viewer_html is not None
+    assert "conversation_id: conv-no-refs" in viewer_html
+    assert "referenced_documents: 0" in viewer_html
+    assert "OpenShift Lightspeed 참조 문서 (0)" in viewer_html
+    assert "이번 OpenShift Lightspeed API 응답에는 참조 문서 목록이 포함되지 않았습니다." in viewer_html

@@ -42,6 +42,53 @@ Pod Pending 상태면 무엇을 먼저 확인해야 해?
 | 질문 | answer_source | OpenShift Lightspeed status | Viewer path | related link |
 |---|---|---|---|---|
 | `사용자 권한은 어떤 명령으로 확인해?` | `lightspeed_with_pbs_rag` | `used` | `/external/lightspeed/53ab1ab5c718090f0417` | `OpenShift Lightspeed 공식 답변` |
+| `특정 네임스페이스 에러 포드 로그보는 명령어` | `lightspeed_with_pbs_rag` | `used` | `/external/lightspeed/b821f69bacbf8b722a02` | `OpenShift Lightspeed 공식 답변` |
+| `네임스페이스내 시크릿 평문으로 디코딩하는 명령어가 있냐` | `lightspeed_with_pbs_rag` | `used` | `/external/lightspeed/f297f8a3b3e5abd44177` | `OpenShift Lightspeed 공식 답변` |
+
+최근 참조 문서 반환 확인:
+
+| 항목 | 값 |
+|---|---|
+| session_id | `proof-secret-decode-25s-finalcheck` |
+| artifact_id | `f297f8a3b3e5abd44177` |
+| duration_ms | `10921.5` |
+| referenced_documents | `5` |
+| timeout_seconds | `25.0` |
+| badge_applied | `true` |
+
+본문 citation 매핑 확인:
+
+| 항목 | 값 |
+|---|---|
+| session_id | `proof-citation-lightspeed-first` |
+| 질문 | `노드 점검을 위해 새로운 포드가 배치되지 않도록 하는 명령어가 뭐야?` |
+| answer_source | `lightspeed_with_pbs_rag` |
+| referenced_documents | `5` |
+| 본문 `[1]` 존재 | `true` |
+| citation `[1]` badge | `Lightspeed` |
+| citation `[1]` viewer_path | `/external/lightspeed/80f16b0dd81bbed26530` |
+| citation `[2]` badge | `Gold Playbook` |
+
+## 참조 문서 목록이 비어 있는 경우
+
+OpenShift Lightspeed 호출 성공과 참조 문서 목록 반환은 별도 항목으로 본다.
+
+일부 OpenShift Lightspeed 응답은 답변 본문, conversation_id, token 사용량은 반환하지만 `referenced_documents` 배열은 비어 있을 수 있다. 이 경우 PBS Viewer는 문서 목록을 임의로 만들지 않고 `OpenShift Lightspeed 참조 문서 (0)`으로 표시한다.
+
+현재 PBS는 OpenShift Lightspeed에 질문을 보낼 때 `답변에 사용한 OpenShift 공식 문서의 제목과 URL을 함께 알려줘.` 문장을 함께 전달한다. 이 지시를 추가한 뒤 동일 질문에서 `referenced_documents=5`가 반환되는 것을 확인했다.
+
+이 상태는 OpenShift Lightspeed 미호출이 아니다. 호출 여부는 다음 값으로 확인한다.
+
+| 확인 항목 | 의미 |
+|---|---|
+| `answer_source=lightspeed_with_pbs_rag` | 최종 답변 생성에 OpenShift Lightspeed가 사용됨 |
+| `status=used` | OpenShift Lightspeed API 호출 성공 |
+| `conversation_id` | OpenShift Lightspeed 응답 식별값 |
+| `artifact_id` | PBS가 저장한 OpenShift Lightspeed 응답 artifact |
+| `input_tokens`, `output_tokens` | OpenShift Lightspeed 응답에서 반환된 토큰 사용량 |
+| `referenced_documents=0` | 이번 API 응답에 문서 목록 메타데이터가 없음 |
+
+따라서 참조 문서 목록이 비어 있는 답변은 `conversation_id`, `artifact_id`, 감사 로그, Viewer 호출 증거로 증명한다. OpenShift Lightspeed가 문서 URL 목록을 반환한 경우에는 PBS Viewer 하단에 해당 목록을 표시한다.
 
 ## 증명 파일
 
@@ -81,9 +128,9 @@ Pod Pending 상태면 무엇을 먼저 확인해야 해?
 | 파일 | 역할 |
 |---|---|
 | `src/play_book_studio/config/settings.py` | `OPENSHIFT_LIGHTSPEED_BASE_URL`, token, provider, model, timeout, TLS 설정 로드 |
-| `src/play_book_studio/integrations/lightspeed.py` | OpenShift Lightspeed `/v1/query`, `/authorized` 호출 client |
+| `src/play_book_studio/integrations/lightspeed.py` | OpenShift Lightspeed `/v1/query`, `/authorized` 호출 client, 공식 문서 제목/URL 반환 요청 |
 | `src/play_book_studio/answering/answerer.py` | 운영 질문 판별 후 OpenShift Lightspeed를 먼저 호출하고 PBS RAG와 결합 |
-| `src/play_book_studio/http/server_support.py` | 최종 `/api/chat`, `/api/chat/stream` payload에 `answer_source`, `related_links`, `primary_*` 값 반영 |
+| `src/play_book_studio/http/server_support.py` | 최종 `/api/chat`, `/api/chat/stream` payload에 `answer_source`, `related_links`, `primary_*`, Lightspeed citation `[1]` 값 반영 |
 | `src/play_book_studio/http/server_chat.py` | 채팅 처리 후 `lightspeed_calls.jsonl`, DB metadata, chat audit 저장 |
 | `src/play_book_studio/http/server_routes_viewer.py` | `/external/lightspeed/{artifact_id}` Viewer 문서 생성 |
 | `apps/web/src/pages/workspace/WorkspaceAnswer.tsx` | `external_openshift_lightspeed` 값을 `Lightspeed` 배지로 표시 |
@@ -93,9 +140,10 @@ Pod Pending 상태면 무엇을 먼저 확인해야 해?
 
 | 기능 | 위치 |
 |---|---|
-| 운영 질문 판별 | `src/play_book_studio/integrations/lightspeed.py:112` |
-| API client | `src/play_book_studio/integrations/lightspeed.py:116` |
-| `/v1/query` 호출 | `src/play_book_studio/integrations/lightspeed.py:181` |
+| 공식 문서 제목/URL 요청 지시 | `src/play_book_studio/integrations/lightspeed.py:35` |
+| 운영 질문 판별 | `src/play_book_studio/integrations/lightspeed.py:117` |
+| API client | `src/play_book_studio/integrations/lightspeed.py:130` |
+| `/v1/query` 호출 | `src/play_book_studio/integrations/lightspeed.py:214` |
 | OpenShift Lightspeed 호출 분기 | `src/play_book_studio/answering/answerer.py:680` |
 | OpenShift Lightspeed 호출 후 PBS RAG 검색 | `src/play_book_studio/answering/answerer.py:1021` |
 | OpenShift Lightspeed 답변을 최종 프롬프트에 반영 | `src/play_book_studio/answering/answerer.py:1328` |
@@ -169,6 +217,12 @@ docker compose exec app python -m play_book_studio.cli lightspeed-integration-sm
 
 ```powershell
 Get-Content artifacts/runtime/lightspeed_calls.jsonl -Tail 1
+```
+
+실시간 터미널 로그 확인:
+
+```powershell
+docker compose logs -f app | Select-String "openshift_lightspeed_call_audit"
 ```
 
 Viewer artifact 확인:
