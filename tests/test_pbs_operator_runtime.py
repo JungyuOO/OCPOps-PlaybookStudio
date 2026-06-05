@@ -108,6 +108,8 @@ def test_operator_runtime_applies_desired_resources_when_enabled() -> None:
     assert any("reconciled modified PlaybookStudio" in entry for entry in logs)
     assert any("appliedResources=" in entry for entry in logs)
     assert any(item[0] == "PATCH" and "/apis/apps/v1/namespaces/pbs-ocpops/deployments/playbookstudio-app" in item[1] for item in writes)
+    assert any(item[0] == "PATCH" and "/apis/rbac.authorization.k8s.io/v1/clusterroles/pbs-terminal-broker" in item[1] for item in writes)
+    assert any(item[0] == "PATCH" and "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings/pbs-terminal-broker" in item[1] for item in writes)
     assert any(item[0] == "PATCH" and item[1].endswith("/playbookstudios/pbs/status") for item in writes)
     assert any(item[2] == "application/apply-patch+yaml" for item in writes)
     assert any(item[2] == "application/merge-patch+json" for item in writes)

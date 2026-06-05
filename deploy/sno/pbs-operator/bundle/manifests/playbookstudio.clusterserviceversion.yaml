@@ -26,9 +26,10 @@ metadata:
                 "LLM_MODEL": "gemma-4-26b-a4b-it-awq-8bit",
                 "POSTGRES_USER": "admin",
                 "POSTGRES_DB": "playbookstudio",
-                "QDRANT_URL": "http://qdrant:6333",
+                "QDRANT_ENABLED": "false",
                 "TERMINAL_ENABLED": "true",
                 "TERMINAL_HOST": "0.0.0.0",
+                "TERMINAL_USER_WORKSPACE_ENABLED": "false",
                 "TERMINAL_WS_PORT": "8770"
               }
             }
@@ -80,12 +81,12 @@ spec:
                     imagePullPolicy: Always
                     command: ["python", "-m", "play_book_studio.pbs_operator.runtime"]
                     env:
-                        - name: PBS_OPERATOR_MODE
-                          value: reconcile
+                      - name: PBS_OPERATOR_MODE
+                        value: reconcile
                       - name: PBS_OPERATOR_WATCH_ENABLED
                         value: "true"
-                        - name: PBS_OPERATOR_APPLY_ENABLED
-                          value: "true"
+                      - name: PBS_OPERATOR_APPLY_ENABLED
+                        value: "true"
                       - name: PBS_OPERATOR_RECONNECT_SECONDS
                         value: "10"
       permissions:
@@ -96,4 +97,10 @@ spec:
               verbs: ["get", "list", "watch", "patch", "update"]
             - apiGroups: ["", "apps", "route.openshift.io", "rbac.authorization.k8s.io"]
               resources: ["configmaps", "services", "serviceaccounts", "deployments", "routes", "roles", "rolebindings"]
+              verbs: ["get", "list", "watch", "create", "update", "patch"]
+      clusterPermissions:
+        - serviceAccountName: pbs-operator
+          rules:
+            - apiGroups: ["rbac.authorization.k8s.io"]
+              resources: ["clusterroles", "clusterrolebindings"]
               verbs: ["get", "list", "watch", "create", "update", "patch"]

@@ -352,6 +352,28 @@ def _int_value(value: Any) -> int:
         return 0
 
 
+def _qdrant_enabled(settings: Any) -> bool:
+    return bool(getattr(settings, "qdrant_enabled", True))
+
+
+def _private_context_status_payload(
+    settings: Any,
+    *,
+    source_scope: str,
+    document_source_id: str,
+    chunk_count: int,
+) -> dict[str, Any]:
+    return {
+        "collection": "" if not _qdrant_enabled(settings) else str(getattr(settings, "qdrant_collection", "") or ""),
+        "source_scope": source_scope,
+        "document_source_id": document_source_id,
+        "candidate_count": chunk_count,
+        "indexed_count": 0,
+        "status": "private_context_ready" if chunk_count > 0 else "no_chunks",
+        "provider": "pbs_private_context",
+    }
+
+
 def _expected_chunk_count(result: dict[str, Any]) -> int:
     persisted = result.get("persisted") if isinstance(result.get("persisted"), dict) else {}
     duplicate = result.get("duplicate") if isinstance(result.get("duplicate"), dict) else {}
@@ -364,7 +386,13 @@ def _expected_chunk_count(result: dict[str, Any]) -> int:
 
 def _index_status_from_counts(index_payload: dict[str, Any], *, expected_chunks: int) -> str:
     raw_status = str(index_payload.get("status") or "").strip()
-    if raw_status in {"failed", "not_requested"}:
+    if raw_status in {
+        "failed",
+        "not_requested",
+        "private_context_ready",
+        "duplicate_existing_private_context",
+        "qdrant_disabled",
+    }:
         return raw_status
     if raw_status.startswith("duplicate_existing"):
         return raw_status
@@ -387,6 +415,8 @@ def _basic_index_ready(result: dict[str, Any]) -> bool:
     return _index_status_from_counts(index_payload, expected_chunks=expected_chunks) in {
         "indexed",
         "duplicate_existing_indexed",
+        "private_context_ready",
+        "duplicate_existing_private_context",
     }
 
 
@@ -397,9 +427,16 @@ def _answer_ready(result: dict[str, Any]) -> bool:
 
 def _apply_upload_readiness(result: dict[str, Any]) -> None:
     basic_ready = _basic_index_ready(result)
+    index_payload = result.get("index") if isinstance(result.get("index"), dict) else {}
+    index_status = _index_status_from_counts(index_payload, expected_chunks=_expected_chunk_count(result))
     quality_gate = dict(result.get("quality_gate") if isinstance(result.get("quality_gate"), dict) else {})
     quality_gate["state"] = "basic_text_indexed" if basic_ready else "basic_text_index_incomplete"
     quality_gate["label"] = quality_gate.get("label") or "기본 텍스트 인덱싱"
+    if index_status in {"private_context_ready", "duplicate_existing_private_context"}:
+        quality_gate["state"] = "private_context_ready"
+        quality_gate["label"] = "PBS private context ready"
+    elif not quality_gate.get("label"):
+        quality_gate["label"] = "basic text index"
     quality_gate["verified_for_answer"] = bool(quality_gate.get("verified_for_answer") is True and basic_ready)
     result["quality_gate"] = quality_gate
     result["basic_index_ready"] = basic_ready
@@ -577,10 +614,17 @@ def _reconstruct_upload_ingestion_report(root_dir: Path, document_source_id: str
         }
     indexed_count = int(row.get("indexed_count") or 0)
     chunk_count = int(row.get("chunk_count") or 0)
+    if not _qdrant_enabled(settings):
+        indexed_count = 0
     index_payload = {
         "candidate_count": chunk_count,
         "indexed_count": indexed_count,
-        "status": "indexed" if chunk_count > 0 and indexed_count >= chunk_count else "partial_or_missing",
+        "status": "private_context_ready"
+        if not _qdrant_enabled(settings) and chunk_count > 0
+        else "indexed"
+        if chunk_count > 0 and indexed_count >= chunk_count
+        else "partial_or_missing",
+        "provider": "pbs_private_context" if not _qdrant_enabled(settings) else "qdrant",
     }
     reconstructed = {
         "schema_version": "user_upload_ingestion_report_v1",
@@ -608,7 +652,7 @@ def _reconstruct_upload_ingestion_report(root_dir: Path, document_source_id: str
             "label": "기본 텍스트 인덱싱",
             "verified_for_answer": False,
         },
-        "warnings": ["저장된 ingestion-report.json이 없어 DB/Qdrant 기록으로 재구성했습니다."],
+        "warnings": ["저장된 ingestion-report.json이 없어 DB 기록으로 재구성했습니다."],
         "ready_for_chat": False,
         "answer_ready": False,
         "basic_index_ready": chunk_count > 0 and indexed_count >= chunk_count,
@@ -619,6 +663,7 @@ def _reconstruct_upload_ingestion_report(root_dir: Path, document_source_id: str
         },
         "stages": [],
     }
+    _apply_upload_readiness(reconstructed)
     return reconstructed
 
 
@@ -706,6 +751,9 @@ def build_upload_ingest_response(
             existing_chunk_count = _int_value(existing.get("chunk_count"))
             existing_indexed_count = _int_value(existing.get("indexed_count"))
             duplicate_index_status = (
+                "duplicate_existing_private_context"
+                if not _qdrant_enabled(settings) and existing_chunk_count > 0
+                else
                 "duplicate_existing_indexed"
                 if existing_chunk_count > 0 and existing_indexed_count >= existing_chunk_count
                 else "duplicate_existing_unindexed"
@@ -758,12 +806,15 @@ def build_upload_ingest_response(
                     "chunk_count": existing_chunk_count,
                 },
                 "index": {
-                    "collection": str(payload.get("collection") or settings.qdrant_collection),
+                    "collection": str(payload.get("collection") or settings.qdrant_collection)
+                    if _qdrant_enabled(settings)
+                    else "",
                     "source_scope": existing.get("source_scope") or source_scope,
                     "document_source_id": existing.get("document_source_id") or "",
                     "candidate_count": existing_chunk_count,
-                    "indexed_count": existing_indexed_count,
+                    "indexed_count": existing_indexed_count if _qdrant_enabled(settings) else 0,
                     "status": duplicate_index_status,
+                    "provider": "qdrant" if _qdrant_enabled(settings) else "pbs_private_context",
                 },
             }
             _apply_upload_readiness(result)
@@ -859,7 +910,7 @@ def build_upload_ingest_response(
                 "basic_text_extract",
                 "chunk_create",
                 "postgres_persist",
-                "qdrant_index",
+                "pbs_private_context",
                 "session_scope_link",
             ],
             "excluded_checks": [
@@ -899,6 +950,9 @@ def build_upload_ingest_response(
             existing_chunk_count = _int_value(existing.get("chunk_count"))
             existing_indexed_count = _int_value(existing.get("indexed_count"))
             duplicate_index_status = (
+                "duplicate_existing_private_context"
+                if not _qdrant_enabled(settings) and existing_chunk_count > 0
+                else
                 "duplicate_existing_indexed"
                 if existing_chunk_count > 0 and existing_indexed_count >= existing_chunk_count
                 else "duplicate_existing_unindexed"
@@ -928,12 +982,15 @@ def build_upload_ingest_response(
                 "chunk_count": int(existing.get("chunk_count") or 0),
             }
             result["index"] = {
-                "collection": str(payload.get("collection") or settings.qdrant_collection),
+                "collection": str(payload.get("collection") or settings.qdrant_collection)
+                if _qdrant_enabled(settings)
+                else "",
                 "source_scope": existing.get("source_scope") or source_scope,
                 "document_source_id": existing.get("document_source_id") or "",
                 "candidate_count": existing_chunk_count,
-                "indexed_count": existing_indexed_count,
+                "indexed_count": existing_indexed_count if _qdrant_enabled(settings) else 0,
                 "status": duplicate_index_status,
+                "provider": "qdrant" if _qdrant_enabled(settings) else "pbs_private_context",
             }
             result.setdefault("warnings", []).append("이미 업로드된 같은 파일입니다.")
             timings["total_ms"] = int((time.perf_counter() - started_at) * 1000)
@@ -944,7 +1001,7 @@ def build_upload_ingest_response(
                 document_source_id=existing.get("document_source_id") or "",
                 repository_id=existing.get("repository_id") or "",
             )
-            if duplicate_index_status == "duplicate_existing_indexed":
+            if duplicate_index_status in {"duplicate_existing_indexed", "duplicate_existing_private_context"}:
                 emit(
                     "ready",
                     "duplicate",
@@ -1039,9 +1096,10 @@ def build_upload_ingest_response(
             asset_count=len(persisted.asset_ids),
             chunk_count=len(persisted.chunk_ids),
         )
-        if _bool_payload(payload.get("index"), default=False):
+        qdrant_requested = _bool_payload(payload.get("index"), default=False) and _qdrant_enabled(settings)
+        if qdrant_requested:
             index_started_at = time.perf_counter()
-            emit("index", "running", "Qdrant 검색 인덱스를 생성하는 중입니다.")
+            emit("index", "running", "Legacy vector index is being prepared.")
             try:
                 result["index"] = index_pending_document_chunks(
                     settings,
@@ -1057,9 +1115,9 @@ def build_upload_ingest_response(
                 )
                 index_event_status = "done" if result["index"]["status"] == "indexed" else "warning"
                 index_message = (
-                    "Qdrant 인덱싱이 완료되었습니다."
+                    "Legacy vector indexing completed."
                     if result["index"]["status"] == "indexed"
-                    else "Qdrant 인덱싱이 일부만 완료되었거나 후보 청크를 찾지 못했습니다."
+                    else "Legacy vector indexing only partially completed or found no candidate chunks."
                 )
                 emit(
                     "index",
@@ -1080,19 +1138,22 @@ def build_upload_ingest_response(
                     "error": str(exc),
                 }
                 result.setdefault("warnings", []).append(f"검색 인덱싱 실패: {exc}")
-                emit("index", "failed", f"Qdrant 인덱싱에 실패했습니다: {exc}")
+                emit("index", "failed", f"Legacy vector indexing failed: {exc}")
             finally:
                 timings["index_ms"] = int((time.perf_counter() - index_started_at) * 1000)
         else:
-            result["index"] = {
-                "collection": str(payload.get("collection") or settings.qdrant_collection),
-                "source_scope": source_scope,
-                "document_source_id": persisted.document_source_id,
-                "candidate_count": len(chunks),
-                "indexed_count": 0,
-                "status": "not_requested",
-            }
-            emit("index", "skipped", "요청에서 Qdrant 인덱싱이 비활성화되어 있습니다.", candidate_count=len(chunks))
+            result["index"] = _private_context_status_payload(
+                settings,
+                source_scope=source_scope,
+                document_source_id=persisted.document_source_id,
+                chunk_count=len(chunks),
+            )
+            emit(
+                "index",
+                "skipped",
+                "PBS private context is ready for user uploads.",
+                candidate_count=len(chunks),
+            )
         index_status = str(result.get("index", {}).get("status") or "")
         scope_status = "done" if result.get("repository_id") and _document_source_id_from_result(result) else "warning"
         emit(
@@ -1105,10 +1166,10 @@ def build_upload_ingest_response(
             repository_id=persisted.repository_id,
             owner_user_id=created_by,
         )
-        if index_status == "indexed":
+        if index_status in {"indexed", "private_context_ready"}:
             emit("ready", "done", "기본 텍스트 인덱싱이 완료되었습니다. 답변 품질 검수는 별도입니다.")
         elif index_status == "failed":
-            emit("ready", "warning", "문서 저장은 완료됐지만 Qdrant 인덱싱 실패로 검색에는 바로 사용할 수 없습니다.")
+            emit("ready", "warning", "Document storage completed, but legacy vector indexing failed.")
         else:
             emit("ready", "warning", "문서 저장은 완료됐지만 검색 인덱싱은 완료되지 않았습니다.")
     timings["total_ms"] = int((time.perf_counter() - started_at) * 1000)

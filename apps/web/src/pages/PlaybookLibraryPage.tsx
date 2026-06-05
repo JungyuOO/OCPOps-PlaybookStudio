@@ -409,7 +409,7 @@ const FACTORY_PIPELINE_STEPS: Record<FactoryLane, Array<{ badge: string; title: 
   user: [
     { badge: 'Bronze', title: '업로드 요청', description: '브라우저에서 서버로 파일 전송' },
     { badge: 'Silver', title: '서버 처리', description: '파싱 · 청킹 · DB 저장' },
-    { badge: 'Gold', title: '검색 인덱싱', description: '임베딩 · Qdrant 반영' },
+    { badge: 'Gold', title: 'Private Context 생성', description: 'PBS 문서 컨텍스트 반영' },
     { badge: 'Judge', title: '기본 인덱싱 확인', description: '답변 품질 검수 전' },
   ],
 };
@@ -425,7 +425,7 @@ const USER_UPLOAD_PIPELINE_STEPS: Array<{
   { stage: 'parse', badge: '3', title: '문서 파싱', description: '텍스트 · 구조 추출' },
   { stage: 'chunk', badge: '4', title: '청크 생성', description: '검색 단위 생성' },
   { stage: 'persist', badge: '5', title: 'DB 저장', description: 'PostgreSQL · 스코프 기록' },
-  { stage: 'index', badge: '6', title: 'Qdrant 인덱싱', description: '임베딩 · 벡터 검색 가능' },
+  { stage: 'index', badge: '6', title: 'Private Context 생성', description: 'PBS 문서 컨텍스트 준비' },
   { stage: 'scope', badge: '7', title: '스코프 확인', description: 'Owner · Repository 연결 확인' },
   { stage: 'ready', badge: '8', title: '완료 판정', description: '기본 검색 가능 상태 확인' },
 ];
@@ -1341,7 +1341,7 @@ const PlaybookLibraryPage: React.FC = () => {
         logUploadStreamEvent(event);
       };
 
-      let ingest = await uploadDocumentIngestionStream(file, { index: true, forceReingest: false }, handleStreamEvent);
+      let ingest = await uploadDocumentIngestionStream(file, { index: false, forceReingest: false }, handleStreamEvent);
       if (ingest.duplicate?.exists) {
         addLog('info', `'${ingest.duplicate.filename || file.name}' 같은 파일 감지 — 사용자 선택을 기다립니다.`);
         setLatestUploadIngest(ingest);
@@ -1363,12 +1363,18 @@ const PlaybookLibraryPage: React.FC = () => {
         }
         setUploadStageEvents([]);
         addLog('info', `'${ingest.duplicate.filename || file.name}' 새 데이터로 기존 문서를 덮어씁니다.`);
-        ingest = await uploadDocumentIngestionStream(file, { index: true, forceReingest: true }, handleStreamEvent);
+        ingest = await uploadDocumentIngestionStream(file, { index: false, forceReingest: true }, handleStreamEvent);
       }
       const indexedCount = ingest.index?.indexed_count ?? 0;
       const indexLine = ingest.index ? `, ${indexedCount}/${ingest.index.candidate_count} indexed` : '';
       const indexFailed = ingest.index?.status === 'failed';
-      const basicIndexReady = Boolean(ingest.basic_index_ready || ingest.index?.status === 'indexed' || ingest.index?.status === 'duplicate_existing_indexed');
+      const basicIndexReady = Boolean(
+        ingest.basic_index_ready
+          || ingest.index?.status === 'indexed'
+          || ingest.index?.status === 'duplicate_existing_indexed'
+          || ingest.index?.status === 'private_context_ready'
+          || ingest.index?.status === 'duplicate_existing_private_context'
+      );
       const timings = ingest.timings_ms ?? {};
       setLatestUploadIngest(ingest);
       setUploadStageEvents(ingest.stage_events ?? []);
@@ -1382,7 +1388,7 @@ const PlaybookLibraryPage: React.FC = () => {
         addLog('warn', ingest.warnings.slice(0, 2).join(' / '));
       }
       if (indexFailed) {
-        addLog('warn', `Search indexing failed: ${ingest.index?.error || 'embedding service unavailable'}`);
+        addLog('warn', `Private context preparation failed: ${ingest.index?.error || 'document context unavailable'}`);
       }
 
       window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify({
@@ -1426,7 +1432,7 @@ const PlaybookLibraryPage: React.FC = () => {
     title: string,
   ): Promise<boolean> => {
     if (!documentSourceId) return false;
-    if (!confirm(`'${title}' 문서를 삭제할까요?\n\nPostgreSQL · Qdrant 인덱스 · 원본 파일이 모두 삭제됩니다. 같은 파일을 다시 업로드하면 새 인덱싱이 시작됩니다.`)) {
+    if (!confirm(`'${title}' 문서를 삭제할까요?\n\nPostgreSQL 기록 · private context · 원본 파일이 모두 삭제됩니다. 같은 파일을 다시 업로드하면 새 컨텍스트가 생성됩니다.`)) {
       return false;
     }
     setDeletingDocumentId(documentSourceId);
@@ -1434,10 +1440,10 @@ const PlaybookLibraryPage: React.FC = () => {
       const result = await deleteUploadedDocument(documentSourceId);
       addLog(
         'success',
-        `Deleted '${result.filename || title}' — Postgres ${result.postgres_rows_deleted}건, Qdrant ${result.qdrant_points_deleted}개 정리.`,
+        `Deleted '${result.filename || title}' — Postgres ${result.postgres_rows_deleted}건, private context 정리 완료.`,
       );
       if (result.qdrant_errors.length > 0) {
-        addLog('warn', `Qdrant 정리 일부 실패: ${result.qdrant_errors.slice(0, 2).join(' / ')}`);
+        addLog('warn', `Legacy vector cleanup 일부 실패: ${result.qdrant_errors.slice(0, 2).join(' / ')}`);
       }
       refreshData();
       return true;
@@ -1757,7 +1763,7 @@ const PlaybookLibraryPage: React.FC = () => {
       ].filter(Boolean);
       const goldBits = [
         promotedCount !== null ? `promoted ${promotedCount}` : '',
-        qdrantCount !== null ? `qdrant ${qdrantCount}` : '',
+        qdrantCount !== null ? `legacy vector ${qdrantCount}` : '',
       ].filter(Boolean);
       addLog('success', `[Silver] 구조화 초안 생성 완료${draftBits.length ? ` · ${draftBits.join(' · ')}` : ''}`);
       addLog('success', `[Gold] 플레이북 · 코퍼스 생성 완료${goldBits.length ? ` · ${goldBits.join(' · ')}` : ''}`);
@@ -2610,7 +2616,7 @@ const PlaybookLibraryPage: React.FC = () => {
                     <span>업로드</span>
                     <span>파싱/청킹</span>
                     <span>PostgreSQL 저장</span>
-                    <span>Qdrant 인덱싱</span>
+                    <span>Private Context</span>
                     <span>챗봇 질문 가능</span>
                   </div>
                 </div>
@@ -2661,7 +2667,7 @@ const PlaybookLibraryPage: React.FC = () => {
                         </div>
                         <div className="library-upload-proof" aria-label={`${title} RAG ingestion proof`}>
                           <span>PostgreSQL 저장 기록</span>
-                          <span>Qdrant {document.indexed_chunk_count.toLocaleString()}개 인덱싱</span>
+                          <span>Private context ready</span>
                           <span>세션 범위 기록</span>
                         </div>
                         <div className="library-document-actions">
@@ -3023,7 +3029,7 @@ const PlaybookLibraryPage: React.FC = () => {
                               factoryManualSnapshot ? (
                                 <ul>
                                   <li>promoted {summaryNumber(factoryManualSnapshot.gold_summary, 'promoted_count') ?? '-'}</li>
-                                  <li>qdrant {summaryNumber(factoryManualSnapshot.gold_summary, 'qdrant_upserted_count') ?? '-'}</li>
+                                  <li>legacy vector {summaryNumber(factoryManualSnapshot.gold_summary, 'qdrant_upserted_count') ?? '-'}</li>
                                   <li>{factoryManualSnapshot.source_label}</li>
                                 </ul>
                               ) : (

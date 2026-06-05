@@ -443,6 +443,45 @@ def test_upload_ingest_zero_index_candidates_is_not_basic_ready(monkeypatch):
     assert ready_events[-1]["status"] == "warning"
 
 
+def test_upload_ingest_qdrant_disabled_uses_private_context(monkeypatch):
+    storage_dir = _storage_dir("qdrant_disabled_private_context")
+    monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(storage_dir))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test")
+    monkeypatch.setenv("QDRANT_ENABLED", "false")
+
+    import psycopg
+
+    monkeypatch.setattr(psycopg, "connect", lambda database_url: FakeDbConnection())
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.persist_parsed_upload_document",
+        lambda connection, parsed, chunks, **kwargs: StoredDocument(),
+    )
+    monkeypatch.setattr("play_book_studio.http.upload_api.find_document_source_by_sha", lambda *args, **kwargs: None)
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("Qdrant indexer must not be called when QDRANT_ENABLED=false")
+
+    monkeypatch.setattr("play_book_studio.http.upload_api.index_pending_document_chunks", fail_if_called)
+
+    result = build_upload_ingest_response(
+        REPO_ROOT,
+        {
+            "file_name": "private-context.md",
+            "file_bytes": b"# Private context\n\nThis should stay in PBS context.",
+            "index": True,
+            "created_by": "owner-1",
+        },
+    )
+
+    assert result["index"]["status"] == "private_context_ready"
+    assert result["index"]["provider"] == "pbs_private_context"
+    assert result["basic_index_ready"] is True
+    assert result["quality_gate"]["state"] == "private_context_ready"
+    assert result["quality_gate"]["label"] == "PBS private context ready"
+    ready_events = [event for event in result["stage_events"] if event["stage"] == "ready"]
+    assert ready_events[-1]["status"] == "done"
+
+
 def test_upload_ingest_reports_duplicate_without_reprocessing(monkeypatch):
     storage_dir = _storage_dir("duplicate")
     monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(storage_dir))

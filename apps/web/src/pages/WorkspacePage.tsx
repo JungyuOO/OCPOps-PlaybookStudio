@@ -3640,7 +3640,7 @@ export default function WorkspacePage() {
         window.localStorage.setItem(WORKSPACE_INGESTION_STATUS_STORAGE_KEY, JSON.stringify(nextBanner));
       };
       let uploaded = await uploadDocumentIngestionStream(file, {
-        index: true,
+        index: false,
         repositoryId: activeRepository?.repository_id,
         forceReingest: false,
       }, handleUploadStageEvent);
@@ -3665,13 +3665,19 @@ export default function WorkspacePage() {
           return;
         }
         uploaded = await uploadDocumentIngestionStream(file, {
-          index: true,
+          index: false,
           repositoryId: activeRepository?.repository_id,
           forceReingest: true,
         }, handleUploadStageEvent);
       }
       const indexFailed = uploaded.index?.status === 'failed';
-      const basicIndexReady = Boolean(uploaded.basic_index_ready || uploaded.index?.status === 'indexed' || uploaded.index?.status === 'duplicate_existing_indexed');
+      const basicIndexReady = Boolean(
+        uploaded.basic_index_ready
+          || uploaded.index?.status === 'indexed'
+          || uploaded.index?.status === 'duplicate_existing_indexed'
+          || uploaded.index?.status === 'private_context_ready'
+          || uploaded.index?.status === 'duplicate_existing_private_context'
+      );
       const repositoryPayload = await loadDocumentRepositories().catch(() => ({ repositories: [] }));
       const repositoryId = uploaded.repository_id || uploaded.persisted?.repository_id || activeRepository?.repository_id || '';
       const documentSourceId = uploaded.persisted?.document_source_id || '';

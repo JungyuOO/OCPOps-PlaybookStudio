@@ -21,7 +21,7 @@ SAMPLE_CR = {
         },
         "console": {"enabled": True, "executorMode": "service-account"},
         "namespaceMode": {"autoCreate": False},
-        "library": {"ingestion": {"outputFormat": "pbs-private-context-markdown", "qdrantEnabled": True}},
+        "library": {"ingestion": {"outputFormat": "pbs-private-context-markdown", "qdrantEnabled": False}},
         "runtime": {
             "secretName": "playbookstudio-secret",
             "config": {
@@ -45,6 +45,9 @@ def test_pbs_operator_reconciler_renders_managed_resources_from_cr() -> None:
     assert ("Service", "playbookstudio-app") in identities
     assert ("Service", "playbookstudio-web") in identities
     assert ("Service", "pbs-mcp") in identities
+    assert ("ServiceAccount", "terminal-broker") in identities
+    assert ("ClusterRole", "pbs-terminal-broker") in identities
+    assert ("ClusterRoleBinding", "pbs-terminal-broker") in identities
     assert ("Route", "playbookstudio") in identities
     assert ("ConfigMap", "pbs-config") in identities
     assert ("ConfigMap", "pbs-olsconfig-patch-preview") in identities
@@ -62,7 +65,7 @@ def test_pbs_operator_reconciler_maps_cr_fields_to_runtime_config() -> None:
     assert config["data"]["LIGHTSPEED_KNOWLEDGE_MODE"] == "lightspeed-rag-with-pbs-private-context"
     assert all("BYOK" not in key for key in config["data"])
     assert config["data"]["LIBRARY_OUTPUT_FORMAT"] == "pbs-private-context-markdown"
-    assert config["data"]["QDRANT_ENABLED"] == "true"
+    assert config["data"]["QDRANT_ENABLED"] == "false"
     assert config["data"]["LLM_ENDPOINT"] == "http://cllm.cywell.co.kr/v1"
     assert config["data"]["POSTGRES_DB"] == "playbookstudio"
 
@@ -79,6 +82,22 @@ def test_pbs_operator_reconciler_maps_runtime_secret_to_app_env() -> None:
     assert env[0]["valueFrom"]["secretKeyRef"]["key"] == "POSTGRES_PASSWORD"
     assert env[1]["valueFrom"]["secretKeyRef"]["key"] == "OCP_API_TOKEN"
     assert env[2]["name"] == "DATABASE_URL"
+
+
+def test_pbs_operator_reconciler_uses_terminal_broker_for_app() -> None:
+    app = next(
+        resource
+        for resource in render_desired_resources(SAMPLE_CR)
+        if resource["kind"] == "Deployment" and resource["metadata"]["name"] == "playbookstudio-app"
+    )
+    web = next(
+        resource
+        for resource in render_desired_resources(SAMPLE_CR)
+        if resource["kind"] == "Deployment" and resource["metadata"]["name"] == "playbookstudio-web"
+    )
+
+    assert app["spec"]["template"]["spec"]["serviceAccountName"] == "terminal-broker"
+    assert web["spec"]["template"]["spec"]["serviceAccountName"] == "playbookstudio"
 
 
 def test_pbs_operator_reconciler_status_does_not_claim_live_success() -> None:

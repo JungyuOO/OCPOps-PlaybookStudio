@@ -16,7 +16,8 @@ def test_sno_pbs_base_declares_v030_lightspeed_boundaries() -> None:
     assert "CONSOLE_EXECUTOR_MODE: service-account" in config
     assert "LIGHTSPEED_KNOWLEDGE_MODE: lightspeed-rag-with-pbs-private-context" in config
     assert "BYOK" not in config
-    assert 'QDRANT_ENABLED: "true"' in config
+    assert 'QDRANT_ENABLED: "false"' in config
+    assert 'TERMINAL_USER_WORKSPACE_ENABLED: "false"' in config
     assert 'PBS_OPERATOR_READY_MODE: "true"' in config
 
 
@@ -51,4 +52,4 @@ def test_playbookstudio_crd_maps_phase1_operator_ready_spec() -> None:
     assert "knowledgeMode: lightspeed-rag-with-pbs-private-context" in sample
     assert "byoKnowledge" not in sample
     assert "autoCreate: false" in sample
-    assert "qdrantEnabled: true" in sample
+    assert "qdrantEnabled: false" in sample

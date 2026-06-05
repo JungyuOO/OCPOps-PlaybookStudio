@@ -21,7 +21,10 @@ def render_desired_resources(custom_resource: dict[str, Any]) -> list[dict[str, 
 
     resources: list[dict[str, Any]] = [
         _service_account("playbookstudio", namespace),
+        _service_account("terminal-broker", namespace),
         _service_account("pbs-console-executor", namespace),
+        _terminal_broker_cluster_role(),
+        _terminal_broker_cluster_role_binding(namespace),
         _config_map(name, namespace, spec),
         _app_compat_service(namespace),
         _service("web", namespace, 8080, "http", selector_name="playbookstudio-web"),
@@ -121,7 +124,7 @@ def _config_map(name: str, namespace: str, spec: dict[str, Any]) -> dict[str, An
         "CONSOLE_EXECUTOR_MODE": str(console.get("executorMode") or "service-account"),
         "PBS_OPERATOR_READY_MODE": "true",
         "PBS_OPERATOR_MANIFEST_PROFILE": "sno",
-        "QDRANT_ENABLED": _bool_text(ingestion.get("qdrantEnabled", True)),
+        "QDRANT_ENABLED": _bool_text(ingestion.get("qdrantEnabled", False)),
         "LIBRARY_OUTPUT_FORMAT": str(ingestion.get("outputFormat") or "pbs-private-context-markdown"),
     }
     data.update(_runtime_config(spec))
@@ -169,7 +172,7 @@ def _deployment(
             "template": {
                 "metadata": {"labels": _labels(name)},
                 "spec": {
-                    "serviceAccountName": "playbookstudio",
+                    "serviceAccountName": "terminal-broker" if name == "playbookstudio-app" else "playbookstudio",
                     "containers": [container],
                 },
             },
@@ -219,6 +222,44 @@ def _route(name: str, namespace: str, service_name: str) -> dict[str, Any]:
 
 def _service_account(name: str, namespace: str) -> dict[str, Any]:
     return {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": _metadata(name, namespace, name)}
+
+
+def _terminal_broker_cluster_role() -> dict[str, Any]:
+    return {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "kind": "ClusterRole",
+        "metadata": {"name": "pbs-terminal-broker", "labels": _labels("terminal-broker")},
+        "rules": [
+            {"apiGroups": [""], "resources": ["namespaces"], "verbs": ["create", "get", "list", "patch", "delete"]},
+            {
+                "apiGroups": [""],
+                "resources": ["configmaps", "events", "persistentvolumeclaims", "pods", "secrets", "serviceaccounts", "services"],
+                "verbs": ["create", "get", "list", "watch", "patch", "update", "delete"],
+            },
+            {"apiGroups": [""], "resources": ["pods/exec"], "verbs": ["create"]},
+            {"apiGroups": [""], "resources": ["pods/log"], "verbs": ["get", "list"]},
+            {"apiGroups": ["apps"], "resources": ["deployments", "replicasets", "statefulsets"], "verbs": ["create", "get", "list", "watch", "patch", "update", "delete"]},
+            {"apiGroups": ["batch"], "resources": ["cronjobs", "jobs"], "verbs": ["create", "get", "list", "watch", "patch", "update", "delete"]},
+            {"apiGroups": ["networking.k8s.io"], "resources": ["networkpolicies"], "verbs": ["create", "get", "list", "patch", "update", "delete"]},
+            {"apiGroups": ["project.openshift.io"], "resources": ["projects"], "verbs": ["get", "list", "watch"]},
+            {"apiGroups": ["route.openshift.io"], "resources": ["routes"], "verbs": ["create", "get", "list", "watch", "patch", "update", "delete"]},
+            {"apiGroups": ["rbac.authorization.k8s.io"], "resources": ["rolebindings", "roles"], "verbs": ["create", "get", "list", "patch", "update", "delete"]},
+        ],
+    }
+
+
+def _terminal_broker_cluster_role_binding(namespace: str) -> dict[str, Any]:
+    return {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "kind": "ClusterRoleBinding",
+        "metadata": {"name": "pbs-terminal-broker", "labels": _labels("terminal-broker")},
+        "roleRef": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "ClusterRole",
+            "name": "pbs-terminal-broker",
+        },
+        "subjects": [{"kind": "ServiceAccount", "name": "terminal-broker", "namespace": namespace}],
+    }
 
 
 def _olsconfig_preview(namespace: str, spec: dict[str, Any]) -> dict[str, Any]:

@@ -298,7 +298,9 @@ def _resource_url(config: OperatorRuntimeConfig, resource: dict[str, Any]) -> st
     plural = _resource_plural(kind)
     if not plural or not name:
         raise ValueError(f"Unsupported resource for operator apply: {api_version} {kind} {namespace}/{name}")
-    if api_version == "v1":
+    if kind in {"ClusterRole", "ClusterRoleBinding"}:
+        base = f"{config.api_server}/apis/{api_version}/{plural}"
+    elif api_version == "v1":
         base = f"{config.api_server}/api/v1/namespaces/{namespace}/{plural}"
     else:
         base = f"{config.api_server}/apis/{api_version}/namespaces/{namespace}/{plural}"
@@ -308,6 +310,8 @@ def _resource_url(config: OperatorRuntimeConfig, resource: dict[str, Any]) -> st
 def _resource_plural(kind: str) -> str:
     return {
         "ConfigMap": "configmaps",
+        "ClusterRole": "clusterroles",
+        "ClusterRoleBinding": "clusterrolebindings",
         "Deployment": "deployments",
         "Role": "roles",
         "RoleBinding": "rolebindings",
