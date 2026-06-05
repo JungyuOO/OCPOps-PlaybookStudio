@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from play_book_studio.answering.models import AnswerResult
+from play_book_studio.answering.models import AnswerResult, Citation
 from play_book_studio.http.server_support import _build_chat_payload
 from play_book_studio.http.sessions import ChatSession
 from play_book_studio.http import server_routes_viewer
@@ -41,6 +41,88 @@ def test_lightspeed_external_answer_is_added_as_related_link(tmp_path):
     assert payload["related_links"][0]["href"] == "/external/lightspeed/unit-test"
     assert payload["related_links"][0]["boundary_badge"] == "Lightspeed"
     assert payload["related_links"][0]["source_lane"] == "openshift_lightspeed"
+
+
+def test_lightspeed_external_answer_isolates_internal_gold_citations(tmp_path):
+    result = AnswerResult(
+        query="클러스터 이벤트중 워닝만 필터링할수있어?",
+        mode="chat",
+        answer="답변: `oc get events --field-selector type=Warning` 명령을 사용합니다. [1]",
+        rewritten_query="클러스터 이벤트중 워닝만 필터링할수있어?",
+        citations=[
+            Citation(
+                index=1,
+                chunk_id="gold-1",
+                book_slug="support",
+                section="지원",
+                anchor="cleaning-crio-storage",
+                source_url="",
+                viewer_path="/playbooks/wiki-runtime/active/support/index.html#cleaning-crio-storage",
+                excerpt="Gold Playbook fallback citation",
+                section_path=("지원",),
+            )
+        ],
+        cited_indices=[1],
+        pipeline_trace={
+            "answer_source": "lightspeed_with_pbs_rag",
+            "external_answer": {
+                "status": "used",
+                "viewer_path": "/external/lightspeed/unit-test",
+                "label": "OpenShift Lightspeed 공식 답변",
+                "source_lane": "openshift_lightspeed",
+                "boundary_truth": "external_openshift_lightspeed",
+                "runtime_truth_label": "OpenShift Lightspeed",
+                "boundary_badge": "Lightspeed",
+            },
+        },
+    )
+    session = ChatSession(
+        session_id="session-1",
+        context=SessionContext(user_id="tester"),
+    )
+
+    payload = _build_chat_payload(root_dir=tmp_path, session=session, result=result)
+    payload_text = json.dumps(payload, ensure_ascii=False)
+
+    assert payload["answer_source"] == "lightspeed_with_pbs_rag"
+    assert payload["citations"] == [
+        {
+            "index": 1,
+            "book_slug": "openshift_lightspeed",
+            "book_title": "OpenShift Lightspeed",
+            "section": "OpenShift Lightspeed 공식 답변",
+            "section_path": ["OpenShift Lightspeed 공식 답변"],
+            "section_path_label": "OpenShift Lightspeed 공식 답변",
+            "heading_title": "OpenShift Lightspeed 공식 답변",
+            "viewer_path": "/external/lightspeed/unit-test",
+            "excerpt": "OpenShift Lightspeed가 반환한 OpenShift 공식 기준 답변",
+            "source_label": "OpenShift Lightspeed 공식 답변",
+            "source_collection": "external_tool",
+            "source_lane": "openshift_lightspeed",
+            "approval_state": "external",
+            "publication_state": "external",
+            "boundary_truth": "external_openshift_lightspeed",
+            "runtime_truth_label": "OpenShift Lightspeed",
+            "boundary_badge": "Lightspeed",
+            "cli_commands": [],
+            "verification_hints": [],
+        }
+    ]
+    assert payload["related_links"] == [
+        {
+            "label": "OpenShift Lightspeed 공식 답변",
+            "href": "/external/lightspeed/unit-test",
+            "kind": "external_tool",
+            "summary": "OpenShift Lightspeed가 반환한 OpenShift 공식 기준 답변",
+            "source_lane": "openshift_lightspeed",
+            "boundary_truth": "external_openshift_lightspeed",
+            "runtime_truth_label": "OpenShift Lightspeed",
+            "boundary_badge": "Lightspeed",
+        }
+    ]
+    assert payload["related_sections"] == []
+    assert "/playbooks/wiki-runtime/active/support" not in payload_text
+    assert "Gold Playbook fallback citation" not in payload_text
 
 
 def test_lightspeed_artifact_opens_in_viewer(tmp_path):

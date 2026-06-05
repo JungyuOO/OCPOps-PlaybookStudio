@@ -211,42 +211,34 @@ def _build_chat_payload(
     # UI 응답과 재현성 로그에 쓰는 chat payload serialization helper.
     presentation_context = _build_citation_presentation_context(root_dir)
     citation_started_at = time.perf_counter()
-    serialized_citations = [
-        _serialize_citation(
-            root_dir,
-            citation,
-            presentation_context=presentation_context,
-        )
-        for citation in result.citations
-    ]
     external_citation = _external_answer_citation(result)
+    external_link = _external_answer_related_link(result)
     if external_citation is not None:
-        shifted_citations = [
-            {**citation, "index": index + 2}
-            for index, citation in enumerate(serialized_citations)
+        serialized_citations = [external_citation]
+    else:
+        serialized_citations = [
+            _serialize_citation(
+                root_dir,
+                citation,
+                presentation_context=presentation_context,
+            )
+            for citation in result.citations
         ]
-        serialized_citations = [external_citation, *shifted_citations]
     if timings_sink is not None:
         timings_sink["payload_citation_serialize"] = (time.perf_counter() - citation_started_at) * 1000
     related_links_started_at = time.perf_counter()
-    related_links = _build_chat_navigation_links(
-        root_dir,
-        serialized_citations,
-        user_id=session.context.user_id,
-    )
-    external_link = _external_answer_related_link(result)
     if external_link is not None:
-        related_links = [
-            external_link,
-            *[
-                link for link in related_links
-                if str(link.get("href") or "").strip() != external_link["href"]
-            ],
-        ]
+        related_links = [external_link]
+    else:
+        related_links = _build_chat_navigation_links(
+            root_dir,
+            serialized_citations,
+            user_id=session.context.user_id,
+        )
     if timings_sink is not None:
         timings_sink["payload_related_links"] = (time.perf_counter() - related_links_started_at) * 1000
     related_sections_started_at = time.perf_counter()
-    related_sections = _build_chat_section_links(
+    related_sections = [] if external_link is not None else _build_chat_section_links(
         root_dir,
         serialized_citations,
         user_id=session.context.user_id,

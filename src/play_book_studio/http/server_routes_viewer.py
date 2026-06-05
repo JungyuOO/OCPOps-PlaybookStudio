@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import base64
+import copy
 import html
 import json
 import re
+import threading
+import time
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
@@ -25,6 +28,7 @@ from play_book_studio.http.source_books import (
     _entity_hubs,
     _figure_asset_by_name,
     _figure_section_match,
+    _playbook_book_candidates,
     internal_active_runtime_markdown_viewer_html as _internal_active_runtime_markdown_viewer_html,
     internal_buyer_packet_viewer_html as _internal_buyer_packet_viewer_html,
     internal_entity_hub_viewer_html as _internal_entity_hub_viewer_html,
@@ -34,7 +38,11 @@ from play_book_studio.http.source_books import (
     parse_entity_hub_viewer_path,
     parse_figure_viewer_path,
 )
-from play_book_studio.http.source_books_wiki_relations import _figure_assets, _figure_viewer_href
+from play_book_studio.http.source_books_wiki_relations import (
+    _active_runtime_markdown_path,
+    _figure_assets,
+    _figure_viewer_href,
+)
 from play_book_studio.http.source_books_customer_pack import (
     internal_customer_pack_viewer_html as _internal_customer_pack_viewer_html,
 )
@@ -63,6 +71,33 @@ _FIGURE_DIRECTORY_VIEWER_PATH_RE = re.compile(r"^/wiki/figures/[^/]+/[^/]+$")
 _UPLOAD_DOCUMENT_DIRECTORY_VIEWER_PATH_RE = re.compile(r"^/uploads/documents/[0-9a-fA-F-]{36}$")
 _UPLOAD_DOCUMENT_VIEWER_PATH_RE = re.compile(r"^/uploads/documents/(?P<document_source_id>[0-9a-fA-F-]{36})(?:/index\.html)?$")
 _LIGHTSPEED_VIEWER_PATH_RE = re.compile(r"^/external/lightspeed/(?P<artifact_id>[A-Za-z0-9_-]+)$")
+VIEWER_DOCUMENT_CACHE_TTL_SECONDS = 120.0
+
+
+class _ViewerDocumentPayloadCache:
+    def __init__(self, ttl_seconds: float) -> None:
+        self.ttl_seconds = ttl_seconds
+        self._lock = threading.Lock()
+        self._items: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
+
+    def get(self, key: tuple[Any, ...]) -> dict[str, Any] | None:
+        now = time.monotonic()
+        with self._lock:
+            cached = self._items.get(key)
+            if cached is None:
+                return None
+            created_at, payload = cached
+            if now - created_at > self.ttl_seconds:
+                self._items.pop(key, None)
+                return None
+            return copy.deepcopy(payload)
+
+    def set(self, key: tuple[Any, ...], payload: dict[str, Any]) -> None:
+        with self._lock:
+            self._items[key] = (time.monotonic(), copy.deepcopy(payload))
+
+
+_VIEWER_DOCUMENT_PAYLOAD_CACHE = _ViewerDocumentPayloadCache(VIEWER_DOCUMENT_CACHE_TTL_SECONDS)
 
 
 def _scope_viewer_style(style_text: str) -> str:
@@ -96,6 +131,72 @@ def _canonicalize_viewer_path(viewer_path: str) -> str:
     if normalized_path == path:
         return raw
     return urlunparse(parsed._replace(path=normalized_path))
+
+
+def _file_signature(path: Path | None) -> tuple[str, int, int]:
+    if path is None:
+        return ("", 0, 0)
+    try:
+        candidate = path.resolve()
+        if not candidate.exists() or not candidate.is_file():
+            return (str(candidate), 0, 0)
+        stat = candidate.stat()
+    except OSError:
+        return (str(path), 0, 0)
+    return (str(candidate), int(stat.st_mtime_ns), int(stat.st_size))
+
+
+def _active_runtime_manifest_candidates(root_dir: Path) -> tuple[Path, ...]:
+    runtime_dir = root_dir / "data" / "wiki_runtime_books"
+    settings = load_settings(root_dir)
+    return (
+        runtime_dir / "active_manifest.json",
+        runtime_dir / "full_rebuild_manifest.json",
+        settings.source_manifest_path,
+    )
+
+
+def _viewer_document_cache_key(
+    root_dir: Path,
+    viewer_path: str,
+    *,
+    page_mode: str,
+) -> tuple[Any, ...] | None:
+    slug = parse_active_runtime_markdown_viewer_path(viewer_path)
+    if not slug:
+        return None
+    manifest_entry = _manifest_entry_for_book(root_dir, slug)
+    manifest_token = (
+        str(manifest_entry.get("updated_at") or ""),
+        str(manifest_entry.get("source_fingerprint") or ""),
+        str(manifest_entry.get("runtime_path") or ""),
+    )
+    return (
+        str(root_dir.resolve()),
+        viewer_path,
+        page_mode,
+        slug,
+        manifest_token,
+        tuple(_file_signature(path) for path in _active_runtime_manifest_candidates(root_dir)),
+        _file_signature(_active_runtime_markdown_path(root_dir, slug)),
+        tuple(_file_signature(path) for path in _playbook_book_candidates(root_dir, slug)),
+    )
+
+
+def _viewer_document_response_payload(
+    payload: dict[str, Any],
+    *,
+    cache_status: str,
+    timings_ms: dict[str, float],
+) -> dict[str, Any]:
+    response = copy.deepcopy(payload)
+    response["viewer_cache_status"] = cache_status
+    response["viewer_timings_ms"] = {
+        key: round(float(value), 1)
+        for key, value in timings_ms.items()
+        if isinstance(value, int | float)
+    }
+    return response
 
 
 def _owner_hash_from_handler(handler: Any) -> str:
@@ -1800,6 +1901,7 @@ def _viewer_html_for_path(
     *,
     page_mode: str = "single",
     owner_user_id: str = "",
+    timings_sink: dict[str, float] | None = None,
 ) -> str | None:
     viewer_path = _canonicalize_viewer_path(viewer_path)
     internal_html = (
@@ -1809,7 +1911,12 @@ def _viewer_html_for_path(
         or
         _internal_buyer_packet_viewer_html(root_dir, viewer_path)
         or _internal_customer_pack_viewer_html(root_dir, viewer_path)
-        or _internal_active_runtime_markdown_viewer_html(root_dir, viewer_path, page_mode=page_mode)
+        or _internal_active_runtime_markdown_viewer_html(
+            root_dir,
+            viewer_path,
+            page_mode=page_mode,
+            timings_sink=timings_sink,
+        )
         or _internal_entity_hub_viewer_html(root_dir, viewer_path)
         or _internal_figure_viewer_html(root_dir, viewer_path)
         or _internal_viewer_html(root_dir, viewer_path, page_mode=page_mode)
@@ -1833,7 +1940,12 @@ def resolve_viewer_html(
     customer_pack_draft_id = customer_pack_draft_id_from_viewer_path(viewer_path)
     if customer_pack_draft_id and not _customer_pack_read_allowed(root_dir, customer_pack_draft_id):
         return None
-    return _viewer_html_for_path(root_dir, viewer_path, page_mode=page_mode, owner_user_id=owner_user_id)
+    return _viewer_html_for_path(
+        root_dir,
+        viewer_path,
+        page_mode=page_mode,
+        owner_user_id=owner_user_id,
+    )
 
 
 def _normalize_viewer_resource_urls(html_text: str, viewer_path: str) -> str:
@@ -2085,6 +2197,7 @@ def handle_source_meta(handler: Any, query: str, *, root_dir: Path) -> None:
 
 
 def handle_viewer_document(handler: Any, query: str, *, root_dir: Path) -> None:
+    request_started_at = time.perf_counter()
     params = parse_qs(query, keep_blank_values=False)
     viewer_path = str((params.get("viewer_path") or [""])[0]).strip()
     page_mode = str((params.get("page_mode") or ["single"])[0]).strip().lower()
@@ -2098,6 +2211,25 @@ def handle_viewer_document(handler: Any, query: str, *, root_dir: Path) -> None:
     if customer_pack_draft_id and not _customer_pack_read_allowed(root_dir, customer_pack_draft_id):
         _send_customer_pack_read_blocked(handler)
         return
+    timings_ms: dict[str, float] = {}
+    cache_key = _viewer_document_cache_key(root_dir, viewer_path, page_mode=page_mode)
+    cache_started_at = time.perf_counter()
+    cached_payload = _VIEWER_DOCUMENT_PAYLOAD_CACHE.get(cache_key) if cache_key is not None else None
+    timings_ms["viewer_cache_lookup"] = (time.perf_counter() - cache_started_at) * 1000
+    if cached_payload is not None:
+        timings_ms["viewer_document_total"] = (time.perf_counter() - request_started_at) * 1000
+        debug_timing = getattr(handler, "_debug_timing", None)
+        if callable(debug_timing):
+            debug_timing("viewer-document cache-hit", request_started_at)
+        handler._send_json(
+            _viewer_document_response_payload(
+                cached_payload,
+                cache_status="hit",
+                timings_ms=timings_ms,
+            )
+        )
+        return
+    resolve_started_at = time.perf_counter()
     html_text = _uploaded_document_viewer_html(root_dir, viewer_path, owner_user_id=_owner_hash_from_handler(handler))
     if html_text is None:
         html_text = _viewer_html_for_path(
@@ -2105,11 +2237,28 @@ def handle_viewer_document(handler: Any, query: str, *, root_dir: Path) -> None:
             viewer_path,
             page_mode=page_mode,
             owner_user_id=_owner_hash_from_handler(handler),
+            timings_sink=timings_ms,
         )
+    timings_ms["viewer_resolve_html"] = (time.perf_counter() - resolve_started_at) * 1000
     if html_text is None:
         handler._send_json({"error": "viewer document를 찾을 수 없습니다."}, HTTPStatus.NOT_FOUND)
         return
-    handler._send_json(_build_viewer_document_payload(html_text, viewer_path))
+    payload_started_at = time.perf_counter()
+    payload = _build_viewer_document_payload(html_text, viewer_path)
+    timings_ms["viewer_payload_extract"] = (time.perf_counter() - payload_started_at) * 1000
+    timings_ms["viewer_document_total"] = (time.perf_counter() - request_started_at) * 1000
+    if cache_key is not None:
+        _VIEWER_DOCUMENT_PAYLOAD_CACHE.set(cache_key, payload)
+    debug_timing = getattr(handler, "_debug_timing", None)
+    if callable(debug_timing):
+        debug_timing("viewer-document cache-miss" if cache_key is not None else "viewer-document", request_started_at)
+    handler._send_json(
+        _viewer_document_response_payload(
+            payload,
+            cache_status="miss" if cache_key is not None else "bypass",
+            timings_ms=timings_ms,
+        )
+    )
 
 
 def handle_runtime_figures(handler: Any, query: str, *, root_dir: Path) -> None:
