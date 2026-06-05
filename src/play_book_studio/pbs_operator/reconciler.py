@@ -27,7 +27,15 @@ def render_desired_resources(custom_resource: dict[str, Any]) -> list[dict[str, 
         _service("web", namespace, 8080, "http", selector_name="playbookstudio-web"),
         _service("playbookstudio-app", namespace, 8765, "http"),
         _service("playbookstudio-web", namespace, 8080, "http"),
-        _deployment("playbookstudio-app", namespace, _app_image(spec), 8765, None, extra_ports=[{"containerPort": 8770, "name": "terminal-ws"}]),
+        _deployment(
+            "playbookstudio-app",
+            namespace,
+            _app_image(spec),
+            8765,
+            None,
+            extra_ports=[{"containerPort": 8770, "name": "terminal-ws"}],
+            runtime_secret_name=_runtime_secret_name(spec),
+        ),
         _deployment("playbookstudio-web", namespace, _web_image(spec), 8080, None),
     ]
 
@@ -100,26 +108,28 @@ def _config_map(name: str, namespace: str, spec: dict[str, Any]) -> dict[str, An
     chat = spec.get("chat") or {}
     library = spec.get("library") or {}
     ingestion = library.get("ingestion") or {}
+    data = {
+        "CHAT_PROVIDER": str(chat.get("provider") or "lightspeed"),
+        "LIGHTSPEED_KNOWLEDGE_MODE": str(
+            lightspeed.get("knowledgeMode") or "lightspeed-rag-with-pbs-private-context"
+        ),
+        "OLS_BASE_URL": str(lightspeed.get("baseUrl") or DEFAULT_OLS_BASE_URL),
+        "OLS_AUTH_MODE": str(auth.get("mode") or "service-account"),
+        "OLS_AUTH_SECRET_NAME": str(auth.get("secretName") or "pbs-ols-auth"),
+        "PBS_AUTO_CREATE_NAMESPACE": _bool_text(namespace_mode.get("autoCreate", False)),
+        "PBS_NAMESPACE_MODE": "auto" if namespace_mode.get("autoCreate", False) else "disabled",
+        "CONSOLE_EXECUTOR_MODE": str(console.get("executorMode") or "service-account"),
+        "PBS_OPERATOR_READY_MODE": "true",
+        "PBS_OPERATOR_MANIFEST_PROFILE": "sno",
+        "QDRANT_ENABLED": _bool_text(ingestion.get("qdrantEnabled", True)),
+        "LIBRARY_OUTPUT_FORMAT": str(ingestion.get("outputFormat") or "pbs-private-context-markdown"),
+    }
+    data.update(_runtime_config(spec))
     return {
         "apiVersion": "v1",
         "kind": "ConfigMap",
         "metadata": _metadata(f"{name}-config", namespace, "playbookstudio"),
-        "data": {
-            "CHAT_PROVIDER": str(chat.get("provider") or "lightspeed"),
-            "LIGHTSPEED_KNOWLEDGE_MODE": str(
-                lightspeed.get("knowledgeMode") or "lightspeed-rag-with-pbs-private-context"
-            ),
-            "OLS_BASE_URL": str(lightspeed.get("baseUrl") or DEFAULT_OLS_BASE_URL),
-            "OLS_AUTH_MODE": str(auth.get("mode") or "service-account"),
-            "OLS_AUTH_SECRET_NAME": str(auth.get("secretName") or "pbs-ols-auth"),
-            "PBS_AUTO_CREATE_NAMESPACE": _bool_text(namespace_mode.get("autoCreate", False)),
-            "PBS_NAMESPACE_MODE": "auto" if namespace_mode.get("autoCreate", False) else "disabled",
-            "CONSOLE_EXECUTOR_MODE": str(console.get("executorMode") or "service-account"),
-            "PBS_OPERATOR_READY_MODE": "true",
-            "PBS_OPERATOR_MANIFEST_PROFILE": "sno",
-            "QDRANT_ENABLED": _bool_text(ingestion.get("qdrantEnabled", True)),
-            "LIBRARY_OUTPUT_FORMAT": str(ingestion.get("outputFormat") or "pbs-private-context-markdown"),
-        },
+        "data": data,
     }
 
 
@@ -131,11 +141,12 @@ def _deployment(
     command: list[str] | None,
     *,
     extra_ports: list[dict[str, Any]] | None = None,
+    runtime_secret_name: str = "",
 ) -> dict[str, Any]:
     container: dict[str, Any] = {
         "name": name.removeprefix("playbookstudio-"),
         "image": image,
-        "imagePullPolicy": "IfNotPresent",
+        "imagePullPolicy": "Always",
         "ports": [
             {"containerPort": port, "name": "http" if name != "pbs-mcp" else "mcp"},
             *(extra_ports or []),
@@ -145,6 +156,9 @@ def _deployment(
         container["command"] = command
     if name == "playbookstudio-app":
         container["envFrom"] = [{"configMapRef": {"name": "pbs-config"}}]
+        secret_env = _runtime_secret_env(runtime_secret_name)
+        if secret_env:
+            container["env"] = secret_env
     return {
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -270,6 +284,36 @@ def _web_image(spec: dict[str, Any]) -> str:
     if "-app:" in app_image:
         return app_image.replace("-app:", "-web:")
     return DEFAULT_WEB_IMAGE
+
+
+def _runtime_config(spec: dict[str, Any]) -> dict[str, str]:
+    config = ((spec.get("runtime") or {}).get("config") or {})
+    if not isinstance(config, dict):
+        return {}
+    return {str(key): str(value) for key, value in config.items() if value is not None}
+
+
+def _runtime_secret_name(spec: dict[str, Any]) -> str:
+    return str((spec.get("runtime") or {}).get("secretName") or "")
+
+
+def _runtime_secret_env(secret_name: str) -> list[dict[str, Any]]:
+    if not secret_name:
+        return []
+    return [
+        {
+            "name": "POSTGRES_PASSWORD",
+            "valueFrom": {"secretKeyRef": {"name": secret_name, "key": "POSTGRES_PASSWORD"}},
+        },
+        {
+            "name": "OCP_API_TOKEN",
+            "valueFrom": {"secretKeyRef": {"name": secret_name, "key": "OCP_API_TOKEN"}},
+        },
+        {
+            "name": "DATABASE_URL",
+            "value": "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)",
+        },
+    ]
 
 
 def _bool_text(value: Any) -> str:

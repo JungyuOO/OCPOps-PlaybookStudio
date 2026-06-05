@@ -22,6 +22,15 @@ SAMPLE_CR = {
         "console": {"enabled": True, "executorMode": "service-account"},
         "namespaceMode": {"autoCreate": False},
         "library": {"ingestion": {"outputFormat": "pbs-private-context-markdown", "qdrantEnabled": True}},
+        "runtime": {
+            "secretName": "playbookstudio-secret",
+            "config": {
+                "LLM_ENDPOINT": "http://cllm.cywell.co.kr/v1",
+                "LLM_MODEL": "gemma-4-26b-a4b-it-awq-8bit",
+                "POSTGRES_USER": "admin",
+                "POSTGRES_DB": "playbookstudio",
+            },
+        },
     },
 }
 
@@ -54,6 +63,22 @@ def test_pbs_operator_reconciler_maps_cr_fields_to_runtime_config() -> None:
     assert all("BYOK" not in key for key in config["data"])
     assert config["data"]["LIBRARY_OUTPUT_FORMAT"] == "pbs-private-context-markdown"
     assert config["data"]["QDRANT_ENABLED"] == "true"
+    assert config["data"]["LLM_ENDPOINT"] == "http://cllm.cywell.co.kr/v1"
+    assert config["data"]["POSTGRES_DB"] == "playbookstudio"
+
+
+def test_pbs_operator_reconciler_maps_runtime_secret_to_app_env() -> None:
+    app = next(
+        resource
+        for resource in render_desired_resources(SAMPLE_CR)
+        if resource["kind"] == "Deployment" and resource["metadata"]["name"] == "playbookstudio-app"
+    )
+    env = app["spec"]["template"]["spec"]["containers"][0]["env"]
+
+    assert env[0]["valueFrom"]["secretKeyRef"]["name"] == "playbookstudio-secret"
+    assert env[0]["valueFrom"]["secretKeyRef"]["key"] == "POSTGRES_PASSWORD"
+    assert env[1]["valueFrom"]["secretKeyRef"]["key"] == "OCP_API_TOKEN"
+    assert env[2]["name"] == "DATABASE_URL"
 
 
 def test_pbs_operator_reconciler_status_does_not_claim_live_success() -> None:
@@ -74,3 +99,21 @@ def test_pbs_operator_reconciler_yaml_dump_contains_expected_documents() -> None
     assert "name: terminal-ws" in output
     assert "play_book_studio.mcp.server" in output
     assert "kind: OLSConfig" in output
+
+
+def test_pbs_operator_reconciler_always_pulls_managed_images() -> None:
+    deployments = [
+        resource
+        for resource in render_desired_resources(SAMPLE_CR)
+        if resource["kind"] == "Deployment"
+    ]
+
+    assert deployments
+    assert {
+        deployment["metadata"]["name"]: deployment["spec"]["template"]["spec"]["containers"][0]["imagePullPolicy"]
+        for deployment in deployments
+    } == {
+        "playbookstudio-app": "Always",
+        "playbookstudio-web": "Always",
+        "pbs-mcp": "Always",
+    }

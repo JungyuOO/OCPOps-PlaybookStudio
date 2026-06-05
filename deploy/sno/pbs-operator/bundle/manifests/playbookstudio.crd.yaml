@@ -96,6 +96,15 @@ spec:
                           type: string
                         qdrantEnabled:
                           type: boolean
+                runtime:
+                  type: object
+                  properties:
+                    secretName:
+                      type: string
+                    config:
+                      type: object
+                      additionalProperties:
+                        type: string
             status:
               type: object
               properties:

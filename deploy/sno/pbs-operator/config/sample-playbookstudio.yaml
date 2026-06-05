@@ -31,3 +31,28 @@ spec:
     ingestion:
       outputFormat: pbs-private-context-markdown
       qdrantEnabled: true
+  runtime:
+    secretName: playbookstudio-secret
+    config:
+      ARTIFACTS_DIR: /app/artifacts
+      CORPUS_SEED_DIR: /app/corpus
+      EMBEDDING_BASE_URL: http://tei.cywell.co.kr/v1
+      EMBEDDING_MODEL: dragonkue/bge-m3-ko
+      LLM_ENDPOINT: http://cllm.cywell.co.kr/v1
+      LLM_MODEL: gemma-4-26b-a4b-it-awq-8bit
+      OBJECT_STORAGE_ROOT: /app/storage
+      OCP_API_BASE_URL: https://api.ocp.cywell.local:6443
+      OCP_DEFAULT_NAMESPACE: pbs-ocpops
+      OCP_INSECURE_SKIP_TLS_VERIFY: "true"
+      POSTGRES_DB: playbookstudio
+      POSTGRES_USER: admin
+      QDRANT_COLLECTION: openshift_docs
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_VECTOR_SIZE: "1024"
+      RERANKER_BASE_URL: http://bge-reranker:80
+      RERANKER_ENABLED: "false"
+      SOURCE_MANIFEST_PATH: /app/corpus/manifests/official/ocp_ko_4_20_approved_ko.json
+      TERMINAL_ENABLED: "true"
+      TERMINAL_HOST: 0.0.0.0
+      TERMINAL_SHELL: /app/scripts/terminal-entrypoint.sh
+      TERMINAL_WS_PORT: "8770"
