@@ -42,7 +42,16 @@ def apply_locator_discovery_adjustments(
     )
 
     if has_doc_locator_intent(normalized):
-        boosts["web_console"] = 1.35 if "콘솔" in normalized else boosts.get("web_console", 1.0)
+        if "콘솔" in normalized:
+            boosts["web_console"] = max(boosts.get("web_console", 1.0), 1.78)
+            penalties["support"] = min(penalties.get("support", 1.0), 0.72)
+            penalties["nodes"] = min(penalties.get("nodes", 1.0), 0.86)
+            penalties["security_and_compliance"] = min(
+                penalties.get("security_and_compliance", 1.0),
+                0.8,
+            )
+        else:
+            boosts["web_console"] = boosts.get("web_console", 1.0)
         if troubleshooting_locator_signal:
             boosts["validation_and_troubleshooting"] = max(
                 boosts.get("validation_and_troubleshooting", 1.0),
@@ -56,11 +65,15 @@ def apply_locator_discovery_adjustments(
         if "위키" in normalized or "wiki" in lowered_combined:
             penalties["web_console"] = min(penalties.get("web_console", 1.0), 0.44)
         if has_backup_restore_intent(normalized):
-            boosts["backup_and_restore"] = 1.55
-            boosts["etcd"] = max(boosts.get("etcd", 1.0), 1.1)
+            boosts["backup_and_restore"] = max(boosts.get("backup_and_restore", 1.0), 1.9)
+            boosts["etcd"] = max(boosts.get("etcd", 1.0), 1.35)
             boosts["postinstallation_configuration"] = max(
                 boosts.get("postinstallation_configuration", 1.0),
-                1.2,
+                1.08,
+            )
+            penalties["postinstallation_configuration"] = min(
+                penalties.get("postinstallation_configuration", 1.0),
+                0.82,
             )
             if not has_hosted_control_plane_signal(normalized):
                 penalties["hosted_control_planes"] = min(

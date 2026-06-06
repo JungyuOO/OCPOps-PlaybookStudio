@@ -5,6 +5,7 @@ from __future__ import annotations
 from .ambiguity import has_logging_ambiguity
 from .intents import (
     COMPARE_RE,
+    ETCD_RE,
     LOGGING_RE,
     MCO_RE,
     MONITORING_RE,
@@ -24,6 +25,7 @@ def apply_concept_discovery_adjustments(
     boosts: dict[str, float],
     penalties: dict[str, float],
 ) -> None:
+    lowered_normalized = (normalized or "").lower()
     observability_compare = bool(
         OBSERVABILITY_RE.search(normalized)
         and MONITORING_RE.search(normalized)
@@ -31,6 +33,14 @@ def apply_concept_discovery_adjustments(
     )
     logging_ambiguity = has_logging_ambiguity(normalized)
     hosted_control_plane_signal = has_hosted_control_plane_signal(normalized) or has_hosted_control_plane_signal(context_text)
+    control_plane_etcd_concept = bool(
+        ETCD_RE.search(normalized)
+        and any(token in lowered_normalized for token in ("control plane", "컨트롤 플레인", "제어 평면"))
+        and any(
+            token in normalized
+            for token in ("관계", "역할", "구성 요소", "설명", "문서", "아키텍처")
+        )
+    )
 
     if hosted_control_plane_signal:
         boosts["hosted_control_planes"] = max(boosts.get("hosted_control_planes", 1.0), 2.6)
@@ -65,11 +75,21 @@ def apply_concept_discovery_adjustments(
         )
 
     if logging_ambiguity:
-        boosts["logging"] = max(boosts.get("logging", 1.0), 2.08)
+        boosts["logging"] = max(boosts.get("logging", 1.0), 2.65)
         boosts["monitoring"] = max(boosts.get("monitoring", 1.0), 1.42)
         boosts["observability_overview"] = max(
             boosts.get("observability_overview", 1.0),
             1.34,
+        )
+        penalties["security_and_compliance"] = min(
+            penalties.get("security_and_compliance", 1.0),
+            0.42,
+        )
+        penalties["cli_tools"] = min(penalties.get("cli_tools", 1.0), 0.58)
+        penalties["nodes"] = min(penalties.get("nodes", 1.0), 0.62)
+        penalties["ingress_and_load_balancing"] = min(
+            penalties.get("ingress_and_load_balancing", 1.0),
+            0.72,
         )
         penalties["support"] = min(penalties.get("support", 1.0), 0.34)
         penalties["release_notes"] = min(penalties.get("release_notes", 1.0), 0.42)
@@ -81,6 +101,24 @@ def apply_concept_discovery_adjustments(
             penalties.get("validation_and_troubleshooting", 1.0),
             0.64,
         )
+
+    if control_plane_etcd_concept:
+        boosts["architecture"] = max(boosts.get("architecture", 1.0), 1.84)
+        boosts["overview"] = max(boosts.get("overview", 1.0), 1.34)
+        boosts["etcd"] = max(boosts.get("etcd", 1.0), 1.28)
+        penalties["backup_and_restore"] = min(
+            penalties.get("backup_and_restore", 1.0),
+            0.68,
+        )
+        penalties["postinstallation_configuration"] = min(
+            penalties.get("postinstallation_configuration", 1.0),
+            0.72,
+        )
+        penalties["installation_overview"] = min(
+            penalties.get("installation_overview", 1.0),
+            0.66,
+        )
+        penalties["support"] = min(penalties.get("support", 1.0), 0.58)
 
     if has_mco_concept_intent(normalized):
         boosts["architecture"] = max(boosts.get("architecture", 1.0), 1.28)

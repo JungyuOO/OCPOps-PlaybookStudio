@@ -1,6 +1,7 @@
 from play_book_studio.retrieval.book_adjustments import query_book_adjustments
-from play_book_studio.retrieval.models import SessionContext
+from play_book_studio.retrieval.models import RetrievalHit, SessionContext
 from play_book_studio.retrieval.query import normalize_query
+from play_book_studio.retrieval.scoring import fuse_ranked_hits
 from play_book_studio.retrieval.query_understanding import understand_query, understand_query_signals
 
 
@@ -25,6 +26,154 @@ def test_openshift_install_query_boosts_installation_books() -> None:
     assert boosts["install_modes"] >= 1.5
     assert boosts["installing_on_any_platform"] >= 1.5
     assert penalties["release_notes"] < 1.0
+
+
+def test_official_book_adjustments_prioritize_network_policy_books() -> None:
+    boosts, penalties = query_book_adjustments(
+        "OpenShift 네트워크 정책과 pod 통신 제한을 확인하고 싶어",
+        context=SessionContext(),
+    )
+
+    assert boosts["advanced_networking"] >= 1.5
+    assert boosts["networking_overview"] >= 1.3
+    assert penalties["security_and_compliance"] < 0.8
+
+
+def test_official_book_adjustments_prioritize_image_pull_books() -> None:
+    boosts, penalties = query_book_adjustments(
+        "ImagePullBackOff가 날 때 이미지 레지스트리와 pull secret 확인 기준은?",
+        context=SessionContext(),
+    )
+
+    assert boosts["images"] >= 1.7
+    assert boosts["registry"] >= 1.3
+    assert penalties["disconnected_environments"] < 0.8
+    assert penalties["installation_overview"] < 0.8
+
+
+def test_official_book_adjustments_prioritize_node_drain_aliases() -> None:
+    boosts, penalties = query_book_adjustments(
+        "워커 노드를 드레이닝하려면 뭘 봐야 해?",
+        context=SessionContext(),
+    )
+
+    assert boosts["nodes"] >= 1.6
+    assert boosts["cli_tools"] >= 1.1
+    assert penalties["support"] < 1.0
+
+
+def test_official_book_adjustments_prioritize_console_locator_books() -> None:
+    boosts, penalties = query_book_adjustments(
+        "OpenShift 콘솔에서 프로젝트와 워크로드를 확인하는 문서를 찾아줘",
+        context=SessionContext(),
+    )
+
+    assert boosts["web_console"] >= 1.7
+    assert penalties["support"] < 0.8
+    assert penalties["nodes"] < 1.0
+
+
+def test_official_book_adjustments_keep_pod_pending_out_of_cli_reference() -> None:
+    boosts, penalties = query_book_adjustments(
+        "Pod가 Pending이면 이벤트와 스케줄링 문제를 어떤 순서로 확인해야 해?",
+        context=SessionContext(),
+    )
+
+    assert boosts["support"] >= 1.4
+    assert boosts["nodes"] >= 1.2
+    assert penalties["cli_tools"] < 0.8
+
+
+def test_official_book_adjustments_keep_logging_out_of_audit_security() -> None:
+    boosts, penalties = query_book_adjustments(
+        "로그는 어디서 봐?",
+        context=SessionContext(),
+    )
+
+    assert boosts["logging"] >= 2.5
+    assert boosts["observability_overview"] >= 1.3
+    assert penalties["cli_tools"] < 0.7
+    assert penalties["nodes"] < 0.7
+    assert penalties["security_and_compliance"] < 0.6
+
+
+def test_official_book_adjustments_prioritize_concept_and_locator_books() -> None:
+    control_plane_boosts, control_plane_penalties = query_book_adjustments(
+        "컨트롤 플레인 구성 요소와 etcd 역할을 설명하는 문서가 필요해",
+        context=SessionContext(),
+    )
+    backup_boosts, backup_penalties = query_book_adjustments(
+        "클러스터 백업과 복구 관련 문서 위치를 알려줘",
+        context=SessionContext(),
+    )
+
+    assert control_plane_boosts["architecture"] >= 1.7
+    assert control_plane_boosts["etcd"] >= 1.2
+    assert control_plane_penalties["backup_and_restore"] < 0.8
+    assert backup_boosts["backup_and_restore"] >= 1.8
+    assert backup_boosts["etcd"] >= 1.3
+    assert backup_penalties["postinstallation_configuration"] < 1.0
+
+
+def test_official_book_adjustments_rebalance_project_namespace_compare() -> None:
+    boosts, penalties = query_book_adjustments(
+        "OpenShift project와 namespace 차이를 설명하는 공식 문서가 필요해",
+        context=SessionContext(),
+    )
+
+    assert boosts["overview"] >= 1.4
+    assert boosts.get("cli_tools", 1.0) == 1.0
+    assert penalties["machine_management"] < 0.6
+    assert penalties["security_and_compliance"] < 0.6
+    assert penalties["postinstallation_configuration"] < 0.8
+
+
+def test_project_namespace_compare_penalizes_irrelevant_cli_sections() -> None:
+    irrelevant_cli = RetrievalHit(
+        chunk_id="cli-odo-release",
+        book_slug="cli_tools",
+        chapter="CLI",
+        section="4장. odo에서 중요한 업데이트",
+        anchor="oc-adm-release-new",
+        source_url="",
+        viewer_path="/playbooks/wiki-runtime/active/cli_tools/index.html#oc-adm-release-new",
+        text="Use oc adm release new to create a release payload.",
+        source="bm25",
+        raw_score=1.0,
+    )
+    overview = RetrievalHit(
+        chunk_id="overview-project-namespace",
+        book_slug="overview",
+        chapter="Overview",
+        section="OpenShift Container Platform의 일반 용어집",
+        anchor="project-namespace",
+        source_url="",
+        viewer_path="/playbooks/wiki-runtime/active/overview/index.html#project-namespace",
+        text="OpenShift projects provide Kubernetes namespace scoping for applications.",
+        source="bm25",
+        raw_score=0.8,
+    )
+
+    hits = fuse_ranked_hits(
+        "OpenShift project와 namespace 차이를 설명하는 공식 문서가 필요해",
+        {"bm25": [irrelevant_cli, overview], "vector": [irrelevant_cli, overview]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "overview-project-namespace"
+    assert hits[1].component_scores["project_namespace_cli_section_mismatch_penalty"] == 0.34
+
+
+def test_official_book_adjustments_route_external_exposure_without_registry_context() -> None:
+    boosts, penalties = query_book_adjustments(
+        "그럼 외부로 공개할 땐 뭘 봐야 해?",
+        context=SessionContext(),
+    )
+
+    assert boosts["ingress_and_load_balancing"] >= 1.8
+    assert boosts["networking_overview"] >= 1.3
+    assert penalties["registry"] < 0.6
 
 
 def test_secret_config_error_query_understanding_expands_for_troubleshooting() -> None:
