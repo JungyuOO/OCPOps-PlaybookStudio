@@ -90,6 +90,25 @@ def _scope_compatible_metadata_filter(
     return compatible_filter
 
 
+def _effective_candidate_k(candidate_k: int, signal_plan: Any) -> int:
+    classification = signal_plan.classification if isinstance(signal_plan.classification, dict) else {}
+    search_signals = signal_plan.search_signals if isinstance(signal_plan.search_signals, dict) else {}
+    intent_labels = set(search_signals.get("intent_labels") or ())
+    command_families = set(search_signals.get("command_families") or ())
+    commands = set(search_signals.get("commands") or ())
+    if (
+        str(classification.get("domain") or "") == "etcd"
+        and "backup" in intent_labels
+        and "restore" not in intent_labels
+        and (
+            "cluster_backup" in command_families
+            or any("cluster-backup.sh" in str(command) for command in commands)
+        )
+    ):
+        return max(candidate_k, 64)
+    return candidate_k
+
+
 def build_retrieval_plan(
     query: str,
     *,
@@ -130,7 +149,7 @@ def build_retrieval_plan(
         metadata_filter = _scope_compatible_metadata_filter(signal_plan.metadata_filter, context)
     rewrite_query_ms = round((time.perf_counter() - rewrite_started_at) * 1000, 1)
 
-    effective_candidate_k = candidate_k
+    effective_candidate_k = _effective_candidate_k(candidate_k, signal_plan)
 
     return RetrievalPlan(
         normalized_query=normalized_query,

@@ -89,6 +89,11 @@ OBSERVABILITY_COMPARE_RE = re.compile(
     r"|(?:구분|차이|설명|비교).*(monitoring|모니터링).*(logging|로깅).*(observability|관측|옵저버빌리티)",
     re.IGNORECASE,
 )
+EXPLICIT_LOG_TARGET_RE = re.compile(
+    r"\b(?:pod|pods|deployment|deployments|operator|container|containers|node|nodes)\b|"
+    r"파드|포드|디플로이먼트|오퍼레이터|컨테이너|노드|애플리케이션|앱|감사|audit|이벤트|event|infra|인프라",
+    re.IGNORECASE,
+)
 
 
 def _friendly_intro_answer() -> str:
@@ -156,6 +161,21 @@ def route_non_rag(
                 "OpenShift 문서를 바탕으로 개념 설명, 운영 절차, 트러블슈팅을 실행 가이드 형태로 안내합니다."
             ),
         )
+    if has_logging_ambiguity(normalized) and not EXPLICIT_LOG_TARGET_RE.search(normalized):
+        return RoutedResponse(
+            route="clarification",
+            answer=(
+                "답변: 어떤 로그를 보는지 먼저 정해야 합니다. 애플리케이션, 인프라, 감사 로그 중 어떤 건가요?"
+            ),
+        )
+    out_of_corpus_version = detect_out_of_corpus_version(normalized, corpus_version=corpus_version)
+    if out_of_corpus_version is not None:
+        return RoutedResponse(
+            route="no_answer",
+            answer=(
+                f"답변: 현재 코퍼스는 {corpus_label} {corpus_version} 기준이라 {out_of_corpus_version} 버전 정보는 근거로 답할 수 없습니다."
+            ),
+        )
     if ocp_operational_question or TECHNICAL_HINT_RE.search(normalized):
         return None
     if CAPABILITY_RE.search(normalized):
@@ -213,14 +233,6 @@ def route_non_rag(
             route="clarification",
             answer=(
                 "답변: 설치 후 무엇을 먼저 할지 작업 범위를 먼저 정해야 합니다. 네트워크, 보안·인증, 레지스트리·스토리지, 노드·머신셋, 모니터링 중 어디부터 볼까요?"
-            ),
-        )
-    out_of_corpus_version = detect_out_of_corpus_version(normalized, corpus_version=corpus_version)
-    if out_of_corpus_version is not None:
-        return RoutedResponse(
-            route="no_answer",
-            answer=(
-                f"답변: 현재 코퍼스는 {corpus_label} {corpus_version} 기준이라 {out_of_corpus_version} 버전 정보는 근거로 답할 수 없습니다."
             ),
         )
     unsupported_product = detect_unsupported_product(normalized)

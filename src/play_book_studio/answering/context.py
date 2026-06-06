@@ -1026,14 +1026,24 @@ def _auth_can_i_hit_priority(hit: RetrievalHit) -> tuple[int, int, int]:
 
 def _topic_preferred_books(query: str) -> tuple[str, ...]:
     lowered = (query or "").lower()
+    if _is_project_namespace_compare_query(query):
+        return ("overview", "applications", "cli_tools")
+    if _is_web_console_workspace_locator_query(query):
+        return ("web_console", "applications", "building_applications")
     if "route" in lowered and any(token in lowered for token in ("tls", "인증서", "certificate", "cert")):
         return ("ingress_and_load_balancing", "security_and_compliance", "authentication_and_authorization")
     if any(token in lowered for token in ("ocp-certificates", "인증서", "certificate", "cert")):
         return ("security_and_compliance", "authentication_and_authorization", "cli_tools")
     if "dns" in lowered:
         return ("networking_overview", "networking_operators", "ingress_and_load_balancing")
-    if "networkpolicy" in lowered or "network policy" in lowered:
-        return ("network_security", "networking_overview")
+    if (
+        "networkpolicy" in lowered
+        or "network policy" in lowered
+        or "네트워크 정책" in query
+        or "통신 제한" in query
+        or "pod 통신" in lowered
+    ):
+        return ("advanced_networking", "network_security", "networking_overview", "networking")
     if "service endpoint" in lowered or ("service" in lowered and "route" in lowered):
         return ("networking_overview", "ingress_and_load_balancing", "nodes")
     if "route" in lowered or "ingress" in lowered:
@@ -1075,6 +1085,29 @@ def _topic_preferred_books(query: str) -> tuple[str, ...]:
     if all(token in lowered for token in ("monitoring", "logging")) or "observability" in lowered:
         return ("monitoring", "logging", "observability_overview")
     return ()
+
+
+def _is_project_namespace_compare_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    has_project = "project" in lowered or "프로젝트" in query
+    has_namespace = "namespace" in lowered or "네임스페이스" in query
+    compare_or_explain = any(token in query for token in ("차이", "설명", "초보자")) or any(
+        token in lowered for token in ("compare", "difference")
+    )
+    return has_project and has_namespace and compare_or_explain
+
+
+def _is_web_console_workspace_locator_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    console_signal = "web console" in lowered or "웹 콘솔" in query or "콘솔" in query
+    workspace_signal = any(
+        token in lowered
+        for token in ("project", "projects", "workload", "workloads", "application", "applications")
+    ) or any(token in query for token in ("프로젝트", "워크로드", "애플리케이션", "앱"))
+    locator_signal = any(token in query for token in ("어디", "확인", "봐야", "보려면")) or any(
+        token in lowered for token in ("where", "view", "check", "show")
+    )
+    return console_signal and workspace_signal and locator_signal
 
 
 def _is_troubleshooting_doc_locator_query(query: str) -> bool:
@@ -1136,7 +1169,16 @@ def _backup_only_etcd_context_priority(hit: RetrievalHit) -> tuple[int, int]:
         "backup_and_restore": 2,
         "etcd": 3,
     }.get(hit.book_slug, 8)
-    phase_priority = 0 if is_backup else 2 if is_restore else 1
+    if is_restore and "cluster-backup.sh" not in lowered_text:
+        phase_priority = 8
+    elif "cluster-backup.sh" in lowered_text or "/usr/local/bin/cluster-backup.sh" in lowered_text:
+        phase_priority = 0
+    elif "oc debug --as-root node" in lowered_text or "chroot /host" in lowered_text:
+        phase_priority = 1
+    elif is_backup:
+        phase_priority = 2
+    else:
+        phase_priority = 5
     return (phase_priority, book_priority)
 
 
@@ -1474,7 +1516,7 @@ def _select_hits(
         [
             _is_oc_login_query(normalized),
             _is_auth_can_i_query(normalized),
-            has_command_request(normalized),
+            has_command_request(normalized) and not _is_web_console_workspace_locator_query(normalized),
             _is_install_guidance_query(normalized),
             has_backup_restore_intent(normalized),
             has_crash_loop_troubleshooting_intent(normalized),
@@ -1526,7 +1568,7 @@ def _select_hits(
         support_window = ranked_hits[: max(max_chunks * 2, 8)]
         top_score = _hit_score(support_window[0])
         top_book = support_window[0].book_slug
-    elif has_command_request(normalized):
+    elif has_command_request(normalized) and not _is_web_console_workspace_locator_query(normalized):
         ranked_hits = sorted(
             ranked_hits,
             key=lambda hit: (
@@ -2017,7 +2059,7 @@ def _select_hits(
             for book_slug in ("cli_tools", "authentication_and_authorization", "postinstallation_configuration"):
                 if best_book_scores.get(book_slug, 0.0) >= top_score * 0.44:
                     allowed_books.add(book_slug)
-    if has_command_request(normalized):
+    if has_command_request(normalized) and not _is_web_console_workspace_locator_query(normalized):
         command_books = tuple(
             book_slug
             for book_slug in (
@@ -2260,6 +2302,7 @@ def _select_hits(
     skip_crash_loop_noise = has_crash_loop_troubleshooting_intent(normalized) and any(
         _crash_loop_priority(hit) < 9 for hit in ranked_hits
     )
+    skip_backup_restore_noise = _is_backup_only_etcd_query(normalized)
     uploaded_hits = [
         hit
         for hit in ranked_hits
@@ -2296,6 +2339,8 @@ def _select_hits(
         if _hit_score(hit) < score_cutoff:
             continue
         if skip_crash_loop_noise and _crash_loop_priority(hit) >= 9:
+            continue
+        if skip_backup_restore_noise and _backup_only_etcd_context_priority(hit)[0] >= 8:
             continue
         if per_book_counts[hit.book_slug] >= per_book_limit:
             continue
@@ -2405,7 +2450,7 @@ def assemble_context(
         for term in (*intent_profile.evidence_terms, *intent_profile.primary_commands, *intent_profile.query_terms)
         if term.strip()
     )
-    if intent_terms:
+    if intent_terms and not _is_web_console_workspace_locator_query(query):
         def hit_matches_intent_terms(hit: RetrievalHit) -> bool:
             haystack = " ".join(
                 [

@@ -453,6 +453,10 @@ def apply_hit_adjustments(
         or "백업" in signals.query
     ) and ("etcd" in lowered_query or domain in {"etcd", "backup_restore"})
     if has_etcd_backup_intent:
+        is_replacement_query = any(
+            term in lowered_query
+            for term in ("replace", "replacement", "restore", "crash", "loop", "member", "복구", "교체")
+        )
         if hit.book_slug == "backup_and_restore" and (
             "automated etcd backup" in lowered_section
             or "creating a single automated etcd backup" in lowered_section
@@ -461,14 +465,13 @@ def apply_hit_adjustments(
         ):
             hit.fused_score *= 2.2
             hit.component_scores["etcd_backup_section_boost"] = 2.2
-        elif "cluster-backup.sh" in lowered_search_text or "/usr/local/bin/cluster-backup.sh" in lowered_search_text:
-            hit.fused_score *= 1.45
-            hit.component_scores["etcd_backup_command_boost"] = 1.45
+        if (
+            not is_replacement_query
+            and ("cluster-backup.sh" in lowered_search_text or "/usr/local/bin/cluster-backup.sh" in lowered_search_text)
+        ):
+            hit.fused_score *= 1.9
+            hit.component_scores["etcd_backup_command_boost"] = 1.9
 
-        is_replacement_query = any(
-            term in lowered_query
-            for term in ("replace", "replacement", "restore", "crash", "loop", "member", "복구", "교체")
-        )
         is_replacement_hit = any(
             term in lowered_section
             for term in ("replacing", "replacement", "unhealthy", "crashloop", "crash loop", "restore")

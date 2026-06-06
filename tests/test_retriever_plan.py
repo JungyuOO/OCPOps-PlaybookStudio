@@ -24,6 +24,16 @@ def test_external_product_without_active_document_stays_out_of_scope() -> None:
     assert plan.unsupported_product == "argocd"
 
 
+def test_etcd_backup_plan_expands_candidate_budget_for_script_recall() -> None:
+    plan = build_retrieval_plan(
+        "etcd 백업은 실제로 어떤 표준 절차로 해야 해?",
+        context=SessionContext(),
+        candidate_k=24,
+    )
+
+    assert plan.effective_candidate_k == 64
+
+
 def test_active_repository_scope_keeps_raw_korean_query_before_llm_embedding_queries(monkeypatch) -> None:
     monkeypatch.setattr(
         retriever_plan,

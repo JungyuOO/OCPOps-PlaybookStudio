@@ -83,3 +83,42 @@ def test_answer_eval_flags_wrong_citation_chunk_even_when_answer_text_matches() 
     assert detail["pass"] is False
     assert detail["citation_forbidden_terms_pass"] is False
     assert detail["forbidden_citation_term_hits"] == ["oc get pods -A"]
+
+
+def test_answer_eval_blocks_external_lightspeed_reference_in_pbs_rag() -> None:
+    citation = _citation()
+    citation.viewer_path = "/external/lightspeed/artifact-1"
+    result = AnswerResult(
+        query="노드 사용량 확인",
+        mode="ops",
+        answer="답변: `oc adm top nodes` 명령으로 확인합니다. [1]",
+        rewritten_query="노드 사용량 확인",
+        citations=[citation],
+        cited_indices=[1],
+        pipeline_trace={
+            "answer_source": "pbs_rag",
+            "external_answer": {"status": "skipped_scoped_sources"},
+        },
+    )
+
+    detail = evaluate_case(
+        _FakeAnswerer(result),
+        {
+            "id": "pbs-boundary",
+            "query": "노드 사용량 확인",
+            "expected_book_slugs": ["support"],
+            "expected_answer_source": "pbs_rag",
+            "forbidden_reference_fragments": ["/external/lightspeed"],
+            "must_include_terms": ["oc adm top nodes"],
+            "expected_citation_terms": ["oc adm top nodes"],
+        },
+        top_k=5,
+        candidate_k=10,
+        max_context_chunks=3,
+    )
+
+    assert detail["pass"] is False
+    assert detail["answer_source"] == "pbs_rag"
+    assert detail["answer_source_pass"] is True
+    assert detail["forbidden_reference_hits"] == ["/external/lightspeed"]
+    assert detail["pbs_external_boundary_pass"] is False

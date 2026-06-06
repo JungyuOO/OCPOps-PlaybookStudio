@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from play_book_studio.answering.context import assemble_context
 from play_book_studio.answering.answerer import _is_low_confidence_retrieval
-from play_book_studio.answering.answer_text_commands import strip_ungrounded_code_blocks
+from play_book_studio.answering.answer_text_commands import preserve_grounded_commands, strip_ungrounded_code_blocks
 from play_book_studio.answering.answer_text_formatting import shape_beginner_grounded_answer
 from play_book_studio.answering.models import AnswerResult, Citation
 from play_book_studio.http.presenters import _citation_display_payload
@@ -68,6 +68,191 @@ def _citation(
 
 def test_korean_command_lookup_is_detected_without_fixed_answer() -> None:
     assert has_command_request("네임스페이스 확인하는 명령어가 뭐야?")
+
+
+def test_preserve_grounded_commands_appends_omitted_cited_command() -> None:
+    answer = "답변: 먼저 `oc adm cordon <node_name>`으로 새 Pod 배치를 막습니다 [1]."
+    preserved = preserve_grounded_commands(
+        answer,
+        query="작업자 노드 점검 전에 cordon하고 drain하는 명령 예시를 알려줘",
+        citations=[
+            _citation(
+                cli_commands=(
+                    "oc adm cordon <node_name>",
+                    "oc adm drain <node_name> --ignore-daemonsets --delete-emptydir-data",
+                )
+            )
+        ],
+    )
+
+    assert "근거에 포함된 명령" in preserved
+    assert "oc adm drain <node_name> --ignore-daemonsets --delete-emptydir-data" in preserved
+    assert preserved.count("oc adm cordon <node_name>") == 1
+
+
+def test_etcd_backup_context_preserves_cluster_backup_command_chunk() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "restore",
+                book_slug="backup_and_restore",
+                section="6.3.3.4. Restoring a cluster manually from an etcd backup",
+                text="Restore procedure cluster-restore.sh and etcd restore details.",
+                cli_commands=("cluster-restore.sh",),
+                chunk_type="command",
+                raw_score=1.0,
+            ),
+            _hit(
+                "debug",
+                book_slug="backup_and_restore",
+                section="6.1.1. Backing up etcd data",
+                text="$ oc debug --as-root node/<node_name>\nsh-4.4# chroot /host",
+                cli_commands=("oc debug --as-root node/<node_name>", "chroot /host"),
+                chunk_type="command",
+                raw_score=0.8,
+            ),
+            _hit(
+                "cluster-backup",
+                book_slug="etcd",
+                section="4.1.1. etcd 데이터 백업",
+                text=(
+                    "디버그 쉘에서 스크립트를 실행하고 백업 저장 위치를 전달합니다. "
+                    "cluster-backup.sh sh-4.4# /usr/local/bin/cluster-backup.sh /home/core/assets/backup"
+                ),
+                cli_commands=("cluster-backup.sh", "/usr/local/bin/cluster-backup.sh /home/core/assets/backup"),
+                chunk_type="command",
+                raw_score=0.2,
+            ),
+        ],
+        query="etcd 백업은 실제로 어떤 표준 절차로 해야 해?",
+        max_chunks=3,
+    )
+
+    assert bundle.citations[0].chunk_id == "cluster-backup"
+    assert any("cluster-backup.sh" in citation.excerpt for citation in bundle.citations)
+    assert all(citation.chunk_id != "restore" for citation in bundle.citations)
+
+
+def test_etcd_backup_scoring_prefers_script_chunk_over_intro_and_restore_noise() -> None:
+    intro = _hit(
+        "backup-intro",
+        book_slug="backup_and_restore",
+        section="6.1.1. Backing up etcd data",
+        text="Follow these steps to back up etcd data. You can later restore etcd from the backup.",
+        raw_score=1.0,
+    )
+    restore = _hit(
+        "restore-noise",
+        book_slug="backup_and_restore",
+        section="6.3.3.4. Restoring a cluster manually from an etcd backup",
+        text="Restore procedure for an etcd backup.",
+        raw_score=0.95,
+    )
+    script = _hit(
+        "cluster-backup-script",
+        book_slug="backup_and_restore",
+        section="6.1.1. Backing up etcd data",
+        text="Run cluster-backup.sh in the debug shell. sh-4.4# /usr/local/bin/cluster-backup.sh /home/core/assets/backup",
+        cli_commands=("cluster-backup.sh", "/usr/local/bin/cluster-backup.sh /home/core/assets/backup"),
+        chunk_type="command",
+        raw_score=0.6,
+    )
+
+    hits = fuse_ranked_hits(
+        "etcd 백업은 실제로 어떤 표준 절차로 해야 해?",
+        {"bm25": [intro, restore, script], "vector": [intro, restore, script]},
+        context=SessionContext(),
+        top_k=3,
+    )
+
+    assert hits[0].chunk_id == "cluster-backup-script"
+    assert hits[0].component_scores["etcd_backup_command_boost"] == 1.9
+
+
+def test_network_policy_context_prefers_network_policy_books_over_noise() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "postinstall-noise",
+                book_slug="postinstallation_configuration",
+                section="Postinstall networking",
+                text="Generic postinstallation network configuration.",
+                raw_score=1.0,
+            ),
+            _hit(
+                "network-policy",
+                book_slug="advanced_networking",
+                section="NetworkPolicy 기준",
+                text="NetworkPolicy uses podSelector, ingress, and egress rules to limit pod communication.",
+                raw_score=0.2,
+            ),
+        ],
+        query="OpenShift NetworkPolicy로 pod 통신을 제한하려면 어떤 기준을 봐야 해?",
+        max_chunks=2,
+    )
+
+    assert bundle.citations[0].book_slug == "advanced_networking"
+
+
+def test_web_console_workspace_context_prefers_console_books_over_runtime_noise() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "cli-current-project-noise",
+                book_slug="cli_tools",
+                section="현재 프로젝트 보기",
+                text="아래 명령을 사용하여 현재 프로젝트를 봅니다. oc project",
+                cli_commands=("oc project",),
+                chunk_type="command",
+                raw_score=1.0,
+            ),
+            _hit(
+                "console-workloads",
+                book_slug="web_console",
+                section="웹 콘솔에서 프로젝트와 워크로드 보기",
+                text="Use the web console developer perspective to view projects, workloads, and applications.",
+                raw_score=0.2,
+            ),
+        ],
+        query="OpenShift 웹 콘솔에서 프로젝트와 워크로드를 확인하려면 어디를 봐야 해?",
+        max_chunks=2,
+    )
+
+    assert bundle.citations[0].book_slug == "web_console"
+
+
+def test_project_namespace_compare_context_prefers_foundation_books_over_console_noise() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "console-noise",
+                book_slug="web_console",
+                section="Namespace dashboard link",
+                text="A custom link can appear under namespace or project in the web console.",
+                raw_score=1.0,
+            ),
+            _hit(
+                "auth-noise",
+                book_slug="authentication_and_authorization",
+                section="Default projects",
+                text="Default projects host infrastructure pods.",
+                raw_score=0.8,
+            ),
+            _hit(
+                "cli-project-namespace",
+                book_slug="cli_tools",
+                section="Projects and namespaces",
+                text="Use oc get projects and oc get namespaces to inspect project and namespace scopes.",
+                cli_commands=("oc get projects", "oc get namespaces"),
+                chunk_type="command",
+                raw_score=0.2,
+            ),
+        ],
+        query="OpenShift project와 namespace 차이를 초보자 기준으로 설명해줘",
+        max_chunks=2,
+    )
+
+    assert bundle.citations[0].book_slug == "cli_tools"
 
 
 def test_command_lookup_boosts_command_bearing_chunks() -> None:

@@ -94,6 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=ANSWER_EVAL_CASES_PATH,
     )
     eval_parser.add_argument("--database-url", default="")
+    eval_parser.add_argument("--output", type=Path, default=None)
     _add_runtime_args(eval_parser)
 
     retrieval_eval_parser = subparsers.add_parser("retrieval-eval", help="Run retrieval evaluation cases")
@@ -881,7 +882,7 @@ def _run_eval(args: argparse.Namespace) -> int:
         **summarize_case_results(details),
         "details": details,
     }
-    output_path = settings.answer_eval_report_path
+    output_path = args.output or settings.answer_eval_report_path
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"wrote answer eval report: {output_path}")

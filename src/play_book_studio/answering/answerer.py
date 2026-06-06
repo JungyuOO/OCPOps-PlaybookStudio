@@ -43,7 +43,11 @@ from play_book_studio.retrieval.query import (
 from play_book_studio.retrieval.korean_text import normalized_token_set
 from play_book_studio.retrieval.query_understanding import has_beginner_troubleshooting_intent
 
-from .answer_text_commands import has_sufficient_command_grounding, strip_ungrounded_code_blocks
+from .answer_text_commands import (
+    has_sufficient_command_grounding,
+    preserve_grounded_commands,
+    strip_ungrounded_code_blocks,
+)
 from .answer_text_formatting import summarize_session_context
 from .citations import (
     finalize_citations,
@@ -1552,6 +1556,17 @@ class ChatAnswerer:
                     answer_text,
                     fallback_citations,
                 )
+        command_preserved_answer_text = preserve_grounded_commands(
+            answer_text,
+            query=query,
+            citations=final_citations or context_bundle.citations,
+        )
+        if command_preserved_answer_text != answer_text:
+            answer_text = command_preserved_answer_text
+            answer_text, final_citations, cited_indices = finalize_citations(
+                answer_text,
+                final_citations or context_bundle.citations,
+            )
         guarded_answer_text = strip_ungrounded_code_blocks(
             answer_text,
             citations=final_citations or context_bundle.citations,
