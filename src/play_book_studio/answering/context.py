@@ -11,10 +11,12 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.settings import load_settings
 from play_book_studio.http.wiki_user_overlay import build_wiki_overlay_signal_payload
 from play_book_studio.retrieval.intake_overlay import has_active_customer_pack_selection
 from play_book_studio.retrieval.models import RetrievalHit
 from play_book_studio.retrieval.models import SessionContext
+from play_book_studio.retrieval.payload import retrieval_payload_from_row
 from play_book_studio.retrieval.query import (
     has_command_request,
     has_backup_restore_intent,
@@ -145,6 +147,236 @@ def _is_navigation_only_hit(hit: RetrievalHit) -> bool:
 
 def _demote_navigation_only_hits(hits: list[RetrievalHit]) -> list[RetrievalHit]:
     return sorted(hits, key=lambda hit: (1 if _is_navigation_only_hit(hit) else 0))
+
+
+def _is_user_upload_hit(hit: RetrievalHit) -> bool:
+    return (
+        str(hit.source_scope or "").strip() == "user_upload"
+        or str(hit.source_collection or "").strip() in {"uploaded", "uploads"}
+        or hit.viewer_path.startswith("/uploads/documents/")
+    )
+
+
+def _is_thin_user_upload_hit(hit: RetrievalHit) -> bool:
+    if not _is_user_upload_hit(hit):
+        return False
+    if hit.cli_commands or hit.asset_ids:
+        return False
+    text = SPACE_RE.sub(" ", strip_internal_markup(hit.text)).strip()
+    if not text:
+        return True
+    token_count = len([part for part in text.split(" ") if part.strip()])
+    if len(text) > 140 or token_count >= 18:
+        return False
+    heading_terms = {
+        SPACE_RE.sub(" ", str(value or "")).strip().casefold()
+        for value in (
+            hit.section,
+            hit.heading_title,
+            hit.chapter,
+            *hit.section_path,
+            *hit.toc_path,
+        )
+        if str(value or "").strip()
+    }
+    text_terms = [
+        SPACE_RE.sub(" ", line).strip().casefold()
+        for line in strip_internal_markup(hit.text).splitlines()
+        if SPACE_RE.sub(" ", line).strip()
+    ]
+    if text_terms and all(term in heading_terms for term in text_terms):
+        return True
+    return token_count <= 6 and len(text) < 80
+
+
+def _substantive_upload_companion(
+    target: RetrievalHit,
+    hits: list[RetrievalHit],
+    *,
+    used_chunk_ids: set[str],
+    root_dir: Path | None = None,
+) -> RetrievalHit | None:
+    document_source_id = str(target.document_source_id or "").strip()
+    if not document_source_id:
+        return None
+    target_section_root = _section_core(target.section_path[0] if target.section_path else target.section)
+    candidates: list[RetrievalHit] = []
+    for hit in hits:
+        if hit.chunk_id in used_chunk_ids or hit.chunk_id == target.chunk_id:
+            continue
+        if not _is_user_upload_hit(hit):
+            continue
+        if str(hit.document_source_id or "").strip() != document_source_id:
+            continue
+        if _is_thin_user_upload_hit(hit):
+            continue
+        candidates.append(hit)
+    if not candidates:
+        return _substantive_upload_companion_from_db(
+            target,
+            root_dir=root_dir,
+            used_chunk_ids=used_chunk_ids,
+        )
+    candidates.sort(
+        key=lambda hit: (
+            0
+            if target_section_root
+            and _section_core(hit.section_path[0] if hit.section_path else hit.section) == target_section_root
+            else 1,
+            -_hit_score(hit),
+            hit.section,
+            hit.chunk_id,
+        )
+    )
+    return candidates[0]
+
+
+def _db_upload_companion_row_to_hit(row: dict[str, Any], *, target: RetrievalHit) -> RetrievalHit:
+    from play_book_studio.retrieval.vector import hit_from_payload
+
+    score = max(_hit_score(target) * 0.92, 0.001)
+    return hit_from_payload(
+        retrieval_payload_from_row(row),
+        source=target.source or "hybrid",
+        score=score,
+    )
+
+
+def _substantive_upload_companion_from_db(
+    target: RetrievalHit,
+    *,
+    root_dir: Path | None,
+    used_chunk_ids: set[str],
+) -> RetrievalHit | None:
+    if root_dir is None:
+        return None
+    document_source_id = str(target.document_source_id or "").strip()
+    if not document_source_id:
+        return None
+    try:
+        database_url = load_settings(root_dir).database_url.strip()
+    except Exception:  # noqa: BLE001
+        return None
+    if not database_url:
+        return None
+    try:
+        import psycopg
+
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    WITH target_chunk AS (
+                        SELECT c.ordinal AS target_ordinal
+                        FROM document_chunks c
+                        JOIN parsed_documents pd ON pd.id = c.parsed_document_id
+                        JOIN document_sources ds ON ds.id = pd.document_source_id
+                        WHERE c.id = %s::uuid
+                          AND ds.id = %s::uuid
+                        LIMIT 1
+                    ),
+                    latest_parsed AS (
+                        SELECT pd.id
+                        FROM parsed_documents pd
+                        WHERE pd.document_source_id = %s::uuid
+                        ORDER BY pd.created_at DESC, pd.id DESC
+                        LIMIT 1
+                    )
+                    SELECT
+                        c.id::text AS chunk_id,
+                        c.chunk_key,
+                        c.ordinal,
+                        c.chunk_type,
+                        c.markdown,
+                        c.embedding_text,
+                        c.section_path,
+                        c.section_number,
+                        c.heading_title,
+                        c.source_anchor,
+                        c.toc_path,
+                        c.asset_ids,
+                        c.repository_id::text AS repository_id,
+                        c.owner_user_id,
+                        c.visibility,
+                        c.source_scope,
+                        c.chunk_role,
+                        c.parent_chunk_id::text AS parent_chunk_id,
+                        c.child_chunk_ids,
+                        c.navigation_only,
+                        c.beginner_narrative,
+                        c.starter_question_candidates,
+                        c.followup_question_candidates,
+                        c.question_candidates_version,
+                        c.metadata AS chunk_metadata,
+                        pd.id::text AS parsed_document_id,
+                        pd.title AS document_title,
+                        pd.metadata AS parsed_metadata,
+                        ds.id::text AS document_source_id,
+                        ds.filename,
+                        ds.storage_key,
+                        ds.source_kind,
+                        ds.metadata AS source_metadata,
+                        ds.created_by
+                    FROM document_chunks c
+                    JOIN latest_parsed lp ON lp.id = c.parsed_document_id
+                    JOIN parsed_documents pd ON pd.id = c.parsed_document_id
+                    JOIN document_sources ds ON ds.id = pd.document_source_id
+                    CROSS JOIN target_chunk tc
+                    WHERE ds.id = %s::uuid
+                      AND c.id <> %s::uuid
+                      AND length(btrim(COALESCE(c.embedding_text, ''))) > 0
+                    ORDER BY
+                        CASE WHEN c.ordinal > tc.target_ordinal THEN 0 ELSE 1 END,
+                        abs(c.ordinal - tc.target_ordinal),
+                        c.ordinal
+                    LIMIT 16
+                    """,
+                    (
+                        target.chunk_id,
+                        document_source_id,
+                        document_source_id,
+                        document_source_id,
+                        target.chunk_id,
+                    ),
+                )
+                rows = cursor.fetchall()
+                columns = [item.name for item in cursor.description]
+    except Exception:  # noqa: BLE001
+        return None
+
+    for row in rows:
+        row_dict = dict(zip(columns, row, strict=True))
+        chunk_id = str(row_dict.get("chunk_id") or "").strip()
+        if not chunk_id or chunk_id in used_chunk_ids:
+            continue
+        hit = _db_upload_companion_row_to_hit(row_dict, target=target)
+        if not _is_thin_user_upload_hit(hit):
+            return hit
+    return None
+
+
+def _replace_thin_user_upload_hits(
+    selected_hits: list[RetrievalHit],
+    all_hits: list[RetrievalHit],
+    *,
+    root_dir: Path | None = None,
+) -> list[RetrievalHit]:
+    if not selected_hits:
+        return selected_hits
+    upgraded: list[RetrievalHit] = []
+    used_chunk_ids: set[str] = set()
+    for hit in selected_hits:
+        replacement = (
+            _substantive_upload_companion(hit, all_hits, used_chunk_ids=used_chunk_ids, root_dir=root_dir)
+            if _is_thin_user_upload_hit(hit)
+            else None
+        )
+        chosen = replacement or hit
+        if chosen.chunk_id in used_chunk_ids:
+            continue
+        upgraded.append(chosen)
+        used_chunk_ids.add(chosen.chunk_id)
+    return upgraded or selected_hits
 
 
 def _commands_from_excerpt(excerpt: str) -> tuple[str, ...]:
@@ -2238,6 +2470,7 @@ def assemble_context(
                 hit.chunk_id,
             ),
         )
+    selected_hits = _replace_thin_user_upload_hits(selected_hits, hits, root_dir=root_dir)
 
     for hit in selected_hits:
         if hit.chunk_id in seen_chunk_ids:

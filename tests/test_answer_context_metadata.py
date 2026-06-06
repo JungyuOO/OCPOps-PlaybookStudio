@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import play_book_studio.answering.context as answer_context
 from play_book_studio.answering.context import assemble_context
 from play_book_studio.retrieval.models import RetrievalHit, SessionContext
 
@@ -205,3 +206,117 @@ def test_assemble_context_keeps_multiple_user_upload_hits_for_active_document() 
     )
 
     assert [citation.chunk_id for citation in bundle.citations] == ["chunk-service", "chunk-types"]
+
+
+def test_assemble_context_replaces_thin_user_upload_title_hit_with_substantive_chunk() -> None:
+    title_hit = RetrievalHit(
+        chunk_id="chunk-title",
+        book_slug="uploaded-documents",
+        chapter="CI 순서",
+        section="CI 순서",
+        anchor="ci-title",
+        source_url="uploads/ci.pdf",
+        viewer_path="/uploads/documents/doc-ci/index.html#chunk-title",
+        text="CI 순서\n\nCI 순서",
+        source="hybrid",
+        raw_score=1.0,
+        fused_score=0.06,
+        section_path=("CI 순서",),
+        heading_title="CI 순서",
+        document_source_id="doc-ci",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+        source_collection="uploads",
+    )
+    body_hit = RetrievalHit(
+        chunk_id="chunk-body",
+        book_slug="uploaded-documents",
+        chapter="CI 순서",
+        section="git source에 파이프라인 yaml 구성",
+        anchor="ci-body",
+        source_url="uploads/ci.pdf",
+        viewer_path="/uploads/documents/doc-ci/index.html#chunk-body",
+        text=(
+            "CI 순서 > git source에 파이프라인 yaml 구성\n\n"
+            "Git push 이벤트가 들어오면 Tekton PipelineRun이 실행되고, "
+            "이미지를 빌드한 뒤 레지스트리에 push합니다."
+        ),
+        source="hybrid",
+        raw_score=0.8,
+        fused_score=0.04,
+        section_path=("CI 순서", "git source에 파이프라인 yaml 구성"),
+        heading_title="git source에 파이프라인 yaml 구성",
+        document_source_id="doc-ci",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+        source_collection="uploads",
+    )
+
+    bundle = assemble_context(
+        [title_hit, body_hit],
+        query="업로드 문서 기준 CI 순서 핵심을 알려줘",
+        session_context=SessionContext(owner_user_id="owner-a", active_document_id="doc-ci"),
+        max_chunks=1,
+    )
+
+    assert [citation.chunk_id for citation in bundle.citations] == ["chunk-body"]
+    assert "Git push 이벤트" in bundle.citations[0].excerpt
+
+
+def test_assemble_context_uses_db_companion_when_top_hits_only_have_upload_title(monkeypatch, tmp_path) -> None:
+    title_hit = RetrievalHit(
+        chunk_id="chunk-title",
+        book_slug="uploaded-documents",
+        chapter="CI 순서",
+        section="CI 순서",
+        anchor="ci-title",
+        source_url="uploads/ci.pdf",
+        viewer_path="/uploads/documents/doc-ci/index.html#chunk-title",
+        text="CI 순서\n\nCI 순서",
+        source="hybrid",
+        raw_score=1.0,
+        fused_score=0.06,
+        section_path=("CI 순서",),
+        heading_title="CI 순서",
+        document_source_id="doc-ci",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+        source_collection="uploads",
+    )
+    db_body_hit = RetrievalHit(
+        chunk_id="chunk-db-body",
+        book_slug="uploaded-documents",
+        chapter="CI 순서",
+        section="git source에 파이프라인 yaml 구성",
+        anchor="ci-db-body",
+        source_url="uploads/ci.pdf",
+        viewer_path="/uploads/documents/doc-ci/index.html#chunk-db-body",
+        text="CI 순서 > git source에 파이프라인 yaml 구성\n\nPipelineRun이 이미지를 빌드하고 레지스트리에 push합니다.",
+        source="hybrid",
+        raw_score=0.05,
+        fused_score=0.05,
+        document_source_id="doc-ci",
+        owner_user_id="owner-a",
+        visibility="private_user",
+        source_scope="user_upload",
+        source_collection="uploads",
+    )
+    monkeypatch.setattr(
+        answer_context,
+        "_substantive_upload_companion_from_db",
+        lambda target, root_dir, used_chunk_ids: db_body_hit,
+    )
+
+    bundle = assemble_context(
+        [title_hit],
+        query="업로드 문서 기준 CI 순서 핵심을 알려줘",
+        session_context=SessionContext(owner_user_id="owner-a", active_document_id="doc-ci"),
+        root_dir=tmp_path,
+        max_chunks=1,
+    )
+
+    assert [citation.chunk_id for citation in bundle.citations] == ["chunk-db-body"]
+    assert "PipelineRun" in bundle.citations[0].excerpt
