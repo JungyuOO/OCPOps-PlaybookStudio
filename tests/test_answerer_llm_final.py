@@ -80,6 +80,38 @@ class WeakCommandRetriever:
         )
 
 
+class ConsoleRetriever:
+    def retrieve(self, query: str, **kwargs: Any) -> RetrievalResult:
+        del kwargs
+        hit = RetrievalHit(
+            chunk_id="web-console-workloads",
+            book_slug="web_console",
+            chapter="Web console",
+            section="웹 콘솔에서 프로젝트와 워크로드 보기",
+            anchor="web-console-workloads",
+            source_url="https://docs.example.test/web-console",
+            viewer_path="/docs/ocp/4.20/ko/web_console/index.html#web-console-workloads",
+            text="Use the OpenShift web console to select projects and view workloads and applications.",
+            source="hybrid",
+            raw_score=0.95,
+            fused_score=0.95,
+            chunk_type="reference",
+            source_collection="core",
+            review_status="approved",
+            component_scores={"bm25_score": 0.95},
+        )
+        return RetrievalResult(
+            query=query,
+            normalized_query=query,
+            rewritten_query=query,
+            top_k=5,
+            candidate_k=10,
+            context={},
+            hits=[hit],
+            trace={"route": "rag"},
+        )
+
+
 class FakeLlmClient:
     def __init__(self) -> None:
         self.calls: list[list[dict[str, str]]] = []
@@ -101,6 +133,13 @@ class FakeLlmClient:
             "last_fallback_used": False,
             "last_attempted_providers": ["fake"],
         }
+
+
+class ConsoleLlmClient(FakeLlmClient):
+    def generate(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
+        del kwargs
+        self.calls.append(messages)
+        return "답변: 웹 콘솔에서 프로젝트를 선택한 뒤 Workloads 영역에서 워크로드와 애플리케이션을 확인합니다 [1]."
 
 
 class FakeLightspeedClient:
@@ -186,6 +225,26 @@ def test_grounded_command_answer_is_rewritten_by_answer_llm(tmp_path: Path) -> N
     assert "oc get pvc" in prompt_text
     assert not any(event.get("step") == "deterministic_draft" for event in result.pipeline_trace["events"])
     assert any(event.get("step") == "llm_runtime" for event in result.pipeline_trace["events"])
+
+
+def test_web_console_locator_is_not_blocked_as_command_query(tmp_path: Path) -> None:
+    llm = ConsoleLlmClient()
+    answerer = ChatAnswerer(
+        Settings(root_dir=tmp_path),
+        retriever=ConsoleRetriever(),  # type: ignore[arg-type]
+        llm_client=llm,  # type: ignore[arg-type]
+    )
+
+    result = answerer.answer("OpenShift 웹 콘솔에서 프로젝트와 워크로드를 확인하려면 어디를 봐야 해?")
+
+    assert llm.calls
+    assert result.response_kind == "rag"
+    assert result.citations[0].book_slug == "web_console"
+    assert "insufficient command grounding coverage" not in result.warnings
+    assert not any(
+        event.get("step") == "grounding_guard" and event.get("status") == "error"
+        for event in result.pipeline_trace["events"]
+    )
 
 
 def test_openshift_lightspeed_answer_is_returned_without_pbs_llm_rewrite(tmp_path: Path) -> None:

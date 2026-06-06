@@ -55,6 +55,17 @@ def _dedupe_queries(queries: tuple[str, ...], *, fallback: str) -> list[str]:
     return deduped[:2]
 
 
+def _signal_embedding_queries_for_retrieval(signal_plan: Any) -> tuple[str, ...]:
+    embedding_queries = tuple(str(query or "") for query in signal_plan.embedding_queries)
+    raw_query = " ".join(str(getattr(signal_plan, "raw_query", "") or "").split())
+    if not embedding_queries or not raw_query:
+        return embedding_queries
+    first_query = " ".join(embedding_queries[0].split())
+    if first_query == raw_query and len(embedding_queries) > 1:
+        return embedding_queries[1:]
+    return embedding_queries
+
+
 def _uses_study_docs_scope(context: SessionContext) -> bool:
     if getattr(context, "enabled_source_scopes", None):
         return False
@@ -93,9 +104,12 @@ def _scope_compatible_metadata_filter(
 def _effective_candidate_k(candidate_k: int, signal_plan: Any) -> int:
     classification = signal_plan.classification if isinstance(signal_plan.classification, dict) else {}
     search_signals = signal_plan.search_signals if isinstance(signal_plan.search_signals, dict) else {}
+    raw_query = str(getattr(signal_plan, "raw_query", "") or "")
     intent_labels = set(search_signals.get("intent_labels") or ())
     command_families = set(search_signals.get("command_families") or ())
     commands = set(search_signals.get("commands") or ())
+    if _is_project_namespace_compare_query(raw_query):
+        return max(candidate_k, 96)
     if (
         str(classification.get("domain") or "") == "etcd"
         and "backup" in intent_labels
@@ -107,6 +121,39 @@ def _effective_candidate_k(candidate_k: int, signal_plan: Any) -> int:
     ):
         return max(candidate_k, 64)
     return candidate_k
+
+
+def _is_project_namespace_compare_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    has_project = "project" in lowered or "프로젝트" in query
+    has_namespace = "namespace" in lowered or "네임스페이스" in query
+    compare_or_explain = any(token in query for token in ("차이", "설명", "초보자")) or any(
+        token in lowered for token in ("compare", "difference")
+    )
+    return has_project and has_namespace and compare_or_explain
+
+
+def _uses_deterministic_signal_plan(query: str) -> bool:
+    lowered = (query or "").lower()
+    web_console_locator = (
+        ("web console" in lowered or "웹 콘솔" in query or "콘솔" in query)
+        and (
+            any(token in lowered for token in ("project", "projects", "workload", "workloads"))
+            or any(token in query for token in ("프로젝트", "워크로드", "애플리케이션", "앱"))
+        )
+        and (
+            any(token in query for token in ("어디", "확인", "봐야", "보려면"))
+            or any(token in lowered for token in ("where", "view", "check", "show"))
+        )
+    )
+    image_pull_grounding = (
+        any(token in lowered for token in ("imagepullbackoff", "errimagepull"))
+        and (
+            any(token in lowered for token in ("pull secret", "registry"))
+            or any(token in query for token in ("풀 시크릿", "레지스트리", "시크릿"))
+        )
+    )
+    return _is_project_namespace_compare_query(query) or web_console_locator or image_pull_grounding
 
 
 def build_retrieval_plan(
@@ -130,7 +177,11 @@ def build_retrieval_plan(
     rewrite_started_at = time.perf_counter()
     rewrite_applied, rewrite_reason = rewrite_decision(normalized_query, context)
     rewritten_query = rewrite_query(normalized_query, context)
-    signal_plan = build_query_signal_plan(query, llm_client=llm_client)
+    deterministic_signal_plan = _uses_deterministic_signal_plan(query)
+    signal_plan = build_query_signal_plan(
+        query,
+        llm_client=None if deterministic_signal_plan else llm_client,
+    )
     product_intro_query = is_openshift_product_intro_query(query)
     enabled_scopes = enabled_source_scope_set(context)
     has_repository_scope = bool(str(getattr(context, "active_repository_id", "") or "").strip())
@@ -139,13 +190,19 @@ def build_retrieval_plan(
         retrieval_queries = _dedupe_queries((rewritten_query,), fallback=rewritten_query)
         metadata_filter: dict[str, Any] = {}
     elif has_document_scope:
-        retrieval_queries = _dedupe_queries((rewritten_query, *signal_plan.embedding_queries), fallback=rewritten_query)
+        retrieval_queries = _dedupe_queries(
+            (rewritten_query, *_signal_embedding_queries_for_retrieval(signal_plan)),
+            fallback=rewritten_query,
+        )
         metadata_filter = {}
     elif product_intro_query:
         retrieval_queries = _dedupe_queries((rewritten_query,), fallback=rewritten_query)
         metadata_filter = signal_plan.metadata_filter
     else:
-        retrieval_queries = _dedupe_queries(signal_plan.embedding_queries, fallback=rewritten_query)
+        retrieval_queries = _dedupe_queries(
+            (rewritten_query, *_signal_embedding_queries_for_retrieval(signal_plan)),
+            fallback=rewritten_query,
+        )
         metadata_filter = _scope_compatible_metadata_filter(signal_plan.metadata_filter, context)
     rewrite_query_ms = round((time.perf_counter() - rewrite_started_at) * 1000, 1)
 

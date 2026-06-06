@@ -19,10 +19,23 @@ CLARIFICATION_RE = re.compile(
 NO_ANSWER_RE = re.compile(
     r"(근거에 .*없습니다|근거가 없습니다|정보가 없습니다|답변할 수 없습니다|답할 수 없습니다|찾을 수 없습니다|포함되어 있지 않습니다)"
 )
+TERM_ALIASES: dict[str, tuple[str, ...]] = {
+    "web console": ("web console", "web_console", "웹 콘솔"),
+}
 
 
 def _normalize_for_contains(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").strip()).lower()
+
+
+def _term_variants(term: str) -> tuple[str, ...]:
+    normalized = _normalize_for_contains(term)
+    aliases = TERM_ALIASES.get(normalized, (term,))
+    return tuple(dict.fromkeys(_normalize_for_contains(alias) for alias in aliases if str(alias).strip()))
+
+
+def _contains_expected_term(search_text: str, term: str) -> bool:
+    return any(variant in search_text for variant in _term_variants(term))
 
 
 def _ordered_unique_books(rows: list[dict[str, Any]]) -> list[str]:
@@ -131,19 +144,19 @@ def evaluate_case(
     )
     normalized_answer = _normalize_for_contains(result.answer)
     missing_required_terms = [
-        term for term in must_include_terms if _normalize_for_contains(term) not in normalized_answer
+        term for term in must_include_terms if not _contains_expected_term(normalized_answer, term)
     ]
     forbidden_answer_terms = [
-        term for term in must_not_include_terms if _normalize_for_contains(term) in normalized_answer
+        term for term in must_not_include_terms if _contains_expected_term(normalized_answer, term)
     ]
     must_include_pass = not missing_required_terms
     must_exclude_pass = not forbidden_answer_terms
     citation_search_text = "\n".join(_citation_search_text(citation) for citation in result.citations)
     missing_citation_terms = [
-        term for term in expected_citation_terms if _normalize_for_contains(term) not in citation_search_text
+        term for term in expected_citation_terms if not _contains_expected_term(citation_search_text, term)
     ]
     forbidden_citation_term_hits = [
-        term for term in forbidden_citation_terms if _normalize_for_contains(term) in citation_search_text
+        term for term in forbidden_citation_terms if _contains_expected_term(citation_search_text, term)
     ]
     citation_terms_pass = not missing_citation_terms
     citation_forbidden_terms_pass = not forbidden_citation_term_hits

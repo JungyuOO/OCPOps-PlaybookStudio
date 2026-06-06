@@ -559,6 +559,28 @@ def _is_standard_etcd_backup_query(query: str) -> bool:
     )
 
 
+def _is_image_pull_registry_secret_query(query: str) -> bool:
+    lowered = str(query or "").lower()
+    return (
+        any(token in lowered for token in ("imagepullbackoff", "errimagepull"))
+        and (
+            any(token in lowered for token in ("pull secret", "registry"))
+            or any(token in str(query or "") for token in ("풀 시크릿", "레지스트리", "시크릿"))
+        )
+    )
+
+
+def _is_control_plane_etcd_query(query: str) -> bool:
+    lowered = str(query or "").lower()
+    has_control_plane = (
+        "control plane" in lowered
+        or "control-plane" in lowered
+        or "controlplane" in lowered
+        or "컨트롤 플레인" in str(query or "")
+    )
+    return has_control_plane and "etcd" in lowered
+
+
 def _prune_provenance_noise_citations(*, query: str, citations: list) -> list:
     if not citations:
         return citations
@@ -595,6 +617,16 @@ def _prune_provenance_noise_citations(*, query: str, citations: list) -> list:
     if _is_standard_etcd_backup_query(query):
         preferred_books = {"postinstallation_configuration", "hosted_control_planes"}
         if any(citation.book_slug in preferred_books for citation in pruned):
+            pruned = [citation for citation in pruned if citation.book_slug in preferred_books]
+
+    if _is_image_pull_registry_secret_query(query):
+        preferred_books = {"images", "registry"}
+        if any(citation.book_slug in preferred_books for citation in pruned):
+            pruned = [citation for citation in pruned if citation.book_slug in preferred_books]
+
+    if _is_control_plane_etcd_query(query):
+        preferred_books = {"etcd", "architecture", "overview"}
+        if any(citation.book_slug == "etcd" for citation in pruned):
             pruned = [citation for citation in pruned if citation.book_slug in preferred_books]
 
     return pruned or citations
@@ -1291,7 +1323,10 @@ class ChatAnswerer:
                 answer_source=answer_source,
                 external_answer_meta=external_answer_meta,
             )
-        actionable_command_query = has_command_request(query) or has_corrective_follow_up(query)
+        actionable_command_query = (
+            (has_command_request(query) or has_corrective_follow_up(query))
+            and not _requires_console_grounding(query)
+        )
         if (
             not lightspeed_used
             and actionable_command_query

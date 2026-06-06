@@ -713,6 +713,41 @@ def _command_lookup_priority(hit: RetrievalHit, query: str) -> tuple[int, int, i
         if hit.book_slug == "cli_tools" and any(token in haystack for token in ("profile", "프로필", "auth can-i")):
             score += 38
 
+    if getattr(intent_profile, "task", "") == "image-pull":
+        has_pull_secret = any(
+            token in haystack
+            for token in (
+                "pull secret",
+                "pull-secret",
+                "image pull secret",
+                "imagepullsecrets",
+                "using image pull secrets",
+                "풀 시크릿",
+            )
+        )
+        has_registry = "registry" in haystack or "레지스트리" in haystack
+        has_image_pull_state = any(
+            token in haystack
+            for token in (
+                "imagepullbackoff",
+                "errimagepull",
+                "back-off pulling image",
+            )
+        )
+        if hit.book_slug == "images" and has_pull_secret:
+            score -= 72
+        elif hit.book_slug == "registry" and has_registry:
+            score -= 36
+        elif hit.book_slug == "support" and has_image_pull_state:
+            score -= 16
+        if (
+            hit.book_slug in {"operators", "support"}
+            and any(token in haystack for token in ("operator catalog", "카탈로그 소스", "openshift-marketplace"))
+        ):
+            score += 28
+        if hit.book_slug in {"machine_configuration", "operators"} and not has_pull_secret:
+            score += 24
+
     if intent_profile.needs_command and intent_profile.confidence >= 0.7:
         if intent_profile.primary_commands:
             if any(_command_term_matches(command, haystack) for command in intent_profile.primary_commands):
@@ -1026,10 +1061,14 @@ def _auth_can_i_hit_priority(hit: RetrievalHit) -> tuple[int, int, int]:
 
 def _topic_preferred_books(query: str) -> tuple[str, ...]:
     lowered = (query or "").lower()
+    if _is_control_plane_etcd_query(query):
+        return ("etcd", "architecture", "overview")
     if _is_project_namespace_compare_query(query):
-        return ("overview", "applications", "cli_tools")
+        return ("overview", "authentication_and_authorization", "cli_tools", "applications")
     if _is_web_console_workspace_locator_query(query):
         return ("web_console", "applications", "building_applications")
+    if _is_image_pull_grounding_query(query):
+        return ("images", "registry", "support")
     if "route" in lowered and any(token in lowered for token in ("tls", "인증서", "certificate", "cert")):
         return ("ingress_and_load_balancing", "security_and_compliance", "authentication_and_authorization")
     if any(token in lowered for token in ("ocp-certificates", "인증서", "certificate", "cert")):
@@ -1108,6 +1147,148 @@ def _is_web_console_workspace_locator_query(query: str) -> bool:
         token in lowered for token in ("where", "view", "check", "show")
     )
     return console_signal and workspace_signal and locator_signal
+
+
+def _is_image_pull_grounding_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return (
+        any(token in lowered for token in ("imagepullbackoff", "errimagepull"))
+        and (
+            any(token in lowered for token in ("pull secret", "registry"))
+            or any(token in query for token in ("풀 시크릿", "레지스트리", "시크릿"))
+        )
+    )
+
+
+def _is_control_plane_etcd_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    has_control_plane = (
+        "control plane" in lowered
+        or "control-plane" in lowered
+        or "controlplane" in lowered
+        or "컨트롤 플레인" in query
+    )
+    return has_control_plane and "etcd" in lowered
+
+
+def _topic_hit_priority(query: str, hit: RetrievalHit) -> int:
+    haystack = " ".join(
+        (
+            hit.book_slug or "",
+            hit.section or "",
+            hit.anchor or "",
+            hit.text or "",
+            " ".join(_all_hit_commands(hit)),
+            " ".join(hit.k8s_objects),
+        )
+    ).casefold()
+
+    if _is_control_plane_etcd_query(query):
+        has_etcd = "etcd" in haystack
+        has_control_plane = any(
+            token in haystack
+            for token in (
+                "control plane",
+                "control-plane",
+                "controlplane",
+                "컨트롤 플레인",
+                "controlplanemachineset",
+                "openshift-control-plane",
+            )
+        )
+        if hit.book_slug == "etcd" and has_etcd and has_control_plane:
+            return 0
+        if hit.book_slug == "etcd" and has_etcd:
+            return 1
+        if hit.book_slug in {"architecture", "overview"} and has_etcd:
+            return 2
+        if hit.book_slug in {"architecture", "overview"}:
+            return 5
+        return 8
+
+    if _is_project_namespace_compare_query(query):
+        has_project = "project" in haystack or "프로젝트" in haystack
+        has_namespace = "namespace" in haystack or "네임스페이스" in haystack
+        has_pair = has_project and has_namespace
+        has_definition = any(
+            token in haystack
+            for token in (
+                "프로젝트는",
+                "kubernetes 네임스페이스",
+                "kubernetes namespace",
+                "추가 주석",
+                "rbac",
+                "role-based access control",
+            )
+        )
+        if hit.book_slug == "overview" and has_pair and has_definition:
+            return 0
+        if hit.book_slug == "authentication_and_authorization" and has_pair and has_definition:
+            return 1
+        if hit.book_slug == "cli_tools" and has_pair and _all_hit_commands(hit):
+            return 2
+        if has_pair:
+            return 4
+        if hit.book_slug == "overview" and any(token in haystack for token in ("glossary", "용어집")):
+            return 9
+        return 8
+
+    if _is_web_console_workspace_locator_query(query):
+        has_console = "web console" in haystack or "웹 콘솔" in haystack or "콘솔" in haystack
+        has_workspace = any(
+            token in haystack
+            for token in (
+                "project",
+                "projects",
+                "workload",
+                "workloads",
+                "application",
+                "applications",
+                "프로젝트",
+                "워크로드",
+                "애플리케이션",
+            )
+        )
+        if hit.book_slug == "web_console" and has_console and has_workspace:
+            return 0
+        if hit.book_slug == "web_console" and has_console:
+            return 2
+        return 8
+
+    if _is_image_pull_grounding_query(query):
+        has_pull_secret = any(
+            token in haystack
+            for token in (
+                "pull secret",
+                "pull-secret",
+                "image pull secret",
+                "imagepullsecrets",
+                "using image pull secrets",
+                "풀 시크릿",
+            )
+        )
+        has_registry = "registry" in haystack or "레지스트리" in haystack
+        has_image_pull_state = any(
+            token in haystack
+            for token in (
+                "imagepullbackoff",
+                "errimagepull",
+                "back-off pulling image",
+            )
+        )
+        if hit.book_slug == "images" and has_pull_secret:
+            return 0
+        if hit.book_slug == "registry" and has_registry:
+            return 1
+        if hit.book_slug == "support" and has_image_pull_state:
+            return 2
+        if hit.book_slug == "support" and any(
+            token in haystack for token in ("operator catalog", "카탈로그 소스", "openshift-marketplace")
+        ):
+            return 7
+        return 8
+
+    return 0
 
 
 def _is_troubleshooting_doc_locator_query(query: str) -> bool:
@@ -1620,6 +1801,7 @@ def _select_hits(
         ranked_hits = sorted(
             ranked_hits,
             key=lambda hit: (
+                _topic_hit_priority(normalized, hit),
                 preferred_order.get(hit.book_slug, 20),
                 _procedure_chunk_priority(hit),
                 -_hit_score(hit),
@@ -2499,8 +2681,22 @@ def assemble_context(
                 ),
             )
             if command_matched_hits and not any(hit_matches_primary_command(hit) for hit in selected_hits):
-                selected_hits = [*command_matched_hits[:2], *selected_hits]
-                selected_hits = selected_hits[:max_chunks]
+                if (
+                    getattr(intent_profile, "task", "") == "image-pull"
+                    and any(_topic_hit_priority(query, hit) <= 1 for hit in selected_hits)
+                ):
+                    command_seeded_hits = [*selected_hits, *command_matched_hits[:2]]
+                else:
+                    command_seeded_hits = [*command_matched_hits[:2], *selected_hits]
+                selected_hits = []
+                seeded_chunk_ids: set[str] = set()
+                for hit in command_seeded_hits:
+                    if hit.chunk_id in seeded_chunk_ids:
+                        continue
+                    selected_hits.append(hit)
+                    seeded_chunk_ids.add(hit.chunk_id)
+                    if len(selected_hits) >= max_chunks:
+                        break
     if overlay_exact_scores or overlay_book_scores:
         selected_hits = sorted(
             selected_hits,

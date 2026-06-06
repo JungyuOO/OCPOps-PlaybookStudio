@@ -62,3 +62,71 @@ def test_active_repository_scope_keeps_raw_korean_query_before_llm_embedding_que
 
     assert plan.retrieval_queries[0] == "업로드 문서 기준 CI 순서 핵심을 알려줘 가이드 참고"
     assert plan.retrieval_queries[1] == "CI sequence core steps"
+
+
+def test_official_scope_keeps_deterministic_query_before_llm_embedding_queries(monkeypatch) -> None:
+    monkeypatch.setattr(
+        retriever_plan,
+        "build_query_signal_plan",
+        lambda _query, llm_client=None: QuerySignalPlan(
+            raw_query="OpenShift 웹 콘솔에서 프로젝트와 워크로드를 확인하려면 어디를 봐야 해?",
+            normalized_query="where to view projects and workloads in OpenShift web console",
+            correction_notes=(),
+            classification={"domain": "ui_tooling"},
+            search_signals={"intent_labels": ("find_document",)},
+            confidence={"domain": 0.9},
+            embedding_queries=(
+                "where to view projects and workloads in OpenShift web console",
+                "OpenShift console projects workloads",
+            ),
+            metadata_filter={},
+            debug={"mode": "unit-test"},
+        ),
+    )
+
+    plan = build_retrieval_plan(
+        "OpenShift 웹 콘솔에서 프로젝트와 워크로드를 확인하려면 어디를 봐야 해?",
+        context=SessionContext(
+            enabled_source_scopes=["official_docs"],
+            preferred_source_scope="official_docs",
+        ),
+        candidate_k=24,
+        llm_client=object(),
+    )
+
+    assert plan.retrieval_queries[0].startswith("OpenShift 웹 콘솔에서 프로젝트와 워크로드")
+    assert "웹 콘솔" in plan.retrieval_queries[0]
+    assert plan.retrieval_queries[1] == "where to view projects and workloads in OpenShift web console"
+
+
+def test_strong_official_topic_uses_rule_based_signal_plan(monkeypatch) -> None:
+    captured = {}
+
+    def fake_build_query_signal_plan(_query, llm_client=None):
+        captured["llm_client"] = llm_client
+        return QuerySignalPlan(
+            raw_query="ImagePullBackOff가 나면 이미지 레지스트리와 pull secret에서 무엇을 확인해야 해?",
+            normalized_query="ImagePullBackOff registry pull secret",
+            correction_notes=(),
+            classification={"domain": "registry"},
+            search_signals={"intent_labels": ("troubleshoot",)},
+            confidence={"domain": 0.9},
+            embedding_queries=("ImagePullBackOff registry pull secret",),
+            metadata_filter={},
+            debug={"mode": "unit-test"},
+        )
+
+    monkeypatch.setattr(retriever_plan, "build_query_signal_plan", fake_build_query_signal_plan)
+
+    plan = build_retrieval_plan(
+        "ImagePullBackOff가 나면 이미지 레지스트리와 pull secret에서 무엇을 확인해야 해?",
+        context=SessionContext(
+            enabled_source_scopes=["official_docs"],
+            preferred_source_scope="official_docs",
+        ),
+        candidate_k=24,
+        llm_client=object(),
+    )
+
+    assert captured["llm_client"] is None
+    assert plan.retrieval_queries[0].startswith("ImagePullBackOff가 나면")

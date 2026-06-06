@@ -339,6 +339,147 @@ def _preserve_specific_customer_candidate(
     return preserved[: max(len(target_hits), 1)]
 
 
+def _topic_search_text(hit: RetrievalHit) -> str:
+    return "\n".join(
+        (
+            hit.book_slug or "",
+            hit.section or "",
+            hit.heading_title or "",
+            hit.anchor or "",
+            hit.text or "",
+            " ".join(hit.cli_commands),
+            " ".join(hit.k8s_objects),
+        )
+    ).casefold()
+
+
+def _is_project_namespace_compare_query(query: str) -> bool:
+    lowered = (query or "").casefold()
+    has_project = "project" in lowered or "프로젝트" in query
+    has_namespace = "namespace" in lowered or "네임스페이스" in query
+    has_shape = any(token in query for token in ("차이", "설명", "초보자")) or any(
+        token in lowered for token in ("compare", "difference")
+    )
+    return has_project and has_namespace and has_shape
+
+
+def _is_web_console_workspace_locator_query(query: str) -> bool:
+    lowered = (query or "").casefold()
+    return (
+        ("web console" in lowered or "웹 콘솔" in query or "콘솔" in query)
+        and (
+            any(token in lowered for token in ("project", "projects", "workload", "workloads"))
+            or any(token in query for token in ("프로젝트", "워크로드", "애플리케이션", "앱"))
+        )
+        and (
+            any(token in query for token in ("어디", "확인", "봐야", "보려면"))
+            or any(token in lowered for token in ("where", "view", "check", "show"))
+        )
+    )
+
+
+def _is_image_pull_grounding_query(query: str) -> bool:
+    lowered = (query or "").casefold()
+    return (
+        any(token in lowered for token in ("imagepullbackoff", "errimagepull"))
+        and (
+            any(token in lowered for token in ("pull secret", "registry"))
+            or any(token in query for token in ("풀 시크릿", "레지스트리", "시크릿"))
+        )
+    )
+
+
+def _official_topic_priority(query: str, hit: RetrievalHit) -> tuple[int, int, float] | None:
+    text = _topic_search_text(hit)
+    score = float(hit.fused_score or hit.raw_score or 0.0)
+    if _is_project_namespace_compare_query(query):
+        has_pair = (
+            ("project" in text or "프로젝트" in text)
+            and ("namespace" in text or "네임스페이스" in text)
+        )
+        if not has_pair:
+            return None
+        if hit.book_slug == "overview" and ("프로젝트는" in text or "project openshift" in text):
+            return (0, 0, -score)
+        if hit.book_slug == "authentication_and_authorization" and (
+            "프로젝트 및 네임스페이스" in text or "추가 주석" in text
+        ):
+            return (1, 0, -score)
+        if hit.book_slug == "cli_tools" and any(command in text for command in ("oc get projects", "oc get namespaces")):
+            return (2, 0, -score)
+        return None
+
+    if _is_web_console_workspace_locator_query(query):
+        if hit.book_slug != "web_console":
+            return None
+        has_console = "web console" in text or "웹 콘솔" in text or "콘솔" in text
+        has_workspace = any(token in text for token in ("project", "projects", "workload", "workloads", "프로젝트", "워크로드"))
+        if not has_console:
+            return None
+        return (0 if has_workspace else 1, 0, -score)
+
+    if _is_image_pull_grounding_query(query):
+        has_pull_secret = "pull secret" in text or "풀 시크릿" in text
+        has_registry = "registry" in text or "레지스트리" in text
+        has_image_error = "imagepullbackoff" in text or "errimagepull" in text
+        if hit.book_slug == "images" and has_pull_secret:
+            return (0, 0, -score)
+        if hit.book_slug == "registry" and has_registry:
+            return (1, 0, -score)
+        if hit.book_slug == "support" and has_image_error:
+            return (2, 0, -score)
+        return None
+
+    return None
+
+
+def _preserve_official_topic_candidate(
+    query: str,
+    *,
+    target_hits: list[RetrievalHit],
+    candidate_hits: list[RetrievalHit],
+    context: SessionContext | None,
+) -> list[RetrievalHit]:
+    enabled = enabled_source_scope_set(context)
+    if enabled and SOURCE_GROUP_OFFICIAL_DOCS not in enabled:
+        return target_hits
+    if active_document_scope_selected(context) or str(getattr(context, "active_repository_id", "") or "").strip():
+        return target_hits
+    if not (
+        _is_project_namespace_compare_query(query)
+        or _is_web_console_workspace_locator_query(query)
+        or _is_image_pull_grounding_query(query)
+    ):
+        return target_hits
+
+    candidates: list[tuple[tuple[int, int, float], int, RetrievalHit]] = []
+    for index, hit in enumerate(candidate_hits):
+        if source_group_for_candidate(hit) != SOURCE_GROUP_OFFICIAL_DOCS:
+            continue
+        priority = _official_topic_priority(query, hit)
+        if priority is None:
+            continue
+        candidates.append((priority, index, hit))
+    if not candidates:
+        return target_hits
+
+    candidates.sort(key=lambda item: (item[0], item[1], item[2].chunk_id))
+    _priority, _index, best_hit = candidates[0]
+    existing_ids = {hit.chunk_id for hit in target_hits}
+    if best_hit.chunk_id in existing_ids:
+        rescued = next(hit for hit in target_hits if hit.chunk_id == best_hit.chunk_id)
+    else:
+        rescued = copy.deepcopy(best_hit)
+        rescued.source = "hybrid_official_topic_seeded"
+        rescued.component_scores = dict(rescued.component_scores)
+        rescued.component_scores.setdefault("official_topic_seed", 1.0)
+        rescued.fused_score = max(float(rescued.fused_score or 0.0), float(rescued.raw_score or 0.0))
+
+    preserved = [rescued]
+    preserved.extend(hit for hit in target_hits if hit.chunk_id != rescued.chunk_id)
+    return preserved[: max(len(target_hits), 1)]
+
+
 @lru_cache(maxsize=1)
 def _active_runtime_slug_set(manifest_path: str) -> frozenset[str]:
     path = Path(manifest_path)
@@ -788,6 +929,12 @@ def execute_retrieval_pipeline(
         context=context,
     )
     hits = _preserve_specific_customer_candidate(
+        query,
+        target_hits=hits,
+        candidate_hits=lexical_candidate_hits,
+        context=context,
+    )
+    hits = _preserve_official_topic_candidate(
         query,
         target_hits=hits,
         candidate_hits=lexical_candidate_hits,

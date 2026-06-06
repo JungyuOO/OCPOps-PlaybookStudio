@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from play_book_studio.answering.context import assemble_context
-from play_book_studio.answering.answerer import _is_low_confidence_retrieval
+from play_book_studio.answering.answerer import _is_low_confidence_retrieval, _prune_provenance_noise_citations
 from play_book_studio.answering.answer_text_commands import preserve_grounded_commands, strip_ungrounded_code_blocks
 from play_book_studio.answering.answer_text_formatting import shape_beginner_grounded_answer
 from play_book_studio.answering.models import AnswerResult, Citation
@@ -253,6 +253,121 @@ def test_project_namespace_compare_context_prefers_foundation_books_over_console
     )
 
     assert bundle.citations[0].book_slug == "cli_tools"
+
+
+def test_project_namespace_compare_context_prefers_exact_definition_over_glossary_noise() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "overview-glossary-noise",
+                book_slug="overview",
+                section="용어집",
+                text="용어집 항목은 project namespace 등 여러 OpenShift 용어를 나열합니다.",
+                raw_score=1.0,
+            ),
+            _hit(
+                "overview-project-definition",
+                book_slug="overview",
+                section="프로젝트 및 네임스페이스",
+                text=(
+                    "프로젝트는 역할 기반 액세스 제어(RBAC) 및 관리 기능을 제공하는 "
+                    "추가 주석이 있는 Kubernetes 네임스페이스입니다."
+                ),
+                raw_score=0.2,
+            ),
+        ],
+        query="OpenShift project와 namespace 차이를 초보자 기준으로 설명해줘",
+        max_chunks=2,
+    )
+
+    assert bundle.citations[0].chunk_id == "overview-project-definition"
+
+
+def test_control_plane_etcd_context_prefers_etcd_grounding_over_architecture_intro() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "architecture-intro",
+                book_slug="architecture",
+                section="OpenShift Container Platform의 아키텍처 개요",
+                text="이 문서에서는 OpenShift Container Platform의 플랫폼 및 애플리케이션 아키텍처 개요를 제공합니다.",
+                raw_score=1.0,
+            ),
+            _hit(
+                "etcd-control-plane",
+                book_slug="etcd",
+                section="비정상적인 베어 메탈 etcd 멤버 교체",
+                text="etcd 멤버는 openshift-control-plane 노드에서 실행되며 control plane 상태와 함께 확인됩니다.",
+                raw_score=0.2,
+            ),
+        ],
+        query="OpenShift 아키텍처에서 control plane과 etcd 관계를 설명해줘",
+        max_chunks=2,
+    )
+
+    assert bundle.citations[0].chunk_id == "etcd-control-plane"
+
+
+def test_image_pull_context_prefers_images_pull_secret_chunk_over_support_noise() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "support-operator-catalog",
+                book_slug="operators",
+                section="카탈로그 소스 상태 보기",
+                text=(
+                    "Operator catalog 문제에서 ImagePullBackOff 또는 ErrImagePull 상태가 "
+                    "openshift-marketplace Pod에 나타날 수 있습니다."
+                ),
+                cli_commands=("oc describe pod <pod-name> -n <namespace>",),
+                chunk_type="command",
+                raw_score=1.0,
+            ),
+            _hit(
+                "images-pull-secret",
+                book_slug="images",
+                section="워크로드에 풀 시크릿 사용",
+                text="Use image pull secrets when a workload must pull images from an authenticated registry.",
+                cli_commands=("oc secrets link default <pull_secret_name> --for=pull",),
+                chunk_type="command",
+                raw_score=0.2,
+            ),
+        ],
+        query="ImagePullBackOff가 나면 이미지 레지스트리와 pull secret에서 무엇을 확인해야 해?",
+        max_chunks=2,
+    )
+
+    assert bundle.citations[0].chunk_id == "images-pull-secret"
+
+
+def test_image_pull_final_citation_prune_keeps_images_over_operator_catalog_noise() -> None:
+    pruned = _prune_provenance_noise_citations(
+        query="ImagePullBackOff가 나면 이미지 레지스트리와 pull secret에서 무엇을 확인해야 해?",
+        citations=[
+            Citation(
+                index=1,
+                chunk_id="operator-catalog",
+                book_slug="operators",
+                section="CLI를 사용하여 Operator 카탈로그 소스 상태 보기",
+                anchor="operator-catalog",
+                source_url="",
+                viewer_path="/docs/operators",
+                excerpt="ImagePullBackOff 상태의 catalog source Pod를 oc describe로 확인합니다.",
+            ),
+            Citation(
+                index=2,
+                chunk_id="image-pull-secret",
+                book_slug="images",
+                section="이미지 풀 시크릿 사용",
+                anchor="image-pull-secret",
+                source_url="",
+                viewer_path="/docs/images",
+                excerpt="보안 레지스트리에서 이미지를 가져오려면 image pull secret 구성을 확인합니다.",
+            ),
+        ],
+    )
+
+    assert [citation.book_slug for citation in pruned] == ["images"]
 
 
 def test_command_lookup_boosts_command_bearing_chunks() -> None:
