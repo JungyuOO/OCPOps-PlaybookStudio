@@ -139,7 +139,13 @@ def build_retrieval_gap_audit(audit_payload: dict[str, Any]) -> dict[str, Any]:
 
     book_cases = [case for case in case_reports if case.get("expected_book_slugs")]
     scope_cases = [case for case in case_reports if case.get("expected_source_scopes")]
+    baseline_cases = [case for case in book_cases if not _is_regression_suite(str(case.get("suite") or ""))]
+    baseline_scope_cases = [case for case in scope_cases if not _is_regression_suite(str(case.get("suite") or ""))]
+    regression_cases = [case for case in book_cases if _is_regression_suite(str(case.get("suite") or ""))]
+    regression_scope_cases = [case for case in scope_cases if _is_regression_suite(str(case.get("suite") or ""))]
     global_summary = _summarize_cases(book_cases=book_cases, scope_cases=scope_cases)
+    baseline_summary = _summarize_cases(book_cases=baseline_cases, scope_cases=baseline_scope_cases)
+    regression_summary = _summarize_cases(book_cases=regression_cases, scope_cases=regression_scope_cases)
     miss_cases = [
         case
         for case in case_reports
@@ -162,6 +168,8 @@ def build_retrieval_gap_audit(audit_payload: dict[str, Any]) -> dict[str, Any]:
         "generated_at": _now(),
         "decision": decision,
         "summary": global_summary,
+        "baseline_summary": baseline_summary,
+        "regression_summary": regression_summary,
         "suite_summaries": suite_summaries,
         "reason_counts": dict(sorted(reason_counts.items())),
         "miss_cases": sorted(
@@ -176,6 +184,10 @@ def build_retrieval_gap_audit(audit_payload: dict[str, Any]) -> dict[str, Any]:
         ),
         "recommendations": _recommendations(global_summary, reason_counts),
     }
+
+
+def _is_regression_suite(suite_name: str) -> bool:
+    return "regression" in suite_name.casefold()
 
 
 def _summarize_cases(*, book_cases: list[dict[str, Any]], scope_cases: list[dict[str, Any]]) -> dict[str, Any]:
@@ -252,6 +264,8 @@ def _recommendations(summary: dict[str, Any], reason_counts: Counter[str]) -> li
 def write_markdown_report(payload: dict[str, Any], output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    baseline = payload.get("baseline_summary") if isinstance(payload.get("baseline_summary"), dict) else {}
+    regression = payload.get("regression_summary") if isinstance(payload.get("regression_summary"), dict) else {}
     lines = [
         "# Retrieval Gap Audit",
         "",
@@ -262,6 +276,8 @@ def write_markdown_report(payload: dict[str, Any], output_path: Path) -> None:
         f"- Book hit@1/hit@3/hit@5: `{summary.get('book_hit@1')}` / `{summary.get('book_hit@3')}` / `{summary.get('book_hit@5')}`",
         f"- Book miss@1/miss@5: `{summary.get('book_miss@1_count')}` / `{summary.get('book_miss@5_count')}`",
         f"- Scope cases hit@1/hit@5: `{summary.get('scope_hit@1')}` / `{summary.get('scope_hit@5')}`",
+        f"- Baseline book hit@1/hit@5: `{baseline.get('book_hit@1')}` / `{baseline.get('book_hit@5')}`",
+        f"- Regression book hit@1/hit@5: `{regression.get('book_hit@1')}` / `{regression.get('book_hit@5')}`",
         "",
         "## Reason Counts",
         "",

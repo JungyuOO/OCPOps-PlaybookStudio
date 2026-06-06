@@ -88,3 +88,41 @@ def test_retrieval_gap_audit_keeps_scope_boundary_signal() -> None:
     assert report["summary"]["scope_hit@1"] == 1.0
     assert report["reason_counts"] == {}
     assert any(item["area"] == "source_scope_boundary" for item in report["recommendations"])
+
+
+def test_retrieval_gap_audit_splits_baseline_and_regression_summaries() -> None:
+    payload = {
+        "retrieval_eval": {
+            "retrieval_benchmark_cases.jsonl": {
+                "details": [
+                    {
+                        "id": "base-clean",
+                        "query": "etcd backup",
+                        "expected_book_slugs": ["backup_and_restore"],
+                        "expected_source_scopes": ["official_docs"],
+                        "top_book_slugs": ["backup_and_restore"],
+                        "top_source_scopes": ["official_docs"],
+                    }
+                ]
+            },
+            "retrieval_official_hit1_regression_cases.jsonl": {
+                "details": [
+                    {
+                        "id": "regression-miss",
+                        "query": "node drain",
+                        "expected_book_slugs": ["nodes"],
+                        "expected_source_scopes": ["official_docs"],
+                        "top_book_slugs": ["support", "nodes"],
+                        "top_source_scopes": ["official_docs", "official_docs"],
+                    }
+                ]
+            },
+        }
+    }
+
+    report = build_retrieval_gap_audit(payload)
+
+    assert report["summary"]["book_hit@1"] == 0.5
+    assert report["baseline_summary"]["book_hit@1"] == 1.0
+    assert report["regression_summary"]["book_hit@1"] == 0.0
+    assert report["regression_summary"]["book_hit@5"] == 1.0
