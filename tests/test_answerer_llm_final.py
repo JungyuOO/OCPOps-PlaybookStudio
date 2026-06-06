@@ -7,7 +7,7 @@ from typing import Any
 from play_book_studio.answering.answerer import ChatAnswerer
 from play_book_studio.config.settings import Settings
 from play_book_studio.integrations.lightspeed import OpenShiftLightspeedResult
-from play_book_studio.retrieval.models import RetrievalHit, RetrievalResult
+from play_book_studio.retrieval.models import RetrievalHit, RetrievalResult, SessionContext
 
 
 class FakeRetriever:
@@ -250,6 +250,29 @@ def test_lightspeed_success_is_not_blocked_by_pbs_rbac_grounding_guard(tmp_path:
         event.get("step") == "grounding_guard" and event.get("status") == "error"
         for event in result.pipeline_trace["events"]
     )
+
+
+def test_lightspeed_is_skipped_when_source_scope_is_explicitly_restricted(tmp_path: Path) -> None:
+    llm = FakeLlmClient()
+    lightspeed = FakeLightspeedClient()
+    answerer = ChatAnswerer(
+        Settings(root_dir=tmp_path),
+        retriever=FakeRetriever(),  # type: ignore[arg-type]
+        llm_client=llm,  # type: ignore[arg-type]
+        lightspeed_client=lightspeed,  # type: ignore[arg-type]
+    )
+
+    result = answerer.answer(
+        "PVC가 Pending이면 무엇을 먼저 확인해야 해?",
+        context=SessionContext(enabled_source_scopes=["user_upload"]),
+    )
+
+    assert lightspeed.calls == []
+    assert llm.calls
+    assert result.pipeline_trace["answer_source"] == "pbs_rag"
+    assert result.pipeline_trace["external_answer"]["status"] == "skipped_scoped_sources"
+    assert result.pipeline_trace["external_answer"]["enabled_source_scopes"] == ["user_upload"]
+    assert "OpenShift Lightspeed" not in result.answer
 
 
 def test_lightspeed_disabled_note_survives_grounding_blocked_path(tmp_path: Path) -> None:

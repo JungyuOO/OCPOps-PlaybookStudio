@@ -179,16 +179,31 @@ def _citation_blob(citation: dict[str, Any]) -> str:
 
 def _score_case(case: EvalCase, payload: dict[str, Any]) -> dict[str, Any]:
     answer = str(payload.get("answer") or "")
+    answer_source = str(payload.get("answer_source") or "")
     citations = [item for item in payload.get("citations") or [] if isinstance(item, dict)]
+    related_links = [item for item in payload.get("related_links") or [] if isinstance(item, dict)]
+    related_sections = [item for item in payload.get("related_sections") or [] if isinstance(item, dict)]
     citation_text = " ".join(_citation_blob(item) for item in citations)
     combined_text = f"{answer} {citation_text}"
     upload_citations = [item for item in citations if _citation_is_user_upload(item)]
     non_upload_citations = [item for item in citations if not _citation_is_user_upload(item)]
+    lightspeed_reference_blob = _text_blob(
+        {
+            "answer_source": answer_source,
+            "citations": citations,
+            "related_links": related_links,
+            "related_sections": related_sections,
+        }
+    )
     missing_terms = [term for term in case.required_answer_terms if term and not _contains(answer, term)]
     missing_source_keywords = [
         keyword for keyword in case.expected_source_keywords if keyword and not _contains(citation_text, keyword)
     ]
     failure_reasons: list[str] = []
+    if answer_source and answer_source != "pbs_rag":
+        failure_reasons.append(f"bad_answer_source:{answer_source}")
+    if "/external/lightspeed" in lightspeed_reference_blob:
+        failure_reasons.append("external_lightspeed_reference_present")
     if len(answer.strip()) < case.min_answer_chars:
         failure_reasons.append("answer_too_short")
     if str(payload.get("response_kind") or "") in {"", "smalltalk", "no_answer", "clarification", "error"}:
@@ -207,10 +222,12 @@ def _score_case(case: EvalCase, payload: dict[str, Any]) -> dict[str, Any]:
         "verdict": "pass" if not failure_reasons else "review",
         "failure_reasons": failure_reasons,
         "answer_chars": len(answer.strip()),
+        "answer_source": answer_source,
         "response_kind": str(payload.get("response_kind") or ""),
         "citations_count": len(citations),
         "upload_citations_count": len(upload_citations),
         "non_upload_citations_count": len(non_upload_citations),
+        "external_lightspeed_references_count": lightspeed_reference_blob.count("/external/lightspeed"),
         "missing_required_answer_terms": missing_terms,
         "missing_source_keywords": missing_source_keywords,
         "citation_sources": [

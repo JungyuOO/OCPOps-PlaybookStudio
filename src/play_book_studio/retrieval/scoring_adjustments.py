@@ -29,6 +29,10 @@ def _has_shell_command_text(text: str) -> bool:
 
 
 _PLACEHOLDER_RE = re.compile(r"<[^>]+>|\{[^}]+\}|\[[^\]]+\]")
+_COMPARISON_SECTION_RE = re.compile(
+    r"(차이|차이점|비교|vs\.?|versus|difference|differences|compare|comparison)",
+    re.IGNORECASE,
+)
 
 
 def _hit_search_text(hit: RetrievalHit) -> str:
@@ -43,6 +47,56 @@ def _hit_search_text(hit: RetrievalHit) -> str:
             " ".join(hit.verification_hints),
         )
     ).lower()
+
+
+def _is_thin_heading_only_hit(hit: RetrievalHit) -> bool:
+    normalized_text = re.sub(r"\s+", " ", (hit.text or "").strip())
+    if not normalized_text or len(normalized_text) > 140:
+        return False
+    tokens = re.findall(r"[가-힣A-Za-z0-9_.-]+", normalized_text)
+    return len(tokens) <= 14 and not hit.cli_commands
+
+
+def _normalized_phrase(value: str) -> str:
+    normalized = re.sub(r"^\d+(?:\.\d+)*\.?\s*", "", str(value or "").strip())
+    normalized = re.sub(r"\s+", " ", normalized).strip().lower()
+    return normalized.strip(" .:-")
+
+
+def _apply_exact_heading_phrase_adjustment(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
+    query = _normalized_phrase(signals.query)
+    if not query:
+        return
+    phrases = (
+        _normalized_phrase(hit.section),
+        _normalized_phrase(hit.heading_title),
+    )
+    for phrase in phrases:
+        if len(phrase) < 5:
+            continue
+        if phrase in query:
+            hit.fused_score *= 1.24
+            hit.component_scores["exact_heading_phrase_boost"] = 1.24
+            return
+
+
+def _apply_comparison_section_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
+    if not signals.compare_intent:
+        return
+    heading_text = " ".join(
+        (
+            hit.section or "",
+            hit.heading_title or "",
+            hit.anchor or "",
+            " ".join(hit.section_path),
+        )
+    )
+    if _COMPARISON_SECTION_RE.search(heading_text):
+        hit.fused_score *= 1.68
+        hit.component_scores["comparison_section_boost"] = 1.68
+    elif _is_thin_heading_only_hit(hit):
+        hit.fused_score *= 0.72
+        hit.component_scores["comparison_thin_heading_penalty"] = 0.72
 
 
 def _term_matches_text(term: str, text: str) -> bool:
@@ -458,6 +512,10 @@ def apply_hit_adjustments(
     _apply_provider_scope_adjustments(hit, signals=signals)
 
     _apply_intent_profile_adjustments(hit, signals=signals)
+
+    _apply_exact_heading_phrase_adjustment(hit, signals=signals)
+
+    _apply_comparison_section_adjustments(hit, signals=signals)
 
     apply_core_adjustments(hit, signals=signals)
 

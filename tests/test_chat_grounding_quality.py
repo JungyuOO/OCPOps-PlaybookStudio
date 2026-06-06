@@ -93,6 +93,58 @@ def test_command_lookup_boosts_command_bearing_chunks() -> None:
     assert "command_intent_cli_commands_boost" in hits[0].component_scores
 
 
+def test_general_compare_query_prefers_comparison_section_chunk() -> None:
+    title_hit = _hit(
+        "rbac-title",
+        text="RBAC, SCC, ImageStream\n\nRBAC, SCC, ImageStream",
+        section="RBAC, SCC, ImageStream",
+    )
+    comparison_hit = _hit(
+        "rbac-scc-diff",
+        text=(
+            "RBAC vs SCC 차이점\n\n"
+            "RBAC은 사용자의 API 권한을 제어하고, SCC는 Pod의 런타임 보안 조건을 제어한다."
+        ),
+        section="RBAC vs SCC 차이점",
+        raw_score=0.92,
+    )
+
+    hits = fuse_ranked_hits(
+        "업로드 문서 기준 RBAC와 SCC의 차이를 알려줘",
+        {"bm25": [title_hit, comparison_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "rbac-scc-diff"
+    assert hits[0].component_scores["comparison_section_boost"] == 1.68
+    assert "comparison_thin_heading_penalty" in hits[1].component_scores
+
+
+def test_exact_heading_phrase_boosts_user_requested_section() -> None:
+    generic_hit = _hit(
+        "config-secret-overview",
+        text="ConfigMap과 Secret 차이\n\n두 리소스는 설정값과 민감 정보를 나누어 관리한다.",
+        section="ConfigMap과 Secret 차이",
+    )
+    mount_hit = _hit(
+        "file-mount",
+        text="파일로 마운트\n\nConfigMap 또는 Secret을 volume으로 Pod에 마운트할 수 있다.",
+        section="파일로 마운트",
+        raw_score=0.9,
+    )
+
+    hits = fuse_ranked_hits(
+        "업로드 문서 기준 ConfigMap이나 Secret을 파일로 마운트하는 방식은 무엇인지 알려줘",
+        {"bm25": [generic_hit, mount_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "file-mount"
+    assert hits[0].component_scores["exact_heading_phrase_boost"] == 1.24
+
+
 def test_intent_profile_prefers_matching_command_over_generic_cli_command() -> None:
     current_context_hit = _hit(
         "current-context",

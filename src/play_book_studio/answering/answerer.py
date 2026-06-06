@@ -653,6 +653,10 @@ def _lightspeed_answer_for_chat(answer_text: str) -> str:
     return answer
 
 
+def _should_skip_lightspeed_for_scoped_sources(context: SessionContext) -> bool:
+    return bool(getattr(context, "enabled_source_scopes", []) or [])
+
+
 class ChatAnswerer:
     """CLI, UI, eval 파이프라인이 공통으로 쓰는 최상위 answer 서비스."""
 
@@ -1046,10 +1050,19 @@ class ChatAnswerer:
             }
         )
         warnings: list[str] = []
-        lightspeed_result, external_answer_meta = self._query_openshift_lightspeed(
-            query,
-            emit=emit,
-        )
+        if _should_skip_lightspeed_for_scoped_sources(context):
+            lightspeed_result = None
+            external_answer_meta = {
+                "provider": "openshift_lightspeed",
+                "status": "skipped_scoped_sources",
+                "reason": "enabled_source_scopes explicitly restrict retrieval sources",
+                "enabled_source_scopes": list(getattr(context, "enabled_source_scopes", []) or []),
+            }
+        else:
+            lightspeed_result, external_answer_meta = self._query_openshift_lightspeed(
+                query,
+                emit=emit,
+            )
         lightspeed_used = external_answer_meta.get("status") == "used"
         answer_source = "lightspeed_with_pbs_rag" if lightspeed_used else "pbs_rag"
         status_note = _lightspeed_internal_status_message(str(external_answer_meta.get("status") or ""))
