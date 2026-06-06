@@ -245,6 +245,7 @@ def _run_case(
         "mode": "ops",
         "active_repository_id": repository_id,
         "active_document_id": "",
+        "enabled_source_scopes": ["user_upload"],
     }
     result: dict[str, Any] = {
         "case_id": case.case_id,
