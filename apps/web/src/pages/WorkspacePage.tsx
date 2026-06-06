@@ -978,6 +978,8 @@ function normalizeViewerDocumentPayload(viewerDocument: Awaited<ReturnType<typeo
     html: viewerDocument.html,
     inlineStyles: viewerDocument.inline_styles,
     bodyClassName: viewerDocument.body_class_name,
+    viewerCacheStatus: viewerDocument.viewer_cache_status,
+    viewerTimingsMs: viewerDocument.viewer_timings_ms,
     interactionPolicy: {
       codeCopy: viewerDocument.interaction_policy.code_copy,
       codeWrapToggle: viewerDocument.interaction_policy.code_wrap_toggle,

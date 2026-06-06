@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from play_book_studio.answering.models import AnswerResult, Citation
 from play_book_studio.http.server_support import _build_chat_payload
 from play_book_studio.http.sessions import ChatSession
 from play_book_studio.http import server_routes_viewer
 from play_book_studio.retrieval.models import SessionContext
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_lightspeed_external_answer_is_added_as_related_link(tmp_path):
@@ -159,6 +162,106 @@ def test_pbs_gold_answer_keeps_internal_gold_citations_without_lightspeed_bounda
     assert payload["citations"][0]["viewer_path"] == "/playbooks/wiki-runtime/active/support/index.html#cleaning-crio-storage"
     assert payload["citations"][0]["href"] == "/playbooks/wiki-runtime/active/support/index.html#cleaning-crio-storage"
     assert payload["citations"][0]["source_collection"] != "external_tool"
+    assert "/external/lightspeed" not in payload_text
+
+
+def test_pbs_gold_answer_rewrites_docs_citation_to_runtime_viewer_path():
+    result = AnswerResult(
+        query="OCP 설치 방법 종류 알려줘",
+        mode="chat",
+        answer="답변: 설치 방법은 플랫폼별 요구사항에 따라 선택합니다. [1]",
+        rewritten_query="OCP 설치 방법 종류 알려줘",
+        citations=[
+            Citation(
+                index=1,
+                chunk_id="gold-1",
+                book_slug="installing_on_any_platform",
+                section="설치 방법",
+                anchor="supported-installation-methods-for-different-platforms",
+                source_url="/docs/ocp/4.20/ko/installing_on_any_platform/index.html",
+                viewer_path="/docs/ocp/4.20/ko/installing_on_any_platform/index.html#supported-installation-methods-for-different-platforms",
+                excerpt="Gold Playbook citation",
+                section_path=("설치", "설치 방법"),
+            )
+        ],
+        cited_indices=[1],
+        pipeline_trace={"answer_source": "pbs_rag"},
+    )
+    session = ChatSession(
+        session_id="session-1",
+        context=SessionContext(user_id="tester"),
+    )
+
+    payload = _build_chat_payload(root_dir=ROOT, session=session, result=result)
+    payload_text = json.dumps(payload, ensure_ascii=False)
+
+    expected = (
+        "/playbooks/wiki-runtime/active/installing_on_any_platform/index.html"
+        "#supported-installation-methods-for-different-platforms"
+    )
+    assert payload["answer_source"] == "pbs_rag"
+    assert payload["citations"][0]["viewer_path"] == expected
+    assert payload["citations"][0]["href"] == expected
+    assert payload["related_links"][0]["href"] == expected
+    assert "/external/lightspeed" not in payload_text
+    assert payload["citations"][0]["viewer_path"].startswith("/playbooks/wiki-runtime/active/")
+    assert payload["citations"][0]["href"].startswith("/playbooks/wiki-runtime/active/")
+    assert payload["related_links"][0]["href"].startswith("/playbooks/wiki-runtime/active/")
+
+
+def test_internal_no_answer_does_not_create_fake_citations_or_related_links(tmp_path):
+    result = AnswerResult(
+        query="사내에 없는 문서 찾아줘",
+        mode="chat",
+        answer="답변: 현재 Playbook Library에 해당 자료가 없습니다. 자료 추가가 필요합니다.",
+        rewritten_query="사내에 없는 문서 찾아줘",
+        citations=[],
+        cited_indices=[],
+        response_kind="no_answer",
+        pipeline_trace={"answer_source": "pbs_rag"},
+    )
+    session = ChatSession(
+        session_id="session-1",
+        context=SessionContext(user_id="tester"),
+    )
+
+    payload = _build_chat_payload(root_dir=tmp_path, session=session, result=result)
+    payload_text = json.dumps(payload, ensure_ascii=False)
+
+    assert payload["answer_source"] == "pbs_rag"
+    assert payload["response_kind"] == "no_answer"
+    assert payload["citations"] == []
+    assert payload["related_links"] == []
+    assert payload["related_sections"] == []
+    assert payload["acquisition"]["kind"] == "repository_search"
+    assert "/external/lightspeed" not in payload_text
+
+
+def test_internal_clarification_does_not_create_fake_citations_or_related_links(tmp_path):
+    result = AnswerResult(
+        query="이거 어떻게 해?",
+        mode="chat",
+        answer="답변: 대상 리소스나 증상을 한 단계만 더 좁혀 주세요.",
+        rewritten_query="이거 어떻게 해?",
+        citations=[],
+        cited_indices=[],
+        response_kind="clarification",
+        pipeline_trace={"answer_source": "pbs_rag"},
+    )
+    session = ChatSession(
+        session_id="session-1",
+        context=SessionContext(user_id="tester"),
+    )
+
+    payload = _build_chat_payload(root_dir=tmp_path, session=session, result=result)
+    payload_text = json.dumps(payload, ensure_ascii=False)
+
+    assert payload["answer_source"] == "pbs_rag"
+    assert payload["response_kind"] == "clarification"
+    assert payload["citations"] == []
+    assert payload["related_links"] == []
+    assert payload["related_sections"] == []
+    assert "acquisition" not in payload
     assert "/external/lightspeed" not in payload_text
 
 

@@ -1161,6 +1161,8 @@ const PlaybookLibraryPage: React.FC = () => {
           html: viewerDocument.html,
           inlineStyles: viewerDocument.inline_styles,
           bodyClassName: viewerDocument.body_class_name,
+          viewerCacheStatus: viewerDocument.viewer_cache_status,
+          viewerTimingsMs: viewerDocument.viewer_timings_ms,
         });
       })
       .catch(() => {
@@ -1797,6 +1799,8 @@ const PlaybookLibraryPage: React.FC = () => {
           html: viewerDocument.html,
           inlineStyles: viewerDocument.inline_styles,
           bodyClassName: viewerDocument.body_class_name,
+          viewerCacheStatus: viewerDocument.viewer_cache_status,
+          viewerTimingsMs: viewerDocument.viewer_timings_ms,
         });
       } else if (draft.capture_artifact_path) {
         const captured = await loadCustomerPackCapturedPreview(draft.draft_id);
@@ -1818,6 +1822,8 @@ const PlaybookLibraryPage: React.FC = () => {
       html: viewerDocument.html,
       inlineStyles: viewerDocument.inline_styles,
       bodyClassName: viewerDocument.body_class_name,
+      viewerCacheStatus: viewerDocument.viewer_cache_status,
+      viewerTimingsMs: viewerDocument.viewer_timings_ms,
       interactionPolicy: {
         codeCopy: viewerDocument.interaction_policy.code_copy,
         codeWrapToggle: viewerDocument.interaction_policy.code_wrap_toggle,
@@ -1879,7 +1885,8 @@ const PlaybookLibraryPage: React.FC = () => {
     switch (kind) {
       case 'approved':
         title = 'Gold PlayBooks';
-        books = [...(cr.gold_books ?? [])];
+        books = [...(cr.approved_wiki_runtime_books?.books?.length ? cr.approved_wiki_runtime_books.books : cr.gold_books ?? [])]
+          .filter((book) => normalizePlaybookGrade(book.grade) === 'Gold');
         break;
       case 'latestNonGold':
         title = 'Silver · Bronze PlayBooks';
@@ -2096,7 +2103,17 @@ const PlaybookLibraryPage: React.FC = () => {
     (total, { document }) => total + Number(document.chunk_count || 0),
     0,
   );
-  const approvedRuntimeBooks = summary?.approved_runtime_count ?? summary?.gold_book_count ?? controlRoom?.gold_books?.length ?? 0;
+  const approvedRuntimeBooks = summary?.authoritative_runtime_book_count
+    ?? summary?.approved_wiki_runtime_book_count
+    ?? controlRoom?.approved_wiki_runtime_book_count
+    ?? controlRoom?.approved_wiki_runtime_books?.books?.length
+    ?? summary?.manualbook_book_count
+    ?? controlRoom?.manualbook_book_count
+    ?? controlRoom?.manualbooks?.books?.length
+    ?? summary?.gold_book_count
+    ?? controlRoom?.gold_book_count
+    ?? controlRoom?.gold_books?.length
+    ?? 0;
   const userLibraryBooks = [...(userLibraryBucket?.books ?? [])];
   const userLibraryBookCount = summary?.customer_pack_runtime_book_count
     ?? summary?.user_library_book_count

@@ -468,9 +468,13 @@ export interface ReleaseCandidateFreezeSummary {
 
 export interface DataControlRoomSummary {
   known_book_count: number;
+  known_books_count?: number;
   approved_runtime_count: number;
   gold_book_count: number;
+  authoritative_runtime_book_count?: number;
+  library_authoritative_bucket?: string;
   manualbook_count: number;
+  manualbook_book_count?: number;
   corpus_book_count?: number;
   customer_pack_runtime_book_count?: number;
   user_library_book_count?: number;
@@ -517,14 +521,19 @@ export interface DataControlRoomResponse {
     blockers: string[];
   };
   known_books: LibraryBook[];
+  known_books_count?: number;
   gold_books: LibraryBook[];
+  gold_book_count?: number;
   corpus: LibraryBucket;
   manualbooks: LibraryBucket;
+  manualbook_book_count?: number;
   customer_pack_runtime_books?: LibraryBucket;
   user_library_books?: LibraryBucket;
   user_library_corpus?: LibraryBucket;
   gold_candidate_books?: LibraryBucket;
   approved_wiki_runtime_books?: LibraryBucket;
+  approved_wiki_runtime_book_count?: number;
+  library_authoritative_bucket?: 'approved_wiki_runtime_books' | 'manualbooks' | 'gold_books' | string;
   wiki_navigation_backlog?: LibraryBucket;
   wiki_usage_signals?: LibraryBucket;
   product_gate?: LibraryBucket;
@@ -779,6 +788,8 @@ export interface ViewerDocumentResponse {
   body_class_name: string;
   inline_styles: string[];
   html: string;
+  viewer_cache_status?: 'hit' | 'miss' | 'bypass' | string;
+  viewer_timings_ms?: Record<string, number>;
   interaction_policy: {
     code_copy: boolean;
     code_wrap_toggle: boolean;

@@ -5,6 +5,8 @@ export interface ViewerDocumentPayload {
   html: string;
   inlineStyles: string[];
   bodyClassName: string;
+  viewerCacheStatus?: string;
+  viewerTimingsMs?: Record<string, number>;
   interactionPolicy?: {
     codeCopy?: boolean;
     codeWrapToggle?: boolean;

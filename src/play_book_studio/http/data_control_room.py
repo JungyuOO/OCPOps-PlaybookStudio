@@ -71,6 +71,33 @@ def _path_fingerprint(path: Path | None) -> tuple[str, bool, int, int]:
     return (str(target), True, int(stat.st_mtime_ns), int(stat.st_size))
 
 
+def _library_count_contract(
+    *,
+    known_books: list[dict],
+    gold_books: list[dict],
+    core_manualbooks: list[dict],
+    approved_wiki_runtime_books: dict,
+) -> dict[str, object]:
+    approved_wiki_runtime_book_count = len(approved_wiki_runtime_books.get("books") or [])
+    manualbook_book_count = len(core_manualbooks)
+    gold_book_count = len(gold_books)
+    library_authoritative_bucket = (
+        "approved_wiki_runtime_books"
+        if approved_wiki_runtime_book_count
+        else "manualbooks"
+        if manualbook_book_count
+        else "gold_books"
+    )
+    return {
+        "known_books_count": len(known_books),
+        "gold_book_count": gold_book_count,
+        "manualbook_book_count": manualbook_book_count,
+        "approved_wiki_runtime_book_count": approved_wiki_runtime_book_count,
+        "authoritative_runtime_book_count": approved_wiki_runtime_book_count or manualbook_book_count or gold_book_count,
+        "library_authoritative_bucket": library_authoritative_bucket,
+    }
+
+
 def _data_control_room_cache_fingerprint(root: Path) -> tuple[tuple[str, bool, int, int], ...]:
     settings = load_settings(root)
     gate_path = root / "reports" / "build_logs" / "foundry_runs" / "profiles" / "morning_gate" / "latest.json"
@@ -213,6 +240,18 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
     playbook_library = _build_playbook_library(derived_playbook_family_statuses)
     gold_candidate_books = _build_gold_candidate_book_bucket(root)
     approved_wiki_runtime_books = _build_approved_wiki_runtime_book_bucket(root, translation_lane_report=translation_lane_report)
+    library_counts = _library_count_contract(
+        known_books=known_book_rows,
+        gold_books=gold_books,
+        core_manualbooks=core_manualbooks,
+        approved_wiki_runtime_books=approved_wiki_runtime_books,
+    )
+    known_books_count = int(library_counts["known_books_count"])
+    gold_book_count = int(library_counts["gold_book_count"])
+    manualbook_book_count = int(library_counts["manualbook_book_count"])
+    approved_wiki_runtime_book_count = int(library_counts["approved_wiki_runtime_book_count"])
+    authoritative_runtime_book_count = int(library_counts["authoritative_runtime_book_count"])
+    library_authoritative_bucket = str(library_counts["library_authoritative_bucket"])
     navigation_backlog = _build_navigation_backlog_bucket(root)
     wiki_usage_signals = _build_wiki_usage_signal_bucket(root)
     product_gate = _build_product_gate_bucket(root)
@@ -279,8 +318,10 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "release_blocking": bool(verdict.get("release_blocking")),
             "approved_runtime_count": selected_approved_runtime_count,
             "known_book_count": int(source_approval_report.get("summary", {}).get("book_count") or len(source_books)),
-            "gold_book_count": len(gold_books),
-            "known_books_count": len(known_book_rows),
+            "gold_book_count": gold_book_count,
+            "known_books_count": known_books_count,
+            "authoritative_runtime_book_count": authoritative_runtime_book_count,
+            "library_authoritative_bucket": library_authoritative_bucket,
             "queue_count": len(active_queue_rows),
             "active_queue_count": len(active_queue_rows),
             "high_value_focus_count": int(high_value_focus.get("count") or 0),
@@ -291,12 +332,13 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "core_corpus_book_count": len(materialized_core_corpus_slugs),
             "manualbook_count": len(materialized_core_manualbook_slugs),
             "core_manualbook_count": len(materialized_core_manualbook_slugs),
+            "manualbook_book_count": manualbook_book_count,
             "customer_pack_runtime_book_count": len(customer_pack_runtime_books),
             "user_library_book_count": len(user_library_books),
             "user_library_corpus_book_count": len(user_library_corpus_books),
             "user_library_corpus_chunk_count": user_library_corpus_chunk_count,
             "gold_candidate_book_count": len(gold_candidate_books.get("books") or []),
-            "approved_wiki_runtime_book_count": len(approved_wiki_runtime_books.get("books") or []),
+            "approved_wiki_runtime_book_count": approved_wiki_runtime_book_count,
             "wiki_navigation_backlog_count": len(navigation_backlog.get("books") or []),
             "wiki_usage_signal_count": len(wiki_usage_signals.get("books") or []),
             "product_gate_count": len(product_gate.get("books") or []),
@@ -377,11 +419,14 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
         "playbook_library": playbook_library,
         "materialization": {
             "manifest_book_count": len(manifest_by_slug),
-            "gold_book_count": len(gold_books),
+            "gold_book_count": gold_book_count,
+            "approved_wiki_runtime_book_count": approved_wiki_runtime_book_count,
+            "authoritative_runtime_book_count": authoritative_runtime_book_count,
+            "library_authoritative_bucket": library_authoritative_bucket,
             "corpus_book_count": len(core_corpus_books),
             "core_corpus_book_count": len(core_corpus_books),
-            "manualbook_book_count": len(core_manualbooks),
-            "core_manualbook_book_count": len(core_manualbooks),
+            "manualbook_book_count": manualbook_book_count,
+            "core_manualbook_book_count": manualbook_book_count,
             "customer_pack_runtime_book_count": len(customer_pack_runtime_books),
             "user_library_book_count": len(user_library_books),
             "user_library_corpus_book_count": len(user_library_corpus_books),
@@ -408,10 +453,17 @@ def _build_data_control_room_payload_uncached(root_dir: str | Path) -> dict[str,
             "extra_manualbook_books": sorted(extra_materialized_manualbook_slugs),
             "missing_corpus_books": sorted(manifest_slugs - materialized_core_corpus_slugs),
             "missing_manualbook_books": sorted(manifest_slugs - materialized_core_manualbook_slugs),
-            "logical_counts_match": len(manifest_by_slug) == len(core_corpus_books) == len(core_manualbooks),
-            "counts_match": len(manifest_by_slug) == len(gold_books) == len(materialized_core_corpus_slugs) == len(materialized_core_manualbook_slugs),
+            "logical_counts_match": len(manifest_by_slug) == len(core_corpus_books) == manualbook_book_count,
+            "counts_match": len(manifest_by_slug) == authoritative_runtime_book_count == len(materialized_core_corpus_slugs) == len(materialized_core_manualbook_slugs),
+            "legacy_gold_counts_match": len(manifest_by_slug) == gold_book_count == len(materialized_core_corpus_slugs) == len(materialized_core_manualbook_slugs),
         },
         "known_books": known_book_rows,
+        "known_books_count": known_books_count,
+        "gold_book_count": gold_book_count,
+        "manualbook_book_count": manualbook_book_count,
+        "approved_wiki_runtime_book_count": approved_wiki_runtime_book_count,
+        "authoritative_runtime_book_count": authoritative_runtime_book_count,
+        "library_authoritative_bucket": library_authoritative_bucket,
         "active_queue": active_queue_rows,
         "high_value_focus": high_value_focus,
         "report_paths": report_paths,

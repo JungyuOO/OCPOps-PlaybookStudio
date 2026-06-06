@@ -15,6 +15,7 @@ from play_book_studio.config.validation import read_jsonl
 from play_book_studio.runtime_catalog_registry import official_runtime_book_entry
 from play_book_studio.answering.models import Citation
 from play_book_studio.http.viewers import _parse_viewer_path
+from play_book_studio.http.source_books_wiki_relations import _rewrite_book_href
 from .runtime_truth import official_runtime_truth_payload
 from .presenters_runtime import (
     _build_health_payload,
@@ -490,7 +491,7 @@ def _serialize_citation_uncached(
 ) -> dict[str, Any]:
     context = presentation_context
     settings = context.settings
-    href = _citation_href(citation)
+    href = _rewrite_book_href(root_dir, _citation_href(citation))
     manifest_entry = context.manifest_entry(citation.book_slug)
     customer_pack_meta = context.customer_pack_meta(href)
     row: dict[str, Any] | None = None
@@ -512,6 +513,7 @@ def _serialize_citation_uncached(
         )
         return {
             **_citation_display_payload(citation),
+            "viewer_path": href,
             "section": _display_source_heading(
                 str(customer_pack_meta.get("section") or citation.section or citation.anchor)
             ),
@@ -555,6 +557,7 @@ def _serialize_citation_uncached(
         )
         return {
             **_citation_display_payload(citation),
+            "viewer_path": href,
             "section": section,
             "href": href,
             "book_title": book_title,
@@ -586,6 +589,7 @@ def _serialize_citation_uncached(
     )
     return {
         **_citation_display_payload(citation),
+        "viewer_path": href,
         "section": section,
         "href": href,
         "book_title": book_title,
