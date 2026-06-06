@@ -191,6 +191,16 @@ def load_bm25_rows_from_connection(connection) -> list[dict[str, Any]]:
             FROM document_chunks c
             JOIN parsed_documents pd ON pd.id = c.parsed_document_id
             JOIN document_sources ds ON ds.id = pd.document_source_id
+            WHERE (
+                c.source_scope <> 'user_upload'
+                OR pd.id = (
+                    SELECT latest_pd.id
+                    FROM parsed_documents latest_pd
+                    WHERE latest_pd.document_source_id = ds.id
+                    ORDER BY latest_pd.created_at DESC, latest_pd.id DESC
+                    LIMIT 1
+                )
+            )
             ORDER BY c.source_scope ASC, ds.filename ASC, c.ordinal ASC
             """
         )

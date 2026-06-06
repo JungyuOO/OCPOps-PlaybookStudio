@@ -97,6 +97,16 @@ def load_embedding_chunk_candidates(
                 AND (%s = '' OR c.source_scope = %s)
                 AND (%s = '' OR ds.id = %s::uuid)
                 AND (
+                    c.source_scope <> 'user_upload'
+                    OR pd.id = (
+                        SELECT latest_pd.id
+                        FROM parsed_documents latest_pd
+                        WHERE latest_pd.document_source_id = ds.id
+                        ORDER BY latest_pd.created_at DESC, latest_pd.id DESC
+                        LIMIT 1
+                    )
+                )
+                AND (
                     ce.chunk_id IS NULL
                     OR ce.embedding_text_hash <> encode(digest(c.embedding_text, 'sha256'), 'hex')
                 )

@@ -195,6 +195,8 @@ def test_load_embedding_chunk_candidates_uses_chunk_embeddings_and_skips_empty_t
     sql = connection.cursor_obj.calls[0][0]
     assert "LEFT JOIN chunk_embeddings ce" in sql
     assert "length(btrim(COALESCE(c.embedding_text, ''))) > 0" in sql
+    assert "c.source_scope <> 'user_upload'" in sql
+    assert "latest_pd.document_source_id = ds.id" in sql
     assert "ce.embedding_text_hash" in sql
 
 

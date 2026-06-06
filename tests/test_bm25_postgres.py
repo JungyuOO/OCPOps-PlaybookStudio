@@ -96,6 +96,9 @@ def test_load_bm25_rows_from_connection_builds_runtime_payload_rows():
     assert rows[0]["source_scope"] == "study_docs"
     assert rows[0]["repository_id"] == "dddddddd-dddd-dddd-dddd-dddddddddddd"
     assert rows[0]["cli_commands"] == ["oc get pods"]
+    sql = connection.cursor_obj.calls[0][0]
+    assert "c.source_scope <> 'user_upload'" in sql
+    assert "latest_pd.document_source_id = ds.id" in sql
 
 
 def test_bm25_index_can_search_postgres_payload_rows():

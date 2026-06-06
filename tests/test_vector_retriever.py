@@ -21,6 +21,33 @@ class _Connection:
         return False
 
 
+class _Cursor:
+    description = []
+
+    def __init__(self):
+        self.calls = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def execute(self, sql, params=None):
+        self.calls.append((str(sql), params))
+
+    def fetchall(self):
+        return []
+
+
+class _SearchConnection:
+    def __init__(self):
+        self.cursor_obj = _Cursor()
+
+    def cursor(self):
+        return self.cursor_obj
+
+
 def test_vector_retriever_uses_pgvector_filter(monkeypatch) -> None:
     settings = Settings(
         root_dir=Path("."),
@@ -95,4 +122,29 @@ def test_pgvector_filter_sql_translates_scope_filters() -> None:
         "22222222-2222-2222-2222-222222222222",
         "user_upload",
     ]
+    assert runtime["sql_filter_applied"] is True
+
+
+def test_pgvector_search_filters_user_upload_to_latest_parse() -> None:
+    settings = Settings(
+        root_dir=Path("."),
+        database_url="postgresql://example",
+        embedding_base_url="http://embedding.test/v1",
+        embedding_model="bge",
+    )
+    retriever = VectorRetriever(settings)
+    connection = _SearchConnection()
+
+    hits, runtime = retriever._search_pgvector(
+        connection,
+        vector=[0.1, 0.2, 0.3],
+        top_k=3,
+        query_filter={"must": [{"key": "source_scope", "match": {"value": "user_upload"}}]},
+    )
+
+    assert hits == []
+    sql = connection.cursor_obj.calls[0][0]
+    assert "c.source_scope <> 'user_upload'" in sql
+    assert "latest_pd.document_source_id = ds.id" in sql
+    assert "ce.model = %s" in sql
     assert runtime["sql_filter_applied"] is True

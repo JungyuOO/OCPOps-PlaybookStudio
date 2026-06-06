@@ -114,16 +114,13 @@ def build_retrieval_plan(
     signal_plan = build_query_signal_plan(query, llm_client=llm_client)
     product_intro_query = is_openshift_product_intro_query(query)
     enabled_scopes = enabled_source_scope_set(context)
-    has_legacy_repository_scope = bool(
-        str(getattr(context, "active_repository_id", "") or "").strip()
-        and not enabled_scopes
-    )
-    has_document_scope = active_document_scope_selected(context) or has_legacy_repository_scope
+    has_repository_scope = bool(str(getattr(context, "active_repository_id", "") or "").strip())
+    has_document_scope = active_document_scope_selected(context) or has_repository_scope
     if _uses_study_docs_scope(context):
         retrieval_queries = _dedupe_queries((rewritten_query,), fallback=rewritten_query)
         metadata_filter: dict[str, Any] = {}
     elif has_document_scope:
-        retrieval_queries = _dedupe_queries(signal_plan.embedding_queries, fallback=rewritten_query)
+        retrieval_queries = _dedupe_queries((rewritten_query, *signal_plan.embedding_queries), fallback=rewritten_query)
         metadata_filter = {}
     elif product_intro_query:
         retrieval_queries = _dedupe_queries((rewritten_query,), fallback=rewritten_query)
