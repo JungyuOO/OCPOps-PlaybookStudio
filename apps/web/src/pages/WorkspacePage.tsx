@@ -25,7 +25,6 @@ import {
   X,
   Pin,
   RotateCcw,
-  ScrollText,
 } from 'lucide-react';
 import gsap from 'gsap';
 import './WorkspacePage.css';
@@ -1648,10 +1647,14 @@ export default function WorkspacePage() {
   }, [activeFooterConnection?.connection_id]);
 
   useEffect(() => {
+    if (!isCourseMode && isLiveClusterAvailable && currentMode !== 'live_cluster') {
+      setCurrentMode('live_cluster');
+      return;
+    }
     if (currentMode === 'live_cluster' && !isLiveClusterAvailable) {
       setCurrentMode('document');
     }
-  }, [currentMode, isLiveClusterAvailable]);
+  }, [currentMode, isCourseMode, isLiveClusterAvailable]);
 
   useEffect(() => {
     if (activeFooterConnection?.default_namespace && selectedResourceNamespace === 'default') {
@@ -1889,12 +1892,17 @@ export default function WorkspacePage() {
     setIsDashboardLoading(true);
     setDashboardError('');
     try {
-      const [overview, metrics] = await Promise.all([
+      const [overviewResult, metricsResult] = await Promise.allSettled([
         loadOcpOverview(activeFooterConnection.connection_id),
         loadOcpMetrics(activeFooterConnection.connection_id, namespace),
       ]);
-      setDashboardOverview(overview);
-      setDashboardMetrics(metrics);
+      setDashboardOverview(overviewResult.status === 'fulfilled' ? overviewResult.value : null);
+      setDashboardMetrics(metricsResult.status === 'fulfilled' ? metricsResult.value : null);
+      if (overviewResult.status === 'rejected' || metricsResult.status === 'rejected') {
+        console.error(overviewResult.status === 'rejected' ? overviewResult.reason : metricsResult.status === 'rejected' ? metricsResult.reason : null);
+        setDashboardError('Live dashboard metrics are partially unavailable. Resource management remains available.');
+      }
+      await refreshClusterResources();
     } catch (error) {
       console.error(error);
       setDashboardOverview(null);
@@ -1903,7 +1911,7 @@ export default function WorkspacePage() {
     } finally {
       setIsDashboardLoading(false);
     }
-  }, [activeFooterConnection, isClusterConnected, selectedResourceNamespace]);
+  }, [activeFooterConnection, isClusterConnected, refreshClusterResources, selectedResourceNamespace]);
 
   useEffect(() => {
     if (dashboardOpen) {
@@ -4392,24 +4400,6 @@ export default function WorkspacePage() {
         isProfileLoading={isFooterProfileLoading}
       />
 
-      <section className="aiops-workbench-statusbar" aria-label="AIOps workbench connection status">
-        <div className="aiops-statusbar-section">
-          <span className={`aiops-status-dot aiops-status-dot--${clusterConnectionStatus}`} />
-          <strong>{footerProfileName || 'No OCP profile'}</strong>
-          <span>{activeFooterConnection?.cluster_url || 'https://api.ocp.cywell.local:6443'}</span>
-        </div>
-        <div className="aiops-statusbar-section">
-          <TerminalIcon size={14} />
-          <strong>{isTerminalConnected ? 'Terminal connected' : 'Terminal offline'}</strong>
-          <span>{learnerWorkspaceStatus?.namespace || userWorkspaceNamespace || 'namespace auto-create disabled for v0.3.0 test'}</span>
-        </div>
-        <div className="aiops-statusbar-section">
-          <ScrollText size={14} />
-          <strong>{aiopsTimelineEvents.length} events</strong>
-          <span>CLI, YAML, apply, logs, and snapshots</span>
-        </div>
-      </section>
-
       <main className="workspace-content">
         <Group
           orientation="horizontal"
@@ -4551,8 +4541,8 @@ export default function WorkspacePage() {
                   <section className="outline-surface-card outline-surface-card--document cluster-resource-explorer">
                     <div className="outline-section-head">
                       <div className="outline-section-copy">
-                        <strong>Cluster Resources</strong>
-                        <span>{isClusterConnected ? activeFooterConnection?.display_name || activeFooterConnection?.cluster_url : 'Cluster is not connected'}</span>
+                        <strong>Cluster Resources / YAML</strong>
+                        <span>{isClusterConnected ? 'Select a resource to inspect and edit YAML.' : 'Cluster is not connected'}</span>
                       </div>
                       <button
                         type="button"
@@ -5048,6 +5038,44 @@ export default function WorkspacePage() {
               ) : (
                 <div className="signals-panel">
                   <section className="signals-card cluster-signals-card">
+                    <div className="signals-card-title signals-card-title--action">
+                      <TerminalIcon size={14} />
+                      <span>Cluster Operations</span>
+                      <button
+                        type="button"
+                        className="signals-refresh-btn"
+                        onClick={() => { void refreshAiopsTimelineEvents(); }}
+                        disabled={isAiopsTimelineLoading}
+                      >
+                        {isAiopsTimelineLoading ? 'Loading' : 'Refresh'}
+                      </button>
+                    </div>
+                    {aiopsTimelineError ? <span className="signals-error">{aiopsTimelineError}</span> : null}
+                    {aiopsTimelineEvents.length === 0 ? (
+                      <span className="signals-empty">No CLI, YAML, apply, log, or snapshot events captured yet.</span>
+                    ) : (
+                      <div className="cluster-signal-list">
+                        {aiopsTimelineEvents.slice(0, 18).map((event) => (
+                          <article key={event.event_id} className={`cluster-signal-item cluster-signal-item--${event.event_type}`}>
+                            <div className="cluster-signal-head">
+                              <strong>{event.event_type}</strong>
+                              <span>{formatTimelineEventTime(event.timestamp)}</span>
+                            </div>
+                            <div className="cluster-signal-meta">
+                              {timelineEventResourceLabel(event) || event.summary}
+                            </div>
+                            <strong className="cluster-signal-summary">{event.summary}</strong>
+                            {event.command_text ? <code>{event.command_text}</code> : null}
+                            {event.exit_code !== undefined && event.exit_code !== null ? <time>exit {event.exit_code}</time> : null}
+                            {event.yaml_diff ? <pre>{event.yaml_diff.slice(0, 360)}</pre> : null}
+                            {event.stderr ? <pre>{event.stderr.slice(0, 360)}</pre> : null}
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                  {false && (
+                  <section className="signals-card cluster-signals-card">
                     <div className="signals-card-title">
                       <TerminalIcon size={14} />
                       <span>Cluster Operations</span>
@@ -5074,6 +5102,7 @@ export default function WorkspacePage() {
                       </div>
                     )}
                   </section>
+                  )}
                   {false && (
                     <>
                   {(isOverlayLoading || isOverlaySaving) && <div className="signals-status">syncing</div>}
@@ -5196,6 +5225,8 @@ export default function WorkspacePage() {
                   </button>
                 </div>
               )}
+              {false && (
+              <>
               <div className="chat-mode-switch chat-mode-switch--top" role="tablist" aria-label="Chat mode">
                 <button
                   type="button"
@@ -5242,13 +5273,15 @@ export default function WorkspacePage() {
                 </div>
                 <div>
                   <span>YAML editor</span>
-                  <strong>{resourceYamlDetail ? `${resourceYamlDetail.kind}/${resourceYamlDetail.name}` : 'Open from left resource list'}</strong>
+                  <strong>{resourceYamlDetail ? `${resourceYamlDetail?.kind}/${resourceYamlDetail?.name}` : 'Open from left resource list'}</strong>
                 </div>
                 <div>
                   <span>Event rail</span>
                   <strong>{aiopsTimelineEvents[0]?.summary || 'Waiting for CLI or YAML activity'}</strong>
                 </div>
               </section>
+              </>
+              )}
               <div className="chat-messages" ref={chatMessagesRef}>
                 {messages.length === 0 && (
                   <div className="chat-welcome">
@@ -5712,7 +5745,7 @@ export default function WorkspacePage() {
                     </button>
                   </div>
                 </div>
-                <div className="aiops-terminal-workbench">
+                <div className="aiops-terminal-workbench aiops-terminal-workbench--single">
                   <TerminalSessionPanel
                     learningContext={terminalLearningContext}
                     onCommandSubmitted={handleTerminalCommandSubmitted}
@@ -5720,6 +5753,7 @@ export default function WorkspacePage() {
                     onSessionStateChange={setTerminalConnectionState}
                     onWorkspaceReady={handleTerminalWorkspaceReady}
                   />
+                  {false && (
                   <aside className="aiops-event-rail" aria-label="AIOps event timeline">
                     <div className="aiops-event-rail-head">
                       <div>
@@ -5761,6 +5795,7 @@ export default function WorkspacePage() {
                       ))}
                     </div>
                   </aside>
+                  )}
                 </div>
               </>
             ) : (
@@ -6018,8 +6053,6 @@ export default function WorkspacePage() {
               <div className="dashboard-modal-body">
                 {!isClusterConnected ? (
                   <div className="outline-empty"><p>Cluster가 연결되어 있지 않습니다.</p></div>
-                ) : dashboardError ? (
-                  <div className="outline-empty"><p>{dashboardError}</p></div>
                 ) : isDashboardLoading ? (
                   <div className="outline-empty">
                     <div className="loading-spinner-small"></div>
@@ -6027,6 +6060,29 @@ export default function WorkspacePage() {
                   </div>
                 ) : (
                   <>
+                    {dashboardError ? <div className="dashboard-error-banner">{dashboardError}</div> : null}
+                    <section className="dashboard-resource-manager">
+                      <div>
+                        <span>Resource Manager</span>
+                        <h4>OpenShift-style YAML workspace</h4>
+                        <p>Open workloads, services, routes, or events in the left resource list, then edit YAML from the same Playbook Studio shell.</p>
+                      </div>
+                      <div className="dashboard-resource-actions">
+                        {CLUSTER_RESOURCE_OPTIONS.map((kind) => (
+                          <button
+                            key={kind}
+                            type="button"
+                            onClick={() => {
+                              setSelectedResourceKind(kind);
+                              setLeftPanelMode('outline');
+                              setDashboardOpen(false);
+                            }}
+                          >
+                            {kind}
+                          </button>
+                        ))}
+                      </div>
+                    </section>
                     <div className="dashboard-summary-grid">
                       <article>
                         <span>Health</span>

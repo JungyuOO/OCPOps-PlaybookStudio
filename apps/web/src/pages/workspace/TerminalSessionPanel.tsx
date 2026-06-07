@@ -64,7 +64,6 @@ export default function TerminalSessionPanel({
   const commandBufferRef = useRef('');
   const [connectionKey, setConnectionKey] = useState(0);
   const [state, setState] = useState<TerminalConnectionState>('connecting');
-  const [sessionMeta, setSessionMeta] = useState({ shell: '', workdir: '', clusterServer: '', workspaceNamespace: '' });
   const [recentCheckResults, setRecentCheckResults] = useState<TerminalSocketEvent[]>([]);
   const wsUrl = useMemo(defaultTerminalWebSocketUrl, []);
   const stableLearningContext = useMemo<TerminalLearningContext | undefined>(() => {
@@ -96,7 +95,6 @@ export default function TerminalSessionPanel({
     }
 
     setState('connecting');
-    setSessionMeta({ shell: '', workdir: '', clusterServer: '', workspaceNamespace: '' });
     const terminal = new Terminal({
       cursorBlink: true,
       convertEol: true,
@@ -126,6 +124,22 @@ export default function TerminalSessionPanel({
     terminal.writeln('Connecting to Terminal Session...');
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
+
+    const scrollTerminalToBottom = (): void => {
+      try {
+        terminal.scrollToBottom();
+      } catch {
+        // xterm can reject scroll calls while the viewport is being mounted.
+      }
+      window.requestAnimationFrame(() => {
+        try {
+          terminal.scrollToBottom();
+        } catch {
+          // Ignore transient layout races during panel resize/reconnect.
+        }
+      });
+    };
+    scrollTerminalToBottom();
 
     const socket = new WebSocket(wsUrl);
     socketRef.current = socket;
@@ -165,6 +179,7 @@ export default function TerminalSessionPanel({
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'input', data }));
       }
+      scrollTerminalToBottom();
     });
 
     const sendTerminalInput = (data: string): void => {
@@ -174,6 +189,7 @@ export default function TerminalSessionPanel({
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'input', data }));
       }
+      scrollTerminalToBottom();
     };
 
     const appendCommandBuffer = (data: string): void => {
@@ -265,20 +281,16 @@ export default function TerminalSessionPanel({
         const chunk = String(event.data);
         terminal.write(chunk);
         onOutputChunk?.(chunk);
+        scrollTerminalToBottom();
         return;
       }
       if (payload.type === 'bootstrap_stage') {
         const message = payload.message || payload.stage || 'Preparing terminal session.';
         terminal.writeln(message);
+        scrollTerminalToBottom();
         return;
       }
       if (payload.type === 'ready') {
-        setSessionMeta({
-          shell: payload.shell ?? '',
-          workdir: payload.workdir ?? '',
-          clusterServer: payload.cluster_server ?? '',
-          workspaceNamespace: payload.workspace_namespace ?? '',
-        });
         if (payload.workspace_namespace) {
           onWorkspaceReady?.({
             namespace: payload.workspace_namespace,
@@ -287,12 +299,14 @@ export default function TerminalSessionPanel({
         }
         setState('connected');
         terminal.writeln(`Connected: ${payload.shell ?? 'shell'}`);
+        scrollTerminalToBottom();
         return;
       }
       if (payload.type === 'output') {
         const chunk = payload.data ?? '';
         terminal.write(chunk);
         onOutputChunk?.(chunk);
+        scrollTerminalToBottom();
         return;
       }
       if (payload.type === 'command_check_result') {
@@ -304,12 +318,14 @@ export default function TerminalSessionPanel({
         terminal.writeln('');
         terminal.writeln(`Session exited (${payload.exit_code ?? 0}).`);
         setState('closed');
+        scrollTerminalToBottom();
         return;
       }
       if (payload.type === 'error') {
         terminal.writeln('');
         terminal.writeln(payload.data ?? 'Terminal session error.');
         setState('error');
+        scrollTerminalToBottom();
       }
     });
 
@@ -321,6 +337,7 @@ export default function TerminalSessionPanel({
       terminal.writeln('');
       terminal.writeln(`Unable to connect to ${wsUrl}`);
       setState('error');
+      scrollTerminalToBottom();
     });
 
     return () => {
@@ -339,19 +356,11 @@ export default function TerminalSessionPanel({
 
   return (
     <section className="terminal-session-shell" aria-label="Terminal Session">
-      <div className="terminal-session-status">
-        <div className="terminal-session-meta">
-          <span className={`terminal-session-dot terminal-session-dot--${state}`} />
-          <strong>{state === 'connected' ? 'Connected' : state === 'connecting' ? 'Connecting' : state === 'error' ? 'Connection error' : 'Closed'}</strong>
-          {sessionMeta.shell ? <span>{sessionMeta.shell}</span> : null}
-          {sessionMeta.workdir ? <span>{sessionMeta.workdir}</span> : null}
-          {sessionMeta.workspaceNamespace ? <span>{sessionMeta.workspaceNamespace}</span> : null}
-          {sessionMeta.clusterServer ? <span title={sessionMeta.clusterServer}>Cluster {sessionMeta.clusterServer}</span> : null}
-          {stableLearningContext?.labTaskId ? <span>Lab attached</span> : null}
-        </div>
+      <div className="terminal-session-status terminal-session-status--compact">
         <button
           className="terminal-session-reconnect"
           type="button"
+          title={state === 'connected' ? 'Reconnect terminal' : 'Connect terminal'}
           onClick={() => setConnectionKey((current) => current + 1)}
         >
           Reconnect

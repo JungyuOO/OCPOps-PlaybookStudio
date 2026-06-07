@@ -1996,6 +1996,33 @@
   font-weight: 650;
 }
 
+.signals-card-title--action {
+  justify-content: space-between;
+}
+
+.signals-refresh-btn {
+  margin-left: auto;
+  border: 1px solid rgba(0, 209, 255, 0.18);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: rgba(0, 209, 255, 0.08);
+  color: #e8fbff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.signals-refresh-btn:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.signals-error {
+  color: #fecdd3;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
 .signals-card-filters {
   display: inline-flex;
   align-items: center;
@@ -3793,6 +3820,12 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
+.cluster-signal-item--yaml_apply,
+.cluster-signal-item--action_execute {
+  border-color: rgba(0, 209, 255, 0.22);
+  background: rgba(0, 209, 255, 0.07);
+}
+
 .cluster-signal-head {
   display: flex;
   align-items: center;
@@ -3817,6 +3850,13 @@
   font-size: 0.72rem;
 }
 
+.cluster-signal-summary {
+  color: rgba(239, 252, 255, 0.9);
+  font-size: 0.76rem;
+  line-height: 1.36;
+  overflow-wrap: anywhere;
+}
+
 .cluster-signal-item code {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3826,6 +3866,32 @@
   background: rgba(0, 0, 0, 0.24);
   color: rgba(239, 252, 255, 0.82);
   font-size: 0.74rem;
+}
+
+.cluster-signal-item pre {
+  max-height: 120px;
+  margin: 0;
+  overflow: auto;
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.24);
+  color: rgba(239, 252, 255, 0.76);
+  font-family: "Cascadia Mono", "Fira Code", Consolas, monospace;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.cluster-signal-legacy {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 8px;
+}
+
+.cluster-signal-legacy summary {
+  color: rgba(239, 252, 255, 0.62);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
 .workspace-trace-panel {
@@ -5618,8 +5684,16 @@
   background: #070b12;
 }
 
+.aiops-terminal-workbench--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .aiops-terminal-workbench .terminal-session-shell {
   border-right: 1px solid rgba(96, 165, 250, 0.12);
+}
+
+.aiops-terminal-workbench--single .terminal-session-shell {
+  border-right: 0;
 }
 
 .aiops-event-rail {
@@ -5872,6 +5946,12 @@
   padding: 8px 10px;
   border-bottom: 1px solid rgba(96, 165, 250, 0.12);
   background: rgba(9, 14, 23, 0.96);
+}
+
+.terminal-session-status--compact {
+  justify-content: flex-end;
+  min-height: 30px;
+  padding: 5px 10px;
 }
 
 .terminal-session-meta {
@@ -7346,6 +7426,72 @@
   padding: 18px 20px 22px;
 }
 
+.dashboard-error-banner {
+  margin-bottom: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.22);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(251, 191, 36, 0.08);
+  color: #fde68a;
+  font-size: 0.8rem;
+}
+
+.dashboard-resource-manager {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 12px;
+  border: 1px solid rgba(0, 209, 255, 0.14);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(0, 209, 255, 0.055);
+}
+
+.dashboard-resource-manager span {
+  color: rgba(0, 209, 255, 0.78);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dashboard-resource-manager h4 {
+  margin: 3px 0 4px;
+  color: #effcff;
+  font-size: 0.98rem;
+}
+
+.dashboard-resource-manager p {
+  margin: 0;
+  color: rgba(239, 252, 255, 0.62);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.dashboard-resource-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dashboard-resource-actions button {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: rgba(15, 23, 42, 0.82);
+  color: rgba(239, 252, 255, 0.88);
+  font-size: 0.76rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.dashboard-resource-actions button:hover {
+  border-color: rgba(0, 209, 255, 0.34);
+  background: rgba(0, 209, 255, 0.12);
+}
+
 .dashboard-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -7440,9 +7586,26 @@
     grid-template-rows: minmax(320px, 1fr) minmax(220px, 38%);
   }
 
+  .aiops-terminal-workbench--single {
+    grid-template-rows: minmax(320px, 1fr);
+  }
+
   .aiops-terminal-workbench .terminal-session-shell {
     border-right: 0;
     border-bottom: 1px solid rgba(96, 165, 250, 0.12);
+  }
+
+  .aiops-terminal-workbench--single .terminal-session-shell {
+    border-bottom: 0;
+  }
+
+  .dashboard-resource-manager {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .dashboard-resource-actions {
+    justify-content: flex-start;
   }
 
   .evidence-drawer {
