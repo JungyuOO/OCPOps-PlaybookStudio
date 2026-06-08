@@ -3798,7 +3798,17 @@ export default function WorkspacePage() {
     const resolvedLearningPathId = options.learningPathId ?? questionMeta?.learningPathId;
     const resolvedLearningStepId = options.learningStepId ?? questionMeta?.learningStepId;
     const resolvedLabTaskId = options.labTaskId ?? questionMeta?.labTaskId;
-    const shouldUseLiveClusterMode = !isCourseMode && currentMode === 'live_cluster' && isLiveClusterAvailable;
+    const isLearningQuestion = Boolean(
+      resolvedLearningIndex !== undefined
+      || resolvedLearningPathId
+      || resolvedLearningStepId
+      || resolvedLabTaskId
+    );
+    const shouldUseLiveClusterMode = !isCourseMode
+      && !isLearningQuestion
+      && currentMode === 'live_cluster'
+      && isLiveClusterAvailable
+      && Boolean(activeFooterConnection?.connection_id);
     const messageRouteKind: Message['routeKind'] = resolvedRouteKind || (isCourseMode ? 'study_docs' : undefined);
     const requestRouteKind = backendRouteKindForChat(messageRouteKind);
     if (messageRouteKind === 'learning' && resolvedLabTaskId) {
