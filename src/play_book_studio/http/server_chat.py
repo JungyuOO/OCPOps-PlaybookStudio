@@ -12,6 +12,7 @@ from datetime import datetime
 import time
 
 from play_book_studio.config.settings import load_settings
+from play_book_studio.answering.models import AnswerResult
 from play_book_studio.answering.lightspeed_provider import (
     LightspeedChatContext,
     build_pbs_rag_context,
@@ -45,6 +46,28 @@ def _merge_lightspeed_and_private_citations(result: Any, rag_result: Any) -> Non
     result.retrieval_trace["pbs_private_context_attached"] = bool(reindexed_private)
     result.retrieval_trace["pbs_private_context_citations"] = len(reindexed_private)
     result.retrieval_trace["lightspeed_referenced_documents"] = len(lightspeed_citations)
+
+
+def _empty_private_context_result(query: str, *, mode: str, error: Exception) -> AnswerResult:
+    return AnswerResult(
+        query=query,
+        mode=mode,
+        answer="",
+        rewritten_query=query,
+        response_kind="private_context_unavailable",
+        citations=[],
+        warnings=[f"pbs private context unavailable: {type(error).__name__}"],
+        retrieval_trace={
+            "provider": "pbs_private_context",
+            "status": "unavailable",
+            "error_type": type(error).__name__,
+            "error": str(error)[:500],
+        },
+        pipeline_trace={
+            "provider": "pbs_private_context",
+            "status": "unavailable",
+        },
+    )
 
 
 def _summarize_citation_truth(response_payload: dict[str, Any]) -> dict[str, str]:
@@ -419,14 +442,17 @@ def handle_chat(
     try:
         answer_started_at = time.perf_counter()
         if lightspeed_enabled(active_answerer.settings):
-            rag_result = active_answerer.answer(
-                query,
-                mode=mode,
-                context=request_context,
-                top_k=5,
-                candidate_k=10,
-                max_context_chunks=5,
-            )
+            try:
+                rag_result = active_answerer.answer(
+                    query,
+                    mode=mode,
+                    context=request_context,
+                    top_k=5,
+                    candidate_k=10,
+                    max_context_chunks=5,
+                )
+            except Exception as exc:  # noqa: BLE001
+                rag_result = _empty_private_context_result(query, mode=mode, error=exc)
             lightspeed_context = _lightspeed_context_from_payload(scoped_payload)
             lightspeed_context = LightspeedChatContext(
                 conversation_id=lightspeed_context.conversation_id,
@@ -631,15 +657,27 @@ def handle_chat_stream(
                     "status": "running",
                 }
             )
-            rag_result = active_answerer.answer(
-                query,
-                mode=mode,
-                context=request_context,
-                top_k=5,
-                candidate_k=10,
-                max_context_chunks=5,
-                trace_callback=emit_trace,
-            )
+            try:
+                rag_result = active_answerer.answer(
+                    query,
+                    mode=mode,
+                    context=request_context,
+                    top_k=5,
+                    candidate_k=10,
+                    max_context_chunks=5,
+                    trace_callback=emit_trace,
+                )
+            except Exception as exc:  # noqa: BLE001
+                rag_result = _empty_private_context_result(query, mode=mode, error=exc)
+                handler._stream_event(
+                    {
+                        "type": "trace",
+                        "step": "pbs_private_context",
+                        "label": "PBS private document context unavailable",
+                        "status": "warning",
+                        "detail": type(exc).__name__,
+                    }
+                )
             handler._stream_event(
                 {
                     "type": "trace",
