@@ -46,7 +46,7 @@ def test_lightspeed_external_answer_is_added_as_related_link(tmp_path):
     assert payload["related_links"][0]["source_lane"] == "openshift_lightspeed"
 
 
-def test_lightspeed_external_answer_isolates_internal_gold_citations(tmp_path):
+def test_lightspeed_external_answer_keeps_supporting_gold_citations(tmp_path):
     result = AnswerResult(
         query="클러스터 이벤트중 워닝만 필터링할수있어?",
         mode="chat",
@@ -84,10 +84,93 @@ def test_lightspeed_external_answer_isolates_internal_gold_citations(tmp_path):
         context=SessionContext(user_id="tester"),
     )
 
-    payload = _build_chat_payload(root_dir=tmp_path, session=session, result=result)
+    payload = _build_chat_payload(root_dir=ROOT, session=session, result=result)
     payload_text = json.dumps(payload, ensure_ascii=False)
 
     assert payload["answer_source"] == "lightspeed_with_pbs_rag"
+    assert payload["citations"][0] == {
+        "index": 1,
+        "book_slug": "openshift_lightspeed",
+        "book_title": "OpenShift Lightspeed",
+        "section": "OpenShift Lightspeed 공식 답변",
+        "section_path": ["OpenShift Lightspeed 공식 답변"],
+        "section_path_label": "OpenShift Lightspeed 공식 답변",
+        "heading_title": "OpenShift Lightspeed 공식 답변",
+        "viewer_path": "/external/lightspeed/unit-test",
+        "excerpt": "OpenShift Lightspeed가 반환한 OpenShift 공식 기준 답변",
+        "source_label": "OpenShift Lightspeed 공식 답변",
+        "source_collection": "external_tool",
+        "source_lane": "openshift_lightspeed",
+        "approval_state": "external",
+        "publication_state": "external",
+        "boundary_truth": "external_openshift_lightspeed",
+        "runtime_truth_label": "OpenShift Lightspeed",
+        "boundary_badge": "Lightspeed",
+        "cli_commands": [],
+        "verification_hints": [],
+    }
+    assert len(payload["citations"]) == 2
+    assert payload["citations"][1]["index"] == 2
+    assert (
+        payload["citations"][1]["viewer_path"]
+        == "/playbooks/wiki-runtime/active/support/index.html#cleaning-crio-storage"
+    )
+    assert (
+        payload["citations"][1]["href"]
+        == "/playbooks/wiki-runtime/active/support/index.html#cleaning-crio-storage"
+    )
+    assert payload["citations"][1]["boundary_badge"] == "Gold Playbook"
+    assert payload["related_links"][0] == {
+        "label": "OpenShift Lightspeed 공식 답변",
+        "href": "/external/lightspeed/unit-test",
+        "kind": "external_tool",
+        "summary": "OpenShift Lightspeed가 반환한 OpenShift 공식 기준 답변",
+        "source_lane": "openshift_lightspeed",
+        "boundary_truth": "external_openshift_lightspeed",
+        "runtime_truth_label": "OpenShift Lightspeed",
+        "boundary_badge": "Lightspeed",
+    }
+    assert any(
+        link.get("href") == "/playbooks/wiki-runtime/active/support/index.html#cleaning-crio-storage"
+        for link in payload["related_links"]
+    )
+    assert any(
+        section.get("href") == "/playbooks/wiki-runtime/active/support/index.html#cleaning-crio-storage"
+        for section in payload["related_sections"]
+    )
+    assert "/external/lightspeed/unit-test" in payload_text
+    assert "/playbooks/wiki-runtime/active/support" in payload_text
+    assert "Gold Playbook fallback citation" in payload_text
+
+
+def test_lightspeed_external_answer_without_gold_keeps_external_only(tmp_path):
+    result = AnswerResult(
+        query="Pod Pending이면?",
+        mode="chat",
+        answer="답변: Events를 확인합니다 [1].",
+        rewritten_query="Pod Pending이면?",
+        citations=[],
+        cited_indices=[],
+        pipeline_trace={
+            "answer_source": "lightspeed_with_pbs_rag",
+            "external_answer": {
+                "status": "used",
+                "viewer_path": "/external/lightspeed/unit-test",
+                "label": "OpenShift Lightspeed 공식 답변",
+                "source_lane": "openshift_lightspeed",
+                "boundary_truth": "external_openshift_lightspeed",
+                "runtime_truth_label": "OpenShift Lightspeed",
+                "boundary_badge": "Lightspeed",
+            },
+        },
+    )
+    session = ChatSession(
+        session_id="session-1",
+        context=SessionContext(user_id="tester"),
+    )
+
+    payload = _build_chat_payload(root_dir=tmp_path, session=session, result=result)
+
     assert payload["citations"] == [
         {
             "index": 1,
@@ -124,8 +207,6 @@ def test_lightspeed_external_answer_isolates_internal_gold_citations(tmp_path):
         }
     ]
     assert payload["related_sections"] == []
-    assert "/playbooks/wiki-runtime/active/support" not in payload_text
-    assert "Gold Playbook fallback citation" not in payload_text
 
 
 def test_pbs_gold_answer_keeps_internal_gold_citations_without_lightspeed_boundary(tmp_path):
