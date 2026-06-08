@@ -157,6 +157,50 @@ def test_ops_console_env_connection_uses_default_namespace(monkeypatch) -> None:
             assert profiles[0]["default_namespace"] == "pbs-test"
 
 
+def test_real_ocp_request_retries_with_service_account_token(monkeypatch) -> None:
+    class FakeResponse:
+        def __init__(self, status_code: int, payload: dict[str, object]) -> None:
+            self.status_code = status_code
+            self._payload = payload
+            self.content = json.dumps(payload).encode("utf-8")
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise requests.HTTPError(f"{self.status_code} response")
+
+    seen_tokens: list[str] = []
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        token_path = root / "serviceaccount-token"
+        token_path.write_text("sa-token", encoding="utf-8")
+        monkeypatch.setattr(ops_console_api, "SERVICE_ACCOUNT_TOKEN_PATH", token_path)
+        monkeypatch.setattr(
+            ops_console_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(
+                ocp_api_base_url="https://api.ocp.cywell.local:6443",
+                ocp_api_token="expired-token",
+                ocp_default_namespace="pbs-ocpops",
+            ),
+        )
+
+        def fake_request(method, url, headers, **kwargs):  # noqa: ANN001, ARG001
+            seen_tokens.append(str(headers.get("Authorization") or ""))
+            if headers.get("Authorization") == "Bearer expired-token":
+                return FakeResponse(401, {"message": "invalid token"})
+            return FakeResponse(200, {"kind": "PodList", "items": []})
+
+        monkeypatch.setattr(requests, "request", fake_request)
+
+        payload = ops_console_api._real_ocp_request(root, "GET", "/api/v1/namespaces/pbs-ocpops/pods")
+
+    assert payload == {"kind": "PodList", "items": []}
+    assert seen_tokens == ["Bearer expired-token", "Bearer sa-token"]
+
+
 def test_ops_console_actions_execute_scale_updates_resource_manifest() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)

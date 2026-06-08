@@ -31,6 +31,7 @@ REAL_OCP_READ_TIMEOUT_SECONDS = 20
 REAL_OCP_RETRY_ATTEMPTS = 3
 REAL_OCP_RETRY_BACKOFF_SECONDS = 0.6
 ENV_OCP_CONNECTION_ID = "env_ocp"
+SERVICE_ACCOUNT_TOKEN_PATH = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
 RESOURCE_KIND_LABELS = {
     "pods": "Pod",
     "deployments": "Deployment",
@@ -350,6 +351,24 @@ def _real_ocp_request_json(root_dir: Path, path: str, *, connection: dict[str, A
     return _real_ocp_request(root_dir, "GET", path, connection=connection)
 
 
+def _read_service_account_token() -> str:
+    try:
+        return SERVICE_ACCOUNT_TOKEN_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def _real_ocp_auth_tokens(config: dict[str, str]) -> list[tuple[str, str]]:
+    configured_token = str(config.get("token") or "").strip()
+    tokens: list[tuple[str, str]] = []
+    if configured_token:
+        tokens.append(("configured token", configured_token))
+    service_account_token = _read_service_account_token()
+    if service_account_token and service_account_token not in {token for _, token in tokens}:
+        tokens.append(("pod service account token", service_account_token))
+    return tokens
+
+
 def _real_ocp_request(
     root_dir: Path,
     method: str,
@@ -368,35 +387,45 @@ def _real_ocp_request(
     from requests import exceptions as requests_exceptions
 
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    headers = {
-        "Authorization": f"Bearer {config['token']}",
-        "Accept": "application/json",
-    }
-    if extra_headers:
-        headers.update(extra_headers)
-    response = None
     last_error: Exception | None = None
-    for attempt in range(1, REAL_OCP_RETRY_ATTEMPTS + 1):
-        try:
-            response = requests.request(
-                method.upper(),
-                f"{config['base_url']}{path}",
-                headers=headers,
-                json=json_payload if raw_body is None else None,
-                data=raw_body.encode("utf-8") if raw_body is not None else None,
-                timeout=(REAL_OCP_CONNECT_TIMEOUT_SECONDS, REAL_OCP_READ_TIMEOUT_SECONDS),
-                verify=False,
-            )
-            break
-        except (
-            requests_exceptions.ConnectTimeout,
-            requests_exceptions.ReadTimeout,
-            requests_exceptions.ConnectionError,
-        ) as exc:
-            last_error = exc
-            if attempt >= REAL_OCP_RETRY_ATTEMPTS:
-                raise
-            time.sleep(REAL_OCP_RETRY_BACKOFF_SECONDS * attempt)
+    response = None
+    auth_tokens = _real_ocp_auth_tokens(config)
+    if not auth_tokens:
+        raise RuntimeError("OCP API token is not configured")
+    for token_label, token in auth_tokens:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+        }
+        if extra_headers:
+            headers.update(extra_headers)
+        response = None
+        for attempt in range(1, REAL_OCP_RETRY_ATTEMPTS + 1):
+            try:
+                response = requests.request(
+                    method.upper(),
+                    f"{config['base_url']}{path}",
+                    headers=headers,
+                    json=json_payload if raw_body is None else None,
+                    data=raw_body.encode("utf-8") if raw_body is not None else None,
+                    timeout=(REAL_OCP_CONNECT_TIMEOUT_SECONDS, REAL_OCP_READ_TIMEOUT_SECONDS),
+                    verify=False,
+                )
+                break
+            except (
+                requests_exceptions.ConnectTimeout,
+                requests_exceptions.ReadTimeout,
+                requests_exceptions.ConnectionError,
+            ) as exc:
+                last_error = exc
+                if attempt >= REAL_OCP_RETRY_ATTEMPTS:
+                    raise
+                time.sleep(REAL_OCP_RETRY_BACKOFF_SECONDS * attempt)
+        if response is None:
+            continue
+        if response.status_code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN} and token_label == "configured token":
+            continue
+        break
     if response is None:
         if last_error is not None:
             raise last_error
