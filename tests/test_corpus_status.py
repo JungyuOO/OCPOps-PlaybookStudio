@@ -120,6 +120,33 @@ def test_load_corpus_status_allows_non_indexable_chunks_when_indexable_chunks_ma
     assert payload["ready"] is True
 
 
+def test_load_corpus_status_uses_latest_user_upload_policy_for_index_readiness():
+    connection = FakeConnection(
+        [
+            [("official_docs", 29), ("study_docs", 10), ("user_upload", 2)],
+            [("official_docs", 27907), ("study_docs", 602), ("user_upload", 103)],
+            [(28612,)],
+            [(28509,)],
+            [(28509,)],
+            [(0,)],
+            [(0,)],
+        ]
+    )
+
+    payload = load_corpus_status(connection, embedding_model="bge-m3")
+
+    indexable_sql = connection.cursor_obj.calls[3][0]
+    missing_sql = connection.cursor_obj.calls[5][0]
+    assert "c.source_scope <> 'user_upload'" in indexable_sql
+    assert "SELECT latest_pd.id" in indexable_sql
+    assert "c.source_scope <> 'user_upload'" in missing_sql
+    assert "SELECT latest_pd.id" in missing_sql
+    assert payload["indexable_chunks"] == 28509
+    assert payload["missing_embedding_index_entries"] == 0
+    assert payload["embedding_index_parity"] is True
+    assert payload["ready"] is True
+
+
 def test_db_corpus_status_parser_accepts_args():
     args = build_parser().parse_args(
         [
