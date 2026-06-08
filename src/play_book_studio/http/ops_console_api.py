@@ -1021,7 +1021,7 @@ def _connection_resource_items(
     namespace: str,
 ) -> list[dict[str, Any]]:
     if _is_real_ocp_connection(root_dir, connection):
-        return _real_ocp_items(resource_type, _real_ocp_resources_payload(root_dir, resource_type, connection))
+        return _real_ocp_items(resource_type, _real_ocp_resources_payload(root_dir, resource_type, connection, namespace))
     inventory = _ensure_connection_inventory(state, str(connection.get("connection_id") or ""), str(connection.get("default_namespace") or "default"))
     return [
         item for item in inventory["resources"][resource_type]
@@ -1038,7 +1038,7 @@ def _connection_resource_detail(
     name: str,
 ) -> dict[str, Any] | None:
     if _is_real_ocp_connection(root_dir, connection):
-        payload = _real_ocp_resource_detail_payload(root_dir, resource_type, name, connection)
+        payload = _real_ocp_resource_detail_payload(root_dir, resource_type, name, connection, namespace)
         metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
         return {
             "name": str(metadata.get("name") or name),
@@ -2478,6 +2478,153 @@ def _append_audit(state: dict[str, Any], entry: dict[str, Any]) -> None:
     state["action_audit"] = state["action_audit"][:100]
 
 
+def _extract_deployment_replicas(manifest_yaml: str) -> int | None:
+    match = re.search(
+        r"(?ms)^spec:\s*\n(?:(?: {2,}.+\n)*?)^ {2}replicas:\s*([0-9]+)\s*$",
+        str(manifest_yaml or ""),
+    )
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def _deployment_selector_labels(deployment: dict[str, Any] | None) -> dict[str, str]:
+    if not isinstance(deployment, dict):
+        return {}
+    manifest = deployment.get("manifest_json") if isinstance(deployment.get("manifest_json"), dict) else {}
+    spec = manifest.get("spec") if isinstance(manifest.get("spec"), dict) else {}
+    selector = spec.get("selector") if isinstance(spec.get("selector"), dict) else {}
+    match_labels = selector.get("matchLabels") if isinstance(selector.get("matchLabels"), dict) else {}
+    return {str(key): str(value) for key, value in match_labels.items() if str(key).strip()}
+
+
+def _pod_matches_selector(pod: dict[str, Any], selector: dict[str, str]) -> bool:
+    if not selector:
+        return False
+    manifest = pod.get("manifest_json") if isinstance(pod.get("manifest_json"), dict) else {}
+    metadata = manifest.get("metadata") if isinstance(manifest.get("metadata"), dict) else {}
+    labels = metadata.get("labels") if isinstance(metadata.get("labels"), dict) else {}
+    return all(str(labels.get(key) or "") == value for key, value in selector.items())
+
+
+def _deployment_status_from_detail(deployment: dict[str, Any] | None) -> dict[str, int]:
+    manifest = deployment.get("manifest_json") if isinstance(deployment, dict) and isinstance(deployment.get("manifest_json"), dict) else {}
+    spec = manifest.get("spec") if isinstance(manifest.get("spec"), dict) else {}
+    status = manifest.get("status") if isinstance(manifest.get("status"), dict) else {}
+    return {
+        "desired_replicas": int(spec.get("replicas") or status.get("replicas") or 0),
+        "ready_replicas": int(status.get("readyReplicas") or 0),
+        "available_replicas": int(status.get("availableReplicas") or 0),
+        "updated_replicas": int(status.get("updatedReplicas") or 0),
+    }
+
+
+def _build_yaml_apply_aiops_analysis(
+    root_dir: Path,
+    state: dict[str, Any],
+    connection: dict[str, Any],
+    request_row: dict[str, Any],
+    *,
+    execution_status: str,
+    execution_error: str = "",
+) -> dict[str, Any] | None:
+    action_type = str((request_row.get("preview") or {}).get("action_type") or request_row.get("action_type") or "")
+    if action_type != "yaml_apply":
+        return None
+    namespace = str(request_row.get("namespace") or "").strip()
+    resource_name = str(request_row.get("resource_name") or "").strip()
+    resource_type = str(request_row.get("resource_type") or "") or _infer_manifest_resource_type(str(request_row.get("manifest_yaml") or ""))
+    manifest_yaml = str(request_row.get("manifest_yaml") or "")
+    before_yaml = ""
+    preview = request_row.get("preview") if isinstance(request_row.get("preview"), dict) else {}
+    diff_unified = str(preview.get("diff_unified") or "")
+    if diff_unified:
+        before_lines: list[str] = []
+        for line in diff_unified.splitlines():
+            if line.startswith("---") or line.startswith("+++") or line.startswith("@@"):
+                continue
+            if line.startswith("-") and not line.startswith("---"):
+                before_lines.append(line[1:])
+            elif line.startswith(" "):
+                before_lines.append(line[1:])
+        before_yaml = "\n".join(before_lines)
+    before_replicas = _extract_deployment_replicas(before_yaml)
+    after_replicas = _extract_deployment_replicas(manifest_yaml)
+    changes: list[dict[str, Any]] = []
+    if resource_type == "deployments" and before_replicas is not None and after_replicas is not None and before_replicas != after_replicas:
+        changes.append(
+            {
+                "field": "spec.replicas",
+                "before": before_replicas,
+                "after": after_replicas,
+                "direction": "decrease" if after_replicas < before_replicas else "increase",
+            }
+        )
+    try:
+        target = _connection_resource_detail(root_dir, state, connection, resource_type, namespace, resource_name)
+        pods = _connection_resource_items(root_dir, state, connection, "pods", namespace)
+        events = _connection_resource_items(root_dir, state, connection, "events", namespace)
+    except Exception as exc:  # noqa: BLE001
+        target = None
+        pods = []
+        events = []
+        execution_error = execution_error or f"snapshot failed: {exc}"
+    selector = _deployment_selector_labels(target) if resource_type == "deployments" else {}
+    related_pods = [pod for pod in pods if _pod_matches_selector(pod, selector)] if selector else []
+    warning_events = [
+        event for event in events
+        if str(event.get("phase") or "").lower() == "warning"
+    ]
+    status = _deployment_status_from_detail(target) if resource_type == "deployments" else {}
+    lines = [
+        f"자동 AIOps 분석: {namespace}/{resource_name} YAML apply 결과를 확인했습니다.",
+    ]
+    if execution_status != "succeeded":
+        lines.append(f"Apply가 실패했습니다. 오류: {execution_error or 'unknown error'}")
+    elif changes:
+        for change in changes:
+            if change["field"] == "spec.replicas":
+                lines.append(f"- replicas 변경: {change['before']} -> {change['after']} ({'축소' if change['direction'] == 'decrease' else '확대'})")
+        if status:
+            lines.append(
+                f"- 현재 Deployment 상태: desired={status['desired_replicas']}, ready={status['ready_replicas']}, available={status['available_replicas']}, updated={status['updated_replicas']}"
+            )
+        if related_pods:
+            pod_summary = ", ".join(f"{pod.get('name')}={pod.get('phase') or '-'}" for pod in related_pods[:6])
+            lines.append(f"- 관련 Pod: {pod_summary}")
+        else:
+            lines.append("- selector 기준 관련 Pod를 아직 찾지 못했습니다. rollout 진행 중이면 몇 초 후 다시 확인하세요.")
+        if warning_events:
+            lines.append("- Warning Event: " + ", ".join(str(event.get("name") or "") for event in warning_events[:5]))
+        else:
+            lines.append("- 최근 Warning Event는 감지되지 않았습니다.")
+        if any(change.get("field") == "spec.replicas" and change.get("direction") == "decrease" for change in changes):
+            lines.append("- 영향: replica 축소로 장애 허용치와 동시 처리 여유가 줄어듭니다. 서비스 트래픽, HPA, PDB 기준을 함께 확인하세요.")
+            lines.append("- 권장 확인: Route/Service 트래픽 대상, HPA 최소 replica, 최근 restart/event를 확인하세요.")
+    else:
+        lines.append("- apply는 성공했지만, replica 변경처럼 자동 분류된 핵심 운영 변경은 감지되지 않았습니다.")
+        lines.append("- 권장 확인: 적용 대상 YAML diff, 관련 Pod 상태, namespace event를 확인하세요.")
+    return {
+        "analysis_id": _make_id("aiops"),
+        "kind": "yaml_apply",
+        "resource_type": resource_type,
+        "resource_name": resource_name,
+        "namespace": namespace,
+        "status": execution_status,
+        "changes": changes,
+        "snapshot": {
+            "deployment_status": status,
+            "related_pods": [_resource_summary("pods", pod) for pod in related_pods[:10]],
+            "warning_events": [_resource_summary("events", event) for event in warning_events[:10]],
+        },
+        "answer": "\n".join(lines),
+        "created_at": _now_iso(),
+    }
+
+
 def _execute_request(root_dir: Path, state: dict[str, Any], request_row: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
     preview = request_row.get("preview") if isinstance(request_row.get("preview"), dict) else {}
     action_type = str(preview.get("action_type") or request_row.get("action_type") or "")
@@ -2554,6 +2701,15 @@ def _execute_request(root_dir: Path, state: dict[str, Any], request_row: dict[st
             "created_at": _now_iso(),
             "executed_by": str(payload.get("actor_id") or ""),
         }
+        aiops_analysis = _build_yaml_apply_aiops_analysis(
+            root_dir,
+            state,
+            connection,
+            request_row,
+            execution_status=str(execution["status"]),
+        )
+        if aiops_analysis:
+            execution["aiops_analysis"] = aiops_analysis
         request_row["status"] = "executed"
         state["action_executions"].insert(0, execution)
         _append_audit(
@@ -2567,6 +2723,18 @@ def _execute_request(root_dir: Path, state: dict[str, Any], request_row: dict[st
                 "created_at": execution["created_at"],
             },
         )
+        if aiops_analysis:
+            _append_audit(
+                state,
+                {
+                    "audit_id": _make_id("audit"),
+                    "request_id": request_row["request_id"],
+                    "execution_id": execution["execution_id"],
+                    "event_type": "analyzed",
+                    "summary": str(aiops_analysis.get("answer") or "").splitlines()[0],
+                    "created_at": str(aiops_analysis.get("created_at") or _now_iso()),
+                },
+            )
         return execution
     if action_type == "scale_deployment":
         replicas = int(request_row.get("replicas") or 0)
@@ -2616,6 +2784,15 @@ def _execute_request(root_dir: Path, state: dict[str, Any], request_row: dict[st
         "created_at": _now_iso(),
         "executed_by": str(payload.get("actor_id") or ""),
     }
+    aiops_analysis = _build_yaml_apply_aiops_analysis(
+        root_dir,
+        state,
+        connection,
+        request_row,
+        execution_status=str(execution["status"]),
+    )
+    if aiops_analysis:
+        execution["aiops_analysis"] = aiops_analysis
     request_row["status"] = "executed"
     state["action_executions"].insert(0, execution)
     _append_audit(
@@ -2629,6 +2806,18 @@ def _execute_request(root_dir: Path, state: dict[str, Any], request_row: dict[st
             "created_at": execution["created_at"],
         },
     )
+    if aiops_analysis:
+        _append_audit(
+            state,
+            {
+                "audit_id": _make_id("audit"),
+                "request_id": request_row["request_id"],
+                "execution_id": execution["execution_id"],
+                "event_type": "analyzed",
+                "summary": str(aiops_analysis.get("answer") or "").splitlines()[0],
+                "created_at": str(aiops_analysis.get("created_at") or _now_iso()),
+            },
+        )
     return execution
 
 

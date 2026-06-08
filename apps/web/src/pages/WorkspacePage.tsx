@@ -1766,6 +1766,24 @@ export default function WorkspacePage() {
         return;
       }
       setResourceYamlApplyStatus((execution.output_lines || []).join('\n') || execution.summary || 'YAML applied.');
+      if (execution.aiops_analysis?.answer) {
+        setMessages((current) => [
+          ...current,
+          {
+            id: makeId('assistant'),
+            role: 'assistant',
+            content: execution.aiops_analysis?.answer || '',
+            responseKind: 'aiops_analysis',
+            answerSource: 'cluster_operation',
+            artifacts: [
+              {
+                type: 'aiops_analysis',
+                ...execution.aiops_analysis,
+              },
+            ],
+          },
+        ]);
+      }
       await refreshClusterResources();
       const detail = await loadResourceDetail(
         activeFooterConnection.connection_id,
