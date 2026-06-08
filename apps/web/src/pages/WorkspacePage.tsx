@@ -3804,13 +3804,16 @@ export default function WorkspacePage() {
       || resolvedLearningStepId
       || resolvedLabTaskId
     );
-    const shouldUseLiveClusterMode = !isCourseMode
+    const messageRouteKind: Message['routeKind'] = resolvedRouteKind || (isCourseMode ? 'study_docs' : undefined);
+    const requestRouteKind = backendRouteKindForChat(messageRouteKind);
+    const backendRouteClassifierEnabled = true;
+    const shouldUseLiveClusterMode = !backendRouteClassifierEnabled
+      && !isCourseMode
       && !isLearningQuestion
+      && !requestRouteKind
       && currentMode === 'live_cluster'
       && isLiveClusterAvailable
       && Boolean(activeFooterConnection?.connection_id);
-    const messageRouteKind: Message['routeKind'] = resolvedRouteKind || (isCourseMode ? 'study_docs' : undefined);
-    const requestRouteKind = backendRouteKindForChat(messageRouteKind);
     if (messageRouteKind === 'learning' && resolvedLabTaskId) {
       setTerminalLearningContext({
         learnerId: wikiOverlayUserId,

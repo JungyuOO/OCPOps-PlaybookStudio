@@ -20,20 +20,32 @@ from play_book_studio.answering.lightspeed_provider import (
     lightspeed_enabled,
     query_lightspeed,
 )
+from play_book_studio.answering.route_classifier import (
+    build_route_probe,
+    classify_route,
+    should_include_private_context,
+)
 from play_book_studio.db.chat_repository import persist_chat_turn
 from play_book_studio.retrieval.models import SessionContext
 from play_book_studio.http.sessions import RUNTIME_CHAT_MODE, Turn
 
 
-def _merge_lightspeed_and_private_citations(result: Any, rag_result: Any) -> None:
+def _merge_lightspeed_and_private_citations(
+    result: Any,
+    rag_result: Any,
+    *,
+    attach_private: bool = True,
+) -> None:
     """Keep OLS references clickable while attaching PBS private context evidence."""
 
     lightspeed_citations = list(getattr(result, "citations", []) or [])
-    private_citations = [
-        citation
-        for citation in (getattr(rag_result, "citations", []) or [])
-        if is_private_pbs_citation(citation)
-    ]
+    private_citations = []
+    if attach_private:
+        private_citations = [
+            citation
+            for citation in (getattr(rag_result, "citations", []) or [])
+            if is_private_pbs_citation(citation)
+        ]
     reindexed_private = [
         replace(citation, index=index)
         for index, citation in enumerate(
@@ -453,25 +465,47 @@ def handle_chat(
                 )
             except Exception as exc:  # noqa: BLE001
                 rag_result = _empty_private_context_result(query, mode=mode, error=exc)
+            route_probe = build_route_probe(rag_result)
+            route_decision = classify_route(
+                query,
+                probe=route_probe,
+                context=request_context,
+                llm_client=getattr(active_answerer, "llm_client", None),
+            )
+            pbs_rag_context = (
+                build_pbs_rag_context(rag_result)
+                if should_include_private_context(route_decision, route_probe)
+                else {}
+            )
             lightspeed_context = _lightspeed_context_from_payload(scoped_payload)
             lightspeed_context = LightspeedChatContext(
                 conversation_id=lightspeed_context.conversation_id,
                 library_scope=lightspeed_context.library_scope,
-                cluster_context=lightspeed_context.cluster_context,
+                cluster_context={
+                    **lightspeed_context.cluster_context,
+                    "route_decision": route_decision.to_dict(),
+                    "route_probe": route_probe.to_dict(),
+                },
                 recent_events=lightspeed_context.recent_events,
                 attachments=lightspeed_context.attachments,
-                pbs_rag=build_pbs_rag_context(rag_result),
+                pbs_rag=pbs_rag_context,
             )
             result = query_lightspeed(
                 active_answerer.settings,
                 query,
                 context=lightspeed_context,
             )
-            _merge_lightspeed_and_private_citations(result, rag_result)
+            _merge_lightspeed_and_private_citations(
+                result,
+                rag_result,
+                attach_private=bool(pbs_rag_context),
+            )
             result.warnings = list(dict.fromkeys([*rag_result.warnings, *result.warnings]))
             result.retrieval_trace["lightspeed_knowledge_mode"] = (
                 active_answerer.settings.lightspeed_knowledge_mode
             )
+            result.retrieval_trace["route_decision"] = route_decision.to_dict()
+            result.retrieval_trace["route_probe"] = route_probe.to_dict()
         else:
             result = active_answerer.answer(
                 query,
@@ -686,14 +720,49 @@ def handle_chat_stream(
                     "status": "done",
                 }
             )
+            route_probe = build_route_probe(rag_result)
+            handler._stream_event(
+                {
+                    "type": "trace",
+                    "step": "route_classifier",
+                    "label": "Question route classification",
+                    "status": "running",
+                }
+            )
+            route_decision = classify_route(
+                query,
+                probe=route_probe,
+                context=request_context,
+                llm_client=getattr(active_answerer, "llm_client", None),
+                trace_callback=emit_trace,
+            )
+            handler._stream_event(
+                {
+                    "type": "trace",
+                    "step": "route_classifier",
+                    "label": "Question route classification",
+                    "status": "done",
+                    "detail": route_decision.primary_route,
+                    "meta": route_decision.to_dict(),
+                }
+            )
+            pbs_rag_context = (
+                build_pbs_rag_context(rag_result)
+                if should_include_private_context(route_decision, route_probe)
+                else {}
+            )
             lightspeed_context = _lightspeed_context_from_payload(scoped_payload)
             lightspeed_context = LightspeedChatContext(
                 conversation_id=lightspeed_context.conversation_id,
                 library_scope=lightspeed_context.library_scope,
-                cluster_context=lightspeed_context.cluster_context,
+                cluster_context={
+                    **lightspeed_context.cluster_context,
+                    "route_decision": route_decision.to_dict(),
+                    "route_probe": route_probe.to_dict(),
+                },
                 recent_events=lightspeed_context.recent_events,
                 attachments=lightspeed_context.attachments,
-                pbs_rag=build_pbs_rag_context(rag_result),
+                pbs_rag=pbs_rag_context,
             )
             handler._stream_event(
                 {
@@ -708,11 +777,17 @@ def handle_chat_stream(
                 query,
                 context=lightspeed_context,
             )
-            _merge_lightspeed_and_private_citations(result, rag_result)
+            _merge_lightspeed_and_private_citations(
+                result,
+                rag_result,
+                attach_private=bool(pbs_rag_context),
+            )
             result.warnings = list(dict.fromkeys([*rag_result.warnings, *result.warnings]))
             result.retrieval_trace["lightspeed_knowledge_mode"] = (
                 active_answerer.settings.lightspeed_knowledge_mode
             )
+            result.retrieval_trace["route_decision"] = route_decision.to_dict()
+            result.retrieval_trace["route_probe"] = route_probe.to_dict()
             handler._stream_event(
                 {
                     "type": "trace",

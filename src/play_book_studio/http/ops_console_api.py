@@ -270,6 +270,7 @@ def _with_env_ocp_connection(root_dir: Path, state: dict[str, Any]) -> dict[str,
     env_connection = _env_ocp_connection(root_dir)
     if env_connection is None:
         return state
+    state.setdefault("connections", [])
     existing = [
         connection for connection in state["connections"]
         if str(connection.get("connection_id") or "") != ENV_OCP_CONNECTION_ID
@@ -3187,7 +3188,7 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
 
 
 def handle_ops_console_post(handler: Any, path: str, query: str, payload: dict[str, Any], *, root_dir: Path, answerer: Any | None = None) -> bool:
-    state = _load_state(root_dir)
+    state = _with_env_ocp_connection(root_dir, _load_state(root_dir))
     if path == "/api/v1/workspace/pin":
         owner_hash = handler._session_owner().owner_hash
         pinned = bool(payload.get("pinned"))
