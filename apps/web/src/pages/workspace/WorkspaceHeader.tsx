@@ -17,10 +17,6 @@ export default function WorkspaceHeader({
   onOpenLibrary,
   onToggleGlobalTheme,
   globalTheme,
-  profileName,
-  profileStatus,
-  profileStatusLabel,
-  isProfileLoading,
 }: WorkspaceHeaderProps) {
   return (
     <AppHeader
@@ -29,13 +25,6 @@ export default function WorkspaceHeader({
       onOpenDashboard={onOpenDashboard}
       onOpenLibrary={onOpenLibrary}
       onToggleGlobalTheme={onToggleGlobalTheme}
-      profile={{
-        name: profileName,
-        status: profileStatus,
-        statusLabel: profileStatusLabel,
-        isLoading: isProfileLoading,
-        onClick: onOpenDashboard,
-      }}
     />
   );
 }
