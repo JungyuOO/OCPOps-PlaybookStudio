@@ -732,12 +732,30 @@ def _markdownish_to_html(markdown: str, asset_sources: dict[str, dict[str, str]]
             asset_source = asset_sources.get(asset_id, {})
             src = asset_source.get("src") or src_raw
             caption = asset_source.get("caption") or alt
+            width = _metadata_int(asset_source.get("width"))
+            height = _metadata_int(asset_source.get("height"))
+            dimension_style = f' style="--asset-width: {width}px;"' if width else ""
+            dimension_attr_parts = []
+            if width:
+                dimension_attr_parts.append(f'width="{width}"')
+            if height:
+                dimension_attr_parts.append(f'height="{height}"')
+            dimension_attrs = f" {' '.join(dimension_attr_parts)}" if dimension_attr_parts else ""
             if src.startswith(("data:image/", "http://", "https://", "/")):
                 parts.append(
-                    '<figure class="upload-asset-figure">'
-                    f'<img src="{html.escape(src, quote=True)}" alt="{html.escape(alt or caption, quote=True)}" loading="lazy" />'
+                    f'<figure class="upload-asset-figure upload-source-asset-figure"{dimension_style}>'
+                    '<div class="upload-asset-frame">'
+                    f'<img src="{html.escape(src, quote=True)}" alt="{html.escape(alt or caption, quote=True)}"{dimension_attrs} loading="lazy" />'
+                    "</div>"
                     + (f"<figcaption>{html.escape(caption)}</figcaption>" if caption else "")
                     + "</figure>"
+                )
+            elif src_raw.startswith("asset://"):
+                parts.append(
+                    '<div class="upload-asset-missing">'
+                    f"<strong>이미지 asset을 찾을 수 없습니다.</strong>"
+                    f"<span>{html.escape(alt or src_raw)}</span>"
+                    "</div>"
                 )
             else:
                 parts.append(f"<p>{html.escape(alt or src_raw)}</p>")
@@ -892,6 +910,24 @@ def _asset_data_url(content: bytes, mime_type: str) -> str:
     return f"data:{mime_type or 'application/octet-stream'};base64,{encoded}"
 
 
+def _uploaded_document_asset_caption(row: dict[str, Any], filename: str) -> str:
+    metadata = _json_dict(row.get("metadata"))
+    page_number = _metadata_int(row.get("page_number") or metadata.get("page_number"))
+    width = _metadata_int(row.get("width") or metadata.get("width"))
+    height = _metadata_int(row.get("height") or metadata.get("height"))
+    caption_text = _short_viewer_text(row.get("caption_text") or "", limit=160)
+    parts = ["원본 문서 캡처"]
+    if page_number:
+        parts.append(f"Page {page_number}")
+    if width and height:
+        parts.append(f"{width} x {height}")
+    if caption_text:
+        parts.append(caption_text)
+    if filename:
+        parts.append(filename)
+    return " · ".join(parts)
+
+
 def _pdf_asset_bytes(source_path: Path, metadata: dict[str, Any]) -> bytes:
     rendered_pdf_page = _metadata_int(metadata.get("rendered_pdf_page"))
     if rendered_pdf_page:
@@ -954,10 +990,14 @@ def _uploaded_document_asset_sources(root_dir: Path, document: dict[str, Any], a
             content = _pdf_asset_bytes(source_path, metadata)
         if not content:
             continue
-        filename = str(metadata.get("filename") or storage_key or asset_id).strip()
+        filename = str(metadata.get("filename") or Path(storage_key).name or asset_id).strip()
+        width = _metadata_int(row.get("width") or metadata.get("width"))
+        height = _metadata_int(row.get("height") or metadata.get("height"))
         result[asset_id] = {
             "src": _asset_data_url(content, str(row.get("mime_type") or "image/png")),
-            "caption": filename,
+            "caption": _uploaded_document_asset_caption(row, filename),
+            "width": str(width) if width else "",
+            "height": str(height) if height else "",
         }
         parser_asset_id = str(metadata.get("parser_asset_id") or "").strip()
         if parser_asset_id:
@@ -1016,7 +1056,9 @@ def _uploaded_document_course_asset_figures_html(chunk: dict[str, Any]) -> str:
         alt_text = caption or caption_text or "고객문서 이미지"
         figures.append(
             '<figure class="upload-asset-figure upload-course-asset-figure">'
+            '<div class="upload-asset-frame">'
             f'<img src="{html.escape(src, quote=True)}" alt="{html.escape(alt_text, quote=True)}" loading="lazy" />'
+            "</div>"
             + (f"<figcaption>{html.escape(caption_text)}</figcaption>" if caption_text else "")
             + "</figure>"
         )
@@ -1122,6 +1164,9 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
                     mime_type,
                     storage_key,
                     page_number,
+                    width,
+                    height,
+                    caption_text,
                     ocr_text,
                     qwen_description,
                     metadata
@@ -1328,25 +1373,51 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
           border-right: 0;
         }
         .upload-reader .upload-asset-figure {
-          margin: 18px 0;
-          border: 1px solid rgba(125, 211, 252, 0.18);
-          border-radius: 14px;
+          margin: 18px auto 22px;
+          width: min(100%, var(--asset-width, 100%));
+          max-width: 100%;
+          border: 1px solid rgba(148, 163, 184, 0.24);
+          border-radius: 8px;
           overflow: hidden;
-          background: rgba(2, 6, 23, 0.42);
+          background: #ffffff;
+        }
+        .upload-reader .upload-asset-frame {
+          width: 100%;
+          overflow: hidden;
+          background: #ffffff;
         }
         .upload-reader .upload-asset-figure img {
           display: block;
           width: 100%;
+          max-width: 100%;
           height: auto;
-          background: #f8fafc;
+          background: #ffffff;
         }
         .upload-reader .upload-asset-figure figcaption {
-          padding: 10px 12px;
-          color: #334155;
-          font-size: 0.86rem;
-          line-height: 1.55;
-          border-top: 1px solid rgba(148, 163, 184, 0.22);
+          padding: 8px 10px;
+          color: #475569;
+          font-size: 0.78rem;
+          line-height: 1.45;
+          border-top: 1px solid rgba(148, 163, 184, 0.2);
           background: #f8fafc;
+        }
+        .upload-reader .upload-asset-missing {
+          display: grid;
+          gap: 4px;
+          margin: 14px 0;
+          padding: 10px 12px;
+          border: 1px dashed rgba(245, 158, 11, 0.5);
+          border-radius: 8px;
+          background: rgba(245, 158, 11, 0.08);
+          color: #f8d78d;
+        }
+        .upload-reader .upload-asset-missing strong {
+          font-size: 0.88rem;
+        }
+        .upload-reader .upload-asset-missing span {
+          color: #cbd5e1;
+          font-size: 0.78rem;
+          overflow-wrap: anywhere;
         }
         .upload-reader .quality-notes {
           display: grid;
@@ -1592,15 +1663,21 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
           min-width: 0;
         }
         .upload-reader .upload-asset-figure {
+          width: min(100%, var(--asset-width, 100%));
           max-width: 100%;
           background: #ffffff;
         }
+        .upload-reader .upload-asset-frame {
+          width: 100%;
+          overflow: hidden;
+          background: #ffffff;
+        }
         .upload-reader .upload-asset-figure img {
-          width: auto;
+          width: 100%;
           max-width: 100%;
-          max-height: min(52vh, 360px);
+          max-height: none;
           object-fit: contain;
-          margin: 0 auto;
+          margin: 0;
         }
         .upload-reader .upload-table {
           min-width: 0 !important;
@@ -1719,7 +1796,8 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
                 '<section class="chunk-diagnostic">',
                 f"<h2>{html.escape(title_text)}</h2>",
                 f'<div class="chunk-meta">{html.escape(meta)}</div>',
-                _markdownish_to_html(str(row.get("markdown") or "")) or "<p>내용이 비어 있습니다.</p>",
+                _markdownish_to_html(str(row.get("markdown") or ""), asset_sources=asset_sources)
+                or "<p>내용이 비어 있습니다.</p>",
                 "</section>",
             ]
         )

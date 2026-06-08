@@ -143,6 +143,69 @@ def test_lightspeed_external_answer_keeps_supporting_gold_citations(tmp_path):
     assert "Gold Playbook fallback citation" in payload_text
 
 
+def test_lightspeed_external_answer_marks_customer_upload_context(tmp_path):
+    result = AnswerResult(
+        query="OpenShift PipelineRun이 안 뜨면 어디부터 확인해?",
+        mode="chat",
+        answer="답변: 이벤트와 PipelineRun 생성을 확인합니다. [1]",
+        rewritten_query="OpenShift PipelineRun이 안 뜨면 어디부터 확인해?",
+        citations=[
+            Citation(
+                index=1,
+                chunk_id="ci-webhook",
+                book_slug="uploaded-documents",
+                section="Webhook 설정",
+                anchor="ci-webhook",
+                source_url="uploads/sources/ci.pdf",
+                viewer_path="/uploads/documents/11111111-1111-1111-1111-111111111111/index.html#ci-webhook",
+                excerpt="고객 CI 문서는 smee URL과 Webhook secret 설정을 설명합니다.",
+                section_path=("CI 순서", "Webhook 설정"),
+                source_collection="uploads",
+            )
+        ],
+        cited_indices=[1],
+        pipeline_trace={
+            "answer_source": "lightspeed_with_pbs_rag",
+            "external_answer": {
+                "status": "used",
+                "viewer_path": "/external/lightspeed/unit-test",
+                "label": "OpenShift Lightspeed 공식 답변",
+                "source_lane": "openshift_lightspeed",
+                "boundary_truth": "external_openshift_lightspeed",
+                "runtime_truth_label": "OpenShift Lightspeed",
+                "boundary_badge": "Lightspeed",
+                "context_bridge": {
+                    "customer_context_applied": True,
+                    "customer_context_citation_count": 1,
+                    "bridge_label": "OpenShift Lightspeed + Customer Context",
+                },
+            },
+        },
+    )
+    session = ChatSession(
+        session_id="session-1",
+        context=SessionContext(user_id="tester"),
+    )
+
+    payload = _build_chat_payload(root_dir=tmp_path, session=session, result=result)
+
+    assert payload["answer_source"] == "lightspeed_with_pbs_rag"
+    assert payload["primary_source_lane"] == "lightspeed_customer_context_bridge"
+    assert payload["primary_boundary_truth"] == "external_lightspeed_with_customer_context"
+    assert payload["primary_runtime_truth_label"] == "OpenShift Lightspeed + Customer Context"
+    assert payload["primary_boundary_badge"] == "Lightspeed + Customer"
+    assert payload["citations"][0]["boundary_badge"] == "Lightspeed"
+    assert payload["citations"][1]["boundary_badge"] == "User Upload"
+    assert payload["citations"][1]["source_lane"] == "user_upload"
+    assert payload["citations"][1]["boundary_truth"] == "private_user_upload_runtime"
+    assert payload["citations"][1]["book_title"] == "CI 순서"
+    assert (
+        payload["citations"][1]["href"]
+        == "/uploads/documents/11111111-1111-1111-1111-111111111111/index.html#ci-webhook"
+    )
+    assert payload["related_links"][0]["href"] == "/external/lightspeed/unit-test"
+
+
 def test_lightspeed_external_answer_without_gold_keeps_external_only(tmp_path):
     result = AnswerResult(
         query="Pod Pending이면?",

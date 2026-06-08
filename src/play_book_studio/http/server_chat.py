@@ -67,9 +67,25 @@ def _summarize_citation_truth(response_payload: dict[str, Any]) -> dict[str, str
     }
 
 
+def _lightspeed_customer_context_truth() -> dict[str, str]:
+    return {
+        "source_lane": "lightspeed_customer_context_bridge",
+        "boundary_truth": "external_lightspeed_with_customer_context",
+        "runtime_truth_label": "OpenShift Lightspeed + Customer Context",
+        "boundary_badge": "Lightspeed + Customer",
+        "publication_state": "mixed",
+        "approval_state": "mixed",
+    }
+
+
 def _summarize_response_truth(response_payload: dict[str, Any]) -> dict[str, str]:
     answer_source = str(response_payload.get("answer_source") or "").strip()
     if answer_source == "lightspeed_with_pbs_rag":
+        pipeline_trace = response_payload.get("pipeline_trace")
+        external_answer = pipeline_trace.get("external_answer") if isinstance(pipeline_trace, dict) else {}
+        context_bridge = external_answer.get("context_bridge") if isinstance(external_answer, dict) else {}
+        if isinstance(context_bridge, dict) and context_bridge.get("customer_context_applied"):
+            return _lightspeed_customer_context_truth()
         return {
             "source_lane": "openshift_lightspeed",
             "boundary_truth": "external_openshift_lightspeed",

@@ -171,6 +171,33 @@ def _external_answer_citation(result: AnswerResult) -> dict[str, Any] | None:
     }
 
 
+def _is_customer_context_citation(citation: dict[str, Any]) -> bool:
+    viewer_path = str(citation.get("viewer_path") or citation.get("href") or "").strip()
+    boundary_truth = str(citation.get("boundary_truth") or "").strip()
+    source_lane = str(citation.get("source_lane") or "").strip()
+    source_collection = str(citation.get("source_collection") or "").strip()
+    book_slug = str(citation.get("book_slug") or "").strip()
+    return (
+        viewer_path.startswith("/uploads/documents/")
+        or viewer_path.startswith("/playbooks/customer-packs/")
+        or boundary_truth in {"private_user_upload_runtime", "private_customer_pack_runtime"}
+        or source_lane in {"user_upload", "customer_source_first_pack"}
+        or source_collection in {"uploads", "uploaded", "customer_docs"}
+        or book_slug == "uploaded-documents"
+    )
+
+
+def _lightspeed_customer_context_truth() -> dict[str, str]:
+    return {
+        "source_lane": "lightspeed_customer_context_bridge",
+        "boundary_truth": "external_lightspeed_with_customer_context",
+        "runtime_truth_label": "OpenShift Lightspeed + Customer Context",
+        "boundary_badge": "Lightspeed + Customer",
+        "publication_state": "mixed",
+        "approval_state": "mixed",
+    }
+
+
 def _primary_response_truth(result: AnswerResult, serialized_citations: list[dict[str, Any]]) -> dict[str, str]:
     answer_source = str(result.pipeline_trace.get("answer_source") or "").strip()
     external_answer = result.pipeline_trace.get("external_answer")
@@ -179,6 +206,8 @@ def _primary_response_truth(result: AnswerResult, serialized_citations: list[dic
         and isinstance(external_answer, dict)
         and external_answer.get("status") == "used"
     ):
+        if any(_is_customer_context_citation(citation) for citation in serialized_citations):
+            return _lightspeed_customer_context_truth()
         return {
             "source_lane": str(external_answer.get("source_lane") or "openshift_lightspeed"),
             "boundary_truth": str(external_answer.get("boundary_truth") or "external_openshift_lightspeed"),

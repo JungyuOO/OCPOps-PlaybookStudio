@@ -116,6 +116,38 @@ def test_uploaded_document_source_meta_uses_current_owner_scope(monkeypatch, tmp
     assert payload["boundary_truth"] == "private_user_upload_runtime"
 
 
+def test_uploaded_document_viewer_renders_upload_asset_as_source_capture():
+    html = server_routes_viewer._markdownish_to_html(
+        "![pdf-page-004-image-01.png](asset://asset-1)",
+        asset_sources={
+            "asset-1": {
+                "src": "data:image/png;base64,AAAA",
+                "caption": "원본 문서 캡처 · Page 4 · 836 x 775 · pdf-page-004-image-01.png",
+                "width": "836",
+                "height": "775",
+            }
+        },
+    )
+
+    assert 'class="upload-asset-figure upload-source-asset-figure"' in html
+    assert 'style="--asset-width: 836px;"' in html
+    assert 'class="upload-asset-frame"' in html
+    assert 'width="836" height="775"' in html
+    assert 'src="data:image/png;base64,AAAA"' in html
+    assert "원본 문서 캡처" in html
+
+
+def test_uploaded_document_viewer_marks_missing_upload_asset():
+    html = server_routes_viewer._markdownish_to_html(
+        "![pdf-page-001-image-01.png](asset://missing)",
+        asset_sources={},
+    )
+
+    assert 'class="upload-asset-missing"' in html
+    assert "이미지 asset을 찾을 수 없습니다." in html
+    assert "<p>pdf-page-001-image-01.png</p>" not in html
+
+
 def test_uploaded_document_viewer_renders_kmsc_course_asset_figures():
     html = server_routes_viewer._uploaded_document_course_asset_figures_html(
         {
@@ -134,6 +166,7 @@ def test_uploaded_document_viewer_renders_kmsc_course_asset_figures():
     )
 
     assert 'class="upload-asset-figure upload-course-asset-figure"' in html
+    assert 'class="upload-asset-frame"' in html
     assert 'src="/api/v1/course/assets?path=data/course_pbs/assets/unit-test__img_01.png"' in html
     assert 'loading="lazy"' in html
     assert "OpenShift 콘솔에서 PV 상태를 확인하는 화면" in html

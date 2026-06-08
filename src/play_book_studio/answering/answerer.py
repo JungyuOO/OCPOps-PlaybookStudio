@@ -689,6 +689,38 @@ def _lightspeed_answer_for_chat(answer_text: str) -> str:
     return answer
 
 
+def _is_customer_context_citation(citation: Citation) -> bool:
+    viewer_path = str(citation.viewer_path or "").strip()
+    source_collection = str(citation.source_collection or "").strip()
+    book_slug = str(citation.book_slug or "").strip()
+    return (
+        viewer_path.startswith("/uploads/documents/")
+        or viewer_path.startswith("/playbooks/customer-packs/")
+        or source_collection in {"uploads", "uploaded", "customer_docs"}
+        or book_slug == "uploaded-documents"
+    )
+
+
+def _customer_context_bridge_meta(citations: list[Citation]) -> dict[str, object]:
+    customer_citations = [
+        citation
+        for citation in citations
+        if _is_customer_context_citation(citation)
+    ]
+    if not customer_citations:
+        return {}
+    return {
+        "customer_context_applied": True,
+        "customer_context_citation_count": len(customer_citations),
+        "customer_context_viewer_paths": [
+            str(citation.viewer_path or "")
+            for citation in customer_citations[:5]
+            if str(citation.viewer_path or "").strip()
+        ],
+        "bridge_label": "OpenShift Lightspeed + Customer Context",
+    }
+
+
 class ChatAnswerer:
     """CLI, UI, eval 파이프라인이 공통으로 쓰는 최상위 answer 서비스."""
 
@@ -1271,6 +1303,18 @@ class ChatAnswerer:
         if not context_bundle.citations:
             selected_hits = []
         if lightspeed_used:
+            context_bridge = _customer_context_bridge_meta(context_bundle.citations)
+            if context_bridge:
+                external_answer_meta["context_bridge"] = context_bridge
+                emit(
+                    {
+                        "step": "customer_context_bridge",
+                        "label": "고객문서 맥락 결합",
+                        "status": "done",
+                        "detail": f"customer citations={context_bridge['customer_context_citation_count']}",
+                        "meta": context_bridge,
+                    }
+                )
             emit(
                 {
                     "step": "lightspeed_answer_passthrough",

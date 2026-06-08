@@ -472,6 +472,48 @@ def _citation_has_direct_section_metadata(citation: Citation) -> bool:
     return bool(citation.section_path or citation.section_path_label.strip())
 
 
+def _is_user_upload_href(href: str) -> bool:
+    return str(href or "").strip().startswith("/uploads/documents/")
+
+
+def _serialize_user_upload_citation(citation: Citation, href: str) -> dict[str, Any]:
+    section_path = [
+        item
+        for item in _display_section_path(list(citation.section_path))
+        if str(item).strip()
+    ]
+    section = _display_source_heading(str(citation.section or citation.anchor))
+    section_label = _display_section_label(
+        section_path=section_path,
+        section_path_label=str(citation.section_path_label or "").strip(),
+        heading=section,
+    )
+    book_title = (
+        section_path[0]
+        if section_path
+        else _display_source_heading(str(citation.book_slug or ""))
+        or "User Upload Document"
+    )
+    return {
+        **_citation_display_payload(citation),
+        "viewer_path": href,
+        "section": section,
+        "href": href,
+        "book_title": book_title,
+        "section_path": section_path,
+        "section_path_label": section_label,
+        "source_label": f"{book_title} · {section_label}" if section_label else book_title,
+        "source_collection": str(citation.source_collection or "uploads"),
+        "source_lane": "user_upload",
+        "approval_state": "private",
+        "publication_state": "private",
+        "boundary_truth": "private_user_upload_runtime",
+        "runtime_truth_label": "User Upload Document",
+        "boundary_badge": "User Upload",
+        "section_match_exact": True,
+    }
+
+
 @lru_cache(maxsize=2048)
 def _serialize_citation_cached(
     root_dir_str: str,
@@ -495,6 +537,9 @@ def _serialize_citation_uncached(
     manifest_entry = context.manifest_entry(citation.book_slug)
     customer_pack_meta = context.customer_pack_meta(href)
     row: dict[str, Any] | None = None
+
+    if _is_user_upload_href(href):
+        return _serialize_user_upload_citation(citation, href)
 
     if row is None and customer_pack_meta is not None:
         book_title = str(customer_pack_meta.get("book_title") or "") or _humanize_book_slug(citation.book_slug)

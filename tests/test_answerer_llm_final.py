@@ -48,6 +48,47 @@ class FakeRetriever:
         )
 
 
+class CustomerUploadRetriever:
+    def retrieve(self, query: str, **kwargs: Any) -> RetrievalResult:
+        del kwargs
+        hit = RetrievalHit(
+            chunk_id="ci-webhook",
+            book_slug="uploaded-documents",
+            chapter="CI 순서",
+            section="Webhook 설정",
+            anchor="ci-webhook",
+            source_url="uploads/sources/ci.pdf",
+            viewer_path="/uploads/documents/11111111-1111-1111-1111-111111111111/index.html#ci-webhook",
+            text=(
+                "고객 CI 순서 문서에서는 GitHub Webhook Payload URL에 smee URL을 넣고, "
+                "Webhook secret을 OpenShift 쪽 secret과 맞추도록 설명합니다."
+            ),
+            source="hybrid",
+            raw_score=0.98,
+            fused_score=0.98,
+            section_path=("CI 순서", "Webhook 설정"),
+            chunk_type="procedure",
+            source_lane="user_upload",
+            source_type="uploaded_document",
+            source_collection="uploads",
+            review_status="private",
+            semantic_role="uploaded_document",
+            block_kinds=("text", "image"),
+            component_scores={"bm25_score": 0.98},
+            source_scope="user_upload",
+        )
+        return RetrievalResult(
+            query=query,
+            normalized_query=query,
+            rewritten_query=query,
+            top_k=5,
+            candidate_k=10,
+            context={},
+            hits=[hit],
+            trace={"route": "rag"},
+        )
+
+
 class WeakCommandRetriever:
     def retrieve(self, query: str, **kwargs: Any) -> RetrievalResult:
         del kwargs
@@ -331,6 +372,31 @@ def test_lightspeed_is_not_skipped_when_source_scope_is_explicitly_restricted(tm
     assert result.pipeline_trace["answer_source"] == "lightspeed_with_pbs_rag"
     assert result.pipeline_trace["external_answer"]["status"] == "used"
     assert "Events에서 scheduling 또는 binding 실패 사유" in result.answer
+
+
+def test_lightspeed_success_records_customer_upload_context_bridge(tmp_path: Path) -> None:
+    llm = FakeLlmClient()
+    lightspeed = FakeLightspeedClient()
+    answerer = ChatAnswerer(
+        Settings(root_dir=tmp_path),
+        retriever=CustomerUploadRetriever(),  # type: ignore[arg-type]
+        llm_client=llm,  # type: ignore[arg-type]
+        lightspeed_client=lightspeed,  # type: ignore[arg-type]
+    )
+
+    result = answerer.answer("OpenShift PipelineRun이 안 뜨면 어디부터 확인해?")
+
+    assert lightspeed.calls == ["OpenShift PipelineRun이 안 뜨면 어디부터 확인해?"]
+    assert not llm.calls
+    assert result.pipeline_trace["answer_source"] == "lightspeed_with_pbs_rag"
+    context_bridge = result.pipeline_trace["external_answer"]["context_bridge"]
+    assert context_bridge["customer_context_applied"] is True
+    assert context_bridge["customer_context_citation_count"] == 1
+    assert context_bridge["bridge_label"] == "OpenShift Lightspeed + Customer Context"
+    assert result.citations[0].viewer_path.startswith("/uploads/documents/")
+    steps = [event.get("step") for event in result.pipeline_trace["events"]]
+    assert "customer_context_bridge" in steps
+    assert "lightspeed_answer_passthrough" in steps
 
 
 def test_lightspeed_disabled_note_survives_grounding_blocked_path(tmp_path: Path) -> None:
