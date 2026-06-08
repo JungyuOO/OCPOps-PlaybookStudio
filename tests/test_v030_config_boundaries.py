@@ -17,6 +17,7 @@ def test_v030_lightspeed_and_operator_settings_load_from_env(tmp_path: Path) -> 
                 "OLS_AUTH_SECRET_NAME=pbs-ols-token",
                 "OLS_AUTH_TOKEN=example-token",
                 "OLS_TIMEOUT_SECONDS=12",
+                "OLS_CA_BUNDLE_PATH=/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt",
                 "OLS_INSECURE_SKIP_TLS_VERIFY=true",
                 "PBS_AUTO_CREATE_NAMESPACE=false",
                 "PBS_NAMESPACE_MODE=disabled",
@@ -37,6 +38,7 @@ def test_v030_lightspeed_and_operator_settings_load_from_env(tmp_path: Path) -> 
     assert settings.ols_auth_secret_name == "pbs-ols-token"
     assert settings.ols_auth_token == "example-token"
     assert settings.ols_timeout_seconds == 12
+    assert settings.ols_ca_bundle_path == "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
     assert settings.ols_insecure_skip_tls_verify is True
     assert settings.pbs_auto_create_namespace is False
     assert settings.pbs_namespace_mode == "disabled"

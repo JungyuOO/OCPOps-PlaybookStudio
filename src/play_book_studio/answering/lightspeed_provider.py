@@ -122,15 +122,25 @@ def default_lightspeed_transport(
     headers: dict[str, str],
     timeout_seconds: float,
     *,
+    ca_bundle_path: str = "",
     insecure_skip_tls_verify: bool = False,
 ) -> dict[str, Any]:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = request.Request(url, data=body, headers=headers, method="POST")
-    context = ssl._create_unverified_context() if insecure_skip_tls_verify else None
+    context = _ssl_context(ca_bundle_path=ca_bundle_path, insecure_skip_tls_verify=insecure_skip_tls_verify)
     with request.urlopen(req, timeout=timeout_seconds, context=context) as response:  # noqa: S310 - configured endpoint
         raw = response.read().decode("utf-8")
     parsed = json.loads(raw) if raw else {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _ssl_context(*, ca_bundle_path: str = "", insecure_skip_tls_verify: bool = False) -> ssl.SSLContext | None:
+    if insecure_skip_tls_verify:
+        return ssl._create_unverified_context()
+    cleaned_ca_bundle_path = str(ca_bundle_path or "").strip()
+    if cleaned_ca_bundle_path:
+        return ssl.create_default_context(cafile=cleaned_ca_bundle_path)
+    return None
 
 
 def _answer_text_from_response(payload: dict[str, Any]) -> str:
@@ -269,6 +279,7 @@ def query_lightspeed(
             request_payload,
             headers,
             float(settings.ols_timeout_seconds),
+            ca_bundle_path=settings.ols_ca_bundle_path,
             insecure_skip_tls_verify=settings.ols_insecure_skip_tls_verify,
         )
     else:
@@ -299,6 +310,7 @@ def query_lightspeed(
             "conversation_id": conversation_id,
             "request_context_keys": sorted(request_payload.keys()),
             "referenced_documents": len(citations),
+            "ca_bundle_configured": bool(settings.ols_ca_bundle_path),
             "insecure_skip_tls_verify": settings.ols_insecure_skip_tls_verify,
         },
         pipeline_trace={

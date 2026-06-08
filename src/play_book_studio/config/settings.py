@@ -168,6 +168,7 @@ class Settings(SettingsPathMixin):
     ols_model: str = ""
     ols_system_prompt: str = ""
     ols_timeout_seconds: float = 30.0
+    ols_ca_bundle_path: str = ""
     ols_insecure_skip_tls_verify: bool = False
     lightspeed_knowledge_mode: str = "lightspeed-rag-with-pbs-private-context"
     ocp_api_base_url: str = ""
@@ -450,6 +451,11 @@ def load_settings(root_dir: str | Path) -> Settings:
             effective_env.get("OLS_TIMEOUT_SECONDS")
             or effective_env.get("OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS")
             or "30"
+        ),
+        ols_ca_bundle_path=_clean_optional_env_value(
+            effective_env.get("OLS_CA_BUNDLE_PATH")
+            or effective_env.get("OPENSHIFT_LIGHTSPEED_CA_BUNDLE_PATH")
+            or ""
         ),
         ols_insecure_skip_tls_verify=(
             effective_env.get("OLS_INSECURE_SKIP_TLS_VERIFY")
