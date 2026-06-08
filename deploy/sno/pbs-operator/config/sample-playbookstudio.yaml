@@ -22,6 +22,12 @@ spec:
       enabled: true
       registerWithOLS: true
       serverName: pbs-tools
+    networkPolicy:
+      enabled: true
+      targetNamespace: openshift-lightspeed
+      allowFromNamespaces:
+        - pbs-ocpops
+      allowAllNamespaces: false
   console:
     enabled: true
     executorMode: service-account

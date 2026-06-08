@@ -17,8 +17,8 @@ This directory intentionally contains no live cluster credentials or destination
 - `pbs-base-application.yaml` points Argo CD at the Operator-ready PBS app, MCP, Route, Service,
   and RBAC base.
 - `pbs-operator-application.yaml` points Argo CD at the future PBS Operator CRD/sample config.
-- `pbs-lightspeed-integration-application.yaml` points Argo CD at the PBS-generated Lightspeed
-  integration preview so `OLSConfig` changes remain reviewable before any live mutation.
+- `pbs-lightspeed-integration-application.yaml` points Argo CD at PBS-owned Lightspeed integration
+  resources, including the ingress NetworkPolicy that lets PBS call the Lightspeed API.
 
 These Applications intentionally omit automated sync, prune, and self-heal settings. Apply them only
 after the live inventory has been reviewed, current resources have been classified as

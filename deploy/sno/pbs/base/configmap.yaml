@@ -9,7 +9,7 @@ metadata:
 data:
   CHAT_PROVIDER: lightspeed
   LIGHTSPEED_KNOWLEDGE_MODE: lightspeed-rag-with-pbs-private-context
-  OLS_BASE_URL: http://ols-app-server.openshift-lightspeed.svc.cluster.local:8080
+  OLS_BASE_URL: https://lightspeed-app-server.openshift-lightspeed.svc.cluster.local:8443
   OLS_AUTH_MODE: service-account
   OLS_AUTH_SECRET_NAME: pbs-ols-auth
   OLS_TIMEOUT_SECONDS: "30"

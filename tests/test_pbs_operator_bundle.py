@@ -23,6 +23,8 @@ def test_operator_config_includes_runtime_deployment_and_rbac() -> None:
     assert "value: reconcile" in deployment
     assert "value: \"true\"" in deployment
     assert "playbookstudios/status" in rbac
+    assert "pbs-operator-lightspeed-networkpolicy" in rbac
+    assert "networkpolicies" in rbac
     assert "resources:" in rbac
 
 
@@ -38,6 +40,8 @@ def test_operator_bundle_and_catalog_preview_exist_without_live_credentials() ->
     assert "ghcr.io/jungyuoo/ocpops-playbookstudio-operator:v0.3.0" in csv
     assert "PBS_OPERATOR_WATCH_ENABLED" in csv
     assert "PBS_OPERATOR_APPLY_ENABLED" in csv
+    assert "networkPolicy" in csv
+    assert "networkpolicies" in csv
     assert "operators.operatorframework.io.bundle.package.v1: playbookstudio-operator" in annotations
     assert "kind: CatalogSource" in catalog
     assert "pbs.ocpops.io/requires-approval: \"true\"" in catalog
@@ -54,6 +58,7 @@ def test_operator_bundle_crd_is_synced_with_config_crd() -> None:
     assert "provider:" in bundle_crd
     assert "enum: [\"internal\", \"lightspeed\"]" in bundle_crd
     assert "manageOLSConfig:" in bundle_crd
+    assert "networkPolicy:" in bundle_crd
     assert "mcpRegistered:" in bundle_crd
 
 

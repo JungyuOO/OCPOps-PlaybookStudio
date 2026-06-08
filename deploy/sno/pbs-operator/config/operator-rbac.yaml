@@ -46,3 +46,31 @@ subjects:
   - kind: ServiceAccount
     name: pbs-operator
     namespace: pbs-ocpops
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pbs-operator-lightspeed-networkpolicy
+  labels:
+    app.kubernetes.io/name: pbs-operator
+    app.kubernetes.io/part-of: playbookstudio
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pbs-operator-lightspeed-networkpolicy
+  labels:
+    app.kubernetes.io/name: pbs-operator
+    app.kubernetes.io/part-of: playbookstudio
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pbs-operator-lightspeed-networkpolicy
+subjects:
+  - kind: ServiceAccount
+    name: pbs-operator
+    namespace: pbs-ocpops

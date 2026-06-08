@@ -17,7 +17,13 @@ metadata:
               "detectOperator": true,
               "manageOLSConfig": true,
               "knowledgeMode": "lightspeed-rag-with-pbs-private-context",
-              "mcp": {"enabled": true, "registerWithOLS": true, "serverName": "pbs-tools"}
+              "mcp": {"enabled": true, "registerWithOLS": true, "serverName": "pbs-tools"},
+              "networkPolicy": {
+                "enabled": true,
+                "targetNamespace": "openshift-lightspeed",
+                "allowFromNamespaces": ["pbs-ocpops"],
+                "allowAllNamespaces": false
+              }
             },
             "runtime": {
               "secretName": "playbookstudio-secret",
@@ -103,4 +109,7 @@ spec:
           rules:
             - apiGroups: ["rbac.authorization.k8s.io"]
               resources: ["clusterroles", "clusterrolebindings"]
+              verbs: ["get", "list", "watch", "create", "update", "patch"]
+            - apiGroups: ["networking.k8s.io"]
+              resources: ["networkpolicies"]
               verbs: ["get", "list", "watch", "create", "update", "patch"]

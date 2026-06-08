@@ -4,5 +4,8 @@ PBS v0.3.0 does not own the OpenShift Lightspeed Operator lifecycle. This direct
 declarative integration previews that PBS or a future PBS Operator can generate after the Lightspeed
 Operator is installed by its own lifecycle.
 
-Phase 1 content is intentionally limited to references and dry-run patch shape. Do not apply these
-files to a live cluster without a later live validation window.
+The base currently contains the narrow ingress NetworkPolicy PBS needs to call the Lightspeed API
+from the `pbs-ocpops` namespace. It does not install or mutate the Lightspeed Operator itself.
+
+Apply these files only during an approved live validation or GitOps sync window because they change
+the `openshift-lightspeed` namespace traffic boundary.

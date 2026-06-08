@@ -13,12 +13,10 @@ spec:
   source:
     repoURL: https://github.com/JungyuOO/OCPOps-PlaybookStudio.git
     targetRevision: v3.0.0/lightspeed
-    path: deploy/sno/pbs/base
-    directory:
-      include: olsconfig-patch-preview.yaml
+    path: deploy/sno/lightspeed/base
   destination:
     server: https://kubernetes.default.svc
-    namespace: pbs-ocpops
+    namespace: openshift-lightspeed
   syncPolicy:
     syncOptions:
       - CreateNamespace=false

@@ -10,7 +10,8 @@ from typing import Any
 DEFAULT_APP_IMAGE = "ghcr.io/jungyuoo/ocpops-playbookstudio-app:v0.3.0"
 DEFAULT_WEB_IMAGE = "ghcr.io/jungyuoo/ocpops-playbookstudio-web:v0.3.0"
 DEFAULT_NAMESPACE = "pbs-ocpops"
-DEFAULT_OLS_BASE_URL = "http://ols-app-server.openshift-lightspeed.svc.cluster.local:8080"
+DEFAULT_OLS_NAMESPACE = "openshift-lightspeed"
+DEFAULT_OLS_BASE_URL = "https://lightspeed-app-server.openshift-lightspeed.svc.cluster.local:8443"
 
 
 def render_desired_resources(custom_resource: dict[str, Any]) -> list[dict[str, Any]]:
@@ -56,6 +57,9 @@ def render_desired_resources(custom_resource: dict[str, Any]) -> list[dict[str, 
     if _manage_ols_config(spec):
         resources.append(_olsconfig_preview(namespace, spec))
 
+    if _manage_lightspeed_network_policy(spec):
+        resources.append(_lightspeed_network_policy(namespace, spec))
+
     return resources
 
 
@@ -77,6 +81,12 @@ def render_status(custom_resource: dict[str, Any]) -> dict[str, Any]:
                 "status": "True" if _manage_ols_config(spec) else "False",
                 "reason": "OLSConfigPreview" if _manage_ols_config(spec) else "Disabled",
                 "message": "OLSConfig changes require explicit live approval.",
+            },
+            {
+                "type": "LightspeedNetworkPolicyRequested",
+                "status": "True" if _manage_lightspeed_network_policy(spec) else "False",
+                "reason": "NetworkPolicyRendered" if _manage_lightspeed_network_policy(spec) else "Disabled",
+                "message": "Lightspeed ingress NetworkPolicy is rendered only when explicitly enabled.",
             },
         ],
     }
@@ -289,6 +299,51 @@ def _olsconfig_preview(namespace: str, spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _lightspeed_network_policy(namespace: str, spec: dict[str, Any]) -> dict[str, Any]:
+    lightspeed = spec.get("lightspeed") or {}
+    policy = lightspeed.get("networkPolicy") or {}
+    target_namespace = str(policy.get("targetNamespace") or DEFAULT_OLS_NAMESPACE)
+    allow_all_namespaces = bool(policy.get("allowAllNamespaces", False))
+    allowed_namespaces = policy.get("allowFromNamespaces") or [namespace]
+    if not isinstance(allowed_namespaces, list):
+        allowed_namespaces = [namespace]
+
+    ingress_from: list[dict[str, Any]]
+    if allow_all_namespaces:
+        ingress_from = [{"namespaceSelector": {}}]
+    else:
+        ingress_from = [
+            {
+                "namespaceSelector": {
+                    "matchLabels": {"kubernetes.io/metadata.name": str(allowed_namespace)}
+                }
+            }
+            for allowed_namespace in allowed_namespaces
+        ]
+
+    return {
+        "apiVersion": "networking.k8s.io/v1",
+        "kind": "NetworkPolicy",
+        "metadata": _metadata("allow-pbs-to-lightspeed-app-server", target_namespace, "pbs-lightspeed-ingress"),
+        "spec": {
+            "podSelector": {
+                "matchLabels": {
+                    "app.kubernetes.io/component": "application-server",
+                    "app.kubernetes.io/name": "lightspeed-service-api",
+                    "app.kubernetes.io/part-of": "openshift-lightspeed",
+                }
+            },
+            "policyTypes": ["Ingress"],
+            "ingress": [
+                {
+                    "from": ingress_from,
+                    "ports": [{"protocol": "TCP", "port": 8443}],
+                }
+            ],
+        },
+    }
+
+
 def _metadata(name: str, namespace: str, app_name: str) -> dict[str, Any]:
     return {"name": name, "namespace": namespace, "labels": _labels(app_name)}
 
@@ -311,6 +366,10 @@ def _mcp_enabled(spec: dict[str, Any]) -> bool:
 
 def _manage_ols_config(spec: dict[str, Any]) -> bool:
     return bool((spec.get("lightspeed") or {}).get("manageOLSConfig", False))
+
+
+def _manage_lightspeed_network_policy(spec: dict[str, Any]) -> bool:
+    return bool(((spec.get("lightspeed") or {}).get("networkPolicy") or {}).get("enabled", False))
 
 
 def _app_image(spec: dict[str, Any]) -> str:

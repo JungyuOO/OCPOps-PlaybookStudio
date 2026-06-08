@@ -18,6 +18,12 @@ SAMPLE_CR = {
             "manageOLSConfig": True,
             "auth": {"mode": "service-account", "secretName": "pbs-ols-auth"},
             "mcp": {"enabled": True, "registerWithOLS": True, "serverName": "pbs-tools"},
+            "networkPolicy": {
+                "enabled": True,
+                "targetNamespace": "openshift-lightspeed",
+                "allowFromNamespaces": ["pbs-ocpops"],
+                "allowAllNamespaces": False,
+            },
         },
         "console": {"enabled": True, "executorMode": "service-account"},
         "namespaceMode": {"autoCreate": False},
@@ -51,6 +57,7 @@ def test_pbs_operator_reconciler_renders_managed_resources_from_cr() -> None:
     assert ("Route", "playbookstudio") in identities
     assert ("ConfigMap", "pbs-config") in identities
     assert ("ConfigMap", "pbs-olsconfig-patch-preview") in identities
+    assert ("NetworkPolicy", "allow-pbs-to-lightspeed-app-server") in identities
     assert ("Role", "pbs-byok-builder") not in identities
 
 
@@ -82,6 +89,21 @@ def test_pbs_operator_reconciler_maps_runtime_secret_to_app_env() -> None:
     assert env[0]["valueFrom"]["secretKeyRef"]["key"] == "POSTGRES_PASSWORD"
     assert env[1]["valueFrom"]["secretKeyRef"]["key"] == "OCP_API_TOKEN"
     assert env[2]["name"] == "DATABASE_URL"
+
+
+def test_pbs_operator_reconciler_renders_lightspeed_network_policy() -> None:
+    policy = next(
+        resource
+        for resource in render_desired_resources(SAMPLE_CR)
+        if resource["kind"] == "NetworkPolicy"
+    )
+
+    assert policy["metadata"]["namespace"] == "openshift-lightspeed"
+    assert policy["spec"]["podSelector"]["matchLabels"]["app.kubernetes.io/name"] == "lightspeed-service-api"
+    assert policy["spec"]["ingress"][0]["from"] == [
+        {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "pbs-ocpops"}}}
+    ]
+    assert policy["spec"]["ingress"][0]["ports"] == [{"protocol": "TCP", "port": 8443}]
 
 
 def test_pbs_operator_reconciler_uses_terminal_broker_for_app() -> None:
@@ -118,6 +140,8 @@ def test_pbs_operator_reconciler_yaml_dump_contains_expected_documents() -> None
     assert "name: terminal-ws" in output
     assert "play_book_studio.mcp.server" in output
     assert "kind: OLSConfig" in output
+    assert "kind: NetworkPolicy" in output
+    assert "allow-pbs-to-lightspeed-app-server" in output
 
 
 def test_pbs_operator_reconciler_always_pulls_managed_images() -> None:
