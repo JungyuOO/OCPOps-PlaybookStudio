@@ -311,7 +311,7 @@ def test_lightspeed_success_is_not_blocked_by_pbs_rbac_grounding_guard(tmp_path:
     )
 
 
-def test_lightspeed_is_skipped_when_source_scope_is_explicitly_restricted(tmp_path: Path) -> None:
+def test_lightspeed_is_not_skipped_when_source_scope_is_explicitly_restricted(tmp_path: Path) -> None:
     llm = FakeLlmClient()
     lightspeed = FakeLightspeedClient()
     answerer = ChatAnswerer(
@@ -326,12 +326,11 @@ def test_lightspeed_is_skipped_when_source_scope_is_explicitly_restricted(tmp_pa
         context=SessionContext(enabled_source_scopes=["user_upload"]),
     )
 
-    assert lightspeed.calls == []
-    assert llm.calls
-    assert result.pipeline_trace["answer_source"] == "pbs_rag"
-    assert result.pipeline_trace["external_answer"]["status"] == "skipped_scoped_sources"
-    assert result.pipeline_trace["external_answer"]["enabled_source_scopes"] == ["user_upload"]
-    assert "OpenShift Lightspeed" not in result.answer
+    assert lightspeed.calls == ["PVC가 Pending이면 무엇을 먼저 확인해야 해?"]
+    assert not llm.calls
+    assert result.pipeline_trace["answer_source"] == "lightspeed_with_pbs_rag"
+    assert result.pipeline_trace["external_answer"]["status"] == "used"
+    assert "Events에서 scheduling 또는 binding 실패 사유" in result.answer
 
 
 def test_lightspeed_disabled_note_survives_grounding_blocked_path(tmp_path: Path) -> None:
