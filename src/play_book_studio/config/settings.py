@@ -65,6 +65,13 @@ DEFAULT_BOOK_URL_TEMPLATE = DEFAULT_CORE_PACK.book_url_template
 DEFAULT_VIEWER_PATH_TEMPLATE = DEFAULT_CORE_PACK.viewer_path_template
 
 
+def _clean_optional_env_value(value: str | None) -> str:
+    cleaned = str(value or "").strip()
+    if cleaned.startswith("<") and cleaned.endswith(">"):
+        return ""
+    return cleaned
+
+
 def _parse_csv_tuple(value: str, default: tuple[str, ...]) -> tuple[str, ...]:
     parts = tuple(item.strip() for item in value.split(",") if item.strip())
     return parts or default
@@ -157,6 +164,9 @@ class Settings(SettingsPathMixin):
     ols_auth_mode: str = "service-account"
     ols_auth_secret_name: str = ""
     ols_auth_token: str = ""
+    ols_provider: str = ""
+    ols_model: str = ""
+    ols_system_prompt: str = ""
     ols_timeout_seconds: float = 30.0
     lightspeed_knowledge_mode: str = "lightspeed-rag-with-pbs-private-context"
     ocp_api_base_url: str = ""
@@ -408,11 +418,38 @@ def load_settings(root_dir: str | Path) -> Settings:
         surya_health_endpoint=effective_env.get("SURYA_HEALTH", "").strip().rstrip("/"),
         surya_timeout_seconds=float(effective_env.get("SURYA_TIMEOUT_SECONDS", "30")),
         chat_provider=effective_env.get("CHAT_PROVIDER", "internal").strip().lower() or "internal",
-        ols_base_url=effective_env.get("OLS_BASE_URL", "").strip().rstrip("/"),
+        ols_base_url=_clean_optional_env_value(
+            effective_env.get("OLS_BASE_URL")
+            or effective_env.get("OPENSHIFT_LIGHTSPEED_BASE_URL")
+            or ""
+        ).rstrip("/"),
         ols_auth_mode=effective_env.get("OLS_AUTH_MODE", "service-account").strip().lower() or "service-account",
         ols_auth_secret_name=effective_env.get("OLS_AUTH_SECRET_NAME", "").strip(),
-        ols_auth_token=effective_env.get("OLS_AUTH_TOKEN", "").strip(),
-        ols_timeout_seconds=float(effective_env.get("OLS_TIMEOUT_SECONDS", "30")),
+        ols_auth_token=_clean_optional_env_value(
+            effective_env.get("OLS_AUTH_TOKEN")
+            or effective_env.get("OPENSHIFT_LIGHTSPEED_API_TOKEN")
+            or ""
+        ),
+        ols_provider=_clean_optional_env_value(
+            effective_env.get("OLS_PROVIDER")
+            or effective_env.get("OPENSHIFT_LIGHTSPEED_PROVIDER")
+            or ""
+        ),
+        ols_model=_clean_optional_env_value(
+            effective_env.get("OLS_MODEL")
+            or effective_env.get("OPENSHIFT_LIGHTSPEED_MODEL")
+            or ""
+        ),
+        ols_system_prompt=_clean_optional_env_value(
+            effective_env.get("OLS_SYSTEM_PROMPT")
+            or effective_env.get("OPENSHIFT_LIGHTSPEED_SYSTEM_PROMPT")
+            or ""
+        ),
+        ols_timeout_seconds=float(
+            effective_env.get("OLS_TIMEOUT_SECONDS")
+            or effective_env.get("OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS")
+            or "30"
+        ),
         lightspeed_knowledge_mode=effective_env.get(
             "LIGHTSPEED_KNOWLEDGE_MODE",
             "lightspeed-rag-with-pbs-private-context",

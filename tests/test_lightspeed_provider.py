@@ -4,6 +4,7 @@ from pathlib import Path
 
 from play_book_studio.answering.lightspeed_provider import (
     LightspeedChatContext,
+    build_lightspeed_citations,
     build_lightspeed_headers,
     build_lightspeed_payload,
     build_pbs_rag_context,
@@ -91,6 +92,28 @@ def test_build_lightspeed_headers_adds_bearer_token(tmp_path: Path) -> None:
     assert headers["Content-Type"] == "application/json"
 
 
+def test_build_lightspeed_citations_maps_referenced_documents() -> None:
+    citations = build_lightspeed_citations(
+        {
+            "referenced_documents": [
+                {
+                    "title": "Pods",
+                    "section": "Viewing pods",
+                    "url": "https://docs.openshift.com/container-platform/latest/nodes/pods.html",
+                    "excerpt": "Use oc get pods to list pods.",
+                }
+            ]
+        }
+    )
+
+    assert len(citations) == 1
+    assert citations[0].book_slug == "openshift-lightspeed"
+    assert citations[0].source_collection == "openshift_lightspeed"
+    assert citations[0].source_url == "https://docs.openshift.com/container-platform/latest/nodes/pods.html"
+    assert citations[0].viewer_path == "https://docs.openshift.com/container-platform/latest/nodes/pods.html"
+    assert citations[0].section == "Viewing pods"
+
+
 def test_query_lightspeed_returns_configuration_error_without_endpoint(tmp_path: Path) -> None:
     result = query_lightspeed(Settings(root_dir=tmp_path, chat_provider="lightspeed"), "hello")
 
@@ -133,3 +156,36 @@ def test_query_lightspeed_normalizes_transport_response(tmp_path: Path) -> None:
             3.0,
         )
     ]
+
+
+def test_query_lightspeed_preserves_referenced_documents_as_citations(tmp_path: Path) -> None:
+    def fake_transport(url: str, payload: dict, headers: dict, timeout_seconds: float) -> dict:
+        return {
+            "response": "Use oc get pods to list pods.",
+            "conversation_id": "conv-docs",
+            "referenced_documents": [
+                {
+                    "title": "Pods",
+                    "section": "Viewing pods",
+                    "url": "https://docs.openshift.com/container-platform/latest/nodes/pods.html",
+                    "excerpt": "Use oc get pods to list pods.",
+                }
+            ],
+        }
+
+    result = query_lightspeed(
+        Settings(
+            root_dir=tmp_path,
+            chat_provider="lightspeed",
+            ols_base_url="https://ols.example.test",
+        ),
+        "how do I list pods?",
+        transport=fake_transport,
+    )
+
+    assert result.response_kind == "lightspeed"
+    assert result.answer == "Use oc get pods to list pods."
+    assert result.retrieval_trace["referenced_documents"] == 1
+    assert result.citations[0].source_collection == "openshift_lightspeed"
+    assert result.citations[0].source_url == "https://docs.openshift.com/container-platform/latest/nodes/pods.html"
+    assert result.cited_indices == [1]

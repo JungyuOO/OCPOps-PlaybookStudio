@@ -495,6 +495,38 @@ def _serialize_citation_uncached(
     customer_pack_meta = context.customer_pack_meta(href)
     row: dict[str, Any] | None = None
 
+    if str(citation.source_collection or "").strip().lower() == "openshift_lightspeed":
+        section = _display_source_heading(str(citation.section or citation.anchor))
+        section_path = [
+            item
+            for item in _display_section_path(list(citation.section_path))
+            if str(item).strip()
+        ]
+        section_label = _display_section_label(
+            section_path=section_path,
+            section_path_label=str(citation.section_path_label or "").strip(),
+            heading=section,
+        )
+        return {
+            **_citation_display_payload(citation),
+            "section": section,
+            "href": href,
+            "book_title": "OpenShift Lightspeed",
+            "section_path": section_path,
+            "section_path_label": section_label,
+            "source_label": f"OpenShift Lightspeed 쨌 {section_label}" if section_label else "OpenShift Lightspeed",
+            "source_collection": "openshift_lightspeed",
+            "source_lane": "openshift_lightspeed",
+            "approval_state": "external",
+            "publication_state": "external",
+            "boundary_truth": "external_openshift_lightspeed",
+            "runtime_truth_label": "OpenShift Lightspeed",
+            "boundary_badge": "Lightspeed",
+            "inferred_product": "openshift",
+            "inferred_version": str(settings.ocp_version or "unknown"),
+            "section_match_exact": bool(href),
+        }
+
     if row is None and customer_pack_meta is not None:
         book_title = str(customer_pack_meta.get("book_title") or "") or _humanize_book_slug(citation.book_slug)
         section_path = [

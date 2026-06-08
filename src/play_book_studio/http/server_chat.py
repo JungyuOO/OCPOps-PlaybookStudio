@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import uuid
 import re
+from dataclasses import replace
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,29 @@ from play_book_studio.answering.lightspeed_provider import (
 from play_book_studio.db.chat_repository import persist_chat_turn
 from play_book_studio.retrieval.models import SessionContext
 from play_book_studio.http.sessions import RUNTIME_CHAT_MODE, Turn
+
+
+def _merge_lightspeed_and_private_citations(result: Any, rag_result: Any) -> None:
+    """Keep OLS references clickable while attaching PBS private context evidence."""
+
+    lightspeed_citations = list(getattr(result, "citations", []) or [])
+    private_citations = [
+        citation
+        for citation in (getattr(rag_result, "citations", []) or [])
+        if is_private_pbs_citation(citation)
+    ]
+    reindexed_private = [
+        replace(citation, index=index)
+        for index, citation in enumerate(
+            private_citations,
+            start=len(lightspeed_citations) + 1,
+        )
+    ]
+    result.citations = [*lightspeed_citations, *reindexed_private]
+    result.cited_indices = [citation.index for citation in result.citations]
+    result.retrieval_trace["pbs_private_context_attached"] = bool(reindexed_private)
+    result.retrieval_trace["pbs_private_context_citations"] = len(reindexed_private)
+    result.retrieval_trace["lightspeed_referenced_documents"] = len(lightspeed_citations)
 
 
 def _summarize_citation_truth(response_payload: dict[str, Any]) -> dict[str, str]:
@@ -417,14 +441,8 @@ def handle_chat(
                 query,
                 context=lightspeed_context,
             )
-            private_citations = [
-                citation for citation in rag_result.citations if is_private_pbs_citation(citation)
-            ]
-            result.citations = private_citations
-            result.cited_indices = [citation.index for citation in private_citations]
+            _merge_lightspeed_and_private_citations(result, rag_result)
             result.warnings = list(dict.fromkeys([*rag_result.warnings, *result.warnings]))
-            result.retrieval_trace["pbs_private_context_attached"] = bool(private_citations)
-            result.retrieval_trace["pbs_private_context_citations"] = len(private_citations)
             result.retrieval_trace["lightspeed_knowledge_mode"] = (
                 active_answerer.settings.lightspeed_knowledge_mode
             )
@@ -652,14 +670,8 @@ def handle_chat_stream(
                 query,
                 context=lightspeed_context,
             )
-            private_citations = [
-                citation for citation in rag_result.citations if is_private_pbs_citation(citation)
-            ]
-            result.citations = private_citations
-            result.cited_indices = [citation.index for citation in private_citations]
+            _merge_lightspeed_and_private_citations(result, rag_result)
             result.warnings = list(dict.fromkeys([*rag_result.warnings, *result.warnings]))
-            result.retrieval_trace["pbs_private_context_attached"] = bool(private_citations)
-            result.retrieval_trace["pbs_private_context_citations"] = len(private_citations)
             result.retrieval_trace["lightspeed_knowledge_mode"] = (
                 active_answerer.settings.lightspeed_knowledge_mode
             )

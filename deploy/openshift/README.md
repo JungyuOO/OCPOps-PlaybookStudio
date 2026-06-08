@@ -30,8 +30,9 @@ export POSTGRES_PASSWORD="admin123"
 oc create secret generic playbookstudio-secret \
   -n pbs-ocpops \
   --from-literal=POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
-  --from-literal=DATABASE_URL="postgresql://admin:${POSTGRES_PASSWORD}@postgres:5432/playbookstudio" \
+  --from-literal=DATABASE_URL="postgresql://playbookstudio:${POSTGRES_PASSWORD}@postgres:5432/playbookstudio" \
   --from-literal=OCP_API_TOKEN="$(oc whoami -t)" \
+  --from-literal=OLS_AUTH_TOKEN="" \
   --dry-run=client -o yaml | oc apply -f -
 
 oc adm policy add-scc-to-user anyuid -z playbookstudio -n pbs-ocpops
@@ -48,7 +49,7 @@ For one-shot seed Jobs, delete completed Jobs before re-applying if the seed
 must run again:
 
 ```bash
-oc delete job db-migrate official-corpus-seed kmsc-corpus-seed learning-seed course-runtime-seed qdrant-seed \
+oc delete job db-migrate official-corpus-seed kmsc-corpus-seed learning-seed course-runtime-seed \
   -n pbs-ocpops \
   --ignore-not-found=true
 

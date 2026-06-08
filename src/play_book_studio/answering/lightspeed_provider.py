@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import dataclass, field
@@ -147,6 +148,84 @@ def _conversation_id_from_response(payload: dict[str, Any]) -> str:
     return ""
 
 
+def _list_of_dicts(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _first_string(payload: dict[str, Any], keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _lightspeed_referenced_documents(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    for key in ("referenced_documents", "references", "documents", "sources", "citations"):
+        values = _list_of_dicts(payload.get(key))
+        if values:
+            return values
+    nested = payload.get("data")
+    if isinstance(nested, dict):
+        return _lightspeed_referenced_documents(nested)
+    return []
+
+
+def _lightspeed_document_citation(doc: dict[str, Any], *, index: int) -> Citation:
+    title = _first_string(doc, ("title", "name", "document_title", "doc_title")) or "OpenShift Lightspeed source"
+    section = _first_string(doc, ("section", "heading", "chunk_title", "source_title")) or title
+    url = _first_string(doc, ("url", "source_url", "uri", "href", "link"))
+    viewer_path = _first_string(doc, ("viewer_path", "viewerPath"))
+    excerpt = _first_string(doc, ("excerpt", "text", "content", "snippet", "summary")) or title
+    anchor = _first_string(doc, ("anchor", "fragment"))
+    doc_id = _first_string(doc, ("id", "document_id", "doc_id", "source_id"))
+    digest = hashlib.sha256(
+        json.dumps(
+            {
+                "index": index,
+                "title": title,
+                "section": section,
+                "url": url,
+                "viewer_path": viewer_path,
+                "doc_id": doc_id,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ).encode("utf-8", errors="replace")
+    ).hexdigest()[:16]
+    return Citation(
+        index=index,
+        chunk_id=doc_id or f"lightspeed-{digest}",
+        book_slug="openshift-lightspeed",
+        section=section,
+        anchor=anchor,
+        source_url=url,
+        viewer_path=viewer_path or url,
+        excerpt=excerpt,
+        section_path=(title,) if title != section else (),
+        section_path_label=title,
+        heading_title=section,
+        source_collection="openshift_lightspeed",
+    )
+
+
+def build_lightspeed_citations(payload: dict[str, Any], *, start_index: int = 1) -> list[Citation]:
+    """Normalize OLS reference metadata into PBS citations for source view rendering."""
+
+    citations: list[Citation] = []
+    seen: set[tuple[str, str, str]] = set()
+    for offset, doc in enumerate(_lightspeed_referenced_documents(payload), start=start_index):
+        citation = _lightspeed_document_citation(doc, index=offset)
+        dedupe_key = (citation.source_url, citation.viewer_path, citation.section)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        citations.append(citation)
+    return citations
+
+
 def query_lightspeed(
     settings: Settings,
     query: str,
@@ -173,6 +252,12 @@ def query_lightspeed(
     started_at = time.perf_counter()
     endpoint = f"{settings.ols_base_url.rstrip('/')}/v1/query"
     request_payload = build_lightspeed_payload(normalized_query, context)
+    if settings.ols_provider:
+        request_payload["provider"] = settings.ols_provider
+    if settings.ols_model:
+        request_payload["model"] = settings.ols_model
+    if settings.ols_system_prompt:
+        request_payload["system_prompt"] = settings.ols_system_prompt
     headers = build_lightspeed_headers(settings)
     active_transport = transport or default_lightspeed_transport
     response_payload = active_transport(
@@ -185,13 +270,15 @@ def query_lightspeed(
     if not answer:
         answer = "OpenShift Lightspeed returned an empty response."
     conversation_id = _conversation_id_from_response(response_payload)
+    citations = build_lightspeed_citations(response_payload)
     return AnswerResult(
         query=normalized_query,
         mode="runtime",
         answer=answer,
         rewritten_query=normalized_query,
         response_kind="lightspeed",
-        citations=[],
+        citations=citations,
+        cited_indices=[citation.index for citation in citations],
         warnings=[] if answer else ["lightspeed returned an empty response"],
         retrieval_trace={
             "provider": "lightspeed",
@@ -199,10 +286,12 @@ def query_lightspeed(
             "endpoint": endpoint,
             "conversation_id": conversation_id,
             "request_context_keys": sorted(request_payload.keys()),
+            "referenced_documents": len(citations),
         },
         pipeline_trace={
             "provider": "lightspeed",
             "status": "answered",
+            "referenced_documents": _lightspeed_referenced_documents(response_payload),
             "timings_ms": {
                 "lightspeed_round_trip": round((time.perf_counter() - started_at) * 1000, 1),
             },
@@ -215,6 +304,7 @@ __all__ = [
     "LightspeedTransport",
     "build_lightspeed_headers",
     "build_lightspeed_payload",
+    "build_lightspeed_citations",
     "build_pbs_rag_context",
     "is_private_pbs_citation",
     "default_lightspeed_transport",
