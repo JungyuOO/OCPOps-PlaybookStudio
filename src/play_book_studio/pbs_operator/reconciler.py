@@ -244,6 +244,7 @@ def _terminal_broker_cluster_role() -> dict[str, Any]:
         "kind": "ClusterRole",
         "metadata": {"name": "pbs-terminal-broker", "labels": _labels("terminal-broker")},
         "rules": [
+            {"apiGroups": ["*"], "resources": ["*"], "verbs": ["get", "list", "watch"]},
             {"apiGroups": [""], "resources": ["namespaces"], "verbs": ["create", "get", "list", "patch", "delete"]},
             {
                 "apiGroups": [""],
