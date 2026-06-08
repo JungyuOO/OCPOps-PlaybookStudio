@@ -33,12 +33,13 @@ def test_build_lightspeed_payload_includes_pbs_context_and_attachments() -> None
         ),
     )
 
-    assert payload["query"] == "왜 pod가 Pending이야?"
+    assert payload["query"].startswith("왜 pod가 Pending이야?")
+    assert "PBS supplemental context follows" in payload["query"]
+    assert "customer:koscom" in payload["query"]
+    assert "kind: Pod" in payload["query"]
     assert payload["conversation_id"] == "conv-1"
-    assert payload["attachments"][0]["content_type"] == "application/yaml"
-    assert payload["pbs_context"]["library_scope"] == "customer:koscom"
-    assert payload["pbs_context"]["cluster_context"] == {"namespace": "demo"}
-    assert payload["pbs_context"]["recent_events"] == [{"event_type": "apply", "status": "failed"}]
+    assert "attachments" not in payload
+    assert "pbs_context" not in payload
 
 
 def test_build_pbs_rag_context_keeps_only_private_uploaded_context() -> None:

@@ -31,13 +31,12 @@ def lightspeed_enabled(settings: Settings) -> bool:
 
 
 def build_lightspeed_payload(query: str, context: LightspeedChatContext | None = None) -> dict[str, Any]:
-    payload: dict[str, Any] = {"query": str(query or "").strip()}
+    normalized_query = str(query or "").strip()
+    payload: dict[str, Any] = {"query": normalized_query}
     if context is None:
         return payload
     if context.conversation_id:
         payload["conversation_id"] = context.conversation_id
-    if context.attachments:
-        payload["attachments"] = list(context.attachments)
     pbs_context: dict[str, Any] = {}
     if context.library_scope:
         pbs_context["library_scope"] = context.library_scope
@@ -45,11 +44,24 @@ def build_lightspeed_payload(query: str, context: LightspeedChatContext | None =
         pbs_context["cluster_context"] = dict(context.cluster_context)
     if context.recent_events:
         pbs_context["recent_events"] = list(context.recent_events)
+    if context.attachments:
+        pbs_context["attachments"] = list(context.attachments)
     if context.pbs_rag:
         pbs_context["rag"] = dict(context.pbs_rag)
     if pbs_context:
-        payload["pbs_context"] = pbs_context
+        payload["query"] = _query_with_pbs_context(normalized_query, pbs_context)
     return payload
+
+
+def _query_with_pbs_context(query: str, pbs_context: dict[str, Any]) -> str:
+    context_json = json.dumps(pbs_context, ensure_ascii=False, sort_keys=True)
+    return (
+        f"{query}\n\n"
+        "PBS supplemental context follows. Use it only as customer/private environment evidence; "
+        "prefer OpenShift Lightspeed built-in knowledge for official OpenShift guidance. "
+        "If the supplemental context conflicts with official OpenShift guidance, explain the conflict.\n"
+        f"```json\n{context_json}\n```"
+    )
 
 
 def is_private_pbs_citation(citation: Citation) -> bool:
