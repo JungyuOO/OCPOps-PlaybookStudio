@@ -114,6 +114,24 @@ def test_build_lightspeed_citations_maps_referenced_documents() -> None:
     assert citations[0].section == "Viewing pods"
 
 
+def test_build_lightspeed_citations_maps_ols_doc_url_shape() -> None:
+    citations = build_lightspeed_citations(
+        {
+            "referenced_documents": [
+                {
+                    "doc_title": "Pod [v1]",
+                    "doc_url": "https://docs.openshift.com/container-platform/4.20/rest_api/workloads_apis/pod-v1.html",
+                }
+            ]
+        }
+    )
+
+    assert len(citations) == 1
+    assert citations[0].section == "Pod [v1]"
+    assert citations[0].source_url == "https://docs.openshift.com/container-platform/4.20/rest_api/workloads_apis/pod-v1.html"
+    assert citations[0].viewer_path == "https://docs.openshift.com/container-platform/4.20/rest_api/workloads_apis/pod-v1.html"
+
+
 def test_query_lightspeed_returns_configuration_error_without_endpoint(tmp_path: Path) -> None:
     result = query_lightspeed(Settings(root_dir=tmp_path, chat_provider="lightspeed"), "hello")
 

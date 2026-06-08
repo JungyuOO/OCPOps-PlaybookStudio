@@ -176,7 +176,7 @@ def _lightspeed_referenced_documents(payload: dict[str, Any]) -> list[dict[str, 
 def _lightspeed_document_citation(doc: dict[str, Any], *, index: int) -> Citation:
     title = _first_string(doc, ("title", "name", "document_title", "doc_title")) or "OpenShift Lightspeed source"
     section = _first_string(doc, ("section", "heading", "chunk_title", "source_title")) or title
-    url = _first_string(doc, ("url", "source_url", "uri", "href", "link"))
+    url = _first_string(doc, ("url", "source_url", "doc_url", "uri", "href", "link"))
     viewer_path = _first_string(doc, ("viewer_path", "viewerPath"))
     excerpt = _first_string(doc, ("excerpt", "text", "content", "snippet", "summary")) or title
     anchor = _first_string(doc, ("anchor", "fragment"))
