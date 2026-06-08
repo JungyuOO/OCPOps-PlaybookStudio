@@ -1899,6 +1899,72 @@
   font-weight: 650;
 }
 
+.cluster-resource-navigator {
+  gap: 12px;
+}
+
+.cluster-nav-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.cluster-nav-group {
+  display: grid;
+  gap: 6px;
+}
+
+.cluster-nav-group-title {
+  color: rgba(239, 252, 255, 0.52);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cluster-nav-item {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: transparent;
+  color: rgba(239, 252, 255, 0.78);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cluster-nav-item span {
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.cluster-nav-item small {
+  color: rgba(239, 252, 255, 0.44);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.cluster-nav-item:hover,
+.cluster-nav-item.active {
+  background: rgba(0, 209, 255, 0.1);
+  color: #f2fdff;
+}
+
+.cluster-nav-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.cluster-resource-navigator--list {
+  min-height: 240px;
+}
+
+.cluster-resource-item.active {
+  border-color: rgba(0, 209, 255, 0.34);
+  background: rgba(0, 209, 255, 0.12);
+}
+
 .signals-card-filters {
   display: inline-flex;
   align-items: center;
@@ -5709,6 +5775,122 @@
 
 .terminal-session-host .xterm {
   height: 100%;
+}
+
+.resource-yaml-panel {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: #071019;
+  color: #e6f7ff;
+}
+
+.resource-yaml-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.resource-yaml-header span {
+  color: #00d1ff;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.resource-yaml-header h3 {
+  margin: 5px 0 3px;
+  color: #f2fdff;
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.resource-yaml-header p {
+  margin: 0;
+  color: rgba(230, 247, 255, 0.62);
+  font-size: 0.76rem;
+}
+
+.resource-yaml-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.resource-yaml-actions button {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(242, 253, 255, 0.86);
+  font-size: 0.74rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.resource-yaml-actions button:hover:not(:disabled) {
+  border-color: rgba(0, 209, 255, 0.32);
+  background: rgba(0, 209, 255, 0.12);
+}
+
+.resource-yaml-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.resource-yaml-actions .resource-yaml-apply-btn {
+  border-color: rgba(83, 220, 140, 0.36);
+  background: rgba(83, 220, 140, 0.14);
+  color: #d9ffe8;
+}
+
+.resource-yaml-editor {
+  flex: 1;
+  min-height: 360px;
+  width: 100%;
+  resize: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 14px;
+  background: #02070d;
+  color: #f1fbff;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  tab-size: 2;
+  outline: none;
+}
+
+.resource-yaml-editor:focus {
+  border-color: rgba(0, 209, 255, 0.4);
+  box-shadow: 0 0 0 1px rgba(0, 209, 255, 0.18);
+}
+
+.resource-yaml-status {
+  max-height: 160px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid rgba(83, 220, 140, 0.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(83, 220, 140, 0.08);
+  color: #d9ffe8;
+  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.74rem;
+}
+
+.resource-yaml-empty {
+  flex: 1;
+  min-height: 240px;
 }
 
 .viewer-header-icon-btn,
