@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pbs-olsconfig-patch-preview
+  labels:
+    app.kubernetes.io/name: pbs-olsconfig-preview
+    app.kubernetes.io/part-of: playbookstudio
+    pbs.ocpops.io/dry-run-only: "true"
+data:
+  olsconfig-patch-preview.yaml: |
+    apiVersion: ols.openshift.io/v1alpha1
+    kind: OLSConfig
+    metadata:
+      name: cluster
+      namespace: openshift-lightspeed
+    spec:
+      ols:
+        conversationCache:
+          type: memory
+      additionalCAConfigMapRef: ""
+      featureGates:
+        - MCPServer
+      mcpServers:
+        - name: pbs-tools
+          url: http://pbs-mcp.pbs-ocpops.svc.cluster.local:8080/mcp
+          timeout: 30
+          headers:
+            - name: kubernetes-authorization
+              valueFrom:
+                type: kubernetes

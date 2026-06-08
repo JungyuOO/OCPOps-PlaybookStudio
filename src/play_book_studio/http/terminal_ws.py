@@ -8,15 +8,9 @@ import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs
 
-from play_book_studio.cluster.workspace_models import WorkspaceHandle
-from play_book_studio.cluster.workspace_provisioner import (
-    enforce_active_workspace_limit,
-    ensure_user_workspace,
-    touch_last_active,
-)
 from play_book_studio.config.settings import Settings
 from play_book_studio.db.terminal_learning_repository import (
     TerminalLearningContext,
@@ -33,6 +27,9 @@ from play_book_studio.db.terminal_learning_repository import (
 
 from .session_owner import resolve_session_owner
 from .terminal_session import TerminalSession, TerminalSessionConfig
+
+if TYPE_CHECKING:
+    from play_book_studio.cluster.workspace_models import WorkspaceHandle
 
 
 def _json_event(event: dict[str, Any]) -> str:
@@ -60,7 +57,7 @@ def build_terminal_session_config(settings: Settings, root_dir: Path) -> Termina
 def build_workspace_terminal_session_config(
     settings: Settings,
     root_dir: Path,
-    workspace: WorkspaceHandle,
+    workspace: "WorkspaceHandle",
 ) -> TerminalSessionConfig:
     return TerminalSessionConfig(
         shell="/app/scripts/sandbox-exec-entrypoint.sh",
@@ -73,6 +70,10 @@ def build_workspace_terminal_session_config(
             "PBS_SANDBOX_SHELL": settings.terminal_sandbox_shell,
         },
     )
+
+
+def terminal_workspace_auto_create_enabled(settings: Settings) -> bool:
+    return bool(settings.terminal_user_workspace_enabled and settings.pbs_auto_create_namespace)
 
 
 def _context_from_message(message: dict[str, Any]) -> TerminalLearningContext:
@@ -458,6 +459,8 @@ async def _handle_terminal_connection(
             return
         last_workspace_touch = current
         try:
+            from play_book_studio.cluster.workspace_provisioner import touch_last_active
+
             await asyncio.to_thread(touch_last_active, workspace_owner_hash)
         except Exception as exc:  # noqa: BLE001
             print(f"[server] workspace activity touch failed for {workspace_owner_hash[:8]}: {exc}")
@@ -525,8 +528,24 @@ def start_terminal_websocket_server(*, settings: Settings, root_dir: Path) -> th
             session_config = config
             workspace: WorkspaceHandle | None = None
             owner_hash = ""
-            if settings.terminal_user_workspace_enabled:
+            if settings.terminal_user_workspace_enabled and not terminal_workspace_auto_create_enabled(settings):
+                await websocket.send(
+                    _json_event(
+                        {
+                            "type": "bootstrap_stage",
+                            "stage": "namespace_auto_create_disabled",
+                            "message": "User workspace namespace auto-create is disabled.",
+                            "namespace_mode": settings.pbs_namespace_mode,
+                        }
+                    )
+                )
+            if terminal_workspace_auto_create_enabled(settings):
                 try:
+                    from play_book_studio.cluster.workspace_provisioner import (
+                        enforce_active_workspace_limit,
+                        ensure_user_workspace,
+                    )
+
                     await websocket.send(
                         _json_event(
                             {
@@ -616,4 +635,5 @@ __all__ = [
     "build_terminal_session_config",
     "build_workspace_terminal_session_config",
     "start_terminal_websocket_server",
+    "terminal_workspace_auto_create_enabled",
 ]

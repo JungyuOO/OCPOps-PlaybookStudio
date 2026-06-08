@@ -127,6 +127,22 @@ export default function TerminalSessionPanel({
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
+    const scrollTerminalToBottom = (): void => {
+      try {
+        terminal.scrollToBottom();
+      } catch {
+        // xterm can reject scroll calls while the viewport is being mounted.
+      }
+      window.requestAnimationFrame(() => {
+        try {
+          terminal.scrollToBottom();
+        } catch {
+          // Ignore transient layout races during panel resize/reconnect.
+        }
+      });
+    };
+    scrollTerminalToBottom();
+
     const socket = new WebSocket(wsUrl);
     socketRef.current = socket;
 
@@ -165,6 +181,7 @@ export default function TerminalSessionPanel({
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'input', data }));
       }
+      scrollTerminalToBottom();
     });
 
     const sendTerminalInput = (data: string): void => {
@@ -174,6 +191,7 @@ export default function TerminalSessionPanel({
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'input', data }));
       }
+      scrollTerminalToBottom();
     };
 
     const appendCommandBuffer = (data: string): void => {
@@ -265,11 +283,13 @@ export default function TerminalSessionPanel({
         const chunk = String(event.data);
         terminal.write(chunk);
         onOutputChunk?.(chunk);
+        scrollTerminalToBottom();
         return;
       }
       if (payload.type === 'bootstrap_stage') {
         const message = payload.message || payload.stage || 'Preparing terminal session.';
         terminal.writeln(message);
+        scrollTerminalToBottom();
         return;
       }
       if (payload.type === 'ready') {
@@ -287,12 +307,14 @@ export default function TerminalSessionPanel({
         }
         setState('connected');
         terminal.writeln(`Connected: ${payload.shell ?? 'shell'}`);
+        scrollTerminalToBottom();
         return;
       }
       if (payload.type === 'output') {
         const chunk = payload.data ?? '';
         terminal.write(chunk);
         onOutputChunk?.(chunk);
+        scrollTerminalToBottom();
         return;
       }
       if (payload.type === 'command_check_result') {
@@ -304,12 +326,14 @@ export default function TerminalSessionPanel({
         terminal.writeln('');
         terminal.writeln(`Session exited (${payload.exit_code ?? 0}).`);
         setState('closed');
+        scrollTerminalToBottom();
         return;
       }
       if (payload.type === 'error') {
         terminal.writeln('');
         terminal.writeln(payload.data ?? 'Terminal session error.');
         setState('error');
+        scrollTerminalToBottom();
       }
     });
 
@@ -321,6 +345,7 @@ export default function TerminalSessionPanel({
       terminal.writeln('');
       terminal.writeln(`Unable to connect to ${wsUrl}`);
       setState('error');
+      scrollTerminalToBottom();
     });
 
     return () => {

@@ -128,6 +128,7 @@ class Settings(SettingsPathMixin):
     openshift_lightspeed_system_prompt: str = ""
     openshift_lightspeed_timeout_seconds: float = 60.0
     openshift_lightspeed_verify_tls: bool = True
+    openshift_lightspeed_ca_bundle_path: str = ""
     question_candidate_llm_client: Any | None = None
     reranker_enabled: bool = False
     reranker_base_url: str = ""
@@ -164,6 +165,8 @@ class Settings(SettingsPathMixin):
     terminal_max_output_bytes: int = 1048576
     terminal_user_workspace_enabled: bool = False
     terminal_sandbox_shell: str = "/bin/bash"
+    pbs_auto_create_namespace: bool = False
+    pbs_namespace_mode: str = "disabled"
     pbs_max_active_workspaces: int = 0
     scm_github_client_id: str = ""
     scm_github_client_secret: str = ""
@@ -358,29 +361,48 @@ def load_settings(root_dir: str | Path) -> Settings:
         llm_model=effective_env.get("LLM_MODEL", "").strip(),
         llm_temperature=float(effective_env.get("LLM_TEMPERATURE", "0.2")),
         llm_max_tokens=int(effective_env.get("LLM_MAX_TOKENS", "1100")),
-        openshift_lightspeed_base_url=_clean_optional_env_value(effective_env.get(
-            "OPENSHIFT_LIGHTSPEED_BASE_URL",
-            "",
-        )).rstrip("/"),
+        openshift_lightspeed_base_url=_clean_optional_env_value(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_BASE_URL")
+            or effective_env.get("OLS_BASE_URL")
+            or ""
+        ).rstrip("/"),
         openshift_lightspeed_api_token=_clean_optional_env_value(
-            effective_env.get("OPENSHIFT_LIGHTSPEED_API_TOKEN", "")
+            effective_env.get("OPENSHIFT_LIGHTSPEED_API_TOKEN")
+            or effective_env.get("OLS_AUTH_TOKEN")
+            or ""
         ),
         openshift_lightspeed_provider=_clean_optional_env_value(
-            effective_env.get("OPENSHIFT_LIGHTSPEED_PROVIDER", "")
+            effective_env.get("OPENSHIFT_LIGHTSPEED_PROVIDER")
+            or effective_env.get("OLS_PROVIDER")
+            or ""
         ),
         openshift_lightspeed_model=_clean_optional_env_value(
-            effective_env.get("OPENSHIFT_LIGHTSPEED_MODEL", "")
+            effective_env.get("OPENSHIFT_LIGHTSPEED_MODEL")
+            or effective_env.get("OLS_MODEL")
+            or ""
         ),
-        openshift_lightspeed_system_prompt=_clean_optional_env_value(effective_env.get(
-            "OPENSHIFT_LIGHTSPEED_SYSTEM_PROMPT",
-            "",
-        )),
+        openshift_lightspeed_system_prompt=_clean_optional_env_value(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_SYSTEM_PROMPT")
+            or effective_env.get("OLS_SYSTEM_PROMPT")
+            or ""
+        ),
         openshift_lightspeed_timeout_seconds=float(
-            effective_env.get("OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS", "60")
+            effective_env.get("OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS")
+            or effective_env.get("OLS_TIMEOUT_SECONDS")
+            or "60"
         ),
         openshift_lightspeed_verify_tls=not (
-            effective_env.get("OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY", "false").lower()
+            (
+                effective_env.get("OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY")
+                or effective_env.get("OLS_INSECURE_SKIP_TLS_VERIFY")
+                or "false"
+            ).lower()
             in {"1", "true", "yes", "on"}
+        ),
+        openshift_lightspeed_ca_bundle_path=_clean_optional_env_value(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_CA_BUNDLE_PATH")
+            or effective_env.get("OLS_CA_BUNDLE_PATH")
+            or ""
         ),
         reranker_enabled=effective_env.get("RERANKER_ENABLED", "false").lower()
         in {"1", "true", "yes", "on"},
@@ -432,6 +454,9 @@ def load_settings(root_dir: str | Path) -> Settings:
         terminal_user_workspace_enabled=effective_env.get("TERMINAL_USER_WORKSPACE_ENABLED", "false").lower()
         in {"1", "true", "yes", "on"},
         terminal_sandbox_shell=effective_env.get("TERMINAL_SANDBOX_SHELL", "/bin/bash").strip() or "/bin/bash",
+        pbs_auto_create_namespace=effective_env.get("PBS_AUTO_CREATE_NAMESPACE", "false").lower()
+        in {"1", "true", "yes", "on"},
+        pbs_namespace_mode=effective_env.get("PBS_NAMESPACE_MODE", "disabled").strip().lower() or "disabled",
         pbs_max_active_workspaces=int(effective_env.get("PBS_MAX_ACTIVE_WORKSPACES", "0") or "0"),
         scm_github_client_id=effective_env.get("SCM_GITHUB_CLIENT_ID", "").strip(),
         scm_github_client_secret=effective_env.get("SCM_GITHUB_CLIENT_SECRET", "").strip(),

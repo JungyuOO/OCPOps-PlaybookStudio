@@ -135,7 +135,9 @@ class OpenShiftLightspeedClient:
         self.model = settings.openshift_lightspeed_model
         self.system_prompt = settings.openshift_lightspeed_system_prompt
         self.timeout_seconds = settings.openshift_lightspeed_timeout_seconds
-        self.verify_tls = settings.openshift_lightspeed_verify_tls
+        self.verify_tls: bool | str = settings.openshift_lightspeed_verify_tls
+        if settings.openshift_lightspeed_verify_tls and settings.openshift_lightspeed_ca_bundle_path:
+            self.verify_tls = settings.openshift_lightspeed_ca_bundle_path
 
     @property
     def is_configured(self) -> bool:

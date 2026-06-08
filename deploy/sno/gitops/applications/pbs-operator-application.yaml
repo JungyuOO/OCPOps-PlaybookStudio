@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pbs-v030-operator-config
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: playbookstudio
+    pbs.ocpops.io/gitops-stage: phase2-preview
+    pbs.ocpops.io/requires-approval: "true"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/JungyuOO/OCPOps-PlaybookStudio.git
+    targetRevision: v3.0.0/lightspeed
+    path: deploy/sno/pbs-operator/config
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pbs-ocpops
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false
+      - RespectIgnoreDifferences=true
