@@ -24,6 +24,7 @@ class Citation:
     chunk_type: str = "reference"
     semantic_role: str = "unknown"
     source_collection: str = "core"
+    source_scope: str = ""
     block_kinds: tuple[str, ...] = field(default_factory=tuple)
     cli_commands: tuple[str, ...] = field(default_factory=tuple)
     error_strings: tuple[str, ...] = field(default_factory=tuple)

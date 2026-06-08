@@ -23,6 +23,7 @@ type InlineToken =
 type AnswerBlock =
   | { type: 'paragraph'; parts: InlineToken[] }
   | { type: 'heading'; level: number; parts: InlineToken[] }
+  | { type: 'table'; header: InlineToken[][]; rows: InlineToken[][][] }
   | { type: 'unordered-list'; items: InlineToken[][] }
   | { type: 'step'; number: number; paragraphs: InlineToken[][]; codeBlocks: { code: string; language: string }[] };
 
@@ -235,6 +236,24 @@ function parseInlineTokens(text: string, citationsByIndex: Map<number, ChatCitat
   return tokens;
 }
 
+function isMarkdownTableLine(line: string): boolean {
+  const stripped = String(line || '').trim();
+  return stripped.startsWith('|') && stripped.endsWith('|') && stripped.split('|').length >= 3;
+}
+
+function isMarkdownTableSeparator(line: string): boolean {
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(String(line || ''));
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  return String(line || '')
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim().replace(/\\\|/g, '|'));
+}
+
 function parseAnswerBlocks(text: string, citations: ChatCitation[]): AnswerBlock[] {
   const normalized = normalizeAssistantAnswer(text).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const citationsByIndex = buildCitationMap(citations);
@@ -248,6 +267,7 @@ function parseAnswerBlocks(text: string, citations: ChatCitation[]): AnswerBlock
   let inCode = false;
   let codeLanguage = '';
   let codeLines: string[] = [];
+  let skipLineUntil = -1;
 
   const flushParagraph = (): void => {
     if (!paragraphBuffer.length) {
@@ -308,7 +328,10 @@ function parseAnswerBlocks(text: string, citations: ChatCitation[]): AnswerBlock
     codeLanguage = '';
   };
 
-  lines.forEach((line) => {
+  lines.forEach((line, lineIndex) => {
+    if (lineIndex <= skipLineUntil) {
+      return;
+    }
     const fence = line.match(/^```([\w.+-]*)\s*$/);
     if (fence) {
       if (inCode) {
@@ -333,6 +356,27 @@ function parseAnswerBlocks(text: string, citations: ChatCitation[]): AnswerBlock
       flushParagraph();
       flushList();
       flushStepParagraph();
+      return;
+    }
+
+    if (isMarkdownTableLine(trimmed) && isMarkdownTableSeparator(lines[lineIndex + 1] ?? '')) {
+      flushParagraph();
+      flushList();
+      flushStep();
+      const tableRows: string[][] = [splitMarkdownTableRow(trimmed)];
+      let cursor = lineIndex + 2;
+      while (cursor < lines.length && isMarkdownTableLine(lines[cursor] ?? '')) {
+        tableRows.push(splitMarkdownTableRow(lines[cursor] ?? ''));
+        cursor += 1;
+      }
+      skipLineUntil = cursor - 1;
+      if (tableRows.length >= 2) {
+        blocks.push({
+          type: 'table',
+          header: tableRows[0].map((cell) => parseInlineTokens(cell, citationsByIndex)),
+          rows: tableRows.slice(1).map((row) => row.map((cell) => parseInlineTokens(cell, citationsByIndex))),
+        });
+      }
       return;
     }
 
@@ -391,6 +435,50 @@ function parseAnswerBlocks(text: string, citations: ChatCitation[]): AnswerBlock
   }
 
   return blocks;
+}
+
+function AnswerTable({
+  header,
+  rows,
+  onCitationClick,
+}: {
+  header: InlineToken[][];
+  rows: InlineToken[][][];
+  onCitationClick: (citation: ChatCitation) => void;
+}) {
+  const columnCount = Math.max(header.length, ...rows.map((row) => row.length), 0);
+  if (columnCount === 0) {
+    return null;
+  }
+  const columns = Array.from({ length: columnCount });
+  return (
+    <div className="assistant-table-wrap">
+      <table className="assistant-table">
+        {header.length > 0 && (
+          <thead>
+            <tr>
+              {columns.map((_, columnIndex) => (
+                <th key={`head-${columnIndex}`}>
+                  <InlineParts parts={header[columnIndex] ?? []} onCitationClick={onCitationClick} />
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={`row-${rowIndex}`}>
+              {columns.map((_, columnIndex) => (
+                <td key={`cell-${rowIndex}-${columnIndex}`}>
+                  <InlineParts parts={row[columnIndex] ?? []} onCitationClick={onCitationClick} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function InlineParts({
@@ -720,6 +808,16 @@ export function AssistantAnswer({
                   </li>
                 ))}
               </ul>
+            );
+          }
+          if (block.type === 'table') {
+            return (
+              <AnswerTable
+                key={`table-${index}`}
+                header={block.header}
+                rows={block.rows}
+                onCitationClick={onCitationClick}
+              />
             );
           }
           if (block.type === 'step') {

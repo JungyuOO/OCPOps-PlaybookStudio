@@ -48,6 +48,13 @@ _FILE_IDENTIFIER_RE = re.compile(
 )
 _DEMO_IDENTIFIER_RE = re.compile(r"(?i)\bdemo-[\w.-]+\b")
 _CUSTOMER_TEST_ID_RE = re.compile(r"(?i)\b(?:TEST|KMSC|COCP|RTER|RECR)-[A-Z0-9_-]+\b")
+_CUSTOMER_DOCUMENT_SIGNAL_RE = re.compile(
+    r"(완료\s*보고서?|완료본|고객\s*(?:데이터|자료)|PPTX?|"
+    r"아키텍[처쳐]\s*설계서|설계서\s*기준|"
+    r"테스트\s*(?:계획서|결과서)|단위테스트\s*(?:계획|결과)|"
+    r"통합테스트\s*(?:계획|결과)|성능\s*테스트\s*(?:계획|결과))",
+    re.IGNORECASE,
+)
 
 
 def _is_customer_pack_explicit_query(query: str) -> bool:
@@ -59,6 +66,10 @@ def _is_customer_pack_explicit_query(query: str) -> bool:
             "업로드한 문서",
             "고객 문서",
             "고객문서",
+            "고객 데이터",
+            "고객데이터",
+            "고객 자료",
+            "고객자료",
             "우리 문서",
             "our document",
             "customer pack",
@@ -157,6 +168,7 @@ def _query_customer_scope_signal(query: str) -> bool:
     lowered = (query or "").casefold()
     return bool(
         _CUSTOMER_TEST_ID_RE.search(query or "")
+        or _CUSTOMER_DOCUMENT_SIGNAL_RE.search(query or "")
         or any(
             token in lowered
             for token in (
@@ -164,6 +176,10 @@ def _query_customer_scope_signal(query: str) -> bool:
                 "komsco",
                 "고객문서",
                 "고객 문서",
+                "고객데이터",
+                "고객 데이터",
+                "고객자료",
+                "고객 자료",
                 "단위 테스트",
                 "단위테스트",
                 "통합 테스트",
@@ -193,8 +209,8 @@ def _context_with_query_source_scope(query: str, context: SessionContext) -> Ses
     ):
         return context
     scoped = copy.copy(context)
-    scoped.preferred_source_scope = "study_docs"
-    scoped.enabled_source_scopes = [SOURCE_GROUP_CUSTOMER_DOCS]
+    scoped.preferred_source_scope = None
+    scoped.enabled_source_scopes = [SOURCE_GROUP_OFFICIAL_DOCS, SOURCE_GROUP_CUSTOMER_DOCS]
     return scoped
 
 
@@ -220,6 +236,16 @@ def _customer_signal_score(query: str, hit: RetrievalHit) -> int:
         token in haystack for token in ("unit_test", "단위 테스트", "단위테스트", "test-un-")
     ):
         score += 4
+    if any(token in lowered_query for token in ("완료보고", "완료 보고", "완료본", "completion report")) and any(
+        token in haystack for token in ("완료보고", "완료 보고", "완료본", "completion")
+    ):
+        score += 5
+    if any(token in lowered_query for token in ("설계서", "architecture design", "cicd")) and any(
+        token in haystack for token in ("설계서", "architecture", "cicd", "ci/cd")
+    ):
+        score += 4
+    if any(token in lowered_query for token in ("고객 데이터", "고객데이터", "고객 자료", "고객자료", "ppt", "pptx")):
+        score += 1
     for match in _CUSTOMER_TEST_ID_RE.finditer(query or ""):
         if match.group(0).casefold() in haystack:
             score += 5
@@ -545,6 +571,8 @@ def _prefer_official_hits_for_product_intro(
     context: SessionContext,
 ) -> list[RetrievalHit]:
     if not hits or not is_openshift_product_intro_query(query):
+        return hits
+    if _query_customer_scope_signal(query):
         return hits
     enabled = enabled_source_scope_set(context)
     if enabled and SOURCE_GROUP_OFFICIAL_DOCS not in enabled:

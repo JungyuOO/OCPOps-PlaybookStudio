@@ -344,8 +344,17 @@ def test_openshift_operation_question_detector() -> None:
     assert is_openshift_operation_question("다른 사용자 기준으로 권한을 테스트하려면 oc auth can-i에 뭘 붙여?")
     assert is_openshift_operation_question("루트와 서비스 연결 상태를 확인하고 싶어")
     assert is_openshift_operation_question("클러스터 이벤트중 워닝만 필터링할수잇어?")
+    assert is_openshift_operation_question("내 GIT 저장소를 파이프라인에 연결 기준으로 주의사항을 정리해줘")
+    assert is_openshift_operation_question("git 저장소를 파이프라인에 연결하는 절차에서 흔한 실패지점은 뭐야?")
+    assert is_openshift_operation_question("Pipelines as Code webhook 호출 실패 지점은 뭐야?")
+    assert is_openshift_operation_question("Tekton PipelineRun이 생성되지 않으면 어디부터 확인해?")
+    assert is_openshift_operation_question("Ingress 컨트롤러에 단일 NodePort 서비스 추가 내용을 초보자용 3단계로 다시 정리해줘")
+    assert is_openshift_operation_question(
+        "Operator 설치 후 CSV가 정상 전환되지 않을 때 Subscription, InstallPlan, ClusterServiceVersion 상태를 어떤 순서로 확인하나요?"
+    )
     assert not is_openshift_operation_question("안녕 오늘 날씨 어때?")
     assert not is_openshift_operation_question("서비스 기획 회의 안건 정리해줘")
+    assert not is_openshift_operation_question("내 Git 저장소 이름을 바꾸는 방법 알려줘")
 
 
 def test_lightspeed_smoke_reports_disabled_when_endpoint_missing(

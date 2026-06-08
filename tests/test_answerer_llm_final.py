@@ -399,6 +399,63 @@ def test_lightspeed_success_records_customer_upload_context_bridge(tmp_path: Pat
     assert "lightspeed_answer_passthrough" in steps
 
 
+def test_pipeline_user_upload_follow_up_calls_lightspeed(tmp_path: Path) -> None:
+    llm = FakeLlmClient()
+    lightspeed = FakeLightspeedClient()
+    answerer = ChatAnswerer(
+        Settings(root_dir=tmp_path),
+        retriever=CustomerUploadRetriever(),  # type: ignore[arg-type]
+        llm_client=llm,  # type: ignore[arg-type]
+        lightspeed_client=lightspeed,  # type: ignore[arg-type]
+    )
+
+    query = "내 GIT 저장소를 파이프라인에 연결 기준으로 주의사항을 정리해줘"
+    result = answerer.answer(
+        query,
+        context=SessionContext(
+            active_document_id="11111111-1111-1111-1111-111111111111",
+            enabled_source_scopes=["user_upload"],
+        ),
+    )
+
+    assert lightspeed.calls == [query]
+    assert not llm.calls
+    assert result.pipeline_trace["answer_source"] == "lightspeed_with_pbs_rag"
+    assert result.pipeline_trace["external_answer"]["status"] == "used"
+    assert result.pipeline_trace["external_answer"]["context_bridge"]["customer_context_applied"] is True
+    assert result.citations[0].source_scope == "user_upload"
+
+
+def test_contextual_pipeline_troubleshooting_follow_up_calls_lightspeed(tmp_path: Path) -> None:
+    llm = FakeLlmClient()
+    lightspeed = FakeLightspeedClient()
+    answerer = ChatAnswerer(
+        Settings(root_dir=tmp_path),
+        retriever=CustomerUploadRetriever(),  # type: ignore[arg-type]
+        llm_client=llm,  # type: ignore[arg-type]
+        lightspeed_client=lightspeed,  # type: ignore[arg-type]
+    )
+
+    result = answerer.answer(
+        "흔한 실패지점은 뭐야?",
+        context=SessionContext(
+            current_topic="CI 순서 > 내 GIT저장소를 파이프라인에 연결",
+            open_entities=["파이프라인", "Git 저장소", "Webhook"],
+            active_document_id="11111111-1111-1111-1111-111111111111",
+            enabled_source_scopes=["user_upload"],
+        ),
+    )
+
+    assert lightspeed.calls == ["흔한 실패지점은 뭐야?"]
+    assert not llm.calls
+    assert result.pipeline_trace["answer_source"] == "lightspeed_with_pbs_rag"
+    external_answer = result.pipeline_trace["external_answer"]
+    assert external_answer["status"] == "used"
+    assert external_answer["routing_reason"] == "contextual_openshift_follow_up"
+    assert external_answer["context_bridge"]["customer_context_applied"] is True
+    assert result.citations[0].source_scope == "user_upload"
+
+
 def test_lightspeed_disabled_note_survives_grounding_blocked_path(tmp_path: Path) -> None:
     answerer = ChatAnswerer(
         Settings(root_dir=tmp_path),

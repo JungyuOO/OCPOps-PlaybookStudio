@@ -320,3 +320,47 @@ def test_assemble_context_uses_db_companion_when_top_hits_only_have_upload_title
 
     assert [citation.chunk_id for citation in bundle.citations] == ["chunk-db-body"]
     assert "PipelineRun" in bundle.citations[0].excerpt
+
+
+def test_assemble_context_seeds_customer_data_for_completion_report_query() -> None:
+    customer_hit = RetrievalHit(
+        chunk_id="chunk-customer-completion",
+        book_slug="kmsc-operations",
+        chapter="완료보고",
+        section="목표 기준 결과 : OCP 가용성 및 업무 테스트 정상 트랜잭션(200 User) 기준",
+        anchor="completion-risk",
+        source_url="uploads/completion.pptx",
+        viewer_path="/uploads/documents/customer-doc/index.html#completion-risk",
+        text="완료보고 완료본에는 WBS 진척률, 업무 테스트, 운영 준비 리스크, 서버/스토리지/Worker 준비 현황이 포함된다.",
+        source="hybrid",
+        raw_score=0.03,
+        fused_score=0.237,
+        source_scope="study_docs",
+        source_collection="core",
+        source_lane="study_docs",
+    )
+    official_hit = RetrievalHit(
+        chunk_id="chunk-official-overview",
+        book_slug="overview",
+        chapter="개요",
+        section="OpenShift Container Platform 소개",
+        anchor="overview",
+        source_url="docs/overview",
+        viewer_path="/docs/ocp/4.20/ko/overview/index.html#overview",
+        text="OpenShift Container Platform은 컨테이너 애플리케이션 플랫폼이다.",
+        source="hybrid",
+        raw_score=0.04,
+        fused_score=0.255,
+        source_scope="official_docs",
+        source_collection="core",
+    )
+
+    bundle = assemble_context(
+        [customer_hit, official_hit],
+        query="완료보고서 기준으로 현재 OCP 운영 준비 리스크를 공식 운영 체크포인트와 같이 정리해줘",
+        max_chunks=4,
+    )
+
+    assert bundle.citations[0].chunk_id == "chunk-customer-completion"
+    assert bundle.citations[0].source_scope == "study_docs"
+    assert bundle.citations[0].viewer_path.startswith("/uploads/documents/customer-doc/")

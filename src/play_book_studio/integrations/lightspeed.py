@@ -22,6 +22,8 @@ OPENSHIFT_OPERATION_RE = re.compile(
     r"namespace|네임스페이스|project|프로젝트|"
     r"deployment|디플로이먼트|배포\s*(리소스|상태|전략|오류|장애)|statefulset|daemonset|"
     r"operator|오퍼레이터|mco|machine\s*config|"
+    r"pipeline|파이프라인|pipelines\s*as\s*code|pipelines-as-code|"
+    r"\bpac\b|tekton|pipelinerun|taskrun|webhook|웹\s*훅|웹훅|"
     r"event|이벤트|log|로그|pending|"
     r"crashloopbackoff|notready|스케줄|스케줄링|"
     r"quota|쿼터|limitrange|limit\s*range|리밋|"

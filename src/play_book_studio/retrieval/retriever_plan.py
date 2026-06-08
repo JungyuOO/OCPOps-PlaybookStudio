@@ -2,9 +2,11 @@
 
 import time
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from .access_scope import (
+    SOURCE_GROUP_CUSTOMER_DOCS,
     SOURCE_GROUP_OFFICIAL_DOCS,
     active_document_scope_selected,
     enabled_source_scope_set,
@@ -25,6 +27,12 @@ _OFFICIAL_ONLY_METADATA_KEYS = {
     "source.corpus_scope",
     "chunk.chunk_type",
 }
+_CUSTOMER_DOCUMENT_QUERY_RE = re.compile(
+    r"(완료\s*보고서?|완료본|고객\s*(?:데이터|자료|문서)|PPTX?|"
+    r"KMSC|COCP|RTER|RECR|아키텍[처쳐]\s*설계서|설계서\s*기준|"
+    r"단위\s*테스트|통합\s*테스트|성능\s*테스트|테스트\s*(?:계획서|결과서))",
+    re.IGNORECASE,
+)
 
 
 @dataclass(slots=True)
@@ -156,6 +164,10 @@ def _uses_deterministic_signal_plan(query: str) -> bool:
     return _is_project_namespace_compare_query(query) or web_console_locator or image_pull_grounding
 
 
+def _has_customer_document_query_signal(query: str) -> bool:
+    return bool(_CUSTOMER_DOCUMENT_QUERY_RE.search(query or ""))
+
+
 def build_retrieval_plan(
     query: str,
     *,
@@ -184,10 +196,11 @@ def build_retrieval_plan(
     )
     product_intro_query = is_openshift_product_intro_query(query)
     enabled_scopes = enabled_source_scope_set(context)
+    customer_document_query = _has_customer_document_query_signal(query)
     has_repository_scope = bool(str(getattr(context, "active_repository_id", "") or "").strip())
     has_document_scope = active_document_scope_selected(context) or has_repository_scope
     if _uses_study_docs_scope(context):
-        retrieval_queries = _dedupe_queries((rewritten_query,), fallback=rewritten_query)
+        retrieval_queries = _dedupe_queries((rewritten_query, query), fallback=rewritten_query)
         metadata_filter: dict[str, Any] = {}
     elif has_document_scope:
         retrieval_queries = _dedupe_queries(
@@ -195,12 +208,15 @@ def build_retrieval_plan(
             fallback=rewritten_query,
         )
         metadata_filter = {}
-    elif product_intro_query:
+    elif product_intro_query and not customer_document_query:
         retrieval_queries = _dedupe_queries((rewritten_query,), fallback=rewritten_query)
         metadata_filter = signal_plan.metadata_filter
     else:
+        base_queries = (rewritten_query, *_signal_embedding_queries_for_retrieval(signal_plan))
+        if SOURCE_GROUP_CUSTOMER_DOCS in enabled_scopes and customer_document_query:
+            base_queries = (rewritten_query, query, *_signal_embedding_queries_for_retrieval(signal_plan))
         retrieval_queries = _dedupe_queries(
-            (rewritten_query, *_signal_embedding_queries_for_retrieval(signal_plan)),
+            base_queries,
             fallback=rewritten_query,
         )
         metadata_filter = _scope_compatible_metadata_filter(signal_plan.metadata_filter, context)

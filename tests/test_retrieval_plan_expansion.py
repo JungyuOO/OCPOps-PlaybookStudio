@@ -166,8 +166,9 @@ def test_study_docs_scope_keeps_user_query_and_skips_official_metadata_filter() 
         llm_client=_DriftingSignalClient(),
     )
 
-    assert plan.retrieval_queries == [plan.rewritten_query]
+    assert plan.retrieval_queries[0] == plan.rewritten_query
     assert "운영 장애 분석" in plan.retrieval_queries[0]
+    assert "운영 장애 분석" in " ".join(plan.retrieval_queries)
     assert plan.metadata_filter == {}
 
 
@@ -249,6 +250,19 @@ def test_mixed_scope_removes_official_only_metadata_filter() -> None:
     assert "source.corpus_scope" not in keys
     assert "source.citation_eligible" not in keys
     assert "chunk.chunk_type" not in keys
+
+
+def test_customer_docs_scope_preserves_raw_customer_document_query() -> None:
+    query = "완료보고서 기준으로 현재 OCP 운영 준비 리스크를 공식 운영 체크포인트와 같이 정리해줘"
+
+    plan = build_retrieval_plan(
+        query,
+        context=SessionContext(enabled_source_scopes=["official_docs", "customer_docs"]),
+        candidate_k=10,
+    )
+
+    assert query in plan.retrieval_queries
+    assert plan.retrieval_queries[0] != query
 
 
 def test_generic_intro_uses_local_rewrite_when_llm_signal_drifts() -> None:

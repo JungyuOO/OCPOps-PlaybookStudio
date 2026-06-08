@@ -3,9 +3,12 @@ from __future__ import annotations
 from play_book_studio.http.session_flow import context_with_request_overrides
 from play_book_studio.retrieval.models import RetrievalHit, SessionContext
 from play_book_studio.retrieval.retriever_pipeline import (
+    _context_with_query_source_scope,
     _filter_preferred_source_scope,
+    _prefer_official_hits_for_product_intro,
     _preserve_specific_customer_candidate,
     _preserve_specific_user_upload_candidate,
+    _query_customer_scope_signal,
 )
 
 
@@ -94,6 +97,21 @@ def test_course_route_is_not_main_chat_study_docs_scope() -> None:
     )
 
     assert context.preferred_source_scope is None
+
+
+def test_customer_document_title_signal_enables_official_and_customer_scopes() -> None:
+    context = _context_with_query_source_scope(
+        "완료보고서 기준으로 현재 OCP 운영 준비 리스크를 공식 운영 체크포인트와 같이 정리해줘",
+        SessionContext(),
+    )
+
+    assert context.preferred_source_scope is None
+    assert context.enabled_source_scopes == ["official_docs", "customer_docs"]
+
+
+def test_customer_document_title_signal_detects_ppt_customer_data_terms() -> None:
+    assert _query_customer_scope_signal("고객 데이터 PPT 기준으로 CI/CD 설계서 핵심을 알려줘")
+    assert _query_customer_scope_signal("완료보고서 기준으로 운영 준비 리스크를 알려줘")
 
 
 def test_preferred_source_scope_filters_retrieval_hits_to_study_docs() -> None:
@@ -226,6 +244,60 @@ def test_customer_scope_signal_is_preserved_inside_full_scope() -> None:
     )
 
     assert hits[0].chunk_id == "customer-pv-delete"
+
+
+def test_customer_completion_report_signal_is_preserved_inside_full_scope() -> None:
+    context = SessionContext(enabled_source_scopes=["official_docs", "customer_docs"])
+    customer = _hit(
+        "customer-completion-risk",
+        "study_docs",
+        raw_score=0.03,
+        book_slug="completion",
+        chapter="완료보고",
+        section="완료보고 완료본",
+        text="완료보고 완료본 WBS 진척률 운영 준비 리스크 프로젝트 범위 Server Storage Worker",
+    )
+    official_top = _hit(
+        "official-overview",
+        "official_docs",
+        raw_score=0.2,
+        fused_score=0.2,
+        text="OpenShift Container Platform 소개 및 설치 개요",
+    )
+
+    hits = _preserve_specific_customer_candidate(
+        "완료보고서 기준으로 현재 OCP 운영 준비 리스크를 공식 운영 체크포인트와 같이 정리해줘",
+        target_hits=[official_top],
+        candidate_hits=[customer, official_top],
+        context=context,
+    )
+
+    assert hits[0].chunk_id == "customer-completion-risk"
+
+
+def test_customer_document_signal_does_not_drop_customer_hits_as_product_intro() -> None:
+    context = SessionContext(enabled_source_scopes=["official_docs", "customer_docs"])
+    official = _hit(
+        "official-overview",
+        "official_docs",
+        book_slug="overview",
+        section="OpenShift Container Platform 소개",
+    )
+    customer = _hit(
+        "customer-completion-risk",
+        "study_docs",
+        book_slug="completion",
+        section="완료보고 완료본",
+        text="완료보고 완료본 WBS 진척률 운영 준비 리스크",
+    )
+
+    hits = _prefer_official_hits_for_product_intro(
+        "완료보고서 기준으로 현재 OCP 운영 준비 리스크를 공식 운영 체크포인트와 같이 정리해줘",
+        [official, customer],
+        context,
+    )
+
+    assert [hit.chunk_id for hit in hits] == ["official-overview", "customer-completion-risk"]
 
 
 def test_customer_scope_signal_does_not_bypass_disabled_customer_scope() -> None:

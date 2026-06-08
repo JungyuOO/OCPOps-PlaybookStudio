@@ -567,6 +567,7 @@ export interface ChatCitation {
   excerpt?: string;
   source_label?: string;
   source_collection?: string;
+  source_scope?: string;
   pack_label?: string;
   source_lane?: string;
   approval_state?: string;

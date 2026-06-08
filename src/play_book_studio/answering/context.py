@@ -69,6 +69,12 @@ AUTH_CAN_I_QUERY_RE = re.compile(
     r"(can-i|권한.*(?:확인|검증)|(?:delete|삭제).*(?:pods?|pod|파드).*(?:가능|권한|할 수)|(?:pods?|pod|파드).*(?:delete|삭제).*(?:가능|권한|할 수))",
     re.IGNORECASE,
 )
+CUSTOMER_DATA_QUERY_RE = re.compile(
+    r"(완료\s*보고서?|완료본|고객\s*(?:데이터|자료|문서)|PPTX?|"
+    r"KMSC|COCP|RTER|RECR|아키텍[처쳐]\s*설계서|설계서\s*기준|"
+    r"테스트\s*(?:계획서|결과서)|단위\s*테스트|통합\s*테스트|성능\s*테스트)",
+    re.IGNORECASE,
+)
 
 
 def _normalize_excerpt(text: str) -> str:
@@ -155,6 +161,18 @@ def _is_user_upload_hit(hit: RetrievalHit) -> bool:
         or str(hit.source_collection or "").strip() in {"uploaded", "uploads"}
         or hit.viewer_path.startswith("/uploads/documents/")
     )
+
+
+def _is_customer_data_hit(hit: RetrievalHit) -> bool:
+    return (
+        str(hit.source_scope or "").strip() == "study_docs"
+        or str(hit.source_collection or "").strip() == "customer_data"
+        or str(hit.source_lane or "").strip() == "customer_data"
+    )
+
+
+def _has_customer_data_query_signal(query: str) -> bool:
+    return bool(CUSTOMER_DATA_QUERY_RE.search(query or "") or _is_customer_pack_explicit_query(query))
 
 
 def _is_thin_user_upload_hit(hit: RetrievalHit) -> bool:
@@ -1675,6 +1693,7 @@ def _select_hits(
         or has_active_customer_pack_selection(session_context)
         or bool(active_document_id or active_repository_id or owner_user_id)
     )
+    customer_data_context = _has_customer_data_query_signal(normalized)
     if not allow_uploaded_hits:
         ranked_hits = [
             hit
@@ -2473,10 +2492,14 @@ def _select_hits(
     )
     if user_upload_context and top_score > 0:
         score_cutoff = min(score_cutoff, top_score * 0.35)
+    customer_data_hits = [hit for hit in ranked_hits if _is_customer_data_hit(hit)]
+    should_seed_customer_data = bool(customer_data_hits) and customer_data_context
+    if should_seed_customer_data and top_score > 0:
+        score_cutoff = min(score_cutoff, top_score * 0.35)
     selected: list[RetrievalHit] = []
     per_book_counts: Counter[str] = Counter()
     per_book_limit = 2 if has_crash_loop_troubleshooting_intent(normalized) else 3 if is_procedure_query else 2
-    if user_upload_context:
+    if user_upload_context or should_seed_customer_data:
         per_book_limit = max(per_book_limit, min(max_chunks, 4))
     if _is_backup_only_etcd_query(normalized):
         per_book_limit = 2
@@ -2497,6 +2520,26 @@ def _select_hits(
         seed_limit = min(max_chunks, 3 if user_upload_context else 1)
         for hit in sorted(
             uploaded_hits,
+            key=lambda item: (
+                -_hit_score(item),
+                item.book_slug,
+                item.chunk_id,
+            ),
+        ):
+            if len(selected) >= seed_limit:
+                break
+            section_signature = (hit.book_slug, _section_core(hit.section))
+            if section_signature in seen_sections:
+                continue
+            selected.append(hit)
+            per_book_counts[hit.book_slug] += 1
+            seen_sections.add(section_signature)
+            allowed_books.add(hit.book_slug)
+
+    if should_seed_customer_data:
+        seed_limit = min(max_chunks - len(selected), 2)
+        for hit in sorted(
+            customer_data_hits,
             key=lambda item: (
                 -_hit_score(item),
                 item.book_slug,
@@ -2778,6 +2821,7 @@ def assemble_context(
                 chunk_type=hit.chunk_type,
                 semantic_role=hit.semantic_role,
                 source_collection=hit.source_collection,
+                source_scope=hit.source_scope,
                 block_kinds=hit.block_kinds,
                 cli_commands=citation_cli_commands,
                 error_strings=hit.error_strings,

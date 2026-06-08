@@ -70,6 +70,13 @@ from .prompt import build_messages
 from .router import route_non_rag
 
 
+OPENSHIFT_CONTEXT_FOLLOW_UP_RE = re.compile(
+    r"(실패|실패\s*지점|오류|에러|문제|장애|주의|주의사항|점검|확인|"
+    r"상태|로그|원인|트러블|trouble|fail|failure|error|check|verify)",
+    re.IGNORECASE,
+)
+
+
 def _looks_like_missing_coverage_answer(answer: str) -> bool:
     normalized = " ".join(str(answer or "").split()).lower()
     missing_patterns = (
@@ -118,6 +125,31 @@ def _retrieval_command_hints(retrieval_trace: dict) -> tuple[str, ...]:
         seen.add(key)
         deduped.append(command)
     return tuple(deduped[:3])
+
+
+def _lightspeed_context_text(context: SessionContext | None) -> str:
+    if context is None:
+        return ""
+    parts = [
+        str(getattr(context, "current_topic", "") or ""),
+        str(getattr(context, "user_goal", "") or ""),
+        str(getattr(context, "unresolved_question", "") or ""),
+        *[str(entity) for entity in (getattr(context, "open_entities", []) or [])],
+    ]
+    return " ".join(part.strip() for part in parts if part and part.strip())
+
+
+def _should_query_openshift_lightspeed(query: str, context: SessionContext | None) -> bool:
+    normalized = str(query or "").strip()
+    if is_openshift_operation_question(normalized):
+        return True
+    context_text = _lightspeed_context_text(context)
+    if not context_text or not is_openshift_operation_question(context_text):
+        return False
+    return bool(
+        has_follow_up_reference(normalized)
+        or OPENSHIFT_CONTEXT_FOLLOW_UP_RE.search(normalized)
+    )
 
 
 _CONFIDENCE_STOPWORDS = {
@@ -692,12 +724,14 @@ def _lightspeed_answer_for_chat(answer_text: str) -> str:
 def _is_customer_context_citation(citation: Citation) -> bool:
     viewer_path = str(citation.viewer_path or "").strip()
     source_collection = str(citation.source_collection or "").strip()
+    source_scope = str(getattr(citation, "source_scope", "") or "").strip()
     book_slug = str(citation.book_slug or "").strip()
     return (
         viewer_path.startswith("/uploads/documents/")
         or viewer_path.startswith("/playbooks/customer-packs/")
-        or source_collection in {"uploads", "uploaded", "customer_docs"}
-        or book_slug == "uploaded-documents"
+        or source_collection in {"uploads", "uploaded", "customer_docs", "customer_data"}
+        or source_scope in {"user_upload", "study_docs"}
+        or book_slug in {"uploaded-documents", "study_docs", "customer-data-documents"}
     )
 
 
@@ -762,14 +796,21 @@ class ChatAnswerer:
         self,
         query: str,
         *,
+        context: SessionContext | None = None,
         emit,
     ) -> tuple[OpenShiftLightspeedResult | None, dict[str, object]]:
         meta: dict[str, object] = {
             "provider": "openshift_lightspeed",
             "status": "not_applicable",
         }
-        if not is_openshift_operation_question(query):
+        direct_lightspeed_route = is_openshift_operation_question(query)
+        if not (direct_lightspeed_route or _should_query_openshift_lightspeed(query, context)):
             return None, meta
+        if not direct_lightspeed_route:
+            meta["routing_reason"] = "contextual_openshift_follow_up"
+            context_text = _lightspeed_context_text(context)
+            if context_text:
+                meta["context_topic"] = context_text[:180]
         if not getattr(self.lightspeed_client, "is_configured", False):
             meta["status"] = "disabled"
             meta["reason"] = "OPENSHIFT_LIGHTSPEED_BASE_URL not configured"
@@ -1116,6 +1157,7 @@ class ChatAnswerer:
         warnings: list[str] = []
         lightspeed_result, external_answer_meta = self._query_openshift_lightspeed(
             query,
+            context=context,
             emit=emit,
         )
         lightspeed_used = external_answer_meta.get("status") == "used"

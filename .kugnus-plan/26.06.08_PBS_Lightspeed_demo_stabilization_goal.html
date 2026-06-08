@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PBS Lightspeed 시연 안정화 작업목표</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #142033;
+      --muted: #5a687a;
+      --line: #d7e0ea;
+      --panel: #f6f9fc;
+      --accent: #007fa8;
+      --accent-soft: #e6f7fb;
+      --warn: #9a6400;
+      --warn-soft: #fff5dc;
+      --ok: #087443;
+      --ok-soft: #e9f8ef;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #ffffff;
+      font: 15px/1.65 "Segoe UI", "Noto Sans KR", Arial, sans-serif;
+    }
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 42px 28px 64px;
+    }
+    header {
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 22px;
+      margin-bottom: 28px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 32px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 34px 0 12px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+    h3 {
+      margin: 22px 0 10px;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+    p {
+      margin: 10px 0;
+    }
+    ul,
+    ol {
+      margin: 10px 0 10px 22px;
+      padding: 0;
+    }
+    li {
+      margin: 6px 0;
+    }
+    code {
+      padding: 2px 5px;
+      border-radius: 5px;
+      background: #eef3f8;
+      color: #0b5771;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.94em;
+    }
+    pre {
+      margin: 12px 0;
+      padding: 14px 16px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #101824;
+      color: #e6edf5;
+    }
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 10px;
+      border: 1px solid #b9ddea;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #075a76;
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .panel {
+      margin: 18px 0;
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    .ok {
+      border-color: #b9e2ca;
+      background: var(--ok-soft);
+    }
+    .warn {
+      border-color: #f0ce7d;
+      background: var(--warn-soft);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+      margin: 14px 0;
+    }
+    .tile {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 16px;
+      background: #fff;
+    }
+    .tile strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #0d4355;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #eef5fa;
+      color: #16384a;
+    }
+    .muted {
+      color: var(--muted);
+    }
+    @media print {
+      main {
+        max-width: none;
+        padding: 24px;
+      }
+      .panel,
+      .tile,
+      pre {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>PBS Lightspeed 시연 안정화 작업목표</h1>
+      <p class="muted">OpenShift 운영 질문에서 Lightspeed를 우선 호출하고, PBS 내부 RAG는 정확한 출처와 뷰어를 보강하는 시연 안정화 목표 문서.</p>
+      <div class="meta">
+        <span class="pill">작성일 2026-06-08</span>
+        <span class="pill">branch feat/kugnus-dev2.3</span>
+        <span class="pill">HEAD bdc7427</span>
+        <span class="pill">base f2fb312</span>
+      </div>
+    </header>
+
+    <section class="panel ok">
+      <h2>1. 목표</h2>
+      <p>이번 작업의 목표는 PBS를 고객맞춤 운영도구 완성본으로 과장하는 것이 아니라, OpenShift 운영 질문에서 Lightspeed 연동이 안정적으로 동작한다는 것을 시연 가능한 상태로 고정하는 것이다.</p>
+      <p>운영 질문이 들어오면 PBS는 OpenShift Lightspeed를 공식 답변 엔진으로 우선 호출한다. Lightspeed 응답이 성공하면 답변 본문은 Lightspeed 원문을 기준으로 보여주고, PBS 내부 RAG는 Gold Playbook, User Upload, Customer 문서 같은 보조 근거와 뷰어 링크를 붙이는 역할을 한다.</p>
+    </section>
+
+    <section>
+      <h2>2. 완료 조건</h2>
+      <div class="grid">
+        <div class="tile">
+          <strong>라우팅</strong>
+          <p>OpenShift, Operator, Pipeline, PAC, Tekton, Ingress, NodePort, <code>oc</code>, <code>kubectl</code> 류 운영 질문은 Lightspeed 호출 대상이다.</p>
+        </div>
+        <div class="tile">
+          <strong>멀티턴</strong>
+          <p>이전 문맥이 OpenShift 운영 주제이고 현재 질문이 실패 지점, 확인, 주의사항, 절차를 묻는 경우에만 후속 질문도 Lightspeed로 보낸다.</p>
+        </div>
+        <div class="tile">
+          <strong>출처</strong>
+          <p>Lightspeed 성공 시 <code>[1]</code>은 항상 <code>/external/lightspeed/{artifact_id}</code> 뷰어로 연결된다.</p>
+        </div>
+        <div class="tile">
+          <strong>Fallback</strong>
+          <p>미설정, timeout, error, empty 응답은 <code>pipeline_trace.external_answer.status</code>에 남긴다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. 현재 운영 플로우</h2>
+      <ol>
+        <li>사용자가 PBS 챗봇에 질문을 입력한다.</li>
+        <li>PBS가 질문과 세션 문맥을 보고 Lightspeed 호출 대상인지 판정한다.</li>
+        <li>대상이면 PBS가 OpenShift Lightspeed API에 <code>POST /v1/query</code>를 호출한다.</li>
+        <li>Lightspeed가 내부 RAG와 모델을 통해 답변을 생성해 반환한다.</li>
+        <li>PBS는 별도로 내부 RAG를 실행하여 Gold, User Upload, Customer 문서 근거를 찾는다.</li>
+        <li>Lightspeed 응답이 성공하면 답변 본문은 Lightspeed 기준으로 표시하고, 내부 RAG 근거는 관련 문서와 citation으로 결합한다.</li>
+        <li>Lightspeed가 실패하거나 응답이 비어 있으면 PBS 내부 RAG 답변으로 fallback한다.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>4. Lightspeed API 요청과 응답 계약</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>구분</th>
+            <th>내용</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Endpoint</td>
+            <td><code>POST /v1/query</code></td>
+          </tr>
+          <tr>
+            <td>필수 body</td>
+            <td><code>query</code></td>
+          </tr>
+          <tr>
+            <td>Optional body</td>
+            <td><code>conversation_id</code>, <code>provider</code>, <code>model</code>, <code>system_prompt</code></td>
+          </tr>
+          <tr>
+            <td>Header</td>
+            <td><code>Content-Type: application/json</code>, token 설정 시 <code>Authorization: Bearer {token}</code></td>
+          </tr>
+          <tr>
+            <td>Timeout</td>
+            <td><code>OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS</code>, 현재 기본 60초</td>
+          </tr>
+          <tr>
+            <td>TLS</td>
+            <td><code>OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY</code> 설정에 따라 검증 여부 결정</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>PBS가 Lightspeed에서 받아 보존하는 값은 <code>response</code>/<code>answer</code>, <code>conversation_id</code>, <code>referenced_documents</code>, <code>truncated</code>, token metadata, tool metadata, raw payload이다.</p>
+
+      <div class="panel warn">
+        <h3>중요한 경계</h3>
+        <p>PBS는 Gold/User Upload/Customer 문서를 Lightspeed 요청 body에 직접 주입하지 않는다. Lightspeed는 자기 내부 RAG로 답변을 만든다. PBS 내부 RAG는 그 뒤에 별도로 실행되어 출처, 관련 문서, 뷰어 연결을 보강한다.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. Fallback 정책</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>의미</th>
+            <th>UI/보고 기준</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>not_applicable</code></td>
+            <td>Lightspeed 대상 질문이 아님</td>
+            <td>PBS 내부 RAG 기준</td>
+          </tr>
+          <tr>
+            <td><code>disabled</code></td>
+            <td>Lightspeed base URL 미설정</td>
+            <td>내부 RAG fallback, 미설정 trace 보존</td>
+          </tr>
+          <tr>
+            <td><code>error</code></td>
+            <td>API 오류 또는 timeout</td>
+            <td>내부 RAG fallback, 오류 trace 보존</td>
+          </tr>
+          <tr>
+            <td><code>empty</code></td>
+            <td>API 응답은 왔지만 답변 본문이 비어 있음</td>
+            <td>내부 RAG fallback, 빈 응답 trace 보존</td>
+          </tr>
+          <tr>
+            <td><code>used</code></td>
+            <td>Lightspeed 답변을 실제 사용함</td>
+            <td>Lightspeed citation과 viewer를 최우선 표시</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>시연에서 중요한 점은 항상 Lightspeed처럼 보이기가 아니다. 중요한 것은 Lightspeed를 써야 하는 질문에서는 우선 호출하고, 실패하면 실패 상태가 추적 가능하며, PBS 내부 RAG 답변과 외부 Lightspeed 답변의 경계가 UI와 로그에서 섞이지 않는 것이다.</p>
+    </section>
+
+    <section>
+      <h2>6. 고객문서와 업로드 문서 판단</h2>
+      <p>고객문서와 업로드 문서는 고객 맞춤 운영도구로 가기 위한 중요한 데이터지만, 이번 안정화 범위에서는 품질이 충분한 검색 hit가 있을 때만 답변 근거로 붙인다.</p>
+      <ul>
+        <li>사용자의 질문과 실제 chunk 본문이 의미 있게 연결된다.</li>
+        <li>viewer에서 사용자가 해당 근거를 확인할 수 있다.</li>
+        <li>출처 라벨이 <code>User Upload</code>, <code>Customer Data</code>, <code>Gold Playbook</code>, <code>Lightspeed</code> 중 무엇인지 명확하다.</li>
+        <li>고객 데이터가 없을 때도 Lightspeed 공식 답변 흐름은 독립적으로 동작한다.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>7. 검증 계획</h2>
+      <h3>Python targeted</h3>
+      <pre><code>.\.venv\Scripts\python.exe -m pytest tests/test_lightspeed_client.py tests/test_answerer_llm_final.py -q
+.\.venv\Scripts\python.exe -m pytest tests/test_app_server.py tests/test_chat_repository.py -q
+.\.venv\Scripts\python.exe -m pytest tests/test_answer_context_metadata.py tests/test_uploaded_viewer_source_meta.py -q</code></pre>
+      <h3>Frontend</h3>
+      <pre><code>npm --prefix apps/web test -- WorkspaceAnswer.test.tsx
+npm --prefix apps/web run build</code></pre>
+      <h3>Runtime smoke</h3>
+      <ul>
+        <li><code>git 저장소를 파이프라인에 연결하는 절차에서 흔한 실패지점은 뭐야?</code>: Lightspeed 호출, <code>answer_source=lightspeed_with_pbs_rag</code>, <code>[1]</code>은 Lightspeed 뷰어</li>
+        <li><code>Ingress 컨트롤러에 단일 NodePort 서비스 추가 내용을 초보자용 3단계로 다시 정리해줘</code>: 60초 timeout 내 성공 시 Lightspeed 우선 응답</li>
+        <li><code>내 Git 저장소 이름을 바꾸는 방법 알려줘</code>: OpenShift 운영 질문이 아니므로 Lightspeed 미호출</li>
+        <li>User Upload 기반 CI 문서 질문 뒤 <code>흔한 실패지점은 뭐야?</code>: 문맥상 OpenShift/Pipeline 후속 질문이면 Lightspeed 호출, 업로드 citation 보존</li>
+      </ul>
+    </section>
+
+    <section class="panel warn">
+      <h2>8. 하지 않을 것</h2>
+      <ul>
+        <li>고객 PPT를 무조건 답변에 끼워 넣지 않는다.</li>
+        <li>Lightspeed 내부 RAG가 어떤 문서를 선택했는지 PBS가 통제한다고 말하지 않는다.</li>
+        <li>Fallback 결과를 Lightspeed 답변처럼 보이게 만들지 않는다.</li>
+        <li>기존 <code>.kugnus-plan</code> 삭제/rename 상태는 이번 작업 목표와 섞지 않는다.</li>
+      </ul>
+    </section>
+
+    <section class="panel ok">
+      <h2>9. 보고용 한 줄 설명</h2>
+      <p>PBS 2.3의 시연 안정화 목표는 OpenShift 운영 질문에 대해 Lightspeed를 공식 답변 엔진으로 우선 호출하고, PBS 내부 RAG는 Gold/업로드/고객문서 근거와 뷰어를 정확히 붙여 출처가 섞이지 않는 운영 챗봇 흐름을 만드는 것이다.</p>
+    </section>
+  </main>
+</body>
+</html>

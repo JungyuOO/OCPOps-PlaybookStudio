@@ -898,6 +898,37 @@ def _json_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _uploaded_document_scope_contract(source_scope: Any) -> dict[str, str]:
+    scope = str(source_scope or "").strip()
+    if scope == "study_docs":
+        return {
+            "book_slug": "customer-data-documents",
+            "eyebrow": "Customer Data Document",
+            "summary_subject": "고객 데이터",
+            "source_collection": "customer_data",
+            "source_lane": "customer_data",
+            "pack_label": "Customer Data",
+            "approval_state": "workspace",
+            "publication_state": "customer_data",
+            "boundary_truth": "customer_data_runtime",
+            "runtime_truth_label": "Customer Data Document",
+            "boundary_badge": "Customer Data",
+        }
+    return {
+        "book_slug": "uploaded-documents",
+        "eyebrow": "User Upload Document",
+        "summary_subject": "문서",
+        "source_collection": "uploads",
+        "source_lane": scope or "user_upload",
+        "pack_label": "User Upload",
+        "approval_state": "private",
+        "publication_state": "uploaded",
+        "boundary_truth": "private_user_upload_runtime",
+        "runtime_truth_label": "User Upload Document",
+        "boundary_badge": "User Upload",
+    }
+
+
 def _short_viewer_text(value: Any, *, limit: int = 220) -> str:
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     if len(text) <= limit:
@@ -1089,6 +1120,7 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
                     ds.storage_key,
                     ds.owner_user_id,
                     ds.visibility,
+                    ds.source_scope,
                     ds.byte_size,
                     pd.id::text AS parsed_document_id,
                     COALESCE(NULLIF(pd.title, ''), ds.filename) AS title,
@@ -1187,6 +1219,7 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
         else stored_title
     )
     filename = str(document.get("filename") or title)
+    scope_contract = _uploaded_document_scope_contract(document.get("source_scope"))
     total_tokens = sum(int(row.get("token_count") or 0) for row in chunks)
     parsed_markdown = _strip_uploaded_document_title(raw_markdown, stored_title)
     parsed_markdown = _strip_uploaded_document_title(parsed_markdown, title)
@@ -1736,15 +1769,16 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
         "</head>",
         '<body class="is-embedded upload-reader-document">',
         '<main class="upload-reader">',
-        '<div class="eyebrow">User Upload Document</div>',
+        f'<div class="eyebrow">{html.escape(scope_contract["eyebrow"])}</div>',
         f"<h1>{html.escape(title)}</h1>",
-        f'<p class="summary">{html.escape(filename)}에서 추출해 정리한 문서 본문입니다. 인용 번호를 누르면 관련 위치로 이동합니다.</p>',
+        f'<p class="summary">{html.escape(filename)}에서 추출해 정리한 {html.escape(scope_contract["summary_subject"])} 본문입니다. 인용 번호를 누르면 관련 위치로 이동합니다.</p>',
         '<div class="meta">',
         f"<span>{block_count:,} blocks</span>",
         f"<span>{len(chunks)} chunks</span>",
         f"<span>{total_tokens:,} tokens</span>",
         f"<span>{page_count:,} pages</span>",
         f"<span>{html.escape(str(document.get('parser_name') or 'parser'))}</span>",
+        f"<span>{html.escape(scope_contract['boundary_badge'])}</span>",
         f"<span>{html.escape(str(document.get('visibility') or 'private_user'))}</span>",
         "</div>",
         '<section class="document-panel">',
@@ -1948,11 +1982,12 @@ def _uploaded_document_source_meta(root_dir: Path, viewer_path: str, *, owner_us
     ]
     section = str(row.get("heading_title") or "").strip() or (section_path[-1] if section_path else title)
     source_scope = str(row.get("source_scope") or "user_upload").strip() or "user_upload"
+    scope_contract = _uploaded_document_scope_contract(source_scope)
     resolved_anchor = str(row.get("chunk_id") or row.get("source_anchor") or anchor or "").strip()
     parsed_viewer_path = urlparse(canonical_viewer_path)
     resolved_viewer_path = urlunparse(parsed_viewer_path._replace(fragment=resolved_anchor))
     return {
-        "book_slug": "uploaded-documents",
+        "book_slug": scope_contract["book_slug"],
         "book_title": title,
         "anchor": resolved_anchor,
         "section": section,
@@ -1961,15 +1996,16 @@ def _uploaded_document_source_meta(root_dir: Path, viewer_path: str, *, owner_us
         "source_url": str(row.get("storage_key") or "").strip(),
         "viewer_path": resolved_viewer_path,
         "section_match_exact": bool(anchor and row.get("chunk_id")),
-        "source_collection": "uploads",
-        "pack_label": "User Upload",
-        "source_lane": source_scope,
-        "approval_state": "private",
-        "publication_state": "uploaded",
+        "source_scope": source_scope,
+        "source_collection": scope_contract["source_collection"],
+        "pack_label": scope_contract["pack_label"],
+        "source_lane": scope_contract["source_lane"],
+        "approval_state": scope_contract["approval_state"],
+        "publication_state": scope_contract["publication_state"],
         "parser_backend": str(row.get("parser_name") or ""),
-        "boundary_truth": "private_user_upload_runtime",
-        "runtime_truth_label": "User Upload Document",
-        "boundary_badge": "User Upload",
+        "boundary_truth": scope_contract["boundary_truth"],
+        "runtime_truth_label": scope_contract["runtime_truth_label"],
+        "boundary_badge": scope_contract["boundary_badge"],
     }
 
 

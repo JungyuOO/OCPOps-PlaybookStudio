@@ -72,6 +72,47 @@ class _FakeConnection:
         return self.cursor_obj
 
 
+class _FakeStudyDocsCursor:
+    def __enter__(self) -> "_FakeStudyDocsCursor":
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        return None
+
+    def execute(self, _sql: str, _params: tuple[object, ...]) -> None:
+        return None
+
+    def fetchone(self) -> dict[str, object]:
+        return {
+            "document_source_id": "11111111-1111-1111-1111-111111111111",
+            "filename": "KMSC-COCP-RECR-005_아키텍처설계서_CICD_20251208_FINAL.pptx",
+            "storage_key": "storage/study-docs/cicd.pptx",
+            "owner_user_id": "",
+            "visibility": "workspace_shared",
+            "source_scope": "study_docs",
+            "source_metadata": {},
+            "parsed_document_id": "22222222-2222-2222-2222-222222222222",
+            "title": "KMSC-COCP-RECR-005_아키텍처설계서_CICD_20251208_FINAL.pptx",
+            "parser_name": "kmsc-course-import",
+            "parsed_metadata": {},
+            "chunk_id": "33333333-3333-3333-3333-333333333333",
+            "heading_title": "Git 저장소 연결",
+            "source_anchor": "chunk-cicd",
+            "chunk_section_path": ["CI/CD", "Git 저장소 연결"],
+        }
+
+
+class _FakeStudyDocsConnection:
+    def __enter__(self) -> "_FakeStudyDocsConnection":
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        return None
+
+    def cursor(self) -> _FakeStudyDocsCursor:
+        return _FakeStudyDocsCursor()
+
+
 def test_uploaded_document_source_meta_uses_current_owner_scope(monkeypatch, tmp_path):
     owner_hash = "owner-hash-for-viewer"
 
@@ -114,6 +155,45 @@ def test_uploaded_document_source_meta_uses_current_owner_scope(monkeypatch, tmp
     )
     assert payload["source_collection"] == "uploads"
     assert payload["boundary_truth"] == "private_user_upload_runtime"
+
+
+def test_study_docs_source_meta_is_labeled_as_customer_data(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        server_routes_viewer,
+        "load_settings",
+        lambda _root_dir: SimpleNamespace(database_url="postgresql://unit-test"),
+    )
+    monkeypatch.setattr(
+        psycopg,
+        "connect",
+        lambda _database_url, row_factory=None: _FakeStudyDocsConnection(),
+    )
+
+    handler = _CaptureHandler("owner-hash-for-viewer")
+    server_routes_viewer.handle_source_meta(
+        handler,
+        urlencode(
+            {
+                "viewer_path": (
+                    "/uploads/documents/11111111-1111-1111-1111-111111111111/index.html"
+                    "#chunk-cicd"
+                )
+            }
+        ),
+        root_dir=tmp_path,
+    )
+
+    assert len(handler.calls) == 1
+    status, payload = handler.calls[0]
+    assert status == HTTPStatus.OK
+    assert payload["book_slug"] == "customer-data-documents"
+    assert payload["source_scope"] == "study_docs"
+    assert payload["source_collection"] == "customer_data"
+    assert payload["source_lane"] == "customer_data"
+    assert payload["pack_label"] == "Customer Data"
+    assert payload["runtime_truth_label"] == "Customer Data Document"
+    assert payload["boundary_badge"] == "Customer Data"
+    assert payload["boundary_truth"] == "customer_data_runtime"
 
 
 def test_uploaded_document_viewer_renders_upload_asset_as_source_capture():

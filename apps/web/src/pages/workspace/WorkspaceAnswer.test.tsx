@@ -53,4 +53,36 @@ describe('WorkspaceAnswer Lightspeed surface', () => {
     expect(html).toContain('OpenShift Lightspeed가 반환한 OpenShift 공식 기준 답변');
     expect(html).toContain('related-link-badge');
   });
+
+  it('renders GFM-style markdown tables instead of plain pipe text', () => {
+    const html = renderToStaticMarkup(
+      <AssistantAnswer
+        content={[
+          '답변: 설정 값을 확인한 뒤 아래 체크리스트로 점검합니다.',
+          '',
+          '요약 점검 체크리스트',
+          '| 점검 항목 | 확인 사항 | 관련 근거 |',
+          '| :--- | :--- | :--- |',
+          '| Operator | Pipeline Operator가 설치되었는가? | PAC 기본 조건 |',
+          '| Feature | `pipelines-as-code`가 활성화되었는가? | PAC 기본 조건 |',
+        ].join('\n')}
+        citations={[]}
+        relatedLinks={[]}
+        relatedSections={[]}
+        visionMode="atlas_canvas"
+        onCitationClick={noop}
+        onRelatedLinkClick={noop}
+        onToggleFavoriteLink={noop}
+        onCheckSectionLink={noop}
+        isFavoriteLink={() => false}
+        isCheckedSectionLink={() => false}
+      />,
+    );
+
+    expect(html).toContain('class="assistant-table"');
+    expect(html).toContain('<th><span>점검 항목</span></th>');
+    expect(html).toContain('<td><span>Pipeline Operator가 설치되었는가?</span></td>');
+    expect(html).toContain('<code class="inline-code">pipelines-as-code</code>');
+    expect(html).not.toContain(':---');
+  });
 });
