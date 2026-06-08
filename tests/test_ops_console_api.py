@@ -201,6 +201,32 @@ def test_real_ocp_request_retries_with_service_account_token(monkeypatch) -> Non
     assert seen_tokens == ["Bearer expired-token", "Bearer sa-token"]
 
 
+def test_real_ocp_resources_payload_uses_requested_namespace(monkeypatch) -> None:
+    requested_paths: list[str] = []
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        monkeypatch.setattr(
+            ops_console_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(
+                ocp_api_base_url="https://api.ocp.cywell.local:6443",
+                ocp_api_token="unit-token",
+                ocp_default_namespace="pbs-ocpops",
+            ),
+        )
+        monkeypatch.setattr(ops_console_api, "_read_service_account_token", lambda: "")
+
+        def fake_request_json(root_dir, path, *, connection=None):  # noqa: ANN001, ARG001
+            requested_paths.append(path)
+            return {"kind": "PodList", "items": []}
+
+        monkeypatch.setattr(ops_console_api, "_real_ocp_request_json", fake_request_json)
+
+        ops_console_api._real_ocp_resources_payload(root, "pods", {}, "openshift-console")
+
+    assert requested_paths == ["/api/v1/namespaces/openshift-console/pods"]
+
+
 def test_ops_console_actions_execute_scale_updates_resource_manifest() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)

@@ -435,8 +435,13 @@ def _real_ocp_request(
     return payload if isinstance(payload, dict) else {}
 
 
-def _real_ocp_resources_payload(root_dir: Path, resource_type: str, connection: dict[str, Any]) -> dict[str, Any]:
-    namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
+def _real_ocp_resources_payload(
+    root_dir: Path,
+    resource_type: str,
+    connection: dict[str, Any],
+    namespace: str | None = None,
+) -> dict[str, Any]:
+    namespace = (str(namespace or "").strip() or (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo"))
     if resource_type == "pods":
         return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/pods", connection=connection)
     if resource_type == "deployments":
@@ -450,8 +455,14 @@ def _real_ocp_resources_payload(root_dir: Path, resource_type: str, connection: 
     raise ValueError("Unsupported resource type")
 
 
-def _real_ocp_resource_detail_payload(root_dir: Path, resource_type: str, name: str, connection: dict[str, Any]) -> dict[str, Any]:
-    namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
+def _real_ocp_resource_detail_payload(
+    root_dir: Path,
+    resource_type: str,
+    name: str,
+    connection: dict[str, Any],
+    namespace: str | None = None,
+) -> dict[str, Any]:
+    namespace = (str(namespace or "").strip() or (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo"))
     if resource_type == "pods":
         return _real_ocp_request_json(root_dir, f"/api/v1/namespaces/{namespace}/pods/{name}", connection=connection)
     if resource_type == "deployments":
@@ -2861,12 +2872,15 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
             _send_not_found(handler, str(exc))
             return True
         if _is_real_ocp_connection(root_dir, connection):
-            enforced_namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
-            if namespace != enforced_namespace:
-                _send_bad_request(handler, f"namespace is fixed to {enforced_namespace}")
-                return True
+            namespace = namespace or (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
             try:
-                items = [_resource_summary(resource_type, item) for item in _real_ocp_items(resource_type, _real_ocp_resources_payload(root_dir, resource_type, connection))]
+                items = [
+                    _resource_summary(resource_type, item)
+                    for item in _real_ocp_items(
+                        resource_type,
+                        _real_ocp_resources_payload(root_dir, resource_type, connection, namespace),
+                    )
+                ]
             except Exception as exc:  # noqa: BLE001
                 handler._send_json({"error": f"Real OCP resource list failed: {exc}"}, HTTPStatus.BAD_GATEWAY)
                 return True
@@ -2915,12 +2929,9 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
             _send_not_found(handler, str(exc))
             return True
         if _is_real_ocp_connection(root_dir, connection):
-            enforced_namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
-            if namespace != enforced_namespace:
-                _send_bad_request(handler, f"namespace is fixed to {enforced_namespace}")
-                return True
+            namespace = namespace or (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
             try:
-                target = _real_ocp_resource_detail_payload(root_dir, resource_type, name, connection)
+                target = _real_ocp_resource_detail_payload(root_dir, resource_type, name, connection, namespace)
             except Exception as exc:  # noqa: BLE001
                 handler._send_json({"error": f"Real OCP resource detail failed: {exc}"}, HTTPStatus.BAD_GATEWAY)
                 return True
