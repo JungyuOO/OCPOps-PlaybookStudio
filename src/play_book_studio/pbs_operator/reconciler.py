@@ -129,6 +129,7 @@ def _config_map(name: str, namespace: str, spec: dict[str, Any]) -> dict[str, An
         "OLS_BASE_URL": str(lightspeed.get("baseUrl") or DEFAULT_OLS_BASE_URL),
         "OLS_AUTH_MODE": str(auth.get("mode") or "service-account"),
         "OLS_AUTH_SECRET_NAME": str(auth.get("secretName") or "pbs-ols-auth"),
+        "OLS_INSECURE_SKIP_TLS_VERIFY": _bool_text(lightspeed.get("insecureSkipTLSVerify", False)),
         "PBS_AUTO_CREATE_NAMESPACE": _bool_text(namespace_mode.get("autoCreate", False)),
         "PBS_NAMESPACE_MODE": "auto" if namespace_mode.get("autoCreate", False) else "disabled",
         "CONSOLE_EXECUTOR_MODE": str(console.get("executorMode") or "service-account"),

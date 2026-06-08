@@ -56,6 +56,8 @@ spec:
                       type: boolean
                     manageOLSConfig:
                       type: boolean
+                    insecureSkipTLSVerify:
+                      type: boolean
                     auth:
                       type: object
                       properties:

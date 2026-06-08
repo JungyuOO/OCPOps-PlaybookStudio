@@ -16,6 +16,7 @@ metadata:
             "lightspeed": {
               "detectOperator": true,
               "manageOLSConfig": true,
+              "insecureSkipTLSVerify": true,
               "knowledgeMode": "lightspeed-rag-with-pbs-private-context",
               "mcp": {"enabled": true, "registerWithOLS": true, "serverName": "pbs-tools"},
               "networkPolicy": {

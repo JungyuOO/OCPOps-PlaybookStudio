@@ -17,6 +17,7 @@ def test_v030_lightspeed_and_operator_settings_load_from_env(tmp_path: Path) -> 
                 "OLS_AUTH_SECRET_NAME=pbs-ols-token",
                 "OLS_AUTH_TOKEN=example-token",
                 "OLS_TIMEOUT_SECONDS=12",
+                "OLS_INSECURE_SKIP_TLS_VERIFY=true",
                 "PBS_AUTO_CREATE_NAMESPACE=false",
                 "PBS_NAMESPACE_MODE=disabled",
                 "CONSOLE_EXECUTOR_MODE=test-admin-secret",
@@ -36,6 +37,7 @@ def test_v030_lightspeed_and_operator_settings_load_from_env(tmp_path: Path) -> 
     assert settings.ols_auth_secret_name == "pbs-ols-token"
     assert settings.ols_auth_token == "example-token"
     assert settings.ols_timeout_seconds == 12
+    assert settings.ols_insecure_skip_tls_verify is True
     assert settings.pbs_auto_create_namespace is False
     assert settings.pbs_namespace_mode == "disabled"
     assert settings.console_executor_mode == "test-admin-secret"

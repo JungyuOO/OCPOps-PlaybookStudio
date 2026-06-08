@@ -12,6 +12,7 @@ data:
   OLS_BASE_URL: https://lightspeed-app-server.openshift-lightspeed.svc.cluster.local:8443
   OLS_AUTH_MODE: service-account
   OLS_AUTH_SECRET_NAME: pbs-ols-auth
+  OLS_INSECURE_SKIP_TLS_VERIFY: "true"
   OLS_TIMEOUT_SECONDS: "30"
   PBS_AUTO_CREATE_NAMESPACE: "false"
   PBS_NAMESPACE_MODE: disabled

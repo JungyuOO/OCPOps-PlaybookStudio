@@ -15,6 +15,7 @@ spec:
     knowledgeMode: lightspeed-rag-with-pbs-private-context
     detectOperator: true
     manageOLSConfig: true
+    insecureSkipTLSVerify: true
     auth:
       mode: service-account
       secretName: pbs-ols-auth

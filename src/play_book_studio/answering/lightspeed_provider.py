@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import ssl
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -120,10 +121,13 @@ def default_lightspeed_transport(
     payload: dict[str, Any],
     headers: dict[str, str],
     timeout_seconds: float,
+    *,
+    insecure_skip_tls_verify: bool = False,
 ) -> dict[str, Any]:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = request.Request(url, data=body, headers=headers, method="POST")
-    with request.urlopen(req, timeout=timeout_seconds) as response:  # noqa: S310 - configured endpoint
+    context = ssl._create_unverified_context() if insecure_skip_tls_verify else None
+    with request.urlopen(req, timeout=timeout_seconds, context=context) as response:  # noqa: S310 - configured endpoint
         raw = response.read().decode("utf-8")
     parsed = json.loads(raw) if raw else {}
     return parsed if isinstance(parsed, dict) else {}
@@ -259,13 +263,21 @@ def query_lightspeed(
     if settings.ols_system_prompt:
         request_payload["system_prompt"] = settings.ols_system_prompt
     headers = build_lightspeed_headers(settings)
-    active_transport = transport or default_lightspeed_transport
-    response_payload = active_transport(
-        endpoint,
-        request_payload,
-        headers,
-        float(settings.ols_timeout_seconds),
-    )
+    if transport is None:
+        response_payload = default_lightspeed_transport(
+            endpoint,
+            request_payload,
+            headers,
+            float(settings.ols_timeout_seconds),
+            insecure_skip_tls_verify=settings.ols_insecure_skip_tls_verify,
+        )
+    else:
+        response_payload = transport(
+            endpoint,
+            request_payload,
+            headers,
+            float(settings.ols_timeout_seconds),
+        )
     answer = _answer_text_from_response(response_payload)
     if not answer:
         answer = "OpenShift Lightspeed returned an empty response."
@@ -287,6 +299,7 @@ def query_lightspeed(
             "conversation_id": conversation_id,
             "request_context_keys": sorted(request_payload.keys()),
             "referenced_documents": len(citations),
+            "insecure_skip_tls_verify": settings.ols_insecure_skip_tls_verify,
         },
         pipeline_trace={
             "provider": "lightspeed",

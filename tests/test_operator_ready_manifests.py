@@ -20,6 +20,7 @@ def test_sno_pbs_base_declares_v030_lightspeed_boundaries() -> None:
     assert 'TERMINAL_USER_WORKSPACE_ENABLED: "false"' in config
     assert 'PBS_OPERATOR_READY_MODE: "true"' in config
     assert "https://lightspeed-app-server.openshift-lightspeed.svc.cluster.local:8443" in config
+    assert 'OLS_INSECURE_SKIP_TLS_VERIFY: "true"' in config
 
 
 def test_sno_pbs_base_includes_mcp_and_ols_preview_without_byok() -> None:
@@ -64,6 +65,7 @@ def test_playbookstudio_crd_maps_phase1_operator_ready_spec() -> None:
     assert "provider: lightspeed" in sample
     assert "knowledgeMode: lightspeed-rag-with-pbs-private-context" in sample
     assert "networkPolicy:" in sample
+    assert "insecureSkipTLSVerify: true" in sample
     assert "targetNamespace: openshift-lightspeed" in sample
     assert "allowAllNamespaces: false" in sample
     assert "byoKnowledge" not in sample

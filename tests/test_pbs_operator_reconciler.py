@@ -16,6 +16,7 @@ SAMPLE_CR = {
         "lightspeed": {
             "knowledgeMode": "lightspeed-rag-with-pbs-private-context",
             "manageOLSConfig": True,
+            "insecureSkipTLSVerify": True,
             "auth": {"mode": "service-account", "secretName": "pbs-ols-auth"},
             "mcp": {"enabled": True, "registerWithOLS": True, "serverName": "pbs-tools"},
             "networkPolicy": {
@@ -70,6 +71,7 @@ def test_pbs_operator_reconciler_maps_cr_fields_to_runtime_config() -> None:
     assert config["data"]["PBS_AUTO_CREATE_NAMESPACE"] == "false"
     assert config["data"]["CONSOLE_EXECUTOR_MODE"] == "service-account"
     assert config["data"]["LIGHTSPEED_KNOWLEDGE_MODE"] == "lightspeed-rag-with-pbs-private-context"
+    assert config["data"]["OLS_INSECURE_SKIP_TLS_VERIFY"] == "true"
     assert all("BYOK" not in key for key in config["data"])
     assert config["data"]["LIBRARY_OUTPUT_FORMAT"] == "pbs-private-context-markdown"
     assert config["data"]["QDRANT_ENABLED"] == "false"
