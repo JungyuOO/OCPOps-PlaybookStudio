@@ -213,6 +213,18 @@ const VIEWER_READER_POLISH = `
     overflow-wrap: anywhere !important;
   }
 
+  :host([data-viewer-theme="obsidian"]) .viewer-root.upload-reader-document .upload-reader .eyebrow {
+    color: #67e8f9 !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root.upload-reader-document .upload-reader h1 {
+    color: #f8fafc !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root.upload-reader-document .upload-reader .summary {
+    color: rgba(226, 232, 240, 0.78) !important;
+  }
+
   .viewer-root.upload-reader-document .upload-reader .meta {
     max-width: 100% !important;
     gap: 8px !important;

@@ -20,6 +20,10 @@ from .viewer_blocks_text import (
 YAML_KEY_VALUE_RE = re.compile(r"^(?P<indent>\s*)(?P<dash>-\s+)?(?P<key>[A-Za-z0-9_.-]+:)(?P<spacing>\s*)(?P<value>.*)$")
 YAML_COMMENT_RE = re.compile(r"^(?P<indent>\s*)(?P<comment>#.*)$")
 CODE_COLLAPSE_MIN_LINES = 20
+KOREAN_PROSE_LABEL_RE = re.compile(
+    r"(?:고객사|대상 시스템|운영 목적|담당 조직|시연 목적|주요 서비스|운영 기준|준비 상태|점검 기준|연결 기준)[:：]"
+)
+SHELLISH_LINE_RE = re.compile(r"^\s*(?:\$|#\s*)?(?:oc|kubectl|curl|wget|podman|docker|helm|git|npm|npx|node)\b", re.IGNORECASE)
 
 
 def _render_note_card_html(*, variant: str, title: str, body_html: str) -> str:
@@ -50,6 +54,8 @@ def _render_code_block_html(
     caption: str = "",
     preserve_layout: bool = False,
 ) -> str:
+    if not preserve_layout and _code_block_looks_like_korean_prose(code_text, language=language):
+        return _render_code_block_as_reader_prose_html(code_text)
     if _should_suppress_low_signal_code_block(code_text, language=language):
         return ""
     normalized_copy_text = str(copy_text or "")
@@ -130,6 +136,39 @@ def _render_code_block_html(
         code=_render_highlighted_code_html(code_text, language=display_language, preserve_layout=preserve_layout),
         collapse_button_html=collapse_button_html,
     ).strip()
+
+
+def _code_block_looks_like_korean_prose(code_text: str, *, language: str) -> bool:
+    normalized_language = (language or "text").strip().lower()
+    if normalized_language not in {"yaml", "yml", "text", "plain"}:
+        return False
+    lines = [line.strip() for line in str(code_text or "").splitlines() if line.strip()]
+    if not lines:
+        return False
+    joined = " ".join(lines)
+    if not re.search(r"[가-힣]", joined):
+        return False
+    if _looks_like_yaml_document(code_text):
+        return False
+    if any(SHELLISH_LINE_RE.match(line) for line in lines):
+        return False
+    ascii_key_lines = sum(1 for line in lines if YAML_KEY_VALUE_RE.match(line))
+    if ascii_key_lines >= max(1, len(lines) // 2):
+        return False
+    if KOREAN_PROSE_LABEL_RE.search(joined):
+        return True
+    return bool(re.search(r"(입니다|합니다|됩니다|있습니다|없습니다|점검한다|확인한다|관리한다)", joined))
+
+
+def _render_code_block_as_reader_prose_html(code_text: str) -> str:
+    normalized = str(code_text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    normalized = re.sub(
+        r"(?<=[가-힣)])(?=(?:고객사|대상 시스템|운영 목적|담당 조직|시연 목적|주요 서비스|운영 기준|준비 상태|점검 기준|연결 기준)[:：])",
+        "\n",
+        normalized,
+    )
+    paragraphs = [line.strip() for line in normalized.splitlines() if line.strip()]
+    return "\n".join(f"<p>{_render_inline_html(paragraph)}</p>" for paragraph in paragraphs)
 
 
 def _display_code_language(code_text: str, *, language: str) -> str:
