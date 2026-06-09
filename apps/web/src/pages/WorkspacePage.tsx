@@ -359,9 +359,18 @@ function opsChatResponseToChatResponse(response: OpsChatResponse, sessionId: str
 
 type LeftPanelMode = 'history' | 'outline' | 'signals';
 type RightPanelMode = 'viewer' | 'terminal' | 'yaml';
-type WorkspaceChatMode = 'document' | 'live_cluster';
 const CLUSTER_RESOURCE_OPTIONS = ['pods', 'deployments', 'services', 'routes', 'events'] as const;
 type ClusterResourceKind = typeof CLUSTER_RESOURCE_OPTIONS[number];
+
+const LIVE_CLUSTER_QUERY_PATTERN =
+  /(cluster|namespace|project|pod|pods|deployment|deployments|service|services|route|routes|event|events|yaml|manifest|apply|replica|scale|log|logs|resource|workload|oc\s+|kubectl|클러스터|네임스페이스|프로젝트|파드|팟|배포|서비스|라우트|이벤트|야믈|매니페스트|적용|레플리카|스케일|로그|리소스|워크로드|상태|현재|지금)/i;
+
+function shouldRouteToLiveCluster(query: string, routeKind?: Message['routeKind']): boolean {
+  if (routeKind) {
+    return false;
+  }
+  return LIVE_CLUSTER_QUERY_PATTERN.test(query);
+}
 
 const CLUSTER_RESOURCE_NAV_GROUPS: ClusterResourceNavGroup[] = [
   {
@@ -1473,7 +1482,6 @@ export default function WorkspacePage() {
   });
   const [footerConnections, setFooterConnections] = useState<OcpConnection[]>([]);
   const [isFooterProfileLoading, setIsFooterProfileLoading] = useState(false);
-  const [currentMode, setCurrentMode] = useState<WorkspaceChatMode>('document');
   const [clusterConnectionStatus, setClusterConnectionStatus] = useState<ClusterConnectionStatus>('not_connected');
   const [terminalConnectionState, setTerminalConnectionState] = useState<TerminalConnectionState>('closed');
   const [userWorkspaceNamespace, setUserWorkspaceNamespace] = useState('');
@@ -1617,12 +1625,6 @@ export default function WorkspacePage() {
       cancelled = true;
     };
   }, [activeFooterConnection?.connection_id]);
-
-  useEffect(() => {
-    if (currentMode === 'live_cluster' && !isLiveClusterAvailable) {
-      setCurrentMode('document');
-    }
-  }, [currentMode, isLiveClusterAvailable]);
 
   useEffect(() => {
     if (activeFooterConnection?.default_namespace && selectedResourceNamespace === 'default') {
@@ -3774,9 +3776,10 @@ export default function WorkspacePage() {
     const resolvedLearningPathId = options.learningPathId ?? questionMeta?.learningPathId;
     const resolvedLearningStepId = options.learningStepId ?? questionMeta?.learningStepId;
     const resolvedLabTaskId = options.labTaskId ?? questionMeta?.labTaskId;
-    const shouldUseLiveClusterMode = !isCourseMode && currentMode === 'live_cluster' && isLiveClusterAvailable;
     const messageRouteKind: Message['routeKind'] = resolvedRouteKind || (isCourseMode ? 'study_docs' : undefined);
     const requestRouteKind = backendRouteKindForChat(messageRouteKind);
+    const shouldUseLiveClusterMode =
+      !isCourseMode && isLiveClusterAvailable && shouldRouteToLiveCluster(trimmed, messageRouteKind);
     if (messageRouteKind === 'learning' && resolvedLabTaskId) {
       setTerminalLearningContext({
         learnerId: wikiOverlayUserId,
@@ -4523,6 +4526,7 @@ export default function WorkspacePage() {
                 </div>
               ) : leftPanelMode === 'outline' ? (
                 <div className="outline-panel">
+                  {false && (
                   <section className="outline-surface-card outline-surface-card--document cluster-resource-explorer">
                     <div className="outline-section-head">
                       <div className="outline-section-copy">
@@ -4598,6 +4602,7 @@ export default function WorkspacePage() {
                       </div>
                     )}
                   </section>
+                  )}
                   <details className="outline-more outline-surface-card outline-surface-card--sources rag-source-scope-card" open>
                     <summary>
                       <span>RAG 범위</span>
@@ -5171,41 +5176,6 @@ export default function WorkspacePage() {
                   </button>
                 </div>
               )}
-              <div className="chat-mode-switch chat-mode-switch--top" role="tablist" aria-label="Chat mode">
-                <button
-                  type="button"
-                  className={`chat-mode-btn ${currentMode === 'document' ? 'active' : ''}`}
-                  onClick={() => setCurrentMode('document')}
-                  aria-selected={currentMode === 'document'}
-                >
-                  <BookOpen size={14} />
-                  Docs
-                </button>
-                <button
-                  type="button"
-                  className={`chat-mode-btn ${currentMode === 'live_cluster' ? 'active' : ''}`}
-                  onClick={() => {
-                    if (isLiveClusterAvailable) {
-                      setCurrentMode('live_cluster');
-                    }
-                  }}
-                  aria-selected={currentMode === 'live_cluster'}
-                  disabled={!isLiveClusterAvailable}
-                  title={
-                    !isClusterConnected
-                      ? 'Cluster is not connected'
-                      : !isTerminalConnected
-                        ? 'Terminal session is not connected'
-                        : 'Live Cluster Mode'
-                  }
-                >
-                  <Cpu size={14} />
-                  Live
-                </button>
-                <span className={`chat-mode-status chat-mode-status--${clusterConnectionStatus}`}>
-                  {isTerminalConnected ? clusterStatusLabel : 'Terminal offline'}
-                </span>
-              </div>
               <div className="chat-messages" ref={chatMessagesRef}>
                 {messages.length === 0 && (
                   <div className="chat-welcome">

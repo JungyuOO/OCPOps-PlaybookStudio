@@ -476,6 +476,19 @@ def _real_ocp_resource_detail_payload(
     raise ValueError("Unsupported resource type")
 
 
+def _real_ocp_namespace_names(root_dir: Path, connection: dict[str, Any]) -> list[str]:
+    payload = _real_ocp_request_json(root_dir, "/api/v1/namespaces", connection=connection)
+    rows = payload.get("items")
+    items = [item for item in rows if isinstance(item, dict)] if isinstance(rows, list) else []
+    names = []
+    for item in items:
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        name = str(metadata.get("name") or "").strip()
+        if name:
+            names.append(name)
+    return sorted(set(names))
+
+
 def _real_ocp_items(resource_type: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
     rows = payload.get("items")
     items = [item for item in rows if isinstance(item, dict)] if isinstance(rows, list) else []
@@ -2960,6 +2973,11 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
         if _is_real_ocp_connection(root_dir, connection):
             namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
             counts: dict[str, int] = {}
+            namespaces = [namespace]
+            try:
+                namespaces = _real_ocp_namespace_names(root_dir, connection) or [namespace]
+            except Exception as exc:  # noqa: BLE001
+                print(f"[ops-console] overview namespace list fallback for {connection_id}: {exc}", flush=True)
             try:
                 for resource_type in RESOURCE_TYPES:
                     counts[resource_type] = len(_real_ocp_items(resource_type, _real_ocp_resources_payload(root_dir, resource_type, connection)))
@@ -2971,8 +2989,8 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
                     "connection_id": connection_id,
                     "cluster_url": connection["cluster_url"],
                     "default_namespace": namespace,
-                    "namespace_count": 1,
-                    "namespace_sample": [namespace],
+                    "namespace_count": len(namespaces),
+                    "namespace_sample": namespaces[:4],
                     "resource_counts": counts,
                     "message": "Loaded from configured OCP API.",
                 }
@@ -3005,12 +3023,17 @@ def handle_ops_console_get(handler: Any, path: str, query: str, *, root_dir: Pat
             return True
         if _is_real_ocp_connection(root_dir, connection):
             namespace = (_real_ocp_config(root_dir, connection) or {}).get("namespace", "demo")
+            try:
+                namespaces = _real_ocp_namespace_names(root_dir, connection) or [namespace]
+            except Exception as exc:  # noqa: BLE001
+                namespaces = [namespace]
+                print(f"[ops-console] namespace list fallback for {connection_id}: {exc}", flush=True)
             handler._send_json(
                 {
                     "connection_id": connection_id,
                     "cluster_url": connection["cluster_url"],
-                    "count": 1,
-                    "items": [namespace],
+                    "count": len(namespaces),
+                    "items": namespaces,
                 }
             )
             return True
