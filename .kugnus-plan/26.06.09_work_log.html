@@ -183,7 +183,7 @@
         <p class="subtitle">feat/v3.0.1-console 기준으로 feat/kugnus-dev2.3 작업과 현재 feat/kugnus-dev2.4에 반영된 추가/수정 사항을 정리한 작업 로그</p>
         <div class="meta">
           <span class="pill">Base: origin/feat/v3.0.1-console @ 8d03845</span>
-          <span class="pill">Current: feat/kugnus-dev2.4 @ 9e6b27b</span>
+          <span class="pill">Current: feat/kugnus-dev2.4 @ 41fa190</span>
           <span class="pill">dev2.3: fd01320</span>
           <span class="pill">Merge-base: b6f7dc1</span>
           <span class="pill">작성일: 2026-06-09</span>
@@ -192,10 +192,10 @@
 
       <section>
         <h2>작업 기준</h2>
-        <p>이 문서는 <code>origin/feat/v3.0.1-console</code>을 기준 브랜치로 두고, 현재 작업 브랜치 <code>feat/kugnus-dev2.4</code>에서 추가 또는 수정된 내용을 정리한다. 현재 브랜치는 console 브랜치의 터미널/콘솔 파츠를 유지하면서, 기존 <code>feat/kugnus-dev2.3</code>의 PBS RAG 및 Lightspeed 연동 작업을 합친 상태다.</p>
+        <p>이 문서는 <code>origin/feat/v3.0.1-console</code>을 기준 브랜치로 두고, 현재 작업 브랜치 <code>feat/kugnus-dev2.4</code>에서 추가 또는 수정된 내용을 정리한다. 현재 브랜치는 console 브랜치의 터미널/콘솔 파츠를 유지하면서, 기존 <code>feat/kugnus-dev2.3</code>의 PBS RAG 및 Lightspeed 연동 작업을 합친 상태다. 배포 리소스는 <code>feat/v3.0.1-console</code>의 최신 안정화 변경을 보존하는 방향으로 정리했다.</p>
         <div class="callout">
           기준 diff: <code>origin/feat/v3.0.1-console..feat/kugnus-dev2.4</code><br />
-          변경 규모: <code>44 files changed, 3970 insertions(+), 533 deletions(-)</code>
+          배포 리소스 주의: <code>8d03845 Keep PBS ingress to Lightspeed stable</code>에서 추가된 Lightspeed NetworkPolicy는 현재 <code>41fa190</code>에서 복구 반영했다.
         </div>
         <div class="grid">
           <div class="card">
@@ -242,7 +242,12 @@
             <tr>
               <td><code>9e6b27b</code></td>
               <td>Lightspeed demo answer flow</td>
-              <td>답변 품질 프로파일, 코드박스 분리, compact UI, stop/abort, 문서화까지 포함한 현재 최신 커밋.</td>
+              <td>답변 품질 프로파일, 코드박스 분리, compact UI, stop/abort, 문서화까지 포함한 시연 안정화 커밋.</td>
+            </tr>
+            <tr>
+              <td><code>41fa190</code></td>
+              <td>Lightspeed NetworkPolicy deployment restore</td>
+              <td><code>feat/v3.0.1-console</code> 최신 배포 변경인 Lightspeed NetworkPolicy를 현재 브랜치에 복구 반영하고, 작업 로그의 오해 소지가 있는 배포 설명을 수정.</td>
             </tr>
           </tbody>
         </table>
@@ -525,7 +530,7 @@
               <tr>
                 <td><code>deploy/openshift/kustomization.yaml</code>, <code>deploy/openshift/lightspeed-networkpolicy.yaml</code></td>
                 <td class="status-modified">수정/복구</td>
-                <td><code>feat/v3.0.1-console</code>의 <code>Keep PBS ingress to Lightspeed stable</code> 변경을 유지하도록 Lightspeed NetworkPolicy 리소스를 kustomization에 포함. PBS 네임스페이스에서 <code>openshift-lightspeed</code> app-server 8443 포트 접근을 허용하는 배포 리소스를 보존.</td>
+                <td><code>feat/v3.0.1-console</code>의 <code>8d03845 Keep PBS ingress to Lightspeed stable</code> 변경을 유지하도록 Lightspeed NetworkPolicy 리소스를 kustomization에 포함. 병합 시점에는 해당 최신 console 커밋이 아직 반영되지 않아 누락되었고, 현재 <code>41fa190</code>에서 PBS 네임스페이스가 <code>openshift-lightspeed</code> app-server 8443 포트에 접근할 수 있도록 배포 리소스를 복구.</td>
               </tr>
             </tbody>
           </table>
@@ -615,7 +620,7 @@
 
       <section>
         <h2>검증 기록</h2>
-        <p>최신 커밋 <code>9e6b27b</code> 반영 전후로 수행한 주요 검증은 다음과 같다.</p>
+        <p>시연 안정화 커밋 <code>9e6b27b</code> 및 배포 리소스 복구 커밋 <code>41fa190</code> 반영 전후로 수행한 주요 검증은 다음과 같다.</p>
         <table>
           <thead>
             <tr>
@@ -659,7 +664,7 @@
         <div class="callout">
           <p><code>feat/v3.0.1-console</code>의 콘솔/터미널 기반은 유지한 상태에서, <code>feat/kugnus-dev2.3</code>의 RAG/Lightspeed 작업을 <code>feat/kugnus-dev2.4</code>에 결합했다. 이후 시연 안정화를 위해 Lightspeed 답변 품질, 코드블록 복사 UX, 출처/뷰어 계약, 고객 데이터 Library, stream 중지 기능을 추가로 보강했다.</p>
         </div>
-        <p>현재 브랜치는 <code>origin/feat/kugnus-dev2.4</code>에 <code>9e6b27b</code>까지 푸시되어 있으며, 이 문서 파일 자체는 본 작업 로그 산출물로 새로 작성되었다.</p>
+        <p>현재 브랜치는 <code>origin/feat/kugnus-dev2.4</code>에 <code>41fa190</code>까지 푸시되어 있으며, 이 문서 파일 자체는 본 작업 로그 산출물로 새로 작성되었다.</p>
       </section>
     </article>
   </main>
