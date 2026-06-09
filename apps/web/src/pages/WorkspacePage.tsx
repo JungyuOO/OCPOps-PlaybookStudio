@@ -363,7 +363,7 @@ const CLUSTER_RESOURCE_OPTIONS = ['pods', 'deployments', 'services', 'routes', '
 type ClusterResourceKind = typeof CLUSTER_RESOURCE_OPTIONS[number];
 
 const LIVE_CLUSTER_QUERY_PATTERN =
-  /(cluster|namespace|project|pod|pods|deployment|deployments|service|services|route|routes|event|events|yaml|manifest|apply|replica|scale|log|logs|resource|workload|oc\s+|kubectl|클러스터|네임스페이스|프로젝트|파드|팟|배포|서비스|라우트|이벤트|야믈|매니페스트|적용|레플리카|스케일|로그|리소스|워크로드|상태|현재|지금)/i;
+  /(terminal|live\s*cluster|yaml\s*(edit|apply)|manifest\s*(edit|apply)|rollout|scale|터미널|라이브\s*클러스터|리소스\s*패널|yaml\s*(수정|적용)|야믈\s*(수정|적용)|매니페스트\s*(수정|적용)|스케일|롤아웃)/i;
 
 function shouldRouteToLiveCluster(query: string, routeKind?: Message['routeKind']): boolean {
   if (routeKind) {

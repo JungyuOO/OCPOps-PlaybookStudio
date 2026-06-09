@@ -125,6 +125,13 @@ def test_lightspeed_placeholder_values_are_ignored() -> None:
     assert settings.openshift_lightspeed_system_prompt == ""
 
 
+def test_lightspeed_default_timeout_allows_slow_introspection_queries() -> None:
+    root = _workspace("lightspeed_default_timeout")
+    settings = load_settings(root)
+
+    assert settings.openshift_lightspeed_timeout_seconds == 90.0
+
+
 def test_seed_manifest_defaults_use_consolidated_corpus_paths() -> None:
     root = _workspace("seed_manifest_paths")
     settings = load_settings(root)

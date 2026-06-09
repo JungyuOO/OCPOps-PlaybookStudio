@@ -486,6 +486,49 @@ def test_lightspeed_artifact_opens_in_viewer(tmp_path):
     assert source_meta["source_collection"] == "external_tool"
 
 
+def test_lightspeed_viewer_renders_markdown_tables(tmp_path):
+    artifact_dir = tmp_path / "artifacts" / "external_answers" / "lightspeed"
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "table-test.json").write_text(
+        json.dumps(
+            {
+                "schema": "pbs.external_answer.lightspeed.v1",
+                "artifact_id": "table-test",
+                "created_at": "2026-06-09T00:00:00Z",
+                "provider": "OpenShift Lightspeed",
+                "query": "openshift-lightspeed pod status",
+                "answer": (
+                    "`openshift-lightspeed` 네임스페이스의 Pod 목록입니다.\n\n"
+                    "| Pod 이름 | READY | STATUS | RESTARTS | AGE |\n"
+                    "| :--- | :--- | :--- | :--- | :--- |\n"
+                    "| `lightspeed-app-server-68789c9985-tw89b` | 3/3 | **Running** | 0 | 29m |\n"
+                    "| `lightspeed-console-plugin-58dbdd79fc-szgxw` | 1/1 | **Running** | 1 | 3d21h |"
+                ),
+                "conversation_id": "conv-table",
+                "input_tokens": 4175,
+                "output_tokens": 242,
+                "referenced_documents": [],
+                "truncated": False,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    viewer_html = server_routes_viewer._viewer_html_for_path(
+        tmp_path,
+        "/external/lightspeed/table-test",
+    )
+
+    assert viewer_html is not None
+    assert '<table class="upload-table">' in viewer_html
+    assert "<th>Pod 이름</th>" in viewer_html
+    assert "<th>READY</th>" in viewer_html
+    assert "<td><code>lightspeed-app-server-68789c9985-tw89b</code></td>" in viewer_html
+    assert "<td><strong>Running</strong></td>" in viewer_html
+    assert "| Pod 이름 | READY | STATUS |" not in viewer_html
+
+
 def test_lightspeed_viewer_shows_when_references_are_not_provided(tmp_path):
     artifact_dir = tmp_path / "artifacts" / "external_answers" / "lightspeed"
     artifact_dir.mkdir(parents=True)

@@ -371,6 +371,70 @@ def test_ops_console_recent_terminal_actions_are_sanitized() -> None:
     assert actions[-1]["command"] == "oc get svc"
 
 
+def test_ops_console_live_chat_lists_pods_for_namespace_status_query(monkeypatch) -> None:
+    def fake_live_context(root_dir, state, connection, namespace):  # noqa: ANN001
+        return {
+            "namespace": namespace,
+            "connection": connection,
+            "resources": {
+                "deployments": [],
+                "pods": [
+                    {
+                        "name": "console-1",
+                        "namespace": namespace,
+                        "kind": "Pod",
+                        "phase": "Running",
+                        "node_name": "worker-1",
+                    },
+                    {
+                        "name": "downloads-1",
+                        "namespace": namespace,
+                        "kind": "Pod",
+                        "phase": "Pending",
+                        "node_name": "",
+                    },
+                ],
+                "services": [],
+                "routes": [],
+                "events": [],
+            },
+            "metrics": {"summary": {}},
+            "manifest_index": {},
+            "manifest_previews": [],
+        }
+
+    monkeypatch.setattr(ops_console_api, "_ops_live_context", fake_live_context)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        response = ops_console_api._chat_payload(
+            Path(tmpdir),
+            {
+                "message": "네임스페이스 pod 목록과 각 pod의 현재 ststus를 실제 클러스터에서 조회해서 보여줘",
+                "connection_id": "conn_live",
+                "namespace": "openshift-console",
+                "history": [],
+            },
+            state={
+                "connections": [
+                    {
+                        "connection_id": "conn_live",
+                        "display_name": "dev-cluster",
+                        "status": "connected",
+                        "default_namespace": "default",
+                    }
+                ]
+            },
+            answerer=None,
+        )
+
+    assert response["lane"] == "live"
+    assert "openshift-console namespace에서 Pod 2건을 찾았습니다." in response["answer"]
+    assert response["artifacts"][0]["kind"] == "resource_list"
+    assert response["artifacts"][0]["resource_type"] == "pods"
+    assert response["artifacts"][0]["items"][0]["name"] == "console-1"
+    assert response["artifacts"][0]["items"][1]["phase"] == "Pending"
+
+
 def test_ops_console_live_chat_includes_recent_terminal_actions(monkeypatch) -> None:
     class CapturingLlmClient:
         def __init__(self) -> None:

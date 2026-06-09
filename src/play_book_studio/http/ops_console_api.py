@@ -40,7 +40,7 @@ RESOURCE_KIND_LABELS = {
     "events": "Event",
 }
 RESOURCE_KEYWORDS = {
-    "pods": ("pod", "pods", "파드", "pods"),
+    "pods": ("pod", "pods", "파드", "팟"),
     "deployments": ("deployment", "deployments", "deploy", "배포", "디플로이"),
     "services": ("service", "services", "svc", "서비스"),
     "routes": ("route", "routes", "ingress", "라우트", "인그레스"),
@@ -73,6 +73,7 @@ OPS_DOMAIN_TERMS = (
     "scale",
     "ready",
     "status",
+    "ststus",
     "cpu",
     "memory",
     "로그",

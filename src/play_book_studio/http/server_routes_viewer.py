@@ -258,6 +258,7 @@ def _render_lightspeed_text_segment_html(text: str) -> list[str]:
     paragraph_lines: list[str] = []
     ordered_items: list[str] = []
     unordered_items: list[str] = []
+    table_lines: list[str] = []
 
     def flush_paragraph() -> None:
         if not paragraph_lines:
@@ -286,7 +287,18 @@ def _render_lightspeed_text_segment_html(text: str) -> list[str]:
         )
         unordered_items.clear()
 
+    def flush_table() -> None:
+        if not table_lines:
+            return
+        rendered = _render_markdown_table(table_lines)
+        if rendered:
+            fragments.append(rendered)
+        else:
+            paragraph_lines.extend(table_lines)
+        table_lines.clear()
+
     def flush_all() -> None:
+        flush_table()
         flush_paragraph()
         flush_ordered()
         flush_unordered()
@@ -302,6 +314,13 @@ def _render_lightspeed_text_segment_html(text: str) -> list[str]:
             level = min(4, max(2, len(heading.group(1)) + 1))
             fragments.append(f"<h{level}>{_render_lightspeed_inline_html(heading.group(2))}</h{level}>")
             continue
+        if _is_markdown_table_line(line):
+            flush_paragraph()
+            flush_ordered()
+            flush_unordered()
+            table_lines.append(line)
+            continue
+        flush_table()
         ordered_match = re.match(r"^\d+[.)]\s+(.+)$", line)
         if ordered_match:
             flush_paragraph()
@@ -460,6 +479,41 @@ def _external_lightspeed_viewer_html(root_dir: Path, viewer_path: str) -> str | 
           padding: 1px 5px;
           font-family: "SF Mono", "Menlo", "Consolas", monospace;
           font-size: 0.88em;
+        }}
+        .section-body .upload-table-wrap {{
+          width: 100%;
+          overflow-x: auto;
+          margin: 14px 0 18px;
+          border: 1px solid #dbe5ef;
+          border-radius: 8px;
+          background: #ffffff;
+        }}
+        .section-body .upload-table {{
+          width: 100%;
+          min-width: 520px;
+          border-collapse: collapse;
+          font-size: 13px;
+        }}
+        .section-body .upload-table th,
+        .section-body .upload-table td {{
+          border-bottom: 1px solid #e5edf5;
+          border-right: 1px solid #e5edf5;
+          padding: 10px 12px;
+          text-align: left;
+          vertical-align: top;
+          line-height: 1.55;
+        }}
+        .section-body .upload-table th {{
+          background: #eaf7ff;
+          color: #0f3554;
+          font-weight: 800;
+        }}
+        .section-body .upload-table tr:last-child td {{
+          border-bottom: 0;
+        }}
+        .section-body .upload-table th:last-child,
+        .section-body .upload-table td:last-child {{
+          border-right: 0;
         }}
         .code-block {{
           margin: 16px 0;
@@ -832,6 +886,7 @@ def _render_markdown_table(lines: list[str]) -> str:
 def _render_basic_inline(text: str) -> str:
     escaped = html.escape(str(text or ""))
     escaped = re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
+    escaped = re.sub(r"\*\*([^*\n]+)\*\*", r"<strong>\1</strong>", escaped)
     return escaped
 
 
