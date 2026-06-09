@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>26.06.09_work_log</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --paper: #ffffff;
+      --ink: #172033;
+      --muted: #647084;
+      --line: #d9e3ef;
+      --blue: #0b63b6;
+      --teal: #087987;
+      --green: #16794c;
+      --amber: #9a5b00;
+      --red: #b42318;
+      --code-bg: #f1f6fb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Noto Sans KR", Arial, sans-serif;
+      line-height: 1.62;
+    }
+    main {
+      max-width: 1180px;
+      margin: 32px auto;
+      padding: 0 24px 48px;
+    }
+    article {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+    }
+    header {
+      padding: 38px 44px 30px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 30px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+      line-height: 1.35;
+    }
+    h3 {
+      margin: 20px 0 9px;
+      font-size: 17px;
+      color: #22324a;
+    }
+    p { margin: 0 0 12px; }
+    section {
+      padding: 28px 44px;
+      border-bottom: 1px solid var(--line);
+    }
+    section:last-child { border-bottom: 0; }
+    ul, ol { margin: 8px 0 0 22px; padding: 0; }
+    li { margin: 6px 0; }
+    code {
+      background: var(--code-bg);
+      border: 1px solid #cfe0f2;
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #064d76;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.92em;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 15px;
+      margin: 0;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: #edf7ff;
+      border: 1px solid #c9e4ff;
+      color: #074d79;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .callout {
+      border-left: 4px solid var(--blue);
+      background: #f2f8ff;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 14px 0;
+    }
+    .callout.warning {
+      border-left-color: var(--amber);
+      background: #fff8eb;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 15px;
+      background: #fbfdff;
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--blue);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #f1f6fb;
+      color: #1b2d45;
+      font-weight: 800;
+    }
+    .status-added { color: var(--green); font-weight: 800; }
+    .status-modified { color: var(--blue); font-weight: 800; }
+    .status-removed { color: var(--red); font-weight: 800; }
+    .status-renamed { color: var(--amber); font-weight: 800; }
+    .small { color: var(--muted); font-size: 13px; }
+    .topic {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin-top: 14px;
+      background: #ffffff;
+    }
+    .topic h3 { margin-top: 0; }
+    .topic table { margin-top: 10px; }
+    .summary-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 18px;
+      margin-top: 12px;
+    }
+    .summary-list div {
+      border-left: 3px solid #b7d8f5;
+      padding-left: 10px;
+    }
+    @media (max-width: 860px) {
+      main { padding: 0 12px 32px; }
+      header, section { padding-left: 22px; padding-right: 22px; }
+      .grid, .summary-list { grid-template-columns: 1fr; }
+      table { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <header>
+        <h1>26.06.09 Work Log</h1>
+        <p class="subtitle">feat/v3.0.1-console 기준으로 feat/kugnus-dev2.3 작업과 현재 feat/kugnus-dev2.4에 반영된 추가/수정 사항을 정리한 작업 로그</p>
+        <div class="meta">
+          <span class="pill">Base: origin/feat/v3.0.1-console @ 8d03845</span>
+          <span class="pill">Current: feat/kugnus-dev2.4 @ 9e6b27b</span>
+          <span class="pill">dev2.3: fd01320</span>
+          <span class="pill">Merge-base: b6f7dc1</span>
+          <span class="pill">작성일: 2026-06-09</span>
+        </div>
+      </header>
+
+      <section>
+        <h2>작업 기준</h2>
+        <p>이 문서는 <code>origin/feat/v3.0.1-console</code>을 기준 브랜치로 두고, 현재 작업 브랜치 <code>feat/kugnus-dev2.4</code>에서 추가 또는 수정된 내용을 정리한다. 현재 브랜치는 console 브랜치의 터미널/콘솔 파츠를 유지하면서, 기존 <code>feat/kugnus-dev2.3</code>의 PBS RAG 및 Lightspeed 연동 작업을 합친 상태다.</p>
+        <div class="callout">
+          기준 diff: <code>origin/feat/v3.0.1-console..feat/kugnus-dev2.4</code><br />
+          변경 규모: <code>44 files changed, 3970 insertions(+), 533 deletions(-)</code>
+        </div>
+        <div class="grid">
+          <div class="card">
+            <strong>반영된 축</strong>
+            <p>console 브랜치 기반의 Ops Console/terminal 구성은 유지하고, PBS 챗봇과 RAG/Lightspeed 동작을 그 위에 결합했다.</p>
+          </div>
+          <div class="card">
+            <strong>수정된 축</strong>
+            <p>Lightspeed 요청 계약, 응답 품질 검증, source/citation/viewer 표시 계약, Studio UI 밀도, stream 중지 기능을 수정했다.</p>
+          </div>
+          <div class="card">
+            <strong>추가된 축</strong>
+            <p>고객 데이터 라이브러리 화면, 고객 문서 RAG 신호, Lightspeed artifact 품질 메타데이터, 작업 문서 산출물을 추가했다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>커밋 흐름</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Commit</th>
+              <th>주제</th>
+              <th>역할</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>f53e61b</code></td>
+              <td>Lightspeed demo flow and source boundaries</td>
+              <td>Lightspeed 우선 라우팅, source boundary, 고객/업로드 문서 출처 계약을 정리한 dev2.3 핵심 작업.</td>
+            </tr>
+            <tr>
+              <td><code>fd01320</code></td>
+              <td>handoff report rename</td>
+              <td>기존 작업보고서 파일명을 날짜 기반 산출물명으로 정리.</td>
+            </tr>
+            <tr>
+              <td><code>09ce6a4</code></td>
+              <td>Lightspeed introspection viewer flow</td>
+              <td>Lightspeed introspection 질문, timeout, external viewer markdown table 렌더링, live-chat 보강.</td>
+            </tr>
+            <tr>
+              <td><code>9e6b27b</code></td>
+              <td>Lightspeed demo answer flow</td>
+              <td>답변 품질 프로파일, 코드박스 분리, compact UI, stop/abort, 문서화까지 포함한 현재 최신 커밋.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>주제별 반영/수정 내역</h2>
+
+        <div class="topic">
+          <h3>1. OpenShift Lightspeed 우선 호출 및 답변 품질 안정화</h3>
+          <p>OpenShift 운영 질문은 PBS 내부 RAG보다 Lightspeed를 우선 호출하도록 정리하고, API 원문 답변 품질이 낮은 경우 재요청할 수 있는 계약을 추가했다.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>파일</th>
+                <th>상태</th>
+                <th>작업 내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>src/play_book_studio/integrations/lightspeed.py</code></td>
+                <td class="status-modified">수정</td>
+                <td>
+                  <ul>
+                    <li><code>console_parity</code>, <code>operator_cli_quality</code>, <code>legacy_configured</code> 요청 프로파일 추가.</li>
+                    <li>기본 요청은 웹콘솔과 유사하게 <code>query</code> 중심으로 보내고, <code>provider/model</code>은 <code>OPENSHIFT_LIGHTSPEED_FORCE_PROVIDER_MODEL=true</code>일 때만 강제 전송하도록 변경.</li>
+                    <li><code>events_list</code>, <code>pods_log</code> 등 내부 tool-name 노출을 감지하는 품질 평가 함수 추가.</li>
+                    <li>운영자용 CLI 답변 품질 프롬프트 추가. 명령어는 복사 가능한 코드블록으로, 가능하면 명령어 1개 단위로 분리하도록 요청.</li>
+                    <li><code>LVMCluster</code>, <code>storageClass</code>, <code>deviceSelector</code>, Pipeline/PAC/Tekton, pod/log/event 류 질문이 Lightspeed 라우팅을 탈 수 있도록 운영 질문 정규식 확장.</li>
+                  </ul>
+                </td>
+              </tr>
+              <tr>
+                <td><code>src/play_book_studio/answering/answerer.py</code></td>
+                <td class="status-modified">수정</td>
+                <td>
+                  <ul>
+                    <li>멀티턴 후속 질문에서 이전 문맥이 OpenShift 운영 주제이고 현재 질문이 실패/점검/로그/주의사항을 묻는 경우 Lightspeed 호출 대상으로 판단.</li>
+                    <li><code>console_parity</code> 응답에 내부 tool-name이 포함되면 <code>operator_cli_quality</code> 프로파일로 1회 재요청.</li>
+                    <li>Lightspeed artifact에 <code>request_metadata</code>, <code>quality</code>, <code>created_at</code> 기록.</li>
+                    <li>외부 답변 metadata에 request profile, payload keys, system prompt hash, 품질 결과를 남겨 추적 가능하게 함.</li>
+                  </ul>
+                </td>
+              </tr>
+              <tr>
+                <td><code>src/play_book_studio/http/server_chat.py</code></td>
+                <td class="status-modified">수정</td>
+                <td>Lightspeed call audit에 request profile, payload keys, query augmentation, provider/model 전송 여부, system prompt hash, quality 결과를 기록하도록 확장.</td>
+              </tr>
+              <tr>
+                <td><code>src/play_book_studio/config/settings.py</code></td>
+                <td class="status-modified">수정</td>
+                <td><code>OPENSHIFT_LIGHTSPEED_REQUEST_PROFILE</code>, <code>OPENSHIFT_LIGHTSPEED_FORCE_PROVIDER_MODEL</code> 설정 추가. 기본 timeout을 90초로 정리.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="topic">
+          <h3>2. Lightspeed 뷰어/출처 표시 계약 정리</h3>
+          <p>Lightspeed 답변은 챗봇 본문이 주 화면이고, 관련 문서 영역에서는 중복 설명이 아니라 출처 이동 수단으로 보이게 정리했다. Viewer에서는 markdown table과 코드블록이 실제 HTML 구조로 렌더링되도록 보강했다.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>파일</th>
+                <th>상태</th>
+                <th>작업 내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>apps/web/src/pages/workspace/WorkspaceAnswer.tsx</code></td>
+                <td class="status-modified">수정</td>
+                <td>
+                  <ul>
+                    <li><code>OpenShift Lightspeed</code> 배지를 Title Case 공식 명칭으로 표시.</li>
+                    <li>Lightspeed 관련 문서 카드는 중복 title/summary를 숨기고, 생성일 기반 source chip으로 축소.</li>
+                    <li>Gold/User Upload/Customer 관련 문서도 배지 + 주제 한 줄 중심으로 간결화.</li>
+                    <li>GFM markdown table 파싱 추가.</li>
+                    <li>코드블록 내부에 주석과 여러 명령어가 섞여 내려와도 명령어별 카드로 분리. 복사 버튼은 명령어 하나만 복사하도록 보장.</li>
+                  </ul>
+                </td>
+              </tr>
+              <tr>
+                <td><code>src/play_book_studio/http/server_routes_viewer.py</code></td>
+                <td class="status-modified">수정</td>
+                <td>
+                  <ul>
+                    <li>Lightspeed external viewer에서 pipe markdown table을 실제 HTML table로 렌더링.</li>
+                    <li>주석 포함 fenced code block을 명령어별 코드블록으로 분리.</li>
+                    <li>뷰어의 코드블록 복사 동작이 실행 명령어 단위가 되도록 caption/copy text를 분리.</li>
+                  </ul>
+                </td>
+              </tr>
+              <tr>
+                <td><code>src/play_book_studio/http/server_support.py</code>, <code>apps/web/src/lib/runtimeApi.ts</code>, <code>apps/web/src/pages/workspaceTypes.ts</code></td>
+                <td class="status-modified">수정</td>
+                <td>related link와 citation에 <code>created_at</code>, <code>source_scope</code> 등 표시/추적에 필요한 필드를 보존.</td>
+              </tr>
+              <tr>
+                <td><code>tests/test_lightspeed_viewer.py</code>, <code>apps/web/src/pages/workspace/WorkspaceAnswer.test.tsx</code></td>
+                <td class="status-modified">수정</td>
+                <td>Lightspeed 뷰어 table 렌더링, 코드블록 분리 개수, 관련 문서 compact 표시, OpenShift Lightspeed 배지 표기 회귀 테스트 추가.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="topic">
+          <h3>3. 고객 데이터 / 업로드 문서 / RAG scope 결합</h3>
+          <p>고객 PPT/업로드 문서를 무조건 답변에 끼워 넣지 않고, 질문 신호가 있을 때 고객 데이터와 공식 문서를 함께 검색할 수 있도록 retrieval scope를 조정했다.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>파일</th>
+                <th>상태</th>
+                <th>작업 내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>src/play_book_studio/answering/context.py</code></td>
+                <td class="status-modified">수정</td>
+                <td>
+                  <ul>
+                    <li>완료보고서, 고객 데이터, PPT, 설계서, 테스트 계획/결과서 등 고객 데이터 질문 신호 정규식 추가.</li>
+                    <li><code>study_docs</code>, <code>customer_data</code> hit를 고객 데이터 citation으로 식별.</li>
+                    <li>고객 데이터 질문일 때 상위 고객 데이터 hit를 seed로 포함해 근거가 누락되지 않게 조정.</li>
+                    <li>Citation에 <code>source_scope</code>를 전달해 UI/source-meta에서 출처를 구분 가능하게 함.</li>
+                  </ul>
+                </td>
+              </tr>
+              <tr>
+                <td><code>src/play_book_studio/retrieval/retriever_pipeline.py</code>, <code>src/play_book_studio/retrieval/retriever_plan.py</code></td>
+                <td class="status-modified">수정</td>
+                <td>
+                  <ul>
+                    <li>고객 데이터 질의 신호가 있으면 official docs와 customer docs를 함께 열어 검색하도록 변경.</li>
+                    <li>고객 데이터만 강제하지 않고, 공식 운영 자료와 고객 자료가 같이 걸릴 수 있도록 scope compatible filter 조정.</li>
+                    <li>완료보고서/설계서/테스트 결과 등 고객 문서 특화 score boost 추가.</li>
+                  </ul>
+                </td>
+              </tr>
+              <tr>
+                <td><code>tests/test_study_docs_rag_scope.py</code>, <code>tests/test_uploaded_viewer_source_meta.py</code>, <code>tests/test_answer_context_metadata.py</code></td>
+                <td class="status-added">추가/수정</td>
+                <td>study docs/customer data scope, uploaded viewer source-meta, citation metadata 보존을 테스트로 고정.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="topic">
+          <h3>4. Wiki Library 고객 데이터 화면 추가</h3>
+          <p>공식 문서와 내 업로드 외에 고객 데이터 자료를 Library 안에서 직접 확인할 수 있도록 별도 surface를 추가했다.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>파일</th>
+                <th>상태</th>
+                <th>작업 내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>apps/web/src/pages/PlaybookLibraryPage.tsx</code></td>
+                <td class="status-modified">수정</td>
+                <td>
+                  <ul>
+                    <li><code>?surface=customer-data</code> 기준 고객 데이터 shelf 추가.</li>
+                    <li><code>study_docs</code> 또는 repository kind <code>study</code> 문서를 고객 데이터로 분류.</li>
+                    <li>고객 데이터 카드에 chunk/indexed count, visibility, 문서 열기, 이 자료로 질문 액션 제공.</li>
+                    <li>고객 데이터 문서는 <code>customer-data-documents</code> book slug와 <code>Customer Data</code> badge로 viewer를 연동.</li>
+                  </ul>
+                </td>
+              </tr>
+              <tr>
+                <td><code>apps/web/src/pages/PlaybookLibraryPage.css</code>, <code>src/play_book_studio/http/presenters.py</code></td>
+                <td class="status-modified">수정</td>
+                <td>고객 데이터 카드/배지 스타일과 data-control-room summary count, authoritative runtime book count 정합성 보강.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="topic">
+          <h3>5. Studio UI compact pass 및 중지 기능</h3>
+          <p>시연 화면에서 답변 본문과 근거 이동이 먼저 보이도록 채팅 입력부, 답변 카드, 관련 문서, 후속 질문 영역의 밀도를 줄였다. 또한 답변 생성 중 중지 버튼이 실제 stream abort로 동작하도록 보강했다.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>파일</th>
+                <th>상태</th>
+                <th>작업 내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>apps/web/src/pages/WorkspacePage.css</code></td>
+                <td class="status-modified">수정</td>
+                <td>
+                  <ul>
+                    <li>채팅 메시지 간격, assistant bubble padding/radius, 본문 line-height, 관련 문서 카드 padding을 compact하게 조정.</li>
+                    <li>OpenShift Lightspeed 배지 대문자 강제 제거.</li>
+                    <li>관련 문서 카드를 pill형 한 줄 표기로 축소.</li>
+                    <li>Markdown table, 코드블록, 후속 질문 chip의 반응형 표시 안정화.</li>
+                  </ul>
+                </td>
+              </tr>
+              <tr>
+                <td><code>apps/web/src/pages/WorkspacePage.tsx</code></td>
+                <td class="status-modified">수정</td>
+                <td>
+                  <ul>
+                    <li>챗봇 stream 요청에 <code>AbortController</code>를 연결해 중지 버튼이 실제 요청을 취소하도록 수정.</li>
+                    <li>중지 후 부분 답변과 loading state가 남지 않도록 상태 정리.</li>
+                    <li>related link/source chip 클릭 흐름과 viewer 열기 동작 유지.</li>
+                  </ul>
+                </td>
+              </tr>
+              <tr>
+                <td><code>apps/web/src/lib/runtimeApi.ts</code>, <code>apps/web/src/lib/opsConsoleApi.ts</code></td>
+                <td class="status-modified">수정</td>
+                <td>일반 chat stream과 Ops Console stream 모두 <code>AbortSignal</code>을 받아 reader cancel 및 AbortError 처리를 수행하도록 수정.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="topic">
+          <h3>6. Ops Console live-chat 보강</h3>
+          <p>console 브랜치의 Ops Console 기능은 유지하면서, 시연 중 나온 pod/status 오타 및 한국어 표현을 더 잘 인식하도록 최소 보강했다.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>파일</th>
+                <th>상태</th>
+                <th>작업 내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>src/play_book_studio/http/ops_console_api.py</code></td>
+                <td class="status-modified">수정</td>
+                <td><code>팟</code>, <code>ststus</code> 같은 사용자 입력 변형을 live-chat resource/domain term으로 인식하도록 보강.</td>
+              </tr>
+              <tr>
+                <td><code>tests/test_ops_console_api.py</code></td>
+                <td class="status-modified">수정</td>
+                <td>namespace pod status 질문이 live context pods 목록으로 응답되는지 테스트 추가.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="topic">
+          <h3>7. 배포/환경 설정 정리</h3>
+          <p>Lightspeed timeout과 요청 프로파일이 로컬 compose, 이미지 compose, prod compose, OpenShift ConfigMap에 동일하게 반영되도록 정리했다.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>파일</th>
+                <th>상태</th>
+                <th>작업 내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>docker-compose.yml</code>, <code>deploy/docker-compose.prod.yml</code>, <code>deploy/docker-compose.image.yml</code>, <code>deploy/openshift/core.yaml</code></td>
+                <td class="status-modified">수정</td>
+                <td>
+                  <ul>
+                    <li><code>OPENSHIFT_LIGHTSPEED_REQUEST_PROFILE=console_parity</code> 추가.</li>
+                    <li><code>OPENSHIFT_LIGHTSPEED_FORCE_PROVIDER_MODEL=false</code> 추가.</li>
+                    <li><code>OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS</code> 기본값을 90초로 통일.</li>
+                  </ul>
+                </td>
+              </tr>
+              <tr>
+                <td><code>deploy/openshift/kustomization.yaml</code>, <code>deploy/openshift/lightspeed-networkpolicy.yaml</code></td>
+                <td class="status-modified">수정/복구</td>
+                <td><code>feat/v3.0.1-console</code>의 <code>Keep PBS ingress to Lightspeed stable</code> 변경을 유지하도록 Lightspeed NetworkPolicy 리소스를 kustomization에 포함. PBS 네임스페이스에서 <code>openshift-lightspeed</code> app-server 8443 포트 접근을 허용하는 배포 리소스를 보존.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="topic">
+          <h3>8. 산출물 문서 추가</h3>
+          <p>시연 안정화 및 향후 live cluster context 확장 방향을 팀 공유용 HTML/MD 문서로 남겼다.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>파일</th>
+                <th>상태</th>
+                <th>내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>.kugnus-plan/26.06.08_PBS_Lightspeed_demo_stabilization_goal.html</code>, <code>.md</code></td>
+                <td class="status-added">추가</td>
+                <td>Lightspeed 시연 안정화 목표, 요청/응답 계약, fallback 정책, 테스트 계획 정리.</td>
+              </tr>
+              <tr>
+                <td><code>.kugnus-plan/26.06.08_PBS_Lightspeed_integration_presentation_guide.html</code></td>
+                <td class="status-added">추가</td>
+                <td>PBS가 Lightspeed API, 내부 RAG, 문서 뷰어를 어떻게 조립하는지 발표용 설명 문서.</td>
+              </tr>
+              <tr>
+                <td><code>.kugnus-plan/26.06.08_PBS_customer_data_RAG_boundary_report.html</code></td>
+                <td class="status-added">추가</td>
+                <td>고객 PPT/업로드 자료가 RAG 근거로 쓰일 수 있는 조건과 억지 매칭을 피해야 하는 제품 판단 정리.</td>
+              </tr>
+              <tr>
+                <td><code>.kugnus-plan/26.06.09_PBS_live_cluster_context_expansion_plan.html</code>, <code>.md</code></td>
+                <td class="status-added">추가</td>
+                <td>PBS가 사용자 환경을 직접 알기 위해 필요한 read-only OpenShift API, live context 결합, 승인 기반 제어 기능 로드맵 정리.</td>
+              </tr>
+              <tr>
+                <td><code>.kugnus-plan/26.06.05_PBS_LightSpeed연동업무보고_김성욱.html</code>, <code>.kugnus-plan/26.06.05_PBS_프로젝트작업범위.html</code></td>
+                <td class="status-renamed">이름 정리</td>
+                <td>기존 handoff report를 날짜/내용 기반 파일명으로 rename.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>파일 변경 요약</h2>
+        <div class="summary-list">
+          <div><strong>추가</strong><br />Lightspeed/고객 데이터/운영도구 로드맵 문서, 고객 데이터/RAG/source-meta 테스트.</div>
+          <div><strong>수정</strong><br />Lightspeed client, answerer, viewer renderer, Studio UI, Library UI, runtime API, deploy env.</div>
+          <div><strong>배포 리소스 보존</strong><br />OpenShift Lightspeed NetworkPolicy 리소스를 console 브랜치 기준으로 유지.</div>
+          <div><strong>이름 변경</strong><br />기존 작업보고서 2개를 날짜 기반 산출물명으로 rename.</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>영역</th>
+              <th>주요 파일</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Backend Lightspeed/RAG</td>
+              <td><code>integrations/lightspeed.py</code>, <code>answering/answerer.py</code>, <code>answering/context.py</code>, <code>retrieval/retriever_pipeline.py</code>, <code>retrieval/retriever_plan.py</code></td>
+            </tr>
+            <tr>
+              <td>HTTP/Viewer</td>
+              <td><code>http/server_routes_viewer.py</code>, <code>http/server_chat.py</code>, <code>http/server_support.py</code>, <code>http/presenters.py</code>, <code>http/ops_console_api.py</code></td>
+            </tr>
+            <tr>
+              <td>Frontend</td>
+              <td><code>WorkspacePage.tsx/css</code>, <code>WorkspaceAnswer.tsx</code>, <code>PlaybookLibraryPage.tsx/css</code>, <code>runtimeApi.ts</code>, <code>opsConsoleApi.ts</code></td>
+            </tr>
+            <tr>
+              <td>Deploy</td>
+              <td><code>docker-compose.yml</code>, <code>deploy/docker-compose.*.yml</code>, <code>deploy/openshift/core.yaml</code>, <code>deploy/openshift/kustomization.yaml</code></td>
+            </tr>
+            <tr>
+              <td>Tests</td>
+              <td><code>test_lightspeed_client.py</code>, <code>test_answerer_llm_final.py</code>, <code>test_lightspeed_viewer.py</code>, <code>WorkspaceAnswer.test.tsx</code>, <code>test_ops_console_api.py</code>, <code>test_study_docs_rag_scope.py</code>, <code>test_uploaded_viewer_source_meta.py</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>검증 기록</h2>
+        <p>최신 커밋 <code>9e6b27b</code> 반영 전후로 수행한 주요 검증은 다음과 같다.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>검증</th>
+              <th>결과</th>
+              <th>비고</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>pytest tests/test_lightspeed_client.py tests/test_answerer_llm_final.py</code></td>
+              <td>통과</td>
+              <td>Lightspeed 요청 프로파일, 품질 재요청, 라우팅 회귀 검증.</td>
+            </tr>
+            <tr>
+              <td><code>pytest tests/test_lightspeed_viewer.py</code></td>
+              <td>통과</td>
+              <td>External Lightspeed viewer table/code block 렌더링 검증.</td>
+            </tr>
+            <tr>
+              <td><code>npm --prefix apps/web test -- WorkspaceAnswer.test.tsx</code></td>
+              <td>통과</td>
+              <td>관련 문서 compact UI, markdown table, 코드박스 분리 렌더링 검증.</td>
+            </tr>
+            <tr>
+              <td><code>npm --prefix apps/web run build</code></td>
+              <td>통과</td>
+              <td>Vite chunk size warning은 기존 경고이며 빌드 실패 아님.</td>
+            </tr>
+            <tr>
+              <td>Runtime smoke</td>
+              <td>통과</td>
+              <td><code>이벤트와 로그는 어떤 명령으로 먼저 확인해?</code> 질문에서 <code>answer_source=lightspeed_with_pbs_rag</code>, <code>request_profile=operator_cli_quality</code>, viewer code block 분리 확인.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>현재 결론</h2>
+        <div class="callout">
+          <p><code>feat/v3.0.1-console</code>의 콘솔/터미널 기반은 유지한 상태에서, <code>feat/kugnus-dev2.3</code>의 RAG/Lightspeed 작업을 <code>feat/kugnus-dev2.4</code>에 결합했다. 이후 시연 안정화를 위해 Lightspeed 답변 품질, 코드블록 복사 UX, 출처/뷰어 계약, 고객 데이터 Library, stream 중지 기능을 추가로 보강했다.</p>
+        </div>
+        <p>현재 브랜치는 <code>origin/feat/kugnus-dev2.4</code>에 <code>9e6b27b</code>까지 푸시되어 있으며, 이 문서 파일 자체는 본 작업 로그 산출물로 새로 작성되었다.</p>
+      </section>
+    </article>
+  </main>
+</body>
+</html>
