@@ -12,7 +12,7 @@ from play_book_studio.cli import (
     _run_lightspeed_chat_smoke,
     _run_lightspeed_smoke,
 )
-from play_book_studio.config.settings import Settings
+from play_book_studio.config.settings import Settings, load_settings
 from play_book_studio.integrations.lightspeed import (
     OpenShiftLightspeedApiError,
     OpenShiftLightspeedClient,
@@ -145,6 +145,56 @@ def test_lightspeed_client_posts_to_query_endpoint(monkeypatch: pytest.MonkeyPat
     assert calls[0]["json"]["model"] == "model-a"
     assert calls[0]["headers"]["Authorization"] == "Bearer token-value"
     assert calls[0]["verify"] is True
+
+
+def test_lightspeed_client_uses_configured_ca_bundle(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def fake_post(url: str, **kwargs: Any) -> FakeResponse:
+        calls.append({"url": url, **kwargs})
+        return FakeResponse()
+
+    monkeypatch.setattr("play_book_studio.integrations.lightspeed.requests.post", fake_post)
+    client = OpenShiftLightspeedClient(
+        Settings(
+            root_dir=tmp_path,
+            openshift_lightspeed_base_url="https://lightspeed.openshift-lightspeed.svc:8443",
+            openshift_lightspeed_ca_bundle_path="/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt",
+        )
+    )
+
+    client.query("oc get pods 명령어 알려줘")
+
+    assert calls[0]["verify"] == "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
+
+
+def test_lightspeed_settings_accept_ols_env_aliases(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                "OLS_BASE_URL=https://ols.openshift-lightspeed.svc:8443",
+                "OLS_AUTH_TOKEN=ols-token",
+                "OLS_PROVIDER=provider-a",
+                "OLS_MODEL=model-a",
+                "OLS_SYSTEM_PROMPT=system-a",
+                "OLS_TIMEOUT_SECONDS=17",
+                "OLS_CA_BUNDLE_PATH=/tmp/service-ca.crt",
+                "OLS_INSECURE_SKIP_TLS_VERIFY=false",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(tmp_path)
+
+    assert settings.openshift_lightspeed_base_url == "https://ols.openshift-lightspeed.svc:8443"
+    assert settings.openshift_lightspeed_api_token == "ols-token"
+    assert settings.openshift_lightspeed_provider == "provider-a"
+    assert settings.openshift_lightspeed_model == "model-a"
+    assert settings.openshift_lightspeed_system_prompt == "system-a"
+    assert settings.openshift_lightspeed_timeout_seconds == 17
+    assert settings.openshift_lightspeed_ca_bundle_path == "/tmp/service-ca.crt"
+    assert settings.openshift_lightspeed_verify_tls is True
 
 
 def test_lightspeed_client_normalizes_common_korean_typo_before_request(

@@ -360,6 +360,19 @@ export interface ActionRequest {
   created_at: string;
 }
 
+export interface AiopsAnalysis {
+  analysis_id: string;
+  kind: string;
+  resource_type: string;
+  resource_name: string;
+  namespace: string;
+  status: string;
+  changes: Array<Record<string, unknown>>;
+  snapshot: Record<string, unknown>;
+  answer: string;
+  created_at: string;
+}
+
 export interface ActionExecution {
   execution_id: string;
   request_id: string;
@@ -372,6 +385,7 @@ export interface ActionExecution {
   error: string;
   created_at: string;
   executed_by: string;
+  aiops_analysis?: AiopsAnalysis;
 }
 
 export interface ActionAuditItem {

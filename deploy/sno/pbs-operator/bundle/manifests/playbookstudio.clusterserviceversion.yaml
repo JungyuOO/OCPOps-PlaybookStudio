@@ -1,0 +1,117 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: playbookstudio-operator.v0.3.0
+  namespace: pbs-ocpops
+  annotations:
+    alm-examples: |
+      [
+        {
+          "apiVersion": "pbs.ocpops.io/v1alpha1",
+          "kind": "PlaybookStudio",
+          "metadata": {"name": "pbs", "namespace": "pbs-ocpops"},
+          "spec": {
+            "chat": {"provider": "lightspeed"},
+            "namespaceMode": {"autoCreate": false},
+            "lightspeed": {
+              "detectOperator": true,
+              "manageOLSConfig": true,
+              "caBundlePath": "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt",
+              "insecureSkipTLSVerify": false,
+              "knowledgeMode": "lightspeed-rag-with-pbs-private-context",
+              "mcp": {"enabled": true, "registerWithOLS": true, "serverName": "pbs-tools"},
+              "networkPolicy": {
+                "enabled": true,
+                "targetNamespace": "openshift-lightspeed",
+                "allowFromNamespaces": ["pbs-ocpops"],
+                "allowAllNamespaces": false
+              }
+            },
+            "runtime": {
+              "secretName": "playbookstudio-secret",
+              "config": {
+                "LLM_ENDPOINT": "http://cllm.cywell.co.kr/v1",
+                "LLM_MODEL": "gemma-4-26b-a4b-it-awq-8bit",
+                "POSTGRES_USER": "admin",
+                "POSTGRES_DB": "playbookstudio",
+                "QDRANT_ENABLED": "false",
+                "TERMINAL_ENABLED": "true",
+                "TERMINAL_HOST": "0.0.0.0",
+                "TERMINAL_USER_WORKSPACE_ENABLED": "false",
+                "TERMINAL_WS_PORT": "8770"
+              }
+            }
+          }
+        }
+      ]
+spec:
+  displayName: Playbook Studio Operator
+  description: Operator-ready preview for managing PBS AIOps Workbench resources.
+  version: 0.3.0
+  maturity: alpha
+  provider:
+    name: OCPOps
+  installModes:
+    - type: OwnNamespace
+      supported: true
+    - type: SingleNamespace
+      supported: true
+    - type: MultiNamespace
+      supported: false
+    - type: AllNamespaces
+      supported: false
+  customresourcedefinitions:
+    owned:
+      - name: playbookstudios.pbs.ocpops.io
+        version: v1alpha1
+        kind: PlaybookStudio
+        displayName: PlaybookStudio
+        description: PBS AIOps Workbench instance.
+  install:
+    strategy: deployment
+    spec:
+      deployments:
+        - name: pbs-operator
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: pbs-operator
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: pbs-operator
+              spec:
+                serviceAccountName: pbs-operator
+                containers:
+                  - name: operator
+                    image: ghcr.io/jungyuoo/ocpops-playbookstudio-operator:v0.3.0
+                    imagePullPolicy: Always
+                    command: ["python", "-m", "play_book_studio.pbs_operator.runtime"]
+                    env:
+                      - name: PBS_OPERATOR_MODE
+                        value: reconcile
+                      - name: PBS_OPERATOR_WATCH_ENABLED
+                        value: "true"
+                      - name: PBS_OPERATOR_APPLY_ENABLED
+                        value: "true"
+                      - name: PBS_OPERATOR_RECONNECT_SECONDS
+                        value: "10"
+      permissions:
+        - serviceAccountName: pbs-operator
+          rules:
+            - apiGroups: ["pbs.ocpops.io"]
+              resources: ["playbookstudios", "playbookstudios/status"]
+              verbs: ["get", "list", "watch", "patch", "update"]
+            - apiGroups: ["", "apps", "route.openshift.io", "rbac.authorization.k8s.io"]
+              resources: ["configmaps", "services", "serviceaccounts", "deployments", "routes", "roles", "rolebindings"]
+              verbs: ["get", "list", "watch", "create", "update", "patch"]
+      clusterPermissions:
+        - serviceAccountName: pbs-operator
+          rules:
+            - apiGroups: ["rbac.authorization.k8s.io"]
+              resources: ["clusterroles", "clusterrolebindings"]
+              verbs: ["get", "list", "watch", "create", "update", "patch"]
+            - apiGroups: ["networking.k8s.io"]
+              resources: ["networkpolicies"]
+              verbs: ["get", "list", "watch", "create", "update", "patch"]

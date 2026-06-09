@@ -51,7 +51,13 @@ def test_terminal_broker_cluster_role_covers_workspace_lifecycle_and_exec() -> N
         for rule in rules
         for resource in rule["resources"]
     }
+    read_all_rule = next(
+        rule
+        for rule in rules
+        if rule["apiGroups"] == ["*"] and rule["resources"] == ["*"]
+    )
 
+    assert set(read_all_rule["verbs"]) == {"get", "list", "watch"}
     assert {"create", "get", "patch", "delete"}.issubset(resource_verbs["namespaces"])
     assert {"create", "get", "patch", "delete"}.issubset(resource_verbs["serviceaccounts"])
     assert {"create", "get", "patch", "delete"}.issubset(resource_verbs["persistentvolumeclaims"])

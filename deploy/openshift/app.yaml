@@ -44,6 +44,13 @@ spec:
                 secretKeyRef:
                   name: playbookstudio-secret
                   key: OCP_API_TOKEN
+                  optional: true
+            - name: OLS_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: playbookstudio-secret
+                  key: OLS_AUTH_TOKEN
+                  optional: true
             - name: OPENSHIFT_LIGHTSPEED_API_TOKEN
               valueFrom:
                 secretKeyRef:

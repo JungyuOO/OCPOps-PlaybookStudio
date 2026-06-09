@@ -19,7 +19,6 @@ import {
   PanelRightClose,
   Check,
   Star,
-  Clock3,
   Compass,
   Terminal as TerminalIcon,
   X,
@@ -44,8 +43,6 @@ import {
   type SessionSummary,
   type StudioStarterQuestion,
   type StudioStarterQuestionGroup,
-  type WikiOverlayRecommendedPlay,
-  type WikiOverlaySignalsResponse,
   type SourceMetaResponse,
   type WikiAnnotationTool,
   type WikiEditedTextStyle,
@@ -69,8 +66,6 @@ import {
   loadDbChatMessages,
   loadDocumentIngestStatus,
   loadDocumentRepositories,
-  loadSignals,
-  loadWikiOverlaySignals,
   loadWikiOverlays,
   loadSession,
   loadStudioStarterQuestions,
@@ -92,8 +87,13 @@ import {
   loadOcpOverview,
   loadResourceDetail,
   loadResources,
+  loadNamespaces,
   loadLearnerWorkspaceStatus,
   listOcpProfiles,
+  previewAction,
+  createActionRequest,
+  approveActionRequest,
+  executeActionRequest,
   resetLearnerWorkspace,
   sendOpsChatStream,
   setLearnerWorkspacePinned,
@@ -358,21 +358,52 @@ function opsChatResponseToChatResponse(response: OpsChatResponse, sessionId: str
 }
 
 type LeftPanelMode = 'history' | 'outline' | 'signals';
-type RightPanelMode = 'viewer' | 'terminal';
-type WorkspaceChatMode = 'document' | 'live_cluster';
-type SignalsFavoriteFilter = 'favorites' | 'edited';
+type RightPanelMode = 'viewer' | 'terminal' | 'yaml';
 const CLUSTER_RESOURCE_OPTIONS = ['pods', 'deployments', 'services', 'routes', 'events'] as const;
 type ClusterResourceKind = typeof CLUSTER_RESOURCE_OPTIONS[number];
 
-interface ClusterSignalEvent {
-  id: string;
-  timestamp: string;
-  operationType: string;
-  resourceKind: string;
-  resourceName: string;
-  namespace: string;
-  status: string;
-  sourceCommand: string;
+const LIVE_CLUSTER_QUERY_PATTERN =
+  /(cluster|namespace|project|pod|pods|deployment|deployments|service|services|route|routes|event|events|yaml|manifest|apply|replica|scale|log|logs|resource|workload|oc\s+|kubectl|클러스터|네임스페이스|프로젝트|파드|팟|배포|서비스|라우트|이벤트|야믈|매니페스트|적용|레플리카|스케일|로그|리소스|워크로드|상태|현재|지금)/i;
+
+function shouldRouteToLiveCluster(query: string, routeKind?: Message['routeKind']): boolean {
+  if (routeKind) {
+    return false;
+  }
+  return LIVE_CLUSTER_QUERY_PATTERN.test(query);
+}
+
+const CLUSTER_RESOURCE_NAV_GROUPS: ClusterResourceNavGroup[] = [
+  {
+    label: 'Workloads',
+    items: [
+      { kind: 'pods', label: 'Pods', description: 'Running workload instances' },
+      { kind: 'deployments', label: 'Deployments', description: 'Declarative application rollout' },
+    ],
+  },
+  {
+    label: 'Networking',
+    items: [
+      { kind: 'services', label: 'Services', description: 'Stable network endpoints' },
+      { kind: 'routes', label: 'Routes', description: 'External OpenShift access' },
+    ],
+  },
+  {
+    label: 'Observe',
+    items: [
+      { kind: 'events', label: 'Events', description: 'Recent namespace events' },
+    ],
+  },
+];
+
+interface ClusterResourceNavItem {
+  kind: ClusterResourceKind;
+  label: string;
+  description: string;
+}
+
+interface ClusterResourceNavGroup {
+  label: string;
+  items: ClusterResourceNavItem[];
 }
 
 interface RecentTerminalAction {
@@ -920,50 +951,6 @@ function NoAnswerAcquisitionCard({
   );
 }
 
-function detectClusterSignal(command: string): Omit<ClusterSignalEvent, 'id' | 'timestamp' | 'status'> | null {
-  const normalized = command.trim().replace(/\s+/g, ' ');
-  const match = normalized.match(/^(oc|kubectl)\s+(create|apply|delete|edit|patch|rollout|scale|expose|adm|set\s+image)\b/i);
-  if (!match) {
-    return null;
-  }
-  const operationType = match[2].toLowerCase();
-  const namespaceMatch = normalized.match(/(?:^|\s)(?:-n|--namespace)\s+([^\s]+)/i);
-  const namespace = namespaceMatch?.[1] ?? 'default';
-  const afterOperation = normalized.slice(match[0].length).trim();
-  const tokens = afterOperation.split(/\s+/).filter(Boolean);
-  const resourceKind = tokens.find((token) => !token.startsWith('-') && !token.includes('=')) ?? 'resource';
-  const resourceName = tokens.find((token, index) => index > 0 && !token.startsWith('-') && !token.includes('=')) ?? '';
-  return {
-    operationType,
-    resourceKind,
-    resourceName,
-    namespace,
-    sourceCommand: command,
-  };
-}
-
-function signalEventFromApi(item: {
-  signal_id: string;
-  timestamp: string;
-  operation_type: string;
-  resource_kind: string;
-  resource_name: string;
-  namespace: string;
-  status: string;
-  source_command: string;
-}): ClusterSignalEvent {
-  return {
-    id: item.signal_id,
-    timestamp: item.timestamp,
-    operationType: item.operation_type,
-    resourceKind: item.resource_kind,
-    resourceName: item.resource_name,
-    namespace: item.namespace,
-    status: item.status,
-    sourceCommand: item.source_command,
-  };
-}
-
 function runtimePathFromUrl(viewerUrl: string): string {
   try {
     const parsed = new URL(viewerUrl, window.location.origin);
@@ -1471,8 +1458,6 @@ export default function WorkspacePage() {
     return window.localStorage.getItem('workspace.outlineCategoryKey') ?? '';
   });
   const [wikiOverlays, setWikiOverlays] = useState<WikiOverlayRecord[]>([]);
-  const [wikiOverlaySignals, setWikiOverlaySignals] = useState<WikiOverlaySignalsResponse | null>(null);
-  const [isOverlayLoading, setIsOverlayLoading] = useState(false);
   const [isOverlaySaving, setIsOverlaySaving] = useState(false);
   const [annotationEnabled, setAnnotationEnabled] = useState(false);
   const [annotationTool, setAnnotationTool] = useState<WikiAnnotationTool>('text');
@@ -1481,7 +1466,6 @@ export default function WorkspacePage() {
   const [annotationTextStyle, setAnnotationTextStyle] = useState<WikiEditedTextStyle>(DEFAULT_EDITED_TEXT_STYLE);
   const [quickNavOpen, setQuickNavOpen] = useState(false);
   const [viewerActiveSection, setViewerActiveSection] = useState<ViewerActiveSection | null>(null);
-  const [signalsFavoriteFilter, setSignalsFavoriteFilter] = useState<SignalsFavoriteFilter>('favorites');
 
   const { globalTheme, toggleGlobalTheme } = useGlobalTheme();
   const [opsWorkspaceId, setOpsWorkspaceId] = useState(() => {
@@ -1498,7 +1482,6 @@ export default function WorkspacePage() {
   });
   const [footerConnections, setFooterConnections] = useState<OcpConnection[]>([]);
   const [isFooterProfileLoading, setIsFooterProfileLoading] = useState(false);
-  const [currentMode, setCurrentMode] = useState<WorkspaceChatMode>('document');
   const [clusterConnectionStatus, setClusterConnectionStatus] = useState<ClusterConnectionStatus>('not_connected');
   const [terminalConnectionState, setTerminalConnectionState] = useState<TerminalConnectionState>('closed');
   const [userWorkspaceNamespace, setUserWorkspaceNamespace] = useState('');
@@ -1507,12 +1490,15 @@ export default function WorkspacePage() {
   const [workspaceActionError, setWorkspaceActionError] = useState('');
   const [selectedResourceKind, setSelectedResourceKind] = useState<ClusterResourceKind>('pods');
   const [selectedResourceNamespace, setSelectedResourceNamespace] = useState('default');
+  const [clusterNamespaces, setClusterNamespaces] = useState<string[]>([]);
   const [clusterResources, setClusterResources] = useState<OcpResourceItem[]>([]);
   const [isClusterResourceLoading, setIsClusterResourceLoading] = useState(false);
   const [clusterResourceError, setClusterResourceError] = useState('');
   const [resourceYamlDetail, setResourceYamlDetail] = useState<ResourceDetailResponse | null>(null);
+  const [resourceYamlDraft, setResourceYamlDraft] = useState('');
+  const [resourceYamlApplyStatus, setResourceYamlApplyStatus] = useState('');
   const [isResourceYamlLoading, setIsResourceYamlLoading] = useState(false);
-  const [signalEvents, setSignalEvents] = useState<ClusterSignalEvent[]>([]);
+  const [isResourceYamlApplying, setIsResourceYamlApplying] = useState(false);
   const [recentTerminalActions, setRecentTerminalActions] = useState<RecentTerminalAction[]>([]);
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [dashboardOverview, setDashboardOverview] = useState<OcpOverview | null>(null);
@@ -1641,16 +1627,28 @@ export default function WorkspacePage() {
   }, [activeFooterConnection?.connection_id]);
 
   useEffect(() => {
-    if (currentMode === 'live_cluster' && !isLiveClusterAvailable) {
-      setCurrentMode('document');
-    }
-  }, [currentMode, isLiveClusterAvailable]);
-
-  useEffect(() => {
     if (activeFooterConnection?.default_namespace && selectedResourceNamespace === 'default') {
       setSelectedResourceNamespace(activeFooterConnection.default_namespace);
     }
   }, [activeFooterConnection?.default_namespace, selectedResourceNamespace]);
+
+  const refreshClusterNamespaces = useCallback(async () => {
+    if (!isClusterConnected || !activeFooterConnection) {
+      setClusterNamespaces([]);
+      return;
+    }
+    try {
+      const response = await loadNamespaces(activeFooterConnection.connection_id);
+      setClusterNamespaces(response.items ?? []);
+    } catch (error) {
+      console.error(error);
+      setClusterNamespaces([]);
+    }
+  }, [activeFooterConnection, isClusterConnected]);
+
+  useEffect(() => {
+    void refreshClusterNamespaces();
+  }, [refreshClusterNamespaces]);
 
   const refreshClusterResources = useCallback(async () => {
     if (!isClusterConnected || !activeFooterConnection) {
@@ -1679,7 +1677,7 @@ export default function WorkspacePage() {
   ]);
 
   useEffect(() => {
-    if (leftPanelMode === 'outline') {
+    if (leftPanelMode === 'outline' || leftPanelMode === 'signals') {
       void refreshClusterResources();
     }
   }, [leftPanelMode, refreshClusterResources]);
@@ -1699,6 +1697,9 @@ export default function WorkspacePage() {
         resource.name,
       );
       setResourceYamlDetail(detail);
+      setResourceYamlDraft(detail.manifest_yaml || '');
+      setResourceYamlApplyStatus('');
+      setRightPanelMode('yaml');
     } catch (error) {
       console.error(error);
       setClusterResourceError('Resource YAML is unavailable.');
@@ -1707,38 +1708,116 @@ export default function WorkspacePage() {
     }
   }
 
-  const refreshSignalEvents = useCallback(async () => {
+  const refreshSelectedResourceYaml = useCallback(async () => {
+    if (!resourceYamlDetail || !activeFooterConnection || !isClusterConnected) {
+      return;
+    }
+    setIsResourceYamlLoading(true);
+    setResourceYamlApplyStatus('');
     try {
-      const payload = await loadSignals(50);
-      if (payload.database === 'postgres') {
-        setSignalEvents(payload.items.map(signalEventFromApi));
-      }
+      const detail = await loadResourceDetail(
+        activeFooterConnection.connection_id,
+        resourceYamlDetail.resource,
+        resourceYamlDetail.namespace,
+        resourceYamlDetail.name,
+      );
+      setResourceYamlDetail(detail);
+      setResourceYamlDraft(detail.manifest_yaml || '');
     } catch (error) {
       console.error(error);
+      setResourceYamlApplyStatus(error instanceof Error ? error.message : 'Resource YAML refresh failed.');
+    } finally {
+      setIsResourceYamlLoading(false);
     }
-  }, []);
+  }, [activeFooterConnection, isClusterConnected, resourceYamlDetail]);
+
+  const applySelectedResourceYaml = useCallback(async () => {
+    if (!resourceYamlDetail || !activeFooterConnection || !isClusterConnected || !resourceYamlDraft.trim()) {
+      return;
+    }
+    const payload = {
+      action_type: 'yaml_apply',
+      connection_id: activeFooterConnection.connection_id,
+      namespace: resourceYamlDetail.namespace,
+      resource_type: resourceYamlDetail.resource,
+      resource_name: resourceYamlDetail.name,
+      manifest_yaml: resourceYamlDraft,
+      actor_id: 'pbs-web',
+      actor_roles: ['operator'],
+    };
+    setIsResourceYamlApplying(true);
+    setResourceYamlApplyStatus('Validating YAML apply request...');
+    try {
+      const preview = await previewAction(payload);
+      if (!preview.allowed) {
+        setResourceYamlApplyStatus(`Apply blocked: ${(preview.blocked_reasons || preview.validation_messages || []).join(' ') || preview.summary}`);
+        return;
+      }
+      const request = await createActionRequest(payload);
+      await approveActionRequest(request.request_id, {
+        actor_id: 'pbs-web',
+        actor_role: 'operator',
+        decision_note: 'Approved from Playbook Studio YAML editor.',
+      });
+      const execution = await executeActionRequest(request.request_id, {
+        actor_id: 'pbs-web',
+        execution_mode: 'live',
+      });
+      if (execution.status !== 'succeeded') {
+        setResourceYamlApplyStatus(execution.error || execution.summary || 'YAML apply failed.');
+        return;
+      }
+      setResourceYamlApplyStatus((execution.output_lines || []).join('\n') || execution.summary || 'YAML applied.');
+      if (execution.aiops_analysis?.answer) {
+        setMessages((current) => [
+          ...current,
+          {
+            id: makeId('assistant'),
+            role: 'assistant',
+            content: execution.aiops_analysis?.answer || '',
+            responseKind: 'aiops_analysis',
+            answerSource: 'cluster_operation',
+            artifacts: [
+              {
+                type: 'aiops_analysis',
+                ...execution.aiops_analysis,
+              },
+            ],
+          },
+        ]);
+      }
+      await refreshClusterResources();
+      const detail = await loadResourceDetail(
+        activeFooterConnection.connection_id,
+        resourceYamlDetail.resource,
+        resourceYamlDetail.namespace,
+        resourceYamlDetail.name,
+      );
+      setResourceYamlDetail(detail);
+      setResourceYamlDraft(detail.manifest_yaml || resourceYamlDraft);
+    } catch (error) {
+      console.error(error);
+      setResourceYamlApplyStatus(error instanceof Error ? error.message : 'YAML apply failed.');
+    } finally {
+      setIsResourceYamlApplying(false);
+    }
+  }, [
+    activeFooterConnection,
+    isClusterConnected,
+    refreshClusterResources,
+    resourceYamlDetail,
+    resourceYamlDraft,
+  ]);
 
   const handleTerminalCommandSubmitted = useCallback((command: string) => {
     setRecentTerminalActions((current) => [
       { command, outputExcerpt: '', timestamp: new Date().toISOString() },
       ...current.filter((item) => item.command !== command),
     ].slice(0, 6));
-    const signal = detectClusterSignal(command);
-    if (!signal) {
-      return;
-    }
-    setSignalEvents((current) => [{
-      ...signal,
-      id: makeId('signal'),
-      timestamp: new Date().toISOString(),
-      status: isClusterConnected ? 'observed' : 'cluster_unverified',
-    }, ...current].slice(0, 40));
-    setLeftPanelMode('signals');
-    window.setTimeout(() => { void refreshSignalEvents(); }, 800);
     if (isClusterConnected) {
       void refreshClusterResources();
     }
-  }, [isClusterConnected, refreshClusterResources, refreshSignalEvents]);
+  }, [isClusterConnected, refreshClusterResources]);
 
   const handleTerminalOutputChunk = useCallback((chunk: string) => {
     if (!chunk) {
@@ -1890,10 +1969,6 @@ export default function WorkspacePage() {
   }, [dashboardOpen, refreshDashboard]);
 
   useEffect(() => {
-    void refreshSignalEvents();
-  }, [refreshSignalEvents]);
-
-  useEffect(() => {
     if (!ingestionStatusBanner?.repositoryId && !ingestionStatusBanner?.documentSourceId) {
       return;
     }
@@ -1955,18 +2030,11 @@ export default function WorkspacePage() {
   }, [ingestionStatusBanner, isWorkspaceUploading]);
 
   const refreshWikiOverlays = useCallback(async () => {
-    setIsOverlayLoading(true);
     try {
-      const [overlayResult, signalResult] = await Promise.all([
-        loadWikiOverlays(wikiOverlayUserId),
-        loadWikiOverlaySignals(wikiOverlayUserId),
-      ]);
+      const overlayResult = await loadWikiOverlays(wikiOverlayUserId);
       setWikiOverlays(overlayResult.items ?? []);
-      setWikiOverlaySignals(signalResult);
     } catch (error) {
       console.error(error);
-    } finally {
-      setIsOverlayLoading(false);
     }
   }, [wikiOverlayUserId]);
 
@@ -2828,10 +2896,6 @@ export default function WorkspacePage() {
     () => wikiOverlays.filter((item) => item.kind === 'favorite'),
     [wikiOverlays],
   );
-  const recentPositionOverlays = useMemo(
-    () => wikiOverlays.filter((item) => item.kind === 'recent_position'),
-    [wikiOverlays],
-  );
   const noteOverlays = useMemo(
     () => wikiOverlays.filter((item) => item.kind === 'note'),
     [wikiOverlays],
@@ -2892,11 +2956,6 @@ export default function WorkspacePage() {
     });
     return next;
   }, [currentPreviewBookSlug, editedCardOverlays, noteOverlays]);
-  const personalizedNextPlays = useMemo<WikiOverlayRecommendedPlay[]>(
-    () => wikiOverlaySignals?.user_focus?.recommended_next_plays ?? [],
-    [wikiOverlaySignals],
-  );
-
   const currentFavorite = useMemo(
     () => favoriteOverlays.find((item) => item.target_ref === currentOverlayTarget?.ref) ?? null,
     [currentOverlayTarget, favoriteOverlays],
@@ -3531,52 +3590,6 @@ export default function WorkspacePage() {
     });
   }
 
-  function getSignalDisplayTitle(item: WikiOverlayRecord): string {
-    if (item.resolved_target?.title) return item.resolved_target.title;
-    const fallback = item.title;
-    if (fallback) return fallback;
-    const ref = item.target_ref || '';
-    try {
-      const cleanRef = ref.replace(/^section:/, '').replace(/^book:/, '');
-      const parts = cleanRef.split('#');
-      if (parts.length > 1) {
-        return `${parts[0]} > ${decodeURIComponent(parts[1])}`;
-      }
-      return decodeURIComponent(cleanRef);
-    } catch {
-      return ref;
-    }
-  }
-
-  function getSignalHref(item: WikiOverlayRecord): string | undefined {
-    if (item.resolved_target?.viewer_path) return item.resolved_target.viewer_path;
-    const fallbackPath = typeof item.payload.viewer_path === 'string' ? item.payload.viewer_path : undefined;
-    if (fallbackPath) return fallbackPath;
-    if (item.target_ref) {
-      if (item.target_ref.startsWith('section:')) {
-        const split = item.target_ref.replace('section:', '').split('#');
-        return `/wiki-runtime/active/${split[0]}/index.html${split[1] ? '#' + split[1] : ''}`;
-      }
-      if (item.target_ref.startsWith('book:')) {
-        return `/wiki-runtime/active/${item.target_ref.replace('book:', '')}/index.html`;
-      }
-    }
-    return undefined;
-  }
-
-  async function handleOverlayJump(item: WikiOverlayRecord): Promise<void> {
-    const href = getSignalHref(item);
-    if (!href) {
-      return;
-    }
-    await handleRelatedLinkClick({
-      label: getSignalDisplayTitle(item),
-      href,
-      kind: item.target_kind === 'entity_hub' ? 'entity' : 'book',
-      summary: item.resolved_target?.summary || item.summary || '',
-    });
-  }
-
   async function handleUploadSelection(event: ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = event.target.files?.[0];
     if (!file) {
@@ -3763,9 +3776,10 @@ export default function WorkspacePage() {
     const resolvedLearningPathId = options.learningPathId ?? questionMeta?.learningPathId;
     const resolvedLearningStepId = options.learningStepId ?? questionMeta?.learningStepId;
     const resolvedLabTaskId = options.labTaskId ?? questionMeta?.labTaskId;
-    const shouldUseLiveClusterMode = !isCourseMode && currentMode === 'live_cluster' && isLiveClusterAvailable;
     const messageRouteKind: Message['routeKind'] = resolvedRouteKind || (isCourseMode ? 'study_docs' : undefined);
     const requestRouteKind = backendRouteKindForChat(messageRouteKind);
+    const shouldUseLiveClusterMode =
+      !isCourseMode && isLiveClusterAvailable && shouldRouteToLiveCluster(trimmed, messageRouteKind);
     if (messageRouteKind === 'learning' && resolvedLabTaskId) {
       setTerminalLearningContext({
         learnerId: wikiOverlayUserId,
@@ -4064,14 +4078,6 @@ export default function WorkspacePage() {
   const canCapture = Boolean(activeDraft) && !isCapturing;
   const canNormalize = Boolean(activeDraft) && !isNormalizing;
 
-  const recentOverlayItems = recentPositionOverlays.slice(0, 4);
-  const editedOverlayItems = editedCardOverlays.slice(0, 6);
-  const favoriteOverlayItems = (
-    signalsFavoriteFilter === 'edited'
-      ? editedOverlayItems
-      : favoriteOverlays
-  ).slice(0, 6);
-  const nextPlayItems = personalizedNextPlays.slice(0, 4);
   const activeAssistantMessage = useMemo(
     () => [...messages].reverse().find((message) => message.role === 'assistant') ?? null,
     [messages],
@@ -4239,7 +4245,12 @@ export default function WorkspacePage() {
     tone: activeSourceId === source.id ? 'default' : 'muted',
   }));
   const previewTitle = preview.kind === 'empty' ? '' : preview.title;
-  const viewerSurfaceTitle = rightPanelMode === 'terminal' ? 'Terminal Session' : 'Wiki Viewer';
+  const viewerSurfaceTitle =
+    rightPanelMode === 'terminal'
+      ? 'Terminal Session'
+      : rightPanelMode === 'yaml'
+        ? 'Resource YAML'
+        : 'Wiki Viewer';
   const viewerDocumentToolbar = !testMode && currentOverlayTarget ? (
     <div className="viewer-header-toolbar" role="toolbar" aria-label="위키 뷰어 액션">
       {preview.kind === 'viewer' && viewerOriginalSourceHref && (
@@ -4347,6 +4358,15 @@ export default function WorkspacePage() {
           aria-label="Terminal Session"
         >
           <TerminalIcon size={14} />
+        </button>
+        <button
+          type="button"
+          className={`viewer-panel-mode-btn ${rightPanelMode === 'yaml' ? 'active' : ''}`}
+          onClick={() => setRightPanelMode('yaml')}
+          title="Resource YAML"
+          aria-label="Resource YAML"
+        >
+          <FileText size={14} />
         </button>
       </div>
       {rightPanelMode === 'viewer' ? viewerDocumentToolbar : null}
@@ -4506,6 +4526,7 @@ export default function WorkspacePage() {
                 </div>
               ) : leftPanelMode === 'outline' ? (
                 <div className="outline-panel">
+                  {false && (
                   <section className="outline-surface-card outline-surface-card--document cluster-resource-explorer">
                     <div className="outline-section-head">
                       <div className="outline-section-copy">
@@ -4581,6 +4602,7 @@ export default function WorkspacePage() {
                       </div>
                     )}
                   </section>
+                  )}
                   <details className="outline-more outline-surface-card outline-surface-card--sources rag-source-scope-card" open>
                     <summary>
                       <span>RAG 범위</span>
@@ -5005,111 +5027,111 @@ export default function WorkspacePage() {
                 </div>
               ) : (
                 <div className="signals-panel">
-                  <section className="signals-card cluster-signals-card">
+                  <section className="signals-card cluster-resource-navigator">
                     <div className="signals-card-title">
                       <TerminalIcon size={14} />
-                      <span>Cluster Operations</span>
+                      <span>Cluster Resources</span>
                     </div>
-                    {signalEvents.length === 0 ? (
-                      <span className="signals-empty">CLI operation signal이 아직 없습니다.</span>
+                    <div className="cluster-resource-controls">
+                      <label>
+                        <span>Project</span>
+                        <select
+                          value={selectedResourceNamespace}
+                          onChange={(event) => setSelectedResourceNamespace(event.target.value)}
+                          disabled={!isClusterConnected || clusterNamespaces.length === 0}
+                        >
+                          {(clusterNamespaces.length > 0 ? clusterNamespaces : [selectedResourceNamespace]).map((namespace) => (
+                            <option key={namespace} value={namespace}>{namespace}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Project scope</span>
+                        <input
+                          type="text"
+                          value={selectedResourceNamespace}
+                          onChange={(event) => setSelectedResourceNamespace(event.target.value)}
+                          disabled={!isClusterConnected}
+                          placeholder={activeFooterConnection?.default_namespace || 'default'}
+                        />
+                      </label>
+                    </div>
+                  </section>
+                  <section className="signals-card cluster-resource-navigator">
+                    <div className="cluster-nav-groups">
+                      {CLUSTER_RESOURCE_NAV_GROUPS.map((group) => (
+                        <div key={group.label} className="cluster-nav-group">
+                          <div className="cluster-nav-group-title">{group.label}</div>
+                          {group.items.map((item) => (
+                            <button
+                              key={item.kind}
+                              type="button"
+                              className={`cluster-nav-item ${selectedResourceKind === item.kind ? 'active' : ''}`}
+                              onClick={() => setSelectedResourceKind(item.kind)}
+                              disabled={!isClusterConnected}
+                            >
+                              <span>{item.label}</span>
+                              <small>{item.description}</small>
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                  <section className="signals-card cluster-resource-navigator cluster-resource-navigator--list">
+                    <div className="outline-section-head">
+                      <div className="outline-section-copy">
+                        <strong>{selectedResourceKind}</strong>
+                        <span>{selectedResourceNamespace || activeFooterConnection?.default_namespace || 'default'}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="cluster-resource-refresh"
+                        onClick={() => { void refreshClusterResources(); }}
+                        disabled={!isClusterConnected || isClusterResourceLoading}
+                      >
+                        {isClusterResourceLoading ? 'Loading' : 'Refresh'}
+                      </button>
+                    </div>
+                    {!isClusterConnected ? (
+                      <div className="outline-empty">
+                        <p>Cluster is not connected.</p>
+                      </div>
+                    ) : clusterResourceError ? (
+                      <div className="outline-empty">
+                        <p>{clusterResourceError}</p>
+                      </div>
+                    ) : isClusterResourceLoading ? (
+                      <div className="outline-empty">
+                        <div className="loading-spinner-small"></div>
+                        <p>Loading cluster resources</p>
+                      </div>
+                    ) : clusterResources.length === 0 ? (
+                      <div className="outline-empty">
+                        <p>No {selectedResourceKind} found.</p>
+                      </div>
                     ) : (
-                      <div className="cluster-signal-list">
-                        {signalEvents.map((signal) => (
-                          <article key={signal.id} className="cluster-signal-item">
-                            <div className="cluster-signal-head">
-                              <strong>{signal.operationType}</strong>
-                              <span>{signal.status}</span>
-                            </div>
-                            <div className="cluster-signal-meta">
-                              {signal.resourceKind}
-                              {signal.resourceName ? ` · ${signal.resourceName}` : ''}
-                              {signal.namespace ? ` · ${signal.namespace}` : ''}
-                            </div>
-                            <code>{signal.sourceCommand}</code>
-                            <time>{new Date(signal.timestamp).toLocaleTimeString()}</time>
-                          </article>
+                      <div className="cluster-resource-list">
+                        {clusterResources.map((resource) => (
+                          <button
+                            key={`${resource.kind}:${resource.namespace}:${resource.name}`}
+                            type="button"
+                            className={`cluster-resource-item ${resourceYamlDetail?.name === resource.name && resourceYamlDetail?.resource === selectedResourceKind ? 'active' : ''}`}
+                            onClick={() => { void openClusterResourceYaml(resource); }}
+                          >
+                            <span className="cluster-resource-title">{resource.name}</span>
+                            <span className="cluster-resource-meta">
+                              {resource.kind} / {resource.namespace || selectedResourceNamespace}
+                              {resource.phase ? ` / ${resource.phase}` : ''}
+                              {typeof resource.ready_replicas === 'number' && typeof resource.replicas === 'number'
+                                ? ` / ${resource.ready_replicas}/${resource.replicas}`
+                                : ''}
+                            </span>
+                          </button>
                         ))}
                       </div>
                     )}
                   </section>
-                  {false && (
-                    <>
-                  {(isOverlayLoading || isOverlaySaving) && <div className="signals-status">syncing</div>}
-                  <div className="signals-card">
-                    <div className="signals-card-title">
-                      <Clock3 size={14} />
-                      <span>Recent Position</span>
-                    </div>
-                    <div className="signals-chip-list">
-                      {isOverlayLoading ? <span className="signals-empty">불러오는 중</span> : recentOverlayItems.length > 0 ? recentOverlayItems.map((item) => (
-                        <button
-                          key={item.overlay_id}
-                          type="button"
-                          className="signals-chip"
-                          onClick={() => { void handleOverlayJump(item); }}
-                          title={item.target_ref}
-                        >
-                          {getSignalDisplayTitle(item)}
-                        </button>
-                      )) : <span className="signals-empty">아직 기록이 없습니다.</span>}
-                    </div>
-                  </div>
-                  <div className="signals-card">
-                    <div className="signals-card-title">
-                      <Star size={14} />
-                      <span>Favorites</span>
-                    </div>
-                    <div className="signals-card-filters">
-                      <button
-                        type="button"
-                        className={`signals-filter-btn ${signalsFavoriteFilter === 'favorites' ? 'active' : ''}`}
-                        onClick={() => setSignalsFavoriteFilter('favorites')}
-                      >
-                        즐겨찾기
-                      </button>
-                      <button
-                        type="button"
-                        className={`signals-filter-btn ${signalsFavoriteFilter === 'edited' ? 'active' : ''}`}
-                        onClick={() => setSignalsFavoriteFilter('edited')}
-                      >
-                        수정한 것
-                      </button>
-                    </div>
-                    <div className="signals-chip-list">
-                      {isOverlayLoading ? <span className="signals-empty">불러오는 중</span> : favoriteOverlayItems.length > 0 ? favoriteOverlayItems.map((item) => (
-                        <button
-                          key={item.overlay_id}
-                          type="button"
-                          className="signals-chip"
-                          onClick={() => { void handleOverlayJump(item); }}
-                          title={item.target_ref}
-                        >
-                          {getSignalDisplayTitle(item)}
-                        </button>
-                      )) : <span className="signals-empty">{signalsFavoriteFilter === 'edited' ? '수정본이 없습니다.' : '즐겨찾기가 없습니다.'}</span>}
-                    </div>
-                  </div>
-                  <div className="signals-card">
-                    <div className="signals-card-title">
-                      <ArrowRight size={14} />
-                      <span>Next</span>
-                    </div>
-                    <div className="signals-chip-list">
-                      {isOverlayLoading ? <span className="signals-empty">불러오는 중</span> : nextPlayItems.length > 0 ? nextPlayItems.map((item, index) => (
-                        <button
-                          key={`${item.source_target_ref}-${item.href}-${index}`}
-                          type="button"
-                          className="signals-chip"
-                          title={item.reason}
-                          onClick={() => { void handleRelatedLinkClick(item); }}
-                        >
-                          {item.label}
-                        </button>
-                      )) : <span className="signals-empty">없음</span>}
-                    </div>
-                  </div>
-                    </>
-                  )}
                 </div>
               )}
             </div>
@@ -5154,41 +5176,6 @@ export default function WorkspacePage() {
                   </button>
                 </div>
               )}
-              <div className="chat-mode-switch chat-mode-switch--top" role="tablist" aria-label="Chat mode">
-                <button
-                  type="button"
-                  className={`chat-mode-btn ${currentMode === 'document' ? 'active' : ''}`}
-                  onClick={() => setCurrentMode('document')}
-                  aria-selected={currentMode === 'document'}
-                >
-                  <BookOpen size={14} />
-                  Docs
-                </button>
-                <button
-                  type="button"
-                  className={`chat-mode-btn ${currentMode === 'live_cluster' ? 'active' : ''}`}
-                  onClick={() => {
-                    if (isLiveClusterAvailable) {
-                      setCurrentMode('live_cluster');
-                    }
-                  }}
-                  aria-selected={currentMode === 'live_cluster'}
-                  disabled={!isLiveClusterAvailable}
-                  title={
-                    !isClusterConnected
-                      ? 'Cluster is not connected'
-                      : !isTerminalConnected
-                        ? 'Terminal session is not connected'
-                        : 'Live Cluster Mode'
-                  }
-                >
-                  <Cpu size={14} />
-                  Live
-                </button>
-                <span className={`chat-mode-status chat-mode-status--${clusterConnectionStatus}`}>
-                  {isTerminalConnected ? clusterStatusLabel : 'Terminal offline'}
-                </span>
-              </div>
               <div className="chat-messages" ref={chatMessagesRef}>
                 {messages.length === 0 && (
                   <div className="chat-welcome">
@@ -5660,6 +5647,62 @@ export default function WorkspacePage() {
                   onWorkspaceReady={handleTerminalWorkspaceReady}
                 />
               </>
+            ) : rightPanelMode === 'yaml' ? (
+              <section className="resource-yaml-panel" aria-label="Resource YAML editor">
+                <header className="resource-yaml-header">
+                  <div>
+                    <span>OpenShift YAML</span>
+                    <h3>{resourceYamlDetail?.name || 'Select a resource'}</h3>
+                    <p>
+                      {resourceYamlDetail
+                        ? `${resourceYamlDetail.kind} / ${resourceYamlDetail.namespace}`
+                        : 'Choose a project and resource from the left Cluster Resources panel.'}
+                    </p>
+                  </div>
+                  <div className="resource-yaml-actions">
+                    <button
+                      type="button"
+                      onClick={() => { void refreshSelectedResourceYaml(); }}
+                      disabled={!resourceYamlDetail || isResourceYamlLoading || isResourceYamlApplying}
+                    >
+                      Refresh
+                    </button>
+                    <button
+                      type="button"
+                      className="resource-yaml-apply-btn"
+                      onClick={() => { void applySelectedResourceYaml(); }}
+                      disabled={!resourceYamlDetail || isResourceYamlLoading || isResourceYamlApplying || !resourceYamlDraft.trim()}
+                    >
+                      {isResourceYamlApplying ? 'Applying' : 'Apply'}
+                    </button>
+                  </div>
+                </header>
+                {isResourceYamlLoading ? (
+                  <div className="empty-state resource-yaml-empty">
+                    <div className="loading-spinner-small"></div>
+                    <h4>Loading YAML</h4>
+                  </div>
+                ) : resourceYamlDetail ? (
+                  <>
+                    <textarea
+                      className="resource-yaml-editor"
+                      value={resourceYamlDraft}
+                      onChange={(event) => setResourceYamlDraft(event.target.value)}
+                      spellCheck={false}
+                      aria-label={`${resourceYamlDetail.name} YAML`}
+                    />
+                    {resourceYamlApplyStatus ? (
+                      <pre className="resource-yaml-status">{resourceYamlApplyStatus}</pre>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="empty-state resource-yaml-empty">
+                    <div className="empty-icon"><FileText size={42} className="text-dim" /></div>
+                    <h4>No resource selected</h4>
+                    <p>Open Pod, Deployment, Service, Route, or Event YAML from the left panel.</p>
+                  </div>
+                )}
+              </section>
             ) : (
               <>
             {testMode && (
@@ -5862,34 +5905,6 @@ export default function WorkspacePage() {
             </aside>
           </div>
         )}
-        {(resourceYamlDetail || isResourceYamlLoading) && (
-          <div className="cluster-yaml-modal-layer">
-            <button
-              className="cluster-yaml-modal-scrim"
-              type="button"
-              aria-label="Close resource YAML"
-              onClick={() => setResourceYamlDetail(null)}
-            />
-            <section className="cluster-yaml-modal" role="dialog" aria-modal="true" aria-label="Cluster resource YAML">
-              <header className="cluster-yaml-modal-head">
-                <div>
-                  <span>Resource YAML</span>
-                  <h3>{resourceYamlDetail?.name || 'Loading resource'}</h3>
-                  {resourceYamlDetail ? <p>{resourceYamlDetail.kind} · {resourceYamlDetail.namespace}</p> : null}
-                </div>
-                <button type="button" onClick={() => setResourceYamlDetail(null)}>Close</button>
-              </header>
-              {isResourceYamlLoading ? (
-                <div className="outline-empty">
-                  <div className="loading-spinner-small"></div>
-                  <p>Loading YAML</p>
-                </div>
-              ) : (
-                <pre className="cluster-yaml-modal-body">{resourceYamlDetail?.manifest_yaml || ''}</pre>
-              )}
-            </section>
-          </div>
-        )}
         {dashboardOpen && (
           <div className="cluster-yaml-modal-layer">
             <button
@@ -5961,14 +5976,14 @@ export default function WorkspacePage() {
                         </div>
                       </section>
                       <section>
-                        <h4>Recent Signals</h4>
+                        <h4>Recent Terminal Actions</h4>
                         <div className="dashboard-signal-list">
-                          {signalEvents.slice(0, 5).length === 0 ? (
-                            <span className="signals-empty">CLI signal이 아직 없습니다.</span>
-                          ) : signalEvents.slice(0, 5).map((signal) => (
-                            <div key={signal.id}>
-                              <strong>{signal.operationType}</strong>
-                              <span>{signal.resourceKind}{signal.resourceName ? ` · ${signal.resourceName}` : ''}</span>
+                          {recentTerminalActions.slice(0, 5).length === 0 ? (
+                            <span className="signals-empty">No terminal actions yet.</span>
+                          ) : recentTerminalActions.slice(0, 5).map((action) => (
+                            <div key={`${action.timestamp}:${action.command}`}>
+                              <strong>{action.command}</strong>
+                              <span>{action.outputExcerpt || 'output pending'}</span>
                             </div>
                           ))}
                         </div>

@@ -16,6 +16,7 @@ on:
       - deploy/docker-compose.image.yml
       - deploy/nginx/**
       - deploy/scripts/**
+      - deploy/sno/pbs-operator/**
       - apps/web/**
       - corpus/**
       - db/**
@@ -43,6 +44,12 @@ jobs:
             image_name: ocpops-playbookstudio-web
           - target: sandbox
             image_name: ocpops-playbookstudio-sandbox
+          - target: operator
+            image_name: ocpops-playbookstudio-operator
+          - target: operator-bundle
+            image_name: ocpops-playbookstudio-operator-bundle
+          - target: operator-catalog
+            image_name: ocpops-playbookstudio-operator-catalog
     steps:
       - name: Checkout
         uses: actions/checkout@v4

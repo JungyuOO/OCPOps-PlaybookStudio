@@ -8,6 +8,7 @@ else
 fi
 login_log=/tmp/playbookstudio-oc-login.log
 version_log=/tmp/playbookstudio-oc-version.log
+sa_token_file=/var/run/secrets/kubernetes.io/serviceaccount/token
 
 print_login_log_tail() {
   if [ -f "${login_log}" ]; then
@@ -41,9 +42,27 @@ classify_login_failure() {
   fi
 }
 
-if command -v oc >/dev/null 2>&1 && [ -n "${OCP_API_BASE_URL:-}" ] && [ -n "${OCP_API_TOKEN:-}" ]; then
+login_with_token() {
+  login_token="$1"
+  login_source="$2"
+  oc login \
+    --server="${OCP_API_BASE_URL}" \
+    --token="${login_token}" \
+    ${tls_flag} \
+    >"${login_log}" 2>&1
+  login_code=$?
+  if [ ${login_code} -eq 0 ]; then
+    echo "OpenShift CLI login ready via ${login_source}: ${OCP_API_BASE_URL}"
+    if [ -n "${OCP_DEFAULT_NAMESPACE:-}" ]; then
+      oc project "${OCP_DEFAULT_NAMESPACE}" >/tmp/playbookstudio-oc-project.log 2>&1 || true
+    fi
+    exec /bin/bash -i
+  fi
+  return ${login_code}
+}
+
+if command -v oc >/dev/null 2>&1 && [ -n "${OCP_API_BASE_URL:-}" ]; then
   echo "OpenShift API target: ${OCP_API_BASE_URL}"
-  echo "OpenShift token: configured"
   tls_flag=""
   case "${OCP_INSECURE_SKIP_TLS_VERIFY:-true}" in
     1|true|TRUE|yes|YES|on|ON)
@@ -64,28 +83,30 @@ if command -v oc >/dev/null 2>&1 && [ -n "${OCP_API_BASE_URL:-}" ] && [ -n "${OC
     fi
   fi
 
-  oc login \
-    --server="${OCP_API_BASE_URL}" \
-    --token="${OCP_API_TOKEN}" \
-    ${tls_flag} \
-    >"${login_log}" 2>&1
-
-  if [ $? -eq 0 ]; then
-    echo "OpenShift CLI login ready: ${OCP_API_BASE_URL}"
-    if [ -n "${OCP_DEFAULT_NAMESPACE:-}" ]; then
-      oc project "${OCP_DEFAULT_NAMESPACE}" >/tmp/playbookstudio-oc-project.log 2>&1 || true
-    fi
-    exec /bin/bash -i
-  else
-    echo "OpenShift CLI login failed for ${OCP_API_BASE_URL}."
+  if [ -n "${OCP_API_TOKEN:-}" ]; then
+    echo "OpenShift token: configured"
+    login_with_token "${OCP_API_TOKEN}" "configured token"
+    echo "OpenShift CLI login failed for configured token."
     classify_login_failure
     print_login_log_tail
-    fail_cluster_terminal
+  else
+    echo "OpenShift token: not configured"
   fi
+
+  if [ -f "${sa_token_file}" ]; then
+    echo "OpenShift service account token: configured"
+    login_with_token "$(cat "${sa_token_file}")" "pod service account token"
+  fi
+
+  echo "OpenShift CLI login failed for ${OCP_API_BASE_URL}."
+  if [ -f "${login_log}" ]; then
+    classify_login_failure
+    print_login_log_tail
+  fi
+  fail_cluster_terminal
 else
-  echo "OpenShift CLI auto-login skipped. oc, OCP_API_BASE_URL, or OCP_API_TOKEN is missing."
+  echo "OpenShift CLI auto-login skipped. oc or OCP_API_BASE_URL is missing."
   command -v oc >/dev/null 2>&1 || echo "Missing: oc CLI"
   [ -n "${OCP_API_BASE_URL:-}" ] || echo "Missing: OCP_API_BASE_URL"
-  [ -n "${OCP_API_TOKEN:-}" ] || echo "Missing: OCP_API_TOKEN"
   fail_cluster_terminal
 fi

@@ -63,7 +63,7 @@ type WorkspaceViewerPanelProps = {
   textAnnotationMode: WikiTextAnnotationMode;
   textAnnotationStyle: WikiEditedTextStyle;
   uploadAccept: string;
-  viewerSurfaceMode?: 'viewer' | 'terminal';
+  viewerSurfaceMode?: 'viewer' | 'terminal' | 'yaml';
   viewerSurfaceTitle: string;
   onAnnotationColorChange: (colorId: WikiInkColorId) => void;
   onAnnotationEnabledChange: (enabled: boolean) => void;

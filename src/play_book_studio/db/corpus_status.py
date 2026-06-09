@@ -36,8 +36,20 @@ def load_corpus_status(connection, *, embedding_model: str) -> dict[str, Any]:
         cursor.execute(
             """
             SELECT count(1)::int
-            FROM document_chunks
-            WHERE length(btrim(COALESCE(embedding_text, ''))) > 0
+            FROM document_chunks c
+            JOIN parsed_documents pd ON pd.id = c.parsed_document_id
+            JOIN document_sources ds ON ds.id = pd.document_source_id
+            WHERE length(btrim(COALESCE(c.embedding_text, ''))) > 0
+              AND (
+                c.source_scope <> 'user_upload'
+                OR pd.id = (
+                    SELECT latest_pd.id
+                    FROM parsed_documents latest_pd
+                    WHERE latest_pd.document_source_id = ds.id
+                    ORDER BY latest_pd.created_at DESC, latest_pd.id DESC
+                    LIMIT 1
+                )
+              )
             """
         )
         indexable_chunks = int((cursor.fetchone() or [0])[0] or 0)
@@ -54,10 +66,22 @@ def load_corpus_status(connection, *, embedding_model: str) -> dict[str, Any]:
             """
             SELECT count(1)::int
             FROM document_chunks c
+            JOIN parsed_documents pd ON pd.id = c.parsed_document_id
+            JOIN document_sources ds ON ds.id = pd.document_source_id
             LEFT JOIN chunk_embeddings ce
                 ON ce.chunk_id = c.id AND ce.model = %s
             WHERE length(btrim(COALESCE(c.embedding_text, ''))) > 0
-                AND ce.chunk_id IS NULL
+              AND (
+                c.source_scope <> 'user_upload'
+                OR pd.id = (
+                    SELECT latest_pd.id
+                    FROM parsed_documents latest_pd
+                    WHERE latest_pd.document_source_id = ds.id
+                    ORDER BY latest_pd.created_at DESC, latest_pd.id DESC
+                    LIMIT 1
+                )
+              )
+              AND ce.chunk_id IS NULL
             """,
             (model,),
         )
