@@ -75,6 +75,11 @@ OPENSHIFT_CONTEXT_FOLLOW_UP_RE = re.compile(
     r"상태|로그|원인|트러블|trouble|fail|failure|error|check|verify)",
     re.IGNORECASE,
 )
+CUSTOMER_CONTEXT_FOLLOW_UP_RE = re.compile(
+    r"(기준|고객\s*(?:사|자료|문서|데이터)?|업로드|운영\s*자료|내\s*(?:문서|자료|업로드)|"
+    r"우리\s*(?:환경|자료|문서|회사|고객)|사내\s*(?:자료|문서|환경))",
+    re.IGNORECASE,
+)
 
 
 def _looks_like_missing_coverage_answer(answer: str) -> bool:
@@ -139,6 +144,30 @@ def _lightspeed_context_text(context: SessionContext | None) -> str:
     return " ".join(part.strip() for part in parts if part and part.strip())
 
 
+def _contextual_lightspeed_query(query: str, context: SessionContext | None) -> str:
+    normalized = " ".join(str(query or "").split())
+    if is_openshift_operation_question(normalized):
+        return normalized
+    context_topic = str(getattr(context, "current_topic", "") or "").strip()
+    open_entities = [
+        str(entity).strip()
+        for entity in (getattr(context, "open_entities", []) or [])
+        if str(entity).strip()
+    ]
+    context_parts = [context_topic, ", ".join(open_entities[:4])]
+    context_text = " ".join(part for part in context_parts if part).strip()
+    if not context_text or not is_openshift_operation_question(context_text):
+        return normalized
+    return (
+        f"{context_text} 관련해서 OpenShift 공식 기준으로 확인 순서와 실행 가능한 명령어를 알려줘. "
+        f"후속 질문: {normalized}"
+    )
+
+
+def _query_requests_customer_context(query: str) -> bool:
+    return bool(CUSTOMER_CONTEXT_FOLLOW_UP_RE.search(query or ""))
+
+
 def _should_query_openshift_lightspeed(query: str, context: SessionContext | None) -> bool:
     normalized = str(query or "").strip()
     if is_openshift_operation_question(normalized):
@@ -149,6 +178,7 @@ def _should_query_openshift_lightspeed(query: str, context: SessionContext | Non
     return bool(
         has_follow_up_reference(normalized)
         or OPENSHIFT_CONTEXT_FOLLOW_UP_RE.search(normalized)
+        or _query_requests_customer_context(normalized)
     )
 
 
@@ -721,6 +751,74 @@ def _lightspeed_answer_for_chat(answer_text: str) -> str:
     return answer
 
 
+def _lightspeed_declines_available_customer_context(answer_text: str) -> bool:
+    normalized = " ".join(str(answer_text or "").split()).casefold()
+    if not normalized:
+        return False
+    context_anchors = (
+        "한빛 리테일",
+        "한빛리테일",
+        "hanbit retail",
+        "운영 자료",
+        "운영자료",
+        "고객 자료",
+        "고객자료",
+        "업로드",
+        "context",
+        "컨텍스트",
+    )
+    if not any(anchor in normalized for anchor in context_anchors):
+        return False
+    denial_patterns = (
+        "접근할 수 있는 정보",
+        "포함되어 있지 않습니다",
+        "전달되지 않았",
+        "제공되지 않았",
+        "자료가 없습니다",
+        "자료를 주시면",
+        "not have access",
+        "do not have access",
+        "not provided",
+        "not available",
+    )
+    return any(pattern in normalized for pattern in denial_patterns)
+
+
+def _redact_lightspeed_customer_context(text: str) -> str:
+    redacted = str(text or "")
+    redacted = re.sub(
+        r"(?i)(secret|token|password|passwd|pwd|client_secret|access_token)(\s*[:=]\s*)([^\s,;]+)",
+        r"\1\2<redacted>",
+        redacted,
+    )
+    redacted = re.sub(
+        r"(?i)(authorization:\s*bearer\s+)[^\s,;]+",
+        r"\1<redacted>",
+        redacted,
+    )
+    return redacted
+
+
+def _lightspeed_customer_context_block(citations: list[Citation], *, limit_chars: int = 1400) -> str:
+    if not citations:
+        return ""
+    lines = [
+        "PBS 고객/업로드 운영자료 context:",
+        "사용자가 고객 기준을 명시했으므로 아래 정보를 고객 환경값으로 반영하세요.",
+        "OpenShift 공식 기준과 충돌하면 공식 기준을 우선하고, 고객값은 환경별 적용값으로 설명하세요.",
+    ]
+    for index, citation in enumerate(citations[:3], start=1):
+        section = citation.section_path_label or " > ".join(citation.section_path) or citation.section
+        excerpt = _redact_lightspeed_customer_context(citation.excerpt)
+        excerpt = " ".join(excerpt.split())
+        lines.append(f"- 고객 근거 {index}: {section}")
+        lines.append(f"  {excerpt[:500]}")
+        if citation.cli_commands:
+            lines.append(f"  명령 힌트: {', '.join(citation.cli_commands[:3])}")
+    block = "\n".join(lines)
+    return block[:limit_chars].strip()
+
+
 def _is_customer_context_citation(citation: Citation) -> bool:
     viewer_path = str(citation.viewer_path or "").strip()
     source_collection = str(citation.source_collection or "").strip()
@@ -752,6 +850,274 @@ def _customer_context_bridge_meta(citations: list[Citation]) -> dict[str, object
             if str(citation.viewer_path or "").strip()
         ],
         "bridge_label": "OpenShift Lightspeed + Customer Context",
+    }
+
+
+def _customer_context_citations(citations: list[Citation]) -> list[Citation]:
+    return [citation for citation in citations if _is_customer_context_citation(citation)]
+
+
+def _customer_context_source_text(citations: list[Citation]) -> str:
+    parts: list[str] = []
+    for citation in _customer_context_citations(citations):
+        parts.extend(
+            [
+                str(citation.section_path_label or ""),
+                str(citation.section or ""),
+                str(citation.heading_title or ""),
+                str(citation.excerpt or ""),
+                " ".join(str(command or "") for command in citation.cli_commands),
+            ]
+        )
+    return "\n".join(part for part in parts if part and part.strip())
+
+
+def _first_regex_group(patterns: tuple[str, ...], text: str) -> str:
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            value = str(match.group(1) or "").strip("`'\".,;:()[]{} ")
+            if value:
+                return value
+    return ""
+
+
+def _extract_customer_context_values(citations: list[Citation]) -> dict[str, object]:
+    """Extract concrete customer environment values from uploaded/customer evidence."""
+    source_text = _customer_context_source_text(citations)
+    if not source_text:
+        return {}
+    compact = " ".join(source_text.split())
+
+    pipeline_namespace = _first_regex_group(
+        (
+            r"(?:pipelinerun|pipeline\s*run|pipeline|repository|repo|ci/cd|ci)[^.\n]{0,160}?"
+            r"(?:namespace|네임스페이스)\s*(?:[:=]|는|은)?\s*`?([a-z0-9][a-z0-9-]{1,62})`?",
+            r"`?([a-z0-9][a-z0-9-]{1,62})`?\s*(?:namespace|네임스페이스)[^.\n]{0,160}?"
+            r"(?:pipelinerun|pipeline\s*run|pipeline|repository|repo|ci/cd|ci)",
+        ),
+        compact,
+    )
+    if not pipeline_namespace and re.search(r"\bci-pipelines\b", compact, flags=re.IGNORECASE):
+        pipeline_namespace = "ci-pipelines"
+
+    repository_namespace = _first_regex_group(
+        (
+            r"(?:repository|repo|레포지토리)[^.\n]{0,160}?"
+            r"(?:namespace|네임스페이스)\s*(?:[:=]|는|은)?\s*`?([a-z0-9][a-z0-9-]{1,62})`?",
+            r"`?([a-z0-9][a-z0-9-]{1,62})`?\s*(?:namespace|네임스페이스)[^.\n]{0,160}?"
+            r"(?:repository|repo|레포지토리)",
+        ),
+        compact,
+    ) or pipeline_namespace
+
+    controller_namespace = _first_regex_group(
+        (
+            r"(?:controller|컨트롤러|pipelines?\s*as\s*code)[^.\n]{0,160}?"
+            r"(?:namespace|네임스페이스)\s*(?:[:=]|는|은)?\s*`?([a-z0-9][a-z0-9-]{1,62})`?",
+            r"`?([a-z0-9][a-z0-9-]{1,62})`?\s*(?:namespace|네임스페이스)[^.\n]{0,160}?"
+            r"(?:controller|컨트롤러|pipelines?\s*as\s*code)",
+        ),
+        compact,
+    )
+    if not controller_namespace and re.search(r"\bopenshift-pipelines\b", compact, flags=re.IGNORECASE):
+        controller_namespace = "openshift-pipelines"
+
+    repository_name = _first_regex_group(
+        (
+            r"(?:repository|repo|레포지토리)\s*(?:cr\s*)?(?:이름|name)?\s*(?:[:=]|는|은)?\s*"
+            r"`?([a-z0-9][a-z0-9-]*(?:repository|repo)[a-z0-9-]*)`?",
+            r"`?([a-z0-9][a-z0-9-]*(?:repository|repo)[a-z0-9-]*)`?\s*(?:repository|repo|레포지토리)",
+        ),
+        compact,
+    )
+
+    smee_url = _first_regex_group(
+        (r"(https://smee\.io/[a-zA-Z0-9._~:/?#@!$&'()*+,;=%-]+)",),
+        compact,
+    )
+
+    values: dict[str, object] = {}
+    if pipeline_namespace:
+        values["pipeline_namespace"] = pipeline_namespace
+    if repository_namespace:
+        values["repository_namespace"] = repository_namespace
+    if controller_namespace:
+        values["controller_namespace"] = controller_namespace
+    if repository_name:
+        values["repository_name"] = repository_name
+    if smee_url:
+        values["smee_url"] = smee_url
+    return values
+
+
+def _replace_customer_context_command_placeholders(
+    answer_text: str,
+    values: dict[str, object],
+) -> str:
+    answer = str(answer_text or "")
+    pipeline_namespace = str(values.get("pipeline_namespace") or "")
+    repository_namespace = str(values.get("repository_namespace") or pipeline_namespace or "")
+    repository_name = str(values.get("repository_name") or "")
+    if pipeline_namespace:
+        answer = re.sub(
+            r"(?i)(oc\s+get\s+pipelineruns?\s+-n\s*)<namespace>",
+            rf"\g<1>{pipeline_namespace}",
+            answer,
+        )
+        answer = re.sub(
+            r"(?i)(oc\s+get\s+events\s+-n\s*)<namespace>",
+            rf"\g<1>{pipeline_namespace}",
+            answer,
+        )
+    if repository_namespace:
+        answer = re.sub(
+            r"(?i)(oc\s+get\s+repositories?\s+-n\s*)<namespace>",
+            rf"\g<1>{repository_namespace}",
+            answer,
+        )
+        answer = re.sub(
+            r"(?i)(oc\s+get\s+repository\s+-n\s*)<namespace>",
+            rf"\g<1>{repository_namespace}",
+            answer,
+        )
+    if repository_namespace and repository_name:
+        answer = re.sub(
+            r"(?i)(oc\s+describe\s+repositories?\s+)<name>(\s+-n\s*)<namespace>",
+            rf"\g<1>{repository_name}\g<2>{repository_namespace}",
+            answer,
+        )
+        answer = re.sub(
+            r"(?i)(oc\s+describe\s+repository\s+)<name>(\s+-n\s*)<namespace>",
+            rf"\g<1>{repository_name}\g<2>{repository_namespace}",
+            answer,
+        )
+    return answer
+
+
+def _fenced_code_text(answer_text: str) -> str:
+    return "\n".join(
+        match.group(1).strip()
+        for match in re.finditer(r"```[a-zA-Z0-9_-]*\n([\s\S]*?)```", answer_text or "")
+        if match.group(1).strip()
+    )
+
+
+def _customer_context_command_cards(
+    *,
+    query: str,
+    answer_text: str,
+    citations: list[Citation],
+    values: dict[str, object],
+) -> list[tuple[str, str]]:
+    if not values:
+        return []
+    haystack = " ".join(
+        [
+            str(query or ""),
+            str(answer_text or ""),
+            _customer_context_source_text(citations),
+        ]
+    ).casefold()
+    if not any(
+        token in haystack
+        for token in (
+            "pipelinerun",
+            "pipeline",
+            "pipeline run",
+            "tekton",
+            "webhook",
+            "repository",
+            "repo",
+            "파이프라인",
+        )
+    ):
+        return []
+
+    pipeline_namespace = str(values.get("pipeline_namespace") or "")
+    repository_namespace = str(values.get("repository_namespace") or pipeline_namespace or "")
+    controller_namespace = str(values.get("controller_namespace") or "")
+    repository_name = str(values.get("repository_name") or "")
+
+    cards: list[tuple[str, str]] = []
+    if pipeline_namespace:
+        cards.append(("PipelineRun 리소스 생성 여부 확인", f"oc get pipelinerun -n {pipeline_namespace}"))
+        cards.append(("PipelineRun 관련 최근 이벤트 확인", f"oc get events -n {pipeline_namespace} --sort-by=.lastTimestamp"))
+    if repository_namespace:
+        cards.append(("Repository CR 목록 확인", f"oc get repository -n {repository_namespace}"))
+    if repository_namespace and repository_name:
+        cards.append(("Repository CR 상세 확인", f"oc describe repository {repository_name} -n {repository_namespace}"))
+    if controller_namespace and any(token in haystack for token in ("controller", "컨트롤러", "로그", "log")):
+        cards.append(("Pipelines as Code 컨트롤러 로그 확인", f"oc logs -n {controller_namespace} deployment/pipelines-as-code-controller"))
+
+    fenced_text = _fenced_code_text(answer_text)
+    deduped: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for note, command in cards:
+        normalized = re.sub(r"\s+", " ", command.strip()).casefold()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        if normalized in re.sub(r"\s+", " ", fenced_text).casefold():
+            continue
+        deduped.append((note, command))
+        if len(deduped) >= 4:
+            break
+    return deduped
+
+
+def _apply_customer_context_answer_contract(
+    answer_text: str,
+    *,
+    query: str,
+    citations: list[Citation],
+) -> tuple[str, dict[str, object]]:
+    values = _extract_customer_context_values(citations)
+    if not values:
+        return answer_text, {"status": "skipped", "reason": "no_customer_context_values"}
+    updated = _replace_customer_context_command_placeholders(answer_text, values)
+    cards = _customer_context_command_cards(
+        query=query,
+        answer_text=updated,
+        citations=citations,
+        values=values,
+    )
+    if cards:
+        updated = re.sub(
+            r"\n*\s*제공된 근거에는 실행 명령이나 예시 코드가 명시되어 있지 않습니다\.?\s*",
+            "\n\n",
+            updated,
+        ).strip()
+        for _, command in cards:
+            updated = re.sub(
+                rf"`\s*{re.escape(command)}\s*`",
+                "아래 명령",
+                updated,
+                flags=re.IGNORECASE,
+            )
+        citation_index = _customer_context_citations(citations)[0].index
+        lines = [
+            updated.rstrip(),
+            "",
+            f"### 바로 실행할 명령",
+            f"고객자료에서 확인된 환경값을 적용한 복붙용 명령입니다 [{citation_index}].",
+        ]
+        for note, command in cards:
+            lines.extend(
+                [
+                    "",
+                    "```bash",
+                    f"# {note}",
+                    command,
+                    "```",
+                ]
+            )
+        updated = "\n".join(lines).strip()
+    return updated, {
+        "status": "used" if updated != answer_text else "no_change",
+        "values": values,
+        "command_card_count": len(cards),
+        "commands": [command for _, command in cards],
     }
 
 
@@ -792,6 +1158,80 @@ class ChatAnswerer:
             handle.write(json.dumps(result.to_dict(), ensure_ascii=False) + "\n")
         return target
 
+    def _prefetch_customer_context_for_lightspeed(
+        self,
+        query: str,
+        *,
+        context: SessionContext | None,
+        emit,
+    ) -> tuple[str, dict[str, object]]:
+        if not _query_requests_customer_context(query):
+            return "", {}
+        context_text = _lightspeed_context_text(context)
+        retrieval_query = " ".join(part for part in (context_text, query) if part.strip()).strip()
+        if not retrieval_query:
+            retrieval_query = query
+        try:
+            retrieval = self.retriever.retrieve(
+                retrieval_query,
+                context=context,
+                top_k=5,
+                candidate_k=24,
+            )
+            bundle = assemble_context(
+                retrieval.hits,
+                query=retrieval_query,
+                command_hints=_retrieval_command_hints(retrieval.trace),
+                session_context=context,
+                root_dir=self.settings.root_dir,
+                max_chunks=3,
+            )
+        except Exception as exc:  # noqa: BLE001
+            emit(
+                {
+                    "step": "lightspeed_customer_context_prefetch",
+                    "label": "고객자료 선검색 실패",
+                    "status": "warning",
+                    "detail": type(exc).__name__,
+                }
+            )
+            return "", {"status": "error", "error_type": type(exc).__name__}
+        customer_citations = [
+            citation
+            for citation in bundle.citations
+            if _is_customer_context_citation(citation)
+        ]
+        if not customer_citations:
+            return "", {"status": "empty", "retrieval_query": retrieval_query[:240]}
+        context_block = _lightspeed_customer_context_block(customer_citations)
+        if not context_block:
+            return "", {"status": "empty", "retrieval_query": retrieval_query[:240]}
+        meta: dict[str, object] = {
+            "status": "used",
+            "retrieval_query": retrieval_query[:240],
+            "citation_count": len(customer_citations),
+            "viewer_paths": [
+                citation.viewer_path
+                for citation in customer_citations[:5]
+                if citation.viewer_path
+            ],
+            "sections": [
+                citation.section
+                for citation in customer_citations[:5]
+                if citation.section
+            ],
+        }
+        emit(
+            {
+                "step": "lightspeed_customer_context_prefetch",
+                "label": "고객자료 선검색 완료",
+                "status": "done",
+                "detail": f"customer citations={len(customer_citations)}",
+                "meta": meta,
+            }
+        )
+        return context_block, meta
+
     def _query_openshift_lightspeed(
         self,
         query: str,
@@ -824,8 +1264,27 @@ class ChatAnswerer:
             )
             return None, meta
 
-        lightspeed_query = normalize_lightspeed_query(query)
-        if lightspeed_query != str(query or "").strip():
+        customer_context_block, customer_context_meta = self._prefetch_customer_context_for_lightspeed(
+            query,
+            context=context,
+            emit=emit,
+        )
+        raw_lightspeed_query = _contextual_lightspeed_query(query, context)
+        if customer_context_block:
+            raw_lightspeed_query = (
+                f"{raw_lightspeed_query}\n\n"
+                f"{customer_context_block}\n\n"
+                "위 고객 context를 반영해 답변하되, OpenShift 공식 운영 기준과 실행 가능한 명령어를 함께 제시하세요."
+            )
+            meta["customer_context_sent_to_lightspeed"] = True
+            meta["customer_context_prefetch"] = customer_context_meta
+        lightspeed_query = normalize_lightspeed_query(raw_lightspeed_query)
+        original_query = str(query or "").strip()
+        if raw_lightspeed_query != original_query:
+            meta["query_augmented"] = True
+            meta["original_query"] = original_query
+            meta["augmented_query"] = raw_lightspeed_query
+        if lightspeed_query != original_query:
             meta["normalized_query"] = lightspeed_query
         started_at = time.perf_counter()
         emit(
@@ -833,7 +1292,11 @@ class ChatAnswerer:
                 "step": "openshift_lightspeed",
                 "label": "OpenShift Lightspeed 호출 중",
                 "status": "running",
-                "meta": {"normalized_query": lightspeed_query} if "normalized_query" in meta else {},
+                "meta": {
+                    key: meta[key]
+                    for key in ("normalized_query", "query_augmented", "augmented_query")
+                    if key in meta
+                },
             }
         )
         try:
@@ -940,7 +1403,10 @@ class ChatAnswerer:
                 "tool_results": len(result.tool_results),
                 "request_profile": result.request_metadata.get("request_profile", ""),
                 "payload_keys": result.request_metadata.get("payload_keys", []),
-                "query_augmented": result.request_metadata.get("query_augmented", False),
+                "query_augmented": bool(
+                    meta.get("query_augmented")
+                    or result.request_metadata.get("query_augmented", False)
+                ),
                 "provider_present": result.request_metadata.get("provider_present", False),
                 "model_present": result.request_metadata.get("model_present", False),
                 "system_prompt_present": result.request_metadata.get("system_prompt_present", False),
@@ -1393,6 +1859,8 @@ class ChatAnswerer:
         )
         if not context_bundle.citations:
             selected_hits = []
+        lightspeed_answer_for_prompt = lightspeed_result.answer if lightspeed_result else ""
+        customer_context_synthesis_used = False
         if lightspeed_used:
             context_bridge = _customer_context_bridge_meta(context_bundle.citations)
             if context_bridge:
@@ -1406,45 +1874,89 @@ class ChatAnswerer:
                         "meta": context_bridge,
                     }
                 )
-            emit(
-                {
-                    "step": "lightspeed_answer_passthrough",
-                    "label": "Lightspeed 원문 답변 사용",
-                    "status": "done",
-                    "detail": "PBS LLM 재작성 없이 OpenShift Lightspeed 원문을 반환합니다",
+            if context_bridge and _lightspeed_declines_available_customer_context(
+                lightspeed_answer_for_prompt
+            ):
+                warnings.append("openshift lightspeed declined available customer context")
+                external_answer_meta["original_status"] = "used"
+                external_answer_meta["status"] = "ignored_customer_context_denial"
+                external_answer_meta["customer_context_synthesis"] = {
+                    "status": "used",
+                    "reason": "lightspeed_answer_declined_available_customer_context",
+                    "customer_context_citation_count": context_bridge[
+                        "customer_context_citation_count"
+                    ],
                 }
-            )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
-            emit(
-                {
-                    "step": "pipeline_complete",
-                    "label": "답변 생성 완료",
-                    "status": "done",
-                    "detail": f"총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
+                lightspeed_used = False
+                answer_source = "pbs_rag"
+                lightspeed_answer_for_prompt = ""
+                customer_context_synthesis_used = True
+                emit(
+                    {
+                        "step": "customer_context_synthesis",
+                        "label": "업로드 고객자료 답변 전환",
+                        "status": "done",
+                        "detail": "Lightspeed가 고객자료 접근 불가로 답해 PBS 업로드 근거 답변으로 전환합니다",
+                        "meta": external_answer_meta["customer_context_synthesis"],
+                    }
+                )
+            elif context_bridge:
+                external_answer_meta["customer_context_synthesis"] = {
+                    "status": "used",
+                    "reason": "lightspeed_answer_combined_with_available_customer_context",
+                    "customer_context_citation_count": context_bridge[
+                        "customer_context_citation_count"
+                    ],
                 }
-            )
-            return build_answer_result(
-                query=query,
-                mode=mode,
-                answer=_lightspeed_answer_for_chat(
-                    lightspeed_result.answer if lightspeed_result else ""
-                ),
-                rewritten_query=retrieval.rewritten_query,
-                response_kind="rag",
-                citations=context_bundle.citations,
-                cited_indices=[1],
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
-                answer_source=answer_source,
-                external_answer_meta=external_answer_meta,
-            )
+                emit(
+                    {
+                        "step": "lightspeed_customer_context_synthesis",
+                        "label": "Lightspeed 고객자료 결합 답변 생성",
+                        "status": "done",
+                        "detail": "OpenShift Lightspeed 답변을 기준으로 PBS 고객/업로드 근거를 보강합니다",
+                        "meta": external_answer_meta["customer_context_synthesis"],
+                    }
+                )
+            else:
+                emit(
+                    {
+                        "step": "lightspeed_answer_passthrough",
+                        "label": "Lightspeed 원문 답변 사용",
+                        "status": "done",
+                        "detail": "PBS LLM 재작성 없이 OpenShift Lightspeed 원문을 반환합니다",
+                    }
+                )
+                pipeline_timings_ms["total"] = round(
+                    (time.perf_counter() - answer_started_at) * 1000,
+                    1,
+                )
+                emit(
+                    {
+                        "step": "pipeline_complete",
+                        "label": "답변 생성 완료",
+                        "status": "done",
+                        "detail": f"총 {pipeline_timings_ms['total']}ms",
+                        "duration_ms": pipeline_timings_ms["total"],
+                    }
+                )
+                return build_answer_result(
+                    query=query,
+                    mode=mode,
+                    answer=_lightspeed_answer_for_chat(
+                        lightspeed_result.answer if lightspeed_result else ""
+                    ),
+                    rewritten_query=retrieval.rewritten_query,
+                    response_kind="rag",
+                    citations=context_bundle.citations,
+                    cited_indices=[1],
+                    warnings=warnings,
+                    retrieval_trace=retrieval.trace,
+                    pipeline_events=pipeline_events,
+                    pipeline_timings_ms=pipeline_timings_ms,
+                    selected_hits=selected_hits,
+                    answer_source=answer_source,
+                    external_answer_meta=external_answer_meta,
+                )
         actionable_command_query = (
             (has_command_request(query) or has_corrective_follow_up(query))
             and not _requires_console_grounding(query)
@@ -1548,7 +2060,7 @@ class ChatAnswerer:
             query=query,
             citations=context_bundle.citations,
             selected_hits=selected_hits,
-        ):
+        ) and not customer_context_synthesis_used:
             warnings.append("low retrieval confidence")
             emit(
                 {
@@ -1606,7 +2118,7 @@ class ChatAnswerer:
             mode=mode,
             context_bundle=context_bundle,
             session_summary=summarize_session_context(context),
-            openshift_lightspeed_answer=lightspeed_result.answer if lightspeed_result else "",
+            openshift_lightspeed_answer=lightspeed_answer_for_prompt,
         )
         pipeline_timings_ms["prompt_build"] = round(
             (time.perf_counter() - prompt_started_at) * 1000,
@@ -1734,6 +2246,36 @@ class ChatAnswerer:
                 answer_text,
                 final_citations or context_bundle.citations,
             )
+        if lightspeed_used and external_answer_meta.get("context_bridge"):
+            customer_contract_answer_text, customer_contract_meta = _apply_customer_context_answer_contract(
+                answer_text,
+                query=query,
+                citations=final_citations or context_bundle.citations,
+            )
+            if customer_contract_meta.get("status") in {"used", "no_change"}:
+                external_answer_meta["customer_context_values"] = customer_contract_meta.get("values", {})
+                external_answer_meta["customer_context_command_cards"] = {
+                    "status": customer_contract_meta.get("status"),
+                    "command_card_count": customer_contract_meta.get("command_card_count", 0),
+                    "commands": customer_contract_meta.get("commands", []),
+                }
+            if customer_contract_answer_text != answer_text:
+                answer_text = customer_contract_answer_text
+                answer_text, final_citations, cited_indices = finalize_citations(
+                    answer_text,
+                    final_citations or context_bundle.citations,
+                )
+                emit(
+                    {
+                        "step": "customer_context_command_cards",
+                        "label": "고객값 명령 카드 보강",
+                        "status": "done",
+                        "detail": (
+                            f"commands={customer_contract_meta.get('command_card_count', 0)}"
+                        ),
+                        "meta": external_answer_meta.get("customer_context_command_cards", {}),
+                    }
+                )
         if not cited_indices:
             warnings.append("answer has no inline citations")
         if status_note:

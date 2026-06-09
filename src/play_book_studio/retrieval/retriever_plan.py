@@ -8,9 +8,11 @@ from typing import Any
 from .access_scope import (
     SOURCE_GROUP_CUSTOMER_DOCS,
     SOURCE_GROUP_OFFICIAL_DOCS,
+    SOURCE_GROUP_USER_UPLOAD,
     active_document_scope_selected,
     enabled_source_scope_set,
 )
+from .korean_text import tokenize_normalized_text
 from .models import SessionContext
 from .query import (
     detect_unsupported_product,
@@ -29,10 +31,28 @@ _OFFICIAL_ONLY_METADATA_KEYS = {
 }
 _CUSTOMER_DOCUMENT_QUERY_RE = re.compile(
     r"(완료\s*보고서?|완료본|고객\s*(?:데이터|자료|문서)|PPTX?|"
+    r"운영\s*자료|업로드\s*(?:문서|자료|데이터)|내\s*업로드|"
     r"KMSC|COCP|RTER|RECR|아키텍[처쳐]\s*설계서|설계서\s*기준|"
     r"단위\s*테스트|통합\s*테스트|성능\s*테스트|테스트\s*(?:계획서|결과서))",
     re.IGNORECASE,
 )
+_COMPACT_QUERY_STOPWORDS = {
+    "그럼",
+    "그때",
+    "그러면",
+    "기준",
+    "답해줄",
+    "알려줘",
+    "정리해줘",
+    "확인",
+    "방법",
+    "어떻게",
+    "무엇",
+    "뭐야",
+    "수",
+    "있어",
+    "있나",
+}
 
 
 @dataclass(slots=True)
@@ -54,13 +74,32 @@ class RetrievalPlan:
     query_signal_debug: dict[str, Any]
 
 
-def _dedupe_queries(queries: tuple[str, ...], *, fallback: str) -> list[str]:
+def _dedupe_queries(queries: tuple[str, ...], *, fallback: str, limit: int = 2) -> list[str]:
     deduped: list[str] = []
     for query in (*queries, fallback):
         cleaned = " ".join(str(query or "").split())
         if cleaned and cleaned not in deduped:
             deduped.append(cleaned)
-    return deduped[:2]
+    return deduped[:limit]
+
+
+def _customer_document_compact_query(query: str) -> str:
+    tokens = tokenize_normalized_text(query)
+    compact_terms: list[str] = []
+    seen: set[str] = set(tokens)
+    for window in (2, 3):
+        for index in range(0, max(0, len(tokens) - window + 1)):
+            window_tokens = tokens[index : index + window]
+            if any(token in _COMPACT_QUERY_STOPWORDS for token in window_tokens):
+                continue
+            compact = "".join(window_tokens)
+            if len(compact) < 4 or compact in seen:
+                continue
+            seen.add(compact)
+            compact_terms.append(compact)
+    if not compact_terms:
+        return ""
+    return " ".join([query, *compact_terms[:8]])
 
 
 def _signal_embedding_queries_for_retrieval(signal_plan: Any) -> tuple[str, ...]:
@@ -213,11 +252,18 @@ def build_retrieval_plan(
         metadata_filter = signal_plan.metadata_filter
     else:
         base_queries = (rewritten_query, *_signal_embedding_queries_for_retrieval(signal_plan))
-        if SOURCE_GROUP_CUSTOMER_DOCS in enabled_scopes and customer_document_query:
-            base_queries = (rewritten_query, query, *_signal_embedding_queries_for_retrieval(signal_plan))
+        compact_query = _customer_document_compact_query(query) if customer_document_query else ""
+        if (SOURCE_GROUP_CUSTOMER_DOCS in enabled_scopes or SOURCE_GROUP_USER_UPLOAD in enabled_scopes) and customer_document_query:
+            base_queries = (
+                rewritten_query,
+                query,
+                compact_query,
+                *_signal_embedding_queries_for_retrieval(signal_plan),
+            )
         retrieval_queries = _dedupe_queries(
             base_queries,
             fallback=rewritten_query,
+            limit=4 if customer_document_query else 2,
         )
         metadata_filter = _scope_compatible_metadata_filter(signal_plan.metadata_filter, context)
     rewrite_query_ms = round((time.perf_counter() - rewrite_started_at) * 1000, 1)

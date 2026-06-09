@@ -16,6 +16,7 @@ from .access_scope import (
     source_group_for_candidate,
 )
 from .intake_overlay import has_active_customer_pack_selection
+from .korean_text import tokenize_normalized_text
 from .models import RetrievalHit, RetrievalResult, SessionContext
 from .retriever_plan import build_retrieval_plan
 from .retriever_rerank import maybe_rerank_hits
@@ -50,11 +51,33 @@ _DEMO_IDENTIFIER_RE = re.compile(r"(?i)\bdemo-[\w.-]+\b")
 _CUSTOMER_TEST_ID_RE = re.compile(r"(?i)\b(?:TEST|KMSC|COCP|RTER|RECR)-[A-Z0-9_-]+\b")
 _CUSTOMER_DOCUMENT_SIGNAL_RE = re.compile(
     r"(완료\s*보고서?|완료본|고객\s*(?:데이터|자료)|PPTX?|"
+    r"운영\s*자료|업로드\s*(?:문서|자료|데이터)|내\s*업로드|"
     r"아키텍[처쳐]\s*설계서|설계서\s*기준|"
     r"테스트\s*(?:계획서|결과서)|단위테스트\s*(?:계획|결과)|"
     r"통합테스트\s*(?:계획|결과)|성능\s*테스트\s*(?:계획|결과))",
     re.IGNORECASE,
 )
+_USER_UPLOAD_DOCUMENT_SIGNAL_RE = re.compile(
+    r"(내\s*업로드|업로드\s*(?:문서|자료|데이터)|운영\s*자료)",
+    re.IGNORECASE,
+)
+_DOCUMENT_MATCH_STOPWORDS = {
+    "그럼",
+    "그때",
+    "그러면",
+    "기준",
+    "답해줄",
+    "알려줘",
+    "정리해줘",
+    "확인",
+    "방법",
+    "어떻게",
+    "무엇",
+    "뭐야",
+    "수",
+    "있어",
+    "있나",
+}
 
 
 def _is_customer_pack_explicit_query(query: str) -> bool:
@@ -149,6 +172,41 @@ def _query_upload_identifier_tokens(query: str) -> tuple[str, ...]:
     return tuple(tokens)
 
 
+def _compact_query_text(text: str) -> str:
+    return re.sub(r"\s+", "", str(text or "").casefold())
+
+
+def _document_match_terms(text: str) -> set[str]:
+    tokens = [
+        token
+        for token in tokenize_normalized_text(text)
+        if token not in _DOCUMENT_MATCH_STOPWORDS
+    ]
+    terms = set(tokens)
+    for window in (2, 3):
+        for index in range(0, max(0, len(tokens) - window + 1)):
+            compact = "".join(tokens[index : index + window])
+            if len(compact) >= 4:
+                terms.add(compact)
+    return terms
+
+
+def _query_user_upload_scope_signal(query: str) -> bool:
+    lowered = (query or "").casefold()
+    return bool(
+        _USER_UPLOAD_DOCUMENT_SIGNAL_RE.search(query or "")
+        or any(
+            token in lowered
+            for token in (
+                "user upload",
+                "uploaded document",
+                "uploaded docs",
+                "private upload",
+            )
+        )
+    )
+
+
 def _upload_identifier_match_count(hit: RetrievalHit, tokens: tuple[str, ...]) -> int:
     if not tokens:
         return 0
@@ -180,6 +238,11 @@ def _query_customer_scope_signal(query: str) -> bool:
                 "고객 데이터",
                 "고객자료",
                 "고객 자료",
+                "운영자료",
+                "운영 자료",
+                "업로드 문서",
+                "업로드 자료",
+                "내 업로드",
                 "단위 테스트",
                 "단위테스트",
                 "통합 테스트",
@@ -210,8 +273,59 @@ def _context_with_query_source_scope(query: str, context: SessionContext) -> Ses
         return context
     scoped = copy.copy(context)
     scoped.preferred_source_scope = None
-    scoped.enabled_source_scopes = [SOURCE_GROUP_OFFICIAL_DOCS, SOURCE_GROUP_CUSTOMER_DOCS]
+    scoped.enabled_source_scopes = [
+        SOURCE_GROUP_OFFICIAL_DOCS,
+        SOURCE_GROUP_CUSTOMER_DOCS,
+        SOURCE_GROUP_USER_UPLOAD,
+    ]
     return scoped
+
+
+def _user_upload_signal_score(query: str, hit: RetrievalHit) -> int:
+    if not _query_user_upload_scope_signal(query):
+        return 0
+    lowered_query = (query or "").casefold()
+    haystack = "\n".join(
+        (
+            hit.book_slug or "",
+            hit.chapter or "",
+            hit.section or "",
+            hit.heading_title or "",
+            hit.source_id or "",
+            hit.source_url or "",
+            hit.viewer_path or "",
+            hit.text or "",
+        )
+    ).casefold()
+    query_terms = _document_match_terms(query)
+    haystack_terms = _document_match_terms(haystack)
+    overlap = query_terms & haystack_terms
+    score = 0
+    score += min(len(overlap), 6) * 2
+    compact_query = _compact_query_text(query)
+    compact_haystack = _compact_query_text(haystack)
+    compact_query_terms = {
+        term
+        for term in query_terms
+        if len(term) >= 4 and not term.isdigit()
+    }
+    if any(term in compact_haystack for term in compact_query_terms):
+        score += 4
+    if any(token in lowered_query for token in ("운영자료", "운영 자료")) and (
+        "운영" in haystack or "운영" in compact_haystack
+    ):
+        score += 3
+    if any(token in lowered_query for token in ("업로드 문서", "업로드 자료", "내 업로드", "uploaded document")):
+        score += 3
+    if any(token in lowered_query for token in ("pipeline", "pipelinerun", "파이프라인", "파이프라인런")) and any(
+        token in haystack for token in ("pipeline", "pipelinerun", "파이프라인")
+    ):
+        score += 3
+    if "기준" in lowered_query and "기준" in haystack:
+        score += 2
+    if "확인" in lowered_query and "확인" in haystack:
+        score += 1
+    return score
 
 
 def _customer_signal_score(query: str, hit: RetrievalHit) -> int:
@@ -273,14 +387,15 @@ def _preserve_specific_user_upload_candidate(
     if enabled and SOURCE_GROUP_USER_UPLOAD not in enabled:
         return target_hits
     tokens = _query_upload_identifier_tokens(query)
-    if not tokens or not candidate_hits:
+    has_upload_scope_signal = _query_user_upload_scope_signal(query)
+    if (not tokens and not has_upload_scope_signal) or not candidate_hits:
         return target_hits
 
     candidates: list[tuple[int, int, RetrievalHit]] = []
     for index, hit in enumerate(candidate_hits):
         if source_group_for_candidate(hit) != SOURCE_GROUP_USER_UPLOAD:
             continue
-        match_count = _upload_identifier_match_count(hit, tokens)
+        match_count = _upload_identifier_match_count(hit, tokens) + _user_upload_signal_score(query, hit)
         if match_count <= 0:
             continue
         candidates.append((match_count, index, hit))

@@ -14,6 +14,7 @@ from typing import Any
 from play_book_studio.config.settings import load_settings
 from play_book_studio.http.wiki_user_overlay import build_wiki_overlay_signal_payload
 from play_book_studio.retrieval.intake_overlay import has_active_customer_pack_selection
+from play_book_studio.retrieval.korean_text import tokenize_normalized_text
 from play_book_studio.retrieval.models import RetrievalHit
 from play_book_studio.retrieval.models import SessionContext
 from play_book_studio.retrieval.payload import retrieval_payload_from_row
@@ -71,10 +72,28 @@ AUTH_CAN_I_QUERY_RE = re.compile(
 )
 CUSTOMER_DATA_QUERY_RE = re.compile(
     r"(완료\s*보고서?|완료본|고객\s*(?:데이터|자료|문서)|PPTX?|"
+    r"운영\s*자료|업로드\s*(?:문서|자료|데이터)|내\s*업로드|"
     r"KMSC|COCP|RTER|RECR|아키텍[처쳐]\s*설계서|설계서\s*기준|"
     r"테스트\s*(?:계획서|결과서)|단위\s*테스트|통합\s*테스트|성능\s*테스트)",
     re.IGNORECASE,
 )
+CUSTOMER_CONTEXT_MATCH_STOPWORDS = {
+    "그럼",
+    "그때",
+    "그러면",
+    "기준",
+    "답해줄",
+    "알려줘",
+    "정리해줘",
+    "확인",
+    "방법",
+    "어떻게",
+    "무엇",
+    "뭐야",
+    "수",
+    "있어",
+    "있나",
+}
 
 
 def _normalize_excerpt(text: str) -> str:
@@ -173,6 +192,67 @@ def _is_customer_data_hit(hit: RetrievalHit) -> bool:
 
 def _has_customer_data_query_signal(query: str) -> bool:
     return bool(CUSTOMER_DATA_QUERY_RE.search(query or "") or _is_customer_pack_explicit_query(query))
+
+
+def _customer_context_match_terms(*texts: str) -> set[str]:
+    tokens = [
+        token
+        for token in tokenize_normalized_text(" ".join(str(text or "") for text in texts))
+        if token not in CUSTOMER_CONTEXT_MATCH_STOPWORDS
+    ]
+    terms = set(tokens)
+    for window in (2, 3):
+        for index in range(0, max(0, len(tokens) - window + 1)):
+            compact = "".join(tokens[index : index + window])
+            if len(compact) >= 4:
+                terms.add(compact)
+    return terms
+
+
+def _customer_context_query_text(query: str, context: SessionContext | None) -> str:
+    if context is None:
+        return query
+    return " ".join(
+        part
+        for part in (
+            query,
+            str(getattr(context, "current_topic", "") or ""),
+            " ".join(str(entity) for entity in (getattr(context, "open_entities", []) or [])),
+        )
+        if str(part or "").strip()
+    )
+
+
+def _is_uploaded_meta_hint_hit(hit: RetrievalHit) -> bool:
+    haystack = " ".join((hit.section or "", hit.heading_title or "", hit.text or ""))
+    return any(
+        token in haystack
+        for token in (
+            "추천 테스트 질문",
+            "시연 질문 힌트",
+            "더미 데이터 고지",
+            "질문 힌트",
+        )
+    )
+
+
+def _customer_context_hit_score(hit: RetrievalHit, query: str, context: SessionContext | None) -> int:
+    query_terms = _customer_context_match_terms(_customer_context_query_text(query, context))
+    hit_terms = _customer_context_match_terms(
+        hit.book_slug,
+        hit.chapter,
+        hit.section,
+        hit.heading_title,
+        hit.source_id,
+        hit.source_url,
+        hit.viewer_path,
+        hit.text,
+    )
+    overlap = query_terms & hit_terms
+    score = min(len(overlap), 8) * 2
+    section_terms = _customer_context_match_terms(hit.section, hit.heading_title)
+    score += min(len(query_terms & section_terms), 4) * 3
+    return score
 
 
 def _is_thin_user_upload_hit(hit: RetrievalHit) -> bool:
@@ -2521,6 +2601,8 @@ def _select_hits(
         for hit in sorted(
             uploaded_hits,
             key=lambda item: (
+                1 if _is_uploaded_meta_hint_hit(item) else 0,
+                -_customer_context_hit_score(item, normalized, session_context),
                 -_hit_score(item),
                 item.book_slug,
                 item.chunk_id,
@@ -2541,6 +2623,8 @@ def _select_hits(
         for hit in sorted(
             customer_data_hits,
             key=lambda item: (
+                1 if _is_uploaded_meta_hint_hit(item) else 0,
+                -_customer_context_hit_score(item, normalized, session_context),
                 -_hit_score(item),
                 item.book_slug,
                 item.chunk_id,

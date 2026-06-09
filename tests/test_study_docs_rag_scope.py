@@ -9,6 +9,7 @@ from play_book_studio.retrieval.retriever_pipeline import (
     _preserve_specific_customer_candidate,
     _preserve_specific_user_upload_candidate,
     _query_customer_scope_signal,
+    _query_user_upload_scope_signal,
 )
 
 
@@ -106,12 +107,17 @@ def test_customer_document_title_signal_enables_official_and_customer_scopes() -
     )
 
     assert context.preferred_source_scope is None
-    assert context.enabled_source_scopes == ["official_docs", "customer_docs"]
+    assert context.enabled_source_scopes == ["official_docs", "customer_docs", "user_upload"]
 
 
 def test_customer_document_title_signal_detects_ppt_customer_data_terms() -> None:
     assert _query_customer_scope_signal("고객 데이터 PPT 기준으로 CI/CD 설계서 핵심을 알려줘")
     assert _query_customer_scope_signal("완료보고서 기준으로 운영 준비 리스크를 알려줘")
+
+
+def test_user_upload_document_signal_detects_ops_material_terms() -> None:
+    assert _query_customer_scope_signal("그럼 한빛 리테일의 운영자료 기준으로 답해줄 수 있어?")
+    assert _query_user_upload_scope_signal("그럼 한빛 리테일의 운영자료 기준으로 답해줄 수 있어?")
 
 
 def test_preferred_source_scope_filters_retrieval_hits_to_study_docs() -> None:
@@ -196,6 +202,39 @@ def test_specific_upload_identifier_is_preserved_inside_full_scope() -> None:
     )
 
     assert hits[0].chunk_id == "upload-demo"
+
+
+def test_user_upload_ops_material_signal_is_preserved_inside_full_scope() -> None:
+    context = SessionContext(enabled_source_scopes=["official_docs", "customer_docs", "user_upload"])
+    upload = _hit(
+        "hanbit-pipeline",
+        "user_upload",
+        raw_score=0.03,
+        chapter="한빛리테일 OCP 운영 준비 현황 및 CI/CD 연결 기준",
+        section="PipelineRun이 생성되지 않을 때 고객사 기준 점검 순서",
+        heading_title="PipelineRun이 생성되지 않을 때 고객사 기준 점검 순서",
+        text=(
+            "한빛리테일 운영자료 PipelineRun이 생성되지 않을 때 고객사 기준 점검 순서 "
+            "Repository 이름 hanbit-payments-api-repository namespace ci-pipelines "
+            "smee.io relay와 GitHub Webhook delivery를 먼저 확인한다."
+        ),
+    )
+    official_top = _hit(
+        "official-pipeline",
+        "official_docs",
+        raw_score=0.2,
+        fused_score=0.2,
+        text="PipelineRun이 생성되지 않으면 oc get pipelinerun 명령으로 확인한다.",
+    )
+
+    hits = _preserve_specific_user_upload_candidate(
+        "그럼 한빛 리테일의 운영자료 기준으로 pipeline 확인 단계는 뭐야?",
+        target_hits=[official_top],
+        candidate_hits=[upload, official_top],
+        context=context,
+    )
+
+    assert hits[0].chunk_id == "hanbit-pipeline"
 
 
 def test_specific_upload_identifier_does_not_bypass_disabled_upload_scope() -> None:
