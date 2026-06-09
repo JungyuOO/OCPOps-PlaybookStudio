@@ -360,6 +360,19 @@ export interface ActionRequest {
   created_at: string;
 }
 
+export interface AiopsAnalysis {
+  analysis_id: string;
+  kind: string;
+  resource_type: string;
+  resource_name: string;
+  namespace: string;
+  status: string;
+  changes: Array<Record<string, unknown>>;
+  snapshot: Record<string, unknown>;
+  answer: string;
+  created_at: string;
+}
+
 export interface ActionExecution {
   execution_id: string;
   request_id: string;
@@ -372,6 +385,7 @@ export interface ActionExecution {
   error: string;
   created_at: string;
   executed_by: string;
+  aiops_analysis?: AiopsAnalysis;
 }
 
 export interface ActionAuditItem {
@@ -628,10 +642,12 @@ export async function sendOpsChatStream(
     recent_terminal_actions?: Array<Record<string, unknown>>;
   },
   onEvent: (event: OpsChatStreamEvent) => void,
+  options: { signal?: AbortSignal } = {},
 ): Promise<OpsChatResponse> {
   const response = await fetch(`${RUNTIME_ORIGIN}/api/v1/chat/query/stream`, {
     method: 'POST',
     credentials: 'include',
+    signal: options.signal,
     headers: withSessionOwnerHeader(new Headers({ 'Content-Type': 'application/json' })),
     body: JSON.stringify(payload),
   });
@@ -642,38 +658,56 @@ export async function sendOpsChatStream(
   const decoder = new TextDecoder();
   let buffer = '';
   let finalResult: OpsChatResponse | null = null;
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-    let newlineIndex = buffer.indexOf('\n');
-    while (newlineIndex >= 0) {
-      const line = buffer.slice(0, newlineIndex).trim();
-      buffer = buffer.slice(newlineIndex + 1);
-      if (line) {
-        const event = JSON.parse(line) as OpsChatStreamEvent;
-        onEvent(event);
-        if (event.type === 'error') {
-          throw new Error(event.message);
-        }
-        if (event.type === 'result') {
-          finalResult = event.response;
-        }
+  const cancelReader = () => {
+    void reader.cancel().catch(() => undefined);
+  };
+  options.signal?.addEventListener('abort', cancelReader, { once: true });
+  try {
+    while (true) {
+      if (options.signal?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
       }
-      newlineIndex = buffer.indexOf('\n');
+      const { value, done } = await reader.read();
+      if (options.signal?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+      let newlineIndex = buffer.indexOf('\n');
+      while (newlineIndex >= 0) {
+        const line = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
+        if (line) {
+          const event = JSON.parse(line) as OpsChatStreamEvent;
+          onEvent(event);
+          if (event.type === 'error') {
+            throw new Error(event.message);
+          }
+          if (event.type === 'result') {
+            finalResult = event.response;
+          }
+        }
+        newlineIndex = buffer.indexOf('\n');
+      }
+      if (done) {
+        break;
+      }
     }
-    if (done) {
-      break;
+
+    if (options.signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
     }
-  }
-  if (buffer.trim()) {
-    const event = JSON.parse(buffer.trim()) as OpsChatStreamEvent;
-    onEvent(event);
-    if (event.type === 'error') {
-      throw new Error(event.message);
+    if (buffer.trim()) {
+      const event = JSON.parse(buffer.trim()) as OpsChatStreamEvent;
+      onEvent(event);
+      if (event.type === 'error') {
+        throw new Error(event.message);
+      }
+      if (event.type === 'result') {
+        finalResult = event.response;
+      }
     }
-    if (event.type === 'result') {
-      finalResult = event.response;
-    }
+  } finally {
+    options.signal?.removeEventListener('abort', cancelReader);
   }
   if (!finalResult) {
     throw new Error('stream completed without final result');

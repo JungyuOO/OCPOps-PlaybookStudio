@@ -57,7 +57,6 @@ study.md
 src/ocp_rag_v2.egg-info/
 C:/
 tmp/
-tmp_qdrant_smoke_chunks.jsonl
 PRD.md
 CANONICAL_AST_DESIGN.md
 CODE_READING_GUIDE.md
@@ -78,8 +77,6 @@ docs/ocp420_assignment_*.md
 docs/pipeline_toolchain_detail.md
 docs/retrieval_flow.md
 reports
-docker-compose.server-qdrant.override.yml
-
 .omx
 .venv
 __pycache__
@@ -89,6 +86,7 @@ spec/v0.1.4/kugnus_only/
 
 .playwright-cli
 output/*
+.kugnus-plan/rag-foundation/*.json
 corpus/sources/kmsc/raw/*
 corpus/sources/kmsc/parsed-preview/course_pbs/*
 !corpus/sources/kmsc/parsed-preview/course_pbs/assets/

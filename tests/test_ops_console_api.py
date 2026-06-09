@@ -157,6 +157,76 @@ def test_ops_console_env_connection_uses_default_namespace(monkeypatch) -> None:
             assert profiles[0]["default_namespace"] == "pbs-test"
 
 
+def test_real_ocp_request_retries_with_service_account_token(monkeypatch) -> None:
+    class FakeResponse:
+        def __init__(self, status_code: int, payload: dict[str, object]) -> None:
+            self.status_code = status_code
+            self._payload = payload
+            self.content = json.dumps(payload).encode("utf-8")
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise requests.HTTPError(f"{self.status_code} response")
+
+    seen_tokens: list[str] = []
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        token_path = root / "serviceaccount-token"
+        token_path.write_text("sa-token", encoding="utf-8")
+        monkeypatch.setattr(ops_console_api, "SERVICE_ACCOUNT_TOKEN_PATH", token_path)
+        monkeypatch.setattr(
+            ops_console_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(
+                ocp_api_base_url="https://api.ocp.cywell.local:6443",
+                ocp_api_token="expired-token",
+                ocp_default_namespace="pbs-ocpops",
+            ),
+        )
+
+        def fake_request(method, url, headers, **kwargs):  # noqa: ANN001, ARG001
+            seen_tokens.append(str(headers.get("Authorization") or ""))
+            if headers.get("Authorization") == "Bearer expired-token":
+                return FakeResponse(401, {"message": "invalid token"})
+            return FakeResponse(200, {"kind": "PodList", "items": []})
+
+        monkeypatch.setattr(requests, "request", fake_request)
+
+        payload = ops_console_api._real_ocp_request(root, "GET", "/api/v1/namespaces/pbs-ocpops/pods")
+
+    assert payload == {"kind": "PodList", "items": []}
+    assert seen_tokens == ["Bearer expired-token", "Bearer sa-token"]
+
+
+def test_real_ocp_resources_payload_uses_requested_namespace(monkeypatch) -> None:
+    requested_paths: list[str] = []
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        monkeypatch.setattr(
+            ops_console_api,
+            "load_settings",
+            lambda _root: SimpleNamespace(
+                ocp_api_base_url="https://api.ocp.cywell.local:6443",
+                ocp_api_token="unit-token",
+                ocp_default_namespace="pbs-ocpops",
+            ),
+        )
+        monkeypatch.setattr(ops_console_api, "_read_service_account_token", lambda: "")
+
+        def fake_request_json(root_dir, path, *, connection=None):  # noqa: ANN001, ARG001
+            requested_paths.append(path)
+            return {"kind": "PodList", "items": []}
+
+        monkeypatch.setattr(ops_console_api, "_real_ocp_request_json", fake_request_json)
+
+        ops_console_api._real_ocp_resources_payload(root, "pods", {}, "openshift-console")
+
+    assert requested_paths == ["/api/v1/namespaces/openshift-console/pods"]
+
+
 def test_ops_console_actions_execute_scale_updates_resource_manifest() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -299,6 +369,70 @@ def test_ops_console_recent_terminal_actions_are_sanitized() -> None:
         "timestamp": "2026-05-14T04:37:58.850361Z",
     }
     assert actions[-1]["command"] == "oc get svc"
+
+
+def test_ops_console_live_chat_lists_pods_for_namespace_status_query(monkeypatch) -> None:
+    def fake_live_context(root_dir, state, connection, namespace):  # noqa: ANN001
+        return {
+            "namespace": namespace,
+            "connection": connection,
+            "resources": {
+                "deployments": [],
+                "pods": [
+                    {
+                        "name": "console-1",
+                        "namespace": namespace,
+                        "kind": "Pod",
+                        "phase": "Running",
+                        "node_name": "worker-1",
+                    },
+                    {
+                        "name": "downloads-1",
+                        "namespace": namespace,
+                        "kind": "Pod",
+                        "phase": "Pending",
+                        "node_name": "",
+                    },
+                ],
+                "services": [],
+                "routes": [],
+                "events": [],
+            },
+            "metrics": {"summary": {}},
+            "manifest_index": {},
+            "manifest_previews": [],
+        }
+
+    monkeypatch.setattr(ops_console_api, "_ops_live_context", fake_live_context)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        response = ops_console_api._chat_payload(
+            Path(tmpdir),
+            {
+                "message": "네임스페이스 pod 목록과 각 pod의 현재 ststus를 실제 클러스터에서 조회해서 보여줘",
+                "connection_id": "conn_live",
+                "namespace": "openshift-console",
+                "history": [],
+            },
+            state={
+                "connections": [
+                    {
+                        "connection_id": "conn_live",
+                        "display_name": "dev-cluster",
+                        "status": "connected",
+                        "default_namespace": "default",
+                    }
+                ]
+            },
+            answerer=None,
+        )
+
+    assert response["lane"] == "live"
+    assert "openshift-console namespace에서 Pod 2건을 찾았습니다." in response["answer"]
+    assert response["artifacts"][0]["kind"] == "resource_list"
+    assert response["artifacts"][0]["resource_type"] == "pods"
+    assert response["artifacts"][0]["items"][0]["name"] == "console-1"
+    assert response["artifacts"][0]["items"][1]["phase"] == "Pending"
 
 
 def test_ops_console_live_chat_includes_recent_terminal_actions(monkeypatch) -> None:

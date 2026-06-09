@@ -409,7 +409,7 @@ const FACTORY_PIPELINE_STEPS: Record<FactoryLane, Array<{ badge: string; title: 
   user: [
     { badge: 'Bronze', title: '업로드 요청', description: '브라우저에서 서버로 파일 전송' },
     { badge: 'Silver', title: '서버 처리', description: '파싱 · 청킹 · DB 저장' },
-    { badge: 'Gold', title: '검색 인덱싱', description: '임베딩 · Qdrant 반영' },
+    { badge: 'Gold', title: '검색 인덱싱', description: '임베딩 · pgvector 반영' },
     { badge: 'Judge', title: '기본 인덱싱 확인', description: '답변 품질 검수 전' },
   ],
 };
@@ -425,7 +425,7 @@ const USER_UPLOAD_PIPELINE_STEPS: Array<{
   { stage: 'parse', badge: '3', title: '문서 파싱', description: '텍스트 · 구조 추출' },
   { stage: 'chunk', badge: '4', title: '청크 생성', description: '검색 단위 생성' },
   { stage: 'persist', badge: '5', title: 'DB 저장', description: 'PostgreSQL · 스코프 기록' },
-  { stage: 'index', badge: '6', title: 'Qdrant 인덱싱', description: '임베딩 · 벡터 검색 가능' },
+  { stage: 'index', badge: '6', title: '벡터 인덱싱', description: 'PostgreSQL pgvector 검색 가능' },
   { stage: 'scope', badge: '7', title: '스코프 확인', description: 'Owner · Repository 연결 확인' },
   { stage: 'ready', badge: '8', title: '완료 판정', description: '기본 검색 가능 상태 확인' },
 ];
@@ -1081,24 +1081,26 @@ const PlaybookLibraryPage: React.FC = () => {
   }, [navigate]);
 
   const openUploadedDocumentReader = useCallback((document: DocumentRepositoryDocument) => {
+    const sourceScope = String(document.source_scope || '').toLowerCase();
+    const isCustomerData = sourceScope === 'study_docs';
     setBookViewerPageMode('single');
     setBookViewer({
-      book_slug: 'uploaded-documents',
+      book_slug: isCustomerData ? 'customer-data-documents' : 'uploaded-documents',
       title: document.title || document.filename || 'Uploaded document',
-      grade: '',
+      grade: isCustomerData ? 'Customer Data' : '',
       review_status: document.visibility || 'private_user',
       source_type: 'uploaded_document',
-      source_lane: document.source_scope || 'user_upload',
+      source_lane: isCustomerData ? 'customer_data' : document.source_scope || 'user_upload',
       section_count: Number(document.chunk_count || 0),
       code_block_count: 0,
       viewer_path: uploadDocumentViewerPath(document),
       source_url: '',
       updated_at: document.updated_at || document.created_at || '',
-      boundary_badge: document.visibility || 'private_user',
-      runtime_truth_label: '업로드 문서 Reader',
+      boundary_badge: isCustomerData ? 'Customer Data' : document.visibility || 'private_user',
+      runtime_truth_label: isCustomerData ? '고객 데이터 Reader' : '업로드 문서 Reader',
       chunk_count: Number(document.chunk_count || 0),
       token_total: 0,
-      source_collection: document.source_scope || 'user_upload',
+      source_collection: isCustomerData ? 'customer_data' : document.source_scope || 'user_upload',
       source_origin_label: document.filename || '',
     });
   }, []);
@@ -1161,6 +1163,8 @@ const PlaybookLibraryPage: React.FC = () => {
           html: viewerDocument.html,
           inlineStyles: viewerDocument.inline_styles,
           bodyClassName: viewerDocument.body_class_name,
+          viewerCacheStatus: viewerDocument.viewer_cache_status,
+          viewerTimingsMs: viewerDocument.viewer_timings_ms,
         });
       })
       .catch(() => {
@@ -1426,7 +1430,7 @@ const PlaybookLibraryPage: React.FC = () => {
     title: string,
   ): Promise<boolean> => {
     if (!documentSourceId) return false;
-    if (!confirm(`'${title}' 문서를 삭제할까요?\n\nPostgreSQL · Qdrant 인덱스 · 원본 파일이 모두 삭제됩니다. 같은 파일을 다시 업로드하면 새 인덱싱이 시작됩니다.`)) {
+    if (!confirm(`'${title}' 문서를 삭제할까요?\n\nPostgreSQL 저장 데이터 · 벡터 인덱스 · 원본 파일이 모두 삭제됩니다. 같은 파일을 다시 업로드하면 새 인덱싱이 시작됩니다.`)) {
       return false;
     }
     setDeletingDocumentId(documentSourceId);
@@ -1434,11 +1438,8 @@ const PlaybookLibraryPage: React.FC = () => {
       const result = await deleteUploadedDocument(documentSourceId);
       addLog(
         'success',
-        `Deleted '${result.filename || title}' — Postgres ${result.postgres_rows_deleted}건, Qdrant ${result.qdrant_points_deleted}개 정리.`,
+        `Deleted '${result.filename || title}' — Postgres ${result.postgres_rows_deleted}건, embedding ${result.embedding_rows_deleted}건 정리.`,
       );
-      if (result.qdrant_errors.length > 0) {
-        addLog('warn', `Qdrant 정리 일부 실패: ${result.qdrant_errors.slice(0, 2).join(' / ')}`);
-      }
       refreshData();
       return true;
     } catch (err) {
@@ -1749,7 +1750,7 @@ const PlaybookLibraryPage: React.FC = () => {
       const chunkCount = summaryNumber(draftSummary, 'chunk_count');
       const generatedCount = summaryNumber(draftSummary, 'generated_count');
       const promotedCount = summaryNumber(goldSummary, 'promoted_count');
-      const qdrantCount = summaryNumber(goldSummary, 'qdrant_upserted_count');
+      const dossierCount = summaryNumber(goldSummary, 'dossier_promoted_count');
       const draftBits = [
         generatedCount !== null ? `generated ${generatedCount}` : '',
         sectionCount !== null ? `sections ${sectionCount}` : '',
@@ -1757,7 +1758,7 @@ const PlaybookLibraryPage: React.FC = () => {
       ].filter(Boolean);
       const goldBits = [
         promotedCount !== null ? `promoted ${promotedCount}` : '',
-        qdrantCount !== null ? `qdrant ${qdrantCount}` : '',
+        dossierCount !== null ? `dossier ${dossierCount}` : '',
       ].filter(Boolean);
       addLog('success', `[Silver] 구조화 초안 생성 완료${draftBits.length ? ` · ${draftBits.join(' · ')}` : ''}`);
       addLog('success', `[Gold] 플레이북 · 코퍼스 생성 완료${goldBits.length ? ` · ${goldBits.join(' · ')}` : ''}`);
@@ -1800,6 +1801,8 @@ const PlaybookLibraryPage: React.FC = () => {
           html: viewerDocument.html,
           inlineStyles: viewerDocument.inline_styles,
           bodyClassName: viewerDocument.body_class_name,
+          viewerCacheStatus: viewerDocument.viewer_cache_status,
+          viewerTimingsMs: viewerDocument.viewer_timings_ms,
         });
       } else if (draft.capture_artifact_path) {
         const captured = await loadCustomerPackCapturedPreview(draft.draft_id);
@@ -1821,6 +1824,8 @@ const PlaybookLibraryPage: React.FC = () => {
       html: viewerDocument.html,
       inlineStyles: viewerDocument.inline_styles,
       bodyClassName: viewerDocument.body_class_name,
+      viewerCacheStatus: viewerDocument.viewer_cache_status,
+      viewerTimingsMs: viewerDocument.viewer_timings_ms,
       interactionPolicy: {
         codeCopy: viewerDocument.interaction_policy.code_copy,
         codeWrapToggle: viewerDocument.interaction_policy.code_wrap_toggle,
@@ -1882,7 +1887,8 @@ const PlaybookLibraryPage: React.FC = () => {
     switch (kind) {
       case 'approved':
         title = 'Gold PlayBooks';
-        books = [...(cr.gold_books ?? [])];
+        books = [...(cr.approved_wiki_runtime_books?.books?.length ? cr.approved_wiki_runtime_books.books : cr.gold_books ?? [])]
+          .filter((book) => normalizePlaybookGrade(book.grade) === 'Gold');
         break;
       case 'latestNonGold':
         title = 'Silver · Bronze PlayBooks';
@@ -2091,6 +2097,14 @@ const PlaybookLibraryPage: React.FC = () => {
     }),
     [repositoryDocumentRows],
   );
+  const customerDataDocumentRows = useMemo(
+    () => repositoryDocumentRows.filter(({ document, repository }) => {
+      const scope = String(document.source_scope || repository.metadata?.source_scope || '').toLowerCase();
+      const kind = String(repository.repository_kind || '').toLowerCase();
+      return scope === 'study_docs' || kind === 'study';
+    }),
+    [repositoryDocumentRows],
+  );
   const userUploadIndexedChunkCount = userUploadDocumentRows.reduce(
     (total, { document }) => total + Number(document.indexed_chunk_count || 0),
     0,
@@ -2099,7 +2113,25 @@ const PlaybookLibraryPage: React.FC = () => {
     (total, { document }) => total + Number(document.chunk_count || 0),
     0,
   );
-  const approvedRuntimeBooks = summary?.approved_runtime_count ?? summary?.gold_book_count ?? controlRoom?.gold_books?.length ?? 0;
+  const customerDataIndexedChunkCount = customerDataDocumentRows.reduce(
+    (total, { document }) => total + Number(document.indexed_chunk_count || 0),
+    0,
+  );
+  const customerDataChunkCount = customerDataDocumentRows.reduce(
+    (total, { document }) => total + Number(document.chunk_count || 0),
+    0,
+  );
+  const approvedRuntimeBooks = summary?.authoritative_runtime_book_count
+    ?? summary?.approved_wiki_runtime_book_count
+    ?? controlRoom?.approved_wiki_runtime_book_count
+    ?? controlRoom?.approved_wiki_runtime_books?.books?.length
+    ?? summary?.manualbook_book_count
+    ?? controlRoom?.manualbook_book_count
+    ?? controlRoom?.manualbooks?.books?.length
+    ?? summary?.gold_book_count
+    ?? controlRoom?.gold_book_count
+    ?? controlRoom?.gold_books?.length
+    ?? 0;
   const userLibraryBooks = [...(userLibraryBucket?.books ?? [])];
   const userLibraryBookCount = summary?.customer_pack_runtime_book_count
     ?? summary?.user_library_book_count
@@ -2283,8 +2315,10 @@ const PlaybookLibraryPage: React.FC = () => {
     }
     return actions;
   }, [generatedCatalogPreferredBasis]);
-  const activeLibrarySurface = viewMode === 'repository' ? 'uploads' : 'official';
+  const activeMonitoringSurface = searchParams.get('surface') === 'customer-data' ? 'customer-data' : 'official';
+  const activeLibrarySurface = viewMode === 'repository' ? 'uploads' : activeMonitoringSurface;
   const connectedOfficialBookCountLabel = controlRoom ? allOperationalWikiBooks.length.toLocaleString() : '--';
+  const customerDataDocumentCountLabel = customerDataDocumentRows.length.toLocaleString();
   const librarySurfaceCards = [
     {
       key: 'official',
@@ -2293,6 +2327,14 @@ const PlaybookLibraryPage: React.FC = () => {
       detail: '연결 완료 문서',
       icon: BookOpen,
       action: () => navigate('/playbook-library/control-tower'),
+    },
+    {
+      key: 'customer-data',
+      label: '고객 데이터',
+      value: customerDataDocumentRows.length,
+      detail: `${customerDataChunkCount.toLocaleString()}개 고객자료 청크`,
+      icon: FileText,
+      action: () => navigate('/playbook-library/control-tower?surface=customer-data'),
     },
     {
       key: 'uploads',
@@ -2349,16 +2391,33 @@ const PlaybookLibraryPage: React.FC = () => {
 
               {viewMode === 'monitoring' ? (
                 <>
-                  <div className="library-runtime-board-copy">
-                    <span className="factory-hub-eyebrow">공식 지식 베이스</span>
-                    <h2>현재 연결된 공식 문서</h2>
-                    <p>플랫폼에서 바로 질문 범위로 선택할 수 있는 공식 문서를 한 화면에 보여줍니다.</p>
-                  </div>
+                  {activeLibrarySurface === 'customer-data' ? (
+                    <>
+                      <div className="library-runtime-board-copy">
+                        <span className="factory-hub-eyebrow">고객 데이터</span>
+                        <h2>현재 연결된 고객 데이터</h2>
+                        <p>고객 환경 산출물과 PPT 기반 운영 자료를 별도 책장으로 보여줍니다.</p>
+                      </div>
 
-                  <div className="library-runtime-summary" aria-label="Official document connection summary">
-                    <span>공식 문서 {connectedOfficialBookCountLabel}권</span>
-                    <span>현재 런타임 연결 기준</span>
-                  </div>
+                      <div className="library-runtime-summary" aria-label="Customer data connection summary">
+                        <span>고객 데이터 {customerDataDocumentCountLabel}건</span>
+                        <span>인덱싱 {customerDataIndexedChunkCount.toLocaleString()} / {customerDataChunkCount.toLocaleString()} 청크</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="library-runtime-board-copy">
+                        <span className="factory-hub-eyebrow">공식 지식 베이스</span>
+                        <h2>현재 연결된 공식 문서</h2>
+                        <p>플랫폼에서 바로 질문 범위로 선택할 수 있는 공식 문서를 한 화면에 보여줍니다.</p>
+                      </div>
+
+                      <div className="library-runtime-summary" aria-label="Official document connection summary">
+                        <span>공식 문서 {connectedOfficialBookCountLabel}권</span>
+                        <span>현재 런타임 연결 기준</span>
+                      </div>
+                    </>
+                  )}
                 </>
               ) : (
                 <div className="library-upload-summary" aria-label="업로드 문서 요약">
@@ -2371,56 +2430,117 @@ const PlaybookLibraryPage: React.FC = () => {
 
         {viewMode === 'monitoring' ? (
           <div className="monitoring-view">
-            <section className="operational-shelf box-container">
-              <div className="operational-shelf-header">
-                <div>
-                  <span className="operational-shelf-eyebrow">공식 문서</span>
-                  <h2>연결된 공식 문서 {connectedOfficialBookCountLabel}권</h2>
-                  <p>현재 런타임에 연결된 공식 문서 전체입니다. 문서는 전체 페이지로 열고, 원천소스 기준은 카드 안에서 바로 확인합니다.</p>
+            {activeLibrarySurface === 'customer-data' ? (
+              <section className="operational-shelf box-container">
+                <div className="operational-shelf-header">
+                  <div>
+                    <span className="operational-shelf-eyebrow">고객 데이터</span>
+                    <h2>연결된 고객 데이터 {customerDataDocumentCountLabel}건</h2>
+                    <p>고객 환경 산출물과 별도 정리 PPT 자료를 문서 단위로 확인합니다.</p>
+                  </div>
+                  <span className="operational-library-count">{customerDataDocumentCountLabel}건</span>
                 </div>
-                <span className="operational-library-count">{connectedOfficialBookCountLabel}권</span>
-              </div>
-              {!controlRoom ? (
-                <div className="repo-empty">
-                  <Loader2 size={32} className="spin-icon" />
-                  <p>연결된 공식 문서를 불러오는 중입니다.</p>
-                </div>
-              ) : allOperationalWikiBooks.length === 0 ? (
-                <div className="repo-empty">
-                  <Database size={36} />
-                  <p>연결된 공식 문서가 아직 없습니다.</p>
-                </div>
-              ) : (
-                <div className="operational-library-grid">
-                  {allOperationalWikiBooks.map((book) => (
-                    <article
-                      key={`official-${book.book_slug}`}
-                      className="operational-library-card"
-                    >
-                      <div className="operational-card-open">
-                        <span className="operational-library-card-badge">{normalizePlaybookGrade(book.grade)}</span>
-                        <strong>{book.title}</strong>
-                        <span className="operational-card-open-subtitle">{book.book_slug.replace(/_/g, ' ')}</span>
-                      </div>
-                      <div className="library-document-actions">
-                        <OfficialSourcePopover record={book} />
-                        <button
-                          type="button"
-                          className="library-document-chat-btn"
-                          onClick={() => {
-                            setBookViewerPageMode('single');
-                            setBookViewer(book);
-                          }}
+                {customerDataDocumentRows.length === 0 ? (
+                  <div className="repo-empty">
+                    <Database size={36} />
+                    <p>연결된 고객 데이터가 아직 없습니다.</p>
+                  </div>
+                ) : (
+                  <div className="operational-library-grid">
+                    {customerDataDocumentRows.map(({ repository, document, categoryKey }) => {
+                      const title = document.title || document.filename || 'Customer data document';
+                      const subtitle = document.filename && document.filename !== title ? document.filename : repository.title || repository.slug;
+                      return (
+                        <article
+                          key={`customer-data-${document.document_source_id}`}
+                          className="operational-library-card operational-library-card--customer"
                         >
-                          <BookOpen size={14} />
-                          <span>문서 열기</span>
-                        </button>
-                      </div>
-                    </article>
-                  ))}
+                          <div className="operational-card-open">
+                            <span className="operational-library-card-badge operational-library-card-badge--customer">Customer Data</span>
+                            <strong>{title}</strong>
+                            <span className="operational-card-open-subtitle">{subtitle}</span>
+                          </div>
+                          <div className="library-upload-facts" aria-label={`${title} customer data status`}>
+                            <span>{Number(document.chunk_count || 0).toLocaleString()} chunks</span>
+                            <span>indexed {Number(document.indexed_chunk_count || 0).toLocaleString()}</span>
+                            <span>{document.visibility || repository.visibility}</span>
+                          </div>
+                          <div className="library-document-actions">
+                            <button
+                              type="button"
+                              className="library-document-chat-btn library-document-chat-btn--reader"
+                              onClick={() => openUploadedDocumentReader(document)}
+                            >
+                              <BookOpen size={14} />
+                              <span>문서 열기</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="library-document-chat-btn"
+                              onClick={() => openDocumentInChat(repository, document, categoryKey)}
+                            >
+                              <MessageSquare size={14} />
+                              <span>이 자료로 질문</span>
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            ) : (
+              <section className="operational-shelf box-container">
+                <div className="operational-shelf-header">
+                  <div>
+                    <span className="operational-shelf-eyebrow">공식 문서</span>
+                    <h2>연결된 공식 문서 {connectedOfficialBookCountLabel}권</h2>
+                    <p>현재 런타임에 연결된 공식 문서 전체입니다. 문서는 전체 페이지로 열고, 원천소스 기준은 카드 안에서 바로 확인합니다.</p>
+                  </div>
+                  <span className="operational-library-count">{connectedOfficialBookCountLabel}권</span>
                 </div>
-              )}
-            </section>
+                {!controlRoom ? (
+                  <div className="repo-empty">
+                    <Loader2 size={32} className="spin-icon" />
+                    <p>연결된 공식 문서를 불러오는 중입니다.</p>
+                  </div>
+                ) : allOperationalWikiBooks.length === 0 ? (
+                  <div className="repo-empty">
+                    <Database size={36} />
+                    <p>연결된 공식 문서가 아직 없습니다.</p>
+                  </div>
+                ) : (
+                  <div className="operational-library-grid">
+                    {allOperationalWikiBooks.map((book) => (
+                      <article
+                        key={`official-${book.book_slug}`}
+                        className="operational-library-card"
+                      >
+                        <div className="operational-card-open">
+                          <span className="operational-library-card-badge">{normalizePlaybookGrade(book.grade)}</span>
+                          <strong>{book.title}</strong>
+                          <span className="operational-card-open-subtitle">{book.book_slug.replace(/_/g, ' ')}</span>
+                        </div>
+                        <div className="library-document-actions">
+                          <OfficialSourcePopover record={book} />
+                          <button
+                            type="button"
+                            className="library-document-chat-btn"
+                            onClick={() => {
+                              setBookViewerPageMode('single');
+                              setBookViewer(book);
+                            }}
+                          >
+                            <BookOpen size={14} />
+                            <span>문서 열기</span>
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
             {releaseCandidateFreeze?.exists && (
               <section className="release-freeze-hero">
@@ -2610,7 +2730,7 @@ const PlaybookLibraryPage: React.FC = () => {
                     <span>업로드</span>
                     <span>파싱/청킹</span>
                     <span>PostgreSQL 저장</span>
-                    <span>Qdrant 인덱싱</span>
+                    <span>벡터 인덱싱</span>
                     <span>챗봇 질문 가능</span>
                   </div>
                 </div>
@@ -2661,7 +2781,7 @@ const PlaybookLibraryPage: React.FC = () => {
                         </div>
                         <div className="library-upload-proof" aria-label={`${title} RAG ingestion proof`}>
                           <span>PostgreSQL 저장 기록</span>
-                          <span>Qdrant {document.indexed_chunk_count.toLocaleString()}개 인덱싱</span>
+                          <span>벡터 {document.indexed_chunk_count.toLocaleString()}개 인덱싱</span>
                           <span>세션 범위 기록</span>
                         </div>
                         <div className="library-document-actions">
@@ -3023,7 +3143,7 @@ const PlaybookLibraryPage: React.FC = () => {
                               factoryManualSnapshot ? (
                                 <ul>
                                   <li>promoted {summaryNumber(factoryManualSnapshot.gold_summary, 'promoted_count') ?? '-'}</li>
-                                  <li>qdrant {summaryNumber(factoryManualSnapshot.gold_summary, 'qdrant_upserted_count') ?? '-'}</li>
+                                  <li>dossier {summaryNumber(factoryManualSnapshot.gold_summary, 'dossier_promoted_count') ?? '-'}</li>
                                   <li>{factoryManualSnapshot.source_label}</li>
                                 </ul>
                               ) : (
@@ -4305,9 +4425,14 @@ const PlaybookLibraryPage: React.FC = () => {
               </div>
               <div className="preview-header-actions">
                 {bookViewer.source_type === 'uploaded_document' ? (
-                  <span className="preview-viewer-mode preview-viewer-mode-static" title="업로드 문서는 HTML 문서 뷰어로 표시합니다.">
+                  <span
+                    className="preview-viewer-mode preview-viewer-mode-static"
+                    title={bookViewer.source_collection === 'customer_data'
+                      ? '고객 데이터는 HTML 문서 뷰어로 표시합니다.'
+                      : '업로드 문서는 HTML 문서 뷰어로 표시합니다.'}
+                  >
                     <BookOpen size={14} aria-hidden="true" />
-                    <span>업로드 문서</span>
+                    <span>{bookViewer.source_collection === 'customer_data' ? '고객 데이터' : '업로드 문서'}</span>
                   </span>
                 ) : (
                   <label className="preview-viewer-mode" title="문서 보기 형식">

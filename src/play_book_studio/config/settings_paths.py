@@ -373,6 +373,10 @@ class SettingsPathMixin:
         return self.runtime_dir / "chat_turns.md"
 
     @property
+    def lightspeed_call_log_path(self) -> Path:
+        return self.runtime_dir / "lightspeed_calls.jsonl"
+
+    @property
     def runtime_sessions_dir(self) -> Path:
         return self.runtime_dir / "sessions"
 

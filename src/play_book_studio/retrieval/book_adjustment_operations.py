@@ -48,6 +48,142 @@ def _apply_runtime_domain_adjustments(
         boosts["disconnected_installation_mirroring"] = max(boosts.get("disconnected_installation_mirroring", 1.0), 1.2)
 
 
+def _apply_network_policy_adjustments(
+    normalized: str,
+    *,
+    boosts: dict[str, float],
+    penalties: dict[str, float],
+) -> None:
+    lowered = (normalized or "").lower()
+    if not (
+        "networkpolicy" in lowered
+        or "network policy" in lowered
+        or "네트워크 정책" in normalized
+        or "네트워크정책" in normalized
+        or "통신 제한" in normalized
+        or "pod 통신" in lowered
+        or "파드 통신" in normalized
+    ):
+        return
+
+    boosts["advanced_networking"] = max(boosts.get("advanced_networking", 1.0), 1.72)
+    boosts["networking_overview"] = max(boosts.get("networking_overview", 1.0), 1.45)
+    boosts["networking"] = max(boosts.get("networking", 1.0), 1.2)
+    penalties["security_and_compliance"] = min(
+        penalties.get("security_and_compliance", 1.0),
+        0.62,
+    )
+    penalties["postinstallation_configuration"] = min(
+        penalties.get("postinstallation_configuration", 1.0),
+        0.76,
+    )
+    penalties["support"] = min(penalties.get("support", 1.0), 0.82)
+
+
+def _apply_image_pull_adjustments(
+    normalized: str,
+    *,
+    boosts: dict[str, float],
+    penalties: dict[str, float],
+) -> None:
+    lowered = (normalized or "").lower()
+    image_pull_signal = (
+        "imagepullbackoff" in lowered
+        or "errimagepull" in lowered
+        or "이미지풀백오프" in normalized
+        or "이미지 풀 백 오프" in normalized
+    )
+    registry_or_secret_signal = any(
+        token in lowered
+        for token in ("pull secret", "registry", "image registry", "이미지", "레지스트리", "시크릿")
+    )
+    if not (image_pull_signal and registry_or_secret_signal):
+        return
+
+    boosts["images"] = max(boosts.get("images", 1.0), 1.85)
+    boosts["registry"] = max(boosts.get("registry", 1.0), 1.45)
+    boosts["support"] = max(boosts.get("support", 1.0), 1.18)
+    penalties["disconnected_environments"] = min(
+        penalties.get("disconnected_environments", 1.0),
+        0.62,
+    )
+    penalties["installation_overview"] = min(
+        penalties.get("installation_overview", 1.0),
+        0.62,
+    )
+    penalties["installing_on_any_platform"] = min(
+        penalties.get("installing_on_any_platform", 1.0),
+        0.62,
+    )
+    penalties["disconnected_installation_mirroring"] = min(
+        penalties.get("disconnected_installation_mirroring", 1.0),
+        0.72,
+    )
+
+
+def _apply_external_exposure_adjustments(
+    normalized: str,
+    *,
+    boosts: dict[str, float],
+    penalties: dict[str, float],
+) -> None:
+    lowered = (normalized or "").lower()
+    exposure_signal = any(token in normalized for token in ("외부", "공개", "노출")) or any(
+        token in lowered for token in ("external", "public", "expose")
+    )
+    registry_context = any(token in lowered for token in ("registry", "image", "레지스트리", "이미지"))
+    if not exposure_signal or registry_context:
+        return
+
+    boosts["ingress_and_load_balancing"] = max(
+        boosts.get("ingress_and_load_balancing", 1.0),
+        1.86,
+    )
+    boosts["networking_overview"] = max(boosts.get("networking_overview", 1.0), 1.42)
+    boosts["advanced_networking"] = max(boosts.get("advanced_networking", 1.0), 1.18)
+    penalties["registry"] = min(penalties.get("registry", 1.0), 0.45)
+    penalties["updating_clusters"] = min(penalties.get("updating_clusters", 1.0), 0.65)
+
+
+def _apply_project_namespace_adjustments(
+    normalized: str,
+    *,
+    boosts: dict[str, float],
+    penalties: dict[str, float],
+) -> None:
+    lowered = (normalized or "").lower()
+    has_project = "project" in lowered or "프로젝트" in normalized
+    has_namespace = "namespace" in lowered or "네임스페이스" in normalized
+    compare_or_doc_signal = any(token in normalized for token in ("차이", "설명", "문서", "초보자")) or any(
+        token in lowered for token in ("compare", "difference")
+    )
+    if not (has_project and has_namespace and compare_or_doc_signal):
+        return
+
+    command_shape = any(token in normalized for token in ("명령", "명령어", "커맨드")) or any(
+        token in lowered for token in ("command", "cli", "oc ")
+    )
+    boosts["overview"] = max(boosts.get("overview", 1.0), 1.48)
+    penalties.pop("cli_tools", None)
+    if command_shape:
+        boosts["cli_tools"] = max(boosts.get("cli_tools", 1.0), 1.18)
+    penalties["machine_management"] = min(penalties.get("machine_management", 1.0), 0.48)
+    penalties["architecture"] = min(penalties.get("architecture", 1.0), 0.72)
+    penalties["security_and_compliance"] = min(
+        penalties.get("security_and_compliance", 1.0),
+        0.42,
+    )
+    penalties["postinstallation_configuration"] = min(
+        penalties.get("postinstallation_configuration", 1.0),
+        0.62,
+    )
+    penalties["backup_and_restore"] = min(penalties.get("backup_and_restore", 1.0), 0.62)
+    penalties["ingress_and_load_balancing"] = min(
+        penalties.get("ingress_and_load_balancing", 1.0),
+        0.62,
+    )
+
+
 def apply_operation_adjustments(
     normalized: str,
     *,
@@ -80,6 +216,26 @@ def apply_operation_adjustments(
         penalties=penalties,
     )
     _apply_runtime_domain_adjustments(
+        normalized,
+        boosts=boosts,
+        penalties=penalties,
+    )
+    _apply_network_policy_adjustments(
+        normalized,
+        boosts=boosts,
+        penalties=penalties,
+    )
+    _apply_image_pull_adjustments(
+        normalized,
+        boosts=boosts,
+        penalties=penalties,
+    )
+    _apply_external_exposure_adjustments(
+        normalized,
+        boosts=boosts,
+        penalties=penalties,
+    )
+    _apply_project_namespace_adjustments(
         normalized,
         boosts=boosts,
         penalties=penalties,

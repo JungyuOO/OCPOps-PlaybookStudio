@@ -58,8 +58,8 @@ DISCONNECTED_RE = re.compile(r"(연결이 없는 환경|분리망|disconnect)", 
 ETCD_RE = re.compile(r"etcd", re.IGNORECASE)
 BACKUP_RE = re.compile(r"(백업|backup)", re.IGNORECASE)
 RESTORE_RE = re.compile(r"(복구|복원|restore)", re.IGNORECASE)
-NODE_RE = re.compile(r"(노드|node|worker)", re.IGNORECASE)
-DRAIN_RE = re.compile(r"(drain|비워|비우|evacuate|점검 때문에 비워)", re.IGNORECASE)
+NODE_RE = re.compile(r"(노드|워커|node|worker)", re.IGNORECASE)
+DRAIN_RE = re.compile(r"(drain|cordon|드레인|드레이닝|비워|비우|evacuate|점검 때문에 비워)", re.IGNORECASE)
 TOP_RE = re.compile(r"(\btop\b|사용량|cpu|메모리|memory)", re.IGNORECASE)
 HOSTED_CONTROL_PLANE_RE = re.compile(
     r"(hosted control plane|hosted cluster|호스팅된 컨트롤 플레인|호스트된 컨트롤 플레인|호스팅 제어 평면|제어 평면|hypershift|oadp|velero)",

@@ -15,8 +15,8 @@ Login:
 
 ```bash
 oc login https://api.ocp.cywell.local:6443 \
-  -u admin \
-  -p admin123 \
+  -u <ocp-user> \
+  -p <ocp-password-or-token> \
   --insecure-skip-tls-verify=true
 ```
 
@@ -25,13 +25,14 @@ Create or update the runtime secret. Keep these values out of Git:
 ```bash
 oc create namespace pbs-ocpops --dry-run=client -o yaml | oc apply -f -
 
-export POSTGRES_PASSWORD="admin123"
+export POSTGRES_PASSWORD="<set-strong-password>"
+export OPENSHIFT_LIGHTSPEED_API_TOKEN="<set-if-lightspeed-route-requires-token>"
 
 oc create secret generic playbookstudio-secret \
   -n pbs-ocpops \
   --from-literal=POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
-  --from-literal=DATABASE_URL="postgresql://admin:${POSTGRES_PASSWORD}@postgres:5432/playbookstudio" \
   --from-literal=OCP_API_TOKEN="$(oc whoami -t)" \
+  --from-literal=OPENSHIFT_LIGHTSPEED_API_TOKEN="${OPENSHIFT_LIGHTSPEED_API_TOKEN}" \
   --dry-run=client -o yaml | oc apply -f -
 
 oc adm policy add-scc-to-user anyuid -z playbookstudio -n pbs-ocpops
@@ -44,11 +45,76 @@ Apply the Git source:
 oc apply -k "https://github.com/JungyuOO/OCPOps-PlaybookStudio//deploy/openshift?ref=dev"
 ```
 
+Set the OpenShift Lightspeed endpoint after the route or internal service URL is confirmed:
+
+```bash
+oc patch configmap playbookstudio-config \
+  -n pbs-ocpops \
+  --type merge \
+  -p '{"data":{"OPENSHIFT_LIGHTSPEED_BASE_URL":"https://<lightspeed-route-or-service>"}}'
+
+oc rollout restart deploy/app -n pbs-ocpops
+oc rollout status deploy/app -n pbs-ocpops
+```
+
+If the company route uses an internal certificate that the app container cannot verify, enable TLS skip only for that route test:
+
+```bash
+oc patch configmap playbookstudio-config \
+  -n pbs-ocpops \
+  --type merge \
+  -p '{"data":{"OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY":"true"}}'
+
+oc rollout restart deploy/app -n pbs-ocpops
+oc rollout status deploy/app -n pbs-ocpops
+```
+
+Confirm PBS sees the setting:
+
+```bash
+oc exec deploy/app -n pbs-ocpops -- \
+  python - <<'PY'
+import json, urllib.request
+payload = json.load(urllib.request.urlopen("http://127.0.0.1:8765/api/health", timeout=10))
+print(json.dumps(payload["runtime"]["openshift_lightspeed"], ensure_ascii=False, indent=2))
+PY
+```
+
+Confirm the app container can validate OpenShift Lightspeed access:
+
+```bash
+oc exec deploy/app -n pbs-ocpops -- \
+  python -m play_book_studio.cli lightspeed-auth-smoke --root-dir /app
+```
+
+Confirm the app container can call OpenShift Lightspeed query:
+
+```bash
+oc exec deploy/app -n pbs-ocpops -- \
+  python -m play_book_studio.cli lightspeed-smoke --root-dir /app
+```
+
+Confirm PBS chat stream uses OpenShift Lightspeed in the final payload:
+
+```bash
+oc exec deploy/app -n pbs-ocpops -- \
+  python -m play_book_studio.cli lightspeed-chat-smoke --ui-base-url http://127.0.0.1:8765
+```
+
+Run the full integration smoke after the three checks above pass:
+
+```bash
+oc exec deploy/app -n pbs-ocpops -- \
+  python -m play_book_studio.cli lightspeed-integration-smoke \
+  --root-dir /app \
+  --ui-base-url http://127.0.0.1:8765
+```
+
 For one-shot seed Jobs, delete completed Jobs before re-applying if the seed
 must run again:
 
 ```bash
-oc delete job db-migrate official-corpus-seed kmsc-corpus-seed learning-seed course-runtime-seed qdrant-seed \
+oc delete job db-migrate official-corpus-seed kmsc-corpus-seed learning-seed course-runtime-seed \
   -n pbs-ocpops \
   --ignore-not-found=true
 
@@ -163,4 +229,4 @@ Use a wider case set when the quick v0.1.2 beginner set is clean:
 
 This verifies local RAG quality with the same `/rerank` API shape. It does not
 replace in-cluster performance testing because local eval still uses the local
-runtime, local database/Qdrant settings, and SSH/port-forward networking.
+runtime, local database settings, and SSH/port-forward networking.

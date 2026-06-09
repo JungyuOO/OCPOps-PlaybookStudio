@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 
-def load_corpus_status(connection, *, collection: str) -> dict[str, Any]:
+def load_corpus_status(connection, *, embedding_model: str) -> dict[str, Any]:
+    model = embedding_model.strip()
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -35,56 +36,112 @@ def load_corpus_status(connection, *, collection: str) -> dict[str, Any]:
         cursor.execute(
             """
             SELECT count(1)::int
-            FROM qdrant_index_entries
-            WHERE collection = %s
-            """,
-            (collection,),
+            FROM document_chunks c
+            JOIN parsed_documents pd ON pd.id = c.parsed_document_id
+            JOIN document_sources ds ON ds.id = pd.document_source_id
+            WHERE length(btrim(COALESCE(c.embedding_text, ''))) > 0
+              AND (
+                c.source_scope <> 'user_upload'
+                OR pd.id = (
+                    SELECT latest_pd.id
+                    FROM parsed_documents latest_pd
+                    WHERE latest_pd.document_source_id = ds.id
+                    ORDER BY latest_pd.created_at DESC, latest_pd.id DESC
+                    LIMIT 1
+                )
+              )
+            """
         )
-        qdrant_entries = int((cursor.fetchone() or [0])[0] or 0)
+        indexable_chunks = int((cursor.fetchone() or [0])[0] or 0)
+        cursor.execute(
+            """
+            SELECT count(1)::int
+            FROM chunk_embeddings
+            WHERE model = %s
+            """,
+            (model,),
+        )
+        embedding_entries = int((cursor.fetchone() or [0])[0] or 0)
         cursor.execute(
             """
             SELECT count(1)::int
             FROM document_chunks c
-            LEFT JOIN qdrant_index_entries q
-                ON q.chunk_id = c.id AND q.collection = %s
-            WHERE q.chunk_id IS NULL
+            JOIN parsed_documents pd ON pd.id = c.parsed_document_id
+            JOIN document_sources ds ON ds.id = pd.document_source_id
+            LEFT JOIN chunk_embeddings ce
+                ON ce.chunk_id = c.id AND ce.model = %s
+            WHERE length(btrim(COALESCE(c.embedding_text, ''))) > 0
+              AND (
+                c.source_scope <> 'user_upload'
+                OR pd.id = (
+                    SELECT latest_pd.id
+                    FROM parsed_documents latest_pd
+                    WHERE latest_pd.document_source_id = ds.id
+                    ORDER BY latest_pd.created_at DESC, latest_pd.id DESC
+                    LIMIT 1
+                )
+              )
+              AND ce.chunk_id IS NULL
             """,
-            (collection,),
+            (model,),
         )
-        missing_qdrant_entries = int((cursor.fetchone() or [0])[0] or 0)
+        missing_embedding_entries = int((cursor.fetchone() or [0])[0] or 0)
+        cursor.execute(
+            """
+            SELECT count(1)::int
+            FROM chunk_embeddings ce
+            JOIN document_chunks c ON c.id = ce.chunk_id
+            WHERE ce.model = %s
+                AND ce.embedding_text_hash <> encode(digest(c.embedding_text, 'sha256'), 'hex')
+            """,
+            (model,),
+        )
+        stale_embedding_entries = int((cursor.fetchone() or [0])[0] or 0)
 
     expected_scopes = ("official_docs", "study_docs")
+    embedding_index_parity = (
+        indexable_chunks == embedding_entries
+        and missing_embedding_entries == 0
+        and stale_embedding_entries == 0
+    )
     return {
         "database": "postgres",
-        "collection": collection,
+        "vector_backend": "pgvector",
+        "embedding_model": model,
         "source_counts": source_counts,
         "chunk_counts": chunk_counts,
         "total_sources": sum(source_counts.values()),
         "total_chunks": total_chunks,
-        "qdrant_index_entries": qdrant_entries,
-        "missing_qdrant_index_entries": missing_qdrant_entries,
-        "qdrant_index_parity": total_chunks == qdrant_entries and missing_qdrant_entries == 0,
+        "indexable_chunks": indexable_chunks,
+        "non_indexable_chunks": max(total_chunks - indexable_chunks, 0),
+        "embedding_index_entries": embedding_entries,
+        "missing_embedding_index_entries": missing_embedding_entries,
+        "stale_embedding_index_entries": stale_embedding_entries,
+        "embedding_index_parity": embedding_index_parity,
         "has_official_docs": chunk_counts.get("official_docs", 0) > 0,
         "has_study_docs": chunk_counts.get("study_docs", 0) > 0,
         "ready_scopes": [scope for scope in expected_scopes if chunk_counts.get(scope, 0) > 0],
         "ready": all(chunk_counts.get(scope, 0) > 0 for scope in expected_scopes)
-        and total_chunks > 0
-        and total_chunks == qdrant_entries
-        and missing_qdrant_entries == 0,
+        and indexable_chunks > 0
+        and embedding_index_parity,
     }
 
 
 def disabled_corpus_status() -> dict[str, Any]:
     return {
         "database": "disabled",
-        "collection": "",
+        "vector_backend": "pgvector",
+        "embedding_model": "",
         "source_counts": {},
         "chunk_counts": {},
         "total_sources": 0,
         "total_chunks": 0,
-        "qdrant_index_entries": 0,
-        "missing_qdrant_index_entries": 0,
-        "qdrant_index_parity": False,
+        "indexable_chunks": 0,
+        "non_indexable_chunks": 0,
+        "embedding_index_entries": 0,
+        "missing_embedding_index_entries": 0,
+        "stale_embedding_index_entries": 0,
+        "embedding_index_parity": False,
         "has_official_docs": False,
         "has_study_docs": False,
         "ready_scopes": [],
@@ -95,7 +152,7 @@ def disabled_corpus_status() -> dict[str, Any]:
 def build_corpus_status(
     *,
     database_url: str,
-    collection: str,
+    embedding_model: str,
 ) -> dict[str, Any]:
     if not database_url.strip():
         return disabled_corpus_status()
@@ -103,11 +160,11 @@ def build_corpus_status(
 
     try:
         with psycopg.connect(database_url) as connection:
-            return load_corpus_status(connection, collection=collection)
+            return load_corpus_status(connection, embedding_model=embedding_model)
     except Exception as exc:  # noqa: BLE001
         payload = disabled_corpus_status()
         payload["database"] = "error"
-        payload["collection"] = collection
+        payload["embedding_model"] = embedding_model.strip()
         payload["error"] = str(exc)
         return payload
 

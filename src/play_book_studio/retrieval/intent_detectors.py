@@ -350,6 +350,60 @@ def is_generic_intro_query(query: str) -> bool:
     )
 
 
+def is_openshift_product_intro_query(query: str) -> bool:
+    normalized = " ".join(str(query or "").split())
+    lowered = normalized.lower()
+    compact = re.sub(r"\s+", "", lowered)
+    if not (OPENSHIFT_RE.search(normalized) or OCP_RE.search(normalized)):
+        return False
+    specific_topic_tokens = (
+        "설치",
+        "install",
+        "backup",
+        "백업",
+        "restore",
+        "복원",
+        "route",
+        "ingress",
+        "operator",
+        "오퍼레이터",
+        "node",
+        "노드",
+        "pod",
+        "파드",
+        "권한",
+        "rbac",
+        "로그인",
+        "login",
+        "etcd",
+        "oc ",
+        "yaml",
+    )
+    if any(token in lowered for token in specific_topic_tokens):
+        return False
+    return any(
+        token in compact
+        for token in (
+            "뭐야",
+            "뭔데",
+            "뭐지",
+            "무엇",
+            "무슨용도",
+            "어디에써",
+            "언제써",
+            "왜써",
+            "소개",
+            "개요",
+            "정의",
+            "요약",
+            "정리",
+            "한줄",
+            "세줄",
+            "3줄",
+        )
+    )
+
+
 def has_openshift_kubernetes_compare_intent(query: str) -> bool:
     normalized = query or ""
     return bool(OPENSHIFT_RE.search(normalized)) and bool(KUBERNETES_RE.search(normalized)) and bool(
@@ -528,6 +582,7 @@ __all__ = [
     "has_deployment_scaling_intent",
     "has_command_request",
     "is_generic_intro_query",
+    "is_openshift_product_intro_query",
     "has_openshift_kubernetes_compare_intent",
     "has_route_ingress_compare_intent",
     "is_explainer_query",

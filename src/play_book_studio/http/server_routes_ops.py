@@ -544,7 +544,6 @@ def _materialize_official_source(root_dir: Path, *, slug: str, source_basis: str
         settings,
         slugs=[slug],
         generate_first=False,
-        sync_qdrant=True,
         refresh_synthesis_report=True,
         manifest_path=manifest_path,
     )

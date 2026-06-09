@@ -1268,6 +1268,39 @@ def _pdf_noncode_lines_without_repeated(text: str, *, title: str) -> list[str]:
     return cleaned
 
 
+def _split_pdf_leading_code_caption_lines(code_lines: list[str]) -> tuple[list[str], list[str]]:
+    caption_lines: list[str] = []
+    index = 0
+    for raw_line in code_lines:
+        line = str(raw_line or "").rstrip()
+        stripped = line.strip()
+        if not stripped:
+            break
+        if _is_pdf_code_line(line) or _pdf_line_looks_yaml_code(line) or _PDF_SHELL_COMMAND_RE.match(stripped):
+            break
+        if re.search(r"[가-힣]", stripped) and len(stripped) <= 90:
+            caption_lines.append(stripped)
+            index += 1
+            continue
+        break
+    remaining_lines = code_lines[index:]
+    if caption_lines and any(str(line or "").strip() for line in remaining_lines):
+        return caption_lines, remaining_lines
+    return [], code_lines
+
+
+def _split_pdf_embedded_korean_labels(line: str) -> list[str]:
+    cleaned = _clean_pdf_line(line)
+    if not cleaned:
+        return []
+    normalized = re.sub(
+        r"(?<=[가-힣)])(?=(?:고객사|대상 시스템|운영 목적|담당 조직|시연 목적|주요 서비스|운영 기준|준비 상태|점검 기준|연결 기준)[:：])",
+        "\n",
+        cleaned,
+    )
+    return [part.strip() for part in normalized.splitlines() if part.strip()]
+
+
 def _pdf_layout_blocks_to_markdown(blocks: list[PdfLayoutBlock], *, title: str, page_index: int) -> str:
     output: list[str] = []
 
@@ -1297,6 +1330,11 @@ def _pdf_layout_blocks_to_markdown(blocks: list[PdfLayoutBlock], *, title: str, 
                 code_lines.pop()
             if not code_lines:
                 continue
+            caption_lines, code_lines = _split_pdf_leading_code_caption_lines(code_lines)
+            if caption_lines:
+                append_blank()
+                output.extend(_clean_pdf_line(line) for line in caption_lines)
+                output.append("")
             first_code_line = next((line for line in code_lines if line.strip()), "")
             language = block.language or _pdf_code_language_for_line(first_code_line)
             append_blank()
@@ -1323,7 +1361,8 @@ def _pdf_layout_blocks_to_markdown(blocks: list[PdfLayoutBlock], *, title: str, 
         paragraph_lines = [line for line in repaired_lines if line.strip()]
         if paragraph_lines:
             append_blank()
-            output.extend(_clean_pdf_line(line) for line in paragraph_lines)
+            for line in paragraph_lines:
+                output.extend(_split_pdf_embedded_korean_labels(line))
             output.append("")
     return "\n".join(output).strip()
 
@@ -1663,6 +1702,22 @@ def _pdf_layout_block_language(text: str) -> str:
     return _pdf_code_language_for_line(first_line)
 
 
+def _pdf_visual_text_region_looks_like_real_code(text: str, *, lines: list[str], font_names: list[str]) -> bool:
+    if not lines:
+        return False
+    mono_font = any(re.search(r"(?:mono|courier|consola|menlo|code)", font, re.IGNORECASE) for font in font_names)
+    if _pdf_text_block_looks_like_code(text):
+        return True
+    if mono_font and not _pdf_text_block_looks_like_prose(text):
+        return True
+    if any(_PDF_SHELL_COMMAND_RE.match(str(line).strip()) for line in lines):
+        return True
+    yamlish_count = sum(1 for line in lines if _pdf_line_looks_yaml_code(line))
+    if yamlish_count >= max(1, len(lines) // 2):
+        return True
+    return False
+
+
 def _pdf_classify_text_layout_block(
     *,
     text: str,
@@ -1678,6 +1733,26 @@ def _pdf_classify_text_layout_block(
     codeish_count = _pdf_codeish_line_count(lines)
     prose_like = _pdf_text_block_looks_like_prose(text)
     if visual_group:
+        if not _pdf_visual_text_region_looks_like_real_code(text, lines=lines, font_names=font_names):
+            if joined and len(lines) <= 2 and _is_pdf_heading_candidate(joined):
+                return PdfLayoutBlock(
+                    kind="heading",
+                    text=text,
+                    bbox=bbox,
+                    font_size=font_size,
+                    confidence=0.78,
+                    reason="visual_region_text_heading_guard",
+                    visual_group=visual_group,
+                )
+            return PdfLayoutBlock(
+                kind="paragraph",
+                text=text,
+                bbox=bbox,
+                font_size=font_size,
+                confidence=0.78,
+                reason="visual_region_prose_guard" if prose_like else "visual_region_text_guard",
+                visual_group=visual_group,
+            )
         return PdfLayoutBlock(
             kind="code",
             text=text,

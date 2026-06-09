@@ -468,9 +468,13 @@ export interface ReleaseCandidateFreezeSummary {
 
 export interface DataControlRoomSummary {
   known_book_count: number;
+  known_books_count?: number;
   approved_runtime_count: number;
   gold_book_count: number;
+  authoritative_runtime_book_count?: number;
+  library_authoritative_bucket?: string;
   manualbook_count: number;
+  manualbook_book_count?: number;
   corpus_book_count?: number;
   customer_pack_runtime_book_count?: number;
   user_library_book_count?: number;
@@ -517,14 +521,19 @@ export interface DataControlRoomResponse {
     blockers: string[];
   };
   known_books: LibraryBook[];
+  known_books_count?: number;
   gold_books: LibraryBook[];
+  gold_book_count?: number;
   corpus: LibraryBucket;
   manualbooks: LibraryBucket;
+  manualbook_book_count?: number;
   customer_pack_runtime_books?: LibraryBucket;
   user_library_books?: LibraryBucket;
   user_library_corpus?: LibraryBucket;
   gold_candidate_books?: LibraryBucket;
   approved_wiki_runtime_books?: LibraryBucket;
+  approved_wiki_runtime_book_count?: number;
+  library_authoritative_bucket?: 'approved_wiki_runtime_books' | 'manualbooks' | 'gold_books' | string;
   wiki_navigation_backlog?: LibraryBucket;
   wiki_usage_signals?: LibraryBucket;
   product_gate?: LibraryBucket;
@@ -558,6 +567,7 @@ export interface ChatCitation {
   excerpt?: string;
   source_label?: string;
   source_collection?: string;
+  source_scope?: string;
   pack_label?: string;
   source_lane?: string;
   approval_state?: string;
@@ -618,6 +628,7 @@ export interface ChatRelatedLink {
   href: string;
   kind: 'entity' | 'book' | string;
   summary?: string;
+  created_at?: string;
   source_lane?: string;
   boundary_truth?: string;
   runtime_truth_label?: string;
@@ -779,6 +790,8 @@ export interface ViewerDocumentResponse {
   body_class_name: string;
   inline_styles: string[];
   html: string;
+  viewer_cache_status?: 'hit' | 'miss' | 'bypass' | string;
+  viewer_timings_ms?: Record<string, number>;
   interaction_policy: {
     code_copy: boolean;
     code_wrap_toggle: boolean;
@@ -791,6 +804,7 @@ export type ViewerPageMode = 'single' | 'multi';
 
 export interface ChatResponse {
   answer: string;
+  answer_source?: string;
   rewritten_query?: string;
   citations: ChatCitation[];
   warnings: string[];
@@ -1147,6 +1161,12 @@ export interface SessionTurnSnapshot {
   answer: string;
   turn_id: string;
   created_at: string;
+  answer_source?: string;
+  citations?: ChatCitation[];
+  related_links?: ChatRelatedLink[];
+  related_sections?: ChatRelatedLink[];
+  response_kind?: string;
+  rewritten_query?: string;
   primary_source_lane?: string;
   primary_boundary_truth?: string;
   primary_runtime_truth_label?: string;
@@ -1461,10 +1481,12 @@ export async function sendChatStream(
     enabledUploadDocumentIds?: string[];
   },
   onEvent: (event: ChatStreamEvent) => void,
+  options: { signal?: AbortSignal } = {},
 ): Promise<ChatResponse> {
   const response = await fetch(`${RUNTIME_ORIGIN}/api/chat/stream`, {
     method: 'POST',
     credentials: 'include',
+    signal: options.signal,
     headers: withSessionOwnerHeader(new Headers({
       'Content-Type': 'application/json',
     })),
@@ -1499,42 +1521,59 @@ export async function sendChatStream(
   const decoder = new TextDecoder();
   let buffer = '';
   let resultPayload: ChatResponse | null = null;
+  const cancelReader = () => {
+    void reader.cancel().catch(() => undefined);
+  };
+  options.signal?.addEventListener('abort', cancelReader, { once: true });
 
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-
-    let newlineIndex = buffer.indexOf('\n');
-    while (newlineIndex >= 0) {
-      const line = buffer.slice(0, newlineIndex).trim();
-      buffer = buffer.slice(newlineIndex + 1);
-      if (line) {
-        const event = JSON.parse(line) as ChatStreamEvent;
-        onEvent(event);
-        if (event.type === 'error') {
-          throw new Error(event.error || 'stream error');
-        }
-        if (event.type === 'result') {
-          resultPayload = event.payload;
-        }
+  try {
+    while (true) {
+      if (options.signal?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
       }
-      newlineIndex = buffer.indexOf('\n');
+      const { value, done } = await reader.read();
+      if (options.signal?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+      let newlineIndex = buffer.indexOf('\n');
+      while (newlineIndex >= 0) {
+        const line = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
+        if (line) {
+          const event = JSON.parse(line) as ChatStreamEvent;
+          onEvent(event);
+          if (event.type === 'error') {
+            throw new Error(event.error || 'stream error');
+          }
+          if (event.type === 'result') {
+            resultPayload = event.payload;
+          }
+        }
+        newlineIndex = buffer.indexOf('\n');
+      }
+
+      if (done) {
+        break;
+      }
     }
 
-    if (done) {
-      break;
+    if (options.signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
     }
-  }
-
-  if (buffer.trim()) {
-    const event = JSON.parse(buffer.trim()) as ChatStreamEvent;
-    onEvent(event);
-    if (event.type === 'error') {
-      throw new Error(event.error || 'stream error');
+    if (buffer.trim()) {
+      const event = JSON.parse(buffer.trim()) as ChatStreamEvent;
+      onEvent(event);
+      if (event.type === 'error') {
+        throw new Error(event.error || 'stream error');
+      }
+      if (event.type === 'result') {
+        resultPayload = event.payload;
+      }
     }
-    if (event.type === 'result') {
-      resultPayload = event.payload;
-    }
+  } finally {
+    options.signal?.removeEventListener('abort', cancelReader);
   }
 
   if (!resultPayload) {
@@ -1727,11 +1766,11 @@ export interface UploadDeleteResponse {
   document_source_id: string;
   filename: string;
   postgres_rows_deleted: number;
-  qdrant_points_deleted: number;
-  qdrant_errors: string[];
+  embedding_rows_deleted: number;
   storage_file_removed: boolean;
   storage_error: string;
   report_file_removed: boolean;
+  asset_dir_removed: boolean;
 }
 
 export async function deleteUploadedDocument(documentSourceId: string): Promise<UploadDeleteResponse> {

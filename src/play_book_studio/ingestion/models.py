@@ -486,8 +486,6 @@ class PipelineLog:
     chunk_count: int = 0
     graph_book_count: int = 0
     graph_relation_count: int = 0
-    embedded_count: int = 0
-    qdrant_upserted_count: int = 0
     collected_sources: list[str] = field(default_factory=list)
     processed_sources: list[str] = field(default_factory=list)
     per_book_stats: list[dict[str, Any]] = field(default_factory=list)

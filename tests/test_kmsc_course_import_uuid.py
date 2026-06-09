@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import uuid
 
-from play_book_studio.ingestion.kmsc_course_import import _chunk_metadata, _chunk_uuid, _parent_chunk_uuid, _with_parent_rows
+from play_book_studio.ingestion.kmsc_course_import import (
+    KMSC_PARENT_MAX_WORDS,
+    _chunk_metadata,
+    _chunk_uuid,
+    _parent_chunk_uuid,
+    _with_parent_rows,
+)
 
 
 class _FakeQuestionLlm:
@@ -73,6 +79,35 @@ def test_kmsc_parent_rows_are_derived_before_children() -> None:
     assert rows[0]["chunk_role"] == "parent"
     assert rows[0]["child_chunk_ids"] == ["child-a", "child-b"]
     assert rows[1]["parent_chunk_id"] == "parent-a"
+
+
+def test_kmsc_parent_search_text_is_bounded_summary_not_full_child_concat() -> None:
+    long_body = " ".join(f"word-{index}" for index in range(300))
+    rows = _with_parent_rows(
+        [
+            {
+                "chunk_id": f"child-{index}",
+                "parent_chunk_id": "parent-a",
+                "source_pptx": "ops.pptx",
+                "stage_id": "unit-test",
+                "chunk_kind": "test_case_summary",
+                "native_id": f"TEST-{index}",
+                "title": f"테스트 항목 {index}",
+                "body_md": long_body,
+                "facets": {"technologies": ["OpenShift", "Monitoring"], "network_zones": ["DMZ"]},
+                "source_slide_range": [index, index],
+            }
+            for index in range(20)
+        ]
+    )
+
+    parent = rows[0]
+
+    assert parent["chunk_role"] == "parent"
+    assert len(str(parent["search_text"]).split()) <= KMSC_PARENT_MAX_WORDS
+    assert "테스트 항목 0" in parent["search_text"]
+    assert "stage: unit-test" in parent["search_text"]
+    assert "word-299" not in parent["search_text"]
 
 
 def test_kmsc_parent_metadata_generates_starter_questions_from_course_chunk_text() -> None:

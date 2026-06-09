@@ -7,6 +7,8 @@ from http import HTTPStatus
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from play_book_studio.ingestion.document_parsing import DocumentAsset, DocumentBlock, ParsedUploadDocument
 from play_book_studio.http.upload_api import (
     _materialize_upload_assets,
@@ -110,7 +112,9 @@ def test_build_upload_ingest_response_dry_run_stores_file_and_chunks(monkeypatch
     assert (storage_dir / result["storage_key"]).is_file()
 
 
-def test_handle_upload_ingest_reports_bad_base64():
+def test_handle_upload_ingest_reports_bad_base64(monkeypatch):
+    storage_dir = _storage_dir("bad_base64")
+    monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(storage_dir))
     handler = FakeHandler()
 
     handle_upload_ingest(
@@ -125,6 +129,9 @@ def test_handle_upload_ingest_reports_bad_base64():
 
     assert handler.status == HTTPStatus.BAD_REQUEST
     assert "content_base64" in handler.payload["error"]
+    report = handler.payload["failure_report"]
+    assert report["stage"] == "store"
+    assert (storage_dir / report["storage_key"]).is_file()
 
 
 def test_upload_ingest_response_is_json_serializable(monkeypatch):
@@ -196,6 +203,49 @@ def test_upload_ingest_preserves_parser_progress_events(monkeypatch):
     assert progress_events[0]["progress_current"] == 1
     assert progress_events[0]["progress_total"] == 2
     assert progress_events[0]["progress_percent"] == 50
+
+
+def test_upload_ingest_parse_failure_moves_source_to_exception_report(monkeypatch):
+    storage_dir = _storage_dir("parse_failure")
+    monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(storage_dir))
+
+    def fake_parse_upload_document(path, *, image_describer=None, progress=None):
+        return ParsedUploadDocument(
+            document_id="doc-empty",
+            filename=Path(path).name,
+            document_format="md",
+            mime_type="text/markdown",
+            sha256="abc",
+            markdown="",
+            blocks=(),
+            warnings=("no text extracted",),
+        )
+
+    monkeypatch.setattr("play_book_studio.http.upload_api.parse_upload_document", fake_parse_upload_document)
+
+    with pytest.raises(ValueError) as caught:
+        build_upload_ingest_response(
+            REPO_ROOT,
+            {
+                "file_name": "empty.md",
+                "file_bytes": b"# Empty",
+                "dry_run": True,
+                "created_by": "owner-1",
+            },
+        )
+
+    failure_report = getattr(caught.value, "failure_report", {})
+    assert failure_report["stage"] == "parse"
+    report_path = storage_dir / failure_report["storage_key"]
+    assert report_path.is_file()
+    report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+    exception_source_key = report_payload["exception_source_storage_key"]
+    assert exception_source_key.startswith("uploads/exceptions/")
+    assert (storage_dir / exception_source_key).read_bytes() == b"# Empty"
+    assert not (storage_dir / report_payload["original_storage_key"]).exists()
+    assert report_payload["stage"] == "parse"
+    assert report_payload["warnings"] == ["no text extracted"]
+    assert report_payload["stages"][-1]["status"] == "failed"
 
 
 def test_materialize_upload_assets_writes_real_asset_and_debug_files(monkeypatch):

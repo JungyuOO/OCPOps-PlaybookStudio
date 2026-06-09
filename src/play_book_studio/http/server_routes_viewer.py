@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import base64
+import copy
 import html
+import json
 import re
+import threading
+import time
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
@@ -24,6 +28,7 @@ from play_book_studio.http.source_books import (
     _entity_hubs,
     _figure_asset_by_name,
     _figure_section_match,
+    _playbook_book_candidates,
     internal_active_runtime_markdown_viewer_html as _internal_active_runtime_markdown_viewer_html,
     internal_buyer_packet_viewer_html as _internal_buyer_packet_viewer_html,
     internal_entity_hub_viewer_html as _internal_entity_hub_viewer_html,
@@ -33,7 +38,11 @@ from play_book_studio.http.source_books import (
     parse_entity_hub_viewer_path,
     parse_figure_viewer_path,
 )
-from play_book_studio.http.source_books_wiki_relations import _figure_assets, _figure_viewer_href
+from play_book_studio.http.source_books_wiki_relations import (
+    _active_runtime_markdown_path,
+    _figure_assets,
+    _figure_viewer_href,
+)
 from play_book_studio.http.source_books_customer_pack import (
     internal_customer_pack_viewer_html as _internal_customer_pack_viewer_html,
 )
@@ -61,6 +70,34 @@ _ENTITY_DIRECTORY_VIEWER_PATH_RE = re.compile(r"^/wiki/entities/[^/]+$")
 _FIGURE_DIRECTORY_VIEWER_PATH_RE = re.compile(r"^/wiki/figures/[^/]+/[^/]+$")
 _UPLOAD_DOCUMENT_DIRECTORY_VIEWER_PATH_RE = re.compile(r"^/uploads/documents/[0-9a-fA-F-]{36}$")
 _UPLOAD_DOCUMENT_VIEWER_PATH_RE = re.compile(r"^/uploads/documents/(?P<document_source_id>[0-9a-fA-F-]{36})(?:/index\.html)?$")
+_LIGHTSPEED_VIEWER_PATH_RE = re.compile(r"^/external/lightspeed/(?P<artifact_id>[A-Za-z0-9_-]+)$")
+VIEWER_DOCUMENT_CACHE_TTL_SECONDS = 120.0
+
+
+class _ViewerDocumentPayloadCache:
+    def __init__(self, ttl_seconds: float) -> None:
+        self.ttl_seconds = ttl_seconds
+        self._lock = threading.Lock()
+        self._items: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
+
+    def get(self, key: tuple[Any, ...]) -> dict[str, Any] | None:
+        now = time.monotonic()
+        with self._lock:
+            cached = self._items.get(key)
+            if cached is None:
+                return None
+            created_at, payload = cached
+            if now - created_at > self.ttl_seconds:
+                self._items.pop(key, None)
+                return None
+            return copy.deepcopy(payload)
+
+    def set(self, key: tuple[Any, ...], payload: dict[str, Any]) -> None:
+        with self._lock:
+            self._items[key] = (time.monotonic(), copy.deepcopy(payload))
+
+
+_VIEWER_DOCUMENT_PAYLOAD_CACHE = _ViewerDocumentPayloadCache(VIEWER_DOCUMENT_CACHE_TTL_SECONDS)
 
 
 def _scope_viewer_style(style_text: str) -> str:
@@ -96,6 +133,72 @@ def _canonicalize_viewer_path(viewer_path: str) -> str:
     return urlunparse(parsed._replace(path=normalized_path))
 
 
+def _file_signature(path: Path | None) -> tuple[str, int, int]:
+    if path is None:
+        return ("", 0, 0)
+    try:
+        candidate = path.resolve()
+        if not candidate.exists() or not candidate.is_file():
+            return (str(candidate), 0, 0)
+        stat = candidate.stat()
+    except OSError:
+        return (str(path), 0, 0)
+    return (str(candidate), int(stat.st_mtime_ns), int(stat.st_size))
+
+
+def _active_runtime_manifest_candidates(root_dir: Path) -> tuple[Path, ...]:
+    runtime_dir = root_dir / "data" / "wiki_runtime_books"
+    settings = load_settings(root_dir)
+    return (
+        runtime_dir / "active_manifest.json",
+        runtime_dir / "full_rebuild_manifest.json",
+        settings.source_manifest_path,
+    )
+
+
+def _viewer_document_cache_key(
+    root_dir: Path,
+    viewer_path: str,
+    *,
+    page_mode: str,
+) -> tuple[Any, ...] | None:
+    slug = parse_active_runtime_markdown_viewer_path(viewer_path)
+    if not slug:
+        return None
+    manifest_entry = _manifest_entry_for_book(root_dir, slug)
+    manifest_token = (
+        str(manifest_entry.get("updated_at") or ""),
+        str(manifest_entry.get("source_fingerprint") or ""),
+        str(manifest_entry.get("runtime_path") or ""),
+    )
+    return (
+        str(root_dir.resolve()),
+        viewer_path,
+        page_mode,
+        slug,
+        manifest_token,
+        tuple(_file_signature(path) for path in _active_runtime_manifest_candidates(root_dir)),
+        _file_signature(_active_runtime_markdown_path(root_dir, slug)),
+        tuple(_file_signature(path) for path in _playbook_book_candidates(root_dir, slug)),
+    )
+
+
+def _viewer_document_response_payload(
+    payload: dict[str, Any],
+    *,
+    cache_status: str,
+    timings_ms: dict[str, float],
+) -> dict[str, Any]:
+    response = copy.deepcopy(payload)
+    response["viewer_cache_status"] = cache_status
+    response["viewer_timings_ms"] = {
+        key: round(float(value), 1)
+        for key, value in timings_ms.items()
+        if isinstance(value, int | float)
+    }
+    return response
+
+
 def _owner_hash_from_handler(handler: Any) -> str:
     resolver = getattr(handler, "_session_owner", None)
     if not callable(resolver):
@@ -107,8 +210,540 @@ def _owner_hash_from_handler(handler: Any) -> str:
     return str(getattr(owner, "owner_hash", "") or "").strip()
 
 
+def _lightspeed_artifact(root_dir: Path, viewer_path: str) -> dict[str, Any] | None:
+    match = _LIGHTSPEED_VIEWER_PATH_RE.fullmatch(urlparse(str(viewer_path or "").strip()).path)
+    if match is None:
+        return None
+    artifact_id = match.group("artifact_id")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", artifact_id):
+        return None
+    settings = load_settings(root_dir)
+    path = settings.artifacts_dir / "external_answers" / "lightspeed" / f"{artifact_id}.json"
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _render_lightspeed_answer_html(answer: str) -> str:
+    text = str(answer or "").strip()
+    if not text:
+        return '<p class="wiki-empty">OpenShift Lightspeed 응답이 비어 있습니다.</p>'
+    fragments: list[str] = []
+    cursor = 0
+    for match in re.finditer(r"```(?P<lang>[A-Za-z0-9_-]*)\s*\n(?P<code>[\s\S]*?)```", text):
+        before = text[cursor:match.start()].strip()
+        if before:
+            fragments.extend(_render_lightspeed_text_segment_html(before))
+        fragments.extend(
+            _render_lightspeed_code_block_fragments(
+                str(match.group("code") or "").strip(),
+                language=str(match.group("lang") or "text").strip() or "text",
+            )
+        )
+        cursor = match.end()
+    tail = text[cursor:].strip()
+    if tail:
+        fragments.extend(_render_lightspeed_text_segment_html(tail))
+    return "\n".join(fragments)
+
+
+def _lightspeed_shell_command_line(line: str) -> str:
+    stripped = str(line or "").strip()
+    if not re.match(r"^(?:\$?\s*)?(?:oc|kubectl)\s+\S", stripped, re.IGNORECASE):
+        return ""
+    return re.sub(r"^\$\s*", "", stripped).strip()
+
+
+def _split_lightspeed_annotated_command_cards(code: str) -> list[dict[str, str]]:
+    cards: list[dict[str, str]] = []
+    pending_note: list[str] = []
+    for raw_line in str(code or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            note = line.lstrip("#").strip()
+            if note:
+                pending_note.append(note)
+            continue
+        command = _lightspeed_shell_command_line(line)
+        if command:
+            cards.append({
+                "note": " ".join(part for part in pending_note if part).strip(),
+                "code": command,
+            })
+            pending_note = []
+            continue
+        pending_note.append(line)
+    return cards
+
+
+def _render_lightspeed_code_block_fragments(code: str, *, language: str) -> list[str]:
+    command_cards = _split_lightspeed_annotated_command_cards(code)
+    if not command_cards:
+        rendered = _render_code_block_html(code, language=language)
+        return [rendered] if rendered else []
+    fragments: list[str] = []
+    normalized_language = str(language or "shell").strip().lower()
+    display_language = "shell" if normalized_language in {"text", "plain", "console", "bash", "sh"} else language
+    for card in command_cards:
+        rendered = _render_code_block_html(
+            card["code"],
+            language=display_language,
+            copy_text=card["code"],
+            caption=card["note"],
+        )
+        if rendered:
+            fragments.append(rendered)
+    return fragments
+
+
+def _render_lightspeed_text_segment_html(text: str) -> list[str]:
+    fragments: list[str] = []
+    paragraph_lines: list[str] = []
+    ordered_items: list[str] = []
+    unordered_items: list[str] = []
+    table_lines: list[str] = []
+
+    def flush_paragraph() -> None:
+        if not paragraph_lines:
+            return
+        paragraph = "<br />".join(_render_lightspeed_inline_html(line) for line in paragraph_lines)
+        fragments.append(f"<p>{paragraph}</p>")
+        paragraph_lines.clear()
+
+    def flush_ordered() -> None:
+        if not ordered_items:
+            return
+        fragments.append(
+            "<ol>"
+            + "".join(f"<li>{_render_lightspeed_inline_html(item)}</li>" for item in ordered_items)
+            + "</ol>"
+        )
+        ordered_items.clear()
+
+    def flush_unordered() -> None:
+        if not unordered_items:
+            return
+        fragments.append(
+            "<ul>"
+            + "".join(f"<li>{_render_lightspeed_inline_html(item)}</li>" for item in unordered_items)
+            + "</ul>"
+        )
+        unordered_items.clear()
+
+    def flush_table() -> None:
+        if not table_lines:
+            return
+        rendered = _render_markdown_table(table_lines)
+        if rendered:
+            fragments.append(rendered)
+        else:
+            paragraph_lines.extend(table_lines)
+        table_lines.clear()
+
+    def flush_all() -> None:
+        flush_table()
+        flush_paragraph()
+        flush_ordered()
+        flush_unordered()
+
+    for raw_line in str(text or "").strip().splitlines():
+        line = raw_line.strip()
+        if not line:
+            flush_all()
+            continue
+        heading = re.match(r"^(#{1,4})\s+(.+)$", line)
+        if heading:
+            flush_all()
+            level = min(4, max(2, len(heading.group(1)) + 1))
+            fragments.append(f"<h{level}>{_render_lightspeed_inline_html(heading.group(2))}</h{level}>")
+            continue
+        if _is_markdown_table_line(line):
+            flush_paragraph()
+            flush_ordered()
+            flush_unordered()
+            table_lines.append(line)
+            continue
+        flush_table()
+        ordered_match = re.match(r"^\d+[.)]\s+(.+)$", line)
+        if ordered_match:
+            flush_paragraph()
+            flush_unordered()
+            ordered_items.append(ordered_match.group(1))
+            continue
+        unordered_match = re.match(r"^[-*]\s+(.+)$", line)
+        if unordered_match:
+            flush_paragraph()
+            flush_ordered()
+            unordered_items.append(unordered_match.group(1))
+            continue
+        flush_ordered()
+        flush_unordered()
+        paragraph_lines.append(line)
+    flush_all()
+    return fragments
+
+
+def _render_lightspeed_inline_html(text: str) -> str:
+    parts = re.split(r"(`[^`\n]+`|\*\*[^*\n][^*\n]*(?:\*[^*\n]+)*\*\*)", str(text or ""))
+    rendered: list[str] = []
+    for part in parts:
+        if not part:
+            continue
+        if part.startswith("`") and part.endswith("`") and len(part) >= 2:
+            rendered.append(f"<code>{html.escape(part[1:-1])}</code>")
+            continue
+        if part.startswith("**") and part.endswith("**") and len(part) >= 4:
+            rendered.append(f"<strong>{html.escape(part[2:-2])}</strong>")
+            continue
+        rendered.append(html.escape(part))
+    return "".join(rendered)
+
+
+def _external_lightspeed_viewer_html(root_dir: Path, viewer_path: str) -> str | None:
+    payload = _lightspeed_artifact(root_dir, viewer_path)
+    if payload is None:
+        return None
+    query = str(payload.get("query") or "").strip()
+    answer = str(payload.get("answer") or "").strip()
+    created_at = str(payload.get("created_at") or "").strip()
+    referenced_documents = [
+        item for item in (payload.get("referenced_documents") or [])
+        if isinstance(item, dict)
+    ]
+    reference_count = len(referenced_documents)
+    conversation_id = str(payload.get("conversation_id") or "").strip()
+    input_tokens = payload.get("input_tokens")
+    output_tokens = payload.get("output_tokens")
+    reference_items = "".join(
+        """
+        <div class="wiki-links">
+          <a href="{url}">{title}</a>
+          <span>{summary}</span>
+        </div>
+        """.format(
+            url=html.escape(str(item.get("url") or item.get("source_url") or item.get("doc_url") or "#"), quote=True),
+            title=html.escape(str(item.get("title") or item.get("doc_title") or "Referenced document")),
+            summary=html.escape(str(item.get("summary") or item.get("content") or ""))[:500],
+        ).strip()
+        for item in referenced_documents[:8]
+    )
+    empty_reference_html = (
+        '<div class="wiki-empty">'
+        "이번 OpenShift Lightspeed API 응답에는 참조 문서 목록이 포함되지 않았습니다. "
+        "답변 artifact와 conversation_id는 위 호출 증거에서 확인할 수 있습니다."
+        "</div>"
+    )
+    body_html = _render_lightspeed_answer_html(answer)
+    return """
+    <!doctype html>
+    <html lang="ko">
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        body.is-embedded.external-lightspeed-viewer {{
+          margin: 0;
+          font-family: Inter, "Noto Sans KR", system-ui, sans-serif;
+          color: #102033;
+          background: #f7fafc;
+        }}
+        .lightspeed-page {{
+          display: grid;
+          gap: 16px;
+          padding: 20px;
+        }}
+        .lightspeed-hero,
+        .lightspeed-card {{
+          border: 1px solid #dbe5ef;
+          border-radius: 8px;
+          background: #ffffff;
+          box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+          padding: 18px;
+        }}
+        .lightspeed-badge {{
+          display: inline-flex;
+          align-items: center;
+          width: fit-content;
+          border-radius: 999px;
+          background: #e6f4ff;
+          color: #075985;
+          font-size: 12px;
+          font-weight: 800;
+          padding: 4px 10px;
+        }}
+        .lightspeed-title {{
+          margin: 10px 0 4px;
+          font-size: 24px;
+          line-height: 1.25;
+        }}
+        .lightspeed-meta {{
+          color: #5c6b7b;
+          font-size: 13px;
+        }}
+        .lightspeed-question {{
+          margin-top: 12px;
+          border-left: 3px solid #38bdf8;
+          padding-left: 12px;
+          color: #334155;
+        }}
+        .lightspeed-call-evidence {{
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 12px;
+        }}
+        .lightspeed-call-evidence span {{
+          border: 1px solid #dbeafe;
+          border-radius: 999px;
+          background: #f8fafc;
+          color: #334155;
+          font-size: 12px;
+          font-weight: 700;
+          padding: 4px 9px;
+        }}
+        .section-body p {{
+          line-height: 1.7;
+          margin: 0 0 12px;
+        }}
+        .section-body ul,
+        .section-body ol {{
+          margin: 0 0 14px;
+          padding-left: 22px;
+          color: #334155;
+          line-height: 1.72;
+        }}
+        .section-body li + li {{
+          margin-top: 6px;
+        }}
+        .section-body code:not(pre code) {{
+          border: 1px solid rgba(14, 116, 144, 0.15);
+          border-radius: 5px;
+          background: rgba(236, 254, 255, 0.9);
+          color: #0f6471;
+          padding: 1px 5px;
+          font-family: "SF Mono", "Menlo", "Consolas", monospace;
+          font-size: 0.88em;
+        }}
+        .section-body .upload-table-wrap {{
+          width: 100%;
+          overflow-x: auto;
+          margin: 14px 0 18px;
+          border: 1px solid #dbe5ef;
+          border-radius: 8px;
+          background: #ffffff;
+        }}
+        .section-body .upload-table {{
+          width: 100%;
+          min-width: 520px;
+          border-collapse: collapse;
+          font-size: 13px;
+        }}
+        .section-body .upload-table th,
+        .section-body .upload-table td {{
+          border-bottom: 1px solid #e5edf5;
+          border-right: 1px solid #e5edf5;
+          padding: 10px 12px;
+          text-align: left;
+          vertical-align: top;
+          line-height: 1.55;
+        }}
+        .section-body .upload-table th {{
+          background: #eaf7ff;
+          color: #0f3554;
+          font-weight: 800;
+        }}
+        .section-body .upload-table tr:last-child td {{
+          border-bottom: 0;
+        }}
+        .section-body .upload-table th:last-child,
+        .section-body .upload-table td:last-child {{
+          border-right: 0;
+        }}
+        .code-block {{
+          margin: 16px 0;
+          overflow: hidden;
+          border: 1px solid rgba(15, 23, 42, 0.1);
+          border-radius: 8px;
+          background: #0f172a;
+          box-shadow: none;
+        }}
+        .code-header {{
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+          background: #111827;
+          padding: 10px 12px;
+        }}
+        .code-label {{
+          color: #cbd5e1;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }}
+        .code-actions {{
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }}
+        .icon-button {{
+          display: inline-grid;
+          place-items: center;
+          width: 28px;
+          height: 28px;
+          border: 1px solid rgba(148, 163, 184, 0.22);
+          border-radius: 6px;
+          background: rgba(255, 255, 255, 0.06);
+          color: #cbd5e1;
+          padding: 0;
+          cursor: pointer;
+        }}
+        .icon-button:hover,
+        .icon-button[aria-pressed="true"] {{
+          border-color: rgba(56, 189, 248, 0.4);
+          background: rgba(14, 116, 144, 0.24);
+          color: #f8fafc;
+        }}
+        .sr-only,
+        .icon-button .action-label {{
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+        }}
+        .copy-button .copy-icon-success {{
+          display: none;
+        }}
+        .copy-button.is-copied .copy-icon-idle {{
+          display: none;
+        }}
+        .copy-button.is-copied .copy-icon-success {{
+          display: block;
+        }}
+        body.external-lightspeed-viewer .code-block pre {{
+          margin: 0;
+          overflow-x: auto;
+          background: #0f172a;
+          color: #e2e8f0 !important;
+          padding: 15px 16px;
+          font-family: "SF Mono", "Menlo", "Consolas", monospace;
+          font-size: 13px;
+          line-height: 1.6;
+          tab-size: 2;
+        }}
+        body.external-lightspeed-viewer .code-block pre code,
+        body.external-lightspeed-viewer .code-block pre code span {{
+          background: transparent !important;
+          color: #e2e8f0 !important;
+          padding: 0 !important;
+          white-space: inherit;
+        }}
+        body.external-lightspeed-viewer .code-block .code-token.code-key {{
+          color: #93c5fd !important;
+        }}
+        body.external-lightspeed-viewer .code-block .code-token.code-string {{
+          color: #86efac !important;
+        }}
+        body.external-lightspeed-viewer .code-block .code-token.code-number {{
+          color: #c4b5fd !important;
+        }}
+        body.external-lightspeed-viewer .code-block .code-token.code-atom {{
+          color: #fbbf24 !important;
+        }}
+        body.external-lightspeed-viewer .code-block .code-token.code-comment {{
+          color: #cbd5e1 !important;
+        }}
+        body.external-lightspeed-viewer .code-block .code-token.code-punctuation {{
+          color: #e2e8f0 !important;
+        }}
+        .code-block.overflow-toggle.is-wrapped pre,
+        .code-block.overflow-wrap pre {{
+          overflow-x: hidden;
+          white-space: pre-wrap;
+          overflow-wrap: break-word;
+        }}
+        .wiki-links {{
+          display: grid;
+          gap: 4px;
+          border-top: 1px solid #edf2f7;
+          padding: 10px 0;
+        }}
+        .wiki-links a {{
+          color: #0f5ea8;
+          font-weight: 700;
+          text-decoration: none;
+        }}
+        .wiki-links span {{
+          color: #64748b;
+          font-size: 13px;
+        }}
+      </style>
+    </head>
+    <body class="is-embedded external-lightspeed-viewer">
+      <main class="lightspeed-page">
+        <section class="lightspeed-hero">
+          <span class="lightspeed-badge">Lightspeed</span>
+          <h1 class="lightspeed-title">OpenShift Lightspeed 공식 답변</h1>
+          <div class="lightspeed-meta">{created_at}</div>
+          <div class="lightspeed-question">{query}</div>
+          <div class="lightspeed-call-evidence">
+            <span>conversation_id: {conversation_id}</span>
+            <span>referenced_documents: {reference_count}</span>
+            <span>tokens: {input_tokens}/{output_tokens}</span>
+          </div>
+        </section>
+        <section class="lightspeed-card">
+          <h2>답변</h2>
+          <div class="section-body">{body_html}</div>
+        </section>
+        <section class="lightspeed-card">
+          <h2>OpenShift Lightspeed 참조 문서 ({reference_count})</h2>
+          {reference_items}
+        </section>
+      </main>
+    </body>
+    </html>
+    """.format(
+        created_at=html.escape(created_at or "timestamp unavailable"),
+        query=html.escape(query or "질문 정보 없음"),
+        conversation_id=html.escape(conversation_id or "unavailable"),
+        reference_count=reference_count,
+        input_tokens=html.escape(str(input_tokens if input_tokens is not None else "unknown")),
+        output_tokens=html.escape(str(output_tokens if output_tokens is not None else "unknown")),
+        body_html=body_html,
+        reference_items=reference_items or empty_reference_html,
+    )
+
+
+def _normalize_internal_viewer_markup(markdown: str) -> str:
+    text = str(markdown or "")
+
+    def code_open(match: re.Match[str]) -> str:
+        attrs = html.unescape(str(match.group(1) or ""))
+        language_match = re.search(r'language=["\']?([A-Za-z0-9_+-]+)', attrs)
+        language = language_match.group(1) if language_match else "text"
+        return f"\n```{language}\n"
+
+    text = re.sub(r"\[CODE([^\]]*)\]\s*", code_open, text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*\[/CODE\]\s*", "\n```\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[TABLE[^\]]*\]\s*", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*\[/TABLE\]\s*", "\n", text, flags=re.IGNORECASE)
+    return text
+
+
 def _markdownish_to_html(markdown: str, asset_sources: dict[str, dict[str, str]] | None = None) -> str:
-    text = str(markdown or "").strip()
+    text = _normalize_internal_viewer_markup(str(markdown or "")).strip()
     if not text:
         return ""
     asset_sources = asset_sources or {}
@@ -202,12 +837,30 @@ def _markdownish_to_html(markdown: str, asset_sources: dict[str, dict[str, str]]
             asset_source = asset_sources.get(asset_id, {})
             src = asset_source.get("src") or src_raw
             caption = asset_source.get("caption") or alt
+            width = _metadata_int(asset_source.get("width"))
+            height = _metadata_int(asset_source.get("height"))
+            dimension_style = f' style="--asset-width: {width}px;"' if width else ""
+            dimension_attr_parts = []
+            if width:
+                dimension_attr_parts.append(f'width="{width}"')
+            if height:
+                dimension_attr_parts.append(f'height="{height}"')
+            dimension_attrs = f" {' '.join(dimension_attr_parts)}" if dimension_attr_parts else ""
             if src.startswith(("data:image/", "http://", "https://", "/")):
                 parts.append(
-                    '<figure class="upload-asset-figure">'
-                    f'<img src="{html.escape(src, quote=True)}" alt="{html.escape(alt or caption, quote=True)}" loading="lazy" />'
+                    f'<figure class="upload-asset-figure upload-source-asset-figure"{dimension_style}>'
+                    '<div class="upload-asset-frame">'
+                    f'<img src="{html.escape(src, quote=True)}" alt="{html.escape(alt or caption, quote=True)}"{dimension_attrs} loading="lazy" />'
+                    "</div>"
                     + (f"<figcaption>{html.escape(caption)}</figcaption>" if caption else "")
                     + "</figure>"
+                )
+            elif src_raw.startswith("asset://"):
+                parts.append(
+                    '<div class="upload-asset-missing">'
+                    f"<strong>이미지 asset을 찾을 수 없습니다.</strong>"
+                    f"<span>{html.escape(alt or src_raw)}</span>"
+                    "</div>"
                 )
             else:
                 parts.append(f"<p>{html.escape(alt or src_raw)}</p>")
@@ -284,6 +937,7 @@ def _render_markdown_table(lines: list[str]) -> str:
 def _render_basic_inline(text: str) -> str:
     escaped = html.escape(str(text or ""))
     escaped = re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
+    escaped = re.sub(r"\*\*([^*\n]+)\*\*", r"<strong>\1</strong>", escaped)
     return escaped
 
 
@@ -350,6 +1004,37 @@ def _json_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _uploaded_document_scope_contract(source_scope: Any) -> dict[str, str]:
+    scope = str(source_scope or "").strip()
+    if scope == "study_docs":
+        return {
+            "book_slug": "customer-data-documents",
+            "eyebrow": "Customer Data Document",
+            "summary_subject": "고객 데이터",
+            "source_collection": "customer_data",
+            "source_lane": "customer_data",
+            "pack_label": "Customer Data",
+            "approval_state": "workspace",
+            "publication_state": "customer_data",
+            "boundary_truth": "customer_data_runtime",
+            "runtime_truth_label": "Customer Data Document",
+            "boundary_badge": "Customer Data",
+        }
+    return {
+        "book_slug": "uploaded-documents",
+        "eyebrow": "User Upload Document",
+        "summary_subject": "문서",
+        "source_collection": "uploads",
+        "source_lane": scope or "user_upload",
+        "pack_label": "User Upload",
+        "approval_state": "private",
+        "publication_state": "uploaded",
+        "boundary_truth": "private_user_upload_runtime",
+        "runtime_truth_label": "User Upload Document",
+        "boundary_badge": "User Upload",
+    }
+
+
 def _short_viewer_text(value: Any, *, limit: int = 220) -> str:
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     if len(text) <= limit:
@@ -360,6 +1045,24 @@ def _short_viewer_text(value: Any, *, limit: int = 220) -> str:
 def _asset_data_url(content: bytes, mime_type: str) -> str:
     encoded = base64.b64encode(content).decode("ascii")
     return f"data:{mime_type or 'application/octet-stream'};base64,{encoded}"
+
+
+def _uploaded_document_asset_caption(row: dict[str, Any], filename: str) -> str:
+    metadata = _json_dict(row.get("metadata"))
+    page_number = _metadata_int(row.get("page_number") or metadata.get("page_number"))
+    width = _metadata_int(row.get("width") or metadata.get("width"))
+    height = _metadata_int(row.get("height") or metadata.get("height"))
+    caption_text = _short_viewer_text(row.get("caption_text") or "", limit=160)
+    parts = ["원본 문서 캡처"]
+    if page_number:
+        parts.append(f"Page {page_number}")
+    if width and height:
+        parts.append(f"{width} x {height}")
+    if caption_text:
+        parts.append(caption_text)
+    if filename:
+        parts.append(filename)
+    return " · ".join(parts)
 
 
 def _pdf_asset_bytes(source_path: Path, metadata: dict[str, Any]) -> bytes:
@@ -424,10 +1127,14 @@ def _uploaded_document_asset_sources(root_dir: Path, document: dict[str, Any], a
             content = _pdf_asset_bytes(source_path, metadata)
         if not content:
             continue
-        filename = str(metadata.get("filename") or storage_key or asset_id).strip()
+        filename = str(metadata.get("filename") or Path(storage_key).name or asset_id).strip()
+        width = _metadata_int(row.get("width") or metadata.get("width"))
+        height = _metadata_int(row.get("height") or metadata.get("height"))
         result[asset_id] = {
             "src": _asset_data_url(content, str(row.get("mime_type") or "image/png")),
-            "caption": filename,
+            "caption": _uploaded_document_asset_caption(row, filename),
+            "width": str(width) if width else "",
+            "height": str(height) if height else "",
         }
         parser_asset_id = str(metadata.get("parser_asset_id") or "").strip()
         if parser_asset_id:
@@ -486,7 +1193,9 @@ def _uploaded_document_course_asset_figures_html(chunk: dict[str, Any]) -> str:
         alt_text = caption or caption_text or "고객문서 이미지"
         figures.append(
             '<figure class="upload-asset-figure upload-course-asset-figure">'
+            '<div class="upload-asset-frame">'
             f'<img src="{html.escape(src, quote=True)}" alt="{html.escape(alt_text, quote=True)}" loading="lazy" />'
+            "</div>"
             + (f"<figcaption>{html.escape(caption_text)}</figcaption>" if caption_text else "")
             + "</figure>"
         )
@@ -517,6 +1226,7 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
                     ds.storage_key,
                     ds.owner_user_id,
                     ds.visibility,
+                    ds.source_scope,
                     ds.byte_size,
                     pd.id::text AS parsed_document_id,
                     COALESCE(NULLIF(pd.title, ''), ds.filename) AS title,
@@ -592,6 +1302,9 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
                     mime_type,
                     storage_key,
                     page_number,
+                    width,
+                    height,
+                    caption_text,
                     ocr_text,
                     qwen_description,
                     metadata
@@ -612,6 +1325,7 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
         else stored_title
     )
     filename = str(document.get("filename") or title)
+    scope_contract = _uploaded_document_scope_contract(document.get("source_scope"))
     total_tokens = sum(int(row.get("token_count") or 0) for row in chunks)
     parsed_markdown = _strip_uploaded_document_title(raw_markdown, stored_title)
     parsed_markdown = _strip_uploaded_document_title(parsed_markdown, title)
@@ -798,25 +1512,51 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
           border-right: 0;
         }
         .upload-reader .upload-asset-figure {
-          margin: 18px 0;
-          border: 1px solid rgba(125, 211, 252, 0.18);
-          border-radius: 14px;
+          margin: 18px auto 22px;
+          width: min(100%, var(--asset-width, 100%));
+          max-width: 100%;
+          border: 1px solid rgba(148, 163, 184, 0.24);
+          border-radius: 8px;
           overflow: hidden;
-          background: rgba(2, 6, 23, 0.42);
+          background: #ffffff;
+        }
+        .upload-reader .upload-asset-frame {
+          width: 100%;
+          overflow: hidden;
+          background: #ffffff;
         }
         .upload-reader .upload-asset-figure img {
           display: block;
           width: 100%;
+          max-width: 100%;
           height: auto;
-          background: #f8fafc;
+          background: #ffffff;
         }
         .upload-reader .upload-asset-figure figcaption {
-          padding: 10px 12px;
-          color: #334155;
-          font-size: 0.86rem;
-          line-height: 1.55;
-          border-top: 1px solid rgba(148, 163, 184, 0.22);
+          padding: 8px 10px;
+          color: #475569;
+          font-size: 0.78rem;
+          line-height: 1.45;
+          border-top: 1px solid rgba(148, 163, 184, 0.2);
           background: #f8fafc;
+        }
+        .upload-reader .upload-asset-missing {
+          display: grid;
+          gap: 4px;
+          margin: 14px 0;
+          padding: 10px 12px;
+          border: 1px dashed rgba(245, 158, 11, 0.5);
+          border-radius: 8px;
+          background: rgba(245, 158, 11, 0.08);
+          color: #f8d78d;
+        }
+        .upload-reader .upload-asset-missing strong {
+          font-size: 0.88rem;
+        }
+        .upload-reader .upload-asset-missing span {
+          color: #cbd5e1;
+          font-size: 0.78rem;
+          overflow-wrap: anywhere;
         }
         .upload-reader .quality-notes {
           display: grid;
@@ -1062,15 +1802,21 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
           min-width: 0;
         }
         .upload-reader .upload-asset-figure {
+          width: min(100%, var(--asset-width, 100%));
           max-width: 100%;
           background: #ffffff;
         }
+        .upload-reader .upload-asset-frame {
+          width: 100%;
+          overflow: hidden;
+          background: #ffffff;
+        }
         .upload-reader .upload-asset-figure img {
-          width: auto;
+          width: 100%;
           max-width: 100%;
-          max-height: min(52vh, 360px);
+          max-height: none;
           object-fit: contain;
-          margin: 0 auto;
+          margin: 0;
         }
         .upload-reader .upload-table {
           min-width: 0 !important;
@@ -1129,15 +1875,16 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
         "</head>",
         '<body class="is-embedded upload-reader-document">',
         '<main class="upload-reader">',
-        '<div class="eyebrow">User Upload Document</div>',
+        f'<div class="eyebrow">{html.escape(scope_contract["eyebrow"])}</div>',
         f"<h1>{html.escape(title)}</h1>",
-        f'<p class="summary">{html.escape(filename)}에서 추출해 정리한 문서 본문입니다. 인용 번호를 누르면 관련 위치로 이동합니다.</p>',
+        f'<p class="summary">{html.escape(filename)}에서 추출해 정리한 {html.escape(scope_contract["summary_subject"])} 본문입니다. 인용 번호를 누르면 관련 위치로 이동합니다.</p>',
         '<div class="meta">',
         f"<span>{block_count:,} blocks</span>",
         f"<span>{len(chunks)} chunks</span>",
         f"<span>{total_tokens:,} tokens</span>",
         f"<span>{page_count:,} pages</span>",
         f"<span>{html.escape(str(document.get('parser_name') or 'parser'))}</span>",
+        f"<span>{html.escape(scope_contract['boundary_badge'])}</span>",
         f"<span>{html.escape(str(document.get('visibility') or 'private_user'))}</span>",
         "</div>",
         '<section class="document-panel">',
@@ -1189,7 +1936,8 @@ def _uploaded_document_viewer_html(root_dir: Path, viewer_path: str, *, owner_us
                 '<section class="chunk-diagnostic">',
                 f"<h2>{html.escape(title_text)}</h2>",
                 f'<div class="chunk-meta">{html.escape(meta)}</div>',
-                _markdownish_to_html(str(row.get("markdown") or "")) or "<p>내용이 비어 있습니다.</p>",
+                _markdownish_to_html(str(row.get("markdown") or ""), asset_sources=asset_sources)
+                or "<p>내용이 비어 있습니다.</p>",
                 "</section>",
             ]
         )
@@ -1340,11 +2088,12 @@ def _uploaded_document_source_meta(root_dir: Path, viewer_path: str, *, owner_us
     ]
     section = str(row.get("heading_title") or "").strip() or (section_path[-1] if section_path else title)
     source_scope = str(row.get("source_scope") or "user_upload").strip() or "user_upload"
+    scope_contract = _uploaded_document_scope_contract(source_scope)
     resolved_anchor = str(row.get("chunk_id") or row.get("source_anchor") or anchor or "").strip()
     parsed_viewer_path = urlparse(canonical_viewer_path)
     resolved_viewer_path = urlunparse(parsed_viewer_path._replace(fragment=resolved_anchor))
     return {
-        "book_slug": "uploaded-documents",
+        "book_slug": scope_contract["book_slug"],
         "book_title": title,
         "anchor": resolved_anchor,
         "section": section,
@@ -1353,15 +2102,16 @@ def _uploaded_document_source_meta(root_dir: Path, viewer_path: str, *, owner_us
         "source_url": str(row.get("storage_key") or "").strip(),
         "viewer_path": resolved_viewer_path,
         "section_match_exact": bool(anchor and row.get("chunk_id")),
-        "source_collection": "uploads",
-        "pack_label": "User Upload",
-        "source_lane": source_scope,
-        "approval_state": "private",
-        "publication_state": "uploaded",
+        "source_scope": source_scope,
+        "source_collection": scope_contract["source_collection"],
+        "pack_label": scope_contract["pack_label"],
+        "source_lane": scope_contract["source_lane"],
+        "approval_state": scope_contract["approval_state"],
+        "publication_state": scope_contract["publication_state"],
         "parser_backend": str(row.get("parser_name") or ""),
-        "boundary_truth": "private_user_upload_runtime",
-        "runtime_truth_label": "User Upload Document",
-        "boundary_badge": "User Upload",
+        "boundary_truth": scope_contract["boundary_truth"],
+        "runtime_truth_label": scope_contract["runtime_truth_label"],
+        "boundary_badge": scope_contract["boundary_badge"],
     }
 
 
@@ -1371,15 +2121,22 @@ def _viewer_html_for_path(
     *,
     page_mode: str = "single",
     owner_user_id: str = "",
+    timings_sink: dict[str, float] | None = None,
 ) -> str | None:
     viewer_path = _canonicalize_viewer_path(viewer_path)
     internal_html = (
-        _uploaded_document_viewer_html(root_dir, viewer_path, owner_user_id=owner_user_id)
+        _external_lightspeed_viewer_html(root_dir, viewer_path)
+        or _uploaded_document_viewer_html(root_dir, viewer_path, owner_user_id=owner_user_id)
         or course_viewer_html(root_dir, viewer_path)
         or
         _internal_buyer_packet_viewer_html(root_dir, viewer_path)
         or _internal_customer_pack_viewer_html(root_dir, viewer_path)
-        or _internal_active_runtime_markdown_viewer_html(root_dir, viewer_path, page_mode=page_mode)
+        or _internal_active_runtime_markdown_viewer_html(
+            root_dir,
+            viewer_path,
+            page_mode=page_mode,
+            timings_sink=timings_sink,
+        )
         or _internal_entity_hub_viewer_html(root_dir, viewer_path)
         or _internal_figure_viewer_html(root_dir, viewer_path)
         or _internal_viewer_html(root_dir, viewer_path, page_mode=page_mode)
@@ -1403,7 +2160,12 @@ def resolve_viewer_html(
     customer_pack_draft_id = customer_pack_draft_id_from_viewer_path(viewer_path)
     if customer_pack_draft_id and not _customer_pack_read_allowed(root_dir, customer_pack_draft_id):
         return None
-    return _viewer_html_for_path(root_dir, viewer_path, page_mode=page_mode, owner_user_id=owner_user_id)
+    return _viewer_html_for_path(
+        root_dir,
+        viewer_path,
+        page_mode=page_mode,
+        owner_user_id=owner_user_id,
+    )
 
 
 def _normalize_viewer_resource_urls(html_text: str, viewer_path: str) -> str:
@@ -1420,6 +2182,15 @@ def _normalize_viewer_resource_urls(html_text: str, viewer_path: str) -> str:
     return _RESOURCE_ATTR_RE.sub(_replace, html_text)
 
 
+def _strip_internal_viewer_markers(html_text: str) -> str:
+    text = str(html_text or "")
+    text = re.sub(r"\[CODE[^\]]*\]\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*\[/CODE\]\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[TABLE[^\]]*\]\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*\[/TABLE\]\s*", "", text, flags=re.IGNORECASE)
+    return text
+
+
 def _build_viewer_document_payload(html_text: str, viewer_path: str) -> dict[str, Any]:
     body_match = _BODY_RE.search(html_text)
     body_attrs = body_match.group("attrs") if body_match else ""
@@ -1431,7 +2202,9 @@ def _build_viewer_document_payload(html_text: str, viewer_path: str) -> dict[str
         for match in _STYLE_RE.finditer(html_text)
         if str(match.group("css") or "").strip()
     ]
-    normalized_body_html = _normalize_viewer_resource_urls(_SCRIPT_RE.sub("", body_html), viewer_path)
+    normalized_body_html = _strip_internal_viewer_markers(
+        _normalize_viewer_resource_urls(_SCRIPT_RE.sub("", body_html), viewer_path)
+    )
     return {
         "viewer_path": viewer_path,
         "body_class_name": body_class_name,
@@ -1493,6 +2266,30 @@ def _official_runtime_source_meta(
 
 def _viewer_source_meta(root_dir: Path, viewer_path: str) -> dict[str, Any] | None:
     viewer_path = _canonicalize_viewer_path(viewer_path)
+    lightspeed_payload = _lightspeed_artifact(root_dir, viewer_path)
+    if lightspeed_payload is not None:
+        return {
+            "book_slug": "openshift-lightspeed",
+            "title": "OpenShift Lightspeed 공식 답변",
+            "book_title": "OpenShift Lightspeed 공식 답변",
+            "anchor": str(lightspeed_payload.get("artifact_id") or ""),
+            "section": "OpenShift Lightspeed 공식 답변",
+            "section_path": ["External Tool", "OpenShift Lightspeed"],
+            "section_path_label": "External Tool > OpenShift Lightspeed",
+            "source_label": "OpenShift Lightspeed 공식 답변",
+            "source_url": "",
+            "viewer_path": viewer_path,
+            "section_match_exact": True,
+            "source_collection": "external_tool",
+            "pack_label": "OpenShift Lightspeed",
+            "source_lane": "openshift_lightspeed",
+            "approval_state": "external",
+            "publication_state": "runtime",
+            "parser_backend": "openshift_lightspeed_api",
+            "boundary_truth": "external_openshift_lightspeed",
+            "runtime_truth_label": "OpenShift Lightspeed",
+            "boundary_badge": "Lightspeed",
+        }
     uploaded_meta = _uploaded_document_source_meta(root_dir, viewer_path)
     if uploaded_meta is not None:
         return uploaded_meta
@@ -1558,7 +2355,18 @@ def _viewer_source_meta(root_dir: Path, viewer_path: str) -> dict[str, Any] | No
         if asset is None:
             return None
         settings = load_settings(root_dir)
-        truth = official_runtime_truth_payload(settings=settings, manifest_entry=_manifest_entry_for_book(root_dir, slug))
+        manifest_entry = _manifest_entry_for_book(root_dir, slug)
+        truth = official_runtime_truth_payload(settings=settings, manifest_entry=manifest_entry)
+        truth = {
+            **truth,
+            "source_lane": "official_source_first_candidate",
+            "approval_state": "",
+            "publication_state": str(manifest_entry.get("publication_state") or "published"),
+            "parser_backend": str(manifest_entry.get("parser_backend") or ""),
+            "boundary_truth": "official_candidate_runtime",
+            "runtime_truth_label": "Source-First Candidate",
+            "boundary_badge": "Source-First Candidate",
+        }
         caption = str(asset.get("caption") or asset.get("alt") or asset_name).strip() or asset_name
         section_match = _figure_section_match(slug, asset_name) or {}
         section_path = [str(section_match.get("section_heading") or "").strip(), caption]
@@ -1609,6 +2417,7 @@ def handle_source_meta(handler: Any, query: str, *, root_dir: Path) -> None:
 
 
 def handle_viewer_document(handler: Any, query: str, *, root_dir: Path) -> None:
+    request_started_at = time.perf_counter()
     params = parse_qs(query, keep_blank_values=False)
     viewer_path = str((params.get("viewer_path") or [""])[0]).strip()
     page_mode = str((params.get("page_mode") or ["single"])[0]).strip().lower()
@@ -1622,6 +2431,25 @@ def handle_viewer_document(handler: Any, query: str, *, root_dir: Path) -> None:
     if customer_pack_draft_id and not _customer_pack_read_allowed(root_dir, customer_pack_draft_id):
         _send_customer_pack_read_blocked(handler)
         return
+    timings_ms: dict[str, float] = {}
+    cache_key = _viewer_document_cache_key(root_dir, viewer_path, page_mode=page_mode)
+    cache_started_at = time.perf_counter()
+    cached_payload = _VIEWER_DOCUMENT_PAYLOAD_CACHE.get(cache_key) if cache_key is not None else None
+    timings_ms["viewer_cache_lookup"] = (time.perf_counter() - cache_started_at) * 1000
+    if cached_payload is not None:
+        timings_ms["viewer_document_total"] = (time.perf_counter() - request_started_at) * 1000
+        debug_timing = getattr(handler, "_debug_timing", None)
+        if callable(debug_timing):
+            debug_timing("viewer-document cache-hit", request_started_at)
+        handler._send_json(
+            _viewer_document_response_payload(
+                cached_payload,
+                cache_status="hit",
+                timings_ms=timings_ms,
+            )
+        )
+        return
+    resolve_started_at = time.perf_counter()
     html_text = _uploaded_document_viewer_html(root_dir, viewer_path, owner_user_id=_owner_hash_from_handler(handler))
     if html_text is None:
         html_text = _viewer_html_for_path(
@@ -1629,11 +2457,28 @@ def handle_viewer_document(handler: Any, query: str, *, root_dir: Path) -> None:
             viewer_path,
             page_mode=page_mode,
             owner_user_id=_owner_hash_from_handler(handler),
+            timings_sink=timings_ms,
         )
+    timings_ms["viewer_resolve_html"] = (time.perf_counter() - resolve_started_at) * 1000
     if html_text is None:
         handler._send_json({"error": "viewer document를 찾을 수 없습니다."}, HTTPStatus.NOT_FOUND)
         return
-    handler._send_json(_build_viewer_document_payload(html_text, viewer_path))
+    payload_started_at = time.perf_counter()
+    payload = _build_viewer_document_payload(html_text, viewer_path)
+    timings_ms["viewer_payload_extract"] = (time.perf_counter() - payload_started_at) * 1000
+    timings_ms["viewer_document_total"] = (time.perf_counter() - request_started_at) * 1000
+    if cache_key is not None:
+        _VIEWER_DOCUMENT_PAYLOAD_CACHE.set(cache_key, payload)
+    debug_timing = getattr(handler, "_debug_timing", None)
+    if callable(debug_timing):
+        debug_timing("viewer-document cache-miss" if cache_key is not None else "viewer-document", request_started_at)
+    handler._send_json(
+        _viewer_document_response_payload(
+            payload,
+            cache_status="miss" if cache_key is not None else "bypass",
+            timings_ms=timings_ms,
+        )
+    )
 
 
 def handle_runtime_figures(handler: Any, query: str, *, root_dir: Path) -> None:

@@ -74,6 +74,11 @@ _ROUTE_HTTP_HEADER_RE = re.compile(
     r"|(?:http|헤더|header|요청|응답).*(?:route|routes|라우트|경로)",
     re.IGNORECASE,
 )
+_NETWORK_POLICY_RE = re.compile(
+    r"network\s*policy|networkpolicy|네트워크\s*정책|네트워크정책|(?:pod|pods|파드).*(?:통신|접속).*(?:제한|차단|막힘|막힌)"
+    r"|(?:통신|접속).*(?:제한|차단|막힘|막힌).*(?:pod|pods|파드)",
+    re.IGNORECASE,
+)
 _ETCD_RE = re.compile(r"\betcd\b", re.IGNORECASE)
 _MCO_RE = re.compile(r"machine\s*config\s*operator|\bMCO\b|머신\s*구성\s*오퍼레이터", re.IGNORECASE)
 _RBAC_RE = re.compile(r"\brbac\b|rolebinding|clusterrolebinding|권한|롤바인딩", re.IGNORECASE)
@@ -400,6 +405,18 @@ def understand_query_signals(
         _append_unique(answer_shapes, "command")
         _append_unique(command_families, "oc_create")
         confidence["domain"] = max(confidence.get("domain", 0.0), 0.93)
+        confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
+    if _NETWORK_POLICY_RE.search(raw_query):
+        _append_unique(objects, "NetworkPolicy")
+        _append_unique(primary_topics, "NetworkPolicy")
+        _append_unique(primary_topics, "pod communication policy")
+        _append_unique(domains, "networking")
+        _append_unique(book_slug_candidates, "advanced_networking")
+        _append_unique(book_slug_candidates, "networking_overview")
+        _append_unique(book_slug_candidates, "network_security")
+        _append_unique(intent_labels, "troubleshoot")
+        _append_unique(answer_shapes, "step_by_step")
+        confidence["domain"] = max(confidence.get("domain", 0.0), 0.9)
         confidence["objects"] = max(confidence.get("objects", 0.0), 0.9)
     if _ETCD_RE.search(raw_query):
         _append_unique(objects, "etcd")

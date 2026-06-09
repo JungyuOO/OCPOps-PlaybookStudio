@@ -231,7 +231,7 @@ def _format_turn_markdown(payload: dict[str, Any], diagnosis: dict[str, Any]) ->
         f"recent_session_path: {envelope.get('recent_session_path') or ''}",
         f"runtime_llm_endpoint: {runtime.get('llm_endpoint') or ''}",
         f"runtime_embedding_base_url: {runtime.get('embedding_base_url') or ''}",
-        f"runtime_qdrant_collection: {runtime.get('qdrant_collection') or ''}",
+        f"runtime_vector_backend: {runtime.get('vector_backend') or 'pgvector'}",
     ]
     lines.extend(_format_markdown_list(audit_lines))
 

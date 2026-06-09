@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - core.yaml
   - broker-rbac.yaml
+  - lightspeed-networkpolicy.yaml
   - workspace-reaper-cronjob.yaml
   - app.yaml
   - job-db-migrate.yaml
@@ -10,4 +11,3 @@ resources:
   - job-kmsc-corpus-seed.yaml
   - job-learning-seed.yaml
   - job-course-runtime-seed.yaml
-  - job-qdrant-seed.yaml

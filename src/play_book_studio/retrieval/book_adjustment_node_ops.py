@@ -19,8 +19,25 @@ def apply_node_and_deployment_adjustments(
     penalties: dict[str, float],
 ) -> None:
     if has_node_drain_intent(normalized):
-        boosts["nodes"] = max(boosts.get("nodes", 1.0), 1.45)
-        boosts["support"] = max(boosts.get("support", 1.0), 1.18)
+        doc_or_concept_shape = any(
+            token in normalized
+            for token in (
+                "문서",
+                "가이드",
+                "찾아",
+                "봐야",
+                "보려면",
+                "동작",
+                "어떻게",
+                "차이",
+            )
+        )
+        boosts["nodes"] = max(boosts.get("nodes", 1.0), 1.72 if doc_or_concept_shape else 1.55)
+        if doc_or_concept_shape:
+            boosts["cli_tools"] = max(boosts.get("cli_tools", 1.0), 1.18)
+            penalties["support"] = min(penalties.get("support", 1.0), 0.82)
+        else:
+            boosts["support"] = max(boosts.get("support", 1.0), 1.08)
         penalties["updating_clusters"] = min(
             penalties.get("updating_clusters", 1.0),
             0.62,
@@ -32,7 +49,8 @@ def apply_node_and_deployment_adjustments(
         if "uncordon" in normalized.lower() or any(token in normalized for token in ("다시", "허용", "끝나")):
             boosts["cli_tools"] = max(boosts.get("cli_tools", 1.0), 1.22)
         else:
-            penalties["cli_tools"] = min(penalties.get("cli_tools", 1.0), 0.76)
+            if not doc_or_concept_shape:
+                penalties["cli_tools"] = min(penalties.get("cli_tools", 1.0), 0.76)
 
     if has_cluster_node_usage_intent(normalized):
         boosts["support"] = max(boosts.get("support", 1.0), 1.5)

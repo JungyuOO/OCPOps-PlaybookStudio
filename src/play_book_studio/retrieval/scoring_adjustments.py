@@ -29,6 +29,10 @@ def _has_shell_command_text(text: str) -> bool:
 
 
 _PLACEHOLDER_RE = re.compile(r"<[^>]+>|\{[^}]+\}|\[[^\]]+\]")
+_COMPARISON_SECTION_RE = re.compile(
+    r"(차이|차이점|비교|vs\.?|versus|difference|differences|compare|comparison)",
+    re.IGNORECASE,
+)
 
 
 def _hit_search_text(hit: RetrievalHit) -> str:
@@ -43,6 +47,56 @@ def _hit_search_text(hit: RetrievalHit) -> str:
             " ".join(hit.verification_hints),
         )
     ).lower()
+
+
+def _is_thin_heading_only_hit(hit: RetrievalHit) -> bool:
+    normalized_text = re.sub(r"\s+", " ", (hit.text or "").strip())
+    if not normalized_text or len(normalized_text) > 140:
+        return False
+    tokens = re.findall(r"[가-힣A-Za-z0-9_.-]+", normalized_text)
+    return len(tokens) <= 14 and not hit.cli_commands
+
+
+def _normalized_phrase(value: str) -> str:
+    normalized = re.sub(r"^\d+(?:\.\d+)*\.?\s*", "", str(value or "").strip())
+    normalized = re.sub(r"\s+", " ", normalized).strip().lower()
+    return normalized.strip(" .:-")
+
+
+def _apply_exact_heading_phrase_adjustment(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
+    query = _normalized_phrase(signals.query)
+    if not query:
+        return
+    phrases = (
+        _normalized_phrase(hit.section),
+        _normalized_phrase(hit.heading_title),
+    )
+    for phrase in phrases:
+        if len(phrase) < 5:
+            continue
+        if phrase in query:
+            hit.fused_score *= 1.24
+            hit.component_scores["exact_heading_phrase_boost"] = 1.24
+            return
+
+
+def _apply_comparison_section_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
+    if not signals.compare_intent:
+        return
+    heading_text = " ".join(
+        (
+            hit.section or "",
+            hit.heading_title or "",
+            hit.anchor or "",
+            " ".join(hit.section_path),
+        )
+    )
+    if _COMPARISON_SECTION_RE.search(heading_text):
+        hit.fused_score *= 1.68
+        hit.component_scores["comparison_section_boost"] = 1.68
+    elif _is_thin_heading_only_hit(hit):
+        hit.fused_score *= 0.72
+        hit.component_scores["comparison_thin_heading_penalty"] = 0.72
 
 
 def _term_matches_text(term: str, text: str) -> bool:
@@ -278,6 +332,71 @@ def _query_matches_hit_object(query: str, hit: RetrievalHit) -> bool:
     )
 
 
+def _has_project_namespace_compare_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    has_project = "project" in lowered or "프로젝트" in query
+    has_namespace = "namespace" in lowered or "네임스페이스" in query
+    compare_or_doc = any(token in query for token in ("차이", "설명", "문서", "초보자")) or any(
+        token in lowered for token in ("compare", "difference")
+    )
+    return has_project and has_namespace and compare_or_doc
+
+
+def _apply_project_namespace_section_adjustments(hit: RetrievalHit, *, signals: ScoreSignals) -> None:
+    if not _has_project_namespace_compare_query(signals.query):
+        return
+
+    search_text = _hit_search_text(hit)
+    project_namespace_terms = (
+        "project",
+        "projects",
+        "namespace",
+        "namespaces",
+        "프로젝트",
+        "네임스페이스",
+    )
+    command_terms = (
+        "oc project",
+        "oc get projects",
+        "oc get project",
+        "oc get namespaces",
+        "oc get namespace",
+        "oc new-project",
+    )
+    has_scope_terms = any(term in search_text for term in project_namespace_terms)
+    has_project_namespace_pair = (
+        ("project" in search_text or "프로젝트" in search_text)
+        and ("namespace" in search_text or "네임스페이스" in search_text)
+    )
+    lowered_query = (signals.query or "").lower()
+    command_shape = any(token in signals.query for token in ("명령", "명령어", "커맨드")) or any(
+        token in lowered_query for token in ("command", "cli", "oc ")
+    )
+
+    if hit.book_slug == "cli_tools":
+        if command_shape and (any(term in search_text for term in command_terms) or has_project_namespace_pair):
+            hit.fused_score *= 1.16
+            hit.component_scores["project_namespace_cli_section_boost"] = 1.16
+        elif any(term in search_text for term in command_terms) or has_project_namespace_pair:
+            hit.fused_score *= 0.82
+            hit.component_scores["project_namespace_cli_explanation_penalty"] = 0.82
+        else:
+            hit.fused_score *= 0.34
+            hit.component_scores["project_namespace_cli_section_mismatch_penalty"] = 0.34
+        return
+
+    if hit.book_slug == "overview":
+        hit.fused_score *= 1.24 if has_scope_terms else 1.12
+        hit.component_scores["project_namespace_overview_section_boost"] = (
+            1.24 if has_scope_terms else 1.12
+        )
+        return
+
+    if hit.book_slug in {"machine_management", "architecture"} and not has_scope_terms:
+        hit.fused_score *= 0.56
+        hit.component_scores["project_namespace_section_mismatch_penalty"] = 0.56
+
+
 def apply_hit_adjustments(
     hit: RetrievalHit,
     *,
@@ -334,6 +453,10 @@ def apply_hit_adjustments(
         or "백업" in signals.query
     ) and ("etcd" in lowered_query or domain in {"etcd", "backup_restore"})
     if has_etcd_backup_intent:
+        is_replacement_query = any(
+            term in lowered_query
+            for term in ("replace", "replacement", "restore", "crash", "loop", "member", "복구", "교체")
+        )
         if hit.book_slug == "backup_and_restore" and (
             "automated etcd backup" in lowered_section
             or "creating a single automated etcd backup" in lowered_section
@@ -342,14 +465,13 @@ def apply_hit_adjustments(
         ):
             hit.fused_score *= 2.2
             hit.component_scores["etcd_backup_section_boost"] = 2.2
-        elif "cluster-backup.sh" in lowered_search_text or "/usr/local/bin/cluster-backup.sh" in lowered_search_text:
-            hit.fused_score *= 1.45
-            hit.component_scores["etcd_backup_command_boost"] = 1.45
+        if (
+            not is_replacement_query
+            and ("cluster-backup.sh" in lowered_search_text or "/usr/local/bin/cluster-backup.sh" in lowered_search_text)
+        ):
+            hit.fused_score *= 1.9
+            hit.component_scores["etcd_backup_command_boost"] = 1.9
 
-        is_replacement_query = any(
-            term in lowered_query
-            for term in ("replace", "replacement", "restore", "crash", "loop", "member", "복구", "교체")
-        )
         is_replacement_hit = any(
             term in lowered_section
             for term in ("replacing", "replacement", "unhealthy", "crashloop", "crash loop", "restore")
@@ -394,7 +516,13 @@ def apply_hit_adjustments(
 
     _apply_intent_profile_adjustments(hit, signals=signals)
 
+    _apply_exact_heading_phrase_adjustment(hit, signals=signals)
+
+    _apply_comparison_section_adjustments(hit, signals=signals)
+
     apply_core_adjustments(hit, signals=signals)
+
+    _apply_project_namespace_section_adjustments(hit, signals=signals)
 
     if hit.book_slug in signals.book_boosts:
         hit.fused_score *= signals.book_boosts[hit.book_slug]
@@ -408,4 +536,3 @@ def apply_hit_adjustments(
     )
 
     hit.raw_score = hit.fused_score
-

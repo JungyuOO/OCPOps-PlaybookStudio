@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import threading
 from contextlib import contextmanager
@@ -10,6 +11,7 @@ from unittest.mock import patch
 
 import requests
 
+from play_book_studio.answering.models import AnswerResult
 from play_book_studio.http import server
 from play_book_studio.config.settings import load_settings
 
@@ -52,6 +54,34 @@ class _FakeAnswerer:
         self.settings = load_settings(root)
         self.llm_client = _FakeLlmClient()
         self.retriever = SimpleNamespace(reranker=None)
+        self.last_query = ""
+
+    def answer(self, query: str, **kwargs) -> AnswerResult:
+        del kwargs
+        self.last_query = query
+        return AnswerResult(
+            query=query,
+            mode="chat",
+            answer="답변: OpenShift Lightspeed 원문 답변입니다. oc events --types=Warning [1]",
+            rewritten_query=query,
+            citations=[],
+            cited_indices=[1],
+            pipeline_trace={
+                "answer_source": "lightspeed_with_pbs_rag",
+                "external_answer": {
+                    "status": "used",
+                    "viewer_path": "/external/lightspeed/http-test",
+                    "label": "OpenShift Lightspeed 공식 답변",
+                    "source_lane": "openshift_lightspeed",
+                    "boundary_truth": "external_openshift_lightspeed",
+                    "runtime_truth_label": "OpenShift Lightspeed",
+                    "boundary_badge": "Lightspeed",
+                },
+            },
+        )
+
+    def append_log(self, result: AnswerResult) -> None:
+        del result
 
 
 def _write_frontend_shell(root: Path) -> None:
@@ -173,3 +203,93 @@ def test_runtime_namespaces_resolve_viewer_html_instead_of_shared_spa_shell() ->
         assert response.headers["Content-Type"].startswith("text/html")
         assert "OCP 출처 뷰어" in response.text
         assert "pbs-shell" not in response.text
+
+
+def test_chat_payload_exposes_lightspeed_answer_source_and_related_link() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _write_frontend_shell(root)
+
+        with _test_server(root) as base_url:
+            response = requests.post(
+                f"{base_url}/api/chat",
+                json={
+                    "session_id": "lightspeed-session",
+                    "query": "Pod Pending 상태면 무엇을 먼저 확인해야 해?",
+                },
+                timeout=10,
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["answer_source"] == "lightspeed_with_pbs_rag"
+        assert payload["answer"] == "답변: OpenShift Lightspeed 원문 답변입니다. oc events --types=Warning [1]"
+        assert payload["cited_indices"] == [1]
+        assert payload["pipeline_trace"]["external_answer"]["status"] == "used"
+        assert payload["primary_source_lane"] == "openshift_lightspeed"
+        assert payload["primary_boundary_truth"] == "external_openshift_lightspeed"
+        assert payload["primary_runtime_truth_label"] == "OpenShift Lightspeed"
+        assert payload["primary_boundary_badge"] == "Lightspeed"
+        assert payload["related_links"][0]["href"] == "/external/lightspeed/http-test"
+        assert payload["related_links"][0]["boundary_badge"] == "Lightspeed"
+        assert payload["related_links"][0]["source_lane"] == "openshift_lightspeed"
+        assert payload["citations"][0]["index"] == 1
+        assert payload["citations"][0]["viewer_path"] == "/external/lightspeed/http-test"
+        assert payload["citations"][0]["boundary_badge"] == "Lightspeed"
+        assert payload["citations"][0]["source_lane"] == "openshift_lightspeed"
+        log_path = load_settings(root).lightspeed_call_log_path
+        log_payload = json.loads(log_path.read_text(encoding="utf-8").splitlines()[-1])
+        assert log_payload["record_kind"] == "openshift_lightspeed_call_audit"
+        assert log_payload["status"] == "used"
+        assert log_payload["answer_source"] == "lightspeed_with_pbs_rag"
+        assert log_payload["badge_applied"] is True
+        assert log_payload["related_link_present"] is True
+        assert log_payload["viewer_path"] == "/external/lightspeed/http-test"
+        assert log_payload["provider"] == ""
+        assert log_payload["model"] == ""
+
+
+def test_chat_stream_result_exposes_lightspeed_answer_source_and_related_link() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        _write_frontend_shell(root)
+
+        with _test_server(root) as base_url:
+            response = requests.post(
+                f"{base_url}/api/chat/stream",
+                json={
+                    "session_id": "lightspeed-stream-session",
+                    "query": "Pod Pending 상태면 무엇을 먼저 확인해야 해?",
+                },
+                timeout=10,
+            )
+
+        assert response.status_code == 200
+        events = [
+            line
+            for line in (response.text or "").splitlines()
+            if line.strip()
+        ]
+        payload_events = [event for event in (json.loads(line) for line in events) if event.get("type") == "result"]
+        assert payload_events
+        payload = payload_events[-1]["payload"]
+        assert payload["answer_source"] == "lightspeed_with_pbs_rag"
+        assert payload["answer"] == "답변: OpenShift Lightspeed 원문 답변입니다. oc events --types=Warning [1]"
+        assert payload["cited_indices"] == [1]
+        assert payload["pipeline_trace"]["external_answer"]["status"] == "used"
+        assert payload["primary_source_lane"] == "openshift_lightspeed"
+        assert payload["primary_boundary_truth"] == "external_openshift_lightspeed"
+        assert payload["primary_runtime_truth_label"] == "OpenShift Lightspeed"
+        assert payload["primary_boundary_badge"] == "Lightspeed"
+        assert payload["related_links"][0]["href"] == "/external/lightspeed/http-test"
+        assert payload["related_links"][0]["boundary_badge"] == "Lightspeed"
+        assert payload["related_links"][0]["source_lane"] == "openshift_lightspeed"
+        assert payload["citations"][0]["index"] == 1
+        assert payload["citations"][0]["viewer_path"] == "/external/lightspeed/http-test"
+        assert payload["citations"][0]["boundary_badge"] == "Lightspeed"
+        assert payload["citations"][0]["source_lane"] == "openshift_lightspeed"
+        log_path = load_settings(root).lightspeed_call_log_path
+        log_payload = json.loads(log_path.read_text(encoding="utf-8").splitlines()[-1])
+        assert log_payload["status"] == "used"
+        assert log_payload["badge_applied"] is True
+        assert log_payload["viewer_path"] == "/external/lightspeed/http-test"

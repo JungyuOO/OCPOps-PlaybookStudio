@@ -101,7 +101,7 @@ def _read_recent_chat_turns(settings: Settings, *, limit: int) -> list[dict[str,
                 "config_fingerprint": str(runtime.get("config_fingerprint") or ""),
                 "llm_endpoint": str(runtime.get("llm_endpoint") or ""),
                 "embedding_base_url": str(runtime.get("embedding_base_url") or ""),
-                "qdrant_collection": str(runtime.get("qdrant_collection") or ""),
+                "vector_backend": str(runtime.get("vector_backend") or "pgvector"),
             }
         )
     return summary
@@ -194,31 +194,6 @@ def _probe_llm(settings: Settings, *, sample: bool) -> dict[str, Any]:
     return report
 
 
-def _probe_qdrant(settings: Settings) -> dict[str, Any]:
-    report: dict[str, Any] = {
-        "url": settings.qdrant_url,
-        "collection": settings.qdrant_collection,
-    }
-    try:
-        response = requests.get(
-            f"{settings.qdrant_url}/collections",
-            timeout=20,
-        )
-        report["collections_status"] = response.status_code
-        payload = _safe_json(response)
-        report["collections_payload"] = payload
-        if isinstance(payload, dict):
-            collections = payload.get("result", {}).get("collections", [])
-            report["collection_present"] = any(
-                str(item.get("name") or "") == settings.qdrant_collection
-                for item in collections
-                if isinstance(item, dict)
-            )
-    except Exception as exc:  # noqa: BLE001
-        report["error"] = str(exc)
-    return report
-
-
 def _probe_local_ui(ui_base_url: str | None) -> dict[str, Any]:
     if not ui_base_url:
         return {"enabled": False}
@@ -264,8 +239,7 @@ def build_runtime_report(
             "llm_model": settings.llm_model,
             "embedding_base_url": settings.embedding_base_url,
             "embedding_model": settings.embedding_model,
-            "qdrant_url": settings.qdrant_url,
-            "qdrant_collection": settings.qdrant_collection,
+            "vector_backend": "pgvector",
             "graph_backend": settings.graph_backend,
             "graph_runtime_mode": settings.graph_runtime_mode,
             "graph_compact_artifact": graph_sidecar_compact_artifact_status(settings),
@@ -279,7 +253,7 @@ def build_runtime_report(
             "seed_inputs_required_for_runtime": seed_required_for_runtime,
             "db_corpus": build_corpus_status(
                 database_url=settings.database_url,
-                collection=settings.qdrant_collection,
+                embedding_model=settings.embedding_model,
             ),
             "course_runtime": build_course_runtime_status(
                 database_url=settings.database_url,
@@ -321,7 +295,6 @@ def build_runtime_report(
             "local_ui": _probe_local_ui(ui_base_url),
             "llm": _probe_llm(settings, sample=sample),
             "embedding": _probe_embedding(settings, sample=sample),
-            "qdrant": _probe_qdrant(settings),
         },
         "reproducibility": {
             **_summarize_session_strategy(settings),

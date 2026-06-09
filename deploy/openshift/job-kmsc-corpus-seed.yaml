@@ -43,5 +43,3 @@ spec:
             - --course-dir
             - /app/corpus/sources/kmsc/parsed-preview/course_pbs
             - --index
-            - --collection
-            - openshift_docs

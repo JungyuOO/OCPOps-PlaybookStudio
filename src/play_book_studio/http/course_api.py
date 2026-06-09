@@ -18,7 +18,6 @@ from play_book_studio.answering.llm import LLMClient
 from play_book_studio.http.sessions import Turn
 from play_book_studio.config.corpus_paths import COURSE_PBS_DIR
 from play_book_studio.config.settings import load_settings
-from play_book_studio.course.qdrant_course import search_course_and_official, search_ops_learning_chunks
 from play_book_studio.db.course_repository import DEFAULT_COURSE_SLUG
 
 
@@ -1666,6 +1665,24 @@ def _search_ops_learning_chunks(
     return ranked[:limit]
 
 
+def search_ops_learning_chunks(settings: Any, query: str, top_k: int = 5) -> list[dict[str, Any]]:
+    return [
+        row
+        for _, row in _search_ops_learning_chunks(
+            Path(settings.root_dir),
+            query=query,
+            limit=top_k,
+        )
+    ]
+
+
+def search_course_and_official(settings: Any, query: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    root_dir = Path(settings.root_dir)
+    course_hits = [row for _, row in _search_chunks(root_dir, query=query, limit=3)]
+    official_hits = _collect_official_docs(course_hits, []) if _is_official_doc_intent(query) else []
+    return course_hits, official_hits
+
+
 def _ops_learning_chunk_by_step(root_dir: Path) -> dict[tuple[str, str], dict[str, Any]]:
     rows = _load_ops_learning_chunks(root_dir)
     return {
@@ -2516,6 +2533,8 @@ def _course_chat_payload(root_dir: Path, payload: dict[str, Any]) -> dict[str, A
     explicit_chunk_ids = [str(item).strip() for item in chunk_ids if str(item).strip()]
     normalized_query = _normalize_query(query)
     official_doc_intent = _is_official_doc_intent(query)
+    if not chunk_ids:
+        course_hits, official_hits = search_course_and_official(settings, query)
     image_evidence_terms = [
         "image",
         "screen",
@@ -2543,20 +2562,6 @@ def _course_chat_payload(root_dir: Path, payload: dict[str, Any]) -> dict[str, A
         step_id=step_id,
         limit=4,
     )
-    if not learning_ranked and not explicit_chunk_ids and not has_query_identifiers:
-        try:
-            local_by_id = {str(row.get("learning_chunk_id") or ""): row for row in _load_ops_learning_chunks(root_dir)}
-            vector_learning_hits = search_ops_learning_chunks(settings, query=query, top_k=4)
-            for hit in vector_learning_hits:
-                payload_hit = hit.get("payload") if isinstance(hit.get("payload"), dict) else {}
-                candidate = local_by_id.get(str(hit.get("chunk_id") or "")) or payload_hit
-                if not isinstance(candidate, dict):
-                    continue
-                if stage_id and str(candidate.get("stage_id") or "") != stage_id:
-                    continue
-                learning_ranked.append((float(hit.get("score") or 0.0), candidate))
-        except Exception:  # noqa: BLE001
-            learning_ranked = []
     learning_candidates = [row for _, row in learning_ranked]
     learning_chunks, learning_selector_meta, learning_selector_warning = _select_ops_learning_chunks_with_llm(
         settings=settings,
@@ -2635,41 +2640,6 @@ def _course_chat_payload(root_dir: Path, payload: dict[str, Any]) -> dict[str, A
                 continue
         if route_chunks:
             ranked = [(2000 - index, chunk) for index, chunk in enumerate(route_chunks, start=1)]
-    should_use_vector = (
-        guide_step is None
-        and (official_doc_intent
-        or (
-            not explicit_chunk_ids
-            and not learning_chunks
-            and not route_start_ids
-            and resolved_route_chunk is None
-            and (not ranked or ranked[0][0] < 36)
-        ))
-    )
-    if should_use_vector:
-        try:
-            course_vector_hits, official_vector_hits = search_course_and_official(settings, query=query)
-            for hit in course_vector_hits:
-                chunk = _load_chunk(root_dir, str(hit.get("chunk_id") or ""))
-                if stage_id and str(chunk.get("stage_id") or "").strip() != stage_id:
-                    continue
-                course_hits.append(chunk)
-            official_hits = [
-                {
-                    "book_slug": str(hit.get("book_slug") or ""),
-                    "section_id": str(hit.get("section_id") or ""),
-                    "score": float(hit.get("score") or 0.0),
-                    "trusted": float(hit.get("score") or 0.0) >= OFFICIAL_DOC_MIN_SCORE,
-                    "title": str(hit.get("book_slug") or ""),
-                    "section_title": str(hit.get("section") or ""),
-                    "snippet": str(hit.get("text") or "")[:240],
-                }
-                for hit in official_vector_hits
-                if float(hit.get("score") or 0.0) >= OFFICIAL_DOC_MIN_SCORE
-            ]
-        except Exception:  # noqa: BLE001
-            course_hits = []
-            official_hits = []
     if course_hits and not route_start_ids and not resolved_route_chunk and not explicit_chunk_ids and (not ranked or ranked[0][0] < 36):
         ranked = [(999 - index, chunk) for index, chunk in enumerate(course_hits[:3], start=1)]
     ranked_chunks = [chunk for _, chunk in ranked]

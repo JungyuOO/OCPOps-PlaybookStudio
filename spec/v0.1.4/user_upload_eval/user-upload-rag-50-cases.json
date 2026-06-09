@@ -1,0 +1,361 @@
+{
+  "suite_id": "user-upload-rag-50-v1",
+  "title": "User upload RAG 50-case coverage suite",
+  "defaults": {
+    "min_citations": 1,
+    "min_answer_chars": 60,
+    "require_upload_citation": true
+  },
+  "cases": [
+    {
+      "id": "upload-yaml-key-value",
+      "topic": "yaml",
+      "question": "업로드 문서 기준 YAML 기본 Key-Value 구조를 설명해줘",
+      "expected_source_keywords": ["YAML", "Key-Value"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-yaml-indentation",
+      "topic": "yaml",
+      "question": "업로드 문서 기준 YAML 들여쓰기에서 조심할 점을 알려줘",
+      "expected_source_keywords": ["YAML", "들여쓰기"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-yaml-multiline",
+      "topic": "yaml",
+      "question": "업로드 문서 기준 YAML 다중 라인 문자열은 어떻게 쓰는지 알려줘",
+      "expected_source_keywords": ["YAML", "다중 라인"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-yaml-error-prevention",
+      "topic": "yaml",
+      "question": "업로드 문서 기준 YAML 작성 시 에러 방지 팁을 정리해줘",
+      "expected_source_keywords": ["YAML", "에러 방지"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-storage-pv",
+      "topic": "storage",
+      "question": "업로드 문서 기준 PersistentVolume이 무엇인지 알려줘",
+      "expected_source_keywords": ["PersistentVolume", "PV"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-storage-pvc",
+      "topic": "storage",
+      "question": "업로드 문서 기준 PersistentVolumeClaim이 무엇인지 알려줘",
+      "expected_source_keywords": ["PersistentVolumeClaim", "PVC"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-storage-storageclass",
+      "topic": "storage",
+      "question": "업로드 문서 기준 StorageClass의 역할을 설명해줘",
+      "expected_source_keywords": ["StorageClass"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-storage-reclaimpolicy",
+      "topic": "storage",
+      "question": "업로드 문서 기준 ReclaimPolicy는 무엇을 결정하는지 알려줘",
+      "expected_source_keywords": ["ReclaimPolicy"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-networking-service",
+      "topic": "networking",
+      "question": "업로드 문서 기준 Service의 역할을 설명해줘",
+      "expected_source_keywords": ["Service"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-networking-route",
+      "topic": "networking",
+      "question": "업로드 문서 기준 OpenShift Route가 무엇인지 알려줘",
+      "expected_source_keywords": ["Route"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-networking-edge",
+      "topic": "networking",
+      "question": "업로드 문서 기준 Edge Route 방식은 어떤 TLS 방식인지 알려줘",
+      "expected_source_keywords": ["Edge"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-networking-reencrypt",
+      "topic": "networking",
+      "question": "업로드 문서 기준 Re-encrypt Route는 어떻게 동작하는지 알려줘",
+      "expected_source_keywords": ["Re-encrypt"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-networking-ingress-route",
+      "topic": "networking",
+      "question": "업로드 문서 기준 Ingress와 Route 차이를 설명해줘",
+      "expected_source_keywords": ["Ingress", "Route"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-scc-definition",
+      "topic": "scc",
+      "question": "업로드 문서 기준 SCC의 정의와 필요성을 설명해줘",
+      "expected_source_keywords": ["SCC", "Security Context Constraints"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-scc-rbac-difference",
+      "topic": "scc",
+      "question": "업로드 문서 기준 RBAC와 SCC의 차이를 알려줘",
+      "expected_source_keywords": ["RBAC", "SCC"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-scc-types",
+      "topic": "scc",
+      "question": "업로드 문서 기준 주요 SCC 유형을 정리해줘",
+      "expected_source_keywords": ["SCC", "유형"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-scc-serviceaccount-assignment",
+      "topic": "scc",
+      "question": "업로드 문서 기준 서비스 계정에 SCC를 할당하는 흐름을 알려줘",
+      "expected_source_keywords": ["SCC", "서비스 계정"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-rbac-core-components",
+      "topic": "rbac",
+      "question": "업로드 문서 기준 RBAC의 4대 핵심 구성 요소를 알려줘",
+      "expected_source_keywords": ["RBAC", "4대 핵심 구성 요소"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-rbac-role-clusterrole",
+      "topic": "rbac",
+      "question": "업로드 문서 기준 Role과 ClusterRole 차이를 설명해줘",
+      "expected_source_keywords": ["Role", "ClusterRole"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-rbac-binding-difference",
+      "topic": "rbac",
+      "question": "업로드 문서 기준 RoleBinding과 ClusterRoleBinding 차이를 알려줘",
+      "expected_source_keywords": ["RoleBinding", "ClusterRoleBinding"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-rbac-can-i",
+      "topic": "rbac",
+      "question": "업로드 문서 기준 oc auth can-i는 언제 쓰는지 알려줘",
+      "expected_source_keywords": ["oc auth can-i"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-rbac-secret-access",
+      "topic": "rbac",
+      "question": "업로드 문서 기준 Secret 접근 제어 시나리오를 설명해줘",
+      "expected_source_keywords": ["Secret", "접근 제어"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-rbac-serviceaccount",
+      "topic": "rbac",
+      "question": "업로드 문서 기준 ServiceAccount의 특징을 설명해줘",
+      "expected_source_keywords": ["ServiceAccount"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-imagestream-definition",
+      "topic": "imagestream",
+      "question": "업로드 문서 기준 ImageStream의 정의와 목적을 알려줘",
+      "expected_source_keywords": ["ImageStream", "정의"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-imagestream-components",
+      "topic": "imagestream",
+      "question": "업로드 문서 기준 ImageStream의 주요 구성 요소를 알려줘",
+      "expected_source_keywords": ["ImageStream", "주요 구성 요소"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-imagestream-pointer",
+      "topic": "imagestream",
+      "question": "업로드 문서 기준 ImageStream의 포인터 구조는 무엇인지 알려줘",
+      "expected_source_keywords": ["ImageStream", "포인터"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-imagestream-trigger",
+      "topic": "imagestream",
+      "question": "업로드 문서 기준 ImageStream 트리거 기능을 설명해줘",
+      "expected_source_keywords": ["ImageStream", "트리거"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-imagestream-docker-difference",
+      "topic": "imagestream",
+      "question": "업로드 문서 기준 ImageStream과 Docker Image의 차이를 설명해줘",
+      "expected_source_keywords": ["ImageStream", "Docker Image"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-configmap-secret-needed",
+      "topic": "config-secret",
+      "question": "업로드 문서 기준 ConfigMap과 Secret이 왜 필요한지 알려줘",
+      "expected_source_keywords": ["ConfigMap", "Secret"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-configmap-definition",
+      "topic": "config-secret",
+      "question": "업로드 문서 기준 ConfigMap이 무엇인지 설명해줘",
+      "expected_source_keywords": ["ConfigMap"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-secret-definition",
+      "topic": "config-secret",
+      "question": "업로드 문서 기준 Secret이 무엇인지 설명해줘",
+      "expected_source_keywords": ["Secret"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-configmap-secret-difference",
+      "topic": "config-secret",
+      "question": "업로드 문서 기준 ConfigMap과 Secret 차이를 정리해줘",
+      "expected_source_keywords": ["ConfigMap", "Secret 차이"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-configmap-secret-envfrom",
+      "topic": "config-secret",
+      "question": "업로드 문서 기준 envFrom으로 ConfigMap 전체를 주입하는 방법을 알려줘",
+      "expected_source_keywords": ["envFrom", "ConfigMap"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-configmap-secret-volume",
+      "topic": "config-secret",
+      "question": "업로드 문서 기준 ConfigMap이나 Secret을 파일로 마운트하는 방식은 무엇인지 알려줘",
+      "expected_source_keywords": ["파일로 마운트"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-practice-resource-create",
+      "topic": "practice",
+      "question": "업로드 문서 기준 실습에서 리소스를 생성하는 첫 단계는 무엇인지 알려줘",
+      "expected_source_keywords": ["실습", "리소스 생성"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-practice-pod-deploy",
+      "topic": "practice",
+      "question": "업로드 문서 기준 검증용 Pod 배포 단계는 무엇을 확인하기 위한 것인지 알려줘",
+      "expected_source_keywords": ["검증용 Pod"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-practice-env-volume-demo",
+      "topic": "practice",
+      "question": "업로드 문서 기준 환경 변수와 볼륨 마운트 데모를 설명해줘",
+      "expected_source_keywords": ["환경 변수", "볼륨 마운트"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-question-rbac-group",
+      "topic": "question",
+      "question": "업로드 문서 기준 그룹에 RBAC 역할 바인딩 후 사용자에게 권한이 적용되는 흐름을 설명해줘",
+      "expected_source_keywords": ["RBAC", "역할 바인딩"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-question-pod-completed",
+      "topic": "question",
+      "question": "업로드 문서 기준 Pod Completed 상태의 의미를 알려줘",
+      "expected_source_keywords": ["Completed"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-closed-network-smee",
+      "topic": "closed-network-github",
+      "question": "업로드 문서 기준 Smee.io 주소 생성은 왜 필요한지 알려줘",
+      "expected_source_keywords": ["Smee.io"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-closed-network-powershell",
+      "topic": "closed-network-github",
+      "question": "업로드 문서 기준 windows powershell 실행 단계에서 무엇을 하는지 알려줘",
+      "expected_source_keywords": ["windows powershell"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-closed-network-webhook-secret",
+      "topic": "closed-network-github",
+      "question": "업로드 문서 기준 webhook secret을 잊었을 때 어떻게 확인하는지 알려줘",
+      "expected_source_keywords": ["webhook secrets"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-ci-repository-connect",
+      "topic": "ci",
+      "question": "업로드 문서 기준 내 Git 저장소를 파이프라인에 연결하는 절차를 알려줘",
+      "expected_source_keywords": ["GIT저장소", "파이프라인"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-ci-webhook",
+      "topic": "ci",
+      "question": "업로드 문서 기준 git webhook 설정 절차를 알려줘",
+      "expected_source_keywords": ["git webhook"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-ci-external-link",
+      "topic": "ci",
+      "question": "업로드 문서 기준 webhook url과 외부링크를 연결하는 절차를 알려줘",
+      "expected_source_keywords": ["webhook url", "외부링크"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-ci-pipeline-yaml",
+      "topic": "ci",
+      "question": "업로드 문서 기준 git source에 파이프라인 yaml을 구성하는 흐름을 알려줘",
+      "expected_source_keywords": ["파이프라인 yaml"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-argocd-gitops",
+      "topic": "argocd",
+      "question": "업로드 문서 기준 ArgoCD와 GitOps의 관계를 설명해줘",
+      "expected_source_keywords": ["ArgoCD", "GitOps"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-argocd-pull",
+      "topic": "argocd",
+      "question": "업로드 문서 기준 ArgoCD의 Pull 방식 핵심 동작 원리를 알려줘",
+      "expected_source_keywords": ["ArgoCD", "Pull"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-argocd-sync-policy",
+      "topic": "argocd",
+      "question": "업로드 문서 기준 ArgoCD Sync Policy 설정은 무엇을 의미하는지 알려줘",
+      "expected_source_keywords": ["SYNC POLICY"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-argocd-kustomize-overlays",
+      "topic": "argocd",
+      "question": "업로드 문서 기준 ArgoCD에서 overlays 폴더를 환경별로 쓰는 방법을 알려줘",
+      "expected_source_keywords": ["overlays", "환경별"],
+      "required_answer_terms": []
+    }
+  ]
+}

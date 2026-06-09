@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from play_book_studio.answering.context import assemble_context
-from play_book_studio.answering.answerer import _is_low_confidence_retrieval
-from play_book_studio.answering.answer_text_commands import strip_ungrounded_code_blocks
+from play_book_studio.answering.answerer import _is_low_confidence_retrieval, _prune_provenance_noise_citations
+from play_book_studio.answering.answer_text_commands import preserve_grounded_commands, strip_ungrounded_code_blocks
 from play_book_studio.answering.answer_text_formatting import shape_beginner_grounded_answer
 from play_book_studio.answering.models import AnswerResult, Citation
 from play_book_studio.http.presenters import _citation_display_payload
@@ -70,6 +70,306 @@ def test_korean_command_lookup_is_detected_without_fixed_answer() -> None:
     assert has_command_request("네임스페이스 확인하는 명령어가 뭐야?")
 
 
+def test_preserve_grounded_commands_appends_omitted_cited_command() -> None:
+    answer = "답변: 먼저 `oc adm cordon <node_name>`으로 새 Pod 배치를 막습니다 [1]."
+    preserved = preserve_grounded_commands(
+        answer,
+        query="작업자 노드 점검 전에 cordon하고 drain하는 명령 예시를 알려줘",
+        citations=[
+            _citation(
+                cli_commands=(
+                    "oc adm cordon <node_name>",
+                    "oc adm drain <node_name> --ignore-daemonsets --delete-emptydir-data",
+                )
+            )
+        ],
+    )
+
+    assert "근거에 포함된 명령" in preserved
+    assert "oc adm drain <node_name> --ignore-daemonsets --delete-emptydir-data" in preserved
+    assert preserved.count("oc adm cordon <node_name>") == 1
+
+
+def test_etcd_backup_context_preserves_cluster_backup_command_chunk() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "restore",
+                book_slug="backup_and_restore",
+                section="6.3.3.4. Restoring a cluster manually from an etcd backup",
+                text="Restore procedure cluster-restore.sh and etcd restore details.",
+                cli_commands=("cluster-restore.sh",),
+                chunk_type="command",
+                raw_score=1.0,
+            ),
+            _hit(
+                "debug",
+                book_slug="backup_and_restore",
+                section="6.1.1. Backing up etcd data",
+                text="$ oc debug --as-root node/<node_name>\nsh-4.4# chroot /host",
+                cli_commands=("oc debug --as-root node/<node_name>", "chroot /host"),
+                chunk_type="command",
+                raw_score=0.8,
+            ),
+            _hit(
+                "cluster-backup",
+                book_slug="etcd",
+                section="4.1.1. etcd 데이터 백업",
+                text=(
+                    "디버그 쉘에서 스크립트를 실행하고 백업 저장 위치를 전달합니다. "
+                    "cluster-backup.sh sh-4.4# /usr/local/bin/cluster-backup.sh /home/core/assets/backup"
+                ),
+                cli_commands=("cluster-backup.sh", "/usr/local/bin/cluster-backup.sh /home/core/assets/backup"),
+                chunk_type="command",
+                raw_score=0.2,
+            ),
+        ],
+        query="etcd 백업은 실제로 어떤 표준 절차로 해야 해?",
+        max_chunks=3,
+    )
+
+    assert bundle.citations[0].chunk_id == "cluster-backup"
+    assert any("cluster-backup.sh" in citation.excerpt for citation in bundle.citations)
+    assert all(citation.chunk_id != "restore" for citation in bundle.citations)
+
+
+def test_etcd_backup_scoring_prefers_script_chunk_over_intro_and_restore_noise() -> None:
+    intro = _hit(
+        "backup-intro",
+        book_slug="backup_and_restore",
+        section="6.1.1. Backing up etcd data",
+        text="Follow these steps to back up etcd data. You can later restore etcd from the backup.",
+        raw_score=1.0,
+    )
+    restore = _hit(
+        "restore-noise",
+        book_slug="backup_and_restore",
+        section="6.3.3.4. Restoring a cluster manually from an etcd backup",
+        text="Restore procedure for an etcd backup.",
+        raw_score=0.95,
+    )
+    script = _hit(
+        "cluster-backup-script",
+        book_slug="backup_and_restore",
+        section="6.1.1. Backing up etcd data",
+        text="Run cluster-backup.sh in the debug shell. sh-4.4# /usr/local/bin/cluster-backup.sh /home/core/assets/backup",
+        cli_commands=("cluster-backup.sh", "/usr/local/bin/cluster-backup.sh /home/core/assets/backup"),
+        chunk_type="command",
+        raw_score=0.6,
+    )
+
+    hits = fuse_ranked_hits(
+        "etcd 백업은 실제로 어떤 표준 절차로 해야 해?",
+        {"bm25": [intro, restore, script], "vector": [intro, restore, script]},
+        context=SessionContext(),
+        top_k=3,
+    )
+
+    assert hits[0].chunk_id == "cluster-backup-script"
+    assert hits[0].component_scores["etcd_backup_command_boost"] == 1.9
+
+
+def test_network_policy_context_prefers_network_policy_books_over_noise() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "postinstall-noise",
+                book_slug="postinstallation_configuration",
+                section="Postinstall networking",
+                text="Generic postinstallation network configuration.",
+                raw_score=1.0,
+            ),
+            _hit(
+                "network-policy",
+                book_slug="advanced_networking",
+                section="NetworkPolicy 기준",
+                text="NetworkPolicy uses podSelector, ingress, and egress rules to limit pod communication.",
+                raw_score=0.2,
+            ),
+        ],
+        query="OpenShift NetworkPolicy로 pod 통신을 제한하려면 어떤 기준을 봐야 해?",
+        max_chunks=2,
+    )
+
+    assert bundle.citations[0].book_slug == "advanced_networking"
+
+
+def test_web_console_workspace_context_prefers_console_books_over_runtime_noise() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "cli-current-project-noise",
+                book_slug="cli_tools",
+                section="현재 프로젝트 보기",
+                text="아래 명령을 사용하여 현재 프로젝트를 봅니다. oc project",
+                cli_commands=("oc project",),
+                chunk_type="command",
+                raw_score=1.0,
+            ),
+            _hit(
+                "console-workloads",
+                book_slug="web_console",
+                section="웹 콘솔에서 프로젝트와 워크로드 보기",
+                text="Use the web console developer perspective to view projects, workloads, and applications.",
+                raw_score=0.2,
+            ),
+        ],
+        query="OpenShift 웹 콘솔에서 프로젝트와 워크로드를 확인하려면 어디를 봐야 해?",
+        max_chunks=2,
+    )
+
+    assert bundle.citations[0].book_slug == "web_console"
+
+
+def test_project_namespace_compare_context_prefers_foundation_books_over_console_noise() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "console-noise",
+                book_slug="web_console",
+                section="Namespace dashboard link",
+                text="A custom link can appear under namespace or project in the web console.",
+                raw_score=1.0,
+            ),
+            _hit(
+                "auth-noise",
+                book_slug="authentication_and_authorization",
+                section="Default projects",
+                text="Default projects host infrastructure pods.",
+                raw_score=0.8,
+            ),
+            _hit(
+                "cli-project-namespace",
+                book_slug="cli_tools",
+                section="Projects and namespaces",
+                text="Use oc get projects and oc get namespaces to inspect project and namespace scopes.",
+                cli_commands=("oc get projects", "oc get namespaces"),
+                chunk_type="command",
+                raw_score=0.2,
+            ),
+        ],
+        query="OpenShift project와 namespace 차이를 초보자 기준으로 설명해줘",
+        max_chunks=2,
+    )
+
+    assert bundle.citations[0].book_slug == "cli_tools"
+
+
+def test_project_namespace_compare_context_prefers_exact_definition_over_glossary_noise() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "overview-glossary-noise",
+                book_slug="overview",
+                section="용어집",
+                text="용어집 항목은 project namespace 등 여러 OpenShift 용어를 나열합니다.",
+                raw_score=1.0,
+            ),
+            _hit(
+                "overview-project-definition",
+                book_slug="overview",
+                section="프로젝트 및 네임스페이스",
+                text=(
+                    "프로젝트는 역할 기반 액세스 제어(RBAC) 및 관리 기능을 제공하는 "
+                    "추가 주석이 있는 Kubernetes 네임스페이스입니다."
+                ),
+                raw_score=0.2,
+            ),
+        ],
+        query="OpenShift project와 namespace 차이를 초보자 기준으로 설명해줘",
+        max_chunks=2,
+    )
+
+    assert bundle.citations[0].chunk_id == "overview-project-definition"
+
+
+def test_control_plane_etcd_context_prefers_etcd_grounding_over_architecture_intro() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "architecture-intro",
+                book_slug="architecture",
+                section="OpenShift Container Platform의 아키텍처 개요",
+                text="이 문서에서는 OpenShift Container Platform의 플랫폼 및 애플리케이션 아키텍처 개요를 제공합니다.",
+                raw_score=1.0,
+            ),
+            _hit(
+                "etcd-control-plane",
+                book_slug="etcd",
+                section="비정상적인 베어 메탈 etcd 멤버 교체",
+                text="etcd 멤버는 openshift-control-plane 노드에서 실행되며 control plane 상태와 함께 확인됩니다.",
+                raw_score=0.2,
+            ),
+        ],
+        query="OpenShift 아키텍처에서 control plane과 etcd 관계를 설명해줘",
+        max_chunks=2,
+    )
+
+    assert bundle.citations[0].chunk_id == "etcd-control-plane"
+
+
+def test_image_pull_context_prefers_images_pull_secret_chunk_over_support_noise() -> None:
+    bundle = assemble_context(
+        [
+            _hit(
+                "support-operator-catalog",
+                book_slug="operators",
+                section="카탈로그 소스 상태 보기",
+                text=(
+                    "Operator catalog 문제에서 ImagePullBackOff 또는 ErrImagePull 상태가 "
+                    "openshift-marketplace Pod에 나타날 수 있습니다."
+                ),
+                cli_commands=("oc describe pod <pod-name> -n <namespace>",),
+                chunk_type="command",
+                raw_score=1.0,
+            ),
+            _hit(
+                "images-pull-secret",
+                book_slug="images",
+                section="워크로드에 풀 시크릿 사용",
+                text="Use image pull secrets when a workload must pull images from an authenticated registry.",
+                cli_commands=("oc secrets link default <pull_secret_name> --for=pull",),
+                chunk_type="command",
+                raw_score=0.2,
+            ),
+        ],
+        query="ImagePullBackOff가 나면 이미지 레지스트리와 pull secret에서 무엇을 확인해야 해?",
+        max_chunks=2,
+    )
+
+    assert bundle.citations[0].chunk_id == "images-pull-secret"
+
+
+def test_image_pull_final_citation_prune_keeps_images_over_operator_catalog_noise() -> None:
+    pruned = _prune_provenance_noise_citations(
+        query="ImagePullBackOff가 나면 이미지 레지스트리와 pull secret에서 무엇을 확인해야 해?",
+        citations=[
+            Citation(
+                index=1,
+                chunk_id="operator-catalog",
+                book_slug="operators",
+                section="CLI를 사용하여 Operator 카탈로그 소스 상태 보기",
+                anchor="operator-catalog",
+                source_url="",
+                viewer_path="/docs/operators",
+                excerpt="ImagePullBackOff 상태의 catalog source Pod를 oc describe로 확인합니다.",
+            ),
+            Citation(
+                index=2,
+                chunk_id="image-pull-secret",
+                book_slug="images",
+                section="이미지 풀 시크릿 사용",
+                anchor="image-pull-secret",
+                source_url="",
+                viewer_path="/docs/images",
+                excerpt="보안 레지스트리에서 이미지를 가져오려면 image pull secret 구성을 확인합니다.",
+            ),
+        ],
+    )
+
+    assert [citation.book_slug for citation in pruned] == ["images"]
+
+
 def test_command_lookup_boosts_command_bearing_chunks() -> None:
     concept_hit = _hit(
         "concept",
@@ -91,6 +391,58 @@ def test_command_lookup_boosts_command_bearing_chunks() -> None:
 
     assert hits[0].chunk_id == "command"
     assert "command_intent_cli_commands_boost" in hits[0].component_scores
+
+
+def test_general_compare_query_prefers_comparison_section_chunk() -> None:
+    title_hit = _hit(
+        "rbac-title",
+        text="RBAC, SCC, ImageStream\n\nRBAC, SCC, ImageStream",
+        section="RBAC, SCC, ImageStream",
+    )
+    comparison_hit = _hit(
+        "rbac-scc-diff",
+        text=(
+            "RBAC vs SCC 차이점\n\n"
+            "RBAC은 사용자의 API 권한을 제어하고, SCC는 Pod의 런타임 보안 조건을 제어한다."
+        ),
+        section="RBAC vs SCC 차이점",
+        raw_score=0.92,
+    )
+
+    hits = fuse_ranked_hits(
+        "업로드 문서 기준 RBAC와 SCC의 차이를 알려줘",
+        {"bm25": [title_hit, comparison_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "rbac-scc-diff"
+    assert hits[0].component_scores["comparison_section_boost"] == 1.68
+    assert "comparison_thin_heading_penalty" in hits[1].component_scores
+
+
+def test_exact_heading_phrase_boosts_user_requested_section() -> None:
+    generic_hit = _hit(
+        "config-secret-overview",
+        text="ConfigMap과 Secret 차이\n\n두 리소스는 설정값과 민감 정보를 나누어 관리한다.",
+        section="ConfigMap과 Secret 차이",
+    )
+    mount_hit = _hit(
+        "file-mount",
+        text="파일로 마운트\n\nConfigMap 또는 Secret을 volume으로 Pod에 마운트할 수 있다.",
+        section="파일로 마운트",
+        raw_score=0.9,
+    )
+
+    hits = fuse_ranked_hits(
+        "업로드 문서 기준 ConfigMap이나 Secret을 파일로 마운트하는 방식은 무엇인지 알려줘",
+        {"bm25": [generic_hit, mount_hit]},
+        context=SessionContext(),
+        top_k=2,
+    )
+
+    assert hits[0].chunk_id == "file-mount"
+    assert hits[0].component_scores["exact_heading_phrase_boost"] == 1.24
 
 
 def test_intent_profile_prefers_matching_command_over_generic_cli_command() -> None:
@@ -568,6 +920,7 @@ def test_beginner_ops_profiles_do_not_collapse_to_namespace_lookup() -> None:
     node = build_intent_profile("Node 확인하려면 어떤 명령어부터 쓰면 돼?")
     namespace = build_intent_profile("네임스페이스 확인하는 명령어가 뭐야?")
     network = build_intent_profile("NetworkPolicy 때문에 Pod 통신이 막힌 건지 확인하려면 뭘 봐야 해?")
+    network_ko = build_intent_profile("네트워크 정책 때문에 Pod 통신 제한이 걸린 건지 확인하려면?")
     dns = build_intent_profile("클러스터 DNS 문제가 의심되면 어떤 리소스 상태부터 확인해야 해?")
     mco = build_intent_profile("Machine Config Operator 상태를 먼저 확인하는 명령을 알려줘")
     cvo = build_intent_profile("Cluster Version Operator가 업데이트를 못 하고 있으면 어디부터 확인해?")
@@ -593,6 +946,8 @@ def test_beginner_ops_profiles_do_not_collapse_to_namespace_lookup() -> None:
     assert namespace.primary_commands[0] == "oc project"
     assert network.target_object == "networkpolicy"
     assert "NetworkPolicy" in network.evidence_terms
+    assert network_ko.target_object == "networkpolicy"
+    assert "NetworkPolicy" in network_ko.evidence_terms
     assert dns.target_object == "dns"
     assert "openshift-dns" in dns.evidence_terms
     assert mco.target_object == "machineconfigpool"

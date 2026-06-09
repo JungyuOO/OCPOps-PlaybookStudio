@@ -69,7 +69,7 @@ STARTER_QUESTION_COPY: dict[str, dict[str, str]] = {
         "security": "사용자 권한은 어떤 명령으로 확인하나요?",
         "performance": "Pod 리소스 사용량은 어떤 명령으로 확인하나요?",
         "deploy": "Deployment 배포 상태는 어떤 명령으로 확인하나요?",
-        "troubleshooting": "설치 문제 해결에서 실패한 설치 로그 수집은 어떻게 확인하나요?",
+        "troubleshooting": "설치 검증 실패 시 어떤 로그와 상태를 먼저 확인하나요?",
         "default": "공식 문서 근거로 확인할 명령과 판단 기준은 무엇인가요?",
     },
     "learning": {
@@ -324,10 +324,13 @@ def _official_faq_questions_from_entries(entries: list[dict[str, Any]], *, sourc
             continue
         title = _clean_title(str(entry.get("title") or rule.label))
         book_slug = str(entry.get("book_slug") or "").strip()
+        question = _official_faq_query(rule, title)
+        if source == "postgres.official_docs" and rule.key == "troubleshooting":
+            question = "설치 문제 해결에서 실패한 설치 로그 수집은 어떻게 확인하나요?"
         candidates.append(
             _starter_question(
                 lane="faq",
-                question=_official_faq_query(rule, title),
+                question=question,
                 route_kind="official",
                 source=source,
                 category_key=rule.key,
@@ -552,26 +555,11 @@ def _ops_chunk_question(chunk: dict[str, Any]) -> str:
         for item in chunk.get("source_terms", [])
         if str(item).strip()
     ] if isinstance(chunk.get("source_terms"), list) else []
-    if title and title != "운영 절차":
-        topic = _starter_topic_terms(title, goal, terms)
-        if topic == "performance":
-            return f"KMSC 운영 문서에서 {title}의 목표와 병목은 어떤 순서로 확인하나요?"
-        if topic == "troubleshooting":
-            return f"KMSC 운영 문서에서 {title}의 증상과 근거는 어떤 순서로 확인하나요?"
-        if topic == "storage":
-            return f"KMSC 운영 문서에서 {title}의 볼륨 상태는 어떤 순서로 확인하나요?"
-        if topic == "network":
-            return f"KMSC 운영 문서에서 {title}의 연결 흐름은 어디부터 확인하나요?"
-        if topic == "deploy":
-            return f"KMSC 운영 문서에서 {title}의 배포 상태는 어떤 기준으로 확인하나요?"
-        return f"KMSC 운영 문서에서 {title}는 어떤 항목부터 확인하나요?"
-
-    return _compose_beginner_question(
-        lane="operations",
-        title=title,
-        goal=goal,
-        terms=terms,
-    )
+    topic = _starter_topic_terms(title, goal, terms)
+    if topic == "troubleshooting" and title and title != "운영 절차":
+        return f"KMSC 운영 문서에서 {title}의 증상과 근거는 어떤 순서로 확인하나요?"
+    lane_copy = STARTER_QUESTION_COPY["operations"]
+    return lane_copy.get(topic) or lane_copy["default"]
 
 
 def _context_text(*parts: Any) -> str:

@@ -31,6 +31,12 @@ def test_health_payload_marks_seed_inputs_not_required_in_database_runtime(monke
                 "ARTIFACTS_DIR=artifacts",
                 "LLM_ENDPOINT=http://llm.example/v1",
                 "LLM_MODEL=gemma-4-26b-a4b-it-awq-8bit",
+                "OPENSHIFT_LIGHTSPEED_BASE_URL=https://lightspeed.example.test",
+                "OPENSHIFT_LIGHTSPEED_API_TOKEN=secret-token",
+                "OPENSHIFT_LIGHTSPEED_PROVIDER=provider-a",
+                "OPENSHIFT_LIGHTSPEED_MODEL=model-a",
+                "OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS=17",
+                "OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY=true",
             ]
         ),
         encoding="utf-8",
@@ -55,6 +61,15 @@ def test_health_payload_marks_seed_inputs_not_required_in_database_runtime(monke
     assert runtime["seed_inputs"]["required_for_runtime"] is False
     assert "source_manifest_path" not in runtime
     assert runtime["seed_inputs"]["source_manifest_path"]
+    assert runtime["openshift_lightspeed"] == {
+        "configured": True,
+        "base_url_present": True,
+        "token_present": True,
+        "provider": "provider-a",
+        "model": "model-a",
+        "timeout_seconds": 17.0,
+        "verify_tls": False,
+    }
 
 
 def test_runtime_report_marks_legacy_files_as_seed_inputs_in_database_runtime(monkeypatch) -> None:
@@ -75,7 +90,6 @@ def test_runtime_report_marks_legacy_files_as_seed_inputs_in_database_runtime(mo
     monkeypatch.setattr(runtime_report, "graph_sidecar_compact_artifact_status", lambda _settings: {"ready": False})
     monkeypatch.setattr(runtime_report, "_probe_llm", lambda _settings, *, sample: {"sample": sample})
     monkeypatch.setattr(runtime_report, "_probe_embedding", lambda _settings, *, sample: {"sample": sample})
-    monkeypatch.setattr(runtime_report, "_probe_qdrant", lambda _settings: {"ok": True})
 
     payload = runtime_report.build_runtime_report(root, ui_base_url=None, sample=False)
 
@@ -85,6 +99,37 @@ def test_runtime_report_marks_legacy_files_as_seed_inputs_in_database_runtime(mo
     assert payload["artifacts"]["source_manifest"]["required_for_runtime"] is False
     assert payload["artifacts"]["chunks"]["role"] == "seed_input"
     assert payload["artifacts"]["bm25_corpus"]["required_for_runtime"] is False
+
+
+def test_lightspeed_placeholder_values_are_ignored() -> None:
+    root = _workspace("lightspeed_placeholders")
+    (root / ".env").write_text(
+        "\n".join(
+            [
+                "OPENSHIFT_LIGHTSPEED_BASE_URL=<lightspeed-route-or-service>",
+                "OPENSHIFT_LIGHTSPEED_API_TOKEN=<token-if-required>",
+                "OPENSHIFT_LIGHTSPEED_PROVIDER=<provider-if-needed>",
+                "OPENSHIFT_LIGHTSPEED_MODEL=<model-if-needed>",
+                "OPENSHIFT_LIGHTSPEED_SYSTEM_PROMPT=<system-prompt-if-needed>",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(root)
+
+    assert settings.openshift_lightspeed_base_url == ""
+    assert settings.openshift_lightspeed_api_token == ""
+    assert settings.openshift_lightspeed_provider == ""
+    assert settings.openshift_lightspeed_model == ""
+    assert settings.openshift_lightspeed_system_prompt == ""
+
+
+def test_lightspeed_default_timeout_allows_slow_introspection_queries() -> None:
+    root = _workspace("lightspeed_default_timeout")
+    settings = load_settings(root)
+
+    assert settings.openshift_lightspeed_timeout_seconds == 90.0
 
 
 def test_seed_manifest_defaults_use_consolidated_corpus_paths() -> None:

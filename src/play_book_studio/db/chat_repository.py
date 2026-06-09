@@ -386,9 +386,10 @@ def persist_chat_turn(
     citation_payloads = [dict(item) for item in (citations or []) if isinstance(item, dict)]
     cited_chunk_ids = _citation_ids(citation_payloads, "chunk_id")
     cited_asset_ids = _citation_ids(citation_payloads, "asset_id")
+    extra_metadata = dict(metadata or {})
     session_metadata = {
         "mode": mode,
-        **dict(metadata or {}),
+        **extra_metadata,
     }
     user_metadata = {
         "turn_id": turn_id,
@@ -397,6 +398,7 @@ def persist_chat_turn(
         "mode": mode,
     }
     assistant_metadata = {
+        **extra_metadata,
         "turn_id": turn_id,
         "parent_turn_id": parent_turn_id,
         "message_kind": "answer",

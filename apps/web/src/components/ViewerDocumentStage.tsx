@@ -5,6 +5,8 @@ export interface ViewerDocumentPayload {
   html: string;
   inlineStyles: string[];
   bodyClassName: string;
+  viewerCacheStatus?: string;
+  viewerTimingsMs?: Record<string, number>;
   interactionPolicy?: {
     codeCopy?: boolean;
     codeWrapToggle?: boolean;
@@ -209,6 +211,18 @@ const VIEWER_READER_POLISH = `
     font-size: 0.88rem !important;
     line-height: 1.65 !important;
     overflow-wrap: anywhere !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root.upload-reader-document .upload-reader .eyebrow {
+    color: #67e8f9 !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root.upload-reader-document .upload-reader h1 {
+    color: #f8fafc !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root.upload-reader-document .upload-reader .summary {
+    color: rgba(226, 232, 240, 0.78) !important;
   }
 
   .viewer-root.upload-reader-document .upload-reader .meta {

@@ -132,6 +132,8 @@ def build_answer_result(
     pipeline_timings_ms: dict[str, float],
     selected_hits: list[dict[str, Any]] | None = None,
     llm_runtime_meta: dict[str, Any] | None = None,
+    answer_source: str = "",
+    external_answer_meta: dict[str, Any] | None = None,
 ) -> AnswerResult:
     trace = retrieval_trace or {}
     pipeline_trace: dict[str, Any] = {
@@ -145,6 +147,10 @@ def build_answer_result(
         pipeline_trace["selection"] = {"selected_hits": selected_hits}
     if llm_runtime_meta is not None:
         pipeline_trace["llm"] = llm_runtime_meta
+    if answer_source:
+        pipeline_trace["answer_source"] = answer_source
+    if external_answer_meta is not None:
+        pipeline_trace["external_answer"] = external_answer_meta
     return AnswerResult(
         query=query,
         mode=mode,

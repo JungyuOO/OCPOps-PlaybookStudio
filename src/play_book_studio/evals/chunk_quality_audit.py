@@ -80,14 +80,15 @@ def _row_cli_commands(row: dict[str, Any], text: str) -> list[str]:
     return [match.group(0).strip() for match in CLI_COMMAND_RE.finditer(text)]
 
 
-def _issue_sample(row: dict[str, Any], *, reason: str) -> dict[str, Any]:
+def _issue_sample(row: dict[str, Any], *, reason: str, token_count: int | None = None) -> dict[str, Any]:
     text = _row_text(row)
     return {
         "chunk_id": str(row.get("chunk_id") or ""),
         "book_slug": str(row.get("book_slug") or ""),
         "section": str(row.get("section") or ""),
         "chunk_type": _row_chunk_type(row),
-        "token_count": _safe_int(row.get("token_count")),
+        "token_count": _safe_int(token_count if token_count is not None else row.get("token_count")),
+        "source_token_count": _safe_int(row.get("token_count")),
         "reason": reason,
         "preview": re.sub(r"\s+", " ", text)[:240],
     }
@@ -113,11 +114,15 @@ def build_chunk_quality_audit(rows: list[dict[str, Any]]) -> dict[str, Any]:
     issue_counts: Counter[str] = Counter()
     issue_samples: dict[str, list[dict[str, Any]]] = defaultdict(list)
     hangul_ratios: list[int] = []
+    source_token_zero_count = 0
 
     for row in rows:
         text = _row_text(row)
         cli_commands = _row_cli_commands(row, text)
-        token_count = _safe_int(row.get("token_count")) or len(text.split())
+        source_token_count = _safe_int(row.get("token_count"))
+        if source_token_count == 0:
+            source_token_zero_count += 1
+        token_count = source_token_count or len(text.split())
         token_counts.append(token_count)
         char_counts.append(len(text))
         command_counts.append(len(cli_commands))
@@ -149,7 +154,7 @@ def build_chunk_quality_audit(rows: list[dict[str, Any]]) -> dict[str, Any]:
         for issue in issues:
             issue_counts[issue] += 1
             if len(issue_samples[issue]) < 8:
-                issue_samples[issue].append(_issue_sample(row, reason=issue))
+                issue_samples[issue].append(_issue_sample(row, reason=issue, token_count=token_count))
 
     total = len(rows)
     command_chunk_count = sum(1 for count in command_counts if count > 0)
@@ -170,6 +175,10 @@ def build_chunk_quality_audit(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "p90": _percentile(token_counts, 0.90),
             "p95": _percentile(token_counts, 0.95),
             "max": max(token_counts or [0]),
+        },
+        "source_token_count": {
+            "zero_count": source_token_zero_count,
+            "zero_rate": _ratio(source_token_zero_count, total),
         },
         "char_count": {
             "p50": _percentile(char_counts, 0.50),

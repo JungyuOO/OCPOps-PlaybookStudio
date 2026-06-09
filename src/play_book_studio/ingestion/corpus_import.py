@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from play_book_studio.db.document_repository import persist_parsed_upload_document
-from play_book_studio.db.qdrant_indexer import index_pending_document_chunks
+from play_book_studio.db.embedding_indexer import index_pending_document_chunks
 from play_book_studio.config.corpus_paths import OFFICIAL_IMPORTED_GOLD_DIR, STUDY_DOCS_DIR
 from play_book_studio.ingestion.document_parsing import build_document_chunks, parse_upload_document
 from play_book_studio.ingestion.learning_metadata import attach_learning_metadata, build_learning_document_index
@@ -210,7 +210,6 @@ def import_corpus_documents(
         index_result = index_pending_document_chunks(
             settings,
             connection,
-            collection=collection.strip() or None,
             limit=max(100, sum(int(item["chunk_count"]) for item in imported)),
         )
 

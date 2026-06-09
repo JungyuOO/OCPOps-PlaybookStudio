@@ -533,6 +533,64 @@ class AppViewersTestSupport(unittest.TestCase):
         self.assertIn(">이전<", multi_html)
         self.assertNotIn(">다음<", multi_html)
 
+    def test_active_runtime_viewer_document_caches_gold_runtime_payload(self) -> None:
+        with self._workspace() as root:
+            runtime_dir = root / "data" / "wiki_runtime_books" / "full_rebuild"
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+            runtime_path = runtime_dir / "support.md"
+            runtime_path.write_text(
+                (
+                    "# 지원\n\n"
+                    "## CRI-O 스토리지 정리\n\n"
+                    "노드 점검 시 `oc adm cordon` 명령으로 새 Pod 배치를 차단합니다.\n"
+                ),
+                encoding="utf-8",
+            )
+            active_manifest_path = root / "data" / "wiki_runtime_books" / "active_manifest.json"
+            active_manifest_path.parent.mkdir(parents=True, exist_ok=True)
+            active_manifest_path.write_text(
+                json.dumps(
+                    {
+                        "generated_at_utc": "2026-06-05T08:00:00+00:00",
+                        "active_group": "full_rebuild",
+                        "entries": [
+                            {
+                                "slug": "support",
+                                "title": "지원",
+                                "runtime_path": str(runtime_path),
+                                "source_lane": "official_ko",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            first_handler = self._capture_json_response()
+            handle_viewer_document(
+                first_handler,
+                urlencode({"viewer_path": "/playbooks/wiki-runtime/active/support/index.html"}),
+                root_dir=root,
+            )
+            second_handler = self._capture_json_response()
+            handle_viewer_document(
+                second_handler,
+                urlencode({"viewer_path": "/playbooks/wiki-runtime/active/support/index.html"}),
+                root_dir=root,
+            )
+
+        self.assertEqual(HTTPStatus.OK, first_handler.calls[0][0])
+        self.assertEqual(HTTPStatus.OK, second_handler.calls[0][0])
+        first_payload = first_handler.calls[0][1]
+        second_payload = second_handler.calls[0][1]
+        self.assertEqual("miss", first_payload["viewer_cache_status"])
+        self.assertEqual("hit", second_payload["viewer_cache_status"])
+        self.assertEqual(first_payload["html"], second_payload["html"])
+        self.assertIn("active_runtime_render_cards", first_payload["viewer_timings_ms"])
+        self.assertIn("active_runtime_supplementary_blocks", first_payload["viewer_timings_ms"])
+        self.assertIn("viewer_cache_lookup", second_payload["viewer_timings_ms"])
+
     def test_active_runtime_viewer_uses_local_asciidoc_overlay_for_missing_link_metadata(self) -> None:
         with self._workspace() as root:
             playbook_dir = self._playbook_dir(root)

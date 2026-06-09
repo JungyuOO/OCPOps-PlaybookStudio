@@ -5,14 +5,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-import requests
-
 from play_book_studio.config.corpus_paths import (
     resolve_official_gold_chunks_path,
     resolve_official_manualbook_playbooks_dir,
 )
 from play_book_studio.config.settings import load_settings
-from play_book_studio.ingestion.embedding import EmbeddingClient
+from play_book_studio.retrieval.vector import VectorRetriever
 
 from .common import tokenize_korean_english
 
@@ -222,38 +220,25 @@ def _iter_official_sections(root_dir: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _query_official_qdrant(root_dir: Path, text: str, *, top_k: int) -> list[dict[str, Any]]:
+def _query_official_pgvector(root_dir: Path, text: str, *, top_k: int) -> list[dict[str, Any]]:
     settings = load_settings(root_dir)
-    client = EmbeddingClient(settings)
-    vector = client.embed_texts([text])[0]
-    response = requests.post(
-        f"{settings.qdrant_url}/collections/{settings.qdrant_collection}/points/query",
-        json={
-            "query": vector,
-            "limit": top_k,
-            "with_payload": True,
-            "with_vector": False,
-        },
-        timeout=max(settings.request_timeout_seconds, 30),
+    hits = VectorRetriever(settings).search(
+        text,
+        top_k,
+        query_filter={"must": [{"key": "source_scope", "match": {"value": "official_docs"}}]},
     )
-    response.raise_for_status()
-    result = response.json().get("result") or {}
-    points = result.get("points") if isinstance(result, dict) else result
     matches: list[dict[str, Any]] = []
-    for point in points or []:
-        payload = point.get("payload") if isinstance(point, dict) else None
-        if not isinstance(payload, dict):
-            continue
+    for hit in hits:
         matches.append(
             {
-                "book_slug": str(payload.get("book_slug") or ""),
-                "section_id": str(payload.get("section_id") or ""),
-                "score": round(float(point.get("score") or 0.0), 3),
-                "snippet": str(payload.get("text") or "")[:240],
-                "title": str(payload.get("book_title") or payload.get("book_slug") or ""),
-                "section_title": str(payload.get("section") or ""),
-                "viewer_path": str(payload.get("viewer_path") or ""),
-                "match_reason": "vector similarity from official collection",
+                "book_slug": hit.book_slug,
+                "section_id": hit.section_id or hit.anchor,
+                "score": round(float(hit.raw_score or 0.0), 3),
+                "snippet": hit.text[:240],
+                "title": hit.book_slug,
+                "section_title": hit.section,
+                "viewer_path": hit.viewer_path,
+                "match_reason": "vector similarity from pgvector official chunks",
             }
         )
     return matches
@@ -357,7 +342,7 @@ def match_official_docs(
         try:
             vector_matches = [
                 match
-                for match in _query_official_qdrant(root_dir, search_text, top_k=top_k)
+                for match in _query_official_pgvector(root_dir, search_text, top_k=top_k)
                 if float(match.get("score") or 0.0) >= min_score
             ]
         except Exception:  # noqa: BLE001

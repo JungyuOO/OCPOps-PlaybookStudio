@@ -25,6 +25,7 @@ export interface Message {
   relatedSections?: ChatRelatedLink[];
   artifacts?: Array<Record<string, unknown>>;
   responseKind?: string;
+  answerSource?: string;
   acquisition?: {
     kind: string;
     title: string;
@@ -46,6 +47,7 @@ export interface Message {
   retrievalTrace?: Record<string, unknown>;
   pipelineTrace?: Record<string, unknown>;
   traceEvents?: ChatTraceEvent[];
+  isStreaming?: boolean;
 }
 
 export interface WorkspaceTestTrace {

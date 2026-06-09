@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OCPOps PBS 작업 보고서</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18212f;
+      --muted: #5d6b7f;
+      --line: #d7e0ea;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --accent: #0f6b8f;
+      --accent-soft: #e8f6fb;
+      --warn-soft: #fff7df;
+      --danger-soft: #fff1f1;
+      --code: #0d3f58;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", Arial, sans-serif;
+      line-height: 1.65;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 44px 24px 72px;
+    }
+
+    header {
+      margin-bottom: 28px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 32px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 38px 0 14px;
+      padding-top: 6px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 24px 0 10px;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    code {
+      color: var(--code);
+      background: #edf5f8;
+      border: 1px solid #d4e8ef;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 0.92em;
+      word-break: break-word;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+
+    .metric b {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .metric span {
+      display: block;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 22px;
+      margin-top: 18px;
+    }
+
+    .note {
+      background: var(--accent-soft);
+      border-left: 4px solid var(--accent);
+      padding: 13px 14px;
+      margin: 16px 0;
+    }
+
+    .warning {
+      background: var(--warn-soft);
+      border-left: 4px solid #c58a00;
+      padding: 13px 14px;
+      margin: 16px 0;
+    }
+
+    .danger {
+      background: var(--danger-soft);
+      border-left: 4px solid #b42318;
+      padding: 13px 14px;
+      margin: 16px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 4px;
+      table-layout: fixed;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #edf2f7;
+      font-size: 13px;
+      color: #324154;
+    }
+
+    td:first-child,
+    th:first-child {
+      width: 32%;
+    }
+
+    ul {
+      margin: 8px 0 0 20px;
+      padding: 0;
+    }
+
+    li {
+      margin: 4px 0;
+    }
+
+    .file-list {
+      columns: 2;
+      column-gap: 28px;
+      margin-top: 8px;
+    }
+
+    .file-list li {
+      break-inside: avoid;
+      margin-bottom: 7px;
+    }
+
+    .tag {
+      display: inline-block;
+      min-width: 64px;
+      margin-right: 6px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #e9eef6;
+      color: #344255;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .tag.add {
+      background: #e6f6ed;
+      color: #146c3d;
+    }
+
+    .tag.modify {
+      background: #e8f3fb;
+      color: #0f5c82;
+    }
+
+    .tag.delete {
+      background: #fdecec;
+      color: #9d241d;
+    }
+
+    .tag.rename {
+      background: #f3edff;
+      color: #5a35a3;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        padding: 28px 14px 48px;
+      }
+
+      .meta {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .file-list {
+        columns: 1;
+      }
+
+      td:first-child,
+      th:first-child {
+        width: 42%;
+      }
+    }
+
+    @media (max-width: 640px) {
+      h1 {
+        font-size: 25px;
+      }
+
+      .meta {
+        grid-template-columns: 1fr;
+      }
+
+      section {
+        padding: 16px;
+      }
+
+      table,
+      thead,
+      tbody,
+      tr,
+      th,
+      td {
+        display: block;
+        width: 100%;
+      }
+
+      thead {
+        display: none;
+      }
+
+      tr {
+        border: 1px solid var(--line);
+        margin-bottom: 12px;
+      }
+
+      td {
+        border: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      td:last-child {
+        border-bottom: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>OCPOps PBS 작업 보고서</h1>
+      <p>
+        이 문서는 협업자가 프로젝트 변경 범위를 빠르게 확인할 수 있도록, 이번 작업에서
+        추가·수정·삭제·이름변경된 파일을 기능 영역별로 정리한 별도 HTML 산출물입니다.
+      </p>
+      <div class="meta" aria-label="작업 기준">
+        <div class="metric">
+          <b>대상 브랜치</b>
+          <span><code>feat/kugnus-dev2.3</code></span>
+        </div>
+        <div class="metric">
+          <b>기준 범위</b>
+          <span><code>7dde93d</code> ~ <code>0d96653</code></span>
+        </div>
+        <div class="metric">
+          <b>최신 HEAD</b>
+          <span><code>0d96653</code></span>
+        </div>
+        <div class="metric">
+          <b>문서 작성일</b>
+          <span>2026-06-05</span>
+        </div>
+      </div>
+    </header>
+
+    <section>
+      <h2>작업내용</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>구분</th>
+            <th>요약</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag add">추가</span>신규 기능 파일</td>
+            <td>
+              OpenShift Lightspeed 클라이언트, 외부 답변 아티팩트, viewer 연동, 테스트용 로컬 응답 서버,
+              pgvector 기반 검색 보강, 신규 평가·테스트 파일이 추가되었습니다.
+            </td>
+          </tr>
+          <tr>
+            <td><span class="tag modify">수정</span>기존 기능 파일</td>
+            <td>
+              채팅 응답 파이프라인, citation 매핑, viewer 라우트, 설정값, 배포 설정,
+              프론트엔드 Workspace 표시 영역, PostgreSQL 적재 흐름이 수정되었습니다.
+            </td>
+          </tr>
+          <tr>
+            <td><span class="tag delete">삭제</span>Qdrant 파일</td>
+            <td>
+              Qdrant 기반 course/indexer/ingestion/store 파일과 OpenShift Qdrant seed job이 제거되었습니다.
+            </td>
+          </tr>
+          <tr>
+            <td><span class="tag rename">이름변경</span>테스트 파일</td>
+            <td>
+              Qdrant payload 테스트가 검색 payload 테스트로 이름이 변경되었습니다.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">
+        변경의 중심은 두 가지입니다. 첫째, Qdrant 의존을 걷어내고 PostgreSQL/pgvector 기반으로 통합했습니다.
+        둘째, OpenShift Lightspeed 답변을 PBS 채팅 응답·참조문서·viewer 흐름에 연결했습니다.
+      </div>
+    </section>
+
+    <section>
+      <h2>추가된파일</h2>
+      <h3>OpenShift Lightspeed 연동</h3>
+      <ul class="file-list">
+        <li><code>src/play_book_studio/integrations/__init__.py</code></li>
+        <li><code>src/play_book_studio/integrations/lightspeed.py</code></li>
+        <li><code>scripts/mock_lightspeed_server.py</code> <span class="small">테스트 전용 로컬 응답 서버</span></li>
+        <li><code>tests/test_lightspeed_client.py</code></li>
+        <li><code>tests/test_lightspeed_viewer.py</code></li>
+        <li><code>apps/web/src/pages/workspace/WorkspaceAnswer.test.tsx</code></li>
+      </ul>
+
+      <h3>PostgreSQL/pgvector 검색 통합</h3>
+      <ul class="file-list">
+        <li><code>db/migrations/0010_pgvector_chunk_embeddings.sql</code></li>
+        <li><code>db/migrations/0011_drop_legacy_qdrant_index_entries.sql</code></li>
+        <li><code>src/play_book_studio/db/embedding_indexer.py</code></li>
+        <li><code>src/play_book_studio/course/chunk_loader.py</code></li>
+        <li><code>src/play_book_studio/course/search_payload.py</code></li>
+        <li><code>src/play_book_studio/retrieval/payload.py</code></li>
+        <li><code>tests/test_embedding_indexer.py</code></li>
+      </ul>
+
+      <h3>평가·데이터·작업 문서</h3>
+      <ul class="file-list">
+        <li><code>corpus/manifests/eval/retrieval_foundation_p0_cases.jsonl</code></li>
+        <li><code>data/wiki_runtime_books/full_rebuild/monitoring.md</code></li>
+        <li><code>src/play_book_studio/evals/answer_viewer_audit.py</code></li>
+        <li><code>src/play_book_studio/evals/rag_foundation_audit.py</code></li>
+        <li><code>.kugnus-plan/README.md</code></li>
+        <li><code>.kugnus-plan/change-inventory.md</code></li>
+        <li><code>.kugnus-plan/company-openshift-lightspeed-next.md</code></li>
+        <li><code>.kugnus-plan/lightspeed-call-proof-report.md</code></li>
+        <li><code>.kugnus-plan/lightspeed-pbs-chat-integration.md</code></li>
+        <li><code>.kugnus-plan/macbook-crc-lightspeed-runbook.md</code></li>
+        <li><code>.kugnus-plan/pbs-enhancement-plan.md</code></li>
+        <li><code>.kugnus-plan/pgvector-acceptance-check.md</code></li>
+        <li><code>.kugnus-plan/pgvector-change-summary.md</code></li>
+        <li><code>.kugnus-plan/pgvector-transition-handoff.md</code></li>
+        <li><code>.kugnus-plan/plan1.md</code></li>
+        <li><code>.kugnus-plan/rag-foundation/00-baseline.md</code></li>
+        <li><code>.kugnus-plan/rag-foundation/01-chunk-audit.md</code></li>
+        <li><code>.kugnus-plan/rag-foundation/02-embedding-index-audit.md</code></li>
+        <li><code>.kugnus-plan/rag-foundation/03-retrieval-eval.md</code></li>
+        <li><code>.kugnus-plan/rag-foundation/04-answer-viewer-check.md</code></li>
+        <li><code>.kugnus-plan/rag-foundation/05-go-no-go.md</code></li>
+        <li><code>.kugnus-plan/rag-foundation/06-crc-check.md</code></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>수정한파일</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>영역</th>
+            <th>파일</th>
+            <th>변경 내용</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>환경·설정</td>
+            <td>
+              <code>.env.production.example</code><br />
+              <code>.gitignore</code><br />
+              <code>src/play_book_studio/config/corpus_paths.py</code><br />
+              <code>src/play_book_studio/config/packs.py</code><br />
+              <code>src/play_book_studio/config/settings.py</code><br />
+              <code>src/play_book_studio/config/settings_paths.py</code><br />
+              <code>src/play_book_studio/config/validation.py</code>
+            </td>
+            <td>
+              PostgreSQL/pgvector, Lightspeed 호출 설정, timeout 기본값, 아티팩트 경로,
+              런타임 로그 제외 범위를 반영했습니다.
+            </td>
+          </tr>
+          <tr>
+            <td>배포 설정</td>
+            <td>
+              <code>docker-compose.yml</code><br />
+              <code>deploy/docker-compose.image.yml</code><br />
+              <code>deploy/docker-compose.prod.yml</code><br />
+              <code>deploy/DEPLOY.md</code><br />
+              <code>deploy/openshift/README.md</code><br />
+              <code>deploy/openshift/app.yaml</code><br />
+              <code>deploy/openshift/apply-playbookstudio.sh</code><br />
+              <code>deploy/openshift/core.yaml</code><br />
+              <code>deploy/openshift/job-kmsc-corpus-seed.yaml</code><br />
+              <code>deploy/openshift/job-official-corpus-seed.yaml</code><br />
+              <code>deploy/openshift/kustomization.yaml</code>
+            </td>
+            <td>
+              Qdrant 배포 전제를 제거하고 PostgreSQL 중심 초기화·적재·마이그레이션 흐름으로 정리했습니다.
+              Lightspeed timeout 설정도 배포 파일에 반영했습니다.
+            </td>
+          </tr>
+          <tr>
+            <td>백엔드 채팅 응답</td>
+            <td>
+              <code>src/play_book_studio/answering/answerer.py</code><br />
+              <code>src/play_book_studio/answering/context.py</code><br />
+              <code>src/play_book_studio/answering/pipeline_helpers.py</code><br />
+              <code>src/play_book_studio/answering/prompt.py</code><br />
+              <code>src/play_book_studio/db/chat_repository.py</code><br />
+              <code>src/play_book_studio/http/chat_debug.py</code><br />
+              <code>src/play_book_studio/http/server_chat.py</code><br />
+              <code>src/play_book_studio/http/server_routes_ops.py</code><br />
+              <code>src/play_book_studio/http/server_routes_viewer.py</code><br />
+              <code>src/play_book_studio/http/server_support.py</code><br />
+              <code>src/play_book_studio/http/sessions.py</code><br />
+              <code>src/play_book_studio/cli.py</code>
+            </td>
+            <td>
+              OpenShift 운영 질의에서 Lightspeed 우선 호출 후 PBS RAG 참조를 결합하도록 수정했습니다.
+              Lightspeed 답변 아티팩트 viewer, 호출 증적, citation 번호 매핑, markdown 표시를 보강했습니다.
+              후속 수정으로 Lightspeed 성공 시 PBS LLM 재작성 없이 원문 답변을 반환하도록 바꿨습니다.
+            </td>
+          </tr>
+          <tr>
+            <td>Lightspeed 라우팅</td>
+            <td>
+              <code>src/play_book_studio/integrations/lightspeed.py</code>
+            </td>
+            <td>
+              권한·명령어·운영 절차성 질문을 Lightspeed 후보로 분류하고,
+              공식 문서 제목·URL 요청 문장을 함께 보내도록 조정했습니다.
+              <code>잇</code> 같은 흔한 한글 오타는 내부 Lightspeed 요청에서 <code>있</code>으로 보정합니다.
+            </td>
+          </tr>
+          <tr>
+            <td>검색·인덱싱</td>
+            <td>
+              <code>src/play_book_studio/course/build_index.py</code><br />
+              <code>src/play_book_studio/course/pipeline/official_doc_matcher.py</code><br />
+              <code>src/play_book_studio/db/corpus_status.py</code><br />
+              <code>src/play_book_studio/db/document_repository.py</code><br />
+              <code>src/play_book_studio/ingestion/corpus_import.py</code><br />
+              <code>src/play_book_studio/ingestion/pipeline.py</code><br />
+              <code>src/play_book_studio/ingestion/runtime_catalog_library.py</code><br />
+              <code>src/play_book_studio/retrieval/bm25.py</code><br />
+              <code>src/play_book_studio/retrieval/chunk_hydration.py</code><br />
+              <code>src/play_book_studio/retrieval/query.py</code><br />
+              <code>src/play_book_studio/retrieval/retriever_pipeline.py</code><br />
+              <code>src/play_book_studio/retrieval/retriever_search.py</code><br />
+              <code>src/play_book_studio/retrieval/vector.py</code>
+            </td>
+            <td>
+              Qdrant payload 전제를 제거하고 PostgreSQL 테이블과 pgvector 임베딩 검색을 기준으로
+              적재·검색·평가 경로를 맞췄습니다.
+            </td>
+          </tr>
+          <tr>
+            <td>프론트엔드</td>
+            <td>
+              <code>apps/web/src/lib/runtimeApi.ts</code><br />
+              <code>apps/web/src/pages/PlaybookLibraryPage.tsx</code><br />
+              <code>apps/web/src/pages/WorkspacePage.tsx</code><br />
+              <code>apps/web/src/pages/workspace/WorkspaceAnswer.tsx</code><br />
+              <code>apps/web/src/pages/workspaceTypes.ts</code>
+            </td>
+            <td>
+              답변 출처 badge, 관련 문서, 바로 볼 절차, citation 클릭 동작과 runtime API 타입을
+              Lightspeed/PBS 결합 응답에 맞게 보강했습니다.
+            </td>
+          </tr>
+          <tr>
+            <td>문서·코퍼스</td>
+            <td>
+              <code>README.md</code><br />
+              <code>corpus/README.md</code><br />
+              <code>spec/v0.1.3/planner.md</code>
+            </td>
+            <td>
+              현재 구조가 PostgreSQL 중심이라는 점과 Lightspeed 연동 증적, 작업 계획을 맞춰 정리했습니다.
+              공유 계정 예시 표현도 실제 운영 문맥에 맞게 정리했습니다.
+            </td>
+          </tr>
+          <tr>
+            <td>테스트</td>
+            <td>
+              <code>tests/test_answerer_llm_final.py</code><br />
+              <code>tests/test_app_server.py</code><br />
+              <code>tests/test_chat_grounding_quality.py</code><br />
+              <code>tests/test_chat_latency_logging.py</code><br />
+              <code>tests/test_chat_repository.py</code><br />
+              <code>tests/test_db_migrations.py</code><br />
+              <code>tests/test_deploy_seed_commands.py</code><br />
+              <code>tests/test_retrieval_access_scope.py</code><br />
+              <code>tests/test_retrieval_plan_expansion.py</code><br />
+              <code>tests/test_vector_retriever.py</code>
+            </td>
+            <td>
+              Qdrant 제거, pgvector 검색, Lightspeed 호출 성공·실패, citation 번호 매핑,
+              viewer 라우팅을 검증하도록 테스트 기대값을 수정했습니다.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>삭제된파일</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>파일</th>
+            <th>삭제 이유</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>deploy/openshift/job-qdrant-seed.yaml</code></td>
+            <td>Qdrant seed job이 더 이상 배포 경로에 필요하지 않습니다.</td>
+          </tr>
+          <tr>
+            <td><code>src/play_book_studio/course/qdrant_course.py</code></td>
+            <td>course 검색 저장소가 PostgreSQL 기반으로 대체되었습니다.</td>
+          </tr>
+          <tr>
+            <td><code>src/play_book_studio/db/qdrant_indexer.py</code></td>
+            <td>임베딩 인덱서가 <code>embedding_indexer.py</code>로 대체되었습니다.</td>
+          </tr>
+          <tr>
+            <td><code>src/play_book_studio/ingestion/official_embedding_qdrant.py</code></td>
+            <td>공식 문서 임베딩 적재가 PostgreSQL/pgvector 경로로 통합되었습니다.</td>
+          </tr>
+          <tr>
+            <td><code>src/play_book_studio/ingestion/qdrant_store.py</code></td>
+            <td>Qdrant store 추상화가 제거되었습니다.</td>
+          </tr>
+          <tr>
+            <td><code>tests/test_qdrant_indexer.py</code></td>
+            <td>Qdrant 인덱서 테스트가 PostgreSQL 인덱서 테스트로 대체되었습니다.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>이름변경파일</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>변경 전</th>
+            <th>변경 후</th>
+            <th>변경 이유</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>tests/test_course_qdrant_payload.py</code></td>
+            <td><code>tests/test_course_search_payload.py</code></td>
+            <td>테스트 대상이 Qdrant 전용 payload가 아니라 검색 payload 일반 계약으로 바뀌었습니다.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>협업자 확인 포인트</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>우선순위</th>
+            <th>확인 파일</th>
+            <th>확인할 내용</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>
+              <code>src/play_book_studio/answering/answerer.py</code><br />
+              <code>src/play_book_studio/integrations/lightspeed.py</code>
+            </td>
+            <td>
+              어떤 질문이 Lightspeed로 라우팅되는지, 실패 시 PBS RAG fallback으로 내려가는지 확인합니다.
+            </td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>
+              <code>src/play_book_studio/http/server_chat.py</code><br />
+              <code>src/play_book_studio/http/server_routes_viewer.py</code>
+            </td>
+            <td>
+              Lightspeed citation이 <code>[1]</code>로 고정되고 viewer 링크가 Gold Playbook으로 섞이지 않는지 확인합니다.
+            </td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>
+              <code>apps/web/src/pages/workspace/WorkspaceAnswer.tsx</code><br />
+              <code>apps/web/src/lib/runtimeApi.ts</code>
+            </td>
+            <td>
+              관련 문서 카드, 바로 볼 절차, badge, citation 클릭 결과가 응답 source와 일치하는지 확인합니다.
+            </td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>
+              <code>src/play_book_studio/db/embedding_indexer.py</code><br />
+              <code>db/migrations/0010_pgvector_chunk_embeddings.sql</code>
+            </td>
+            <td>
+              Qdrant 제거 후 임베딩 저장·검색이 PostgreSQL/pgvector 경로로 동작하는지 확인합니다.
+            </td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>
+              <code>tests/test_lightspeed_client.py</code><br />
+              <code>tests/test_lightspeed_viewer.py</code><br />
+              <code>tests/test_answerer_llm_final.py</code>
+            </td>
+            <td>
+              Lightspeed 성공·timeout·viewer·citation 번호 매핑·원문 보존·오타 보정 회귀 테스트를 우선 확인합니다.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="warning">
+        긴 범위의 질문은 Lightspeed 응답이 timeout으로 실패할 수 있습니다. 이 경우 현재 구현은 답변을 중단하지 않고
+        PBS RAG로 fallback합니다. 해당 동작은 장애가 아니라 방어 동작이며, 긴 질문 최적화는 별도 개선 항목입니다.
+      </div>
+    </section>
+
+    <section>
+      <h2>검증 기록</h2>
+      <ul>
+        <li>Python 테스트: <code>606 passed, 1 skipped, 10 subtests passed</code></li>
+        <li>후속 Lightspeed 회귀 테스트: <code>37 passed</code></li>
+        <li>Frontend 테스트: <code>1 file passed, 2 tests passed</code></li>
+        <li>Frontend build: <code>npm --prefix apps/web run build</code> 통과</li>
+        <li>정적 확인: <code>git diff --check</code> 통과</li>
+        <li>런타임 확인: app/postgres/web 컨테이너 health 정상 확인</li>
+      </ul>
+      <p class="small">
+        이 문서는 파일 변경 인수인계용 산출물이며, 토큰·내부 endpoint·인증정보는 포함하지 않았습니다.
+      </p>
+    </section>
+  </main>
+</body>
+</html>

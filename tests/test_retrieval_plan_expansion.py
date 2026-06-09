@@ -72,6 +72,40 @@ class _InstallSignalClient:
         """
 
 
+class _GenericIntroDriftSignalClient:
+    def generate(self, _messages: list[dict[str, str]], *, max_tokens: int) -> str:
+        return """
+        {
+          "normalized_query": "OpenShift route ingress load balancing",
+          "classification": {
+            "domain": "networking",
+            "book_slug_candidates": ["ingress_and_load_balancing"],
+            "platform": "any_platform",
+            "ocp_version": "4.20",
+            "locale": "ko"
+          },
+          "search_signals": {
+            "objects": ["Route"],
+            "error_states": [],
+            "intent_labels": ["explain_concept"],
+            "answer_shapes": ["short_explanation"],
+            "command_families": [],
+            "primary_topics": ["Route ingress"],
+            "cluster_phase": [],
+            "execution_target": [],
+            "commands": [],
+            "secondary_topics": [],
+            "components": []
+          },
+          "confidence": {"domain": 0.96},
+          "embedding_queries": [
+            "OpenShift route ingress load balancing",
+            "Router ingress controller configuration"
+          ]
+        }
+        """
+
+
 def _must_keys(metadata_filter: dict[str, object]) -> set[str]:
     must = metadata_filter.get("must")
     if not isinstance(must, list):
@@ -111,6 +145,19 @@ def test_retrieval_plan_does_not_expand_simple_node_status_into_logs() -> None:
     assert "node-logs" not in combined
 
 
+def test_korean_network_policy_query_adds_network_policy_signals() -> None:
+    plan = build_retrieval_plan(
+        "OpenShift 네트워크 정책과 pod 통신 제한을 확인하고 싶어",
+        context=SessionContext(),
+        candidate_k=10,
+    )
+
+    combined = " ".join(plan.retrieval_queries)
+    assert "NetworkPolicy" in combined
+    assert plan.metadata_filter.get("_domain_boosts") == ("networking",)
+    assert "NetworkPolicy" in plan.metadata_filter["_intent_signal_boosts"]["objects"]
+
+
 def test_study_docs_scope_keeps_user_query_and_skips_official_metadata_filter() -> None:
     plan = build_retrieval_plan(
         "운영 장애 분석에서 증상과 근거는 어떤 순서로 정리하나요?",
@@ -119,8 +166,9 @@ def test_study_docs_scope_keeps_user_query_and_skips_official_metadata_filter() 
         llm_client=_DriftingSignalClient(),
     )
 
-    assert plan.retrieval_queries == [plan.rewritten_query]
+    assert plan.retrieval_queries[0] == plan.rewritten_query
     assert "운영 장애 분석" in plan.retrieval_queries[0]
+    assert "운영 장애 분석" in " ".join(plan.retrieval_queries)
     assert plan.metadata_filter == {}
 
 
@@ -202,3 +250,31 @@ def test_mixed_scope_removes_official_only_metadata_filter() -> None:
     assert "source.corpus_scope" not in keys
     assert "source.citation_eligible" not in keys
     assert "chunk.chunk_type" not in keys
+
+
+def test_customer_docs_scope_preserves_raw_customer_document_query() -> None:
+    query = "완료보고서 기준으로 현재 OCP 운영 준비 리스크를 공식 운영 체크포인트와 같이 정리해줘"
+
+    plan = build_retrieval_plan(
+        query,
+        context=SessionContext(enabled_source_scopes=["official_docs", "customer_docs"]),
+        candidate_k=10,
+    )
+
+    assert query in plan.retrieval_queries
+    assert plan.retrieval_queries[0] != query
+
+
+def test_generic_intro_uses_local_rewrite_when_llm_signal_drifts() -> None:
+    plan = build_retrieval_plan(
+        "오픈시프트가뭐야",
+        context=SessionContext(enabled_source_scopes=["official_docs", "customer_docs", "user_upload"]),
+        candidate_k=10,
+        llm_client=_GenericIntroDriftSignalClient(),
+    )
+
+    assert plan.retrieval_queries == [plan.rewritten_query]
+    assert "OpenShift Container Platform" in plan.retrieval_queries[0]
+    keys = _must_keys(plan.metadata_filter)
+    assert "source.corpus_scope" in keys
+    assert "source.citation_eligible" in keys

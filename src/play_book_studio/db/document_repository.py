@@ -611,9 +611,9 @@ def find_document_source_by_sha(
                 WHERE dc.parsed_document_id = pd.id
             ) chunk_counts ON TRUE
             LEFT JOIN LATERAL (
-                SELECT count(qie.chunk_id) AS indexed_count
+                SELECT count(ce.chunk_id) AS indexed_count
                 FROM document_chunks dc
-                JOIN qdrant_index_entries qie ON qie.chunk_id = dc.id
+                JOIN chunk_embeddings ce ON ce.chunk_id = dc.id
                 WHERE dc.parsed_document_id = pd.id
             ) index_counts ON TRUE
             WHERE t.slug = %s
@@ -652,10 +652,10 @@ def delete_document_source(
     """document_source 한 건 삭제. owner_user_id 일치 검증.
 
     FK 가 ON DELETE CASCADE 로 걸려있어 document_versions/parse_jobs/parsed_documents/
-    document_blocks/document_chunks/document_assets/qdrant_index_entries 가 자동으로 따라
-    지워진다. 호출자는 별도로 Qdrant point 와 디스크 원본을 청소해야 한다.
+    document_blocks/document_chunks/document_assets/chunk_embeddings 가 자동으로 따라
+    지워진다. 호출자는 별도로 디스크 원본을 청소해야 한다.
 
-    삭제 전 storage_key, chunk_ids, qdrant_point_ids 등을 모아서 반환 → 후속 cleanup 용.
+    삭제 전 storage_key 와 embedding row 수를 모아서 반환한다.
     """
     document_source_id = str(document_source_id or "").strip()
     if not document_source_id:
@@ -683,20 +683,15 @@ def delete_document_source(
 
         cursor.execute(
             """
-            SELECT qie.point_id, qie.collection
-            FROM qdrant_index_entries qie
-            JOIN document_chunks dc ON dc.id = qie.chunk_id
+            SELECT count(ce.chunk_id)::int
+            FROM chunk_embeddings ce
+            JOIN document_chunks dc ON dc.id = ce.chunk_id
             JOIN parsed_documents pd ON pd.id = dc.parsed_document_id
             WHERE pd.document_source_id = %s::uuid
             """,
             (document_source_id,),
         )
-        qdrant_points: list[dict[str, str]] = []
-        for row in cursor.fetchall():
-            point_id = str(row[0] or "").strip()
-            collection = str(row[1] or "").strip()
-            if point_id:
-                qdrant_points.append({"point_id": point_id, "collection": collection})
+        embedding_rows = int((cursor.fetchone() or [0])[0] or 0)
 
         cursor.execute(
             "DELETE FROM document_sources WHERE id = %s::uuid",
@@ -711,7 +706,7 @@ def delete_document_source(
         "visibility": str(head[3] or ""),
         "source_scope": str(head[4] or ""),
         "filename": str(head[5] or ""),
-        "qdrant_points": qdrant_points,
+        "embedding_rows": embedding_rows,
         "deleted_rows": int(deleted_rows),
     }
 
@@ -993,7 +988,7 @@ def list_document_repositories(
                     ds.metadata,
                     COALESCE(pj.status, CASE WHEN pd.id IS NULL THEN 'pending' ELSE 'completed' END) AS parse_status,
                     count(dc.id)::int AS chunk_count,
-                    count(qie.chunk_id)::int AS indexed_chunk_count,
+                    count(ce.chunk_id)::int AS indexed_chunk_count,
                     ds.created_at,
                     COALESCE(max(pd.created_at), ds.created_at) AS updated_at
                 FROM document_sources ds
@@ -1012,7 +1007,7 @@ def list_document_repositories(
                     LIMIT 1
                 ) pj ON TRUE
                 LEFT JOIN document_chunks dc ON dc.parsed_document_id = pd.id
-                LEFT JOIN qdrant_index_entries qie ON qie.chunk_id = dc.id
+                LEFT JOIN chunk_embeddings ce ON ce.chunk_id = dc.id
                 WHERE ds.repository_id = ANY(%s::uuid[])
                 GROUP BY
                     ds.repository_id,

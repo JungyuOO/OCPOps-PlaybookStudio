@@ -19,7 +19,7 @@ from play_book_studio.ingestion.official_gold_import import (
     write_official_embedding_chunks,
     write_official_text_layers,
 )
-from play_book_studio.ingestion.official_embedding_qdrant import build_official_embedding_qdrant_candidates
+from play_book_studio.retrieval.payload import retrieval_payload_from_row
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TEST_TMP = REPO_ROOT / "tmp" / "official_gold_import_tests"
@@ -88,13 +88,6 @@ def test_official_gold_import_parser_accepts_args():
             "--index",
             "--index-limit",
             "30000",
-            "--refresh-qdrant-payloads",
-            "--collection",
-            "openshift_docs",
-            "--refresh-limit",
-            "30000",
-            "--refresh-batch-size",
-            "128",
             "--embedding-chunks-path",
             "corpus/sources/official/imported-gold/gold_corpus_ko/embeddings/embedding_chunks.jsonl",
             "--text-layers-path",
@@ -108,41 +101,12 @@ def test_official_gold_import_parser_accepts_args():
     assert args.limit == 25
     assert args.index is True
     assert args.index_limit == 30000
-    assert args.refresh_qdrant_payloads is True
-    assert args.collection == "openshift_docs"
-    assert args.refresh_limit == 30000
-    assert args.refresh_batch_size == 128
     assert args.embedding_chunks_path == Path(
         "corpus/sources/official/imported-gold/gold_corpus_ko/embeddings/embedding_chunks.jsonl"
     )
     assert args.text_layers_path == Path(
         "corpus/sources/official/imported-gold/gold_corpus_ko/text-layers/text_layers.jsonl"
     )
-    assert args.dry_run is True
-
-
-def test_official_embedding_qdrant_parser_accepts_args():
-    args = build_parser().parse_args(
-        [
-            "official-embedding-qdrant-upsert",
-            "--root-dir",
-            str(REPO_ROOT),
-            "--chunks-path",
-            "corpus/sources/official/imported-gold/gold_corpus_ko/chunks.jsonl",
-            "--embedding-chunks-path",
-            "corpus/sources/official/imported-gold/gold_corpus_ko/embeddings/embedding_chunks.jsonl",
-            "--collection",
-            "openshift_docs",
-            "--delete-skipped",
-            "--sync-db",
-            "--dry-run",
-        ]
-    )
-
-    assert args.command == "official-embedding-qdrant-upsert"
-    assert args.collection == "openshift_docs"
-    assert args.delete_skipped is True
-    assert args.sync_db is True
     assert args.dry_run is True
 
 
@@ -410,9 +374,9 @@ def test_write_official_embedding_chunks_repairs_placeholder_artifacts():
     )
 
 
-def test_build_official_embedding_qdrant_candidates_uses_clean_text_without_raw_payload():
-    chunks_path = TEST_TMP / "qdrant-source.jsonl"
-    embedding_path = TEST_TMP / "embeddings" / "qdrant-embedding.jsonl"
+def test_official_embedding_payload_uses_clean_text_without_raw_payload():
+    chunks_path = TEST_TMP / "pgvector-source.jsonl"
+    embedding_path = TEST_TMP / "embeddings" / "pgvector-embedding.jsonl"
     source_row = {
         "chunk_id": "22222222-2222-2222-2222-222222222222",
         "book_slug": "storage",
@@ -437,20 +401,63 @@ def test_build_official_embedding_qdrant_candidates_uses_clean_text_without_raw_
     }
     _write_jsonl(chunks_path, [source_row])
     write_official_embedding_chunks(chunks_path, embedding_path)
+    embedding_row = json.loads(embedding_path.read_text(encoding="utf-8").strip())
 
-    candidates = build_official_embedding_qdrant_candidates(
-        chunks_path=chunks_path,
-        embedding_chunks_path=embedding_path,
+    payload = retrieval_payload_from_row(
+        {
+            "chunk_id": source_row["chunk_id"],
+            "chunk_key": "storage:pvc-pending",
+            "ordinal": 0,
+            "chunk_type": "reference",
+            "markdown": source_row["text"],
+            "embedding_text": embedding_row["embedding_text"],
+            "section_path": source_row["section_path"],
+            "section_number": "1.1",
+            "heading_title": source_row["section"],
+            "source_anchor": source_row["anchor"],
+            "toc_path": source_row["section_path"],
+            "asset_ids": [],
+            "chunk_role": "leaf",
+            "parent_chunk_id": "",
+            "child_chunk_ids": [],
+            "navigation_only": False,
+            "beginner_narrative": "",
+            "starter_question_candidates": [],
+            "followup_question_candidates": [],
+            "question_candidates_version": 0,
+            "repository_id": None,
+            "owner_user_id": "",
+            "visibility": "global_shared",
+            "source_scope": "official_docs",
+            "chunk_metadata": {
+                **source_row,
+                "text_layers": {
+                    "embedding_text": embedding_row["embedding_text"],
+                    "normalized_text": embedding_row["normalized_text"],
+                },
+            },
+            "parsed_document_id": "11111111-1111-1111-1111-111111111111",
+            "document_title": source_row["book_title"],
+            "parsed_metadata": {"document_format": "official_gold_jsonl"},
+            "document_source_id": "33333333-3333-3333-3333-333333333333",
+            "filename": "storage.jsonl",
+            "storage_key": "official/storage.jsonl",
+            "source_kind": "official_gold",
+            "source_metadata": {
+                "document_format": "official_gold_jsonl",
+                "source_scope": "official_docs",
+                "visibility": "global_shared",
+            },
+            "created_by": "system",
+        }
     )
 
-    assert len(candidates) == 1
-    candidate = candidates[0]
-    assert candidate.embedding_text == "$ oc describe pvc <pvc-name>"
-    assert candidate.payload["text"] == "$ oc describe pvc <pvc-name>"
-    assert candidate.payload["text_fields"]["embedding_text"] == "$ oc describe pvc <pvc-name>"
-    assert candidate.payload["text_fields"]["normalized_text"] == "oc describe pvc pvc name"
-    assert candidate.payload["text"] == candidate.payload["text_fields"]["embedding_text"]
-    assert candidate.payload["chunk_metadata"]["text_layers"]["embedding_text"] == "$ oc describe pvc <pvc-name>"
-    assert candidate.payload["chunk_metadata"]["text_layers"]["normalized_text"] == "oc describe pvc pvc name"
-    assert "raw_text" not in json.dumps(candidate.payload, ensure_ascii=False)
-    assert candidate.payload["source"]["corpus_scope"] == "official_docs"
+    assert embedding_row["embedding_text"] == "$ oc describe pvc <pvc-name>"
+    assert payload["text"] == "$ oc describe pvc <pvc-name>"
+    assert payload["text_fields"]["embedding_text"] == "$ oc describe pvc <pvc-name>"
+    assert payload["text_fields"]["normalized_text"] == "oc describe pvc pvc name"
+    assert payload["text"] == payload["text_fields"]["embedding_text"]
+    assert payload["chunk_metadata"]["text_layers"]["embedding_text"] == "$ oc describe pvc <pvc-name>"
+    assert payload["chunk_metadata"]["text_layers"]["normalized_text"] == "oc describe pvc pvc name"
+    assert "raw_text" not in json.dumps(payload, ensure_ascii=False)
+    assert payload["source"]["corpus_scope"] == "official_docs"

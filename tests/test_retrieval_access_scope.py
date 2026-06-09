@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from play_book_studio.retrieval.access_scope import filter_hits_by_session_scope, hit_visible_to_session
 from play_book_studio.retrieval.models import RetrievalHit, SessionContext
-from play_book_studio.retrieval.retriever_search import _session_scope_qdrant_filter, _session_scope_row_filter
+from play_book_studio.retrieval.retriever_search import _session_scope_row_filter, _session_scope_vector_filter
 from play_book_studio.retrieval.vector import hit_from_payload
 
 
@@ -297,7 +297,7 @@ def test_enabled_upload_document_ids_override_active_repository_filter():
     ]
 
 
-def test_enabled_upload_document_ids_are_prefiltered_for_bm25_and_qdrant():
+def test_enabled_upload_document_ids_are_prefiltered_for_bm25_and_vector():
     context = SessionContext(
         owner_user_id="owner-a",
         enabled_source_scopes=["user_upload"],
@@ -309,7 +309,7 @@ def test_enabled_upload_document_ids_are_prefiltered_for_bm25_and_qdrant():
     assert row_filter({"document_source_id": "doc-b", "source_scope": "user_upload"})
     assert not row_filter({"document_source_id": "doc-a", "source_scope": "user_upload"})
 
-    assert _session_scope_qdrant_filter(context) == {
+    assert _session_scope_vector_filter(context) == {
         "must": [{"key": "document_source_id", "match": {"value": "doc-b"}}]
     }
 
@@ -328,7 +328,7 @@ def test_active_document_overrides_single_selected_upload_document_id():
     assert not row_filter({"document_source_id": "doc-b", "source_scope": "user_upload"})
     assert not row_filter({"book_slug": "storage", "source_scope": "official_docs"})
 
-    assert _session_scope_qdrant_filter(context) == {
+    assert _session_scope_vector_filter(context) == {
         "must": [{"key": "document_source_id", "match": {"value": "doc-a"}}]
     }
 
@@ -347,7 +347,7 @@ def test_active_document_does_not_override_expanded_upload_document_ids():
     assert row_filter({"document_source_id": "doc-b", "source_scope": "user_upload"})
     assert row_filter({"book_slug": "storage", "source_scope": "official_docs"})
 
-    assert _session_scope_qdrant_filter(context) == {
+    assert _session_scope_vector_filter(context) == {
         "should": [
             {"key": "document_source_id", "match": {"value": "doc-a"}},
             {"key": "document_source_id", "match": {"value": "doc-b"}},
@@ -435,12 +435,12 @@ def test_active_document_does_not_override_when_user_upload_scope_is_disabled():
     assert not row_filter({"document_source_id": "doc-a", "source_scope": "user_upload"})
     assert row_filter({"book_slug": "storage", "source_scope": "official_docs"})
 
-    assert _session_scope_qdrant_filter(context) == {
+    assert _session_scope_vector_filter(context) == {
         "should": [{"key": "source_scope", "match": {"value": "official_docs"}}]
     }
 
 
-def test_enabled_upload_document_ids_keep_other_enabled_scopes_in_qdrant_filter():
+def test_enabled_upload_document_ids_keep_other_enabled_scopes_in_vector_filter():
     context = SessionContext(
         owner_user_id="owner-a",
         enabled_source_scopes=["official_docs", "user_upload"],
@@ -453,8 +453,8 @@ def test_enabled_upload_document_ids_keep_other_enabled_scopes_in_qdrant_filter(
     assert not row_filter({"document_source_id": "doc-a", "source_scope": "user_upload"})
     assert row_filter({"book_slug": "storage", "source_scope": "official_docs"})
 
-    qdrant_filter = _session_scope_qdrant_filter(context)
-    assert qdrant_filter == {
+    vector_filter = _session_scope_vector_filter(context)
+    assert vector_filter == {
         "should": [
             {"key": "document_source_id", "match": {"value": "doc-b"}},
             {"key": "source_scope", "match": {"value": "official_docs"}},

@@ -79,6 +79,7 @@ from .intent_detectors import (
     has_deployment_scaling_intent,
     has_command_request,
     is_generic_intro_query,
+    is_openshift_product_intro_query,
     has_openshift_kubernetes_compare_intent,
     has_route_ingress_compare_intent,
     is_explainer_query,

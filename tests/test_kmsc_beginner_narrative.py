@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from play_book_studio.course.qdrant_course import load_ops_learning_chunks
+from play_book_studio.course.search_payload import load_ops_learning_chunks
 from play_book_studio.ingestion.kmsc_beginner_narrative import (
     build_beginner_narrative,
     derive_ops_learning_chunks,

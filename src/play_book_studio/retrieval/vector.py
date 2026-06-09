@@ -1,14 +1,13 @@
-# Qdrant 기반 의미 검색을 담당하는 최소 vector retriever다.
+# pgvector 기반 의미 검색을 담당하는 최소 vector retriever다.
 # hybrid retrieval에서는 이 모듈이 semantic 후보만 준비하고, 최종 결합은 retriever가 맡는다.
 from __future__ import annotations
 
 import time
 from typing import Any
 
-import requests
-
 from play_book_studio.config.settings import Settings
 from play_book_studio.ingestion.embedding import EmbeddingClient
+from play_book_studio.retrieval.payload import retrieval_payload_from_row, vector_literal
 
 from .models import RetrievalHit
 
@@ -72,7 +71,7 @@ def hit_from_payload(payload: dict[str, Any], *, source: str, score: float) -> R
 
 
 class VectorRetriever:
-    """hybrid retrieval의 한 신호로 쓰이는 최소 Qdrant vector retriever."""
+    """hybrid retrieval의 한 신호로 쓰이는 PostgreSQL pgvector retriever."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -100,84 +99,131 @@ class VectorRetriever:
         embedding_started_at = time.perf_counter()
         vector = self.embedding_client.embed_texts([query])[0]
         embedding_ms = round((time.perf_counter() - embedding_started_at) * 1000, 1)
-        payloads = [
-            (
-                f"{self.settings.qdrant_url}/collections/{self.settings.qdrant_collection}/points/search",
-                {
-                    "vector": vector,
-                    "limit": top_k,
-                    "with_payload": True,
-                    "with_vector": False,
-                },
-            ),
-            (
-                f"{self.settings.qdrant_url}/collections/{self.settings.qdrant_collection}/points/query",
-                {
-                    "query": vector,
-                    "limit": top_k,
-                    "with_payload": True,
-                    "with_vector": False,
-                },
-            ),
-        ]
-        if query_filter:
-            for _url, payload in payloads:
-                payload["filter"] = query_filter
+        if not self.database_url:
+            raise RuntimeError("database_url is required for pgvector search")
+        import psycopg
 
-        last_error = "vector search failed"
-        attempted_endpoints: list[str] = []
-        errors: list[dict[str, str]] = []
-        qdrant_ms = 0.0
-        for url, payload in payloads:
-            endpoint_name = url.rsplit("/", maxsplit=1)[-1]
-            attempted_endpoints.append(endpoint_name)
-            qdrant_started_at = time.perf_counter()
-            response = requests.post(
-                url,
-                json=payload,
-                timeout=self.request_timeout_seconds,
+        vector_started_at = time.perf_counter()
+        with psycopg.connect(self.database_url) as connection:
+            hits, filter_runtime = self._search_pgvector(
+                connection,
+                vector=vector,
+                top_k=top_k,
+                query_filter=query_filter,
             )
-            qdrant_ms += (time.perf_counter() - qdrant_started_at) * 1000
-            if not response.ok:
-                last_error = response.text[:500]
-                errors.append({"endpoint": endpoint_name, "error": last_error})
-                continue
-            result = response.json()["result"]
-            points = result["points"] if isinstance(result, dict) and "points" in result else result
-            hits: list[RetrievalHit] = []
-            for point in points:
-                payload_row = point.get("payload") or {}
-                if not payload_row:
-                    continue
-                hits.append(
-                    hit_from_payload(
-                        payload_row,
-                        source="vector",
-                        score=float(point.get("score", 0.0)),
-                    )
+        vector_db_ms = round((time.perf_counter() - vector_started_at) * 1000, 1)
+        return (
+            hits,
+            {
+                "backend": "pgvector",
+                "endpoint_used": "postgres",
+                "attempted_endpoints": ["postgres"],
+                "errors": [],
+                "hit_count": len(hits),
+                "top_score": hits[0].raw_score if hits else None,
+                "hydration": {"status": "not_required", "requested_count": len(hits), "hydrated_count": 0},
+                "embedding_ms": embedding_ms,
+                "vector_db_ms": vector_db_ms,
+                "pgvector_ms": vector_db_ms,
+                "hydrate_ms": 0.0,
+                "request_timeout_seconds": self.request_timeout_seconds,
+                "metadata_filter_applied": bool(query_filter),
+                "metadata_filter": query_filter or {},
+                **filter_runtime,
+            },
+        )
+
+    def _search_pgvector(
+        self,
+        connection,
+        *,
+        vector: list[float],
+        top_k: int,
+        query_filter: dict[str, Any] | None,
+    ) -> tuple[list[RetrievalHit], dict[str, Any]]:
+        filter_sql, filter_params, filter_runtime = _pgvector_filter_sql(query_filter)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT
+                    c.id::text AS chunk_id,
+                    c.chunk_key,
+                    c.ordinal,
+                    c.chunk_type,
+                    c.markdown,
+                    c.embedding_text,
+                    c.section_path,
+                    c.section_number,
+                    c.heading_title,
+                    c.source_anchor,
+                    c.toc_path,
+                    c.asset_ids,
+                    c.repository_id::text AS repository_id,
+                    c.owner_user_id,
+                    c.visibility,
+                    c.source_scope,
+                    c.chunk_role,
+                    c.parent_chunk_id::text AS parent_chunk_id,
+                    c.child_chunk_ids,
+                    c.navigation_only,
+                    c.beginner_narrative,
+                    c.starter_question_candidates,
+                    c.followup_question_candidates,
+                    c.question_candidates_version,
+                    c.metadata AS chunk_metadata,
+                    pd.id::text AS parsed_document_id,
+                    pd.title AS document_title,
+                    pd.metadata AS parsed_metadata,
+                    ds.id::text AS document_source_id,
+                    ds.filename,
+                    ds.storage_key,
+                    ds.source_kind,
+                    ds.metadata AS source_metadata,
+                    ds.created_by,
+                    (ce.embedding <=> %s::vector) AS vector_distance
+                FROM chunk_embeddings ce
+                JOIN document_chunks c ON c.id = ce.chunk_id
+                JOIN parsed_documents pd ON pd.id = c.parsed_document_id
+                JOIN document_sources ds ON ds.id = pd.document_source_id
+                WHERE ce.model = %s
+                  AND length(btrim(COALESCE(c.embedding_text, ''))) > 0
+                  AND ce.embedding_text_hash = encode(digest(c.embedding_text, 'sha256'), 'hex')
+                  AND (
+                      c.source_scope <> 'user_upload'
+                      OR pd.id = (
+                          SELECT latest_pd.id
+                          FROM parsed_documents latest_pd
+                          WHERE latest_pd.document_source_id = ds.id
+                          ORDER BY latest_pd.created_at DESC, latest_pd.id DESC
+                          LIMIT 1
+                      )
+                  )
+                  {filter_sql}
+                ORDER BY ce.embedding <=> %s::vector
+                LIMIT %s
+                """,
+                (
+                    vector_literal(vector),
+                    self.settings.embedding_model,
+                    *filter_params,
+                    vector_literal(vector),
+                    int(top_k),
+                ),
+            )
+            rows = cursor.fetchall()
+            columns = _cursor_column_names(cursor)
+        hits: list[RetrievalHit] = []
+        for row in rows:
+            row_dict = dict(zip(columns, row, strict=True))
+            distance = float(row_dict.get("vector_distance") or 0.0)
+            hits.append(
+                hit_from_payload(
+                    retrieval_payload_from_row(row_dict),
+                    source="vector",
+                    score=1.0 - distance,
                 )
-            hydration_started_at = time.perf_counter()
-            hits, hydration = self._hydrate_hits_from_database(hits)
-            hydrate_ms = round((time.perf_counter() - hydration_started_at) * 1000, 1)
-            return (
-                hits,
-                {
-                    "endpoint_used": endpoint_name,
-                    "attempted_endpoints": attempted_endpoints,
-                    "errors": errors,
-                    "hit_count": len(hits),
-                    "top_score": float(points[0].get("score", 0.0)) if points else None,
-                    "hydration": hydration,
-                    "embedding_ms": embedding_ms,
-                    "qdrant_ms": round(qdrant_ms, 1),
-                    "hydrate_ms": hydrate_ms,
-                    "request_timeout_seconds": self.request_timeout_seconds,
-                    "metadata_filter_applied": bool(query_filter),
-                    "metadata_filter": query_filter or {},
-                },
             )
-
-        raise ValueError(last_error)
+        return hits, filter_runtime
 
     def _hydrate_hits_from_database(self, hits: list[RetrievalHit]) -> tuple[list[RetrievalHit], dict[str, Any]]:
         hydration: dict[str, Any] = {
@@ -198,3 +244,81 @@ class VectorRetriever:
             1 for original, canonical in zip(hits, hydrated, strict=True) if original is not canonical
         )
         return hydrated, hydration
+
+
+def _pgvector_filter_sql(query_filter: dict[str, Any] | None) -> tuple[str, list[Any], dict[str, Any]]:
+    if not query_filter:
+        return "", [], {"sql_filter_applied": False, "sql_filter_keys": []}
+    clauses: list[str] = []
+    params: list[Any] = []
+    keys: list[str] = []
+    unsupported = 0
+
+    def add_condition(item: Any) -> str | None:
+        nonlocal unsupported
+        if not isinstance(item, dict):
+            unsupported += 1
+            return None
+        key = str(item.get("key") or "").strip()
+        match = item.get("match") if isinstance(item.get("match"), dict) else {}
+        value = match.get("value") if isinstance(match, dict) else None
+        if value is None:
+            unsupported += 1
+            return None
+        if key == "source_scope":
+            params.append(str(value))
+            keys.append(key)
+            return "c.source_scope = %s"
+        if key == "document_source_id":
+            params.append(str(value))
+            keys.append(key)
+            return "ds.id = %s::uuid"
+        if key == "repository_id":
+            params.append(str(value))
+            keys.append(key)
+            return "c.repository_id = %s::uuid"
+        if key == "owner_user_id":
+            params.append(str(value))
+            keys.append(key)
+            return "c.owner_user_id = %s"
+        if key == "visibility":
+            params.append(str(value))
+            keys.append(key)
+            return "c.visibility = %s"
+        if key == "source.enabled_for_chat":
+            params.append("true" if bool(value) else "false")
+            keys.append(key)
+            return "COALESCE(NULLIF(c.metadata->>'enabled_for_chat', ''), 'true') = %s"
+        if key == "classification.domain":
+            params.append(str(value))
+            keys.append(key)
+            return "COALESCE(c.metadata->'classification'->>'domain', c.metadata->>'domain', ds.metadata->>'domain', '') = %s"
+        unsupported += 1
+        return None
+
+    for item in query_filter.get("must") or []:
+        condition = add_condition(item)
+        if condition:
+            clauses.append(condition)
+    should_conditions: list[str] = []
+    for item in query_filter.get("should") or []:
+        condition = add_condition(item)
+        if condition:
+            should_conditions.append(condition)
+    if should_conditions:
+        clauses.append("(" + " OR ".join(should_conditions) + ")")
+    if not clauses:
+        return "", [], {"sql_filter_applied": False, "sql_filter_keys": [], "sql_filter_unsupported": unsupported}
+    return (
+        " AND " + " AND ".join(clauses),
+        params,
+        {"sql_filter_applied": True, "sql_filter_keys": keys, "sql_filter_unsupported": unsupported},
+    )
+
+
+def _cursor_column_names(cursor) -> list[str]:
+    names: list[str] = []
+    for item in cursor.description:
+        name = getattr(item, "name", None)
+        names.append(str(name if name is not None else item[0]))
+    return names

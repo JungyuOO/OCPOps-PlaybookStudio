@@ -15,6 +15,7 @@ from play_book_studio.config.validation import read_jsonl
 from play_book_studio.runtime_catalog_registry import official_runtime_book_entry
 from play_book_studio.answering.models import Citation
 from play_book_studio.http.viewers import _parse_viewer_path
+from play_book_studio.http.source_books_wiki_relations import _rewrite_book_href
 from .runtime_truth import official_runtime_truth_payload
 from .presenters_runtime import (
     _build_health_payload,
@@ -457,6 +458,7 @@ def _citation_from_payload(payload: dict[str, Any]) -> Citation:
         chunk_type=str(payload.get("chunk_type") or "reference"),
         semantic_role=str(payload.get("semantic_role") or "unknown"),
         source_collection=str(payload.get("source_collection") or "core"),
+        source_scope=str(payload.get("source_scope") or ""),
         block_kinds=tuple(str(item) for item in (payload.get("block_kinds") or [])),
         cli_commands=tuple(str(item) for item in (payload.get("cli_commands") or [])),
         error_strings=tuple(str(item) for item in (payload.get("error_strings") or [])),
@@ -469,6 +471,84 @@ def _citation_from_payload(payload: dict[str, Any]) -> Citation:
 
 def _citation_has_direct_section_metadata(citation: Citation) -> bool:
     return bool(citation.section_path or citation.section_path_label.strip())
+
+
+def _is_user_upload_href(href: str) -> bool:
+    return str(href or "").strip().startswith("/uploads/documents/")
+
+
+def _upload_citation_source_contract(citation: Citation) -> dict[str, str]:
+    source_scope = str(getattr(citation, "source_scope", "") or "").strip()
+    source_collection = str(citation.source_collection or "").strip()
+    book_slug = str(citation.book_slug or "").strip()
+    if (
+        source_scope == "study_docs"
+        or source_collection in {"customer_docs", "customer_data"}
+        or book_slug in {"study_docs", "customer-data-documents"}
+    ):
+        return {
+            "book_slug": book_slug or "customer-data-documents",
+            "source_collection": "customer_data",
+            "source_lane": "customer_data",
+            "approval_state": "workspace",
+            "publication_state": "customer_data",
+            "boundary_truth": "customer_data_runtime",
+            "runtime_truth_label": "Customer Data Document",
+            "boundary_badge": "Customer Data",
+            "fallback_title": "Customer Data Document",
+        }
+    return {
+        "book_slug": book_slug or "uploaded-documents",
+        "source_collection": source_collection or "uploads",
+        "source_lane": "user_upload",
+        "approval_state": "private",
+        "publication_state": "private",
+        "boundary_truth": "private_user_upload_runtime",
+        "runtime_truth_label": "User Upload Document",
+        "boundary_badge": "User Upload",
+        "fallback_title": "User Upload Document",
+    }
+
+
+def _serialize_uploaded_document_citation(citation: Citation, href: str) -> dict[str, Any]:
+    section_path = [
+        item
+        for item in _display_section_path(list(citation.section_path))
+        if str(item).strip()
+    ]
+    section = _display_source_heading(str(citation.section or citation.anchor))
+    section_label = _display_section_label(
+        section_path=section_path,
+        section_path_label=str(citation.section_path_label or "").strip(),
+        heading=section,
+    )
+    book_title = (
+        section_path[0]
+        if section_path
+        else _display_source_heading(str(citation.book_slug or ""))
+        or _upload_citation_source_contract(citation)["fallback_title"]
+    )
+    source_contract = _upload_citation_source_contract(citation)
+    return {
+        **_citation_display_payload(citation),
+        "book_slug": source_contract["book_slug"],
+        "viewer_path": href,
+        "section": section,
+        "href": href,
+        "book_title": book_title,
+        "section_path": section_path,
+        "section_path_label": section_label,
+        "source_label": f"{book_title} · {section_label}" if section_label else book_title,
+        "source_collection": source_contract["source_collection"],
+        "source_lane": source_contract["source_lane"],
+        "source_scope": str(getattr(citation, "source_scope", "") or ""),
+        "approval_state": source_contract["approval_state"],
+        "publication_state": source_contract["publication_state"],
+        "boundary_truth": source_contract["boundary_truth"],
+        "runtime_truth_label": source_contract["runtime_truth_label"],
+        "boundary_badge": source_contract["boundary_badge"],
+        "section_match_exact": True,
+    }
 
 
 @lru_cache(maxsize=2048)
@@ -490,10 +570,13 @@ def _serialize_citation_uncached(
 ) -> dict[str, Any]:
     context = presentation_context
     settings = context.settings
-    href = _citation_href(citation)
+    href = _rewrite_book_href(root_dir, _citation_href(citation))
     manifest_entry = context.manifest_entry(citation.book_slug)
     customer_pack_meta = context.customer_pack_meta(href)
     row: dict[str, Any] | None = None
+
+    if _is_user_upload_href(href):
+        return _serialize_uploaded_document_citation(citation, href)
 
     if row is None and customer_pack_meta is not None:
         book_title = str(customer_pack_meta.get("book_title") or "") or _humanize_book_slug(citation.book_slug)
@@ -512,6 +595,7 @@ def _serialize_citation_uncached(
         )
         return {
             **_citation_display_payload(citation),
+            "viewer_path": href,
             "section": _display_source_heading(
                 str(customer_pack_meta.get("section") or citation.section or citation.anchor)
             ),
@@ -555,6 +639,7 @@ def _serialize_citation_uncached(
         )
         return {
             **_citation_display_payload(citation),
+            "viewer_path": href,
             "section": section,
             "href": href,
             "book_title": book_title,
@@ -586,6 +671,7 @@ def _serialize_citation_uncached(
     )
     return {
         **_citation_display_payload(citation),
+        "viewer_path": href,
         "section": section,
         "href": href,
         "book_title": book_title,

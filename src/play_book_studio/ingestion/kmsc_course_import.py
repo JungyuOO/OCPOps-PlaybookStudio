@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from play_book_studio.course.qdrant_course import load_course_chunks
+from play_book_studio.course.chunk_loader import load_course_chunks
 from play_book_studio.db.document_repository import (
     _fetch_id,
     _json,
@@ -27,6 +27,8 @@ KMSC_STARTER_CHUNK_KINDS = {
     "integration_scenario_summary",
     "perf_section_summary",
 }
+KMSC_PARENT_MAX_WORDS = 680
+KMSC_PARENT_CHILD_SUMMARY_WORDS = 80
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,17 +195,40 @@ def _parent_text(children: list[dict[str, Any]]) -> str:
     parts: list[str] = []
     seen: set[str] = set()
     for child in children:
-        text = _chunk_text(child)
-        for block in text.split("\n\n"):
-            cleaned = block.strip()
-            if not cleaned:
-                continue
-            key = " ".join(cleaned.split()).lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            parts.append(cleaned)
-    return "\n\n".join(parts)
+        cleaned = _parent_child_summary(child)
+        if not cleaned:
+            continue
+        key = " ".join(cleaned.split()).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        parts.append(cleaned)
+    return _limit_words("\n\n".join(parts), KMSC_PARENT_MAX_WORDS)
+
+
+def _parent_child_summary(child: dict[str, Any]) -> str:
+    facets = child.get("facets") if isinstance(child.get("facets"), dict) else {}
+    technologies = facets.get("technologies") if isinstance(facets.get("technologies"), list) else []
+    network_zones = facets.get("network_zones") if isinstance(facets.get("network_zones"), list) else []
+    slide_range = child.get("source_slide_range") if isinstance(child.get("source_slide_range"), list) else []
+    lines = [
+        str(child.get("native_id") or child.get("chunk_id") or "").strip(),
+        str(child.get("title") or "").strip(),
+        f"stage: {child.get('stage_id')}" if str(child.get("stage_id") or "").strip() else "",
+        f"type: {child.get('chunk_kind')}" if str(child.get("chunk_kind") or "").strip() else "",
+        f"slides: {slide_range[0]}-{slide_range[-1]}" if slide_range else "",
+        "tech: " + ", ".join(str(item).strip() for item in technologies[:8] if str(item).strip()) if technologies else "",
+        "zone: " + ", ".join(str(item).strip() for item in network_zones[:6] if str(item).strip()) if network_zones else "",
+        _limit_words(_chunk_text(child), KMSC_PARENT_CHILD_SUMMARY_WORDS),
+    ]
+    return "\n".join(line for line in lines if line)
+
+
+def _limit_words(text: str, max_words: int) -> str:
+    words = str(text or "").split()
+    if max_words <= 0 or len(words) <= max_words:
+        return str(text or "").strip()
+    return " ".join(words[:max_words]).strip()
 
 
 def _group_rows_by_source(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:

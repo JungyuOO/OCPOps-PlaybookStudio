@@ -1007,17 +1007,19 @@ def _etcd_backup_priority(hit: RetrievalHit) -> int:
     lowered_section = (hit.section or "").lower()
     lowered_text = (hit.text or "").lower()
     if (
-        "cluster-backup.sh" in lowered_text
-        or "oc debug --as-root node" in lowered_text
-        or "chroot /host" in lowered_text
+        "cluster-restore.sh" in lowered_text
+        or "복원" in lowered_section
+        or "restore" in lowered_text
     ):
-        return 0
-    if "etcd 데이터 백업" in lowered_section:
-        return 1
-    if "자동화된 etcd 백업" in lowered_section:
-        return 2
-    if "cluster-restore.sh" in lowered_text or "복원" in lowered_section or "restore" in lowered_text:
         return 8
+    if "cluster-backup.sh" in lowered_text or "/usr/local/bin/cluster-backup.sh" in lowered_text:
+        return 0
+    if "oc debug --as-root node" in lowered_text or "chroot /host" in lowered_text:
+        return 1
+    if "etcd 데이터 백업" in lowered_section:
+        return 2
+    if "자동화된 etcd 백업" in lowered_section:
+        return 3
     return 5
 
 

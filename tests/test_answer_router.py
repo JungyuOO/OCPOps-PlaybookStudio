@@ -23,6 +23,27 @@ def test_observability_comparison_is_not_treated_as_ambiguous() -> None:
     assert route_non_rag("Monitoring, Logging, Observability를 운영 관점에서 구분해서 설명해줘") is None
 
 
+def test_short_logging_location_question_asks_which_log_scope() -> None:
+    routed = route_non_rag("로그는 어디서 봐?")
+
+    assert routed is not None
+    assert routed.route == "clarification"
+    assert "어떤 로그" in routed.answer
+
+
+def test_targeted_pod_log_question_stays_rag() -> None:
+    assert route_non_rag("파드 로그 봐줘") is None
+
+
+def test_out_of_corpus_version_is_no_answer_before_rag_routing() -> None:
+    routed = route_non_rag("OpenShift 4.21에서 새로 추가된 기능만 정리해줘")
+
+    assert routed is not None
+    assert routed.route == "no_answer"
+    assert "4.20" in routed.answer
+    assert "4.21" in routed.answer
+
+
 def test_short_operational_status_question_is_not_smalltalk() -> None:
     assert route_non_rag("PVC가 Pending인데 뭐 확인해야 해?") is None
 

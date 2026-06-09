@@ -1370,6 +1370,11 @@
   letter-spacing: 0.06em;
 }
 
+.operational-library-card-badge--customer {
+  background: rgba(20, 184, 166, 0.12);
+  color: #5eead4;
+}
+
 .operational-card-open {
   width: 100%;
   padding: 0;

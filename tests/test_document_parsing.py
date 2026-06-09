@@ -478,6 +478,49 @@ def test_pdf_layout_visual_code_region_keeps_spaced_yaml_box_together():
     assert "```bash" not in markdown
 
 
+def test_pdf_layout_moves_korean_code_caption_outside_fence():
+    markdown = _pdf_layout_blocks_to_markdown(
+        [
+            PdfLayoutBlock(
+                kind="code",
+                text="\n".join(
+                    [
+                        "운영자가 자주 쓰는 확인 명령 예시",
+                        "oc get clusterversion",
+                        "oc get co",
+                    ]
+                ),
+                bbox=(72, 320, 500, 390),
+                font_size=12,
+                language="bash",
+                visual_group="box-commands",
+            ),
+        ],
+        title="운영 점검",
+        page_index=1,
+    )
+
+    assert "운영자가 자주 쓰는 확인 명령 예시\n\n```bash\noc get clusterversion" in markdown
+    assert "```bash\n운영자가 자주 쓰는 확인 명령 예시" not in markdown
+
+
+def test_pdf_layout_splits_embedded_korean_business_labels():
+    markdown = _pdf_layout_blocks_to_markdown(
+        [
+            PdfLayoutBlock(
+                kind="paragraph",
+                text="대상 시스템: 한빛페이 결제 API, 백오피스 알림 서비스운영 목적: OpenShift 기반 운영 점검을 수행한다.",
+                bbox=(72, 320, 500, 338),
+                font_size=12,
+            ),
+        ],
+        title="한빛리테일",
+        page_index=1,
+    )
+
+    assert "서비스\n운영 목적: OpenShift 기반 운영 점검을 수행한다." in markdown
+
+
 def test_pdf_layout_classifier_keeps_explanatory_label_lines_as_paragraph():
     block = _pdf_classify_text_layout_block(
         text="Project Name: 애플리케이션이 속할 그룹입니다. default 를 선택하면 됩니다.",
@@ -488,6 +531,27 @@ def test_pdf_layout_classifier_keeps_explanatory_label_lines_as_paragraph():
     )
 
     assert block.kind == "paragraph"
+
+
+def test_pdf_layout_visual_region_keeps_korean_business_summary_as_paragraph():
+    block = _pdf_classify_text_layout_block(
+        text="\n".join(
+            [
+                "고객사/서비스 개요",
+                "고객사: 한빛리테일(Hanbit Retail)",
+                "대상 시스템: 한빛페이 결제 API, 주문 이벤트 처리기, 백오피스 알림 서비스",
+                "운영 목적: OpenShift 4.20 기반으로 결제 API 배포, PipelineRun 자동 생성, Route/Ingress 노출, PVC 상태와 Warning 이벤트를 일상 점검한다.",
+            ]
+        ),
+        bbox=(66, 244, 518, 317),
+        font_size=12,
+        median_font_size=12,
+        font_names=["Arial"],
+        visual_group="visual-code-54-234-541-346-2",
+    )
+
+    assert block.kind == "paragraph"
+    assert block.reason == "visual_region_prose_guard"
 
 
 def test_pdf_layout_visual_code_region_overrides_prose_guard():

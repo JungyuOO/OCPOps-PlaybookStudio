@@ -21,6 +21,11 @@ QUERY_COMMAND_RE = re.compile(
     r"(?:\b(?:oc|kubectl|describe|get|logs|adm|apply|delete|scale|rollout|command)\b|명령|확인|조회|봐)",
     re.IGNORECASE,
 )
+COMMAND_PRESERVE_QUERY_RE = re.compile(
+    r"(명령|명령어|command|예시|절차|방법|어떻게|확인|점검|백업|drain|cordon|권한|admin)",
+    re.IGNORECASE,
+)
+GENERIC_COMMAND_RE = re.compile(r"^(?:oc|oc\s+adm|oc\s+adm\s+policy|kubectl)\s*$", re.IGNORECASE)
 
 
 def _citation_value(citation: Any, key: str, default: Any = None) -> Any:
@@ -73,6 +78,38 @@ def _citation_commands(citation: Any) -> set[str]:
         if normalized:
             commands.add(normalized)
     return commands
+
+
+def _citation_command_items(citations: Iterable[Any]) -> list[tuple[str, int]]:
+    items: list[tuple[str, int]] = []
+    seen: set[str] = set()
+    for offset, citation in enumerate(citations, start=1):
+        index = int(_citation_value(citation, "index", offset) or offset)
+        for value in _as_strings(_citation_value(citation, "cli_commands", ())):
+            command = re.sub(r"\s+", " ", str(value or "").strip().lstrip("$").strip())
+            if not command:
+                continue
+            if GENERIC_COMMAND_RE.match(command):
+                continue
+            normalized = _normalize_command(command)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            items.append((command, index))
+        ordered = _citation_value(citation, "ordered_cli_commands", ()) or ()
+        for item in ordered:
+            value = item.get("command") if isinstance(item, dict) else item
+            command = re.sub(r"\s+", " ", str(value or "").strip().lstrip("$").strip())
+            if not command:
+                continue
+            if GENERIC_COMMAND_RE.match(command):
+                continue
+            normalized = _normalize_command(command)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            items.append((command, index))
+    return items
 
 
 def _all_citation_text(citations: Iterable[Any]) -> str:
@@ -157,7 +194,40 @@ def strip_ungrounded_code_blocks(answer_text: str, *, citations) -> str:
     return cleaned
 
 
+def preserve_grounded_commands(answer_text: str, *, query: str, citations, limit: int = 3) -> str:
+    """Append cited commands that a command/procedure query needs but the LLM omitted."""
+    if not COMMAND_PRESERVE_QUERY_RE.search(query or ""):
+        return answer_text
+    command_items = _citation_command_items(citations)
+    if not command_items:
+        return answer_text
+
+    normalized_answer = _normalize_command(answer_text)
+    missing: list[tuple[str, int]] = []
+    for command, index in command_items:
+        if _normalize_command(command) in normalized_answer:
+            continue
+        missing.append((command, index))
+        if len(missing) >= limit:
+            break
+    if not missing:
+        return answer_text
+
+    citation_refs = sorted({index for _, index in missing})
+    citation_suffix = " ".join(f"[{index}]" for index in citation_refs)
+    lines = [
+        (answer_text or "").strip(),
+        "",
+        f"근거에 포함된 명령: {citation_suffix}".strip(),
+        "```bash",
+        *[command for command, _ in missing],
+        "```",
+    ]
+    return "\n".join(line for line in lines if line is not None).strip()
+
+
 __all__ = [
     "has_sufficient_command_grounding",
+    "preserve_grounded_commands",
     "strip_ungrounded_code_blocks",
 ]

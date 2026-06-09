@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -34,6 +35,11 @@ from .viewers import (
 def _resolve_page_mode(page_mode: str) -> str:
     normalized = str(page_mode or "").strip().lower()
     return "multi" if normalized == "multi" else "single"
+
+
+def _record_timing(timings_sink: dict[str, float] | None, key: str, started_at: float) -> None:
+    if timings_sink is not None:
+        timings_sink[key] = round((time.perf_counter() - started_at) * 1000, 1)
 
 
 def _select_view_sections(
@@ -198,7 +204,15 @@ def internal_viewer_html(root_dir: Path, viewer_path: str, *, page_mode: str = "
     )
 
 
-def internal_active_runtime_markdown_viewer_html(root_dir: Path, viewer_path: str, *, page_mode: str = "single") -> str | None:
+def internal_active_runtime_markdown_viewer_html(
+    root_dir: Path,
+    viewer_path: str,
+    *,
+    page_mode: str = "single",
+    timings_sink: dict[str, float] | None = None,
+) -> str | None:
+    total_started_at = time.perf_counter()
+    resolve_started_at = time.perf_counter()
     slug = parse_active_runtime_markdown_viewer_path(viewer_path)
     if not slug:
         return None
@@ -242,8 +256,17 @@ def internal_active_runtime_markdown_viewer_html(root_dir: Path, viewer_path: st
             content_sections = _trim_leading_title_section(sections, title=str(title))
             summary = _markdown_summary(content_sections)
             source_url = ""
+    _record_timing(timings_sink, "active_runtime_resolve", resolve_started_at)
+    select_started_at = time.perf_counter()
     visible_sections = _select_view_sections(content_sections, target_anchor=request.fragment.strip(), page_mode=page_mode)
+    _record_timing(timings_sink, "active_runtime_select_sections", select_started_at)
+    cards_started_at = time.perf_counter()
     cards = _build_study_section_cards(visible_sections, book_slug=slug, target_anchor=request.fragment.strip(), embedded=embedded, root_dir=root_dir)
+    _record_timing(timings_sink, "active_runtime_render_cards", cards_started_at)
+    supplementary_started_at = time.perf_counter()
+    supplementary_blocks = _build_wiki_supplementary_blocks(root_dir, slug)
+    _record_timing(timings_sink, "active_runtime_supplementary_blocks", supplementary_started_at)
+    chrome_started_at = time.perf_counter()
     overlay_target = _overlay_target_for_view(
         book_slug=slug,
         title=str(title),
@@ -252,27 +275,37 @@ def internal_active_runtime_markdown_viewer_html(root_dir: Path, viewer_path: st
         visible_sections=visible_sections,
         page_mode=page_mode,
     )
-    return _render_study_viewer_html(
+    section_outline = _build_section_outline(content_sections)
+    section_navigation = _build_section_navigation(content_sections, target_anchor=request.fragment.strip(), page_mode=page_mode)
+    section_metrics = _build_section_metrics(content_sections)
+    page_overlay_toolbar = _render_page_overlay_toolbar(
+        target_kind=overlay_target["target_kind"],
+        target_ref=overlay_target["target_ref"],
+        title=overlay_target["title"],
+        book_slug=slug,
+        anchor=overlay_target["anchor"],
+        viewer_path=overlay_target["viewer_path"],
+    )
+    eyebrow = official_runtime_truth_payload(settings=load_settings(root_dir), manifest_entry=manifest_entry).get("boundary_badge") or "Source-First Candidate"
+    _record_timing(timings_sink, "active_runtime_chrome", chrome_started_at)
+    render_started_at = time.perf_counter()
+    html_text = _render_study_viewer_html(
         title=str(title),
         source_url=source_url,
         cards=cards,
-        supplementary_blocks=_build_wiki_supplementary_blocks(root_dir, slug),
+        supplementary_blocks=supplementary_blocks,
         section_count=len(content_sections),
-        eyebrow=official_runtime_truth_payload(settings=load_settings(root_dir), manifest_entry=manifest_entry).get("boundary_badge") or "Source-First Candidate",
+        eyebrow=eyebrow,
         summary=summary,
         embedded=embedded,
-        section_outline=_build_section_outline(content_sections),
-        section_navigation=_build_section_navigation(content_sections, target_anchor=request.fragment.strip(), page_mode=page_mode),
-        section_metrics=_build_section_metrics(content_sections),
-        page_overlay_toolbar=_render_page_overlay_toolbar(
-            target_kind=overlay_target["target_kind"],
-            target_ref=overlay_target["target_ref"],
-            title=overlay_target["title"],
-            book_slug=slug,
-            anchor=overlay_target["anchor"],
-            viewer_path=overlay_target["viewer_path"],
-        ),
+        section_outline=section_outline,
+        section_navigation=section_navigation,
+        section_metrics=section_metrics,
+        page_overlay_toolbar=page_overlay_toolbar,
     )
+    _record_timing(timings_sink, "active_runtime_render_html", render_started_at)
+    _record_timing(timings_sink, "active_runtime_total", total_started_at)
+    return html_text
 
 
 __all__ = [

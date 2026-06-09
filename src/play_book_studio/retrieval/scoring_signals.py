@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from .models import SessionContext
 from .intent_profile import IntentProfile, build_intent_profile
+from .intent_patterns import COMPARE_RE
 from .query_understanding import StructuredQuerySignals, understand_query_signals
 from .query import (
     OC_LOGIN_RE,
@@ -73,7 +74,7 @@ def build_score_signals(query: str, *, context: SessionContext) -> ScoreSignals:
     structured_signals = understand_query_signals(query)
     structured_query_terms = tuple(_extract_structured_query_terms(query))
     book_boosts, book_penalties = query_book_adjustments(query, context=context)
-    compare_intent = has_openshift_kubernetes_compare_intent(query)
+    compare_intent = has_openshift_kubernetes_compare_intent(query) or bool(COMPARE_RE.search(query or ""))
     operator_concept_intent = has_operator_concept_intent(query)
     mco_concept_intent = has_mco_concept_intent(query)
     pod_lifecycle_intent = has_pod_lifecycle_concept_intent(query)

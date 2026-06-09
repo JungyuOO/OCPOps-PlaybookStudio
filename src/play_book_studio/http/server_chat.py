@@ -67,8 +67,38 @@ def _summarize_citation_truth(response_payload: dict[str, Any]) -> dict[str, str
     }
 
 
-def _apply_primary_citation_truth(turn: Turn, response_payload: dict[str, Any]) -> None:
-    summary = _summarize_citation_truth(response_payload)
+def _lightspeed_customer_context_truth() -> dict[str, str]:
+    return {
+        "source_lane": "lightspeed_customer_context_bridge",
+        "boundary_truth": "external_lightspeed_with_customer_context",
+        "runtime_truth_label": "OpenShift Lightspeed + Customer Context",
+        "boundary_badge": "Lightspeed + Customer",
+        "publication_state": "mixed",
+        "approval_state": "mixed",
+    }
+
+
+def _summarize_response_truth(response_payload: dict[str, Any]) -> dict[str, str]:
+    answer_source = str(response_payload.get("answer_source") or "").strip()
+    if answer_source == "lightspeed_with_pbs_rag":
+        pipeline_trace = response_payload.get("pipeline_trace")
+        external_answer = pipeline_trace.get("external_answer") if isinstance(pipeline_trace, dict) else {}
+        context_bridge = external_answer.get("context_bridge") if isinstance(external_answer, dict) else {}
+        if isinstance(context_bridge, dict) and context_bridge.get("customer_context_applied"):
+            return _lightspeed_customer_context_truth()
+        return {
+            "source_lane": "openshift_lightspeed",
+            "boundary_truth": "external_openshift_lightspeed",
+            "runtime_truth_label": "OpenShift Lightspeed",
+            "boundary_badge": "Lightspeed",
+            "publication_state": "external",
+            "approval_state": "external",
+        }
+    return _summarize_citation_truth(response_payload)
+
+
+def _apply_primary_response_truth(turn: Turn, response_payload: dict[str, Any]) -> None:
+    summary = _summarize_response_truth(response_payload)
     if not summary:
         return
     turn.primary_source_lane = str(summary.get("source_lane") or "")
@@ -171,7 +201,7 @@ def _build_chat_latency_log(
         "bm25_ms": _round_ms(retrieval_timings.get("bm25_search")),
         "vector_ms": _round_ms(retrieval_timings.get("vector_search")),
         "embedding_ms": _vector_runtime_ms(vector_runtime, "embedding_ms"),
-        "qdrant_ms": _vector_runtime_ms(vector_runtime, "qdrant_ms"),
+        "vector_db_ms": _vector_runtime_ms(vector_runtime, "vector_db_ms"),
         "hydrate_ms": _vector_runtime_ms(vector_runtime, "hydrate_ms"),
         "rerank_ms": _round_ms(retrieval_timings.get("rerank")),
         "llm_ms": _round_ms(pipeline_timings.get("llm_generate_total")),
@@ -251,6 +281,14 @@ def _persist_chat_audit_logs(
             related_links=response_payload.get("related_links"),
             related_sections=response_payload.get("related_sections"),
         )
+        _append_lightspeed_call_audit(
+            root_dir=root_dir,
+            session=session,
+            query=query,
+            response_payload=response_payload,
+            owner_user_id=owner_user_id,
+            active_repository_id=active_repository_id,
+        )
         if result.response_kind == "no_answer":
             append_unanswered_question_log(
                 root_dir,
@@ -271,6 +309,91 @@ def _persist_chat_audit_logs(
     )
 
 
+def _append_lightspeed_call_audit(
+    *,
+    root_dir: Path,
+    session: Any,
+    query: str,
+    response_payload: dict[str, Any],
+    owner_user_id: str,
+    active_repository_id: str,
+) -> None:
+    pipeline_trace = response_payload.get("pipeline_trace")
+    if not isinstance(pipeline_trace, dict):
+        return
+    external_answer = pipeline_trace.get("external_answer")
+    if not isinstance(external_answer, dict):
+        return
+    status = str(external_answer.get("status") or "").strip()
+    if status in {"", "not_applicable"}:
+        return
+
+    related_links = [item for item in response_payload.get("related_links") or [] if isinstance(item, dict)]
+    viewer_path = str(external_answer.get("viewer_path") or "").strip()
+    related_link_present = any(
+        str(link.get("href") or "").strip() == viewer_path
+        and (
+            str(link.get("source_lane") or "").strip() == "openshift_lightspeed"
+            or str(link.get("boundary_badge") or "").strip() == "Lightspeed"
+        )
+        for link in related_links
+    )
+    answer_source = str(response_payload.get("answer_source") or "").strip()
+    badge_applied = bool(
+        answer_source == "lightspeed_with_pbs_rag"
+        and status == "used"
+        and viewer_path
+        and related_link_present
+    )
+    turn = session.history[-1] if getattr(session, "history", None) else None
+    settings = load_settings(root_dir)
+    payload = {
+        "record_kind": "openshift_lightspeed_call_audit",
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "session_id": str(getattr(session, "session_id", "") or ""),
+        "turn_id": str(getattr(turn, "turn_id", "") or ""),
+        "owner_user_id": str(owner_user_id or ""),
+        "active_repository_id": str(active_repository_id or ""),
+        "query": str(query or ""),
+        "answer_source": answer_source,
+        "status": status,
+        "badge_applied": badge_applied,
+        "related_link_present": related_link_present,
+        "viewer_path": viewer_path,
+        "artifact_id": str(external_answer.get("artifact_id") or ""),
+        "conversation_id": str(external_answer.get("conversation_id") or ""),
+        "duration_ms": external_answer.get("duration_ms"),
+        "referenced_documents": external_answer.get("referenced_documents"),
+        "input_tokens": external_answer.get("input_tokens"),
+        "output_tokens": external_answer.get("output_tokens"),
+        "truncated": bool(external_answer.get("truncated", False)),
+        "tool_calls": external_answer.get("tool_calls"),
+        "tool_results": external_answer.get("tool_results"),
+        "request_profile": str(external_answer.get("request_profile") or ""),
+        "payload_keys": external_answer.get("payload_keys") if isinstance(external_answer.get("payload_keys"), list) else [],
+        "query_augmented": bool(external_answer.get("query_augmented", False)),
+        "provider_present": bool(external_answer.get("provider_present", False)),
+        "model_present": bool(external_answer.get("model_present", False)),
+        "system_prompt_present": bool(external_answer.get("system_prompt_present", False)),
+        "system_prompt_hash": str(external_answer.get("system_prompt_hash") or ""),
+        "quality": external_answer.get("quality") if isinstance(external_answer.get("quality"), dict) else {},
+        "error_type": str(external_answer.get("error_type") or ""),
+        "status_code": external_answer.get("status_code"),
+        "error_detail": str(external_answer.get("error_detail") or "")[:500],
+        "primary_boundary_badge": str(response_payload.get("primary_boundary_badge") or ""),
+        "primary_runtime_truth_label": str(response_payload.get("primary_runtime_truth_label") or ""),
+        "provider": settings.openshift_lightspeed_provider,
+        "model": settings.openshift_lightspeed_model,
+        "timeout_seconds": settings.openshift_lightspeed_timeout_seconds,
+        "verify_tls": settings.openshift_lightspeed_verify_tls,
+    }
+    target = settings.lightspeed_call_log_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True), flush=True)
+
+
 def _persist_chat_turn_to_db(
     *,
     root_dir: Path,
@@ -288,6 +411,11 @@ def _persist_chat_turn_to_db(
     turn = session.history[-1] if getattr(session, "history", None) else None
     if turn is None:
         return
+    primary_truth = _summarize_response_truth(response_payload)
+    pipeline_trace = response_payload.get("pipeline_trace")
+    external_answer = pipeline_trace.get("external_answer") if isinstance(pipeline_trace, dict) else None
+    if not isinstance(external_answer, dict):
+        external_answer = {}
     import psycopg
 
     try:
@@ -307,6 +435,20 @@ def _persist_chat_turn_to_db(
                 citations=[item for item in response_payload.get("citations") or [] if isinstance(item, dict)],
                 metadata={
                     "session_revision": int(getattr(session, "revision", 0) or 0),
+                    "answer_source": str(response_payload.get("answer_source") or ""),
+                    "external_answer": dict(external_answer),
+                    "related_links": [
+                        item for item in response_payload.get("related_links") or [] if isinstance(item, dict)
+                    ],
+                    "related_sections": [
+                        item for item in response_payload.get("related_sections") or [] if isinstance(item, dict)
+                    ],
+                    "primary_source_lane": str(primary_truth.get("source_lane") or ""),
+                    "primary_boundary_truth": str(primary_truth.get("boundary_truth") or ""),
+                    "primary_runtime_truth_label": str(primary_truth.get("runtime_truth_label") or ""),
+                    "primary_boundary_badge": str(primary_truth.get("boundary_badge") or ""),
+                    "primary_publication_state": str(primary_truth.get("publication_state") or ""),
+                    "primary_approval_state": str(primary_truth.get("approval_state") or ""),
                 },
             )
     except Exception as exc:  # noqa: BLE001
@@ -432,7 +574,8 @@ def handle_chat(
     turn.citations = [item for item in response_payload.get("citations") or [] if isinstance(item, dict)]
     turn.related_links = [item for item in response_payload.get("related_links") or [] if isinstance(item, dict)]
     turn.related_sections = [item for item in response_payload.get("related_sections") or [] if isinstance(item, dict)]
-    _apply_primary_citation_truth(turn, response_payload)
+    turn.answer_source = str(response_payload.get("answer_source") or "")
+    _apply_primary_response_truth(turn, response_payload)
     second_session_persist_started_at = time.perf_counter()
     store.update(session)
     server_timings_ms["session_persist_post_payload"] = (
@@ -607,7 +750,8 @@ def handle_chat_stream(
     turn.citations = [item for item in response_payload.get("citations") or [] if isinstance(item, dict)]
     turn.related_links = [item for item in response_payload.get("related_links") or [] if isinstance(item, dict)]
     turn.related_sections = [item for item in response_payload.get("related_sections") or [] if isinstance(item, dict)]
-    _apply_primary_citation_truth(turn, response_payload)
+    turn.answer_source = str(response_payload.get("answer_source") or "")
+    _apply_primary_response_truth(turn, response_payload)
     second_session_persist_started_at = time.perf_counter()
     store.update(session)
     server_timings_ms["session_persist_post_payload"] = (

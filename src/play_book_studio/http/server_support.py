@@ -117,6 +117,119 @@ class _TimedValueCache:
         return value
 
 
+def _external_answer_related_link(result: AnswerResult) -> dict[str, Any] | None:
+    external_answer = result.pipeline_trace.get("external_answer")
+    if not isinstance(external_answer, dict):
+        return None
+    if external_answer.get("status") != "used":
+        return None
+    viewer_path = str(external_answer.get("viewer_path") or "").strip()
+    if not viewer_path:
+        return None
+    return {
+        "label": str(external_answer.get("label") or "OpenShift Lightspeed 공식 답변"),
+        "href": viewer_path,
+        "kind": "external_tool",
+        "summary": "OpenShift Lightspeed가 반환한 OpenShift 공식 기준 답변",
+        "created_at": str(external_answer.get("created_at") or ""),
+        "source_lane": str(external_answer.get("source_lane") or "openshift_lightspeed"),
+        "boundary_truth": str(external_answer.get("boundary_truth") or "external_openshift_lightspeed"),
+        "runtime_truth_label": str(external_answer.get("runtime_truth_label") or "OpenShift Lightspeed"),
+        "boundary_badge": str(external_answer.get("boundary_badge") or "Lightspeed"),
+    }
+
+
+def _external_answer_citation(result: AnswerResult) -> dict[str, Any] | None:
+    external_answer = result.pipeline_trace.get("external_answer")
+    if not isinstance(external_answer, dict):
+        return None
+    if external_answer.get("status") != "used":
+        return None
+    viewer_path = str(external_answer.get("viewer_path") or "").strip()
+    if not viewer_path:
+        return None
+    label = str(external_answer.get("label") or "OpenShift Lightspeed 공식 답변")
+    return {
+        "index": 1,
+        "book_slug": "openshift_lightspeed",
+        "book_title": "OpenShift Lightspeed",
+        "section": label,
+        "section_path": [label],
+        "section_path_label": label,
+        "heading_title": label,
+        "viewer_path": viewer_path,
+        "excerpt": "OpenShift Lightspeed가 반환한 OpenShift 공식 기준 답변",
+        "source_label": label,
+        "source_collection": "external_tool",
+        "source_lane": str(external_answer.get("source_lane") or "openshift_lightspeed"),
+        "approval_state": "external",
+        "publication_state": "external",
+        "boundary_truth": str(external_answer.get("boundary_truth") or "external_openshift_lightspeed"),
+        "runtime_truth_label": str(external_answer.get("runtime_truth_label") or "OpenShift Lightspeed"),
+        "boundary_badge": str(external_answer.get("boundary_badge") or "Lightspeed"),
+        "cli_commands": [],
+        "verification_hints": [],
+    }
+
+
+def _is_customer_context_citation(citation: dict[str, Any]) -> bool:
+    viewer_path = str(citation.get("viewer_path") or citation.get("href") or "").strip()
+    boundary_truth = str(citation.get("boundary_truth") or "").strip()
+    source_lane = str(citation.get("source_lane") or "").strip()
+    source_collection = str(citation.get("source_collection") or "").strip()
+    book_slug = str(citation.get("book_slug") or "").strip()
+    return (
+        viewer_path.startswith("/uploads/documents/")
+        or viewer_path.startswith("/playbooks/customer-packs/")
+        or boundary_truth in {"private_user_upload_runtime", "private_customer_pack_runtime"}
+        or source_lane in {"user_upload", "customer_source_first_pack"}
+        or source_collection in {"uploads", "uploaded", "customer_docs"}
+        or book_slug == "uploaded-documents"
+    )
+
+
+def _lightspeed_customer_context_truth() -> dict[str, str]:
+    return {
+        "source_lane": "lightspeed_customer_context_bridge",
+        "boundary_truth": "external_lightspeed_with_customer_context",
+        "runtime_truth_label": "OpenShift Lightspeed + Customer Context",
+        "boundary_badge": "Lightspeed + Customer",
+        "publication_state": "mixed",
+        "approval_state": "mixed",
+    }
+
+
+def _primary_response_truth(result: AnswerResult, serialized_citations: list[dict[str, Any]]) -> dict[str, str]:
+    answer_source = str(result.pipeline_trace.get("answer_source") or "").strip()
+    external_answer = result.pipeline_trace.get("external_answer")
+    if (
+        answer_source == "lightspeed_with_pbs_rag"
+        and isinstance(external_answer, dict)
+        and external_answer.get("status") == "used"
+    ):
+        if any(_is_customer_context_citation(citation) for citation in serialized_citations):
+            return _lightspeed_customer_context_truth()
+        return {
+            "source_lane": str(external_answer.get("source_lane") or "openshift_lightspeed"),
+            "boundary_truth": str(external_answer.get("boundary_truth") or "external_openshift_lightspeed"),
+            "runtime_truth_label": str(external_answer.get("runtime_truth_label") or "OpenShift Lightspeed"),
+            "boundary_badge": str(external_answer.get("boundary_badge") or "Lightspeed"),
+            "publication_state": "external",
+            "approval_state": "external",
+        }
+    if not serialized_citations:
+        return {}
+    primary = serialized_citations[0]
+    return {
+        "source_lane": str(primary.get("source_lane") or ""),
+        "boundary_truth": str(primary.get("boundary_truth") or ""),
+        "runtime_truth_label": str(primary.get("runtime_truth_label") or ""),
+        "boundary_badge": str(primary.get("boundary_badge") or ""),
+        "publication_state": str(primary.get("publication_state") or ""),
+        "approval_state": str(primary.get("approval_state") or ""),
+    }
+
+
 def _build_chat_payload(
     *,
     root_dir: Path,
@@ -136,6 +249,14 @@ def _build_chat_payload(
         )
         for citation in result.citations
     ]
+    external_citation = _external_answer_citation(result)
+    external_link = _external_answer_related_link(result)
+    if external_citation is not None:
+        shifted_citations = [
+            {**citation, "index": index + 2}
+            for index, citation in enumerate(serialized_citations)
+        ]
+        serialized_citations = [external_citation, *shifted_citations]
     if timings_sink is not None:
         timings_sink["payload_citation_serialize"] = (time.perf_counter() - citation_started_at) * 1000
     related_links_started_at = time.perf_counter()
@@ -144,6 +265,15 @@ def _build_chat_payload(
         serialized_citations,
         user_id=session.context.user_id,
     )
+    if external_link is not None:
+        related_links = [
+            external_link,
+            *[
+                link
+                for link in related_links
+                if str(link.get("href") or "").strip() != external_link["href"]
+            ],
+        ]
     if timings_sink is not None:
         timings_sink["payload_related_links"] = (time.perf_counter() - related_links_started_at) * 1000
     related_sections_started_at = time.perf_counter()
@@ -158,10 +288,12 @@ def _build_chat_payload(
     suggested_queries = _suggest_follow_up_questions(session=session, result=result)
     if timings_sink is not None:
         timings_sink["payload_suggested_queries"] = (time.perf_counter() - suggested_queries_started_at) * 1000
+    primary_truth = _primary_response_truth(result, serialized_citations)
     payload = {
         "session_id": session.session_id,
         "mode": session.mode,
         "answer": result.answer,
+        "answer_source": result.pipeline_trace.get("answer_source", result.response_kind),
         "rewritten_query": result.rewritten_query,
         "response_kind": result.response_kind,
         "warnings": list(result.warnings),
@@ -174,6 +306,12 @@ def _build_chat_payload(
         "history_size": len(session.history),
         "retrieval_trace": dict(result.retrieval_trace),
         "pipeline_trace": dict(result.pipeline_trace),
+        "primary_source_lane": primary_truth.get("source_lane", ""),
+        "primary_boundary_truth": primary_truth.get("boundary_truth", ""),
+        "primary_runtime_truth_label": primary_truth.get("runtime_truth_label", ""),
+        "primary_boundary_badge": primary_truth.get("boundary_badge", ""),
+        "primary_publication_state": primary_truth.get("publication_state", ""),
+        "primary_approval_state": primary_truth.get("approval_state", ""),
     }
     if result.response_kind == "no_answer":
         payload["acquisition"] = {

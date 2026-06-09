@@ -11,10 +11,12 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from play_book_studio.config.settings import load_settings
 from play_book_studio.http.wiki_user_overlay import build_wiki_overlay_signal_payload
 from play_book_studio.retrieval.intake_overlay import has_active_customer_pack_selection
 from play_book_studio.retrieval.models import RetrievalHit
 from play_book_studio.retrieval.models import SessionContext
+from play_book_studio.retrieval.payload import retrieval_payload_from_row
 from play_book_studio.retrieval.query import (
     has_command_request,
     has_backup_restore_intent,
@@ -65,6 +67,12 @@ OC_LOGIN_QUERY_RE = re.compile(
 )
 AUTH_CAN_I_QUERY_RE = re.compile(
     r"(can-i|권한.*(?:확인|검증)|(?:delete|삭제).*(?:pods?|pod|파드).*(?:가능|권한|할 수)|(?:pods?|pod|파드).*(?:delete|삭제).*(?:가능|권한|할 수))",
+    re.IGNORECASE,
+)
+CUSTOMER_DATA_QUERY_RE = re.compile(
+    r"(완료\s*보고서?|완료본|고객\s*(?:데이터|자료|문서)|PPTX?|"
+    r"KMSC|COCP|RTER|RECR|아키텍[처쳐]\s*설계서|설계서\s*기준|"
+    r"테스트\s*(?:계획서|결과서)|단위\s*테스트|통합\s*테스트|성능\s*테스트)",
     re.IGNORECASE,
 )
 
@@ -147,6 +155,248 @@ def _demote_navigation_only_hits(hits: list[RetrievalHit]) -> list[RetrievalHit]
     return sorted(hits, key=lambda hit: (1 if _is_navigation_only_hit(hit) else 0))
 
 
+def _is_user_upload_hit(hit: RetrievalHit) -> bool:
+    return (
+        str(hit.source_scope or "").strip() == "user_upload"
+        or str(hit.source_collection or "").strip() in {"uploaded", "uploads"}
+        or hit.viewer_path.startswith("/uploads/documents/")
+    )
+
+
+def _is_customer_data_hit(hit: RetrievalHit) -> bool:
+    return (
+        str(hit.source_scope or "").strip() == "study_docs"
+        or str(hit.source_collection or "").strip() == "customer_data"
+        or str(hit.source_lane or "").strip() == "customer_data"
+    )
+
+
+def _has_customer_data_query_signal(query: str) -> bool:
+    return bool(CUSTOMER_DATA_QUERY_RE.search(query or "") or _is_customer_pack_explicit_query(query))
+
+
+def _is_thin_user_upload_hit(hit: RetrievalHit) -> bool:
+    if not _is_user_upload_hit(hit):
+        return False
+    if hit.cli_commands or hit.asset_ids:
+        return False
+    text = SPACE_RE.sub(" ", strip_internal_markup(hit.text)).strip()
+    if not text:
+        return True
+    token_count = len([part for part in text.split(" ") if part.strip()])
+    if len(text) > 140 or token_count >= 18:
+        return False
+    heading_terms = {
+        SPACE_RE.sub(" ", str(value or "")).strip().casefold()
+        for value in (
+            hit.section,
+            hit.heading_title,
+            hit.chapter,
+            *hit.section_path,
+            *hit.toc_path,
+        )
+        if str(value or "").strip()
+    }
+    text_terms = [
+        SPACE_RE.sub(" ", line).strip().casefold()
+        for line in strip_internal_markup(hit.text).splitlines()
+        if SPACE_RE.sub(" ", line).strip()
+    ]
+    if text_terms and all(term in heading_terms for term in text_terms):
+        return True
+    return token_count <= 6 and len(text) < 80
+
+
+def _substantive_upload_companion(
+    target: RetrievalHit,
+    hits: list[RetrievalHit],
+    *,
+    used_chunk_ids: set[str],
+    root_dir: Path | None = None,
+) -> RetrievalHit | None:
+    document_source_id = str(target.document_source_id or "").strip()
+    if not document_source_id:
+        return None
+    target_section_root = _section_core(target.section_path[0] if target.section_path else target.section)
+    candidates: list[RetrievalHit] = []
+    for hit in hits:
+        if hit.chunk_id in used_chunk_ids or hit.chunk_id == target.chunk_id:
+            continue
+        if not _is_user_upload_hit(hit):
+            continue
+        if str(hit.document_source_id or "").strip() != document_source_id:
+            continue
+        if _is_thin_user_upload_hit(hit):
+            continue
+        candidates.append(hit)
+    if not candidates:
+        return _substantive_upload_companion_from_db(
+            target,
+            root_dir=root_dir,
+            used_chunk_ids=used_chunk_ids,
+        )
+    candidates.sort(
+        key=lambda hit: (
+            0
+            if target_section_root
+            and _section_core(hit.section_path[0] if hit.section_path else hit.section) == target_section_root
+            else 1,
+            -_hit_score(hit),
+            hit.section,
+            hit.chunk_id,
+        )
+    )
+    return candidates[0]
+
+
+def _db_upload_companion_row_to_hit(row: dict[str, Any], *, target: RetrievalHit) -> RetrievalHit:
+    from play_book_studio.retrieval.vector import hit_from_payload
+
+    score = max(_hit_score(target) * 0.92, 0.001)
+    return hit_from_payload(
+        retrieval_payload_from_row(row),
+        source=target.source or "hybrid",
+        score=score,
+    )
+
+
+def _substantive_upload_companion_from_db(
+    target: RetrievalHit,
+    *,
+    root_dir: Path | None,
+    used_chunk_ids: set[str],
+) -> RetrievalHit | None:
+    if root_dir is None:
+        return None
+    document_source_id = str(target.document_source_id or "").strip()
+    if not document_source_id:
+        return None
+    try:
+        database_url = load_settings(root_dir).database_url.strip()
+    except Exception:  # noqa: BLE001
+        return None
+    if not database_url:
+        return None
+    try:
+        import psycopg
+
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    WITH target_chunk AS (
+                        SELECT c.ordinal AS target_ordinal
+                        FROM document_chunks c
+                        JOIN parsed_documents pd ON pd.id = c.parsed_document_id
+                        JOIN document_sources ds ON ds.id = pd.document_source_id
+                        WHERE c.id = %s::uuid
+                          AND ds.id = %s::uuid
+                        LIMIT 1
+                    ),
+                    latest_parsed AS (
+                        SELECT pd.id
+                        FROM parsed_documents pd
+                        WHERE pd.document_source_id = %s::uuid
+                        ORDER BY pd.created_at DESC, pd.id DESC
+                        LIMIT 1
+                    )
+                    SELECT
+                        c.id::text AS chunk_id,
+                        c.chunk_key,
+                        c.ordinal,
+                        c.chunk_type,
+                        c.markdown,
+                        c.embedding_text,
+                        c.section_path,
+                        c.section_number,
+                        c.heading_title,
+                        c.source_anchor,
+                        c.toc_path,
+                        c.asset_ids,
+                        c.repository_id::text AS repository_id,
+                        c.owner_user_id,
+                        c.visibility,
+                        c.source_scope,
+                        c.chunk_role,
+                        c.parent_chunk_id::text AS parent_chunk_id,
+                        c.child_chunk_ids,
+                        c.navigation_only,
+                        c.beginner_narrative,
+                        c.starter_question_candidates,
+                        c.followup_question_candidates,
+                        c.question_candidates_version,
+                        c.metadata AS chunk_metadata,
+                        pd.id::text AS parsed_document_id,
+                        pd.title AS document_title,
+                        pd.metadata AS parsed_metadata,
+                        ds.id::text AS document_source_id,
+                        ds.filename,
+                        ds.storage_key,
+                        ds.source_kind,
+                        ds.metadata AS source_metadata,
+                        ds.created_by
+                    FROM document_chunks c
+                    JOIN latest_parsed lp ON lp.id = c.parsed_document_id
+                    JOIN parsed_documents pd ON pd.id = c.parsed_document_id
+                    JOIN document_sources ds ON ds.id = pd.document_source_id
+                    CROSS JOIN target_chunk tc
+                    WHERE ds.id = %s::uuid
+                      AND c.id <> %s::uuid
+                      AND length(btrim(COALESCE(c.embedding_text, ''))) > 0
+                    ORDER BY
+                        CASE WHEN c.ordinal > tc.target_ordinal THEN 0 ELSE 1 END,
+                        abs(c.ordinal - tc.target_ordinal),
+                        c.ordinal
+                    LIMIT 16
+                    """,
+                    (
+                        target.chunk_id,
+                        document_source_id,
+                        document_source_id,
+                        document_source_id,
+                        target.chunk_id,
+                    ),
+                )
+                rows = cursor.fetchall()
+                columns = [item.name for item in cursor.description]
+    except Exception:  # noqa: BLE001
+        return None
+
+    for row in rows:
+        row_dict = dict(zip(columns, row, strict=True))
+        chunk_id = str(row_dict.get("chunk_id") or "").strip()
+        if not chunk_id or chunk_id in used_chunk_ids:
+            continue
+        hit = _db_upload_companion_row_to_hit(row_dict, target=target)
+        if not _is_thin_user_upload_hit(hit):
+            return hit
+    return None
+
+
+def _replace_thin_user_upload_hits(
+    selected_hits: list[RetrievalHit],
+    all_hits: list[RetrievalHit],
+    *,
+    root_dir: Path | None = None,
+) -> list[RetrievalHit]:
+    if not selected_hits:
+        return selected_hits
+    upgraded: list[RetrievalHit] = []
+    used_chunk_ids: set[str] = set()
+    for hit in selected_hits:
+        replacement = (
+            _substantive_upload_companion(hit, all_hits, used_chunk_ids=used_chunk_ids, root_dir=root_dir)
+            if _is_thin_user_upload_hit(hit)
+            else None
+        )
+        chosen = replacement or hit
+        if chosen.chunk_id in used_chunk_ids:
+            continue
+        upgraded.append(chosen)
+        used_chunk_ids.add(chosen.chunk_id)
+    return upgraded or selected_hits
+
+
 def _commands_from_excerpt(excerpt: str) -> tuple[str, ...]:
     commands: list[str] = []
     for match in re.finditer(
@@ -178,10 +428,17 @@ def _commands_from_excerpt(excerpt: str) -> tuple[str, ...]:
 
 def _citation_cli_commands(hit: RetrievalHit, excerpt: str) -> tuple[str, ...]:
     extracted = list(_commands_from_excerpt(excerpt))
+    extracted_keys = {command.casefold() for command in extracted}
+    normalized_excerpt = SPACE_RE.sub(" ", strip_internal_markup(excerpt)).casefold()
     existing = [
         sanitized
         for command in hit.cli_commands
         if (sanitized := sanitize_cli_command(command))
+        and (
+            not extracted
+            or sanitized.casefold() in extracted_keys
+            or sanitized.casefold() in normalized_excerpt
+        )
     ]
     merged: list[str] = []
     seen: set[str] = set()
@@ -473,6 +730,41 @@ def _command_lookup_priority(hit: RetrievalHit, query: str) -> tuple[int, int, i
             score -= 10
         if hit.book_slug == "cli_tools" and any(token in haystack for token in ("profile", "프로필", "auth can-i")):
             score += 38
+
+    if getattr(intent_profile, "task", "") == "image-pull":
+        has_pull_secret = any(
+            token in haystack
+            for token in (
+                "pull secret",
+                "pull-secret",
+                "image pull secret",
+                "imagepullsecrets",
+                "using image pull secrets",
+                "풀 시크릿",
+            )
+        )
+        has_registry = "registry" in haystack or "레지스트리" in haystack
+        has_image_pull_state = any(
+            token in haystack
+            for token in (
+                "imagepullbackoff",
+                "errimagepull",
+                "back-off pulling image",
+            )
+        )
+        if hit.book_slug == "images" and has_pull_secret:
+            score -= 72
+        elif hit.book_slug == "registry" and has_registry:
+            score -= 36
+        elif hit.book_slug == "support" and has_image_pull_state:
+            score -= 16
+        if (
+            hit.book_slug in {"operators", "support"}
+            and any(token in haystack for token in ("operator catalog", "카탈로그 소스", "openshift-marketplace"))
+        ):
+            score += 28
+        if hit.book_slug in {"machine_configuration", "operators"} and not has_pull_secret:
+            score += 24
 
     if intent_profile.needs_command and intent_profile.confidence >= 0.7:
         if intent_profile.primary_commands:
@@ -787,14 +1079,28 @@ def _auth_can_i_hit_priority(hit: RetrievalHit) -> tuple[int, int, int]:
 
 def _topic_preferred_books(query: str) -> tuple[str, ...]:
     lowered = (query or "").lower()
+    if _is_control_plane_etcd_query(query):
+        return ("etcd", "architecture", "overview")
+    if _is_project_namespace_compare_query(query):
+        return ("overview", "authentication_and_authorization", "cli_tools", "applications")
+    if _is_web_console_workspace_locator_query(query):
+        return ("web_console", "applications", "building_applications")
+    if _is_image_pull_grounding_query(query):
+        return ("images", "registry", "support")
     if "route" in lowered and any(token in lowered for token in ("tls", "인증서", "certificate", "cert")):
         return ("ingress_and_load_balancing", "security_and_compliance", "authentication_and_authorization")
     if any(token in lowered for token in ("ocp-certificates", "인증서", "certificate", "cert")):
         return ("security_and_compliance", "authentication_and_authorization", "cli_tools")
     if "dns" in lowered:
         return ("networking_overview", "networking_operators", "ingress_and_load_balancing")
-    if "networkpolicy" in lowered or "network policy" in lowered:
-        return ("network_security", "networking_overview")
+    if (
+        "networkpolicy" in lowered
+        or "network policy" in lowered
+        or "네트워크 정책" in query
+        or "통신 제한" in query
+        or "pod 통신" in lowered
+    ):
+        return ("advanced_networking", "network_security", "networking_overview", "networking")
     if "service endpoint" in lowered or ("service" in lowered and "route" in lowered):
         return ("networking_overview", "ingress_and_load_balancing", "nodes")
     if "route" in lowered or "ingress" in lowered:
@@ -836,6 +1142,171 @@ def _topic_preferred_books(query: str) -> tuple[str, ...]:
     if all(token in lowered for token in ("monitoring", "logging")) or "observability" in lowered:
         return ("monitoring", "logging", "observability_overview")
     return ()
+
+
+def _is_project_namespace_compare_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    has_project = "project" in lowered or "프로젝트" in query
+    has_namespace = "namespace" in lowered or "네임스페이스" in query
+    compare_or_explain = any(token in query for token in ("차이", "설명", "초보자")) or any(
+        token in lowered for token in ("compare", "difference")
+    )
+    return has_project and has_namespace and compare_or_explain
+
+
+def _is_web_console_workspace_locator_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    console_signal = "web console" in lowered or "웹 콘솔" in query or "콘솔" in query
+    workspace_signal = any(
+        token in lowered
+        for token in ("project", "projects", "workload", "workloads", "application", "applications")
+    ) or any(token in query for token in ("프로젝트", "워크로드", "애플리케이션", "앱"))
+    locator_signal = any(token in query for token in ("어디", "확인", "봐야", "보려면")) or any(
+        token in lowered for token in ("where", "view", "check", "show")
+    )
+    return console_signal and workspace_signal and locator_signal
+
+
+def _is_image_pull_grounding_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    return (
+        any(token in lowered for token in ("imagepullbackoff", "errimagepull"))
+        and (
+            any(token in lowered for token in ("pull secret", "registry"))
+            or any(token in query for token in ("풀 시크릿", "레지스트리", "시크릿"))
+        )
+    )
+
+
+def _is_control_plane_etcd_query(query: str) -> bool:
+    lowered = (query or "").lower()
+    has_control_plane = (
+        "control plane" in lowered
+        or "control-plane" in lowered
+        or "controlplane" in lowered
+        or "컨트롤 플레인" in query
+    )
+    return has_control_plane and "etcd" in lowered
+
+
+def _topic_hit_priority(query: str, hit: RetrievalHit) -> int:
+    haystack = " ".join(
+        (
+            hit.book_slug or "",
+            hit.section or "",
+            hit.anchor or "",
+            hit.text or "",
+            " ".join(_all_hit_commands(hit)),
+            " ".join(hit.k8s_objects),
+        )
+    ).casefold()
+
+    if _is_control_plane_etcd_query(query):
+        has_etcd = "etcd" in haystack
+        has_control_plane = any(
+            token in haystack
+            for token in (
+                "control plane",
+                "control-plane",
+                "controlplane",
+                "컨트롤 플레인",
+                "controlplanemachineset",
+                "openshift-control-plane",
+            )
+        )
+        if hit.book_slug == "etcd" and has_etcd and has_control_plane:
+            return 0
+        if hit.book_slug == "etcd" and has_etcd:
+            return 1
+        if hit.book_slug in {"architecture", "overview"} and has_etcd:
+            return 2
+        if hit.book_slug in {"architecture", "overview"}:
+            return 5
+        return 8
+
+    if _is_project_namespace_compare_query(query):
+        has_project = "project" in haystack or "프로젝트" in haystack
+        has_namespace = "namespace" in haystack or "네임스페이스" in haystack
+        has_pair = has_project and has_namespace
+        has_definition = any(
+            token in haystack
+            for token in (
+                "프로젝트는",
+                "kubernetes 네임스페이스",
+                "kubernetes namespace",
+                "추가 주석",
+                "rbac",
+                "role-based access control",
+            )
+        )
+        if hit.book_slug == "overview" and has_pair and has_definition:
+            return 0
+        if hit.book_slug == "authentication_and_authorization" and has_pair and has_definition:
+            return 1
+        if hit.book_slug == "cli_tools" and has_pair and _all_hit_commands(hit):
+            return 2
+        if has_pair:
+            return 4
+        if hit.book_slug == "overview" and any(token in haystack for token in ("glossary", "용어집")):
+            return 9
+        return 8
+
+    if _is_web_console_workspace_locator_query(query):
+        has_console = "web console" in haystack or "웹 콘솔" in haystack or "콘솔" in haystack
+        has_workspace = any(
+            token in haystack
+            for token in (
+                "project",
+                "projects",
+                "workload",
+                "workloads",
+                "application",
+                "applications",
+                "프로젝트",
+                "워크로드",
+                "애플리케이션",
+            )
+        )
+        if hit.book_slug == "web_console" and has_console and has_workspace:
+            return 0
+        if hit.book_slug == "web_console" and has_console:
+            return 2
+        return 8
+
+    if _is_image_pull_grounding_query(query):
+        has_pull_secret = any(
+            token in haystack
+            for token in (
+                "pull secret",
+                "pull-secret",
+                "image pull secret",
+                "imagepullsecrets",
+                "using image pull secrets",
+                "풀 시크릿",
+            )
+        )
+        has_registry = "registry" in haystack or "레지스트리" in haystack
+        has_image_pull_state = any(
+            token in haystack
+            for token in (
+                "imagepullbackoff",
+                "errimagepull",
+                "back-off pulling image",
+            )
+        )
+        if hit.book_slug == "images" and has_pull_secret:
+            return 0
+        if hit.book_slug == "registry" and has_registry:
+            return 1
+        if hit.book_slug == "support" and has_image_pull_state:
+            return 2
+        if hit.book_slug == "support" and any(
+            token in haystack for token in ("operator catalog", "카탈로그 소스", "openshift-marketplace")
+        ):
+            return 7
+        return 8
+
+    return 0
 
 
 def _is_troubleshooting_doc_locator_query(query: str) -> bool:
@@ -897,7 +1368,16 @@ def _backup_only_etcd_context_priority(hit: RetrievalHit) -> tuple[int, int]:
         "backup_and_restore": 2,
         "etcd": 3,
     }.get(hit.book_slug, 8)
-    phase_priority = 0 if is_backup else 2 if is_restore else 1
+    if is_restore and "cluster-backup.sh" not in lowered_text:
+        phase_priority = 8
+    elif "cluster-backup.sh" in lowered_text or "/usr/local/bin/cluster-backup.sh" in lowered_text:
+        phase_priority = 0
+    elif "oc debug --as-root node" in lowered_text or "chroot /host" in lowered_text:
+        phase_priority = 1
+    elif is_backup:
+        phase_priority = 2
+    else:
+        phase_priority = 5
     return (phase_priority, book_priority)
 
 
@@ -1213,6 +1693,7 @@ def _select_hits(
         or has_active_customer_pack_selection(session_context)
         or bool(active_document_id or active_repository_id or owner_user_id)
     )
+    customer_data_context = _has_customer_data_query_signal(normalized)
     if not allow_uploaded_hits:
         ranked_hits = [
             hit
@@ -1235,7 +1716,7 @@ def _select_hits(
         [
             _is_oc_login_query(normalized),
             _is_auth_can_i_query(normalized),
-            has_command_request(normalized),
+            has_command_request(normalized) and not _is_web_console_workspace_locator_query(normalized),
             _is_install_guidance_query(normalized),
             has_backup_restore_intent(normalized),
             has_crash_loop_troubleshooting_intent(normalized),
@@ -1287,7 +1768,7 @@ def _select_hits(
         support_window = ranked_hits[: max(max_chunks * 2, 8)]
         top_score = _hit_score(support_window[0])
         top_book = support_window[0].book_slug
-    elif has_command_request(normalized):
+    elif has_command_request(normalized) and not _is_web_console_workspace_locator_query(normalized):
         ranked_hits = sorted(
             ranked_hits,
             key=lambda hit: (
@@ -1339,6 +1820,7 @@ def _select_hits(
         ranked_hits = sorted(
             ranked_hits,
             key=lambda hit: (
+                _topic_hit_priority(normalized, hit),
                 preferred_order.get(hit.book_slug, 20),
                 _procedure_chunk_priority(hit),
                 -_hit_score(hit),
@@ -1778,7 +2260,7 @@ def _select_hits(
             for book_slug in ("cli_tools", "authentication_and_authorization", "postinstallation_configuration"):
                 if best_book_scores.get(book_slug, 0.0) >= top_score * 0.44:
                     allowed_books.add(book_slug)
-    if has_command_request(normalized):
+    if has_command_request(normalized) and not _is_web_console_workspace_locator_query(normalized):
         command_books = tuple(
             book_slug
             for book_slug in (
@@ -2010,10 +2492,14 @@ def _select_hits(
     )
     if user_upload_context and top_score > 0:
         score_cutoff = min(score_cutoff, top_score * 0.35)
+    customer_data_hits = [hit for hit in ranked_hits if _is_customer_data_hit(hit)]
+    should_seed_customer_data = bool(customer_data_hits) and customer_data_context
+    if should_seed_customer_data and top_score > 0:
+        score_cutoff = min(score_cutoff, top_score * 0.35)
     selected: list[RetrievalHit] = []
     per_book_counts: Counter[str] = Counter()
     per_book_limit = 2 if has_crash_loop_troubleshooting_intent(normalized) else 3 if is_procedure_query else 2
-    if user_upload_context:
+    if user_upload_context or should_seed_customer_data:
         per_book_limit = max(per_book_limit, min(max_chunks, 4))
     if _is_backup_only_etcd_query(normalized):
         per_book_limit = 2
@@ -2021,6 +2507,7 @@ def _select_hits(
     skip_crash_loop_noise = has_crash_loop_troubleshooting_intent(normalized) and any(
         _crash_loop_priority(hit) < 9 for hit in ranked_hits
     )
+    skip_backup_restore_noise = _is_backup_only_etcd_query(normalized)
     uploaded_hits = [
         hit
         for hit in ranked_hits
@@ -2049,6 +2536,26 @@ def _select_hits(
             seen_sections.add(section_signature)
             allowed_books.add(hit.book_slug)
 
+    if should_seed_customer_data:
+        seed_limit = min(max_chunks - len(selected), 2)
+        for hit in sorted(
+            customer_data_hits,
+            key=lambda item: (
+                -_hit_score(item),
+                item.book_slug,
+                item.chunk_id,
+            ),
+        ):
+            if len(selected) >= seed_limit:
+                break
+            section_signature = (hit.book_slug, _section_core(hit.section))
+            if section_signature in seen_sections:
+                continue
+            selected.append(hit)
+            per_book_counts[hit.book_slug] += 1
+            seen_sections.add(section_signature)
+            allowed_books.add(hit.book_slug)
+
     for hit in ranked_hits:
         if len(selected) >= max_chunks:
             break
@@ -2057,6 +2564,8 @@ def _select_hits(
         if _hit_score(hit) < score_cutoff:
             continue
         if skip_crash_loop_noise and _crash_loop_priority(hit) >= 9:
+            continue
+        if skip_backup_restore_noise and _backup_only_etcd_context_priority(hit)[0] >= 8:
             continue
         if per_book_counts[hit.book_slug] >= per_book_limit:
             continue
@@ -2166,7 +2675,7 @@ def assemble_context(
         for term in (*intent_profile.evidence_terms, *intent_profile.primary_commands, *intent_profile.query_terms)
         if term.strip()
     )
-    if intent_terms:
+    if intent_terms and not _is_web_console_workspace_locator_query(query):
         def hit_matches_intent_terms(hit: RetrievalHit) -> bool:
             haystack = " ".join(
                 [
@@ -2215,8 +2724,22 @@ def assemble_context(
                 ),
             )
             if command_matched_hits and not any(hit_matches_primary_command(hit) for hit in selected_hits):
-                selected_hits = [*command_matched_hits[:2], *selected_hits]
-                selected_hits = selected_hits[:max_chunks]
+                if (
+                    getattr(intent_profile, "task", "") == "image-pull"
+                    and any(_topic_hit_priority(query, hit) <= 1 for hit in selected_hits)
+                ):
+                    command_seeded_hits = [*selected_hits, *command_matched_hits[:2]]
+                else:
+                    command_seeded_hits = [*command_matched_hits[:2], *selected_hits]
+                selected_hits = []
+                seeded_chunk_ids: set[str] = set()
+                for hit in command_seeded_hits:
+                    if hit.chunk_id in seeded_chunk_ids:
+                        continue
+                    selected_hits.append(hit)
+                    seeded_chunk_ids.add(hit.chunk_id)
+                    if len(selected_hits) >= max_chunks:
+                        break
     if overlay_exact_scores or overlay_book_scores:
         selected_hits = sorted(
             selected_hits,
@@ -2231,6 +2754,7 @@ def assemble_context(
                 hit.chunk_id,
             ),
         )
+    selected_hits = _replace_thin_user_upload_hits(selected_hits, hits, root_dir=root_dir)
 
     for hit in selected_hits:
         if hit.chunk_id in seen_chunk_ids:
@@ -2265,9 +2789,10 @@ def assemble_context(
             seen_mirror_sections.setdefault(mirror_signature, hit.book_slug)
         excerpt_limit = 1800 if hit.chunk_role == "parent" else max_chars_per_chunk
         citation_excerpt = excerpt[:excerpt_limit].strip()
+        base_cli_commands = _citation_cli_commands(hit, citation_excerpt)
         citation_cli_commands = _merge_cli_commands(
-            _citation_cli_commands(hit, citation_excerpt),
-            _intent_command_hints_for_hit(hit, query, command_hints=command_hints),
+            base_cli_commands,
+            () if base_cli_commands else _intent_command_hints_for_hit(hit, query, command_hints=command_hints),
         )
         citations.append(
             Citation(
@@ -2296,6 +2821,7 @@ def assemble_context(
                 chunk_type=hit.chunk_type,
                 semantic_role=hit.semantic_role,
                 source_collection=hit.source_collection,
+                source_scope=hit.source_scope,
                 block_kinds=hit.block_kinds,
                 cli_commands=citation_cli_commands,
                 error_strings=hit.error_strings,

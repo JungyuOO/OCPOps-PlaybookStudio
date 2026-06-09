@@ -363,15 +363,15 @@ def build_intent_profile(query: str) -> IntentProfile:
             reasons=("cluster update precheck status request",),
         )
 
-    if _contains_any(text, ("networkpolicy", "network policy")):
+    if _contains_any(text, ("networkpolicy", "network policy", "네트워크 정책", "네트워크정책", "통신 제한", "pod 통신", "파드 통신")):
         return _profile(
             intent="troubleshooting",
             target_object="networkpolicy",
             task="pod-connectivity",
             needs_command=True,
             primary_commands=("oc get networkpolicy -n <namespace>", "oc describe networkpolicy <policy-name> -n <namespace>"),
-            evidence_terms=("NetworkPolicy", "ingress", "egress", "podSelector"),
-            query_terms=("pod communication blocked", "network policy troubleshooting"),
+            evidence_terms=("NetworkPolicy", "네트워크 정책", "ingress", "egress", "podSelector", "통신 제한"),
+            query_terms=("pod communication blocked", "network policy troubleshooting", "네트워크 정책 pod 통신 제한"),
             confidence=0.84,
             reasons=("network policy connectivity troubleshooting",),
         )
