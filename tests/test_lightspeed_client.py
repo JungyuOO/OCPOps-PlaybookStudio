@@ -16,6 +16,7 @@ from play_book_studio.config.settings import Settings, load_settings
 from play_book_studio.integrations.lightspeed import (
     OpenShiftLightspeedApiError,
     OpenShiftLightspeedClient,
+    evaluate_lightspeed_answer_quality,
     is_openshift_operation_question,
     normalize_lightspeed_query,
 )
@@ -111,7 +112,10 @@ class FakeViewerResponse:
         return self.payload
 
 
-def test_lightspeed_client_posts_to_query_endpoint(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_lightspeed_client_console_parity_omits_provider_model_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     calls: list[dict[str, Any]] = []
 
     def fake_post(url: str, **kwargs: Any) -> FakeResponse:
@@ -141,10 +145,72 @@ def test_lightspeed_client_posts_to_query_endpoint(monkeypatch: pytest.MonkeyPat
     assert result.tool_results == [{"name": "cluster_status", "status": "ok"}]
     assert calls[0]["url"] == "https://lightspeed.example.test/v1/query"
     assert calls[0]["json"]["query"] == "Pod Pending이면?"
-    assert calls[0]["json"]["provider"] == "provider-a"
-    assert calls[0]["json"]["model"] == "model-a"
+    assert "provider" not in calls[0]["json"]
+    assert "model" not in calls[0]["json"]
+    assert "system_prompt" not in calls[0]["json"]
+    assert result.request_metadata["request_profile"] == "console_parity"
+    assert result.request_metadata["payload_keys"] == ["query"]
     assert calls[0]["headers"]["Authorization"] == "Bearer token-value"
     assert calls[0]["verify"] is True
+
+
+def test_lightspeed_client_can_force_provider_model(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def fake_post(url: str, **kwargs: Any) -> FakeResponse:
+        calls.append({"url": url, **kwargs})
+        return FakeResponse()
+
+    monkeypatch.setattr("play_book_studio.integrations.lightspeed.requests.post", fake_post)
+    client = OpenShiftLightspeedClient(
+        Settings(
+            root_dir=tmp_path,
+            openshift_lightspeed_base_url="https://lightspeed.example.test",
+            openshift_lightspeed_provider="provider-a",
+            openshift_lightspeed_model="model-a",
+            openshift_lightspeed_force_provider_model=True,
+        )
+    )
+
+    result = client.query("Pod Pending이면?")
+
+    assert calls[0]["json"]["provider"] == "provider-a"
+    assert calls[0]["json"]["model"] == "model-a"
+    assert result.request_metadata["provider_present"] is True
+    assert result.request_metadata["model_present"] is True
+
+
+def test_lightspeed_client_operator_cli_quality_profile_adds_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def fake_post(url: str, **kwargs: Any) -> FakeResponse:
+        calls.append({"url": url, **kwargs})
+        return FakeResponse()
+
+    monkeypatch.setattr("play_book_studio.integrations.lightspeed.requests.post", fake_post)
+    client = OpenShiftLightspeedClient(
+        Settings(
+            root_dir=tmp_path,
+            openshift_lightspeed_base_url="https://lightspeed.example.test",
+            openshift_lightspeed_request_profile="operator_cli_quality",
+        )
+    )
+
+    result = client.query("이벤트와 로그는 어떤 명령으로 먼저 확인해?")
+
+    assert "system_prompt" in calls[0]["json"]
+    assert "events_list" in calls[0]["json"]["system_prompt"]
+    assert "oc logs" in calls[0]["json"]["system_prompt"]
+    assert calls[0]["json"]["query"].startswith("이벤트와 로그는 어떤 명령으로 먼저 확인해?")
+    assert "답변 형식 지침" in calls[0]["json"]["query"]
+    assert "provider" not in calls[0]["json"]
+    assert result.request_metadata["request_profile"] == "operator_cli_quality"
+    assert result.request_metadata["query_augmented"] is True
+    assert result.request_metadata["system_prompt_present"] is True
+    assert result.request_metadata["system_prompt_hash"]
 
 
 def test_lightspeed_client_uses_configured_ca_bundle(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -177,6 +243,8 @@ def test_lightspeed_settings_accept_ols_env_aliases(tmp_path: Path) -> None:
                 "OLS_PROVIDER=provider-a",
                 "OLS_MODEL=model-a",
                 "OLS_SYSTEM_PROMPT=system-a",
+                "OLS_REQUEST_PROFILE=operator_cli_quality",
+                "OLS_FORCE_PROVIDER_MODEL=true",
                 "OLS_TIMEOUT_SECONDS=17",
                 "OLS_CA_BUNDLE_PATH=/tmp/service-ca.crt",
                 "OLS_INSECURE_SKIP_TLS_VERIFY=false",
@@ -192,6 +260,8 @@ def test_lightspeed_settings_accept_ols_env_aliases(tmp_path: Path) -> None:
     assert settings.openshift_lightspeed_provider == "provider-a"
     assert settings.openshift_lightspeed_model == "model-a"
     assert settings.openshift_lightspeed_system_prompt == "system-a"
+    assert settings.openshift_lightspeed_request_profile == "operator_cli_quality"
+    assert settings.openshift_lightspeed_force_provider_model is True
     assert settings.openshift_lightspeed_timeout_seconds == 17
     assert settings.openshift_lightspeed_ca_bundle_path == "/tmp/service-ca.crt"
     assert settings.openshift_lightspeed_verify_tls is True
@@ -219,6 +289,27 @@ def test_lightspeed_client_normalizes_common_korean_typo_before_request(
 
     assert normalize_lightspeed_query("클러스터 이벤트중 워닝만 필터링할수잇어?") == "클러스터 이벤트중 워닝만 필터링할수있어?"
     assert calls[0]["json"]["query"].startswith("클러스터 이벤트중 워닝만 필터링할수있어?")
+
+
+def test_lightspeed_answer_quality_detects_internal_tool_names() -> None:
+    quality = evaluate_lightspeed_answer_quality(
+        "먼저 `events_list`로 확인하고 이후 `pods_log`로 로그를 봅니다."
+    )
+
+    assert quality["passes_operator_cli_quality"] is False
+    assert quality["internal_tool_name_count"] == 2
+    assert quality["cli_command_count"] == 0
+
+
+def test_lightspeed_answer_quality_accepts_operator_cli_answer() -> None:
+    quality = evaluate_lightspeed_answer_quality(
+        "먼저 `oc describe pod <pod_name> -n <namespace>`로 이벤트를 확인하고, "
+        "`oc logs <pod_name> -n <namespace>`로 로그를 확인합니다."
+    )
+
+    assert quality["passes_operator_cli_quality"] is True
+    assert quality["internal_tool_name_count"] == 0
+    assert quality["cli_command_count"] >= 2
 
 
 @pytest.mark.parametrize(

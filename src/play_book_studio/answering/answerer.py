@@ -838,6 +838,41 @@ class ChatAnswerer:
         )
         try:
             result = self.lightspeed_client.query(lightspeed_query)
+            if (
+                str(result.request_metadata.get("request_profile") or "") == "console_parity"
+                and isinstance(result.quality, dict)
+                and int(result.quality.get("internal_tool_name_count") or 0) > 0
+            ):
+                emit(
+                    {
+                        "step": "openshift_lightspeed_quality_retry",
+                        "label": "OpenShift Lightspeed 품질 프로파일 재호출",
+                        "status": "running",
+                        "detail": "internal tool names detected in console_parity answer",
+                        "meta": {"initial_quality": result.quality},
+                    }
+                )
+                try:
+                    retry_result = self.lightspeed_client.query(
+                        lightspeed_query,
+                        request_profile="operator_cli_quality",
+                    )
+                except Exception as retry_exc:
+                    meta["quality_retry"] = {
+                        "from_profile": "console_parity",
+                        "to_profile": "operator_cli_quality",
+                        "initial_quality": result.quality,
+                        "retry_error_type": type(retry_exc).__name__,
+                    }
+                else:
+                    if retry_result.answer:
+                        meta["quality_retry"] = {
+                            "from_profile": "console_parity",
+                            "to_profile": "operator_cli_quality",
+                            "initial_quality": result.quality,
+                            "retry_quality": retry_result.quality,
+                        }
+                        result = retry_result
         except Exception as exc:
             duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
             meta.update(
@@ -903,9 +938,17 @@ class ChatAnswerer:
                 "output_tokens": result.output_tokens,
                 "tool_calls": len(result.tool_calls),
                 "tool_results": len(result.tool_results),
+                "request_profile": result.request_metadata.get("request_profile", ""),
+                "payload_keys": result.request_metadata.get("payload_keys", []),
+                "query_augmented": result.request_metadata.get("query_augmented", False),
+                "provider_present": result.request_metadata.get("provider_present", False),
+                "model_present": result.request_metadata.get("model_present", False),
+                "system_prompt_present": result.request_metadata.get("system_prompt_present", False),
+                "system_prompt_hash": result.request_metadata.get("system_prompt_hash", ""),
+                "quality": result.quality,
             }
         )
-        artifact_id = self._write_lightspeed_artifact(
+        artifact_id, artifact_created_at = self._write_lightspeed_artifact(
             query=query,
             normalized_query=lightspeed_query,
             result=result,
@@ -914,6 +957,7 @@ class ChatAnswerer:
             meta.update(
                 {
                     "artifact_id": artifact_id,
+                    "created_at": artifact_created_at,
                     "viewer_path": f"/external/lightspeed/{artifact_id}",
                     "label": "OpenShift Lightspeed 공식 답변",
                     "boundary_truth": "external_openshift_lightspeed",
@@ -937,6 +981,9 @@ class ChatAnswerer:
                     "output_tokens": result.output_tokens,
                     "tool_calls": len(result.tool_calls),
                     "tool_results": len(result.tool_results),
+                    "request_profile": result.request_metadata.get("request_profile", ""),
+                    "query_augmented": result.request_metadata.get("query_augmented", False),
+                    "quality": result.quality,
                 },
             }
         )
@@ -948,7 +995,7 @@ class ChatAnswerer:
         query: str,
         normalized_query: str,
         result: OpenShiftLightspeedResult,
-    ) -> str:
+    ) -> tuple[str, str]:
         created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         digest = hashlib.sha256(
             f"{created_at}\n{query}\n{result.answer}".encode("utf-8", errors="replace")
@@ -971,12 +1018,14 @@ class ChatAnswerer:
             "available_quotas": result.available_quotas,
             "tool_call_count": len(result.tool_calls),
             "tool_result_count": len(result.tool_results),
+            "request_metadata": result.request_metadata,
+            "quality": result.quality,
         }
         (artifact_dir / f"{digest}.json").write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        return digest
+        return digest, created_at
 
     def _build_grounding_blocked_result(
         self,

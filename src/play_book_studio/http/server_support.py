@@ -131,6 +131,7 @@ def _external_answer_related_link(result: AnswerResult) -> dict[str, Any] | None
         "href": viewer_path,
         "kind": "external_tool",
         "summary": "OpenShift Lightspeed가 반환한 OpenShift 공식 기준 답변",
+        "created_at": str(external_answer.get("created_at") or ""),
         "source_lane": str(external_answer.get("source_lane") or "openshift_lightspeed"),
         "boundary_truth": str(external_answer.get("boundary_truth") or "external_openshift_lightspeed"),
         "runtime_truth_label": str(external_answer.get("runtime_truth_label") or "OpenShift Lightspeed"),

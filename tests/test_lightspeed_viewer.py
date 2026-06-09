@@ -125,6 +125,7 @@ def test_lightspeed_external_answer_keeps_supporting_gold_citations(tmp_path):
         "href": "/external/lightspeed/unit-test",
         "kind": "external_tool",
         "summary": "OpenShift Lightspeed가 반환한 OpenShift 공식 기준 답변",
+        "created_at": "",
         "source_lane": "openshift_lightspeed",
         "boundary_truth": "external_openshift_lightspeed",
         "runtime_truth_label": "OpenShift Lightspeed",
@@ -263,6 +264,7 @@ def test_lightspeed_external_answer_without_gold_keeps_external_only(tmp_path):
             "href": "/external/lightspeed/unit-test",
             "kind": "external_tool",
             "summary": "OpenShift Lightspeed가 반환한 OpenShift 공식 기준 답변",
+            "created_at": "",
             "source_lane": "openshift_lightspeed",
             "boundary_truth": "external_openshift_lightspeed",
             "runtime_truth_label": "OpenShift Lightspeed",
@@ -527,6 +529,55 @@ def test_lightspeed_viewer_renders_markdown_tables(tmp_path):
     assert "<td><code>lightspeed-app-server-68789c9985-tw89b</code></td>" in viewer_html
     assert "<td><strong>Running</strong></td>" in viewer_html
     assert "| Pod 이름 | READY | STATUS |" not in viewer_html
+
+
+def test_lightspeed_viewer_splits_annotated_command_fences(tmp_path):
+    artifact_dir = tmp_path / "artifacts" / "external_answers" / "lightspeed"
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "command-card-test.json").write_text(
+        json.dumps(
+            {
+                "schema": "pbs.external_answer.lightspeed.v1",
+                "artifact_id": "command-card-test",
+                "created_at": "2026-06-09T00:00:00Z",
+                "provider": "OpenShift Lightspeed",
+                "query": "이벤트와 로그는 어떤 명령으로 먼저 확인해?",
+                "answer": (
+                    "### 1단계: 이벤트 확인\n\n"
+                    "```bash\n"
+                    "# 모든 네임스페이스의 최근 이벤트 확인\n"
+                    "oc get events --all-namespaces\n\n"
+                    "# 특정 네임스페이스의 이벤트 확인\n"
+                    "oc get events -n <namespace>\n\n"
+                    "# 특정 Pod와 관련된 상세 정보 및 이벤트 확인\n"
+                    "oc describe pod <pod-name> -n <namespace>\n"
+                    "```"
+                ),
+                "conversation_id": "conv-command-card",
+                "input_tokens": 10,
+                "output_tokens": 20,
+                "referenced_documents": [],
+                "truncated": False,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    viewer_html = server_routes_viewer._viewer_html_for_path(
+        tmp_path,
+        "/external/lightspeed/command-card-test",
+    )
+
+    assert viewer_html is not None
+    assert viewer_html.count('class="code-block') == 3
+    assert "모든 네임스페이스의 최근 이벤트 확인" in viewer_html
+    assert "특정 네임스페이스의 이벤트 확인" in viewer_html
+    assert "특정 Pod와 관련된 상세 정보 및 이벤트 확인" in viewer_html
+    assert "oc get events --all-namespaces" in viewer_html
+    assert "oc get events -n &lt;namespace&gt;" in viewer_html
+    assert "oc describe pod &lt;pod-name&gt; -n &lt;namespace&gt;" in viewer_html
+    assert "# 모든 네임스페이스" not in viewer_html
 
 
 def test_lightspeed_viewer_shows_when_references_are_not_provided(tmp_path):

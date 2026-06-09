@@ -126,6 +126,8 @@ class Settings(SettingsPathMixin):
     openshift_lightspeed_provider: str = ""
     openshift_lightspeed_model: str = ""
     openshift_lightspeed_system_prompt: str = ""
+    openshift_lightspeed_request_profile: str = "console_parity"
+    openshift_lightspeed_force_provider_model: bool = False
     openshift_lightspeed_timeout_seconds: float = 90.0
     openshift_lightspeed_verify_tls: bool = True
     openshift_lightspeed_ca_bundle_path: str = ""
@@ -386,6 +388,18 @@ def load_settings(root_dir: str | Path) -> Settings:
             or effective_env.get("OLS_SYSTEM_PROMPT")
             or ""
         ),
+        openshift_lightspeed_request_profile=(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_REQUEST_PROFILE")
+            or effective_env.get("OLS_REQUEST_PROFILE")
+            or "console_parity"
+        ).strip().lower()
+        or "console_parity",
+        openshift_lightspeed_force_provider_model=(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_FORCE_PROVIDER_MODEL")
+            or effective_env.get("OLS_FORCE_PROVIDER_MODEL")
+            or "false"
+        ).lower()
+        in {"1", "true", "yes", "y", "on"},
         openshift_lightspeed_timeout_seconds=float(
             effective_env.get("OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS")
             or effective_env.get("OLS_TIMEOUT_SECONDS")

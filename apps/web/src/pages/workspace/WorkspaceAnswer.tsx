@@ -103,9 +103,16 @@ export function truthSurfaceCopy(payload?: TruthSurfacePayload): {
     };
   }
 
-  if (boundaryTruth === 'external_openshift_lightspeed' || sourceLane === 'openshift_lightspeed') {
+  const isOpenShiftLightspeed =
+    boundaryTruth === 'external_openshift_lightspeed'
+    || sourceLane === 'openshift_lightspeed'
+    || sourceLane.includes('lightspeed')
+    || runtimeTruthLabel.toLowerCase().includes('openshift lightspeed')
+    || String(payload.boundary_badge || '').trim().toLowerCase().includes('lightspeed');
+
+  if (isOpenShiftLightspeed) {
     return {
-      label: 'Lightspeed',
+      label: 'OpenShift Lightspeed',
       meta: [
         runtimeTruthLabel || 'OpenShift Lightspeed',
       ].filter(Boolean),
@@ -182,6 +189,34 @@ export function TruthBadgeBlock({
   );
 }
 
+function isOpenShiftLightspeedPayload(payload?: TruthSurfacePayload): boolean {
+  if (!payload) {
+    return false;
+  }
+  const boundaryTruth = String(payload.boundary_truth || '').trim().toLowerCase();
+  const sourceLane = String(payload.source_lane || '').trim().toLowerCase();
+  const runtimeTruthLabel = String(payload.runtime_truth_label || '').trim().toLowerCase();
+  const boundaryBadge = String(payload.boundary_badge || '').trim().toLowerCase();
+  return boundaryTruth === 'external_openshift_lightspeed'
+    || sourceLane === 'openshift_lightspeed'
+    || sourceLane.includes('lightspeed')
+    || runtimeTruthLabel.includes('openshift lightspeed')
+    || boundaryBadge.includes('lightspeed');
+}
+
+function relatedLinkSubject(link: ChatRelatedLink, isLightspeedSource: boolean): string {
+  if (isLightspeedSource) {
+    const rawDate = String(link.created_at || '').trim();
+    const dateMatch = rawDate.match(/\d{4}-\d{2}-\d{2}/);
+    return dateMatch ? dateMatch[0] : '응답 생성일 확인 불가';
+  }
+  const label = String(link.label || '').trim();
+  if (!label) {
+    return '관련 문서';
+  }
+  return label.split('>').map((part) => part.trim()).filter(Boolean)[0] || label;
+}
+
 function buildCitationMap(citations: ChatCitation[]): Map<number, ChatCitation> {
   return new Map(citations.map((citation) => [Number(citation.index), citation]));
 }
@@ -252,6 +287,19 @@ function splitMarkdownTableRow(line: string): string[] {
     .replace(/\|$/, '')
     .split('|')
     .map((cell) => cell.trim().replace(/\\\|/g, '|'));
+}
+
+function standaloneCliCommand(line: string): string {
+  const trimmed = String(line || '').trim();
+  const inline = trimmed.match(/^`((?:oc|kubectl)\s+[^`]+)`$/i);
+  if (inline) {
+    return inline[1].trim();
+  }
+  const plain = trimmed.match(/^((?:\$?\s*)?(?:oc|kubectl)\s+\S.*)$/i);
+  if (!plain) {
+    return '';
+  }
+  return plain[1].replace(/^\$\s*/, '').trim();
 }
 
 function parseAnswerBlocks(text: string, citations: ChatCitation[]): AnswerBlock[] {
@@ -409,9 +457,21 @@ function parseAnswerBlocks(text: string, citations: ChatCitation[]): AnswerBlock
     }
 
     const unorderedMatch = trimmed.match(/^[-*]\s+(.*)$/);
+    if (unorderedMatch && currentStep) {
+      flushStepParagraph();
+      currentStep.paragraphs.push(parseInlineTokens(unorderedMatch[1], citationsByIndex));
+      return;
+    }
     if (unorderedMatch && !currentStep) {
       flushParagraph();
       listBuffer.push(parseInlineTokens(unorderedMatch[1], citationsByIndex));
+      return;
+    }
+
+    const cliCommand = standaloneCliCommand(trimmed);
+    if (cliCommand && currentStep) {
+      flushStepParagraph();
+      currentStep.codeBlocks.push({ code: cliCommand, language: 'bash' });
       return;
     }
 
@@ -527,63 +587,78 @@ function InlineParts({
   );
 }
 
-function AnswerCodeBlock({ code, language }: { code: string; language: string }) {
+export function copyableCommandTextFromCodeBlock(code: string): string {
+  return String(code || '')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => {
+      const trimmed = line.trim();
+      return trimmed.length > 0 && !trimmed.startsWith('#');
+    })
+    .join('\n')
+    .trim();
+}
+
+type CommandCard = {
+  note: string;
+  code: string;
+};
+
+function isShellCommandLine(line: string): boolean {
+  return /^(?:\$?\s*)?(?:oc|kubectl)\s+\S/i.test(String(line || '').trim());
+}
+
+export function splitAnnotatedCommandCards(code: string): CommandCard[] {
+  const lines = String(code || '').split('\n');
+  const cards: CommandCard[] = [];
+  let pendingNote: string[] = [];
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return;
+    }
+    if (trimmed.startsWith('#')) {
+      pendingNote.push(trimmed.replace(/^#\s?/, '').trim());
+      return;
+    }
+    if (isShellCommandLine(trimmed)) {
+      cards.push({
+        note: pendingNote.filter(Boolean).join(' '),
+        code: trimmed.replace(/^\$\s*/, ''),
+      });
+      pendingNote = [];
+      return;
+    }
+    pendingNote.push(trimmed);
+  });
+
+  return cards;
+}
+
+function SingleAnswerCodeBlock({
+  code,
+  languageLabel,
+  note = '',
+}: {
+  code: string;
+  languageLabel: string;
+  note?: string;
+}) {
   const [wrapped, setWrapped] = useState(false);
   const [copied, setCopied] = useState(false);
-  const segments = useMemo(() => {
-    const lines = code.split('\n');
-    const parsed: Array<{ type: 'note' | 'code'; value: string }> = [];
-    let noteBuffer: string[] = [];
-    let codeBuffer: string[] = [];
-
-    const flushNotes = () => {
-      const text = noteBuffer
-        .map((line) => line.replace(/^#\s?/, '').trim())
-        .filter(Boolean)
-        .join(' ');
-      if (text) {
-        parsed.push({ type: 'note', value: text });
-      }
-      noteBuffer = [];
-    };
-
-    const flushCode = () => {
-      const text = codeBuffer.join('\n').trim();
-      if (text) {
-        parsed.push({ type: 'code', value: text });
-      }
-      codeBuffer = [];
-    };
-
-    lines.forEach((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        flushNotes();
-        flushCode();
-        return;
-      }
-      if (trimmed.startsWith('#')) {
-        flushCode();
-        noteBuffer.push(trimmed);
-        return;
-      }
-      flushNotes();
-      codeBuffer.push(line);
-    });
-
-    flushNotes();
-    flushCode();
-
-    return parsed.length > 0 ? parsed : [{ type: 'code', value: code.trim() }];
+  const copyText = useMemo(() => {
+    const executable = copyableCommandTextFromCodeBlock(code);
+    return executable || code.trim();
   }, [code]);
 
   async function handleCopy(): Promise<void> {
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(code);
+        await navigator.clipboard.writeText(copyText);
       } else {
         const helper = document.createElement('textarea');
-        helper.value = code;
+        helper.value = copyText;
         helper.setAttribute('readonly', 'true');
         helper.style.position = 'fixed';
         helper.style.opacity = '0';
@@ -602,7 +677,7 @@ function AnswerCodeBlock({ code, language }: { code: string; language: string })
   return (
     <section className={`answer-code-block ${wrapped ? 'is-wrapped' : ''}`}>
       <div className="answer-code-header">
-        <span className="answer-code-lang">{(language || 'text').toUpperCase()}</span>
+        <span className="answer-code-lang">{languageLabel}</span>
         <div className="answer-code-actions">
           <button type="button" className="answer-code-action" onClick={() => { void handleCopy(); }} title={copied ? '복사됨' : '복사'}>
             {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -613,15 +688,43 @@ function AnswerCodeBlock({ code, language }: { code: string; language: string })
         </div>
       </div>
       <div className="answer-code-body">
-        {segments.map((segment, index) => (
-          segment.type === 'note' ? (
-            <p key={`note-${index}`} className="answer-code-note">{segment.value}</p>
-          ) : (
-            <pre key={`code-${index}`} className="answer-code-pre"><code>{segment.value}</code></pre>
-          )
-        ))}
+        {note && <p className="answer-code-note">{note}</p>}
+        <pre className="answer-code-pre"><code>{code.trim()}</code></pre>
       </div>
     </section>
+  );
+}
+
+function AnswerCodeBlock({ code, language }: { code: string; language: string }) {
+  const languageLabel = useMemo(() => {
+    const normalized = String(language || 'text').trim().toLowerCase();
+    if ((normalized === 'text' || !normalized) && /\b(?:oc|kubectl)\s+\S/i.test(code)) {
+      return 'SHELL';
+    }
+    return (language || 'text').toUpperCase();
+  }, [code, language]);
+  const commandCards = useMemo(() => splitAnnotatedCommandCards(code), [code]);
+
+  if (commandCards.length > 0) {
+    return (
+      <>
+        {commandCards.map((card, index) => (
+          <SingleAnswerCodeBlock
+            key={`${card.code}-${index}`}
+            code={card.code}
+            languageLabel={languageLabel}
+            note={card.note}
+          />
+        ))}
+      </>
+    );
+  }
+
+  return (
+    <SingleAnswerCodeBlock
+      code={code}
+      languageLabel={languageLabel}
+    />
   );
 }
 
@@ -1006,23 +1109,21 @@ export function RelatedLinkCard({
   onOpen: (link: ChatRelatedLink) => void;
 }) {
   const truth = truthBlockCopy(link);
-  const meta = link.summary ? [link.summary] : [];
+  const isLightspeedSource = link.kind !== 'entity' && isOpenShiftLightspeedPayload(link);
+  const subject = relatedLinkSubject(link, isLightspeedSource);
   return (
     <button
-      className="related-link-card"
+      className="related-link-card related-link-card--source-line"
       type="button"
       onClick={() => onOpen(link)}
+      title={isLightspeedSource ? `OpenShift Lightspeed 응답 보기 · ${subject}` : subject}
+      aria-label={`${link.kind === 'entity' ? 'Entity' : truth.badge} ${subject}`}
     >
-      <div className="related-link-topline">
-        <span className="related-link-badge">{link.kind === 'entity' ? 'Entity' : truth.badge}</span>
-        <span className="related-link-link">
-          <LinkIcon size={12} />
-        </span>
-      </div>
-      <div className="related-link-title">{link.label}</div>
-      {link.kind !== 'entity' && meta.length > 0 && (
-        <div className="related-link-meta">{meta.join(' · ')}</div>
-      )}
+      <span className="related-link-badge">{link.kind === 'entity' ? 'Entity' : truth.badge}</span>
+      <span className="related-link-title">{subject}</span>
+      <span className="related-link-link">
+        <LinkIcon size={12} />
+      </span>
     </button>
   );
 }

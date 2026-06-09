@@ -47,6 +47,7 @@ export interface Message {
   retrievalTrace?: Record<string, unknown>;
   pipelineTrace?: Record<string, unknown>;
   traceEvents?: ChatTraceEvent[];
+  isStreaming?: boolean;
 }
 
 export interface WorkspaceTestTrace {

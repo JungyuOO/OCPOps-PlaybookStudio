@@ -628,6 +628,7 @@ export interface ChatRelatedLink {
   href: string;
   kind: 'entity' | 'book' | string;
   summary?: string;
+  created_at?: string;
   source_lane?: string;
   boundary_truth?: string;
   runtime_truth_label?: string;
@@ -1480,10 +1481,12 @@ export async function sendChatStream(
     enabledUploadDocumentIds?: string[];
   },
   onEvent: (event: ChatStreamEvent) => void,
+  options: { signal?: AbortSignal } = {},
 ): Promise<ChatResponse> {
   const response = await fetch(`${RUNTIME_ORIGIN}/api/chat/stream`, {
     method: 'POST',
     credentials: 'include',
+    signal: options.signal,
     headers: withSessionOwnerHeader(new Headers({
       'Content-Type': 'application/json',
     })),
@@ -1518,42 +1521,59 @@ export async function sendChatStream(
   const decoder = new TextDecoder();
   let buffer = '';
   let resultPayload: ChatResponse | null = null;
+  const cancelReader = () => {
+    void reader.cancel().catch(() => undefined);
+  };
+  options.signal?.addEventListener('abort', cancelReader, { once: true });
 
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-
-    let newlineIndex = buffer.indexOf('\n');
-    while (newlineIndex >= 0) {
-      const line = buffer.slice(0, newlineIndex).trim();
-      buffer = buffer.slice(newlineIndex + 1);
-      if (line) {
-        const event = JSON.parse(line) as ChatStreamEvent;
-        onEvent(event);
-        if (event.type === 'error') {
-          throw new Error(event.error || 'stream error');
-        }
-        if (event.type === 'result') {
-          resultPayload = event.payload;
-        }
+  try {
+    while (true) {
+      if (options.signal?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
       }
-      newlineIndex = buffer.indexOf('\n');
+      const { value, done } = await reader.read();
+      if (options.signal?.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      }
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+      let newlineIndex = buffer.indexOf('\n');
+      while (newlineIndex >= 0) {
+        const line = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
+        if (line) {
+          const event = JSON.parse(line) as ChatStreamEvent;
+          onEvent(event);
+          if (event.type === 'error') {
+            throw new Error(event.error || 'stream error');
+          }
+          if (event.type === 'result') {
+            resultPayload = event.payload;
+          }
+        }
+        newlineIndex = buffer.indexOf('\n');
+      }
+
+      if (done) {
+        break;
+      }
     }
 
-    if (done) {
-      break;
+    if (options.signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
     }
-  }
-
-  if (buffer.trim()) {
-    const event = JSON.parse(buffer.trim()) as ChatStreamEvent;
-    onEvent(event);
-    if (event.type === 'error') {
-      throw new Error(event.error || 'stream error');
+    if (buffer.trim()) {
+      const event = JSON.parse(buffer.trim()) as ChatStreamEvent;
+      onEvent(event);
+      if (event.type === 'error') {
+        throw new Error(event.error || 'stream error');
+      }
+      if (event.type === 'result') {
+        resultPayload = event.payload;
+      }
     }
-    if (event.type === 'result') {
-      resultPayload = event.payload;
-    }
+  } finally {
+    options.signal?.removeEventListener('abort', cancelReader);
   }
 
   if (!resultPayload) {

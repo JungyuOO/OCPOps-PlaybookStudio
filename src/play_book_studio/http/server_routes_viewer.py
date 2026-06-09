@@ -240,8 +240,8 @@ def _render_lightspeed_answer_html(answer: str) -> str:
         before = text[cursor:match.start()].strip()
         if before:
             fragments.extend(_render_lightspeed_text_segment_html(before))
-        fragments.append(
-            _render_code_block_html(
+        fragments.extend(
+            _render_lightspeed_code_block_fragments(
                 str(match.group("code") or "").strip(),
                 language=str(match.group("lang") or "text").strip() or "text",
             )
@@ -251,6 +251,57 @@ def _render_lightspeed_answer_html(answer: str) -> str:
     if tail:
         fragments.extend(_render_lightspeed_text_segment_html(tail))
     return "\n".join(fragments)
+
+
+def _lightspeed_shell_command_line(line: str) -> str:
+    stripped = str(line or "").strip()
+    if not re.match(r"^(?:\$?\s*)?(?:oc|kubectl)\s+\S", stripped, re.IGNORECASE):
+        return ""
+    return re.sub(r"^\$\s*", "", stripped).strip()
+
+
+def _split_lightspeed_annotated_command_cards(code: str) -> list[dict[str, str]]:
+    cards: list[dict[str, str]] = []
+    pending_note: list[str] = []
+    for raw_line in str(code or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            note = line.lstrip("#").strip()
+            if note:
+                pending_note.append(note)
+            continue
+        command = _lightspeed_shell_command_line(line)
+        if command:
+            cards.append({
+                "note": " ".join(part for part in pending_note if part).strip(),
+                "code": command,
+            })
+            pending_note = []
+            continue
+        pending_note.append(line)
+    return cards
+
+
+def _render_lightspeed_code_block_fragments(code: str, *, language: str) -> list[str]:
+    command_cards = _split_lightspeed_annotated_command_cards(code)
+    if not command_cards:
+        rendered = _render_code_block_html(code, language=language)
+        return [rendered] if rendered else []
+    fragments: list[str] = []
+    normalized_language = str(language or "shell").strip().lower()
+    display_language = "shell" if normalized_language in {"text", "plain", "console", "bash", "sh"} else language
+    for card in command_cards:
+        rendered = _render_code_block_html(
+            card["code"],
+            language=display_language,
+            copy_text=card["code"],
+            caption=card["note"],
+        )
+        if rendered:
+            fragments.append(rendered)
+    return fragments
 
 
 def _render_lightspeed_text_segment_html(text: str) -> list[str]:

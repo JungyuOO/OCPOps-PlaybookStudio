@@ -189,7 +189,8 @@ class FakeLightspeedClient:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    def query(self, query: str) -> OpenShiftLightspeedResult:
+    def query(self, query: str, **kwargs: Any) -> OpenShiftLightspeedResult:
+        del kwargs
         self.calls.append(query)
         return OpenShiftLightspeedResult(
             answer=(
@@ -197,6 +198,44 @@ class FakeLightspeedClient:
                 "먼저 확인하고, 리소스 request와 quota 조건을 비교합니다."
             ),
             referenced_documents=[{"title": "OpenShift troubleshooting"}],
+        )
+
+
+class ToolNameThenCliLightspeedClient:
+    is_configured = True
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def query(self, query: str, **kwargs: Any) -> OpenShiftLightspeedResult:
+        request_profile = str(kwargs.get("request_profile") or "console_parity")
+        self.calls.append({"query": query, "request_profile": request_profile})
+        if request_profile == "operator_cli_quality":
+            return OpenShiftLightspeedResult(
+                answer=(
+                    "먼저 `oc describe pod <pod_name> -n <namespace>`로 Events 섹션을 확인하고, "
+                    "`oc get events -n <namespace> --sort-by='.lastTimestamp'`로 네임스페이스 이벤트를 봅니다. "
+                    "이후 `oc logs <pod_name> -n <namespace>`로 로그를 확인합니다."
+                ),
+                request_metadata={"request_profile": "operator_cli_quality", "payload_keys": ["query", "system_prompt"]},
+                quality={
+                    "internal_tool_names": [],
+                    "internal_tool_name_count": 0,
+                    "cli_command_count": 3,
+                    "cli_command_samples": ["oc describe pod", "oc get events", "oc logs"],
+                    "passes_operator_cli_quality": True,
+                },
+            )
+        return OpenShiftLightspeedResult(
+            answer="먼저 `events_list`로 이벤트를 보고 `pods_log`로 로그를 확인합니다.",
+            request_metadata={"request_profile": "console_parity", "payload_keys": ["query"]},
+            quality={
+                "internal_tool_names": ["events_list", "pods_log"],
+                "internal_tool_name_count": 2,
+                "cli_command_count": 0,
+                "cli_command_samples": [],
+                "passes_operator_cli_quality": False,
+            },
         )
 
 
@@ -350,6 +389,51 @@ def test_lightspeed_success_is_not_blocked_by_pbs_rbac_grounding_guard(tmp_path:
         event.get("step") == "grounding_guard" and event.get("status") == "error"
         for event in result.pipeline_trace["events"]
     )
+
+
+def test_lightspeed_quality_retry_replaces_internal_tool_name_answer(tmp_path: Path) -> None:
+    lightspeed = ToolNameThenCliLightspeedClient()
+    answerer = ChatAnswerer(
+        Settings(root_dir=tmp_path),
+        retriever=FakeRetriever(),  # type: ignore[arg-type]
+        llm_client=FakeLlmClient(),  # type: ignore[arg-type]
+        lightspeed_client=lightspeed,  # type: ignore[arg-type]
+    )
+
+    result = answerer.answer("이벤트와 로그는 어떤 명령으로 먼저 확인해?")
+
+    assert lightspeed.calls == [
+        {"query": "이벤트와 로그는 어떤 명령으로 먼저 확인해?", "request_profile": "console_parity"},
+        {"query": "이벤트와 로그는 어떤 명령으로 먼저 확인해?", "request_profile": "operator_cli_quality"},
+    ]
+    assert result.pipeline_trace["answer_source"] == "lightspeed_with_pbs_rag"
+    external_answer = result.pipeline_trace["external_answer"]
+    assert external_answer["request_profile"] == "operator_cli_quality"
+    assert external_answer["quality"]["passes_operator_cli_quality"] is True
+    assert external_answer["quality_retry"]["initial_quality"]["internal_tool_name_count"] == 2
+    assert "events_list" not in result.answer
+    assert "pods_log" not in result.answer
+    assert "oc describe pod" in result.answer
+    assert "oc logs" in result.answer
+
+
+def test_lvmcluster_storage_cr_question_calls_lightspeed(tmp_path: Path) -> None:
+    llm = FakeLlmClient()
+    lightspeed = FakeLightspeedClient()
+    answerer = ChatAnswerer(
+        Settings(root_dir=tmp_path),
+        retriever=FakeRetriever(),  # type: ignore[arg-type]
+        llm_client=llm,  # type: ignore[arg-type]
+        lightspeed_client=lightspeed,  # type: ignore[arg-type]
+    )
+
+    query = "LVMCluster CR을 CLI로 생성할 때 storageClass와 deviceSelector는 어떻게 지정하나요?"
+    result = answerer.answer(query)
+
+    assert lightspeed.calls == [query]
+    assert not llm.calls
+    assert result.pipeline_trace["answer_source"] == "lightspeed_with_pbs_rag"
+    assert result.pipeline_trace["external_answer"]["status"] == "used"
 
 
 def test_lightspeed_is_not_skipped_when_source_scope_is_explicitly_restricted(tmp_path: Path) -> None:

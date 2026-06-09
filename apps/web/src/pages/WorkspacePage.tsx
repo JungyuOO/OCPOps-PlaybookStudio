@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Send,
+  Square,
   BookOpen,
   Cpu,
   ArrowRight,
@@ -296,14 +297,6 @@ function loadStoredIngestionStatus(): IngestionStatusBanner | null {
 
 function citationEvidenceTitle(citation: ChatCitation): string {
   return citation.source_label || citation.book_title || citation.section || citation.book_slug || `Citation ${citation.index}`;
-}
-
-function citationEvidenceMeta(citation: ChatCitation): string {
-  return [
-    citation.runtime_truth_label || citation.boundary_badge || citation.source_lane || '',
-    citation.section_path || citation.section || '',
-    citation.viewer_path || '',
-  ].filter(Boolean).join(' · ');
 }
 
 const TERMINAL_OUTPUT_EXCERPT_LIMIT = 1000;
@@ -727,6 +720,10 @@ function isContinuationQuery(value: string): boolean {
   return CONTINUATION_QUERY_RE.test(value.trim());
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
 function resolveContinuationQuestion(
   value: string,
   messages: Message[],
@@ -737,7 +734,11 @@ function resolveContinuationQuestion(
   }
   const lastAssistantWithSuggestions = [...messages]
     .reverse()
-    .find((message) => message.role === 'assistant' && (message.suggestedQueries?.length ?? 0) > 0);
+    .find((message) => (
+      message.role === 'assistant'
+      && !message.isStreaming
+      && (message.suggestedQueries?.length ?? 0) > 0
+    ));
   const nextQuestion = lastAssistantWithSuggestions?.suggestedQueries?.[0]?.trim();
   if (!nextQuestion) {
     return { query: value };
@@ -1514,6 +1515,8 @@ export default function WorkspacePage() {
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
+  const chatAutoScrollingRef = useRef(false);
+  const chatAbortControllerRef = useRef<AbortController | null>(null);
   const scrollIntentTouchYRef = useRef<number | null>(null);
   const quickNavRef = useRef<HTMLDivElement>(null);
   const viewerPreviewRetryKeysRef = useRef<Set<string>>(new Set());
@@ -2244,6 +2247,9 @@ export default function WorkspacePage() {
     }
 
     function handleScroll(): void {
+      if (chatAutoScrollingRef.current) {
+        return;
+      }
       if (frameId) {
         return;
       }
@@ -2251,7 +2257,8 @@ export default function WorkspacePage() {
     }
 
     function handleWheel(event: WheelEvent): void {
-      if (event.deltaY < -2 && scrollElement.scrollTop > 0) {
+      if (event.deltaY < -2 && scrollElement.scrollHeight > scrollElement.clientHeight) {
+        chatAutoScrollingRef.current = false;
         updateChatScrollLock(true);
       }
     }
@@ -2264,6 +2271,7 @@ export default function WorkspacePage() {
       const nextY = event.touches[0]?.clientY ?? null;
       const previousY = scrollIntentTouchYRef.current;
       if (nextY !== null && previousY !== null && nextY - previousY > 4 && scrollElement.scrollTop > 0) {
+        chatAutoScrollingRef.current = false;
         updateChatScrollLock(true);
       }
       scrollIntentTouchYRef.current = nextY;
@@ -2288,7 +2296,11 @@ export default function WorkspacePage() {
     const el = chatMessagesRef.current;
     if (el) {
       updateChatScrollLock(false);
+      chatAutoScrollingRef.current = true;
       el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+      requestAnimationFrame(() => {
+        chatAutoScrollingRef.current = false;
+      });
     }
   }
 
@@ -2460,11 +2472,16 @@ export default function WorkspacePage() {
           return;
         }
         try {
+          chatAutoScrollingRef.current = true;
           container.scrollTo({
             top: container.scrollHeight,
             behavior: 'auto'
           });
+          requestAnimationFrame(() => {
+            chatAutoScrollingRef.current = false;
+          });
         } catch {
+          chatAutoScrollingRef.current = false;
           // ignore
         }
       });
@@ -2486,11 +2503,16 @@ export default function WorkspacePage() {
         return;
       }
       try {
+        chatAutoScrollingRef.current = true;
         container.scrollTo({
           top: container.scrollHeight,
           behavior: 'auto',
         });
+        requestAnimationFrame(() => {
+          chatAutoScrollingRef.current = false;
+        });
       } catch {
+        chatAutoScrollingRef.current = false;
         container.scrollTop = container.scrollHeight;
       }
     });
@@ -2996,6 +3018,7 @@ export default function WorkspacePage() {
       setPreview({ kind: 'empty' });
       return;
     }
+    setRightPanelMode('viewer');
     setActiveSourceId(sourceId ?? `viewer:${normalizedViewerPath}`);
     setPreview({ kind: 'loading', title });
     try {
@@ -3804,6 +3827,12 @@ export default function WorkspacePage() {
     }
     setIsSending(true);
     setThinkingStatus('질문 접수 중');
+    const abortController = new AbortController();
+    chatAbortControllerRef.current = abortController;
+    let response: ChatResponse;
+    let assistantStreamMessageId = '';
+    let assistantStreamUpdater: ReturnType<typeof createTypewriterMessageContentUpdater> | null = null;
+    let streamedAnswer = '';
 
     try {
       const enabledCustomerDraftIdsForRequest = enabledRagSourceScopeSet.has('customer_docs')
@@ -3840,11 +3869,7 @@ export default function WorkspacePage() {
         learningTargetTitle: resolvedTargetTitle,
         learningTargetViewerPath: resolvedTargetViewerPath,
       };
-      let response: ChatResponse;
-      let assistantStreamMessageId = '';
-      let assistantStreamUpdater: ReturnType<typeof createTypewriterMessageContentUpdater> | null = null;
       assistantStreamMessageId = makeId('assistant');
-      let streamedAnswer = '';
       setMessages((current) => [
         ...current,
         {
@@ -3859,6 +3884,7 @@ export default function WorkspacePage() {
           responseKind: 'rag',
           routeKind: messageRouteKind,
           learningIndex: resolvedLearningIndex,
+          isStreaming: true,
         },
       ]);
       assistantStreamUpdater = createTypewriterMessageContentUpdater(assistantStreamMessageId, setMessages);
@@ -3883,6 +3909,9 @@ export default function WorkspacePage() {
             timestamp: item.timestamp,
           })),
         }, (event) => {
+          if (abortController.signal.aborted) {
+            return;
+          }
           if (event.type === 'answer_delta') {
             streamedAnswer += event.delta;
             setThinkingStatus('답변 작성 중');
@@ -3916,10 +3945,13 @@ export default function WorkspacePage() {
               result: opsChatResponseToChatResponse(event.response, sessionId),
             }));
           }
-        });
+        }, { signal: abortController.signal });
         response = opsChatResponseToChatResponse(liveResponse, sessionId);
       } else {
         response = await sendChatStream(requestPayload, (event) => {
+          if (abortController.signal.aborted) {
+            return;
+          }
           if (event.type === 'answer_delta') {
             streamedAnswer += event.delta;
             setThinkingStatus('답변 작성 중');
@@ -3947,7 +3979,10 @@ export default function WorkspacePage() {
               result: event.payload,
             }));
           }
-        });
+        }, { signal: abortController.signal });
+      }
+      if (abortController.signal.aborted) {
+        throw new DOMException('The operation was aborted.', 'AbortError');
       }
       const primaryTruth = primaryCitationTruth(response.citations);
       const answerSource = String(response.answer_source || response.pipeline_trace?.answer_source || '').trim();
@@ -3977,7 +4012,7 @@ export default function WorkspacePage() {
           primarySourceLane: usesLightspeed ? 'openshift_lightspeed' : primaryTruth?.sourceLane,
           primaryBoundaryTruth: usesLightspeed ? 'external_openshift_lightspeed' : primaryTruth?.boundaryTruth,
           primaryRuntimeTruthLabel: usesLightspeed ? 'OpenShift Lightspeed' : primaryTruth?.runtimeTruthLabel,
-          primaryBoundaryBadge: usesLightspeed ? 'Lightspeed' : primaryTruth?.boundaryBadge,
+          primaryBoundaryBadge: usesLightspeed ? 'OpenShift Lightspeed' : primaryTruth?.boundaryBadge,
           primaryPublicationState: primaryTruth?.publicationState,
           primaryApprovalState: primaryTruth?.approvalState,
           routeKind: messageRouteKind,
@@ -3986,6 +4021,7 @@ export default function WorkspacePage() {
           retrievalTrace: response.retrieval_trace,
           pipelineTrace: response.pipeline_trace,
           traceEvents: response.pipeline_trace?.events ?? (testMode ? activeTestTrace?.events ?? [] : []),
+          isStreaming: Boolean(assistantStreamMessageId),
         } satisfies Message;
       if (assistantStreamMessageId) {
         setMessages((current) => current.map((message) => (
@@ -3994,6 +4030,7 @@ export default function WorkspacePage() {
                 ...assistantMessage,
                 id: assistantStreamMessageId,
                 content: message.content || assistantMessage.content,
+                isStreaming: true,
               }
             : message
         )));
@@ -4009,24 +4046,55 @@ export default function WorkspacePage() {
         }));
       }
 
-      const primaryCitation = pickPrimaryPlaybookCitation(response.citations);
-      if (primaryCitation) {
-        const targetAssistantMessageId = assistantStreamMessageId || assistantMessage.id;
-        setMessages((current) => current.map((message) => (
-          message.id === targetAssistantMessageId
-            ? { ...message, activeCitationIndex: primaryCitation.index }
-            : message
-        )));
-      }
-      await assistantStreamUpdater.finish();
+      await assistantStreamUpdater?.finish();
       if (assistantStreamMessageId) {
+        const primaryCitation = pickPrimaryPlaybookCitation(response.citations);
         setMessages((current) => current.map((message) => (
           message.id === assistantStreamMessageId
-            ? { ...message, content: visibleAnswer }
+            ? {
+                ...message,
+                content: visibleAnswer,
+                activeCitationIndex: primaryCitation?.index,
+                isStreaming: false,
+              }
             : message
         )));
+      } else {
+        const primaryCitation = pickPrimaryPlaybookCitation(response.citations);
+        if (primaryCitation) {
+          setMessages((current) => current.map((message) => (
+            message.id === assistantMessage.id
+              ? { ...message, activeCitationIndex: primaryCitation.index, isStreaming: false }
+              : message
+          )));
+        }
       }
     } catch (error) {
+      if (abortController.signal.aborted || isAbortError(error)) {
+        assistantStreamUpdater?.cancel();
+        const stoppedContent = streamedAnswer.trim()
+          ? `${streamedAnswer.trim()}\n\n_답변 생성이 중지되었습니다._`
+          : '답변 생성을 중지했습니다.';
+        if (assistantStreamMessageId) {
+          setMessages((current) => current.map((message) => (
+            message.id === assistantStreamMessageId
+              ? {
+                  ...message,
+                  content: stoppedContent,
+                  citations: [],
+                  suggestedQueries: [],
+                  relatedLinks: [],
+                  relatedSections: [],
+                  artifacts: [],
+                  activeCitationIndex: undefined,
+                  isStreaming: false,
+                }
+              : message
+          )));
+        }
+        setThinkingStatus('');
+        return;
+      }
       console.error(error);
       if (testMode && error instanceof Error) {
         setActiveTestTrace((current) => ({
@@ -4047,6 +4115,9 @@ export default function WorkspacePage() {
       }
       window.alert(error instanceof Error ? error.message : '질문 처리 중 오류가 발생했습니다.');
     } finally {
+      if (chatAbortControllerRef.current === abortController) {
+        chatAbortControllerRef.current = null;
+      }
       setIsSending(false);
       void refreshSessionList();
     }
@@ -4054,6 +4125,14 @@ export default function WorkspacePage() {
 
   function handleAcquisitionConfirm(): void {
     navigate('/playbook-library?view=repository');
+  }
+
+  function handleStopGenerating(): void {
+    if (!isSending) {
+      return;
+    }
+    setThinkingStatus('중지하는 중');
+    chatAbortControllerRef.current?.abort();
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
@@ -4079,7 +4158,7 @@ export default function WorkspacePage() {
   const canNormalize = Boolean(activeDraft) && !isNormalizing;
 
   const activeAssistantMessage = useMemo(
-    () => [...messages].reverse().find((message) => message.role === 'assistant') ?? null,
+    () => [...messages].reverse().find((message) => message.role === 'assistant' && !message.isStreaming) ?? null,
     [messages],
   );
   const visibleMessages = useMemo(
@@ -5235,17 +5314,22 @@ export default function WorkspacePage() {
                     )}
                   </div>
                 )}
-                {visibleMessages.map((message) => (
-                  <div key={message.id} className={`message-row ${message.role}`}>
+                {visibleMessages.map((message) => {
+                  const assistantMetadataReady = message.role === 'assistant' && !message.isStreaming;
+                  const visibleCitations = assistantMetadataReady ? message.citations ?? [] : [];
+                  const visibleRelatedLinks = assistantMetadataReady ? message.relatedLinks ?? [] : [];
+                  const visibleRelatedSections = assistantMetadataReady ? message.relatedSections ?? [] : [];
+                  return (
+                    <div key={message.id} className={`message-row ${message.role}${message.isStreaming ? ' streaming' : ''}`}>
                     <div className="message-bubble glass-panel">
                       <div className="message-content">
                         {message.role === 'assistant' ? (
                           <>
                             <AssistantAnswer
                               content={message.content}
-                              citations={message.citations ?? []}
-                              relatedLinks={message.relatedLinks ?? []}
-                              relatedSections={message.relatedSections ?? []}
+                              citations={visibleCitations}
+                              relatedLinks={visibleRelatedLinks}
+                              relatedSections={visibleRelatedSections}
                               visionMode={visionMode}
                               primarySourceLane={message.primarySourceLane}
                               primaryBoundaryTruth={message.primaryBoundaryTruth}
@@ -5274,34 +5358,6 @@ export default function WorkspacePage() {
                                 return Boolean(target && overlayExists('check', target.ref));
                               }}
                             />
-                            {(() => {
-                              const activeCitation = (message.citations ?? []).find(
-                                (citation) => citation.index === message.activeCitationIndex,
-                              );
-                              if (!activeCitation) {
-                                return null;
-                              }
-                              return (
-                                <div className="citation-evidence-preview">
-                                  <div className="citation-evidence-header">
-                                    <span className="citation-evidence-index">[{activeCitation.index}]</span>
-                                    <div>
-                                      <strong>{citationEvidenceTitle(activeCitation)}</strong>
-                                      <p>{citationEvidenceMeta(activeCitation)}</p>
-                                    </div>
-                                  </div>
-                                  {activeCitation.excerpt ? (
-                                    <blockquote>{activeCitation.excerpt}</blockquote>
-                                  ) : null}
-                                  {activeCitation.cli_commands?.length ? (
-                                    <div className="citation-evidence-command">
-                                      <span>Command</span>
-                                      <code>{activeCitation.cli_commands[0]}</code>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              );
-                            })()}
                           </>
                         ) : (
                           message.content
@@ -5318,7 +5374,7 @@ export default function WorkspacePage() {
                           ))}
                         </div>
                       )}
-                      {message.role === 'assistant' && message.suggestedQueries && message.suggestedQueries.length > 0 && (
+                      {assistantMetadataReady && message.suggestedQueries && message.suggestedQueries.length > 0 && (
                         <div className="suggested-query-group">
                           <div className="suggested-query-label">{isGuidedSurface ? '다음 경로' : '이런 질문은 어떠세요?'}</div>
                           <div className={isGuidedSurface ? 'suggested-query-list guided-tour-query-list' : 'suggested-query-list'}>
@@ -5360,7 +5416,7 @@ export default function WorkspacePage() {
                           </div>
                         </div>
                       )}
-                      {message.role === 'assistant' && message.acquisition && (
+                      {assistantMetadataReady && message.acquisition && (
                         <NoAnswerAcquisitionCard
                           acquisition={message.acquisition}
                           onConfirm={handleAcquisitionConfirm}
@@ -5368,7 +5424,8 @@ export default function WorkspacePage() {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
 
                 {showThinkingIndicator && <ThinkingIndicator status={thinkingStatus} />}
 
@@ -5440,8 +5497,15 @@ export default function WorkspacePage() {
                     placeholder={isGuidedSurface ? '질문을 던지면 문서 투어를 엽니다...' : '질문을 입력하거나 문서를 탐색하세요...'}
                     disabled={isSending}
                   />
-                  <button className="send-btn" onClick={() => { void handleSend(); }} type="button" disabled={isSending}>
-                    <Send size={18} />
+                  <button
+                    className={isSending ? 'send-btn stop-btn' : 'send-btn'}
+                    onClick={isSending ? handleStopGenerating : () => { void handleSend(); }}
+                    type="button"
+                    disabled={!isSending && !query.trim()}
+                    title={isSending ? '답변 생성 중지' : '질문 보내기'}
+                    aria-label={isSending ? '답변 생성 중지' : '질문 보내기'}
+                  >
+                    {isSending ? <Square size={15} fill="currentColor" /> : <Send size={18} />}
                   </button>
                 </div>
               </div>

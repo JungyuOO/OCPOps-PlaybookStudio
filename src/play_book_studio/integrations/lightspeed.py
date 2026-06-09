@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,6 +23,9 @@ OPENSHIFT_OPERATION_RE = re.compile(
     r"namespace|네임스페이스|project|프로젝트|"
     r"deployment|디플로이먼트|배포\s*(리소스|상태|전략|오류|장애)|statefulset|daemonset|"
     r"operator|오퍼레이터|mco|machine\s*config|"
+    r"lvmcluster|lvms|logical\s*volume\s*manager|storageclass|storage\s*class|"
+    r"deviceselector|device\s*selector|(?<![a-z0-9])crd?(?![a-z0-9])|custom\s*resource|"
+    r"스토리지\s*클래스|스토리지|볼륨|디바이스\s*셀렉터|장치\s*선택|커스텀\s*리소스|"
     r"pipeline|파이프라인|pipelines\s*as\s*code|pipelines-as-code|"
     r"\bpac\b|tekton|pipelinerun|taskrun|webhook|웹\s*훅|웹훅|"
     r"event|이벤트|log|로그|pending|"
@@ -33,6 +37,57 @@ OPENSHIFT_OPERATION_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
+
+DEFAULT_OPERATOR_CLI_QUALITY_SYSTEM_PROMPT = (
+    "당신은 Red Hat OpenShift 운영자를 돕는 한국어 어시스턴트입니다. "
+    "답변에는 내부 tool/function 이름(events_list, pods_log 등)을 절대 노출하지 말고, "
+    "사용자가 바로 실행할 수 있는 oc/kubectl CLI 명령어를 제시하세요. "
+    "문제 진단 답변은 순서, 명령어, 목적, 다음 판단 기준을 포함하세요. "
+    "명령어는 인라인 코드가 아니라 ```bash fenced code block```으로 분리해서 보여주세요. "
+    "코드블록 안에는 사용자가 복사해 실행할 명령어 하나만 넣고, 설명 주석은 코드블록 밖 문장으로 작성하세요. "
+    "여러 명령어가 필요하면 설명 문장과 코드블록을 명령어별로 분리하세요. "
+    "짧은 요약만 하지 말고 각 단계에서 무엇을 보고 다음에 어떻게 판단할지 설명하세요. "
+    "이벤트와 로그를 설명할 때는 oc describe pod, oc get events, oc logs, "
+    "oc logs --previous, oc logs -f, -n <namespace> 같은 실제 명령어를 우선 사용하세요."
+)
+OPERATOR_CLI_QUALITY_QUERY_SUFFIX = (
+    "\n\n답변 형식 지침: 내부 tool/function 이름(events_list, pods_log 등)을 쓰지 말고 "
+    "사용자가 실행할 실제 OpenShift CLI 명령어로 답하세요. "
+    "명령어는 반드시 ```bash fenced code block```으로 분리하세요. "
+    "코드블록 안에는 설명 주석 없이 복사 가능한 명령어 하나만 넣으세요. "
+    "여러 명령어가 필요하면 명령어마다 설명 문장과 코드블록을 따로 나누세요. "
+    "가능하면 oc describe pod, oc get events, oc logs, --previous, -f, -n <namespace>를 포함하세요. "
+    "답변은 '1단계: 이벤트 확인', '2단계: 로그 확인', '요약 워크플로우' 흐름으로 작성하고, "
+    "각 단계마다 명령어의 목적과 다음 판단 기준을 한두 문장으로 설명하세요."
+)
+
+INTERNAL_TOOL_NAME_RE = re.compile(
+    r"\b(?:events_list|pods_log|pods_list|resources_get|namespaces_list|logs_get|cluster_status)\b",
+    re.IGNORECASE,
+)
+CLI_COMMAND_RE = re.compile(r"\b(?:oc|kubectl)\s+[a-z][^\n`]*", re.IGNORECASE)
+
+
+def evaluate_lightspeed_answer_quality(answer: str) -> dict[str, Any]:
+    """Return lightweight quality signals without rewriting the Lightspeed answer."""
+
+    text = str(answer or "")
+    internal_tool_names = sorted({match.group(0) for match in INTERNAL_TOOL_NAME_RE.finditer(text)})
+    cli_commands = sorted({match.group(0).strip() for match in CLI_COMMAND_RE.finditer(text)})
+    return {
+        "internal_tool_names": internal_tool_names,
+        "internal_tool_name_count": len(internal_tool_names),
+        "cli_command_count": len(cli_commands),
+        "cli_command_samples": cli_commands[:5],
+        "passes_operator_cli_quality": not internal_tool_names and len(cli_commands) >= 2,
+    }
+
+
+def _hash_prompt(value: str) -> str:
+    if not value:
+        return ""
+    return hashlib.sha256(value.encode("utf-8", errors="replace")).hexdigest()[:16]
+
 
 def normalize_lightspeed_query(query: str) -> str:
     """Normalize common Korean chat typos before sending a query to Lightspeed."""
@@ -59,6 +114,8 @@ class OpenShiftLightspeedResult:
     available_quotas: dict[str, Any] = field(default_factory=dict)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     tool_results: list[dict[str, Any]] = field(default_factory=list)
+    request_metadata: dict[str, Any] = field(default_factory=dict)
+    quality: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -136,6 +193,10 @@ class OpenShiftLightspeedClient:
         self.provider = settings.openshift_lightspeed_provider
         self.model = settings.openshift_lightspeed_model
         self.system_prompt = settings.openshift_lightspeed_system_prompt
+        self.request_profile = (
+            settings.openshift_lightspeed_request_profile or "console_parity"
+        ).strip().lower() or "console_parity"
+        self.force_provider_model = bool(settings.openshift_lightspeed_force_provider_model)
         self.timeout_seconds = settings.openshift_lightspeed_timeout_seconds
         self.verify_tls: bool | str = settings.openshift_lightspeed_verify_tls
         if settings.openshift_lightspeed_verify_tls and settings.openshift_lightspeed_ca_bundle_path:
@@ -163,6 +224,49 @@ class OpenShiftLightspeedClient:
         if self.api_token:
             headers["Authorization"] = f"Bearer {self.api_token}"
         return headers
+
+    def _quality_system_prompt(self) -> str:
+        return self.system_prompt or DEFAULT_OPERATOR_CLI_QUALITY_SYSTEM_PROMPT
+
+    def build_query_payload(
+        self,
+        query: str,
+        *,
+        conversation_id: str = "",
+        request_profile: str = "",
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        normalized_query = normalize_lightspeed_query(query)
+        payload: dict[str, Any] = {"query": normalized_query}
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+
+        profile = (request_profile or self.request_profile).strip().lower()
+        if profile not in {"console_parity", "operator_cli_quality", "legacy_configured"}:
+            profile = "console_parity"
+
+        include_provider_model = self.force_provider_model or profile == "legacy_configured"
+        if include_provider_model:
+            if self.provider:
+                payload["provider"] = self.provider
+            if self.model:
+                payload["model"] = self.model
+
+        if profile == "operator_cli_quality":
+            payload["system_prompt"] = self._quality_system_prompt()
+            payload["query"] = f"{normalized_query}{OPERATOR_CLI_QUALITY_QUERY_SUFFIX}"
+        elif profile == "legacy_configured" and self.system_prompt:
+            payload["system_prompt"] = self.system_prompt
+
+        request_metadata = {
+            "request_profile": profile,
+            "payload_keys": sorted(payload.keys()),
+            "query_augmented": payload["query"] != normalized_query,
+            "provider_present": "provider" in payload,
+            "model_present": "model" in payload,
+            "system_prompt_present": "system_prompt" in payload,
+            "system_prompt_hash": _hash_prompt(str(payload.get("system_prompt") or "")),
+        }
+        return payload, request_metadata
 
     def check_authorized(self) -> OpenShiftLightspeedAuthResult:
         if not self.is_configured:
@@ -201,19 +305,16 @@ class OpenShiftLightspeedClient:
         query: str,
         *,
         conversation_id: str = "",
+        request_profile: str = "",
     ) -> OpenShiftLightspeedResult:
         if not self.is_configured:
             raise ValueError("OPENSHIFT_LIGHTSPEED_BASE_URL is not configured")
 
-        payload: dict[str, Any] = {"query": normalize_lightspeed_query(query)}
-        if conversation_id:
-            payload["conversation_id"] = conversation_id
-        if self.provider:
-            payload["provider"] = self.provider
-        if self.model:
-            payload["model"] = self.model
-        if self.system_prompt:
-            payload["system_prompt"] = self.system_prompt
+        payload, request_metadata = self.build_query_payload(
+            query,
+            conversation_id=conversation_id,
+            request_profile=request_profile,
+        )
 
         response = requests.post(
             self.query_url,
@@ -233,6 +334,7 @@ class OpenShiftLightspeedClient:
         if not isinstance(data, dict):
             data = {}
         answer = str(data.get("response") or data.get("answer") or "").strip()
+        quality = evaluate_lightspeed_answer_quality(answer)
         quotas = data.get("available_quotas")
         if not isinstance(quotas, dict):
             quotas = {}
@@ -246,5 +348,7 @@ class OpenShiftLightspeedClient:
             available_quotas=quotas,
             tool_calls=_dict_list(data.get("tool_calls")),
             tool_results=_dict_list(data.get("tool_results")),
+            request_metadata=request_metadata,
+            quality=quality,
             raw=data,
         )
