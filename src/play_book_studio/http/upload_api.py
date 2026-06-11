@@ -1231,6 +1231,40 @@ def build_upload_ingest_response(
             asset_count=len(persisted.asset_ids),
             chunk_count=len(persisted.chunk_ids),
         )
+        if settings.entity_graph_enabled:
+            graph_started_at = time.perf_counter()
+            emit("graph_extract", "running", "운영 엔티티/관계를 추출하는 중입니다.")
+            try:
+                from play_book_studio.graph.extractor import build_entity_extractor
+                from play_book_studio.graph.service import extract_graph_for_parsed_document
+
+                graph_summary = extract_graph_for_parsed_document(
+                    connection,
+                    parsed_document_id=persisted.parsed_document_id,
+                    document_source_id=persisted.document_source_id,
+                    extractor=build_entity_extractor(settings),
+                )
+                result["entity_graph"] = {"status": "extracted", **graph_summary}
+                emit(
+                    "graph_extract",
+                    "done",
+                    "운영 엔티티/관계 추출이 완료되었습니다.",
+                    duration_ms=int((time.perf_counter() - graph_started_at) * 1000),
+                    entity_count=graph_summary.get("entity_count", 0),
+                    mention_count=graph_summary.get("mention_count", 0),
+                    relation_count=graph_summary.get("relation_count", 0),
+                )
+            except Exception as exc:  # noqa: BLE001 - graph extraction must never fail the upload
+                result["entity_graph"] = {"status": "failed", "error": str(exc)}
+                result.setdefault("warnings", []).append(f"엔티티 그래프 추출 실패: {exc}")
+                emit(
+                    "graph_extract",
+                    "warning",
+                    f"엔티티 그래프 추출을 건너뜁니다: {exc}",
+                    duration_ms=int((time.perf_counter() - graph_started_at) * 1000),
+                )
+            finally:
+                timings["graph_extract_ms"] = int((time.perf_counter() - graph_started_at) * 1000)
         if _bool_payload(payload.get("index"), default=False):
             index_started_at = time.perf_counter()
             emit("index", "running", "검색 인덱스를 생성하는 중입니다.")

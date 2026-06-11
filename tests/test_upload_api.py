@@ -651,3 +651,132 @@ def test_handle_upload_ingest_report_rejects_invisible_document(monkeypatch):
     )
 
     assert handler.status == HTTPStatus.FORBIDDEN
+
+
+def test_upload_ingest_runs_entity_graph_extraction(monkeypatch):
+    storage_dir = _storage_dir("entity_graph_stage")
+    monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(storage_dir))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test")
+    events = []
+    graph_calls = {}
+
+    import psycopg
+
+    monkeypatch.setattr(psycopg, "connect", lambda database_url: FakeDbConnection())
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.persist_parsed_upload_document",
+        lambda connection, parsed, chunks, **kwargs: StoredDocument(),
+    )
+    monkeypatch.setattr("play_book_studio.http.upload_api.find_document_source_by_sha", lambda *args, **kwargs: None)
+
+    def fake_extract(connection, *, parsed_document_id, document_source_id, extractor, replace=True):
+        graph_calls["parsed_document_id"] = parsed_document_id
+        graph_calls["document_source_id"] = document_source_id
+        graph_calls["extractor"] = f"{extractor.name}:{extractor.version}"
+        return {"entity_count": 3, "mention_count": 5, "relation_count": 2}
+
+    monkeypatch.setattr(
+        "play_book_studio.graph.service.extract_graph_for_parsed_document",
+        fake_extract,
+    )
+
+    result = build_upload_ingest_response(
+        REPO_ROOT,
+        {
+            "file_name": "graph-stage.md",
+            "file_bytes": b"# Graph\n\noc get route pay-api -n ori-pay-prod",
+            "created_by": "owner-1",
+        },
+        progress_callback=events.append,
+    )
+
+    assert graph_calls["parsed_document_id"] == StoredDocument.parsed_document_id
+    assert graph_calls["document_source_id"] == StoredDocument.document_source_id
+    assert graph_calls["extractor"] == "rule:rule-v1"
+    assert result["entity_graph"]["status"] == "extracted"
+    assert result["entity_graph"]["entity_count"] == 3
+    graph_events = [
+        event
+        for event in events
+        if event.get("type") == "stage" and event.get("stage") == "graph_extract"
+    ]
+    assert any(event.get("status") == "done" for event in graph_events)
+
+
+def test_upload_ingest_entity_graph_failure_does_not_fail_upload(monkeypatch):
+    storage_dir = _storage_dir("entity_graph_failure")
+    monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(storage_dir))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test")
+    events = []
+
+    import psycopg
+
+    monkeypatch.setattr(psycopg, "connect", lambda database_url: FakeDbConnection())
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.persist_parsed_upload_document",
+        lambda connection, parsed, chunks, **kwargs: StoredDocument(),
+    )
+    monkeypatch.setattr("play_book_studio.http.upload_api.find_document_source_by_sha", lambda *args, **kwargs: None)
+
+    def broken_extract(connection, **kwargs):
+        raise RuntimeError("graph tables missing")
+
+    monkeypatch.setattr(
+        "play_book_studio.graph.service.extract_graph_for_parsed_document",
+        broken_extract,
+    )
+
+    result = build_upload_ingest_response(
+        REPO_ROOT,
+        {
+            "file_name": "graph-failure.md",
+            "file_bytes": b"# Graph failure\n\ncontent",
+            "created_by": "owner-1",
+        },
+        progress_callback=events.append,
+    )
+
+    assert result["persisted"]["document_source_id"] == StoredDocument.document_source_id
+    assert result["entity_graph"]["status"] == "failed"
+    assert "graph tables missing" in result["entity_graph"]["error"]
+    assert any("엔티티 그래프 추출 실패" in warning for warning in result.get("warnings", []))
+    graph_events = [
+        event
+        for event in events
+        if event.get("type") == "stage" and event.get("stage") == "graph_extract"
+    ]
+    assert any(event.get("status") == "warning" for event in graph_events)
+
+
+def test_upload_ingest_entity_graph_disabled_skips_stage(monkeypatch):
+    storage_dir = _storage_dir("entity_graph_disabled")
+    monkeypatch.setenv("OBJECT_STORAGE_ROOT", str(storage_dir))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test")
+    monkeypatch.setenv("ENTITY_GRAPH_ENABLED", "false")
+    events = []
+
+    import psycopg
+
+    monkeypatch.setattr(psycopg, "connect", lambda database_url: FakeDbConnection())
+    monkeypatch.setattr(
+        "play_book_studio.http.upload_api.persist_parsed_upload_document",
+        lambda connection, parsed, chunks, **kwargs: StoredDocument(),
+    )
+    monkeypatch.setattr("play_book_studio.http.upload_api.find_document_source_by_sha", lambda *args, **kwargs: None)
+
+    result = build_upload_ingest_response(
+        REPO_ROOT,
+        {
+            "file_name": "graph-disabled.md",
+            "file_bytes": b"# Graph disabled\n\ncontent",
+            "created_by": "owner-1",
+        },
+        progress_callback=events.append,
+    )
+
+    assert "entity_graph" not in result
+    assert not any(
+        event.get("stage") == "graph_extract"
+        for event in events
+        if event.get("type") == "stage"
+    )

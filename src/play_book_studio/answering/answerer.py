@@ -1071,8 +1071,12 @@ def _apply_customer_context_answer_contract(
     *,
     query: str,
     citations: list[Citation],
+    graph_values: dict[str, object] | None = None,
 ) -> tuple[str, dict[str, object]]:
-    values = _extract_customer_context_values(citations)
+    regex_values = _extract_customer_context_values(citations)
+    # regex 값이 우선하고, entity graph는 비어 있는 키만 보충한다.
+    values = {**(graph_values or {}), **regex_values}
+    graph_filled_keys = sorted(set(values) - set(regex_values))
     if not values:
         return answer_text, {"status": "skipped", "reason": "no_customer_context_values"}
     updated = _replace_customer_context_command_placeholders(answer_text, values)
@@ -1116,6 +1120,7 @@ def _apply_customer_context_answer_contract(
     return updated, {
         "status": "used" if updated != answer_text else "no_change",
         "values": values,
+        "graph_filled_keys": graph_filled_keys,
         "command_card_count": len(cards),
         "commands": [command for _, command in cards],
     }
@@ -2246,12 +2251,38 @@ class ChatAnswerer:
                 answer_text,
                 final_citations or context_bundle.citations,
             )
-        if lightspeed_used and external_answer_meta.get("context_bridge"):
+        customer_context_present = bool(
+            _customer_context_citations(final_citations or context_bundle.citations)
+        )
+        if (lightspeed_used and external_answer_meta.get("context_bridge")) or customer_context_present:
+            from play_book_studio.answering.graph_context import (
+                load_graph_customer_context_values,
+            )
+
+            graph_context = load_graph_customer_context_values(
+                self.settings,
+                query=query,
+                chunk_ids=[
+                    citation.chunk_id
+                    for citation in _customer_context_citations(
+                        final_citations or context_bundle.citations
+                    )
+                ],
+                answer_text=answer_text,
+                owner_user_id=str(getattr(context, "owner_user_id", "") or ""),
+            )
             customer_contract_answer_text, customer_contract_meta = _apply_customer_context_answer_contract(
                 answer_text,
                 query=query,
                 citations=final_citations or context_bundle.citations,
+                graph_values=graph_context.get("values") or None,
             )
+            if graph_context.get("values"):
+                external_answer_meta["customer_context_graph"] = {
+                    "values": graph_context.get("values", {}),
+                    "evidence": graph_context.get("evidence", []),
+                    "graph_filled_keys": customer_contract_meta.get("graph_filled_keys", []),
+                }
             if customer_contract_meta.get("status") in {"used", "no_change"}:
                 external_answer_meta["customer_context_values"] = customer_contract_meta.get("values", {})
                 external_answer_meta["customer_context_command_cards"] = {

@@ -7,6 +7,7 @@ import time
 from functools import lru_cache
 from pathlib import Path
 
+from .entity_graph import maybe_expand_entity_graph
 from .access_scope import (
     SOURCE_GROUP_CUSTOMER_DOCS,
     SOURCE_GROUP_OFFICIAL_DOCS,
@@ -903,21 +904,26 @@ def execute_retrieval_pipeline(
     vector_hits: list[RetrievalHit] = []
     vector_runtime: dict[str, object] = {}
     if use_vector:
-        vector_search = search_vector_candidates(
-            retriever,
-            context=context,
-            rewritten_queries=plan.rewritten_queries,
-            metadata_filter=plan.metadata_filter or None,
-            correction_notes=plan.correction_notes,
-            effective_candidate_k=effective_candidate_k,
-            trace_callback=trace_callback,
-            timings_ms=timings_ms,
-        )
-        vector_hits = vector_search["hits"]
-        vector_runtime = vector_search["runtime"]
-        vector_hits = _filter_latest_only_hits(retriever, vector_hits)
-        vector_hits = _filter_preferred_source_scope(vector_hits, context)
-        vector_hits = _prefer_official_hits_for_product_intro(query, vector_hits, context)
+        try:
+            vector_search = search_vector_candidates(
+                retriever,
+                context=context,
+                rewritten_queries=plan.rewritten_queries,
+                metadata_filter=plan.metadata_filter or None,
+                correction_notes=plan.correction_notes,
+                effective_candidate_k=effective_candidate_k,
+                trace_callback=trace_callback,
+                timings_ms=timings_ms,
+            )
+        except Exception as exc:  # noqa: BLE001 - degrade to lexical-only retrieval
+            warnings.append(f"vector search degraded to bm25-only: {exc}")
+            vector_runtime = {"status": "failed", "error": str(exc)}
+        else:
+            vector_hits = vector_search["hits"]
+            vector_runtime = vector_search["runtime"]
+            vector_hits = _filter_latest_only_hits(retriever, vector_hits)
+            vector_hits = _filter_preferred_source_scope(vector_hits, context)
+            vector_hits = _prefer_official_hits_for_product_intro(query, vector_hits, context)
 
     _emit_trace_event(
         trace_callback,
@@ -1034,6 +1040,15 @@ def execute_retrieval_pipeline(
                 "hit_count": 0,
             },
         )
+    graph_enriched_hits, entity_graph_trace = maybe_expand_entity_graph(
+        retriever,
+        query=query,
+        hits=graph_enriched_hits,
+        context=context,
+        candidate_k=effective_candidate_k,
+        trace_callback=trace_callback,
+        timings_ms=timings_ms,
+    )
     graph_enriched_hits = _preserve_uploaded_customer_pack_candidate(
         query,
         hybrid_hits=graph_enriched_hits,
@@ -1110,6 +1125,7 @@ def execute_retrieval_pipeline(
         use_vector=use_vector,
         vector_runtime=vector_runtime,
         query_signal_debug=plan.query_signal_debug,
+        entity_graph_trace=entity_graph_trace,
     )
     return RetrievalResult(
         query=query,

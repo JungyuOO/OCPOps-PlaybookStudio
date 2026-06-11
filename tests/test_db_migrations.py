@@ -27,6 +27,7 @@ def test_list_migrations_includes_ingestion_foundation():
     assert versions[9].startswith("0009_")
     assert versions[10] == "0010_pgvector_chunk_embeddings"
     assert versions[11].startswith("0011_")
+    assert versions[12] == "0012_entity_graph_foundation"
     assert all(len(migration.checksum) == 64 for migration in migrations)
     assert "document_chunks" in migrations[1].sql
     assert "qwen_description" in migrations[1].sql
@@ -46,6 +47,10 @@ def test_list_migrations_includes_ingestion_foundation():
     assert "vector(1024)" in migrations[10].sql
     assert "DROP TABLE IF EXISTS" in migrations[11].sql
     assert "starter_question_candidates" in migrations[8].sql
+    assert "graph_entities" in migrations[12].sql
+    assert "graph_entity_mentions" in migrations[12].sql
+    assert "graph_entity_relations" in migrations[12].sql
+    assert "ON DELETE CASCADE" in migrations[12].sql
 
 
 def test_db_migrate_parser_accepts_dry_run_args():
@@ -62,6 +67,31 @@ def test_db_migrate_parser_accepts_dry_run_args():
     assert args.dry_run is True
     assert args.root_dir == REPO_ROOT
     assert args.migrations_dir == Path("db/migrations")
+
+
+def test_graph_entity_backfill_parser_accepts_args():
+    args = build_parser().parse_args(
+        [
+            "graph-entity-backfill",
+            "--root-dir",
+            str(REPO_ROOT),
+            "--source-scope",
+            "official_docs",
+            "--lightspeed",
+            "--rebuild",
+            "--prune",
+            "--limit",
+            "10",
+        ]
+    )
+
+    assert args.command == "graph-entity-backfill"
+    assert args.root_dir == REPO_ROOT
+    assert args.source_scope == "official_docs"
+    assert args.lightspeed is True
+    assert args.rebuild is True
+    assert args.prune is True
+    assert args.limit == 10
 
 
 def test_course_chunk_import_parser_accepts_dry_run_args():

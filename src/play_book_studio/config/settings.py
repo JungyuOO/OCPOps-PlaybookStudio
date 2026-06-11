@@ -117,6 +117,11 @@ class Settings(SettingsPathMixin):
     graph_database: str = ""
     graph_boost_top_n: int = 8
     graph_max_edge_fanout: int = 12
+    entity_graph_enabled: bool = True
+    entity_graph_extractor: str = "rule"
+    entity_graph_max_neighbors: int = 20
+    entity_graph_max_injected_hits: int = 3
+    entity_graph_boost_weight: float = 0.08
     llm_endpoint: str = ""
     llm_model: str = ""
     llm_temperature: float = 0.2
@@ -359,6 +364,15 @@ def load_settings(root_dir: str | Path) -> Settings:
         graph_database=effective_env.get("GRAPH_DATABASE", "").strip(),
         graph_boost_top_n=int(effective_env.get("GRAPH_BOOST_TOP_N", "8")),
         graph_max_edge_fanout=int(effective_env.get("GRAPH_MAX_EDGE_FANOUT", "12")),
+        entity_graph_enabled=effective_env.get("ENTITY_GRAPH_ENABLED", "true").lower()
+        in {"1", "true", "yes", "on"},
+        entity_graph_extractor=effective_env.get("ENTITY_GRAPH_EXTRACTOR", "rule").strip().lower()
+        or "rule",
+        entity_graph_max_neighbors=int(effective_env.get("ENTITY_GRAPH_MAX_NEIGHBORS", "20")),
+        entity_graph_max_injected_hits=int(
+            effective_env.get("ENTITY_GRAPH_MAX_INJECTED_HITS", "3")
+        ),
+        entity_graph_boost_weight=float(effective_env.get("ENTITY_GRAPH_BOOST_WEIGHT", "0.08")),
         llm_endpoint=effective_env.get("LLM_ENDPOINT", "").strip().rstrip("/"),
         llm_model=effective_env.get("LLM_MODEL", "").strip(),
         llm_temperature=float(effective_env.get("LLM_TEMPERATURE", "0.2")),

@@ -99,6 +99,7 @@ def build_retrieval_trace(
     use_vector: bool = True,
     vector_runtime: dict[str, Any] | None = None,
     query_signal_debug: dict[str, Any] | None = None,
+    entity_graph_trace: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     bm25_summary = summarize_hit_list(bm25_hits)
     overlay_bm25_summary = summarize_hit_list(overlay_bm25_hits or [])
@@ -159,4 +160,6 @@ def build_retrieval_trace(
     if overlay_bm25_hits:
         trace["overlay_bm25"] = [hit.to_dict() for hit in overlay_bm25_hits[: min(candidate_k, 10)]]
         trace["metrics"]["overlay_bm25"] = overlay_bm25_summary
+    if entity_graph_trace is not None:
+        trace["entity_graph"] = entity_graph_trace
     return trace

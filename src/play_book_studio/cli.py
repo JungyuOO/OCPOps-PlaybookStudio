@@ -196,6 +196,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compact_graph_parser.add_argument("--output", type=Path, default=None)
 
+    entity_graph_backfill_parser = subparsers.add_parser(
+        "graph-entity-backfill",
+        help="Extract operational entities/relations from stored document chunks into the entity graph tables",
+    )
+    entity_graph_backfill_parser.add_argument("--root-dir", type=Path, default=ROOT)
+    entity_graph_backfill_parser.add_argument("--database-url", default="")
+    entity_graph_backfill_parser.add_argument(
+        "--source-scope",
+        default="all",
+        choices=["all", "official_docs", "user_upload", "customer_docs", "study_docs"],
+    )
+    entity_graph_backfill_parser.add_argument("--lightspeed", action="store_true")
+    entity_graph_backfill_parser.add_argument("--rebuild", action="store_true")
+    entity_graph_backfill_parser.add_argument("--prune", action="store_true")
+    entity_graph_backfill_parser.add_argument("--limit", type=int, default=0)
+
     db_migrate_parser = subparsers.add_parser(
         "db-migrate",
         help="Apply PostgreSQL migrations for ingestion runtime tables",
@@ -1105,6 +1121,29 @@ def _run_graph_compact(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_graph_entity_backfill(args: argparse.Namespace) -> int:
+    from play_book_studio.graph.backfill import run_entity_graph_backfill
+
+    root_dir = args.root_dir.resolve()
+    settings = load_settings(root_dir)
+    database_url = (args.database_url or settings.database_url).strip()
+    if not database_url:
+        print("DATABASE_URL is required. Set it in .env or pass --database-url.")
+        return 1
+
+    summary = run_entity_graph_backfill(
+        settings,
+        database_url=database_url,
+        source_scope=args.source_scope,
+        include_lightspeed=bool(args.lightspeed),
+        rebuild=bool(args.rebuild),
+        prune=bool(args.prune),
+        limit=max(0, int(args.limit or 0)),
+    )
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _run_db_migrate(args: argparse.Namespace) -> int:
     from play_book_studio.db.migrations import apply_migrations, list_migrations
 
@@ -1755,6 +1794,8 @@ def main() -> int:
         return _run_private_lane_smoke(args)
     if args.command == "graph-compact":
         return _run_graph_compact(args)
+    if args.command == "graph-entity-backfill":
+        return _run_graph_entity_backfill(args)
     if args.command == "db-migrate":
         return _run_db_migrate(args)
     if args.command == "upload-ingest":
