@@ -1,0 +1,2646 @@
+{
+  "cases_file": "corpus\\manifests\\eval\\retrieval_eval_cases.jsonl",
+  "top_k": 8,
+  "candidate_k": 24,
+  "case_count": 18,
+  "overall": {
+    "hit@1": 0.8889,
+    "hit@3": 0.9444,
+    "hit@5": 0.9444,
+    "warning_free_rate": 1.0,
+    "similar_document_risk_rate": 0.0556,
+    "policy_overlay_warning_rate": 0.0,
+    "relation_aware_miss_rate": 0.0556,
+    "landing_case_count": 4,
+    "landing_hit@1": 0.5,
+    "landing_hit@3": 0.75,
+    "landing_hit@5": 1.0
+  },
+  "stage_ablation": {
+    "case_count": 18,
+    "overall": {
+      "bm25_hit@1": 0.5556,
+      "bm25_hit@3": 0.5556,
+      "bm25_hit@5": 0.7222,
+      "vector_hit@1": 0.7778,
+      "vector_hit@3": 0.8889,
+      "vector_hit@5": 0.9444,
+      "hybrid_hit@1": 0.8889,
+      "hybrid_hit@3": 0.8889,
+      "hybrid_hit@5": 0.9444,
+      "reranked_hit@1": 0.8889,
+      "reranked_hit@3": 0.9444,
+      "reranked_hit@5": 0.9444,
+      "vector_empty_rate": 0.0,
+      "hybrid_lift_over_bm25_at_5": 0.2222,
+      "rerank_lift_over_hybrid_at_1": 0.0,
+      "rerank_regression_rate_at_1": 0.0,
+      "rewrite_applied_rate": 0.1667,
+      "follow_up_detected_rate": 0.1667,
+      "rerank_top1_changed_rate": 0.1667
+    },
+    "stages": {
+      "bm25": {
+        "hit@1": 0.5556,
+        "hit@3": 0.5556,
+        "hit@5": 0.7222
+      },
+      "vector": {
+        "hit@1": 0.7778,
+        "hit@3": 0.8889,
+        "hit@5": 0.9444
+      },
+      "hybrid": {
+        "hit@1": 0.8889,
+        "hit@3": 0.8889,
+        "hit@5": 0.9444
+      },
+      "reranked": {
+        "hit@1": 0.8889,
+        "hit@3": 0.9444,
+        "hit@5": 0.9444
+      }
+    },
+    "vector_empty_rate": 0.0,
+    "hybrid_lift_over_bm25_at_5": 0.2222,
+    "rerank_lift_over_hybrid_at_1": 0.0,
+    "rerank_regression_rate_at_1": 0.0,
+    "rewrite_applied_rate": 0.1667,
+    "follow_up_detected_rate": 0.1667,
+    "rerank_top1_changed_rate": 0.1667,
+    "hybrid_hit_at_1_case_count": 16,
+    "rewrite_reason_counts": {
+      "follow_up_reference": 3,
+      "no_context": 15
+    },
+    "vector_endpoint_counts": {
+      "search": 18
+    },
+    "hybrid_top_support_counts": {
+      "bm25": 1,
+      "both": 16,
+      "vector": 1
+    },
+    "rerank_reason_counts": {}
+  },
+  "by_query_type": {
+    "ambiguous": {
+      "hit@1": 0.6667,
+      "hit@3": 0.6667,
+      "hit@5": 0.6667,
+      "warning_free_rate": 1.0,
+      "similar_document_risk_rate": 0.0,
+      "policy_overlay_warning_rate": 0.0,
+      "relation_aware_miss_rate": 0.3333,
+      "landing_case_count": 0,
+      "landing_hit@1": 0.0,
+      "landing_hit@3": 0.0,
+      "landing_hit@5": 0.0
+    },
+    "follow-up": {
+      "hit@1": 1.0,
+      "hit@3": 1.0,
+      "hit@5": 1.0,
+      "warning_free_rate": 1.0,
+      "similar_document_risk_rate": 0.0,
+      "policy_overlay_warning_rate": 0.0,
+      "relation_aware_miss_rate": 0.0,
+      "landing_case_count": 0,
+      "landing_hit@1": 0.0,
+      "landing_hit@3": 0.0,
+      "landing_hit@5": 0.0
+    },
+    "learn": {
+      "hit@1": 1.0,
+      "hit@3": 1.0,
+      "hit@5": 1.0,
+      "warning_free_rate": 1.0,
+      "similar_document_risk_rate": 0.0,
+      "policy_overlay_warning_rate": 0.0,
+      "relation_aware_miss_rate": 0.0,
+      "landing_case_count": 1,
+      "landing_hit@1": 0.0,
+      "landing_hit@3": 1.0,
+      "landing_hit@5": 1.0
+    },
+    "ops": {
+      "hit@1": 0.875,
+      "hit@3": 1.0,
+      "hit@5": 1.0,
+      "warning_free_rate": 1.0,
+      "similar_document_risk_rate": 0.125,
+      "policy_overlay_warning_rate": 0.0,
+      "relation_aware_miss_rate": 0.0,
+      "landing_case_count": 3,
+      "landing_hit@1": 0.6667,
+      "landing_hit@3": 0.6667,
+      "landing_hit@5": 1.0
+    }
+  },
+  "by_mode": {
+    "retrieval": {
+      "hit@1": 0.8889,
+      "hit@3": 0.9444,
+      "hit@5": 0.9444,
+      "warning_free_rate": 1.0,
+      "similar_document_risk_rate": 0.0556,
+      "policy_overlay_warning_rate": 0.0,
+      "relation_aware_miss_rate": 0.0556,
+      "landing_case_count": 4,
+      "landing_hit@1": 0.5,
+      "landing_hit@3": 0.75,
+      "landing_hit@5": 1.0
+    }
+  },
+  "graph_signal_counts": {
+    "relation-aware-retrieval": 1,
+    "similar-document": 1
+  },
+  "misses": [
+    {
+      "id": "ambiguous-001",
+      "query": "로그는 어디서 봐?",
+      "query_type": "ambiguous",
+      "expected_book_slugs": [
+        "logging",
+        "monitoring",
+        "observability_overview"
+      ],
+      "top_book_slugs": [
+        "security_and_compliance",
+        "nodes",
+        "nodes",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance"
+      ],
+      "graph_signal_tag": "relation-aware-retrieval",
+      "graph_signal_reason": "context-dependent query missed the expected playbook family"
+    }
+  ],
+  "details": [
+    {
+      "id": "ops-001",
+      "mode": "retrieval",
+      "query_type": "ops",
+      "query": "etcd 백업은 어떻게 하나?",
+      "rewritten_query": "etcd 백업은 어떻게 하나? oc debug node node/<node-name> chroot /host / 백업 Backing up 정적 pod 리소스 설치 후 클러스터 작업 cluster-backup.sh restore quorum backup /usr/local/bin/cluster-backup.sh static_kuberesources",
+      "expected_book_slugs": [
+        "backup_and_restore",
+        "etcd",
+        "postinstallation_configuration"
+      ],
+      "expected_landing_terms": [
+        "backup"
+      ],
+      "top_book_slugs": [
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "etcd",
+        "etcd",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "d73c3a51-23dc-5d03-a473-bfca0407b003",
+          "book_slug": "postinstallation_configuration",
+          "section": "4.12.7. 두 개 이상의 노드의 이전 클러스터 상태로 복원",
+          "anchor": "dr-scenario-2-restoring-cluster-state_post-install-cluster-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#dr-scenario-2-restoring-cluster-state_post-install-cluster-tasks",
+          "score": 0.14015307152758155
+        },
+        {
+          "chunk_id": "083ba8fa-426a-5e30-b237-195867091107",
+          "book_slug": "postinstallation_configuration",
+          "section": "4.12.7. 두 개 이상의 노드의 이전 클러스터 상태로 복원",
+          "anchor": "dr-scenario-2-restoring-cluster-state_post-install-cluster-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#dr-scenario-2-restoring-cluster-state_post-install-cluster-tasks",
+          "score": 0.12270927618782616
+        },
+        {
+          "chunk_id": "bfb075d0-a420-5731-bf9c-580e12b5a846",
+          "book_slug": "postinstallation_configuration",
+          "section": "4.12.7. 두 개 이상의 노드의 이전 클러스터 상태로 복원",
+          "anchor": "dr-scenario-2-restoring-cluster-state_post-install-cluster-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#dr-scenario-2-restoring-cluster-state_post-install-cluster-tasks",
+          "score": 0.050480401423609766
+        },
+        {
+          "chunk_id": "1d093274-0d1a-58a7-88fd-4357d990d810",
+          "book_slug": "etcd",
+          "section": "4.3.2.4. etcd 백업에서 수동으로 클러스터 복원",
+          "anchor": "manually-restoring-cluster-etcd-backup_etcd-disaster-recovery",
+          "viewer_path": "/docs/ocp/4.20/ko/etcd/index.html#manually-restoring-cluster-etcd-backup_etcd-disaster-recovery",
+          "score": 0.06280721329101642
+        },
+        {
+          "chunk_id": "f1ece47a-d7f2-5b3d-a533-aab29dfb474b",
+          "book_slug": "etcd",
+          "section": "4.3.2.3. 두 개 이상의 노드의 이전 클러스터 상태로 복원",
+          "anchor": "dr-scenario-2-restoring-cluster-state_etcd-disaster-recovery",
+          "viewer_path": "/docs/ocp/4.20/ko/etcd/index.html#dr-scenario-2-restoring-cluster-state_etcd-disaster-recovery",
+          "score": 0.05542693464476905
+        },
+        {
+          "chunk_id": "8f332bd4-cd2e-5714-aaaf-e86d42c0b605",
+          "book_slug": "postinstallation_configuration",
+          "section": "5.1.5. AWS에서 사용자 지정 /var 파티션을 사용하여 새 RHCOS 작업자 노드 추가",
+          "anchor": "machine-node-custom-partition_post-install-node-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#machine-node-custom-partition_post-install-node-tasks",
+          "score": 0.08110095840000003
+        },
+        {
+          "chunk_id": "80e7f3c1-f210-594c-a188-0841abd55029",
+          "book_slug": "postinstallation_configuration",
+          "section": "4.12.5. etcd 데이터 백업",
+          "anchor": "backing-up-etcd-data_post-install-cluster-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#backing-up-etcd-data_post-install-cluster-tasks",
+          "score": 0.10151994037029852
+        },
+        {
+          "chunk_id": "1e3bdef7-97ed-5a6d-9825-5ca6da815088",
+          "book_slug": "postinstallation_configuration",
+          "section": "4.12.5. etcd 데이터 백업",
+          "anchor": "backing-up-etcd-data_post-install-cluster-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#backing-up-etcd-data_post-install-cluster-tasks",
+          "score": 0.09804448295221624
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "kmsc-operations",
+        "kmsc-operations",
+        "study_docs",
+        "backup_and_restore",
+        "backup_and_restore",
+        "etcd",
+        "postinstallation_configuration",
+        "etcd",
+        "postinstallation_configuration",
+        "ingress_and_load_balancing"
+      ],
+      "vector_top_book_slugs": [
+        "etcd",
+        "etcd",
+        "postinstallation_configuration",
+        "etcd",
+        "etcd",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "etcd",
+        "etcd",
+        "etcd"
+      ],
+      "hybrid_top_book_slugs": [
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration"
+      ],
+      "reranked_top_book_slugs": [
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "etcd",
+        "etcd"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "ops-002",
+      "mode": "retrieval",
+      "query_type": "ops",
+      "query": "클러스터 업데이트 전에 확인할 사항은?",
+      "rewritten_query": "클러스터 업데이트 전에 확인할 사항은? 상태 확인 판단 기준 oc CLI 명령어",
+      "expected_book_slugs": [
+        "updating_clusters",
+        "release_notes"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "release_notes",
+        "release_notes",
+        "updating_clusters",
+        "validation_and_troubleshooting",
+        "validation_and_troubleshooting",
+        "validation_and_troubleshooting",
+        "updating_clusters",
+        "updating_clusters"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "17d3a453-6280-5521-9091-ba8e0d888374",
+          "book_slug": "release_notes",
+          "section": "1.3.17.1. oc adm upgrade recommend 명령 소개 (일반 가용성)",
+          "anchor": "ocp-oc-adm-upgrade-recommend_release-notes",
+          "viewer_path": "/docs/ocp/4.20/ko/release_notes/index.html#ocp-oc-adm-upgrade-recommend_release-notes",
+          "score": 5.445552825927734
+        },
+        {
+          "chunk_id": "6f0b512b-6d8e-564d-9240-0e86132abbd4",
+          "book_slug": "release_notes",
+          "section": "1.3.17.1. oc adm upgrade recommend 명령 소개 (일반 가용성)",
+          "anchor": "ocp-oc-adm-upgrade-recommend_release-notes",
+          "viewer_path": "/docs/ocp/4.20/ko/release_notes/index.html#ocp-oc-adm-upgrade-recommend_release-notes",
+          "score": 5.445552825927734
+        },
+        {
+          "chunk_id": "0c78a394-7fe1-50a1-a2de-420825b4050b",
+          "book_slug": "updating_clusters",
+          "section": "3.7.1. CLI를 사용하여 다중 아키텍처 컴퓨팅 머신이 있는 클러스터로 마이그레이션",
+          "anchor": "migrating-to-multi-arch-cli_updating-clusters-overview",
+          "viewer_path": "/docs/ocp/4.20/ko/updating_clusters/index.html#migrating-to-multi-arch-cli_updating-clusters-overview",
+          "score": 4.207250118255615
+        },
+        {
+          "chunk_id": "656769f1-250f-5c88-9453-dbfbc79d1ddf",
+          "book_slug": "validation_and_troubleshooting",
+          "section": "1.4. 클러스터 버전, 상태 및 업데이트 세부 정보 가져오기",
+          "anchor": "getting-cluster-version-and-update-details_validating-an-installation",
+          "viewer_path": "/docs/ocp/4.20/ko/validation_and_troubleshooting/index.html#getting-cluster-version-and-update-details_validating-an-installation",
+          "score": 4.068508625030518
+        },
+        {
+          "chunk_id": "57aae2dd-43d9-53dc-a2dc-999b8651286e",
+          "book_slug": "validation_and_troubleshooting",
+          "section": "1.6. CLI를 사용하여 클러스터 노드의 상태 쿼리",
+          "anchor": "querying-the-status-of-cluster-nodes-using-the-cli_validating-an-installation",
+          "viewer_path": "/docs/ocp/4.20/ko/validation_and_troubleshooting/index.html#querying-the-status-of-cluster-nodes-using-the-cli_validating-an-installation",
+          "score": 4.062195777893066
+        },
+        {
+          "chunk_id": "c3105116-f42c-587f-8ff2-6fae276d171a",
+          "book_slug": "validation_and_troubleshooting",
+          "section": "1.4. 클러스터 버전, 상태 및 업데이트 세부 정보 가져오기",
+          "anchor": "getting-cluster-version-and-update-details_validating-an-installation",
+          "viewer_path": "/docs/ocp/4.20/ko/validation_and_troubleshooting/index.html#getting-cluster-version-and-update-details_validating-an-installation",
+          "score": 3.3291451930999756
+        },
+        {
+          "chunk_id": "e6d141e8-b484-5912-8105-1078d676ec02",
+          "book_slug": "updating_clusters",
+          "section": "3.1.4. CLI를 사용하여 클러스터 업데이트",
+          "anchor": "update-upgrading-cli_updating-cluster-cli",
+          "viewer_path": "/docs/ocp/4.20/ko/updating_clusters/index.html#update-upgrading-cli_updating-cluster-cli",
+          "score": 3.234851360321045
+        },
+        {
+          "chunk_id": "95082b6c-aaaa-5798-abe5-f37b599206fd",
+          "book_slug": "updating_clusters",
+          "section": "3.1.4. CLI를 사용하여 클러스터 업데이트",
+          "anchor": "update-upgrading-cli_updating-cluster-cli",
+          "viewer_path": "/docs/ocp/4.20/ko/updating_clusters/index.html#update-upgrading-cli_updating-cluster-cli",
+          "score": 2.648679256439209
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations"
+      ],
+      "vector_top_book_slugs": [
+        "validation_and_troubleshooting",
+        "validation_and_troubleshooting",
+        "updating_clusters",
+        "validation_and_troubleshooting",
+        "release_notes",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters"
+      ],
+      "hybrid_top_book_slugs": [
+        "release_notes",
+        "updating_clusters",
+        "release_notes",
+        "updating_clusters",
+        "validation_and_troubleshooting"
+      ],
+      "reranked_top_book_slugs": [
+        "release_notes",
+        "release_notes",
+        "updating_clusters",
+        "validation_and_troubleshooting",
+        "validation_and_troubleshooting"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "ops-003",
+      "mode": "retrieval",
+      "query_type": "ops",
+      "query": "이미지 레지스트리 저장소를 구성하려면?",
+      "rewritten_query": "이미지 레지스트리 저장소를 구성하려면? oc get configs.imageregistry.operator.openshift.io Image registry / ImageContentSourcePolicy",
+      "expected_book_slugs": [
+        "registry",
+        "images"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "installing_on_any_platform",
+        "registry",
+        "registry",
+        "registry"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "2d4520a0-0e4d-5739-943c-9733097257dd",
+          "book_slug": "registry",
+          "section": "3.6.3.2. 프로덕션 환경 외 클러스터에서 이미지 레지스트리의 스토리지 구성",
+          "anchor": "installation-registry-storage-non-production_configuring-registry-storage-baremetal",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#installation-registry-storage-non-production_configuring-registry-storage-baremetal",
+          "score": 0.051864179104477624
+        },
+        {
+          "chunk_id": "38adfda2-2eda-5504-a187-89a6bd998c1b",
+          "book_slug": "registry",
+          "section": "3.9.3.2. 프로덕션 환경 외 클러스터에서 이미지 레지스트리의 스토리지 구성",
+          "anchor": "installation-registry-storage-non-production_configuring-registry-storage-nutanix",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#installation-registry-storage-non-production_configuring-registry-storage-nutanix",
+          "score": 0.05107690257352942
+        },
+        {
+          "chunk_id": "116a2bd5-f491-562b-aa3f-dde4c32409ea",
+          "book_slug": "registry",
+          "section": "3.7.3.2. 프로덕션 환경 외 클러스터에서 이미지 레지스트리의 스토리지 구성",
+          "anchor": "installation-registry-storage-non-production_configuring-registry-storage-vsphere",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#installation-registry-storage-non-production_configuring-registry-storage-vsphere",
+          "score": 0.05031319063545152
+        },
+        {
+          "chunk_id": "5aba38df-82de-5553-b0f7-18ab41e8eaf1",
+          "book_slug": "registry",
+          "section": "2.5. 이미지 레지스트리 Operator 설정 매개 변수",
+          "anchor": "registry-operator-configuration-resource-overview_configuring-registry-operator",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#registry-operator-configuration-resource-overview_configuring-registry-operator",
+          "score": 0.03453390343588593
+        },
+        {
+          "chunk_id": "ba0b944e-7a9c-520e-b017-585d05a7d96e",
+          "book_slug": "installing_on_any_platform",
+          "section": "1.17.3.2. Configuring storage for the image registry in non-production clusters",
+          "anchor": "installation-registry-storage-non-production_installing-platform-agnostic",
+          "viewer_path": "/docs/ocp/4.20/ko/installing_on_any_platform/index.html#installation-registry-storage-non-production_installing-platform-agnostic",
+          "score": 0.031586055194805195
+        },
+        {
+          "chunk_id": "68a9966a-0096-506a-8a4a-33e4ec858c8c",
+          "book_slug": "registry",
+          "section": "3.8.1. Red Hat OpenShift Data Foundation에서 Ceph RGW 스토리지를 사용하도록 이미지 레지스트리 Operator 구성",
+          "anchor": "registry-configuring-registry-storage-rhodf-cephrgw_configuring-registry-storage-rhodf",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#registry-configuring-registry-storage-rhodf-cephrgw_configuring-registry-storage-rhodf",
+          "score": 0.02590753846153847
+        },
+        {
+          "chunk_id": "de8ccaad-959a-5a6c-981f-6456b37cc71c",
+          "book_slug": "registry",
+          "section": "2.6. CRD를 사용하여 이미지 레지스트리 기본 경로 활성화",
+          "anchor": "registry-operator-default-crd_configuring-registry-operator",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#registry-operator-default-crd_configuring-registry-operator",
+          "score": 0.025561475409836068
+        },
+        {
+          "chunk_id": "e3aec3a3-99bd-5c2f-9ae4-f6061e3f5a4d",
+          "book_slug": "registry",
+          "section": "3.7.2. 이미지 레지스트리의 관리 상태 변경",
+          "anchor": "registry-change-management-state_configuring-registry-storage-vsphere",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#registry-change-management-state_configuring-registry-storage-vsphere",
+          "score": 0.02551500000000001
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry"
+      ],
+      "vector_top_book_slugs": [
+        "registry",
+        "images",
+        "registry",
+        "images",
+        "registry",
+        "images",
+        "registry",
+        "registry",
+        "registry",
+        "images"
+      ],
+      "hybrid_top_book_slugs": [
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "installing_on_any_platform"
+      ],
+      "reranked_top_book_slugs": [
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "installing_on_any_platform"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "ops-004",
+      "mode": "retrieval",
+      "query_type": "ops",
+      "query": "Route와 Ingress 차이가 뭐야?",
+      "rewritten_query": "Route와 Ingress 차이가 뭐야? oc describe route / 라우트 인그레스 애플리케이션 노출 Service TLS IngressController 비교 차이점 유사점 networking Kubernetes",
+      "expected_book_slugs": [
+        "ingress_and_load_balancing",
+        "networking_overview"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "networking_overview",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "896085e7-bf4f-5adc-97e2-556feaf97dde",
+          "book_slug": "networking_overview",
+          "section": "1.3.1. Ingress 및 Route 오브젝트를 사용하여 애플리케이션 노출",
+          "anchor": "exposing-applications-with-ingress-and-route-objects_understanding-networking",
+          "viewer_path": "/docs/ocp/4.20/ko/networking_overview/index.html#exposing-applications-with-ingress-and-route-objects_understanding-networking",
+          "score": 4.309503078460693
+        },
+        {
+          "chunk_id": "b0f331f1-6819-5a32-99b8-182cef1d6d18",
+          "book_slug": "ingress_and_load_balancing",
+          "section": "1.1.3. Ingress 컨트롤러 샤딩의 경로 생성",
+          "anchor": "nw-ingress-sharding-route-configuration_creating-basic-routes",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-sharding-route-configuration_creating-basic-routes",
+          "score": -1.7012555599212646
+        },
+        {
+          "chunk_id": "5baacdbc-d44f-53f3-8945-401be509963a",
+          "book_slug": "ingress_and_load_balancing",
+          "section": "1.1.4. Ingress 오브젝트를 통해 경로 생성",
+          "anchor": "nw-ingress-creating-a-route-via-an-ingress_creating-basic-routes",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-creating-a-route-via-an-ingress_creating-basic-routes",
+          "score": -2.123741865158081
+        },
+        {
+          "chunk_id": "c2f1339c-29fe-56ea-91e1-d48e30593db6",
+          "book_slug": "ingress_and_load_balancing",
+          "section": "1.1.4. Ingress 오브젝트를 통해 경로 생성",
+          "anchor": "nw-ingress-creating-a-route-via-an-ingress_creating-basic-routes",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-creating-a-route-via-an-ingress_creating-basic-routes",
+          "score": -2.1550981998443604
+        },
+        {
+          "chunk_id": "0555cbdf-25c9-548d-ae38-fc4de96d52a3",
+          "book_slug": "ingress_and_load_balancing",
+          "section": "1.1.3. Ingress 컨트롤러 샤딩의 경로 생성",
+          "anchor": "nw-ingress-sharding-route-configuration_creating-basic-routes",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-sharding-route-configuration_creating-basic-routes",
+          "score": -2.3116190433502197
+        },
+        {
+          "chunk_id": "59a24e55-d760-5a52-81ba-2392a9552cf0",
+          "book_slug": "ingress_and_load_balancing",
+          "section": "1.1.3. Ingress 컨트롤러 샤딩의 경로 생성",
+          "anchor": "nw-ingress-sharding-route-configuration_creating-basic-routes",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-sharding-route-configuration_creating-basic-routes",
+          "score": -2.611881971359253
+        },
+        {
+          "chunk_id": "581350bc-fd3a-5137-a0a3-ef75fab6ade4",
+          "book_slug": "ingress_and_load_balancing",
+          "section": "2.3.6.7. Ingress 컨트롤러 샤딩의 경로 생성",
+          "anchor": "nw-ingress-sharding-route-configuration_configuring-ingress-cluster-traffic-ingress-controller",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-sharding-route-configuration_configuring-ingress-cluster-traffic-ingress-controller",
+          "score": -2.7604682445526123
+        },
+        {
+          "chunk_id": "ba80cabb-6b6d-5b16-a7e7-26896245addc",
+          "book_slug": "ingress_and_load_balancing",
+          "section": "2.4.1.3. Ingress 컨트롤러에 단일 NodePort 서비스 추가",
+          "anchor": "nw-ingress-controller-nodeportservice-projects_nw-configuring-ingress-controller-endpoint-publishing-strategy",
+          "viewer_path": "/docs/ocp/4.20/ko/ingress_and_load_balancing/index.html#nw-ingress-controller-nodeportservice-projects_nw-configuring-ingress-controller-endpoint-publishing-strategy",
+          "score": -3.8674161434173584
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "cli_tools",
+        "cli_tools",
+        "study_docs",
+        "cli_tools",
+        "cli_tools",
+        "study_docs",
+        "cli_tools",
+        "cli_tools",
+        "cli_tools",
+        "ingress_and_load_balancing"
+      ],
+      "vector_top_book_slugs": [
+        "networking_overview",
+        "networking_overview",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "networking_overview",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing"
+      ],
+      "hybrid_top_book_slugs": [
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing"
+      ],
+      "reranked_top_book_slugs": [
+        "networking_overview",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing",
+        "ingress_and_load_balancing"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": true,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "ops-005",
+      "mode": "retrieval",
+      "query_type": "ops",
+      "query": "연결이 끊긴 환경에서 이미지 미러링은 어떻게 준비해?",
+      "rewritten_query": "연결이 끊긴 환경에서 이미지 미러링은 어떻게 준비해?",
+      "expected_book_slugs": [
+        "disconnected_environments",
+        "images"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "8076bd97-aa58-57e6-9cbb-69e0b6d205fd",
+          "book_slug": "disconnected_environments",
+          "section": "7.7.2. 완전히 연결이 끊긴 환경에서 이미지 세트 미러링",
+          "anchor": "mirroring-image-set-full",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#mirroring-image-set-full",
+          "score": 9.67548656463623
+        },
+        {
+          "chunk_id": "df80e2dd-25e5-5abc-b07e-d92530a0eaf3",
+          "book_slug": "disconnected_environments",
+          "section": "7.7.2. 완전히 연결이 끊긴 환경에서 이미지 세트 미러링",
+          "anchor": "mirroring-image-set-full",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#mirroring-image-set-full",
+          "score": 9.67548656463623
+        },
+        {
+          "chunk_id": "64fa03a8-60df-5218-97df-a427d5426b4a",
+          "book_slug": "disconnected_environments",
+          "section": "5.4.4. 완전히 연결이 끊긴 환경에서 이미지 세트 미러링",
+          "anchor": "oc-mirror-workflows-fully-disconnected-v2_about-installing-oc-mirror-v2",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#oc-mirror-workflows-fully-disconnected-v2_about-installing-oc-mirror-v2",
+          "score": 9.111973762512207
+        },
+        {
+          "chunk_id": "ce77ea84-0eef-5c5f-8656-155a6b4b3ac0",
+          "book_slug": "disconnected_environments",
+          "section": "7.7. 미러 레지스트리로 이미지 세트 미러링",
+          "anchor": "mirroring-image-set",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#mirroring-image-set",
+          "score": 8.374695777893066
+        },
+        {
+          "chunk_id": "6f9c7c69-6efb-5ed9-8f4b-5e17d5454b48",
+          "book_slug": "disconnected_environments",
+          "section": "7.7.1. 부분적으로 연결이 끊긴 환경에서 이미지 세트 미러링",
+          "anchor": "mirroring-image-set-partial",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#mirroring-image-set-partial",
+          "score": 7.676589488983154
+        },
+        {
+          "chunk_id": "6ab8cc2c-822c-537d-9dc5-ff15776b48b6",
+          "book_slug": "disconnected_environments",
+          "section": "11.1.1. OpenShift Container Platform 이미지 미러링",
+          "anchor": "about-disconnected-updates-mirroring_about-disconnected-updates",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#about-disconnected-updates-mirroring_about-disconnected-updates",
+          "score": 7.119772434234619
+        },
+        {
+          "chunk_id": "759c3919-a89e-5367-b233-80a459a5856a",
+          "book_slug": "disconnected_environments",
+          "section": "11.1.1. OpenShift Container Platform 이미지 미러링",
+          "anchor": "about-disconnected-updates-mirroring_about-disconnected-updates",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#about-disconnected-updates-mirroring_about-disconnected-updates",
+          "score": 7.119772434234619
+        },
+        {
+          "chunk_id": "0eae55b1-84d9-5cb8-90bf-e552c8e57b0c",
+          "book_slug": "disconnected_environments",
+          "section": "5.4. 미러 레지스트리로 이미지 세트 미러링",
+          "anchor": "using-oc-mirror_about-installing-oc-mirror-v2",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#using-oc-mirror_about-installing-oc-mirror-v2",
+          "score": 6.61924409866333
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments"
+      ],
+      "vector_top_book_slugs": [
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments"
+      ],
+      "hybrid_top_book_slugs": [
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments"
+      ],
+      "reranked_top_book_slugs": [
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments",
+        "disconnected_environments"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "ops-006",
+      "mode": "retrieval",
+      "query_type": "ops",
+      "query": "노드 드레이닝은 어떻게 동작해?",
+      "rewritten_query": "노드 드레이닝은 어떻게 동작해? oc debug node / Ready NotReady",
+      "expected_book_slugs": [
+        "nodes",
+        "machine_management"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "images",
+        "nodes",
+        "machine_configuration",
+        "nodes",
+        "nodes",
+        "postinstallation_configuration",
+        "study_docs",
+        "nodes"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "7c0d0d26-140e-5b27-914e-648ed5d9eda8",
+          "book_slug": "images",
+          "section": "9.4.2. 이미지의 단축 이름을 허용하는 레지스트리 추가",
+          "anchor": "images-configuration-shortname_image-configuration",
+          "viewer_path": "/docs/ocp/4.20/ko/images/index.html#images-configuration-shortname_image-configuration",
+          "score": 3.42048716545105
+        },
+        {
+          "chunk_id": "9646c631-1abf-519d-b4eb-e3dfb58e505b",
+          "book_slug": "nodes",
+          "section": "6.9.4. 노드를 정상적으로 재부팅",
+          "anchor": "nodes-nodes-rebooting-gracefully_nodes-nodes-rebooting",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-nodes-rebooting-gracefully_nodes-nodes-rebooting",
+          "score": 3.1954097747802734
+        },
+        {
+          "chunk_id": "7eb0e6d7-e0bb-594a-aaf5-193466b58287",
+          "book_slug": "machine_configuration",
+          "section": "8.4.1. Reverting an out-of-cluster node",
+          "anchor": "coreos-layering-removing_mco-coreos-layering",
+          "viewer_path": "/docs/ocp/4.20/ko/machine_configuration/index.html#coreos-layering-removing_mco-coreos-layering",
+          "score": 2.771282911300659
+        },
+        {
+          "chunk_id": "f464bb5d-f2ef-5ec2-acbf-71cfcda5fb1f",
+          "book_slug": "nodes",
+          "section": "6.1.1. 클러스터의 모든 노드 나열 정보",
+          "anchor": "nodes-nodes-viewing-listing_nodes-nodes-viewing",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-nodes-viewing-listing_nodes-nodes-viewing",
+          "score": 1.8804939985275269
+        },
+        {
+          "chunk_id": "e98462f1-407b-5980-bd64-5783a1a43c2b",
+          "book_slug": "nodes",
+          "section": "6.9.4. 노드를 정상적으로 재부팅",
+          "anchor": "nodes-nodes-rebooting-gracefully_nodes-nodes-rebooting",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-nodes-rebooting-gracefully_nodes-nodes-rebooting",
+          "score": 1.6121273040771484
+        },
+        {
+          "chunk_id": "8f332bd4-cd2e-5714-aaaf-e86d42c0b605",
+          "book_slug": "postinstallation_configuration",
+          "section": "5.1.5. AWS에서 사용자 지정 /var 파티션을 사용하여 새 RHCOS 작업자 노드 추가",
+          "anchor": "machine-node-custom-partition_post-install-node-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#machine-node-custom-partition_post-install-node-tasks",
+          "score": 1.2758936882019043
+        },
+        {
+          "chunk_id": "3efe3198-c84f-55c8-85b7-84e61f289f03",
+          "book_slug": "study_docs",
+          "section": "shutdown -h now",
+          "anchor": "shutdown--h-now",
+          "viewer_path": "/uploads/documents/fa8703b0-7263-4475-8cff-a5480a18566c/chunks/3efe3198-c84f-55c8-85b7-84e61f289f03",
+          "score": 1.1447914838790894
+        },
+        {
+          "chunk_id": "11868cd8-b23e-5962-938f-dbd03768e2bd",
+          "book_slug": "nodes",
+          "section": "6.1.1. 클러스터의 모든 노드 나열 정보",
+          "anchor": "nodes-nodes-viewing-listing_nodes-nodes-viewing",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-nodes-viewing-listing_nodes-nodes-viewing",
+          "score": 1.1207586526870728
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "machine_configuration",
+        "machine_configuration",
+        "machine_configuration",
+        "backup_and_restore",
+        "study_docs",
+        "study_docs",
+        "study_docs",
+        "machine_configuration",
+        "backup_and_restore",
+        "postinstallation_configuration"
+      ],
+      "vector_top_book_slugs": [
+        "nodes",
+        "study_docs",
+        "nodes",
+        "study_docs",
+        "security_and_compliance",
+        "nodes",
+        "study_docs",
+        "nodes",
+        "cli_tools",
+        "nodes"
+      ],
+      "hybrid_top_book_slugs": [
+        "machine_configuration",
+        "machine_configuration",
+        "machine_configuration",
+        "nodes",
+        "nodes"
+      ],
+      "reranked_top_book_slugs": [
+        "images",
+        "nodes",
+        "machine_configuration",
+        "nodes",
+        "nodes"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": true,
+      "rerank_reasons": [],
+      "graph_signal_tag": "similar-document",
+      "graph_signal_reason": "expected family was retrieved but lost rank to a similar or adjacent manual"
+    },
+    {
+      "id": "ops-007",
+      "mode": "retrieval",
+      "query_type": "ops",
+      "query": "노드 CPU랑 메모리 사용량은 어떻게 확인해?",
+      "rewritten_query": "노드 CPU랑 메모리 사용량은 어떻게 확인해? oc adm top pods debug node 상태 확인 판단 기준 resource usage / 리소스 사용량 CLI 명령어 CPU memory utilization Ready NotReady requests limits nodes",
+      "expected_book_slugs": [
+        "nodes",
+        "support"
+      ],
+      "expected_landing_terms": [
+        "사용량"
+      ],
+      "top_book_slugs": [
+        "support",
+        "support",
+        "support",
+        "nodes",
+        "nodes",
+        "nodes",
+        "nodes",
+        "nodes"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "70f1eeb8-6004-56b7-9be4-aadc62786735",
+          "book_slug": "support",
+          "section": "7.2.1. 노드 상태, 리소스 사용량 및 구성 확인",
+          "anchor": "reviewing-node-status-use-and-configuration_verifying-node-health",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#reviewing-node-status-use-and-configuration_verifying-node-health",
+          "score": 6.617144584655762
+        },
+        {
+          "chunk_id": "575b9b5a-cc6c-5f5f-97d3-017debe9b2df",
+          "book_slug": "support",
+          "section": "7.2.1. 노드 상태, 리소스 사용량 및 구성 확인",
+          "anchor": "reviewing-node-status-use-and-configuration_verifying-node-health",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#reviewing-node-status-use-and-configuration_verifying-node-health",
+          "score": 6.901820182800293
+        },
+        {
+          "chunk_id": "10d51671-2bc6-595f-ba9b-9fb9f850cb4d",
+          "book_slug": "support",
+          "section": "7.2.1. 노드 상태, 리소스 사용량 및 구성 확인",
+          "anchor": "reviewing-node-status-use-and-configuration_verifying-node-health",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#reviewing-node-status-use-and-configuration_verifying-node-health",
+          "score": 5.719216823577881
+        },
+        {
+          "chunk_id": "c7402461-95f9-5533-b6eb-4adcd45f1184",
+          "book_slug": "nodes",
+          "section": "6.1.3. 노드의 메모리 및 CPU 사용량 통계 보기",
+          "anchor": "nodes-nodes-viewing-memory_nodes-nodes-viewing",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-nodes-viewing-memory_nodes-nodes-viewing",
+          "score": 8.145798683166504
+        },
+        {
+          "chunk_id": "b6e50950-68c0-595e-8189-3581f8c5fceb",
+          "book_slug": "nodes",
+          "section": "6.1.3. 노드의 메모리 및 CPU 사용량 통계 보기",
+          "anchor": "nodes-nodes-viewing-memory_nodes-nodes-viewing",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-nodes-viewing-memory_nodes-nodes-viewing",
+          "score": 8.219449043273926
+        },
+        {
+          "chunk_id": "3cc8d0c1-55dd-5d7e-97bf-e9897b8e1c7d",
+          "book_slug": "nodes",
+          "section": "2.2.2. Pod 사용량 통계 보기",
+          "anchor": "nodes-pods-viewing-usage_nodes-pods-viewing",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-pods-viewing-usage_nodes-pods-viewing",
+          "score": 5.281509876251221
+        },
+        {
+          "chunk_id": "8db89739-29b3-5d23-94e5-485c93a1a960",
+          "book_slug": "nodes",
+          "section": "2.2.2. Pod 사용량 통계 보기",
+          "anchor": "nodes-pods-viewing-usage_nodes-pods-viewing",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-pods-viewing-usage_nodes-pods-viewing",
+          "score": 5.604816913604736
+        },
+        {
+          "chunk_id": "933f36e3-48fa-5ce2-864a-026d6e6057ff",
+          "book_slug": "nodes",
+          "section": "2.2.2. Pod 사용량 통계 보기",
+          "anchor": "nodes-pods-viewing-usage_nodes-pods-viewing",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#nodes-pods-viewing-usage_nodes-pods-viewing",
+          "score": 6.442681789398193
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "support",
+        "cli_tools",
+        "cli_tools",
+        "support",
+        "study_docs",
+        "nodes",
+        "validation_and_troubleshooting",
+        "kmsc-operations",
+        "security_and_compliance",
+        "nodes"
+      ],
+      "vector_top_book_slugs": [
+        "support",
+        "cli_tools",
+        "validation_and_troubleshooting",
+        "nodes",
+        "nodes",
+        "nodes",
+        "nodes",
+        "nodes",
+        "validation_and_troubleshooting",
+        "nodes"
+      ],
+      "hybrid_top_book_slugs": [
+        "support",
+        "support",
+        "nodes",
+        "nodes",
+        "nodes"
+      ],
+      "reranked_top_book_slugs": [
+        "support",
+        "support",
+        "support",
+        "nodes",
+        "nodes"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "ops-008",
+      "mode": "retrieval",
+      "query_type": "ops",
+      "query": "API 서버 인증서 만료 여부는 어떻게 확인해?",
+      "rewritten_query": "API 서버 인증서 만료 여부는 어떻게 확인해? oc debug node 상태 확인 판단 기준 / 노드 CLI 명령어 Ready NotReady 인증 monitor-certificates ocp-certificates",
+      "expected_book_slugs": [
+        "cli_tools",
+        "security_and_compliance"
+      ],
+      "expected_landing_terms": [
+        "monitor-certificates",
+        "expiry"
+      ],
+      "top_book_slugs": [
+        "cli_tools",
+        "cli_tools",
+        "cli_tools",
+        "cli_tools",
+        "support",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "b0f75c1b-dc58-5b59-8e3d-db73560d52fe",
+          "book_slug": "cli_tools",
+          "section": "2.7.1.25. oc adm ocp-certificates monitor-certificates",
+          "anchor": "oc-adm-ocp-certificates-monitor-certificates",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-adm-ocp-certificates-monitor-certificates",
+          "score": -7.1594438552856445
+        },
+        {
+          "chunk_id": "d89dd2b6-8996-56d4-93e7-4a55b51d7efd",
+          "book_slug": "cli_tools",
+          "section": "2.7.1.25. oc adm ocp-certificates monitor-certificates",
+          "anchor": "oc-adm-ocp-certificates-monitor-certificates",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-adm-ocp-certificates-monitor-certificates",
+          "score": -7.1594438552856445
+        },
+        {
+          "chunk_id": "2c945d7c-e46b-5add-ba33-603b88c101cf",
+          "book_slug": "cli_tools",
+          "section": "2.7.1.27. oc adm ocp-certificates recreate-machine-config-server-serving-cert",
+          "anchor": "oc-adm-ocp-certificates-regenerate-machine-config-server-serving-cert",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-adm-ocp-certificates-regenerate-machine-config-server-serving-cert",
+          "score": -4.291571140289307
+        },
+        {
+          "chunk_id": "f13486a8-28b6-5747-bb45-48963320f5e7",
+          "book_slug": "cli_tools",
+          "section": "2.7.1.27. oc adm ocp-certificates recreate-machine-config-server-serving-cert",
+          "anchor": "oc-adm-ocp-certificates-regenerate-machine-config-server-serving-cert",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-adm-ocp-certificates-regenerate-machine-config-server-serving-cert",
+          "score": -4.291571140289307
+        },
+        {
+          "chunk_id": "fbd8a2c9-ac55-514c-be25-8b8d95357331",
+          "book_slug": "support",
+          "section": "7.1.10. 컨트롤 플레인 노드 kubelet 및 API 서버 문제 조사",
+          "anchor": "investigating-kubelet-api-installation-issues_troubleshooting-installations",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#investigating-kubelet-api-installation-issues_troubleshooting-installations",
+          "score": 3.8166143894195557
+        },
+        {
+          "chunk_id": "13bac5b5-b7b9-5947-ac14-7d6f3c8c1d30",
+          "book_slug": "kmsc-operations",
+          "section": "1. 구성 및 컴포넌트 기능 확인",
+          "anchor": "slide:19",
+          "viewer_path": "/uploads/documents/d9c9de11-222d-5ede-9ea3-e0186c10e39f/chunks/13bac5b5-b7b9-5947-ac14-7d6f3c8c1d30",
+          "score": -3.8087828159332275
+        },
+        {
+          "chunk_id": "a5011c0c-0f15-5afb-9875-79db0cc5d043",
+          "book_slug": "kmsc-operations",
+          "section": "2. OCP HA 구성 테스트",
+          "anchor": "slide:33",
+          "viewer_path": "/uploads/documents/d9c9de11-222d-5ede-9ea3-e0186c10e39f/chunks/a5011c0c-0f15-5afb-9875-79db0cc5d043",
+          "score": -2.4561822414398193
+        },
+        {
+          "chunk_id": "984284bd-56f5-5207-883f-4ae977f24950",
+          "book_slug": "kmsc-operations",
+          "section": "1. 구성 및 컴포넌트 기능 확인",
+          "anchor": "slide:20",
+          "viewer_path": "/uploads/documents/d9c9de11-222d-5ede-9ea3-e0186c10e39f/chunks/984284bd-56f5-5207-883f-4ae977f24950",
+          "score": -3.5576672554016113
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "cli_tools",
+        "cli_tools",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations",
+        "kmsc-operations"
+      ],
+      "vector_top_book_slugs": [
+        "support",
+        "machine_configuration",
+        "validation_and_troubleshooting",
+        "support",
+        "cli_tools",
+        "security_and_compliance",
+        "study_docs",
+        "study_docs",
+        "kmsc-operations",
+        "validation_and_troubleshooting"
+      ],
+      "hybrid_top_book_slugs": [
+        "cli_tools",
+        "cli_tools",
+        "cli_tools",
+        "cli_tools",
+        "support"
+      ],
+      "reranked_top_book_slugs": [
+        "cli_tools",
+        "cli_tools",
+        "cli_tools",
+        "cli_tools",
+        "support"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "learn-001",
+      "mode": "retrieval",
+      "query_type": "learn",
+      "query": "OpenShift 아키텍처를 처음 설명해줘",
+      "rewritten_query": "OpenShift 아키텍처를 처음 설명해줘 Container Platform OCP 구조 개요 플랫폼",
+      "expected_book_slugs": [
+        "architecture",
+        "overview"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "architecture",
+        "architecture",
+        "architecture",
+        "architecture",
+        "architecture",
+        "overview",
+        "operators",
+        "operators"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "c40347cc-e378-55b8-8ca1-aab7c41571c4",
+          "book_slug": "architecture",
+          "section": "1장. 아키텍처 개요",
+          "anchor": "architecture-overview",
+          "viewer_path": "/docs/ocp/4.20/ko/architecture/index.html#architecture-overview",
+          "score": 8.378579139709473
+        },
+        {
+          "chunk_id": "dace0520-5a2e-58d5-bd51-591afe160c07",
+          "book_slug": "architecture",
+          "section": "OpenShift Container Platform의 아키텍처 개요",
+          "anchor": "openshift-container-platform의-아키텍처-개요",
+          "viewer_path": "/docs/ocp/4.20/ko/architecture/index.html#openshift-container-platform의-아키텍처-개요",
+          "score": 4.435049057006836
+        },
+        {
+          "chunk_id": "9b6c5531-c12b-5ce0-8f1c-c2f9bcc6a32d",
+          "book_slug": "architecture",
+          "section": "OpenShift Container Platform의 아키텍처 개요",
+          "anchor": "openshift-container-platform의-아키텍처-개요",
+          "viewer_path": "/docs/ocp/4.20/ko/architecture/index.html#openshift-container-platform의-아키텍처-개요",
+          "score": 4.435049057006836
+        },
+        {
+          "chunk_id": "1fa57251-3bc9-59c9-934f-272551707cf9",
+          "book_slug": "architecture",
+          "section": "2.1.3.4. OpenShift Container Platform 라이프사이클",
+          "anchor": "architecture-overview-image_architecture",
+          "viewer_path": "/docs/ocp/4.20/ko/architecture/index.html#architecture-overview-image_architecture",
+          "score": 4.217737674713135
+        },
+        {
+          "chunk_id": "61df3a23-471a-5925-a297-a9b358ec7299",
+          "book_slug": "architecture",
+          "section": "2.1.3.4. OpenShift Container Platform 라이프사이클",
+          "anchor": "architecture-overview-image_architecture",
+          "viewer_path": "/docs/ocp/4.20/ko/architecture/index.html#architecture-overview-image_architecture",
+          "score": 4.217737674713135
+        },
+        {
+          "chunk_id": "e6af5afc-e22e-57ec-b697-5b1fdf131f22",
+          "book_slug": "overview",
+          "section": "OpenShift Container Platform 소개",
+          "anchor": "openshift-container-platform-소개",
+          "viewer_path": "/docs/ocp/4.20/ko/overview/index.html#openshift-container-platform-소개",
+          "score": 3.0098016262054443
+        },
+        {
+          "chunk_id": "352ca9a1-268f-5430-a9a3-2e64d5b8ea89",
+          "book_slug": "operators",
+          "section": "2.4.2. Operator Lifecycle Manager 아키텍처",
+          "anchor": "olm-arch",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-arch",
+          "score": 2.773218870162964
+        },
+        {
+          "chunk_id": "18db2c70-8430-5cdf-b100-1dcbb5d24ce3",
+          "book_slug": "operators",
+          "section": "2.4.2. Operator Lifecycle Manager 아키텍처",
+          "anchor": "olm-arch",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-arch",
+          "score": 2.773218870162964
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "kmsc-operations",
+        "study_docs",
+        "operators",
+        "operators",
+        "study_docs",
+        "study_docs",
+        "architecture",
+        "architecture",
+        "operators",
+        "operators"
+      ],
+      "vector_top_book_slugs": [
+        "architecture",
+        "architecture",
+        "architecture",
+        "overview",
+        "updating_clusters",
+        "operators",
+        "installation_overview",
+        "architecture",
+        "overview",
+        "updating_clusters"
+      ],
+      "hybrid_top_book_slugs": [
+        "architecture",
+        "architecture",
+        "architecture",
+        "architecture",
+        "operators"
+      ],
+      "reranked_top_book_slugs": [
+        "architecture",
+        "architecture",
+        "architecture",
+        "architecture",
+        "architecture"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "vector",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "learn-002",
+      "mode": "retrieval",
+      "query_type": "learn",
+      "query": "Operator가 뭐고 왜 필요한가?",
+      "rewritten_query": "Operator가 뭐고 왜 필요한가? Operator / 오퍼레이터 Lifecycle Manager ClusterServiceVersion Subscription InstallPlan CatalogSource 운영 관리 operators OLM",
+      "expected_book_slugs": [
+        "operators",
+        "overview"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "operators",
+        "installation_overview",
+        "security_and_compliance",
+        "security_and_compliance",
+        "operators",
+        "support",
+        "disconnected_environments",
+        "disconnected_environments"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "6a96cff0-9259-51b6-9352-e9fd27b6bb43",
+          "book_slug": "operators",
+          "section": "2.4.2.1. 구성 요소의 역할",
+          "anchor": "olm-architecture_olm-arch",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-architecture_olm-arch",
+          "score": 3.6980912685394287
+        },
+        {
+          "chunk_id": "a6fcaed9-7677-5e83-ab23-bc25e737f514",
+          "book_slug": "installation_overview",
+          "section": "3.2.16. OLM(Operator Lifecycle Manager) 클래식 기능",
+          "anchor": "olm-overview_cluster-capabilities",
+          "viewer_path": "/docs/ocp/4.20/ko/installation_overview/index.html#olm-overview_cluster-capabilities",
+          "score": 1.3305342197418213
+        },
+        {
+          "chunk_id": "cdc20eca-a148-5ab8-87a7-e77fb250ac9d",
+          "book_slug": "security_and_compliance",
+          "section": "11.10.2.2. Operator Lifecylce Manager 설치 제거 커뮤니티 External Secrets Operator",
+          "anchor": "external-secrets-operator-uninstall-olm_external-secrets-operator-migrate-downstream-upstream",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#external-secrets-operator-uninstall-olm_external-secrets-operator-migrate-downstream-upstream",
+          "score": 0.1935817003250122
+        },
+        {
+          "chunk_id": "e83a00ac-5df8-5764-ae88-629e2d22df6b",
+          "book_slug": "security_and_compliance",
+          "section": "4.7.1. 관리",
+          "anchor": "management-7",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#management-7",
+          "score": -0.7116060853004456
+        },
+        {
+          "chunk_id": "197c356f-9330-54b9-9160-1e75b9903b44",
+          "book_slug": "operators",
+          "section": "2.4.3.1. OLM의 Operator 설치 및 업그레이드 워크플로",
+          "anchor": "olm-upgrades_olm-workflow",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#olm-upgrades_olm-workflow",
+          "score": -1.2954742908477783
+        },
+        {
+          "chunk_id": "f6dfa6a0-48a0-5be1-94bd-08b0c9e5fb92",
+          "book_slug": "support",
+          "section": "7.6.1. Operator 서브스크립션 상태 유형",
+          "anchor": "olm-status-conditions_troubleshooting-operator-issues",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#olm-status-conditions_troubleshooting-operator-issues",
+          "score": -1.434098243713379
+        },
+        {
+          "chunk_id": "ae2a30fa-e145-5cf1-8039-c08d661ae87f",
+          "book_slug": "disconnected_environments",
+          "section": "11.3.5.2. CLI를 사용하여 OpenShift Update Service Operator 설치",
+          "anchor": "update-service-install-cli_updating-disconnected-cluster-osus",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#update-service-install-cli_updating-disconnected-cluster-osus",
+          "score": -1.5417728424072266
+        },
+        {
+          "chunk_id": "5ff03c61-8d82-5736-acab-aa4769164000",
+          "book_slug": "disconnected_environments",
+          "section": "7.8. oc-mirror에서 생성한 리소스를 사용하도록 클러스터 구성",
+          "anchor": "oc-mirror-updating-cluster-manifests_installing-mirroring-disconnected",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#oc-mirror-updating-cluster-manifests_installing-mirroring-disconnected",
+          "score": -1.603590726852417
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "installation_overview",
+        "installation_overview",
+        "installation_overview",
+        "operators",
+        "operators",
+        "disconnected_environments",
+        "operators",
+        "operators",
+        "operators",
+        "security_and_compliance"
+      ],
+      "vector_top_book_slugs": [
+        "operators",
+        "operators",
+        "operators",
+        "operators",
+        "operators",
+        "operators",
+        "operators",
+        "operators",
+        "operators",
+        "operators"
+      ],
+      "hybrid_top_book_slugs": [
+        "operators",
+        "operators",
+        "disconnected_environments",
+        "security_and_compliance",
+        "security_and_compliance"
+      ],
+      "reranked_top_book_slugs": [
+        "operators",
+        "installation_overview",
+        "security_and_compliance",
+        "security_and_compliance",
+        "operators"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "learn-003",
+      "mode": "retrieval",
+      "query_type": "learn",
+      "query": "observability와 monitoring은 어떻게 달라?",
+      "rewritten_query": "observability와 monitoring은 어떻게 달라? 관찰 기능 모니터링 monitoring observability",
+      "expected_book_slugs": [
+        "observability_overview",
+        "monitoring"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "3ab6afc4-be33-54dc-a6b5-82bf3030b1f7",
+          "book_slug": "observability_overview",
+          "section": "1장. Observability 정보",
+          "anchor": "observability-overview",
+          "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#observability-overview",
+          "score": 0.924311637878418
+        },
+        {
+          "chunk_id": "56dd3338-03e1-507f-ab58-8e590fcd91fb",
+          "book_slug": "observability_overview",
+          "section": "1장. Observability 정보",
+          "anchor": "observability-overview",
+          "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#observability-overview",
+          "score": 0.7790742516517639
+        },
+        {
+          "chunk_id": "90454f5b-a8e0-5f1e-9e5e-6cf6319766e0",
+          "book_slug": "observability_overview",
+          "section": "1장. Observability 정보",
+          "anchor": "observability-overview",
+          "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#observability-overview",
+          "score": 0.4027620255947113
+        },
+        {
+          "chunk_id": "5dd1c11b-41ec-57a7-b100-511ea4466fe2",
+          "book_slug": "observability_overview",
+          "section": "1.5. 네트워크 관찰 기능",
+          "anchor": "network-observability-overview-index_observability-overview",
+          "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#network-observability-overview-index_observability-overview",
+          "score": 0.3123711347579956
+        },
+        {
+          "chunk_id": "110033f1-697d-554a-8bdb-0e751409140c",
+          "book_slug": "observability_overview",
+          "section": "1.1. 모니터링",
+          "anchor": "monitoring-overview-index_observability-overview",
+          "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#monitoring-overview-index_observability-overview",
+          "score": 0.16810865700244904
+        },
+        {
+          "chunk_id": "81f5e248-80f5-5564-b149-b7259bd71b36",
+          "book_slug": "observability_overview",
+          "section": "OpenShift Container Platform의 관찰 기능에 대한 정보 포함",
+          "anchor": "openshift-container-platform의-관찰-기능에-대한-정보-포함",
+          "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#openshift-container-platform의-관찰-기능에-대한-정보-포함",
+          "score": -0.10473340004682541
+        },
+        {
+          "chunk_id": "b169757d-a660-5898-b986-795eb8edd245",
+          "book_slug": "observability_overview",
+          "section": "OpenShift Container Platform의 관찰 기능에 대한 정보 포함",
+          "anchor": "openshift-container-platform의-관찰-기능에-대한-정보-포함",
+          "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#openshift-container-platform의-관찰-기능에-대한-정보-포함",
+          "score": -0.10473340004682541
+        },
+        {
+          "chunk_id": "cfcab3d8-37a1-515f-b8c3-040d66580b24",
+          "book_slug": "observability_overview",
+          "section": "1.6. 전원 모니터링",
+          "anchor": "power-monitoring-overview-index_observability-overview",
+          "viewer_path": "/docs/ocp/4.20/ko/observability_overview/index.html#power-monitoring-overview-index_observability-overview",
+          "score": -0.7852300405502319
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "study_docs",
+        "study_docs",
+        "operators",
+        "operators",
+        "kmsc-operations",
+        "observability_overview"
+      ],
+      "vector_top_book_slugs": [
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview"
+      ],
+      "hybrid_top_book_slugs": [
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview"
+      ],
+      "reranked_top_book_slugs": [
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview",
+        "observability_overview"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "learn-004",
+      "mode": "retrieval",
+      "query_type": "learn",
+      "query": "Machine Config Operator는 뭐야?",
+      "rewritten_query": "Machine Config Operator는 뭐야? Operator / 오퍼레이터 머신 구성 노드 설정 About the configuration overview ClusterServiceVersion Subscription InstallPlan CatalogSource 운영 관리 operators MCO machineconfigpool MCD Ignition node RHCOS CRI-O 개요",
+      "expected_book_slugs": [
+        "machine_configuration",
+        "operators"
+      ],
+      "expected_landing_terms": [
+        "machine-config-operator"
+      ],
+      "top_book_slugs": [
+        "machine_configuration",
+        "machine_configuration",
+        "operators",
+        "operators",
+        "architecture",
+        "architecture",
+        "overview",
+        "images"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "1cab6ccb-48ae-5d90-8b8a-05572c523e67",
+          "book_slug": "machine_configuration",
+          "section": "1.2. Machine config overview",
+          "anchor": "machine-config-overview_machine-config-overview",
+          "viewer_path": "/docs/ocp/4.20/ko/machine_configuration/index.html#machine-config-overview_machine-config-overview",
+          "score": 0.38924
+        },
+        {
+          "chunk_id": "c5191354-989a-5da3-a4da-18c2b87dfc5e",
+          "book_slug": "machine_configuration",
+          "section": "1.1. About the Machine Config Operator",
+          "anchor": "about-machine-config-operator_machine-config-overview",
+          "viewer_path": "/docs/ocp/4.20/ko/machine_configuration/index.html#about-machine-config-operator_machine-config-overview",
+          "score": 0.320335
+        },
+        {
+          "chunk_id": "48fefc3b-62b2-51ea-8258-226f0fb34f7b",
+          "book_slug": "operators",
+          "section": "6.27. Machine Config Operator",
+          "anchor": "machine-config-operator_operator-reference",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#machine-config-operator_operator-reference",
+          "score": 0.255714
+        },
+        {
+          "chunk_id": "f810f379-5025-5e00-8993-db9d3c840c98",
+          "book_slug": "operators",
+          "section": "6.7. Cluster Config Operator",
+          "anchor": "cluster-config-operator_operator-reference",
+          "viewer_path": "/docs/ocp/4.20/ko/operators/index.html#cluster-config-operator_operator-reference",
+          "score": 0.243554
+        },
+        {
+          "chunk_id": "2b303aef-37a5-58ab-bef0-80da4cc102cb",
+          "book_slug": "architecture",
+          "section": "3.1.2. RHCOS(Red Hat Enterprise Linux CoreOS) 정보",
+          "anchor": "about-rhcos",
+          "viewer_path": "/docs/ocp/4.20/ko/architecture/index.html#about-rhcos",
+          "score": 0.251383
+        },
+        {
+          "chunk_id": "98d0f48a-cb42-52d7-9585-fe13c532b2ca",
+          "book_slug": "architecture",
+          "section": "6.1. 머신 구성 풀을 사용한 노드 구성 관리",
+          "anchor": "architecture-machine-config-pools_control-plane",
+          "viewer_path": "/docs/ocp/4.20/ko/architecture/index.html#architecture-machine-config-pools_control-plane",
+          "score": 0.247104
+        },
+        {
+          "chunk_id": "f62c825c-5116-5b78-98bc-41b9974b918a",
+          "book_slug": "overview",
+          "section": "6장. OpenShift Container Platform의 일반 용어집",
+          "anchor": "getting-started-openshift-common-terms_openshift-editions",
+          "viewer_path": "/docs/ocp/4.20/ko/overview/index.html#getting-started-openshift-common-terms_openshift-editions",
+          "score": 0.223434
+        },
+        {
+          "chunk_id": "666f2aa4-3ae9-52c2-b232-1299dc86264a",
+          "book_slug": "images",
+          "section": "9.2. Machine Config Operator 동작 및 레지스트리 변경",
+          "anchor": "images-configuration-mco-and-registry-changes_image-configuration",
+          "viewer_path": "/docs/ocp/4.20/ko/images/index.html#images-configuration-mco-and-registry-changes_image-configuration",
+          "score": 0.235291
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "machine_configuration",
+        "machine_configuration",
+        "machine_configuration",
+        "machine_configuration",
+        "machine_configuration",
+        "machine_configuration",
+        "machine_configuration",
+        "machine_configuration",
+        "machine_configuration",
+        "machine_configuration"
+      ],
+      "vector_top_book_slugs": [
+        "machine_configuration",
+        "machine_configuration",
+        "machine_configuration",
+        "updating_clusters",
+        "updating_clusters",
+        "machine_configuration",
+        "machine_configuration",
+        "images",
+        "images",
+        "machine_configuration"
+      ],
+      "hybrid_top_book_slugs": [
+        "machine_configuration",
+        "machine_configuration",
+        "operators",
+        "architecture",
+        "postinstallation_configuration"
+      ],
+      "reranked_top_book_slugs": [
+        "machine_configuration",
+        "machine_configuration",
+        "operators",
+        "operators",
+        "architecture"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "follow-up-001",
+      "mode": "retrieval",
+      "query_type": "follow-up",
+      "query": "그거 복구는?",
+      "rewritten_query": "OCP 4.20 | 주제 etcd 백업 | 미해결 질문 etcd 백업 이후 복원 절차 | 그거 복구는? oc debug node chroot /host etcd / 백업 cluster-backup.sh restore quorum 복원",
+      "expected_book_slugs": [
+        "backup_and_restore",
+        "etcd",
+        "postinstallation_configuration"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "backup_and_restore",
+        "postinstallation_configuration",
+        "storage",
+        "storage",
+        "security_and_compliance",
+        "machine_management"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "d73c3a51-23dc-5d03-a473-bfca0407b003",
+          "book_slug": "postinstallation_configuration",
+          "section": "4.12.7. 두 개 이상의 노드의 이전 클러스터 상태로 복원",
+          "anchor": "dr-scenario-2-restoring-cluster-state_post-install-cluster-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#dr-scenario-2-restoring-cluster-state_post-install-cluster-tasks",
+          "score": 2.1895077228546143
+        },
+        {
+          "chunk_id": "95503e2d-2a1d-5554-855b-41bbf003d611",
+          "book_slug": "postinstallation_configuration",
+          "section": "4.12.7. 두 개 이상의 노드의 이전 클러스터 상태로 복원",
+          "anchor": "dr-scenario-2-restoring-cluster-state_post-install-cluster-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#dr-scenario-2-restoring-cluster-state_post-install-cluster-tasks",
+          "score": 1.167407512664795
+        },
+        {
+          "chunk_id": "42eaea5f-6f7b-56e9-a930-a7393905d072",
+          "book_slug": "backup_and_restore",
+          "section": "6.3.3.3. Restoring to a previous cluster state for more than one node",
+          "anchor": "dr-scenario-2-restoring-cluster-state_dr-restoring-cluster-state",
+          "viewer_path": "/docs/ocp/4.20/ko/backup_and_restore/index.html#dr-scenario-2-restoring-cluster-state_dr-restoring-cluster-state",
+          "score": 1.6038501262664795
+        },
+        {
+          "chunk_id": "8f332bd4-cd2e-5714-aaaf-e86d42c0b605",
+          "book_slug": "postinstallation_configuration",
+          "section": "5.1.5. AWS에서 사용자 지정 /var 파티션을 사용하여 새 RHCOS 작업자 노드 추가",
+          "anchor": "machine-node-custom-partition_post-install-node-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#machine-node-custom-partition_post-install-node-tasks",
+          "score": -2.263805866241455
+        },
+        {
+          "chunk_id": "9717bef1-58d6-5f7c-b228-dbc01876bc2f",
+          "book_slug": "storage",
+          "section": "6.11.6.1. 머신 세트를 사용하여 울트라 디스크가 있는 머신 생성",
+          "anchor": "machineset-creating-azure-ultra-disk_persistent-storage-csi-azure",
+          "viewer_path": "/docs/ocp/4.20/ko/storage/index.html#machineset-creating-azure-ultra-disk_persistent-storage-csi-azure",
+          "score": -1.46023428440094
+        },
+        {
+          "chunk_id": "8a75d623-92dd-5b35-bce1-7471a5ab25c3",
+          "book_slug": "storage",
+          "section": "4.2.4.1. 머신 세트를 사용하여 울트라 디스크가 있는 머신 생성",
+          "anchor": "machineset-creating-azure-ultra-disk_persistent-storage-azure",
+          "viewer_path": "/docs/ocp/4.20/ko/storage/index.html#machineset-creating-azure-ultra-disk_persistent-storage-azure",
+          "score": -0.5769848227500916
+        },
+        {
+          "chunk_id": "b54fce4a-3ed7-57c7-a6fb-312b0c37997a",
+          "book_slug": "security_and_compliance",
+          "section": "2.4.2. 서명 확인 구성 확인",
+          "anchor": "containers-signature-verify-application_security-container-signature",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#containers-signature-verify-application_security-container-signature",
+          "score": -0.4403659403324127
+        },
+        {
+          "chunk_id": "a58dc238-daec-56fc-9ac3-0fc6ffb8b683",
+          "book_slug": "machine_management",
+          "section": "2.2.8.1. 머신 세트를 사용하여 울트라 디스크가 있는 머신 생성",
+          "anchor": "machineset-creating-azure-ultra-disk_creating-machineset-azure",
+          "viewer_path": "/docs/ocp/4.20/ko/machine_management/index.html#machineset-creating-azure-ultra-disk_creating-machineset-azure",
+          "score": -1.530914068222046
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "postinstallation_configuration",
+        "kmsc-operations",
+        "kmsc-operations",
+        "machine_configuration",
+        "backup_and_restore",
+        "nodes",
+        "machine_management",
+        "storage",
+        "storage",
+        "machine_configuration"
+      ],
+      "vector_top_book_slugs": [
+        "etcd",
+        "etcd",
+        "backup_and_restore",
+        "etcd",
+        "backup_and_restore",
+        "backup_and_restore",
+        "backup_and_restore",
+        "backup_and_restore",
+        "backup_and_restore",
+        "etcd"
+      ],
+      "hybrid_top_book_slugs": [
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "etcd",
+        "postinstallation_configuration",
+        "postinstallation_configuration"
+      ],
+      "reranked_top_book_slugs": [
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "backup_and_restore",
+        "postinstallation_configuration",
+        "storage"
+      ],
+      "rewrite_applied": true,
+      "rewrite_reason": "follow_up_reference",
+      "follow_up_detected": true,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "bm25",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "follow-up-002",
+      "mode": "retrieval",
+      "query_type": "follow-up",
+      "query": "그 설정은 어디서 바꿔?",
+      "rewritten_query": "OCP 4.20 | 주제 Machine Config Operator가 노드를 업데이트하는 방법 | 엔터티 Machine Config Operator, machine config | 그 설정은 어디서 바꿔? Secret Secrets ConfigMap 문서 가이드 참고",
+      "expected_book_slugs": [
+        "machine_configuration",
+        "updating_clusters",
+        "operators"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "2d8ad36a-dad1-5b7d-942b-36a8812bed18",
+          "book_slug": "updating_clusters",
+          "section": "1.1. OpenShift 업데이트 소개",
+          "anchor": "understanding-openshift-updates",
+          "viewer_path": "/docs/ocp/4.20/ko/updating_clusters/index.html#understanding-openshift-updates",
+          "score": -2.9831831455230713
+        },
+        {
+          "chunk_id": "4bb5e74a-4e06-51c1-979e-39681cdd0236",
+          "book_slug": "updating_clusters",
+          "section": "1.2.3. 프로세스 워크플로 업데이트",
+          "anchor": "update-process-workflow_how-updates-work",
+          "viewer_path": "/docs/ocp/4.20/ko/updating_clusters/index.html#update-process-workflow_how-updates-work",
+          "score": 1.5971975326538086
+        },
+        {
+          "chunk_id": "fb8ab06d-1490-571d-910d-0cdca661144a",
+          "book_slug": "updating_clusters",
+          "section": "1.2.2. 이미지 릴리스",
+          "anchor": "update-release-images_how-updates-work",
+          "viewer_path": "/docs/ocp/4.20/ko/updating_clusters/index.html#update-release-images_how-updates-work",
+          "score": -0.2043800950050354
+        },
+        {
+          "chunk_id": "98a5c4d5-d97a-58d4-8274-ee24a5a4b499",
+          "book_slug": "updating_clusters",
+          "section": "1.4.2.3. 클러스터 Operator 업데이트 기간의 예",
+          "anchor": "update-duration-example_openshift-update-duration",
+          "viewer_path": "/docs/ocp/4.20/ko/updating_clusters/index.html#update-duration-example_openshift-update-duration",
+          "score": 3.1429927349090576
+        },
+        {
+          "chunk_id": "eb107dd9-3b9d-5600-abb1-df68f3dd0818",
+          "book_slug": "updating_clusters",
+          "section": "3.3.1. 컨트롤 플레인만 업데이트 수행",
+          "anchor": "updating-control-plane-only-update_control-plane-only-update",
+          "viewer_path": "/docs/ocp/4.20/ko/updating_clusters/index.html#updating-control-plane-only-update_control-plane-only-update",
+          "score": 3.33776593208313
+        },
+        {
+          "chunk_id": "c9d37472-076b-5755-8fce-811ee76be32c",
+          "book_slug": "updating_clusters",
+          "section": "3.7.1. CLI를 사용하여 다중 아키텍처 컴퓨팅 머신이 있는 클러스터로 마이그레이션",
+          "anchor": "migrating-to-multi-arch-cli_updating-clusters-overview",
+          "viewer_path": "/docs/ocp/4.20/ko/updating_clusters/index.html#migrating-to-multi-arch-cli_updating-clusters-overview",
+          "score": -1.693597674369812
+        },
+        {
+          "chunk_id": "18958090-129b-594a-8ade-811277e75426",
+          "book_slug": "updating_clusters",
+          "section": "1.2.5. Machine Config Operator가 노드를 업데이트하는 방법 이해",
+          "anchor": "mco-update-process_how-updates-work",
+          "viewer_path": "/docs/ocp/4.20/ko/updating_clusters/index.html#mco-update-process_how-updates-work",
+          "score": 2.173541784286499
+        },
+        {
+          "chunk_id": "d921295e-5c72-5867-bedb-bee234924047",
+          "book_slug": "updating_clusters",
+          "section": "1.2.5. Machine Config Operator가 노드를 업데이트하는 방법 이해",
+          "anchor": "mco-update-process_how-updates-work",
+          "viewer_path": "/docs/ocp/4.20/ko/updating_clusters/index.html#mco-update-process_how-updates-work",
+          "score": 1.4665558338165283
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "updating_clusters",
+        "updating_clusters",
+        "security_and_compliance",
+        "security_and_compliance",
+        "overview",
+        "overview",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters"
+      ],
+      "vector_top_book_slugs": [
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "machine_configuration",
+        "web_console",
+        "machine_configuration",
+        "web_console",
+        "updating_clusters",
+        "updating_clusters"
+      ],
+      "hybrid_top_book_slugs": [
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters"
+      ],
+      "reranked_top_book_slugs": [
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters",
+        "updating_clusters"
+      ],
+      "rewrite_applied": true,
+      "rewrite_reason": "follow_up_reference",
+      "follow_up_detected": true,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "follow-up-003",
+      "mode": "retrieval",
+      "query_type": "follow-up",
+      "query": "아까 말한 이미지 저장소는?",
+      "rewritten_query": "OCP 4.20 | 주제 내부 이미지 레지스트리 구성 | 엔터티 registry, image registry | 아까 말한 이미지 저장소는?",
+      "expected_book_slugs": [
+        "registry",
+        "images"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "1f7b0b35-d11c-5663-9b16-6cd2d3169812",
+          "book_slug": "registry",
+          "section": "1.2. 통합된 OpenShift 이미지 레지스트리",
+          "anchor": "registry-integrated-openshift-registry_registry-overview",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#registry-integrated-openshift-registry_registry-overview",
+          "score": 0.843364417552948
+        },
+        {
+          "chunk_id": "308b7484-1d4f-5b74-b88d-b6564ed04800",
+          "book_slug": "registry",
+          "section": "2.1. 클라우드 플랫폼 및 OpenStack의 이미지 레지스트리",
+          "anchor": "image-registry-on-cloud",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#image-registry-on-cloud",
+          "score": 0.6255804896354675
+        },
+        {
+          "chunk_id": "2d4520a0-0e4d-5739-943c-9733097257dd",
+          "book_slug": "registry",
+          "section": "3.6.3.2. 프로덕션 환경 외 클러스터에서 이미지 레지스트리의 스토리지 구성",
+          "anchor": "installation-registry-storage-non-production_configuring-registry-storage-baremetal",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#installation-registry-storage-non-production_configuring-registry-storage-baremetal",
+          "score": -0.8225530982017517
+        },
+        {
+          "chunk_id": "116a2bd5-f491-562b-aa3f-dde4c32409ea",
+          "book_slug": "registry",
+          "section": "3.7.3.2. 프로덕션 환경 외 클러스터에서 이미지 레지스트리의 스토리지 구성",
+          "anchor": "installation-registry-storage-non-production_configuring-registry-storage-vsphere",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#installation-registry-storage-non-production_configuring-registry-storage-vsphere",
+          "score": -0.8833855986595154
+        },
+        {
+          "chunk_id": "38adfda2-2eda-5504-a187-89a6bd998c1b",
+          "book_slug": "registry",
+          "section": "3.9.3.2. 프로덕션 환경 외 클러스터에서 이미지 레지스트리의 스토리지 구성",
+          "anchor": "installation-registry-storage-non-production_configuring-registry-storage-nutanix",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#installation-registry-storage-non-production_configuring-registry-storage-nutanix",
+          "score": -0.9297105669975281
+        },
+        {
+          "chunk_id": "5aba38df-82de-5553-b0f7-18ab41e8eaf1",
+          "book_slug": "registry",
+          "section": "2.5. 이미지 레지스트리 Operator 설정 매개 변수",
+          "anchor": "registry-operator-configuration-resource-overview_configuring-registry-operator",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#registry-operator-configuration-resource-overview_configuring-registry-operator",
+          "score": -1.2491390705108643
+        },
+        {
+          "chunk_id": "e3aec3a3-99bd-5c2f-9ae4-f6061e3f5a4d",
+          "book_slug": "registry",
+          "section": "3.7.2. 이미지 레지스트리의 관리 상태 변경",
+          "anchor": "registry-change-management-state_configuring-registry-storage-vsphere",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#registry-change-management-state_configuring-registry-storage-vsphere",
+          "score": -1.800966501235962
+        },
+        {
+          "chunk_id": "3ca2beab-df58-5da1-b93a-0f2998c84d59",
+          "book_slug": "registry",
+          "section": "3.9.2. 이미지 레지스트리의 관리 상태 변경",
+          "anchor": "registry-change-management-state_configuring-registry-storage-nutanix",
+          "viewer_path": "/docs/ocp/4.20/ko/registry/index.html#registry-change-management-state_configuring-registry-storage-nutanix",
+          "score": -1.9024745225906372
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "study_docs",
+        "registry",
+        "study_docs",
+        "registry"
+      ],
+      "vector_top_book_slugs": [
+        "images",
+        "registry",
+        "images",
+        "images",
+        "images",
+        "images",
+        "images",
+        "registry",
+        "disconnected_environments",
+        "disconnected_environments"
+      ],
+      "hybrid_top_book_slugs": [
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry"
+      ],
+      "reranked_top_book_slugs": [
+        "registry",
+        "registry",
+        "registry",
+        "registry",
+        "registry"
+      ],
+      "rewrite_applied": true,
+      "rewrite_reason": "follow_up_reference",
+      "follow_up_detected": true,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "ambiguous-001",
+      "mode": "retrieval",
+      "query_type": "ambiguous",
+      "query": "로그는 어디서 봐?",
+      "rewritten_query": "로그는 어디서 봐? 로깅 문서 가이드 참고",
+      "expected_book_slugs": [
+        "logging",
+        "monitoring",
+        "observability_overview"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "security_and_compliance",
+        "nodes",
+        "nodes",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "affc2dcc-cae0-56a0-89af-b13201b76373",
+          "book_slug": "security_and_compliance",
+          "section": "2.13.2. 로깅",
+          "anchor": "security-monitoring-cluster-logging_security-monitoring",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#security-monitoring-cluster-logging_security-monitoring",
+          "score": -0.9450123906135559
+        },
+        {
+          "chunk_id": "a7a27f9d-076a-576e-9f32-1a05bced7bce",
+          "book_slug": "nodes",
+          "section": "2.2.3. 리소스 로그 보기",
+          "anchor": "viewing-resource-logs-cli-console_nodes-pods-viewing",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#viewing-resource-logs-cli-console_nodes-pods-viewing",
+          "score": -1.3472342491149902
+        },
+        {
+          "chunk_id": "80963127-fa42-55f2-9aa6-de1ec01fc480",
+          "book_slug": "nodes",
+          "section": "2.2.3. 리소스 로그 보기",
+          "anchor": "viewing-resource-logs-cli-console_nodes-pods-viewing",
+          "viewer_path": "/docs/ocp/4.20/ko/nodes/index.html#viewing-resource-logs-cli-console_nodes-pods-viewing",
+          "score": -1.3472342491149902
+        },
+        {
+          "chunk_id": "e4e8b3e4-75a1-5639-bf5a-fcf8602fa4b5",
+          "book_slug": "security_and_compliance",
+          "section": "12.2. 감사 로그 보기",
+          "anchor": "nodes-nodes-audit-log-basic-viewing_audit-log-view",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#nodes-nodes-audit-log-basic-viewing_audit-log-view",
+          "score": -4.081485271453857
+        },
+        {
+          "chunk_id": "64fa27a1-cd93-5667-b887-d5937605d488",
+          "book_slug": "security_and_compliance",
+          "section": "12.2. 감사 로그 보기",
+          "anchor": "nodes-nodes-audit-log-basic-viewing_audit-log-view",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#nodes-nodes-audit-log-basic-viewing_audit-log-view",
+          "score": -4.187821865081787
+        },
+        {
+          "chunk_id": "34e41cef-8ba6-5bc9-8f6a-9c743a220abb",
+          "book_slug": "security_and_compliance",
+          "section": "12.2. 감사 로그 보기",
+          "anchor": "nodes-nodes-audit-log-basic-viewing_audit-log-view",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#nodes-nodes-audit-log-basic-viewing_audit-log-view",
+          "score": -4.19551420211792
+        },
+        {
+          "chunk_id": "634dda78-f189-562d-8492-6b9f7aab8d11",
+          "book_slug": "security_and_compliance",
+          "section": "12.2. 감사 로그 보기",
+          "anchor": "nodes-nodes-audit-log-basic-viewing_audit-log-view",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#nodes-nodes-audit-log-basic-viewing_audit-log-view",
+          "score": -4.21520471572876
+        },
+        {
+          "chunk_id": "50446a40-22b8-5ba9-b2a8-4b0dd8160e59",
+          "book_slug": "security_and_compliance",
+          "section": "6.6.5.2. FileIntegrityNodeStatus CR 실패 상태의 예",
+          "anchor": "file-integrity-node-status-failure_file-integrity-operator",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#file-integrity-node-status-failure_file-integrity-operator",
+          "score": -6.114623546600342
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "security_and_compliance",
+        "advanced_networking",
+        "advanced_networking",
+        "support",
+        "advanced_networking",
+        "advanced_networking",
+        "registry",
+        "registry",
+        "support",
+        "support"
+      ],
+      "vector_top_book_slugs": [
+        "nodes",
+        "nodes",
+        "security_and_compliance",
+        "nodes",
+        "authentication_and_authorization",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance"
+      ],
+      "hybrid_top_book_slugs": [
+        "nodes",
+        "nodes",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance"
+      ],
+      "reranked_top_book_slugs": [
+        "security_and_compliance",
+        "nodes",
+        "nodes",
+        "security_and_compliance",
+        "security_and_compliance"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": true,
+      "rerank_reasons": [],
+      "graph_signal_tag": "relation-aware-retrieval",
+      "graph_signal_reason": "context-dependent query missed the expected playbook family"
+    },
+    {
+      "id": "ambiguous-002",
+      "mode": "retrieval",
+      "query_type": "ambiguous",
+      "query": "설치 후에 뭘 먼저 해야 해?",
+      "rewritten_query": "설치 후에 뭘 먼저 해야 해?",
+      "expected_book_slugs": [
+        "postinstallation_configuration",
+        "installation_overview"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "disconnected_environments",
+        "disconnected_environments",
+        "architecture"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "22cce0f6-a349-541a-adba-3052347d0b6f",
+          "book_slug": "postinstallation_configuration",
+          "section": "1.1. 설치 후 구성 작업",
+          "anchor": "post-install-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#post-install-tasks",
+          "score": 1.4944239854812622
+        },
+        {
+          "chunk_id": "2b3bf3ab-279f-5f3c-b859-888bbd622512",
+          "book_slug": "postinstallation_configuration",
+          "section": "1.1. 설치 후 구성 작업",
+          "anchor": "post-install-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#post-install-tasks",
+          "score": 0.6602898240089417
+        },
+        {
+          "chunk_id": "4cc2eeea-2bbb-5ba7-9df3-8266117fe4ec",
+          "book_slug": "postinstallation_configuration",
+          "section": "4.3.2. 컴퓨팅 머신 세트 수동 스케일링",
+          "anchor": "machineset-manually-scaling_post-install-cluster-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#machineset-manually-scaling_post-install-cluster-tasks",
+          "score": -0.8413951396942139
+        },
+        {
+          "chunk_id": "f8eb329f-6290-5ff9-b078-d494fe1fe478",
+          "book_slug": "postinstallation_configuration",
+          "section": "3.6.2. z/VM을 사용하여 IBM Z에서 RHCOS 머신 생성",
+          "anchor": "machine-user-infra-machines-ibm-z_creating-multi-arch-compute-nodes-ibm-z",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#machine-user-infra-machines-ibm-z_creating-multi-arch-compute-nodes-ibm-z",
+          "score": -1.3341047763824463
+        },
+        {
+          "chunk_id": "28680a5f-647b-5d9b-a734-b89033ceee94",
+          "book_slug": "postinstallation_configuration",
+          "section": "5.2.4. 컴퓨팅 머신 세트 수동 스케일링",
+          "anchor": "machineset-manually-scaling_post-install-node-tasks",
+          "viewer_path": "/docs/ocp/4.20/ko/postinstallation_configuration/index.html#machineset-manually-scaling_post-install-node-tasks",
+          "score": -2.2012226581573486
+        },
+        {
+          "chunk_id": "df80e2dd-25e5-5abc-b07e-d92530a0eaf3",
+          "book_slug": "disconnected_environments",
+          "section": "7.7.2. 완전히 연결이 끊긴 환경에서 이미지 세트 미러링",
+          "anchor": "mirroring-image-set-full",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#mirroring-image-set-full",
+          "score": -3.415242910385132
+        },
+        {
+          "chunk_id": "8076bd97-aa58-57e6-9cbb-69e0b6d205fd",
+          "book_slug": "disconnected_environments",
+          "section": "7.7.2. 완전히 연결이 끊긴 환경에서 이미지 세트 미러링",
+          "anchor": "mirroring-image-set-full",
+          "viewer_path": "/docs/ocp/4.20/ko/disconnected_environments/index.html#mirroring-image-set-full",
+          "score": -3.415242910385132
+        },
+        {
+          "chunk_id": "426fe53c-1f68-51aa-b2b9-71e7aad682eb",
+          "book_slug": "architecture",
+          "section": "3.1.4.5. 설치 프로세스 세부사항",
+          "anchor": "installation-process-details",
+          "viewer_path": "/docs/ocp/4.20/ko/architecture/index.html#installation-process-details",
+          "score": -3.8866360187530518
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "disconnected_environments",
+        "disconnected_environments",
+        "architecture",
+        "architecture",
+        "installation_overview",
+        "architecture",
+        "installation_overview",
+        "installation_overview",
+        "installation_overview",
+        "architecture"
+      ],
+      "vector_top_book_slugs": [
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "machine_management",
+        "postinstallation_configuration",
+        "installing_on_any_platform",
+        "installing_on_any_platform",
+        "postinstallation_configuration"
+      ],
+      "hybrid_top_book_slugs": [
+        "postinstallation_configuration",
+        "disconnected_environments",
+        "disconnected_environments",
+        "architecture",
+        "architecture"
+      ],
+      "reranked_top_book_slugs": [
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration",
+        "postinstallation_configuration"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    },
+    {
+      "id": "ambiguous-003",
+      "mode": "retrieval",
+      "query_type": "ambiguous",
+      "query": "보안 관련 기본 문서는 뭐가 중심이야?",
+      "rewritten_query": "보안 관련 기본 문서는 뭐가 중심이야? 개요 문서 가이드 참고",
+      "expected_book_slugs": [
+        "security_and_compliance",
+        "authentication_and_authorization"
+      ],
+      "expected_landing_terms": [],
+      "top_book_slugs": [
+        "security_and_compliance",
+        "study_docs",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance"
+      ],
+      "top_hits": [
+        {
+          "chunk_id": "c626897f-84f9-5b49-92ef-0e65a74b782a",
+          "book_slug": "security_and_compliance",
+          "section": "5.6.1.1.7. PCI-DSS 규정 준수 프로필",
+          "anchor": "pci-dss-profiles_compliance-operator-supported-profiles",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#pci-dss-profiles_compliance-operator-supported-profiles",
+          "score": -4.930478572845459
+        },
+        {
+          "chunk_id": "6d31210f-8403-5734-a2d6-2bf17bc40442",
+          "book_slug": "study_docs",
+          "section": "Slide 8",
+          "anchor": "완료보고_20260112_완료본-slide-8",
+          "viewer_path": "/uploads/documents/3b15b035-9434-4504-a283-f819c2e1496e/chunks/6d31210f-8403-5734-a2d6-2bf17bc40442",
+          "score": -5.211780071258545
+        },
+        {
+          "chunk_id": "d2223b8c-4583-5cac-a43c-7e4498b71c67",
+          "book_slug": "security_and_compliance",
+          "section": "14.2. TLS 보안 프로필 세부 정보 보기",
+          "anchor": "tls-profiles-view-details_tls-security-profiles",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#tls-profiles-view-details_tls-security-profiles",
+          "score": -6.90937614440918
+        },
+        {
+          "chunk_id": "231a78c8-f059-593f-a243-dd3678c7e44c",
+          "book_slug": "security_and_compliance",
+          "section": "14.2. TLS 보안 프로필 세부 정보 보기",
+          "anchor": "tls-profiles-view-details_tls-security-profiles",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#tls-profiles-view-details_tls-security-profiles",
+          "score": -7.36962890625
+        },
+        {
+          "chunk_id": "d205d54f-a0d9-51f4-b47e-4f309bfb2c92",
+          "book_slug": "security_and_compliance",
+          "section": "5.6.1.1.7. PCI-DSS 규정 준수 프로필",
+          "anchor": "pci-dss-profiles_compliance-operator-supported-profiles",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#pci-dss-profiles_compliance-operator-supported-profiles",
+          "score": -8.010475158691406
+        },
+        {
+          "chunk_id": "1a61393c-d22d-5f63-b412-c87be750477b",
+          "book_slug": "security_and_compliance",
+          "section": "15.3. 추가 리소스",
+          "anchor": "seccomp-profiles-2",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#seccomp-profiles-2",
+          "score": -8.059086799621582
+        },
+        {
+          "chunk_id": "003947f5-45df-5f18-bf46-6e20daa1c5ef",
+          "book_slug": "security_and_compliance",
+          "section": "15.3. 추가 리소스",
+          "anchor": "seccomp-profiles-2",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#seccomp-profiles-2",
+          "score": -8.059086799621582
+        },
+        {
+          "chunk_id": "fcbe7ce6-f776-54fb-9e52-1493378c0850",
+          "book_slug": "security_and_compliance",
+          "section": "2.8.6. 추가 리소스",
+          "anchor": "security-build-2",
+          "viewer_path": "/docs/ocp/4.20/ko/security_and_compliance/index.html#security-build-2",
+          "score": -8.383752822875977
+        }
+      ],
+      "warnings": [],
+      "bm25_top_book_slugs": [
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "operators"
+      ],
+      "vector_top_book_slugs": [
+        "nodes",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance",
+        "nodes",
+        "nodes",
+        "nodes",
+        "security_and_compliance"
+      ],
+      "hybrid_top_book_slugs": [
+        "security_and_compliance",
+        "study_docs",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance"
+      ],
+      "reranked_top_book_slugs": [
+        "security_and_compliance",
+        "study_docs",
+        "security_and_compliance",
+        "security_and_compliance",
+        "security_and_compliance"
+      ],
+      "rewrite_applied": false,
+      "rewrite_reason": "no_context",
+      "follow_up_detected": false,
+      "vector_endpoint_used": "search",
+      "hybrid_top_support": "both",
+      "rerank_top1_changed": false,
+      "rerank_reasons": [],
+      "graph_signal_tag": "clean",
+      "graph_signal_reason": "expected playbook family ranked first"
+    }
+  ]
+}

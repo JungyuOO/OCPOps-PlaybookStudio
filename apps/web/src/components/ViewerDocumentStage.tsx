@@ -1,0 +1,1655 @@
+import { useEffect, useRef, useState } from 'react';
+import type { WikiEditedTextStyle, WikiTextAnnotation, WikiTextAnnotationMode } from '../lib/runtimeApi';
+
+export interface ViewerDocumentPayload {
+  html: string;
+  inlineStyles: string[];
+  bodyClassName: string;
+  viewerCacheStatus?: string;
+  viewerTimingsMs?: Record<string, number>;
+  interactionPolicy?: {
+    codeCopy?: boolean;
+    codeWrapToggle?: boolean;
+    recentPositionTracking?: boolean;
+    anchorNavigation?: boolean;
+  };
+}
+
+const VIEWER_READER_POLISH = `
+  :host {
+    display: block;
+    color: #0f172a;
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    --pbs-reader-card-bg: rgba(255, 255, 255, 0.96);
+    --pbs-reader-border: rgba(15, 23, 42, 0.12);
+    --pbs-reader-text: #0f172a;
+    --pbs-reader-dim: #64748b;
+    --pbs-reader-code-bg: rgba(0, 0, 0, 0.03);
+  }
+
+  :host([data-viewer-theme="obsidian"]) {
+    color: #e5eef8;
+    --pbs-reader-card-bg: rgba(15, 23, 42, 0.88);
+    --pbs-reader-border: rgba(148, 163, 184, 0.18);
+    --pbs-reader-text: #e5eef8;
+    --pbs-reader-dim: rgba(203, 213, 225, 0.68);
+    --pbs-reader-code-bg: rgba(255, 255, 255, 0.035);
+  }
+
+  :host,
+  .viewer-root,
+  .viewer-root * {
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(89, 208, 255, 0.42) rgba(8, 13, 22, 0.72);
+  }
+
+  :host([data-viewer-theme="paper"]),
+  :host([data-viewer-theme="paper"]) .viewer-root,
+  :host([data-viewer-theme="paper"]) .viewer-root * {
+    scrollbar-color: rgba(194, 65, 12, 0.5) rgba(238, 231, 220, 0.92);
+  }
+
+  :host::-webkit-scrollbar,
+  .viewer-root::-webkit-scrollbar,
+  .viewer-root *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  :host::-webkit-scrollbar-track,
+  .viewer-root::-webkit-scrollbar-track,
+  .viewer-root *::-webkit-scrollbar-track {
+    background: rgba(8, 13, 22, 0.72);
+  }
+
+  :host::-webkit-scrollbar-thumb,
+  .viewer-root::-webkit-scrollbar-thumb,
+  .viewer-root *::-webkit-scrollbar-thumb {
+    border: 2px solid rgba(8, 13, 22, 0.72);
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(89, 208, 255, 0.56), rgba(34, 211, 238, 0.24));
+  }
+
+  :host::-webkit-scrollbar-thumb:hover,
+  .viewer-root::-webkit-scrollbar-thumb:hover,
+  .viewer-root *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(103, 232, 249, 0.72), rgba(89, 208, 255, 0.34));
+  }
+
+  :host([data-viewer-theme="paper"])::-webkit-scrollbar-track,
+  :host([data-viewer-theme="paper"]) .viewer-root::-webkit-scrollbar-track,
+  :host([data-viewer-theme="paper"]) .viewer-root *::-webkit-scrollbar-track {
+    background: rgba(238, 231, 220, 0.92);
+  }
+
+  :host([data-viewer-theme="paper"])::-webkit-scrollbar-thumb,
+  :host([data-viewer-theme="paper"]) .viewer-root::-webkit-scrollbar-thumb,
+  :host([data-viewer-theme="paper"]) .viewer-root *::-webkit-scrollbar-thumb {
+    border-color: rgba(238, 231, 220, 0.92);
+    background: linear-gradient(180deg, rgba(194, 65, 12, 0.48), rgba(97, 72, 42, 0.22));
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root,
+  :host([data-viewer-theme="obsidian"]) .viewer-root main,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .study-document,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .reader-layout,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .hero,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .hero-grid,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .hero-main,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .section-list,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .section-body,
+  :host([data-viewer-theme="obsidian"]) .viewer-root article {
+    background: transparent !important;
+    color: var(--pbs-reader-text) !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root p,
+  :host([data-viewer-theme="obsidian"]) .viewer-root li,
+  :host([data-viewer-theme="obsidian"]) .viewer-root td,
+  :host([data-viewer-theme="obsidian"]) .viewer-root th,
+  :host([data-viewer-theme="obsidian"]) .viewer-root blockquote,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .section-body span,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .section-body div {
+    color: rgba(226, 232, 240, 0.86) !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root h1,
+  :host([data-viewer-theme="obsidian"]) .viewer-root h2,
+  :host([data-viewer-theme="obsidian"]) .viewer-root h3,
+  :host([data-viewer-theme="obsidian"]) .viewer-root h4,
+  :host([data-viewer-theme="obsidian"]) .viewer-root h5,
+  :host([data-viewer-theme="obsidian"]) .viewer-root strong {
+    color: #f8fafc !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root a {
+    color: #67e8f9 !important;
+  }
+
+  .viewer-root {
+    min-height: 100%;
+    background: transparent;
+    color: var(--pbs-reader-text);
+    padding-bottom: 40px;
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    overflow-wrap: break-word;
+  }
+
+  /* 
+   * Allow the native styling from viewer_page.py to take over entirely.
+   * Hide the reader-sidebar as requested by user ("목록들은 껍데기같은데 싹 지우면 안돼?").
+   */
+  .viewer-root .reader-sidebar {
+    display: none !important;
+  }
+
+  .viewer-root .reader-layout {
+    grid-template-columns: 1fr !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .viewer-root .hero .actions.hero-actions,
+  .viewer-root .hero .hero-meta,
+  .viewer-root .hero .meta-pill {
+    display: none !important;
+  }
+
+  .viewer-root .document-toolbar {
+    display: none !important;
+  }
+
+  .viewer-root .hero {
+    margin-bottom: 20px !important;
+  }
+
+  /* Constrain the main width similar to a typical book/documentation layout */
+  .viewer-root main {
+    width: min(860px, 100%) !important;
+    max-width: 860px !important;
+    margin: 0 auto !important;
+    padding: 28px 32px 56px !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+
+  .viewer-root.upload-reader-document {
+    padding-bottom: 0 !important;
+    color: #1e293b !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 10px 8px 44px !important;
+    min-width: 0 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .eyebrow {
+    color: #0e7490 !important;
+    letter-spacing: 0.11em !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader h1 {
+    margin: 8px 0 10px !important;
+    color: #1f2937 !important;
+    font-size: clamp(1.8rem, 4vw, 2.45rem) !important;
+    line-height: 1.08 !important;
+    letter-spacing: 0 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .summary {
+    color: #64748b !important;
+    font-size: 0.88rem !important;
+    line-height: 1.65 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root.upload-reader-document .upload-reader .eyebrow {
+    color: #67e8f9 !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root.upload-reader-document .upload-reader h1 {
+    color: #f8fafc !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root.upload-reader-document .upload-reader .summary {
+    color: rgba(226, 232, 240, 0.78) !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .meta {
+    max-width: 100% !important;
+    gap: 8px !important;
+    margin: 18px 0 20px !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .meta span {
+    border: 1px solid rgba(14, 116, 144, 0.18) !important;
+    background: rgba(236, 254, 255, 0.86) !important;
+    color: #0f6471 !important;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.78) inset !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-panel,
+  .viewer-root.upload-reader-document .upload-reader .diagnostic-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(15, 23, 42, 0.09) !important;
+    border-radius: 16px !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 248, 244, 0.96)) !important;
+    box-shadow: none !important;
+    padding: 12px !important;
+    margin: 10px 0 0 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-panel > h2,
+  .viewer-root.upload-reader-document .upload-reader .diagnostic-panel > h2 {
+    color: #111827 !important;
+    font-size: 1.08rem !important;
+    letter-spacing: 0 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-body {
+    gap: 18px !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-body > * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-chunk-section {
+    position: relative !important;
+    scroll-margin-top: 28px !important;
+    border-top: 0 !important;
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-chunk-section + .upload-chunk-section {
+    margin-top: 14px !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-chunk-section:target {
+    border-color: rgba(14, 116, 144, 0.28) !important;
+    background: linear-gradient(90deg, rgba(236, 254, 255, 0.62), rgba(236, 254, 255, 0)) !important;
+    border-radius: 12px !important;
+    padding-left: 14px !important;
+    margin-left: -14px !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-anchor-alias {
+    position: relative !important;
+    top: -28px !important;
+    display: block !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-chunk-path {
+    margin: 0 0 8px !important;
+    color: #0e7490 !important;
+    font-size: 0.78rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.02em !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-body h2,
+  .viewer-root.upload-reader-document .upload-reader .document-body h3,
+  .viewer-root.upload-reader-document .upload-reader .document-body h4,
+  .viewer-root.upload-reader-document .upload-reader .document-body h5 {
+    color: #1f2937 !important;
+    margin: 24px 0 8px !important;
+    line-height: 1.38 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-body h2:first-child,
+  .viewer-root.upload-reader-document .upload-reader .document-body h3:first-child,
+  .viewer-root.upload-reader-document .upload-reader .document-body h4:first-child {
+    margin-top: 0 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader p,
+  .viewer-root.upload-reader-document .upload-reader li,
+  .viewer-root.upload-reader-document .upload-reader td {
+    color: #334155 !important;
+    line-height: 1.72 !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader strong,
+  .viewer-root.upload-reader-document .upload-reader th {
+    color: #111827 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .document-body,
+  .viewer-root.upload-reader-document .upload-reader .upload-table-wrap,
+  .viewer-root.upload-reader-document .upload-reader .code-block,
+  .viewer-root.upload-reader-document .upload-reader pre {
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-table-wrap,
+  .viewer-root.upload-reader-document .upload-reader pre {
+    overflow-x: auto !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-asset-figure {
+    max-width: 100% !important;
+    background: #ffffff !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-asset-figure img {
+    display: block !important;
+    width: auto !important;
+    max-width: 100% !important;
+    max-height: min(52vh, 360px) !important;
+    object-fit: contain !important;
+    margin: 0 auto !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-table-wrap {
+    border: 1px solid rgba(15, 23, 42, 0.08) !important;
+    background: #ffffff !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-table {
+    color: #334155 !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-table th {
+    background: #f8fafc !important;
+    color: #111827 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .upload-table td,
+  .viewer-root.upload-reader-document .upload-reader .upload-table th {
+    border-color: rgba(15, 23, 42, 0.08) !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader code:not(pre code) {
+    background: rgba(14, 116, 144, 0.08) !important;
+    color: #0f6471 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-block {
+    border: 1px solid rgba(15, 23, 42, 0.1) !important;
+    border-radius: 14px !important;
+    background: #0f172a !important;
+    box-shadow: none !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-header,
+  .viewer-root.upload-reader-document .upload-reader .code-footer {
+    background: #111827 !important;
+    border-color: rgba(148, 163, 184, 0.18) !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-label {
+    color: #cbd5e1 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .icon-button {
+    border-color: rgba(148, 163, 184, 0.22) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: #cbd5e1 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .icon-button:hover,
+  .viewer-root.upload-reader-document .upload-reader .icon-button[aria-pressed="true"] {
+    border-color: rgba(14, 116, 144, 0.24) !important;
+    background: rgba(236, 254, 255, 0.96) !important;
+    color: #0f6471 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-block pre,
+  .viewer-root.upload-reader-document .upload-reader .code-block code,
+  .viewer-root.upload-reader-document .upload-reader pre,
+  .viewer-root.upload-reader-document .upload-reader pre code {
+    background: #0f172a !important;
+    color: #dbeafe !important;
+    font-size: 0.82rem !important;
+    line-height: 1.58 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .collapse-button {
+    color: #cbd5e1 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .collapse-button:hover,
+  .viewer-root.upload-reader-document .upload-reader .collapse-button.is-collapsed {
+    color: #0e7490 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-block.is-collapsible.is-collapsed pre::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-token.code-key {
+    color: #7dd3fc !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-token.code-string {
+    color: #86efac !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-token.code-number {
+    color: #c4b5fd !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-token.code-atom {
+    color: #fbbf24 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-token.code-comment {
+    color: #cbd5e1 !important;
+  }
+
+  .viewer-root.upload-reader-document .upload-reader .code-token.code-punctuation {
+    color: #e2e8f0 !important;
+  }
+
+  .viewer-root .section-card {
+    background: var(--pbs-reader-card-bg) !important;
+    border: 1px solid var(--pbs-reader-border) !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03) !important;
+    border-radius: 12px !important;
+    margin-bottom: 24px !important;
+    padding: 28px 32px !important;
+    transition: border-color 0.3s ease, background-color 0.3s ease;
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 520px;
+    contain: layout paint style;
+  }
+
+  .viewer-root .section-header h2,
+  .viewer-root .section-header h3 {
+    color: var(--pbs-reader-text) !important;
+  }
+
+  .viewer-root .section-meta {
+    color: var(--pbs-reader-dim) !important;
+  }
+
+  .viewer-root:not(.upload-reader-document) .code-block {
+    background: var(--pbs-reader-code-bg) !important;
+    border: 1px solid var(--pbs-reader-border) !important;
+  }
+
+  .viewer-root:not(.upload-reader-document) .code-block pre,
+  .viewer-root:not(.upload-reader-document) .code-block code,
+  .viewer-root:not(.upload-reader-document) .code-block span,
+  .viewer-root:not(.upload-reader-document) pre,
+  .viewer-root:not(.upload-reader-document) pre code {
+    color: #0f172a !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root .code-block {
+    background: rgba(255,255,255,0.03) !important;
+  }
+
+  :host([data-viewer-theme="obsidian"]) .viewer-root .code-block pre,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .code-block code,
+  :host([data-viewer-theme="obsidian"]) .viewer-root .code-block span,
+  :host([data-viewer-theme="obsidian"]) .viewer-root pre,
+  :host([data-viewer-theme="obsidian"]) .viewer-root pre code {
+    color: #e5eef8 !important;
+  }
+
+  .viewer-root .study-document,
+  .viewer-root .hero,
+  .viewer-root .hero-grid,
+  .viewer-root .hero-main,
+  .viewer-root .section-list,
+  .viewer-root .section-body,
+  .viewer-root .table-wrap {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  @media (max-width: 1100px) {
+    .viewer-root main {
+      padding: 24px 20px 48px !important;
+    }
+  }
+
+  :host([data-viewer-variant="editorial"]) .viewer-root {
+    background: transparent;
+    color: #182230;
+  }
+
+  :host([data-viewer-theme="obsidian"][data-viewer-variant="editorial"]) .viewer-root {
+    background: transparent !important;
+    color: var(--pbs-reader-text) !important;
+  }
+
+  :host([data-viewer-variant="editorial"]) .viewer-root main {
+    width: min(760px, 100%) !important;
+    max-width: 760px !important;
+    padding: 0 0 72px !important;
+  }
+
+  :host([data-viewer-variant="editorial"]) .viewer-root .hero {
+    margin-bottom: 28px !important;
+  }
+
+  :host([data-viewer-variant="editorial"]) .viewer-root .section-card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    margin-bottom: 34px !important;
+  }
+
+  :host([data-viewer-theme="obsidian"][data-viewer-variant="editorial"]) .viewer-root .section-card {
+    background: transparent !important;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14) !important;
+  }
+
+  .viewer-root img,
+  .viewer-root figure,
+  .viewer-root .course-slide-card,
+  .viewer-root .table-wrap,
+  .viewer-root .code-block {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 360px;
+  }
+
+  :host([data-viewer-variant="editorial"]) .viewer-root .code-block {
+    background: #f5f7fb !important;
+    border: 1px solid #d9e0ea !important;
+    border-radius: 14px !important;
+    box-shadow: none !important;
+  }
+
+  :host([data-viewer-theme="obsidian"][data-viewer-variant="editorial"]) .viewer-root .code-block {
+    background: rgba(2, 6, 12, 0.78) !important;
+    border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  }
+
+  :host([data-viewer-variant="editorial"]) .viewer-root .table-wrap {
+    border-radius: 14px !important;
+    border: 1px solid #dde4ef !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
+
+  :host([data-viewer-theme="obsidian"][data-viewer-variant="editorial"]) .viewer-root .table-wrap {
+    border-color: rgba(148, 163, 184, 0.18) !important;
+    background: rgba(15, 23, 42, 0.72) !important;
+  }
+
+  .viewer-root .code-block.viewer-code-scroll-target {
+    outline: 2px solid rgba(14, 116, 144, 0.46) !important;
+    outline-offset: 3px !important;
+    box-shadow: 0 0 0 6px rgba(14, 116, 144, 0.08) !important;
+  }
+`;
+
+const VIEWER_ANNOTATION_POLISH = `
+  .viewer-annotated-section {
+    position: relative !important;
+  }
+
+  .viewer-section-annotation-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9;
+  }
+
+  .viewer-floating-text-annotation,
+  .viewer-inline-text-patch {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    border-radius: 18px;
+    border: 1px solid rgba(194, 120, 49, 0.16);
+    background: rgba(255, 252, 247, 0.96);
+    box-shadow: 0 16px 28px rgba(89, 64, 37, 0.08);
+    color: #2e2219;
+    text-align: left;
+  }
+
+  .viewer-floating-text-annotation {
+    position: absolute;
+    left: calc(var(--annotation-x, 0.08) * 100%);
+    top: calc(var(--annotation-y, 0.12) * 100%);
+    width: min(340px, max(190px, calc(100% - 32px - (var(--annotation-x, 0.08) * 100%))));
+    padding: 13px 15px;
+    pointer-events: auto;
+    cursor: pointer;
+    transform: translateY(-4px);
+  }
+
+  .viewer-inline-source-block-hidden {
+    display: none !important;
+  }
+
+  .viewer-inline-text-patch {
+    position: relative;
+    width: 100%;
+    margin: 10px 0 12px;
+    padding: 14px 16px;
+    cursor: pointer;
+  }
+
+  .viewer-text-annotation-kicker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    color: #8f5a2c;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .viewer-text-annotation-body {
+    display: block;
+    width: 100%;
+    margin: 0;
+    white-space: pre-wrap;
+    line-height: 1.7;
+  }
+`;
+
+type ViewerTextEditorDraft = {
+  annotationId: string;
+  anchor: string;
+  title: string;
+  kind: WikiTextAnnotationMode;
+  text: string;
+  xRatio: number;
+  yRatio: number;
+  blockPath: string;
+  style: WikiEditedTextStyle;
+  left: number;
+  top: number;
+};
+
+function editedTextToneColor(tone: string): string {
+  switch (String(tone || '').trim().toLowerCase()) {
+    case 'ink':
+      return '#2e2219';
+    case 'teal':
+      return '#16555f';
+    case 'cyan':
+      return '#0f6e85';
+    case 'rose':
+      return '#9f1239';
+    case 'violet':
+      return '#6d28d9';
+    case 'lime':
+      return '#4d7c0f';
+    default:
+      return '#6d451f';
+  }
+}
+
+function editedTextSurfaceColor(tone: string): { border: string; background: string } {
+  switch (String(tone || '').trim().toLowerCase()) {
+    case 'ink':
+      return { border: 'rgba(98, 82, 69, 0.18)', background: 'rgba(252, 249, 244, 0.98)' };
+    case 'teal':
+      return { border: 'rgba(22, 85, 95, 0.2)', background: 'rgba(241, 253, 254, 0.98)' };
+    case 'cyan':
+      return { border: 'rgba(14, 116, 144, 0.18)', background: 'rgba(241, 252, 255, 0.98)' };
+    case 'rose':
+      return { border: 'rgba(190, 24, 93, 0.18)', background: 'rgba(255, 244, 248, 0.98)' };
+    case 'violet':
+      return { border: 'rgba(109, 40, 217, 0.18)', background: 'rgba(248, 245, 255, 0.98)' };
+    case 'lime':
+      return { border: 'rgba(77, 124, 15, 0.18)', background: 'rgba(248, 255, 238, 0.98)' };
+    default:
+      return { border: 'rgba(194, 120, 49, 0.16)', background: 'rgba(255, 252, 247, 0.98)' };
+  }
+}
+
+function normalizeEditedTextStyle(value?: Partial<WikiEditedTextStyle> | null): WikiEditedTextStyle {
+  const tone = String(value?.tone || '').trim().toLowerCase();
+  const size = String(value?.size || '').trim().toLowerCase();
+  const weight = String(value?.weight || '').trim().toLowerCase();
+  return {
+    tone:
+      tone === 'ink'
+        || tone === 'teal'
+        || tone === 'amber'
+        || tone === 'cyan'
+        || tone === 'rose'
+        || tone === 'violet'
+        || tone === 'lime'
+        ? tone
+        : 'amber',
+    size: size === 'sm' || size === 'md' || size === 'lg' ? size : 'md',
+    weight: weight === 'strong' || weight === 'regular' ? weight : 'regular',
+  };
+}
+
+function applyAnnotationTextStyle(node: HTMLElement, styleValue?: Partial<WikiEditedTextStyle> | null): void {
+  const style = normalizeEditedTextStyle(styleValue);
+  const surface = editedTextSurfaceColor(style.tone);
+  node.style.color = editedTextToneColor(style.tone);
+  node.style.borderColor = surface.border;
+  node.style.background = surface.background;
+  node.style.fontSize = style.size === 'sm' ? '0.88rem' : style.size === 'lg' ? '1.04rem' : '0.95rem';
+  node.style.fontWeight = style.weight === 'strong' ? '700' : '500';
+}
+
+function clampAnnotationRatio(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(0, Math.min(1, value));
+}
+
+function findSectionFromNode(node: HTMLElement | null): HTMLElement | null {
+  const section = node?.closest('section.section-card[id], section.embedded-section[id]');
+  return section instanceof HTMLElement ? section : null;
+}
+
+function findEditableBlock(node: HTMLElement | null): HTMLElement | null {
+  const block = node?.closest('p, li, h2, h3, h4, h5, blockquote, td, th');
+  if (!(block instanceof HTMLElement)) {
+    return null;
+  }
+  if (block.closest('.code-block, pre, .viewer-inline-text-patch, .viewer-floating-text-annotation')) {
+    return null;
+  }
+  return block;
+}
+
+function readCodeBlockCopyText(button: Element): string {
+  const copyPayload = button.getAttribute('data-copy');
+  if (copyPayload) {
+    return JSON.parse(copyPayload) as string;
+  }
+  const codeBlock = button.closest('.code-block');
+  const code = codeBlock?.querySelector('code');
+  return code?.textContent ?? '';
+}
+
+function normalizeCodeSearchText(value: string): string {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function findCodeBlockContainingText(container: ParentNode, targetText?: string): HTMLElement | null {
+  const normalizedTarget = normalizeCodeSearchText(targetText || '');
+  if (!normalizedTarget) {
+    return null;
+  }
+  const codeNodes = Array.from(container.querySelectorAll('.code-block code, pre code'));
+  for (const node of codeNodes) {
+    const code = node instanceof HTMLElement ? node : null;
+    if (!code) {
+      continue;
+    }
+    const normalizedCode = normalizeCodeSearchText(code.textContent || '');
+    const codeMatchesTarget = normalizedCode.includes(normalizedTarget)
+      || (normalizedCode.length > 8 && normalizedTarget.includes(normalizedCode));
+    if (!codeMatchesTarget) {
+      continue;
+    }
+    const block = code.closest('.code-block, pre');
+    return block instanceof HTMLElement ? block : code;
+  }
+  return null;
+}
+
+function elementPathWithinSection(section: HTMLElement, element: HTMLElement): string {
+  const path: number[] = [];
+  let current: HTMLElement | null = element;
+  while (current && current !== section) {
+    const parent: HTMLElement | null = current.parentElement;
+    if (!parent) {
+      return '';
+    }
+    const index = Array.from(parent.children).indexOf(current);
+    if (index < 0) {
+      return '';
+    }
+    path.push(index);
+    current = parent;
+  }
+  return path.reverse().join('.');
+}
+
+function elementFromSectionPath(section: HTMLElement, path: string): HTMLElement | null {
+  const segments = String(path || '').split('.').filter(Boolean);
+  let current: Element = section;
+  for (const segment of segments) {
+    const index = Number(segment);
+    if (!Number.isInteger(index) || index < 0 || !current.children[index]) {
+      return null;
+    }
+    current = current.children[index];
+  }
+  return current instanceof HTMLElement ? current : null;
+}
+
+function isViewerHref(href: string): boolean {
+  try {
+    const parsed = new URL(href, window.location.origin);
+    return (
+      parsed.pathname.startsWith('/playbooks/')
+      || parsed.pathname.startsWith('/docs/ocp/')
+      || parsed.pathname.startsWith('/course/chunks/')
+      || parsed.pathname.startsWith('/wiki/entities/')
+      || parsed.pathname.startsWith('/wiki/figures/')
+    );
+  } catch {
+    return false;
+  }
+}
+
+function scrollShadowTargetIntoView(host: HTMLDivElement, targetNode: HTMLElement): void {
+  const scrollContainer = findScrollContainer(host);
+  if (scrollContainer !== window) {
+    const container = scrollContainer as HTMLElement;
+    const containerRect = container.getBoundingClientRect();
+    const nodeRect = targetNode.getBoundingClientRect();
+    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    const targetScrollTop = Math.max(
+      0,
+      Math.min(maxScrollTop, container.scrollTop + (nodeRect.top - containerRect.top) - 24),
+    );
+    container.scrollTo({ top: targetScrollTop, behavior: 'auto' });
+    return;
+  }
+  targetNode.scrollIntoView({ block: 'start', behavior: 'auto' });
+}
+
+function findScrollContainer(host: HTMLDivElement): HTMLElement | Window {
+  let scrollContainer: Element | null = host.parentElement;
+  while (scrollContainer && scrollContainer !== document.documentElement) {
+    const style = window.getComputedStyle(scrollContainer);
+    if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+      return scrollContainer as HTMLElement;
+    }
+    scrollContainer = scrollContainer.parentElement;
+  }
+  return window;
+}
+
+function sectionDescriptor(node: HTMLElement | null): { anchor: string; title: string } | null {
+  if (!node) {
+    return null;
+  }
+  const anchor = String(node.id || '').trim();
+  if (!anchor) {
+    return null;
+  }
+  const title = node.querySelector('h2, h3, .section-title, .section-meta')?.textContent?.trim() || anchor;
+  return { anchor, title };
+}
+
+function pickActiveSection(
+  sections: HTMLElement[],
+  scrollContainer: HTMLElement | Window,
+): HTMLElement | null {
+  if (sections.length === 0) {
+    return null;
+  }
+  let containerRect: { top: number; height: number };
+  if (scrollContainer === window) {
+    containerRect = { top: 0, height: window.innerHeight };
+  } else {
+    containerRect = (scrollContainer as HTMLElement).getBoundingClientRect();
+  }
+  const leadLine = containerRect.top + Math.min(160, Math.max(containerRect.height * 0.24, 72));
+  let currentSection: HTMLElement | null = null;
+  let nextSection: HTMLElement | null = null;
+
+  for (const section of sections) {
+    const rect = section.getBoundingClientRect();
+    if (rect.top <= leadLine && rect.bottom > leadLine) {
+      return section;
+    }
+    if (rect.top <= leadLine) {
+      currentSection = section;
+      continue;
+    }
+    nextSection = section;
+    break;
+  }
+
+  return currentSection ?? nextSection ?? sections[0];
+}
+
+function findShadowTarget(root: ShadowRoot, targetId: string): HTMLElement | null {
+  const normalizedTargetId = String(targetId || '').trim();
+  if (!normalizedTargetId) {
+    return null;
+  }
+  const candidates = [normalizedTargetId];
+  try {
+    const decodedTargetId = decodeURIComponent(normalizedTargetId);
+    if (decodedTargetId && decodedTargetId !== normalizedTargetId) {
+      candidates.push(decodedTargetId);
+    }
+  } catch {
+    // Keep the raw hash when the fragment is not URI-encoded.
+  }
+  for (const candidate of candidates) {
+    const matched =
+      root.getElementById(candidate)
+      ?? root.querySelector(`[id="${CSS.escape(candidate)}"]`);
+    if (matched instanceof HTMLElement) {
+      return matched;
+    }
+  }
+  return null;
+}
+
+function findSectionNodes(container: ParentNode): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll('section.section-card[id], section.embedded-section[id], section.upload-chunk-section[id]'),
+  ).filter((node): node is HTMLElement => node instanceof HTMLElement);
+}
+
+export default function ViewerDocumentStage({
+  viewerDocument,
+  currentViewerPath,
+  scrollTargetText,
+  onNavigateViewerPath,
+  onActiveSectionChange,
+  suspendActiveSectionTracking = false,
+  textAnnotationsByAnchor,
+  textToolEnabled = false,
+  textToolMode = 'add',
+  activeTextStyle,
+  onSaveTextAnnotation,
+  onRemoveTextAnnotation,
+  className,
+  surfaceVariant = 'default',
+  surfaceTheme = 'auto',
+}: {
+  viewerDocument: ViewerDocumentPayload;
+  currentViewerPath?: string;
+  scrollTargetText?: string;
+  onNavigateViewerPath?: (viewerPath: string) => void;
+  onActiveSectionChange?: (section: { anchor: string; title: string } | null) => void;
+  suspendActiveSectionTracking?: boolean;
+  textAnnotationsByAnchor?: Record<string, WikiTextAnnotation[]>;
+  textToolEnabled?: boolean;
+  textToolMode?: WikiTextAnnotationMode;
+  activeTextStyle?: WikiEditedTextStyle;
+  onSaveTextAnnotation?: (
+    section: { anchor: string; title: string },
+    annotation: WikiTextAnnotation,
+  ) => void;
+  onRemoveTextAnnotation?: (
+    section: { anchor: string; title: string },
+    annotationId: string,
+  ) => void;
+  className?: string;
+  surfaceVariant?: 'default' | 'editorial';
+  surfaceTheme?: 'auto' | 'paper' | 'obsidian';
+}) {
+  const shellRef = useRef<HTMLDivElement>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const shadowRootRef = useRef<ShadowRoot | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const latestViewerPathRef = useRef(currentViewerPath);
+  const latestNavigateViewerPathRef = useRef(onNavigateViewerPath);
+  const latestActiveSectionChangeRef = useRef(onActiveSectionChange);
+  const latestTextAnnotationsRef = useRef(textAnnotationsByAnchor ?? {});
+  const latestTextToolEnabledRef = useRef(textToolEnabled);
+  const latestTextToolModeRef = useRef(textToolMode);
+  const latestTextStyleRef = useRef(activeTextStyle);
+  const latestSaveTextAnnotationRef = useRef(onSaveTextAnnotation);
+  const latestRemoveTextAnnotationRef = useRef(onRemoveTextAnnotation);
+  const [editorDraft, setEditorDraft] = useState<ViewerTextEditorDraft | null>(null);
+  const inlineStylesKey = viewerDocument.inlineStyles.join('\n/*__viewer-style-split__*/\n');
+
+  latestViewerPathRef.current = currentViewerPath;
+  latestNavigateViewerPathRef.current = onNavigateViewerPath;
+  latestActiveSectionChangeRef.current = onActiveSectionChange;
+  latestTextAnnotationsRef.current = textAnnotationsByAnchor ?? {};
+  latestTextToolEnabledRef.current = textToolEnabled;
+  latestTextToolModeRef.current = textToolMode;
+  latestTextStyleRef.current = activeTextStyle;
+  latestSaveTextAnnotationRef.current = onSaveTextAnnotation;
+  latestRemoveTextAnnotationRef.current = onRemoveTextAnnotation;
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) {
+      return;
+    }
+    host.dataset.viewerVariant = surfaceVariant;
+    host.dataset.viewerTheme = surfaceTheme !== 'auto'
+      ? surfaceTheme
+      : document.documentElement.getAttribute('data-theme') === 'light'
+        ? 'paper'
+        : 'obsidian';
+    const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
+    shadowRootRef.current = root;
+    root.replaceChildren();
+
+    viewerDocument.inlineStyles.forEach((styleText) => {
+      const style = document.createElement('style');
+      style.textContent = styleText;
+      root.appendChild(style);
+    });
+
+    const polishStyle = document.createElement('style');
+    polishStyle.textContent = VIEWER_READER_POLISH;
+    root.appendChild(polishStyle);
+
+    const annotationStyle = document.createElement('style');
+    annotationStyle.textContent = VIEWER_ANNOTATION_POLISH;
+    root.appendChild(annotationStyle);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = ['viewer-root', 'is-embedded', viewerDocument.bodyClassName].filter(Boolean).join(' ');
+    wrapper.innerHTML = viewerDocument.html;
+    root.appendChild(wrapper);
+    wrapperRef.current = wrapper;
+
+    wrapper.querySelectorAll('img').forEach((node) => {
+      const image = node as HTMLImageElement;
+      image.loading = 'lazy';
+      image.decoding = 'async';
+    });
+
+    root.querySelectorAll('a[href]').forEach((node) => {
+      const anchor = node as HTMLAnchorElement;
+      const href = anchor.getAttribute('href') ?? '';
+      if (!href || href.startsWith('#') || isViewerHref(href)) {
+        return;
+      }
+      if (!anchor.hasAttribute('target')) {
+        anchor.setAttribute('target', '_blank');
+      }
+      anchor.setAttribute('rel', 'noreferrer');
+    });
+
+    const buildEditorDraftFromInteraction = (
+      target: HTMLElement | null,
+      clickEvent?: MouseEvent,
+    ): ViewerTextEditorDraft | null => {
+      if (!latestTextToolEnabledRef.current || !target) {
+        return null;
+      }
+      if (target.closest('.copy-button, .wrap-button, .collapse-button, .document-nav-menu')) {
+        return null;
+      }
+
+      const hostRect = host.getBoundingClientRect();
+      const currentAnnotations = latestTextAnnotationsRef.current;
+      const annotationNode = target.closest('.viewer-floating-text-annotation, .viewer-inline-text-patch') as HTMLElement | null;
+      if (annotationNode) {
+        const section = findSectionFromNode(annotationNode);
+        const descriptor = sectionDescriptor(section);
+        if (!descriptor) {
+          return null;
+        }
+        const existing = (currentAnnotations[descriptor.anchor] ?? []).find((item) => (
+          item.annotation_id === annotationNode.dataset.annotationId
+        ));
+        const referenceRect = annotationNode.getBoundingClientRect();
+        return {
+          annotationId: existing?.annotation_id || annotationNode.dataset.annotationId || `ant-${Date.now()}`,
+          anchor: descriptor.anchor,
+          title: descriptor.title,
+          kind: existing?.kind ?? (annotationNode.classList.contains('viewer-inline-text-patch') ? 'edit' : 'add'),
+          text: existing?.text ?? '',
+          xRatio: clampAnnotationRatio(Number(existing?.x_ratio ?? annotationNode.dataset.annotationX ?? 0.08), 0.08),
+          yRatio: clampAnnotationRatio(Number(existing?.y_ratio ?? annotationNode.dataset.annotationY ?? 0.12), 0.12),
+          blockPath: String(existing?.block_path || annotationNode.dataset.blockPath || ''),
+          style: normalizeEditedTextStyle(existing?.style ?? latestTextStyleRef.current),
+          left: Math.max(12, Math.min(referenceRect.left - hostRect.left, hostRect.width - 344)),
+          top: Math.max(12, referenceRect.bottom - hostRect.top + 10),
+        };
+      }
+
+      const section = findSectionFromNode(target);
+      const descriptor = sectionDescriptor(section);
+      if (!section || !descriptor) {
+        return null;
+      }
+
+      if (latestTextToolModeRef.current === 'edit') {
+        const editableBlock = findEditableBlock(target);
+        if (!editableBlock) {
+          return null;
+        }
+        const blockPath = elementPathWithinSection(section, editableBlock);
+        if (!blockPath) {
+          return null;
+        }
+        const existing = (currentAnnotations[descriptor.anchor] ?? []).find((item) => (
+          item.kind === 'edit' && item.block_path === blockPath
+        ));
+        const blockRect = editableBlock.getBoundingClientRect();
+        return {
+          annotationId: existing?.annotation_id || `ant-${Date.now()}`,
+          anchor: descriptor.anchor,
+          title: descriptor.title,
+          kind: 'edit',
+          text: existing?.text ?? editableBlock.textContent?.trim() ?? '',
+          xRatio: clampAnnotationRatio(Number(existing?.x_ratio ?? 0.08), 0.08),
+          yRatio: clampAnnotationRatio(Number(existing?.y_ratio ?? 0.12), 0.12),
+          blockPath,
+          style: normalizeEditedTextStyle(existing?.style ?? latestTextStyleRef.current),
+          left: Math.max(12, Math.min(blockRect.left - hostRect.left, hostRect.width - 344)),
+          top: Math.max(12, blockRect.bottom - hostRect.top + 10),
+        };
+      }
+
+      const sectionRect = section.getBoundingClientRect();
+      const clientX = clickEvent?.clientX ?? sectionRect.left + 40;
+      const clientY = clickEvent?.clientY ?? sectionRect.top + 48;
+      return {
+        annotationId: `ant-${Date.now()}`,
+        anchor: descriptor.anchor,
+        title: descriptor.title,
+        kind: 'add',
+        text: '',
+        xRatio: clampAnnotationRatio((clientX - sectionRect.left) / Math.max(sectionRect.width, 1), 0.08),
+        yRatio: clampAnnotationRatio((clientY - sectionRect.top) / Math.max(sectionRect.height, 1), 0.12),
+        blockPath: '',
+        style: normalizeEditedTextStyle(latestTextStyleRef.current),
+        left: Math.max(12, Math.min(clientX - hostRect.left, hostRect.width - 344)),
+        top: Math.max(12, clientY - hostRect.top + 10),
+      };
+    };
+
+    const handleClick = async (event: Event): Promise<void> => {
+      const target = event.target as HTMLElement | null;
+      if (latestTextToolEnabledRef.current) {
+        const editorCandidate = buildEditorDraftFromInteraction(target, event as MouseEvent);
+        if (editorCandidate) {
+          event.preventDefault();
+          event.stopPropagation();
+          setEditorDraft(editorCandidate);
+          return;
+        }
+      }
+
+      const anchor = target?.closest('a[href]') as HTMLAnchorElement | null;
+      if (anchor) {
+        const href = anchor.getAttribute('href') ?? '';
+        const navMenu = anchor.closest('.document-nav-menu') as HTMLDetailsElement | null;
+        if (href.startsWith('#')) {
+          event.preventDefault();
+          const targetId = href.slice(1);
+          const targetNode = findShadowTarget(root, targetId);
+          if (targetNode instanceof HTMLElement) {
+            scrollShadowTargetIntoView(host, targetNode);
+          }
+          if (!targetNode && latestNavigateViewerPathRef.current && latestViewerPathRef.current) {
+            const basePath = latestViewerPathRef.current.split('#', 1)[0];
+            if (basePath) {
+              latestNavigateViewerPathRef.current(`${basePath}#${targetId}`);
+            }
+          }
+          if (navMenu) {
+            navMenu.open = false;
+          }
+          return;
+        }
+        if (href && isViewerHref(href) && latestNavigateViewerPathRef.current) {
+          event.preventDefault();
+          const parsed = new URL(href, window.location.origin);
+          if (navMenu) {
+            navMenu.open = false;
+          }
+          latestNavigateViewerPathRef.current(`${parsed.pathname}${parsed.search}${parsed.hash}`);
+          return;
+        }
+      }
+
+      const button = target?.closest('button');
+      if (!button) {
+        return;
+      }
+      if (button.classList.contains('copy-button')) {
+        const defaultLabel = button.getAttribute('data-label-default') ?? '복사';
+        try {
+          const text = readCodeBlockCopyText(button);
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+          }
+          button.classList.add('is-copied');
+          button.setAttribute('title', button.getAttribute('data-label-active') ?? '복사됨');
+          button.setAttribute('aria-label', button.getAttribute('data-label-active') ?? '복사됨');
+          window.setTimeout(() => {
+            button.classList.remove('is-copied');
+            button.setAttribute('title', defaultLabel);
+            button.setAttribute('aria-label', defaultLabel);
+          }, 1400);
+        } catch {
+          button.setAttribute('title', '실패');
+          button.setAttribute('aria-label', '실패');
+          window.setTimeout(() => {
+            button.setAttribute('title', defaultLabel);
+            button.setAttribute('aria-label', defaultLabel);
+          }, 1400);
+        }
+        return;
+      }
+      if (button.classList.contains('wrap-button')) {
+        const codeBlock = button.closest('.code-block');
+        if (!codeBlock) {
+          return;
+        }
+        codeBlock.classList.toggle('is-wrapped');
+        const wrapped = codeBlock.classList.contains('is-wrapped');
+        button.setAttribute('aria-pressed', wrapped ? 'true' : 'false');
+        button.setAttribute(
+          'title',
+          wrapped
+            ? button.getAttribute('data-label-active') ?? '줄바꿈 해제'
+            : button.getAttribute('data-label-default') ?? '줄바꿈',
+        );
+        button.setAttribute(
+          'aria-label',
+          wrapped
+            ? button.getAttribute('data-label-active') ?? '줄바꿈 해제'
+            : button.getAttribute('data-label-default') ?? '줄바꿈',
+        );
+        return;
+      }
+      if (button.classList.contains('collapse-button')) {
+        const codeBlock = button.closest('.code-block');
+        if (!codeBlock) {
+          return;
+        }
+        codeBlock.classList.toggle('is-collapsed');
+        const collapsed = codeBlock.classList.contains('is-collapsed');
+        button.classList.toggle('is-collapsed', collapsed);
+        button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        button.textContent = collapsed
+          ? button.getAttribute('data-label-collapsed') ?? '전체 보기'
+          : button.getAttribute('data-label-expanded') ?? '접기';
+      }
+    };
+
+    root.addEventListener('click', handleClick);
+    return () => {
+      wrapperRef.current = null;
+      root.removeEventListener('click', handleClick);
+    };
+  }, [surfaceTheme, surfaceVariant, viewerDocument.bodyClassName, viewerDocument.html, inlineStylesKey]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    const wrapper = wrapperRef.current;
+    if (!host || !wrapper || suspendActiveSectionTracking || !onActiveSectionChange) {
+      latestActiveSectionChangeRef.current?.(null);
+      return undefined;
+    }
+    const sections = findSectionNodes(wrapper);
+    if (sections.length === 0) {
+      latestActiveSectionChangeRef.current?.(null);
+      return undefined;
+    }
+
+    const scrollContainer = findScrollContainer(host);
+    let frameId = 0;
+    let lastAnchor = '';
+
+    const publishSection = (section: HTMLElement | null): void => {
+      if (frameId) {
+        return;
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+        const nextSection = sectionDescriptor(section);
+        const nextAnchor = nextSection?.anchor || '';
+        if (nextAnchor === lastAnchor) {
+          return;
+        }
+        lastAnchor = nextAnchor;
+        latestActiveSectionChangeRef.current?.(nextSection);
+      });
+    };
+
+    publishSection(pickActiveSection(sections, scrollContainer));
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting && entry.target instanceof HTMLElement)
+          .map((entry) => entry.target as HTMLElement)
+          .sort((left, right) => left.getBoundingClientRect().top - right.getBoundingClientRect().top);
+        publishSection(visible[0] ?? null);
+      },
+      {
+        root: scrollContainer === window ? null : scrollContainer as HTMLElement,
+        rootMargin: '-96px 0px -62% 0px',
+        threshold: [0, 0.01],
+      },
+    );
+
+    sections.forEach((section) => observer.observe(section));
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+      observer.disconnect();
+      latestActiveSectionChangeRef.current?.(null);
+    };
+  }, [onActiveSectionChange, suspendActiveSectionTracking, viewerDocument.html]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    const root = shadowRootRef.current;
+    if (!host || !root || !currentViewerPath || !currentViewerPath.includes('#')) {
+      return undefined;
+    }
+    const targetId = currentViewerPath.split('#').slice(1).join('#');
+    const targetNode = findShadowTarget(root, targetId);
+    if (!targetNode) {
+      return undefined;
+    }
+    const frameId = requestAnimationFrame(() => {
+      scrollShadowTargetIntoView(host, targetNode);
+    });
+    const retryTimers = [120, 360].map((delay) => window.setTimeout(() => {
+      scrollShadowTargetIntoView(host, targetNode);
+    }, delay));
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      retryTimers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [currentViewerPath, viewerDocument.html]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    const root = shadowRootRef.current;
+    if (!host || !root || !scrollTargetText) {
+      return undefined;
+    }
+    let clearTimer = 0;
+    const frameId = window.requestAnimationFrame(() => {
+      const targetId = currentViewerPath?.includes('#')
+        ? currentViewerPath.split('#').slice(1).join('#')
+        : '';
+      const sectionTarget = targetId ? findShadowTarget(root, targetId) : null;
+      const targetNode = (
+        sectionTarget ? findCodeBlockContainingText(sectionTarget, scrollTargetText) : null
+      ) ?? findCodeBlockContainingText(root, scrollTargetText);
+      if (!targetNode) {
+        return;
+      }
+      scrollShadowTargetIntoView(host, targetNode);
+      targetNode.classList.add('viewer-code-scroll-target');
+      clearTimer = window.setTimeout(() => {
+        targetNode.classList.remove('viewer-code-scroll-target');
+      }, 1800);
+    });
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      if (clearTimer) {
+        window.clearTimeout(clearTimer);
+      }
+    };
+  }, [currentViewerPath, scrollTargetText, viewerDocument.html]);
+
+  useEffect(() => {
+    if (!onActiveSectionChange || suspendActiveSectionTracking) {
+      return;
+    }
+    const host = hostRef.current;
+    const wrapper = wrapperRef.current;
+    if (!host || !wrapper) {
+      onActiveSectionChange(null);
+      return;
+    }
+    const sections = findSectionNodes(wrapper);
+    if (sections.length === 0) {
+      onActiveSectionChange(null);
+      return;
+    }
+    const scrollContainer = findScrollContainer(host);
+    onActiveSectionChange(sectionDescriptor(pickActiveSection(sections, scrollContainer)));
+  }, [currentViewerPath, onActiveSectionChange, viewerDocument.html, suspendActiveSectionTracking]);
+
+  useEffect(() => {
+    setEditorDraft(null);
+  }, [currentViewerPath, textToolEnabled, viewerDocument.html]);
+
+  useEffect(() => {
+    if (!editorDraft) {
+      return;
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      editorTextareaRef.current?.focus();
+      editorTextareaRef.current?.setSelectionRange(
+        editorTextareaRef.current.value.length,
+        editorTextareaRef.current.value.length,
+      );
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [editorDraft]);
+
+  useEffect(() => {
+    if (!activeTextStyle) {
+      return;
+    }
+    setEditorDraft((current) => (
+      current
+        ? { ...current, style: normalizeEditedTextStyle(activeTextStyle) }
+        : current
+    ));
+  }, [activeTextStyle]);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    const root = shadowRootRef.current;
+    if (!wrapper || !root) {
+      return;
+    }
+
+    const cleanupAnnotations = (): void => {
+      wrapper.querySelectorAll('.viewer-section-annotation-layer').forEach((node) => node.remove());
+      wrapper.querySelectorAll('.viewer-inline-text-patch').forEach((node) => node.remove());
+      wrapper.querySelectorAll('.viewer-inline-source-block-hidden').forEach((node) => {
+        node.classList.remove('viewer-inline-source-block-hidden');
+      });
+    };
+
+    cleanupAnnotations();
+
+    Object.entries(textAnnotationsByAnchor ?? {}).forEach(([anchor, annotations]) => {
+      const sectionTarget = findShadowTarget(root, anchor);
+      const section = sectionTarget?.matches('section.section-card[id], section.embedded-section[id]')
+        ? sectionTarget
+        : findSectionFromNode(sectionTarget ?? null);
+      if (!section) {
+        return;
+      }
+      section.classList.add('viewer-annotated-section');
+
+      const addAnnotations = annotations.filter((item) => item.kind === 'add');
+      if (addAnnotations.length > 0) {
+        const layer = document.createElement('div');
+        layer.className = 'viewer-section-annotation-layer';
+        addAnnotations.forEach((annotation) => {
+          const note = document.createElement('button');
+          note.type = 'button';
+          note.className = 'viewer-floating-text-annotation';
+          note.dataset.annotationId = annotation.annotation_id;
+          note.dataset.annotationKind = annotation.kind;
+          note.dataset.annotationAnchor = annotation.anchor;
+          note.dataset.annotationX = String(annotation.x_ratio ?? 0.08);
+          note.dataset.annotationY = String(annotation.y_ratio ?? 0.12);
+          note.style.setProperty('--annotation-x', String(clampAnnotationRatio(Number(annotation.x_ratio ?? 0.08), 0.08)));
+          note.style.setProperty('--annotation-y', String(clampAnnotationRatio(Number(annotation.y_ratio ?? 0.12), 0.12)));
+          applyAnnotationTextStyle(note, annotation.style);
+
+          const kicker = document.createElement('span');
+          kicker.className = 'viewer-text-annotation-kicker';
+          kicker.textContent = '추가 텍스트';
+
+          const body = document.createElement('span');
+          body.className = 'viewer-text-annotation-body';
+          body.textContent = annotation.text;
+
+          note.append(kicker, body);
+          layer.appendChild(note);
+        });
+        section.appendChild(layer);
+      }
+
+      annotations
+        .filter((item) => item.kind === 'edit')
+        .forEach((annotation) => {
+          const sourceBlock = elementFromSectionPath(section, annotation.block_path || '');
+          if (!sourceBlock) {
+            return;
+          }
+          sourceBlock.classList.add('viewer-inline-source-block-hidden');
+
+          const patch = document.createElement('button');
+          patch.type = 'button';
+          patch.className = 'viewer-inline-text-patch';
+          patch.dataset.annotationId = annotation.annotation_id;
+          patch.dataset.annotationKind = annotation.kind;
+          patch.dataset.annotationAnchor = annotation.anchor;
+          patch.dataset.blockPath = annotation.block_path || '';
+          applyAnnotationTextStyle(patch, annotation.style);
+
+          const kicker = document.createElement('span');
+          kicker.className = 'viewer-text-annotation-kicker';
+          kicker.textContent = '수정 텍스트';
+
+          const body = document.createElement('span');
+          body.className = 'viewer-text-annotation-body';
+          body.textContent = annotation.text;
+
+          patch.append(kicker, body);
+          sourceBlock.insertAdjacentElement('afterend', patch);
+        });
+    });
+
+    return cleanupAnnotations;
+  }, [currentViewerPath, textAnnotationsByAnchor, viewerDocument.html]);
+
+  useEffect(() => {
+    if (!editorDraft) {
+      return undefined;
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setEditorDraft(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editorDraft]);
+
+  return (
+    <div className="viewer-document-stage-shell" ref={shellRef}>
+      <div className={className} ref={hostRef} />
+      {editorDraft && (
+        <div
+          ref={editorRef}
+          className="viewer-text-editor-popover"
+          style={{ left: `${editorDraft.left}px`, top: `${editorDraft.top}px` }}
+        >
+          <div className="viewer-text-editor-kicker">
+            {editorDraft.kind === 'edit' ? '텍스트 수정' : '텍스트 추가'}
+          </div>
+          <div className="viewer-text-editor-title">{editorDraft.title}</div>
+          <textarea
+            ref={editorTextareaRef}
+            className="viewer-text-editor-input"
+            value={editorDraft.text}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              setEditorDraft((current) => (
+                current
+                  ? { ...current, text: nextValue }
+                  : current
+              ));
+            }}
+            placeholder={editorDraft.kind === 'edit' ? '이 문단의 수정본을 적어두세요.' : '본문 위에 올릴 텍스트를 적어두세요.'}
+          />
+          <div className="viewer-text-editor-actions">
+            <button
+              type="button"
+              className="viewer-text-editor-btn"
+              onClick={() => setEditorDraft(null)}
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              className="viewer-text-editor-btn viewer-text-editor-btn-danger"
+              onClick={() => {
+                latestRemoveTextAnnotationRef.current?.(
+                  { anchor: editorDraft.anchor, title: editorDraft.title },
+                  editorDraft.annotationId,
+                );
+                setEditorDraft(null);
+              }}
+            >
+              삭제
+            </button>
+            <button
+              type="button"
+              className="viewer-text-editor-btn viewer-text-editor-btn-primary"
+              onClick={() => {
+                const text = editorDraft.text.trim();
+                if (!text) {
+                  latestRemoveTextAnnotationRef.current?.(
+                    { anchor: editorDraft.anchor, title: editorDraft.title },
+                    editorDraft.annotationId,
+                  );
+                  setEditorDraft(null);
+                  return;
+                }
+                latestSaveTextAnnotationRef.current?.(
+                  { anchor: editorDraft.anchor, title: editorDraft.title },
+                  {
+                    annotation_id: editorDraft.annotationId,
+                    kind: editorDraft.kind,
+                    anchor: editorDraft.anchor,
+                    text,
+                    style: normalizeEditedTextStyle(editorDraft.style),
+                    x_ratio: editorDraft.xRatio,
+                    y_ratio: editorDraft.yRatio,
+                    block_path: editorDraft.blockPath,
+                  },
+                );
+                setEditorDraft(null);
+              }}
+            >
+              저장
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

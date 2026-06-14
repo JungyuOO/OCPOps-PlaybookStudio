@@ -128,6 +128,30 @@ def _normalize_spacing_segment(segment: str) -> str:
     normalized = re.sub(r"\s+([,.;:])", r"\1", segment)
     normalized = re.sub(r"[ \t]{2,}", " ", normalized)
     normalized = re.sub(r"\n[ \t]+", "\n", normalized)
+    normalized = _normalize_korean_citation_punctuation(normalized)
+    normalized = re.sub(r"(?m)^(\s*\d+\.)(?=[^\s\d])", r"\1 ", normalized)
+    normalized = re.sub(r"(?<=[가-힣][.!?。！？])(?=[가-힣A-Za-z`])", " ", normalized)
+    return normalized
+
+
+def _normalize_korean_citation_punctuation(segment: str) -> str:
+    normalized = re.sub(
+        r"(?P<term>`?[A-Za-z0-9._/<>-]+`?[)>]?)\s+(?P<particle>은|는|이|가|을|를|의|로|와|과|에|에서)",
+        lambda match: f"{match.group('term')}{match.group('particle')}",
+        segment,
+    )
+    normalized = re.sub(r"(?P<number>\d+)\s+(?P<unit>초|분|시간|개|회|장|번)", r"\g<number>\g<unit>", normalized)
+    normalized = re.sub(
+        r"(?P<last>[^\s\[\]\n.!?。！？])\s+(?P<cites>(?:\[\d+\]\s*)+)\.",
+        lambda match: f"{match.group('last')}. {match.group('cites').strip()}",
+        normalized,
+    )
+    normalized = re.sub(
+        r"(?P<last>[^\s\[\]\n.!?。！？])\s+(?P<cites>(?:\[\d+\]\s*)+)(?=\s*(?:\n|$))",
+        lambda match: f"{match.group('last')}. {match.group('cites').strip()}",
+        normalized,
+    )
+    normalized = re.sub(r"(?P<cites>(?:\[\d+\])+)(?=[가-힣A-Za-z0-9`])", r"\g<cites> ", normalized)
     return normalized
 
 

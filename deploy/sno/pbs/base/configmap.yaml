@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: playbookstudio-v030-config
+  labels:
+    app.kubernetes.io/name: playbookstudio
+    app.kubernetes.io/part-of: playbookstudio
+    pbs.ocpops.io/operator-ready: "true"
+data:
+  CHAT_PROVIDER: lightspeed
+  LIGHTSPEED_KNOWLEDGE_MODE: lightspeed-rag-with-pbs-private-context
+  OLS_BASE_URL: https://lightspeed-app-server.openshift-lightspeed.svc.cluster.local:8443
+  OLS_AUTH_MODE: service-account
+  OLS_AUTH_SECRET_NAME: pbs-ols-auth
+  OLS_CA_BUNDLE_PATH: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+  OLS_INSECURE_SKIP_TLS_VERIFY: "false"
+  OLS_TIMEOUT_SECONDS: "30"
+  PBS_AUTO_CREATE_NAMESPACE: "false"
+  PBS_NAMESPACE_MODE: disabled
+  TERMINAL_USER_WORKSPACE_ENABLED: "false"
+  CONSOLE_EXECUTOR_MODE: service-account
+  PBS_OPERATOR_READY_MODE: "true"
+  PBS_OPERATOR_MANIFEST_PROFILE: sno
+  QDRANT_COLLECTION: openshift_docs
+  QDRANT_ENABLED: "false"
+  OCP_API_BASE_URL: https://api.ocp.cywell.local:6443
+  OCP_DEFAULT_NAMESPACE: pbs-ocpops
+  OBJECT_STORAGE_ROOT: /app/storage
+  ARTIFACTS_DIR: /app/artifacts

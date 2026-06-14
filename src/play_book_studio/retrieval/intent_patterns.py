@@ -11,7 +11,7 @@ COMPARE_RE = re.compile(r"(차이|다른 점|비교|vs|versus|유사점|달라|�
 ROUTE_RE = re.compile(r"(route|routes|루트)", re.IGNORECASE)
 INGRESS_RE = re.compile(r"(ingress|ingresses|인그레스)", re.IGNORECASE)
 ARCHITECTURE_RE = re.compile(r"(아키텍처|architecture)", re.IGNORECASE)
-LOGGING_RE = re.compile(r"(로그|로깅|logging)", re.IGNORECASE)
+LOGGING_RE = re.compile(r"(로그(?!인)|로깅|logging)", re.IGNORECASE)
 AUDIT_RE = re.compile(r"(감사|audit)", re.IGNORECASE)
 EVENT_RE = re.compile(r"(이벤트|event)", re.IGNORECASE)
 APP_RE = re.compile(r"(애플리케이션|application|pod|컨테이너|container)", re.IGNORECASE)
@@ -21,7 +21,7 @@ POD_LIFECYCLE_RE = re.compile(
     r"(pod lifecycle|pod 라이프사이클|파드 라이프사이클|pod 생명주기|파드 생명주기|lifecycle)",
     re.IGNORECASE,
 )
-OC_LOGIN_RE = re.compile(r"\boc\s+login\b|(로그인).*(\boc\b)", re.IGNORECASE)
+OC_LOGIN_RE = re.compile(r"\boc\s+login\b|(?:ocp|openshift|오픈\s*시프트)?.*로그인|로그인.*(?:\boc\b|ocp|openshift)", re.IGNORECASE)
 INFRA_RE = re.compile(r"(인프라|infra|노드|node|컨트롤 플레인|control plane)", re.IGNORECASE)
 MONITORING_RE = re.compile(r"(모니터링|monitoring)", re.IGNORECASE)
 OBSERVABILITY_RE = re.compile(r"(observability|관찰 기능|관측|옵저버빌리티)", re.IGNORECASE)
@@ -58,8 +58,8 @@ DISCONNECTED_RE = re.compile(r"(연결이 없는 환경|분리망|disconnect)", 
 ETCD_RE = re.compile(r"etcd", re.IGNORECASE)
 BACKUP_RE = re.compile(r"(백업|backup)", re.IGNORECASE)
 RESTORE_RE = re.compile(r"(복구|복원|restore)", re.IGNORECASE)
-NODE_RE = re.compile(r"(노드|node|worker)", re.IGNORECASE)
-DRAIN_RE = re.compile(r"(drain|비워|비우|evacuate|점검 때문에 비워)", re.IGNORECASE)
+NODE_RE = re.compile(r"(노드|워커|node|worker)", re.IGNORECASE)
+DRAIN_RE = re.compile(r"(drain|cordon|드레인|드레이닝|비워|비우|evacuate|점검 때문에 비워)", re.IGNORECASE)
 TOP_RE = re.compile(r"(\btop\b|사용량|cpu|메모리|memory)", re.IGNORECASE)
 HOSTED_CONTROL_PLANE_RE = re.compile(
     r"(hosted control plane|hosted cluster|호스팅된 컨트롤 플레인|호스트된 컨트롤 플레인|호스팅 제어 평면|제어 평면|hypershift|oadp|velero)",
@@ -111,7 +111,7 @@ COMPARE_DECOMPOSE_RE = re.compile(
     re.IGNORECASE,
 )
 ROUTE_TIMEOUT_RE = re.compile(r"(route|루트).*(시간|timeout|타임아웃|늘리|줄이|변경|조정)", re.IGNORECASE)
-NODE_NOTREADY_RE = re.compile(r"(node|노드|worker|워커).*(notready|안돼|왜그래|상태|죽었|끊겼)", re.IGNORECASE)
+NODE_NOTREADY_RE = re.compile(r"(node|노드|worker|워커).*(notready|안돼|왜그래|죽었|끊겼|장애|문제)", re.IGNORECASE)
 CONJUNCTION_SPLIT_RE = re.compile(r"\s*(?:그리고|또한|및|and then|and also|and)\s*", re.IGNORECASE)
 GENERIC_CONTEXT_TOPIC_RE = re.compile(
     r"(운영 설정 변경|복구 절차 검토|설정 변경|설정 검토|운영 설정|복구 절차|절차 검토|일반 설정)",

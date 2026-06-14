@@ -24,15 +24,24 @@ from .vector import VectorRetriever
 from .retriever_pipeline import execute_retrieval_pipeline
 
 if TYPE_CHECKING:
-    from .reranker import CrossEncoderReranker
+    from .reranker import RemoteBgeReranker
 
 
-def _build_reranker(settings: Settings, *, enabled: bool) -> "CrossEncoderReranker | None":
+def _build_reranker(settings: Settings, *, enabled: bool) -> "RemoteBgeReranker | None":
     if not enabled:
         return None
-    from .reranker import CrossEncoderReranker
+    from .reranker import RemoteBgeReranker
 
-    return CrossEncoderReranker(settings)
+    return RemoteBgeReranker(settings)
+
+
+def _load_bm25_index(settings: Settings) -> BM25Index:
+    if settings.database_url.strip():
+        try:
+            return BM25Index.from_postgres(settings.database_url)
+        except Exception:  # noqa: BLE001
+            return BM25Index.from_rows([])
+    return BM25Index.from_jsonl(settings.retrieval_bm25_corpus_path)
 
 
 class ChatRetriever:
@@ -44,7 +53,7 @@ class ChatRetriever:
         bm25_index: BM25Index,
         *,
         vector_retriever: VectorRetriever | None = None,
-        reranker: CrossEncoderReranker | None = None,
+        reranker: RemoteBgeReranker | None = None,
         graph_runtime: RetrievalGraphRuntime | None = None,
     ) -> None:
         self.settings = settings
@@ -52,6 +61,7 @@ class ChatRetriever:
         self.vector_retriever = vector_retriever
         self.reranker = reranker
         self.graph_runtime = graph_runtime or RetrievalGraphRuntime(settings)
+        self.query_signal_llm_client = None
         self._customer_pack_overlay_fingerprint: tuple[tuple[str, int], ...] = ()
         self._customer_pack_overlay_index: BM25Index | None = None
 
@@ -63,7 +73,7 @@ class ChatRetriever:
         enable_vector: bool = True,
         enable_reranker: bool | None = None,
     ) -> "ChatRetriever":
-        bm25_index = BM25Index.from_jsonl(settings.retrieval_bm25_corpus_path)
+        bm25_index = _load_bm25_index(settings)
         vector_retriever = VectorRetriever(settings) if enable_vector else None
         reranker_enabled = settings.reranker_enabled if enable_reranker is None else enable_reranker
         reranker = _build_reranker(settings, enabled=reranker_enabled)
@@ -100,8 +110,8 @@ class ChatRetriever:
         query: str,
         *,
         context: SessionContext | None = None,
-        top_k: int = 8,
-        candidate_k: int = 20,
+        top_k: int = 5,
+        candidate_k: int = 10,
         use_bm25: bool = True,
         use_vector: bool = True,
         trace_callback=None,

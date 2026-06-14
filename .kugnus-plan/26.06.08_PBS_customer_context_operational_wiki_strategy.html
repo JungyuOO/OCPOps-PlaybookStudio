@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>PBS 고객 맞춤 운영 위키 답변 전략</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #5f6f89;
+      --line: #d9e2ef;
+      --panel: #f7f9fc;
+      --blue: #075985;
+      --teal: #0f766e;
+      --amber: #92400e;
+      --red: #991b1b;
+    }
+    body {
+      margin: 0;
+      background: #eef3f8;
+      color: var(--ink);
+      font-family: "Segoe UI", Pretendard, Arial, sans-serif;
+      line-height: 1.68;
+    }
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 38px 28px 72px;
+    }
+    header {
+      border-bottom: 3px solid #0e7490;
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 2rem;
+      line-height: 1.25;
+    }
+    h2 {
+      margin: 34px 0 12px;
+      font-size: 1.35rem;
+      color: #0f2742;
+    }
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 1.05rem;
+      color: #16324f;
+    }
+    p {
+      margin: 8px 0;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .pill {
+      border: 1px solid #b7c8dc;
+      border-radius: 999px;
+      background: #fff;
+      padding: 5px 10px;
+      color: #334155;
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+    section {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 20px 22px;
+      margin: 16px 0;
+    }
+    .lead {
+      font-size: 1.05rem;
+      color: #26364f;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .box {
+      border: 1px solid #d8e1eb;
+      border-radius: 8px;
+      padding: 14px;
+      background: var(--panel);
+    }
+    .box strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #102a43;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      background: #fff;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #e8f2f8;
+      color: #123047;
+    }
+    code {
+      background: #eef4fb;
+      border: 1px solid #d7e3f2;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      white-space: pre-wrap;
+      background: #0f172a;
+      color: #dbeafe;
+      border-radius: 8px;
+      padding: 14px;
+      overflow-x: auto;
+      line-height: 1.58;
+    }
+    .ok { color: var(--teal); font-weight: 800; }
+    .warn { color: var(--amber); font-weight: 800; }
+    .risk { color: var(--red); font-weight: 800; }
+    ul, ol {
+      margin-top: 8px;
+      padding-left: 22px;
+    }
+    li {
+      margin: 5px 0;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>PBS 고객 맞춤 운영 위키 답변 전략</h1>
+    <p class="lead">
+      PBS의 목표는 Lightspeed 답변을 단순 중계하는 챗봇이 아니라,
+      고객 환경의 사실과 OpenShift 운영 지식을 결합해 현장 운영 판단을 돕는 위키형 운영 도구가 되는 것이다.
+    </p>
+    <div class="meta">
+      <span class="pill">Branch: feat/kugnus-dev2.3</span>
+      <span class="pill">Base HEAD: b51ff02</span>
+      <span class="pill">Date: 2026-06-08</span>
+      <span class="pill">Scope: Chat RAG, source label, viewer/source contract</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>1. 핵심 판단</h2>
+    <p>
+      고객이 올린 문서, PPT, PDF는 고객 환경에서 사실로 취급해야 한다.
+      따라서 고객문서 자체가 답인 질문에서는 Lightspeed가 주도권을 가지면 안 된다.
+      Lightspeed는 OpenShift 제품 동작, 공식 운영 기준, 점검 명령, 장애 분석 원리를 보강할 때 사용한다.
+    </p>
+    <div class="grid">
+      <div class="box">
+        <strong>고객문서가 주도하는 경우</strong>
+        CI 순서, 내부 절차, 사내 URL, 교육자료, 고객 환경 네이밍, 고객이 정한 운영 규칙을 묻는 질문.
+      </div>
+      <div class="box">
+        <strong>Lightspeed가 주도하는 경우</strong>
+        OpenShift 리소스 상태, Operator 장애, Pod/PVC/PipelineRun 장애, 공식 점검 명령을 묻는 운영 질문.
+      </div>
+      <div class="box">
+        <strong>결합이 필요한 경우</strong>
+        고객문서의 절차나 제약이 장애 분석의 전제가 되고, OpenShift 공식 운영 지식으로 점검 순서를 보강해야 하는 질문.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. 지식 우선순위</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>우선순위</th>
+          <th>지식 원천</th>
+          <th>역할</th>
+          <th>답변에서의 표현</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>고객 업로드/PPT/PDF</td>
+          <td>고객 환경의 사실, 내부 절차, 현장 기준</td>
+          <td><code>User Upload</code>, <code>Customer Context</code></td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>현재 콘솔/클러스터 상태</td>
+          <td>실제 리소스 상태, 이벤트, 설치/장애 진행 상황</td>
+          <td><code>Console Runtime</code>, <code>Cluster State</code></td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>OpenShift Lightspeed</td>
+          <td>공식 운영 설명, 점검 순서, 제품 동작 기준</td>
+          <td><code>Lightspeed</code></td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Gold Playbook</td>
+          <td>PBS 내부 검증 runbook, fallback 운영 근거</td>
+          <td><code>Gold Playbook</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>3. 실제 고객 시나리오</h2>
+    <h3>시나리오 A: 고객문서 자체가 답인 질문</h3>
+    <p><strong>질문:</strong> <code>CI 순서 핵심 알려줘</code></p>
+    <p>
+      이 질문은 고객이 업로드한 <code>CI 순서</code> 문서가 정답이다.
+      OpenShift 일반 지식보다 고객이 정리한 절차가 우선한다.
+    </p>
+    <pre>답변 출처: User Upload
+
+고객 업로드 문서 기준 CI 순서는 다음 흐름입니다.
+1. Git 저장소를 Pipeline에 연결
+2. GitHub Webhook 설정
+3. smee URL과 Webhook secret 설정
+4. .tekton/push.yaml 구성
+5. Git push 후 PipelineRun 실행 확인
+
+근거: CI 순서 업로드 문서 [1]</pre>
+
+    <h3>시나리오 B: 고객문서가 운영 판단의 전제가 되는 질문</h3>
+    <p><strong>질문:</strong> <code>우리 CI에서 push해도 PipelineRun이 안 떠. 어디부터 봐야 해?</code></p>
+    <p>
+      이 질문은 고객문서와 Lightspeed 결합이 필요하다.
+      고객문서는 이 환경의 CI 구성 방식을 알려주고, Lightspeed는 OpenShift/Pipelines 기준 점검 순서를 보강한다.
+    </p>
+    <pre>답변 출처: Lightspeed + Customer Context
+
+고객 문서 기준으로 이 환경의 CI 흐름은
+Git 저장소 연결 -> Webhook 설정 -> smee URL 사용 -> secret 설정 -> .tekton/push.yaml 구성입니다. [고객문서 1]
+
+따라서 이 환경에서는 먼저 다음을 확인합니다.
+1. GitHub Webhook Payload URL이 고객 문서의 smee URL 흐름과 맞는지 확인
+2. Webhook secret이 OpenShift 쪽 secret과 일치하는지 확인
+3. Repository 또는 PipelineRun 생성 이벤트 확인
+4. Pipeline controller 로그와 이벤트 확인
+
+OpenShift 기준으로는 Webhook 수신, Repository CR, PipelineRun/Event 순서로 좁히는 것이 적절합니다. [Lightspeed 1]</pre>
+
+    <h3>시나리오 C: 공식 운영 지식이 우선인 질문</h3>
+    <p><strong>질문:</strong> <code>CSV가 정상 전환되지 않을 때 Subscription, InstallPlan, CSV를 어떤 순서로 확인해?</code></p>
+    <p>
+      고객문서에 특정 Operator 설치 절차가 없으면 Lightspeed가 주도한다.
+      고객문서에 사내 설치 절차나 namespace, operator name이 있으면 그 부분만 맥락으로 결합한다.
+    </p>
+  </section>
+
+  <section>
+    <h2>4. 바람직한 답변 형식</h2>
+    <p>
+      답변은 단순히 출처를 나열하는 것이 아니라, 각 출처의 역할을 분리해서 보여줘야 한다.
+      특히 고객문서와 Lightspeed가 함께 쓰인 경우에는 상단 라벨이 <code>Lightspeed</code> 단독이면 부족하다.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>질문 유형</th>
+          <th>주도 출처</th>
+          <th>보조 출처</th>
+          <th>상단 라벨</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>고객 절차 요약</td>
+          <td>고객문서</td>
+          <td>없음</td>
+          <td><code>User Upload</code></td>
+        </tr>
+        <tr>
+          <td>고객 절차 기반 장애 분석</td>
+          <td>Lightspeed 또는 콘솔 상태</td>
+          <td>고객문서</td>
+          <td><code>Lightspeed + Customer</code></td>
+        </tr>
+        <tr>
+          <td>OpenShift 일반 운영 질문</td>
+          <td>Lightspeed</td>
+          <td>Gold Playbook</td>
+          <td><code>Lightspeed</code></td>
+        </tr>
+        <tr>
+          <td>내부 runbook 기반 조치</td>
+          <td>Gold Playbook</td>
+          <td>Lightspeed 실패 시 없음</td>
+          <td><code>Gold Playbook</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>5. 현재 1차 연동 작업 방향</h2>
+    <ol>
+      <li><span class="ok">User Upload citation 라벨 정리:</span> 업로드 문서 citation이 Gold나 Source-First처럼 보이지 않도록 <code>User Upload</code>로 직렬화한다.</li>
+      <li><span class="ok">결합 답변 primary badge 추가:</span> Lightspeed 답변에 고객문서 citation이 붙으면 <code>Lightspeed + Customer</code>로 표시한다.</li>
+      <li><span class="ok">Trace 증거 보존:</span> <code>external_answer.context_bridge.customer_context_applied=true</code>를 남겨 재현 로그에서 결합 이유를 확인할 수 있게 한다.</li>
+      <li><span class="warn">본문 합성은 다음 단계:</span> Lightspeed 원문을 임의로 재작성하지 않고, 먼저 출처 계약과 UI 신호를 안정화한다.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>6. Acceptance Criteria</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th>Pass 조건</th>
+          <th>검증 방법</th>
+          <th>현재 Gap</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>고객문서 단독 답변</td>
+          <td><code>CI 순서</code> 요약 질문에서 고객 업로드 문서가 primary로 표시된다.</td>
+          <td><code>/api/chat</code> payload의 citation/source badge 확인</td>
+          <td>질문 의도별 라우팅 정교화 필요</td>
+        </tr>
+        <tr>
+          <td>Lightspeed + 고객문서 결합</td>
+          <td>Lightspeed 성공 답변에 업로드 citation이 붙으면 primary badge가 <code>Lightspeed + Customer</code>가 된다.</td>
+          <td>unit test 및 chat payload 확인</td>
+          <td>1차 연동 대상으로 반영</td>
+        </tr>
+        <tr>
+          <td>출처 뷰어</td>
+          <td>고객 업로드 문서는 viewer에서 원본 이미지와 본문이 확인 가능하다.</td>
+          <td>업로드 문서 viewer HTML 확인</td>
+          <td>이미지 표기 개선 반영 완료</td>
+        </tr>
+        <tr>
+          <td>본문 합성</td>
+          <td>고객문서 전제와 Lightspeed 점검 순서가 한 답변 안에서 역할 분리되어 서술된다.</td>
+          <td>실제 운영 질문 smoke test</td>
+          <td>다음 단계에서 합성 프롬프트/정책 필요</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>7. 결론</h2>
+    <p>
+      PBS의 이상적인 형태는 Lightspeed를 항상 앞세우는 구조가 아니다.
+      고객문서가 사실인 영역은 고객문서가 답하고, 운영 판단에는 Lightspeed와 콘솔 상태가 보강되어야 한다.
+      이번 1차 연동은 이 제품 방향을 UI와 trace 계약으로 고정하는 작업이다.
+    </p>
+  </section>
+</main>
+</body>
+</html>

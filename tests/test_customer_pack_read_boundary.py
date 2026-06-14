@@ -19,18 +19,19 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from play_book_studio.answering.models import AnswerResult, Citation
-from play_book_studio.app.customer_pack_read_boundary import (
+from play_book_studio.http.customer_pack_read_boundary import (
     LOCAL_CUSTOMER_PACK_TENANT_ID,
     LOCAL_CUSTOMER_PACK_WORKSPACE_ID,
     load_customer_pack_read_boundary,
 )
-from play_book_studio.app.chat_debug import append_chat_turn_log
-from play_book_studio.app.server import _build_handler
-from play_book_studio.app.sessions import ChatSession, SessionStore, Turn
+from play_book_studio.http.chat_debug import append_chat_turn_log
+from play_book_studio.http.server import _build_handler
+from play_book_studio.http.session_owner import resolve_session_owner
+from play_book_studio.http.sessions import ChatSession, SessionStore, Turn
 from play_book_studio.config.settings import load_settings
 from play_book_studio.intake import CustomerPackDraftStore
 from play_book_studio.intake.private_corpus import customer_pack_private_manifest_path
-from play_book_studio.app.intake_api import ingest_customer_pack
+from play_book_studio.http.intake_api import ingest_customer_pack
 from play_book_studio.retrieval.models import SessionContext
 
 
@@ -249,6 +250,19 @@ def _persist_private_session(
 
 
 class CustomerPackReadBoundaryTests(unittest.TestCase):
+    def test_customer_pack_ingest_rejects_file_upload_payloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            payload = {
+                "source_type": "md",
+                "uri": "ignored.md",
+                "title": "legacy-upload",
+                "file_bytes": b"# Legacy Upload\n\nBody",
+            }
+
+            with self.assertRaisesRegex(ValueError, "/api/uploads/ingest"):
+                ingest_customer_pack(root, payload)
+
     def test_customer_pack_read_surfaces_auto_repair_local_uploads_and_fail_close_non_read_ready_packs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -469,9 +483,12 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
             blocked_id = str(blocked["draft_id"])
 
             with _test_server(root) as (base_url, store, answerer):
+                request_headers = {"X-Forwarded-User": "customer-pack-boundary-test"}
+                owner = resolve_session_owner(SimpleNamespace(headers=request_headers))
+                scoped_store = store.for_owner(owner.owner_hash)
                 _persist_private_session(
                     root=root,
-                    store=store,
+                    store=scoped_store,
                     answerer=answerer,
                     session_id="session-approved",
                     draft_id=approved_id,
@@ -479,7 +496,7 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
                 )
                 _persist_private_session(
                     root=root,
-                    store=store,
+                    store=scoped_store,
                     answerer=answerer,
                     session_id="session-unreviewed",
                     draft_id=unreviewed_id,
@@ -487,7 +504,7 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
                 )
                 _persist_private_session(
                     root=root,
-                    store=store,
+                    store=scoped_store,
                     answerer=answerer,
                     session_id="session-placeholder",
                     draft_id=placeholder_id,
@@ -495,7 +512,7 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
                 )
                 _persist_private_session(
                     root=root,
-                    store=store,
+                    store=scoped_store,
                     answerer=answerer,
                     session_id="session-blocked",
                     draft_id=blocked_id,
@@ -511,6 +528,7 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
                     session_payload = requests.get(
                         f"{base_url}/api/sessions/load",
                         params={"session_id": session_id},
+                        headers=request_headers,
                         timeout=10,
                     )
                     self.assertEqual(expected_status, session_payload.status_code)
@@ -518,6 +536,7 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
                     debug_payload = requests.get(
                         f"{base_url}/api/debug/session",
                         params={"session_id": session_id},
+                        headers=request_headers,
                         timeout=10,
                     )
                     self.assertEqual(expected_status, debug_payload.status_code)
@@ -525,6 +544,7 @@ class CustomerPackReadBoundaryTests(unittest.TestCase):
                 chat_log_payload = requests.get(
                     f"{base_url}/api/debug/chat-log",
                     params={"limit": 20},
+                    headers=request_headers,
                     timeout=10,
                 )
                 self.assertEqual(200, chat_log_payload.status_code)

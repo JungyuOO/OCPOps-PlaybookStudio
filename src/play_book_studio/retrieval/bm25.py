@@ -3,19 +3,20 @@ from __future__ import annotations
 
 import json
 import math
-import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+from play_book_studio.retrieval.payload import retrieval_payload_from_row
+
+from .korean_text import tokenize_normalized_text
 from .models import RetrievalHit
 
 
-TOKEN_RE = re.compile(r"[\uac00-\ud7a3]+|[A-Za-z0-9_.-]+")
-
-
 def tokenize_text(text: str) -> list[str]:
-    return [token.lower() for token in TOKEN_RE.findall(text or "")]
+    return tokenize_normalized_text(text)
 
 
 def _row_to_hit(row: dict, score: float) -> RetrievalHit:
@@ -33,6 +34,10 @@ def _row_to_hit(row: dict, score: float) -> RetrievalHit:
         raw_score=float(score),
         fused_score=float(score),
         section_path=tuple(str(item) for item in (row.get("section_path") or []) if str(item).strip()),
+        section_number=str(row.get("section_number", "")),
+        heading_title=str(row.get("heading_title", "")),
+        source_anchor=str(row.get("source_anchor", "")),
+        toc_path=tuple(str(item) for item in (row.get("toc_path") or []) if str(item).strip()),
         chunk_type=str(row.get("chunk_type", "reference")),
         source_id=str(row.get("source_id", "")),
         source_lane=str(row.get("source_lane", "official_ko")),
@@ -50,6 +55,13 @@ def _row_to_hit(row: dict, score: float) -> RetrievalHit:
         verification_hints=tuple(
             str(item) for item in (row.get("verification_hints") or []) if str(item).strip()
         ),
+        asset_ids=tuple(str(item) for item in (row.get("asset_ids") or []) if str(item).strip()),
+        repository_id=str(row.get("repository_id", "")),
+        document_source_id=str(row.get("document_source_id", "")),
+        owner_user_id=str(row.get("owner_user_id", "")),
+        visibility=str(row.get("visibility", "")),
+        source_scope=str(row.get("source_scope", "")),
+        learning=row.get("learning") if isinstance(row.get("learning"), dict) else {},
     )
 
 
@@ -96,12 +108,28 @@ class BM25Index:
                     rows.append(json.loads(line))
         return cls.from_rows(rows)
 
+    @classmethod
+    def from_postgres(cls, database_url: str) -> "BM25Index":
+        if not database_url.strip():
+            raise ValueError("database_url is required")
+        import psycopg
+
+        with psycopg.connect(database_url) as connection:
+            rows = load_bm25_rows_from_connection(connection)
+        return cls.from_rows(rows)
+
     def _idf(self, token: str) -> float:
         total_docs = len(self.rows)
         doc_freq = self.doc_frequencies.get(token, 0)
         return math.log(1 + (total_docs - doc_freq + 0.5) / (doc_freq + 0.5))
 
-    def search(self, query: str, top_k: int = 10) -> list[RetrievalHit]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        *,
+        row_filter: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> list[RetrievalHit]:
         query_terms = tokenize_text(query)
         if not query_terms:
             return []
@@ -109,6 +137,8 @@ class BM25Index:
         scores: list[tuple[int, float]] = []
         unique_terms = set(query_terms)
         for index, frequencies in enumerate(self.term_frequencies):
+            if row_filter is not None and not row_filter(self.rows[index]):
+                continue
             doc_length = self.doc_lengths[index]
             score = 0.0
             for term in unique_terms:
@@ -125,3 +155,58 @@ class BM25Index:
 
         scores.sort(key=lambda item: item[1], reverse=True)
         return [_row_to_hit(self.rows[index], score) for index, score in scores[:top_k]]
+
+
+def load_bm25_rows_from_connection(connection) -> list[dict[str, Any]]:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                c.id::text AS chunk_id,
+                c.chunk_key,
+                c.ordinal,
+                c.chunk_type,
+                c.markdown,
+                c.embedding_text,
+                c.section_path,
+                c.section_number,
+                c.heading_title,
+                c.source_anchor,
+                c.toc_path,
+                c.asset_ids,
+                c.repository_id::text AS repository_id,
+                c.owner_user_id,
+                c.visibility,
+                c.source_scope,
+                c.metadata AS chunk_metadata,
+                pd.id::text AS parsed_document_id,
+                pd.title AS document_title,
+                pd.metadata AS parsed_metadata,
+                ds.id::text AS document_source_id,
+                ds.filename,
+                ds.storage_key,
+                ds.source_kind,
+                ds.metadata AS source_metadata,
+                ds.created_by
+            FROM document_chunks c
+            JOIN parsed_documents pd ON pd.id = c.parsed_document_id
+            JOIN document_sources ds ON ds.id = pd.document_source_id
+            WHERE (
+                c.source_scope <> 'user_upload'
+                OR pd.id = (
+                    SELECT latest_pd.id
+                    FROM parsed_documents latest_pd
+                    WHERE latest_pd.document_source_id = ds.id
+                    ORDER BY latest_pd.created_at DESC, latest_pd.id DESC
+                    LIMIT 1
+                )
+            )
+            ORDER BY c.source_scope ASC, ds.filename ASC, c.ordinal ASC
+            """
+        )
+        rows = cursor.fetchall()
+        columns = [item.name for item in cursor.description]
+    return [
+        retrieval_payload_from_row(dict(zip(columns, row, strict=True)))
+        for row in rows
+    ]

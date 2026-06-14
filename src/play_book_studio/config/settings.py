@@ -10,6 +10,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from .packs import (
     APP_ID,
@@ -85,6 +86,9 @@ class Settings(SettingsPathMixin):
     source_catalog_versions_override: str = ""
     source_catalog_languages_override: str = ""
     source_catalog_kinds_override: str = ""
+    database_url: str = ""
+    object_storage_root_override: str = ""
+    corpus_seed_dir_override: str = ""
     ocp_version: str = DEFAULT_OCP_VERSION
     docs_language: str = DEFAULT_DOCS_LANGUAGE
     docs_index_url_template: str = DEFAULT_CORE_PACK.docs_index_url_template
@@ -102,12 +106,9 @@ class Settings(SettingsPathMixin):
     embedding_api_key: str = ""
     embedding_batch_size: int = 32
     embedding_timeout_seconds: float = 8
-    qdrant_url: str = "http://localhost:6333"
-    qdrant_collection: str = DEFAULT_CORE_PACK.qdrant_collection
-    qdrant_vector_size: int = 1024
-    qdrant_distance: str = "Cosine"
-    qdrant_upsert_batch_size: int = 128
-    qdrant_recreate_collection: bool = False
+    vector_max_parallel_requests: int = 4
+    vector_domain_filter_enabled: bool = False
+    query_signal_llm_enabled: bool = False
     graph_enabled: bool = True
     graph_backend: str = "local"
     graph_uri: str = ""
@@ -117,15 +118,32 @@ class Settings(SettingsPathMixin):
     graph_boost_top_n: int = 8
     graph_max_edge_fanout: int = 12
     llm_endpoint: str = ""
-    llm_api_key: str = ""
     llm_model: str = ""
     llm_temperature: float = 0.2
     llm_max_tokens: int = 1100
+    openshift_lightspeed_base_url: str = ""
+    openshift_lightspeed_api_token: str = ""
+    openshift_lightspeed_provider: str = ""
+    openshift_lightspeed_model: str = ""
+    openshift_lightspeed_system_prompt: str = ""
+    openshift_lightspeed_request_profile: str = "console_parity"
+    openshift_lightspeed_force_provider_model: bool = False
+    openshift_lightspeed_timeout_seconds: float = 90.0
+    openshift_lightspeed_verify_tls: bool = True
+    openshift_lightspeed_ca_bundle_path: str = ""
+    question_candidate_llm_client: Any | None = None
     reranker_enabled: bool = False
-    reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
-    reranker_top_n: int = 12
-    reranker_batch_size: int = 8
+    reranker_base_url: str = ""
+    reranker_api_key: str = ""
+    reranker_model: str = "dragonkue/bge-reranker-v2-m3-ko"
+    reranker_top_n: int = 5
+    reranker_candidate_k: int = 5
+    reranker_min_fused_score: float = 0.0
+    reranker_min_relative_score: float = 0.0
+    reranker_batch_size: int = 16
+    reranker_max_parallel_requests: int = 5
     reranker_device: str = "auto"
+    reranker_timeout_seconds: float = 20.0
     graph_runtime_mode: str = "auto"
     graph_endpoint: str = ""
     graph_api_key: str = ""
@@ -139,6 +157,19 @@ class Settings(SettingsPathMixin):
     surya_timeout_seconds: float = 30.0
     ocp_api_base_url: str = ""
     ocp_api_token: str = ""
+    ocp_default_namespace: str = ""
+    terminal_enabled: bool = False
+    terminal_host: str = "127.0.0.1"
+    terminal_ws_port: int = 8770
+    terminal_shell: str = ""
+    terminal_workdir_override: str = ""
+    terminal_session_ttl_seconds: int = 1800
+    terminal_max_output_bytes: int = 1048576
+    terminal_user_workspace_enabled: bool = False
+    terminal_sandbox_shell: str = "/bin/bash"
+    pbs_auto_create_namespace: bool = False
+    pbs_namespace_mode: str = "disabled"
+    pbs_max_active_workspaces: int = 0
     scm_github_client_id: str = ""
     scm_github_client_secret: str = ""
     scm_gitlab_client_id: str = ""
@@ -230,6 +261,14 @@ class Settings(SettingsPathMixin):
     def graph_sidecar_compact_path(self) -> Path:
         return self.graph_sidecar_path.with_name("graph_sidecar_compact.json")
 
+
+def _clean_optional_env_value(value: str | None) -> str:
+    cleaned = str(value or "").strip()
+    if cleaned.startswith("<") and cleaned.endswith(">"):
+        return ""
+    return cleaned
+
+
 def load_effective_env(root_dir: str | Path) -> dict[str, str]:
     """`.env` overlay를 반영한 환경 맵을 반환한다.
 
@@ -293,6 +332,9 @@ def load_settings(root_dir: str | Path) -> Settings:
         source_catalog_versions_override=effective_env.get("SOURCE_CATALOG_VERSIONS", "").strip(),
         source_catalog_languages_override=effective_env.get("SOURCE_CATALOG_LANGUAGES", "").strip(),
         source_catalog_kinds_override=effective_env.get("SOURCE_CATALOG_KINDS", "").strip(),
+        database_url=effective_env.get("DATABASE_URL", "").strip(),
+        object_storage_root_override=effective_env.get("OBJECT_STORAGE_ROOT", "").strip(),
+        corpus_seed_dir_override=effective_env.get("CORPUS_SEED_DIR", "").strip(),
         ocp_version=effective_env.get("OCP_VERSION", DEFAULT_OCP_VERSION).strip(),
         docs_language=effective_env.get("DOCS_LANGUAGE", DEFAULT_DOCS_LANGUAGE).strip(),
         book_url_template_str=effective_env.get("BOOK_URL_TEMPLATE", DEFAULT_BOOK_URL_TEMPLATE),
@@ -303,12 +345,10 @@ def load_settings(root_dir: str | Path) -> Settings:
         embedding_api_key=effective_env.get("EMBEDDING_API_KEY", "").strip(),
         embedding_batch_size=int(effective_env.get("EMBEDDING_BATCH_SIZE", "32")),
         embedding_timeout_seconds=float(effective_env.get("EMBEDDING_TIMEOUT_SECONDS", "8")),
-        qdrant_url=effective_env.get("QDRANT_URL", "http://localhost:6333").rstrip("/"),
-        qdrant_collection=effective_env.get("QDRANT_COLLECTION", DEFAULT_CORE_PACK.qdrant_collection),
-        qdrant_vector_size=int(effective_env.get("QDRANT_VECTOR_SIZE", "1024")),
-        qdrant_distance=effective_env.get("QDRANT_DISTANCE", "Cosine"),
-        qdrant_upsert_batch_size=int(effective_env.get("QDRANT_UPSERT_BATCH_SIZE", "128")),
-        qdrant_recreate_collection=effective_env.get("QDRANT_RECREATE_COLLECTION", "false").lower()
+        vector_max_parallel_requests=int(effective_env.get("VECTOR_MAX_PARALLEL_REQUESTS", "4")),
+        vector_domain_filter_enabled=effective_env.get("VECTOR_DOMAIN_FILTER_ENABLED", "false").lower()
+        in {"1", "true", "yes", "on"},
+        query_signal_llm_enabled=effective_env.get("QUERY_SIGNAL_LLM_ENABLED", "false").lower()
         in {"1", "true", "yes", "on"},
         graph_enabled=effective_env.get("GRAPH_ENABLED", "true").lower()
         in {"1", "true", "yes", "on"},
@@ -320,19 +360,80 @@ def load_settings(root_dir: str | Path) -> Settings:
         graph_boost_top_n=int(effective_env.get("GRAPH_BOOST_TOP_N", "8")),
         graph_max_edge_fanout=int(effective_env.get("GRAPH_MAX_EDGE_FANOUT", "12")),
         llm_endpoint=effective_env.get("LLM_ENDPOINT", "").strip().rstrip("/"),
-        llm_api_key=effective_env.get("LLM_API_KEY", "").strip(),
         llm_model=effective_env.get("LLM_MODEL", "").strip(),
         llm_temperature=float(effective_env.get("LLM_TEMPERATURE", "0.2")),
         llm_max_tokens=int(effective_env.get("LLM_MAX_TOKENS", "1100")),
+        openshift_lightspeed_base_url=_clean_optional_env_value(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_BASE_URL")
+            or effective_env.get("OLS_BASE_URL")
+            or ""
+        ).rstrip("/"),
+        openshift_lightspeed_api_token=_clean_optional_env_value(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_API_TOKEN")
+            or effective_env.get("OLS_AUTH_TOKEN")
+            or ""
+        ),
+        openshift_lightspeed_provider=_clean_optional_env_value(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_PROVIDER")
+            or effective_env.get("OLS_PROVIDER")
+            or ""
+        ),
+        openshift_lightspeed_model=_clean_optional_env_value(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_MODEL")
+            or effective_env.get("OLS_MODEL")
+            or ""
+        ),
+        openshift_lightspeed_system_prompt=_clean_optional_env_value(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_SYSTEM_PROMPT")
+            or effective_env.get("OLS_SYSTEM_PROMPT")
+            or ""
+        ),
+        openshift_lightspeed_request_profile=(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_REQUEST_PROFILE")
+            or effective_env.get("OLS_REQUEST_PROFILE")
+            or "console_parity"
+        ).strip().lower()
+        or "console_parity",
+        openshift_lightspeed_force_provider_model=(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_FORCE_PROVIDER_MODEL")
+            or effective_env.get("OLS_FORCE_PROVIDER_MODEL")
+            or "false"
+        ).lower()
+        in {"1", "true", "yes", "y", "on"},
+        openshift_lightspeed_timeout_seconds=float(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS")
+            or effective_env.get("OLS_TIMEOUT_SECONDS")
+            or "90"
+        ),
+        openshift_lightspeed_verify_tls=not (
+            (
+                effective_env.get("OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY")
+                or effective_env.get("OLS_INSECURE_SKIP_TLS_VERIFY")
+                or "false"
+            ).lower()
+            in {"1", "true", "yes", "on"}
+        ),
+        openshift_lightspeed_ca_bundle_path=_clean_optional_env_value(
+            effective_env.get("OPENSHIFT_LIGHTSPEED_CA_BUNDLE_PATH")
+            or effective_env.get("OLS_CA_BUNDLE_PATH")
+            or ""
+        ),
         reranker_enabled=effective_env.get("RERANKER_ENABLED", "false").lower()
         in {"1", "true", "yes", "on"},
-        reranker_model=effective_env.get(
-            "RERANKER_MODEL",
-            "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+        reranker_base_url=effective_env.get("RERANKER_BASE_URL", "").strip().rstrip("/"),
+        reranker_api_key=effective_env.get(
+            "RERANKER_API_KEY",
+            effective_env.get("EMBEDDING_API_KEY", ""),
         ).strip(),
-        reranker_top_n=int(effective_env.get("RERANKER_TOP_N", "12")),
-        reranker_batch_size=int(effective_env.get("RERANKER_BATCH_SIZE", "8")),
+        reranker_model=effective_env.get("RERANKER_MODEL", "dragonkue/bge-reranker-v2-m3-ko").strip(),
+        reranker_top_n=int(effective_env.get("RERANKER_TOP_N", "5")),
+        reranker_candidate_k=int(effective_env.get("RERANKER_CANDIDATE_K", "5")),
+        reranker_min_fused_score=float(effective_env.get("RERANKER_MIN_FUSED_SCORE", "0")),
+        reranker_min_relative_score=float(effective_env.get("RERANKER_MIN_RELATIVE_SCORE", "0")),
+        reranker_batch_size=int(effective_env.get("RERANKER_BATCH_SIZE", "16")),
+        reranker_max_parallel_requests=int(effective_env.get("RERANKER_MAX_PARALLEL_REQUESTS", "5")),
         reranker_device=effective_env.get("RERANKER_DEVICE", "auto").strip(),
+        reranker_timeout_seconds=float(effective_env.get("RERANKER_TIMEOUT_SECONDS", "20")),
         graph_runtime_mode=effective_env.get("GRAPH_RUNTIME_MODE", "auto").strip().lower() or "auto",
         graph_endpoint=effective_env.get("GRAPH_ENDPOINT", "").strip().rstrip("/"),
         graph_api_key=effective_env.get("GRAPH_API_KEY", "").strip(),
@@ -355,6 +456,22 @@ def load_settings(root_dir: str | Path) -> Settings:
         surya_timeout_seconds=float(effective_env.get("SURYA_TIMEOUT_SECONDS", "30")),
         ocp_api_base_url=effective_env.get("OCP_API_BASE_URL", "").strip().rstrip("/"),
         ocp_api_token=effective_env.get("OCP_API_TOKEN", "").strip(),
+        ocp_default_namespace=effective_env.get("OCP_DEFAULT_NAMESPACE", "").strip(),
+        terminal_enabled=effective_env.get("TERMINAL_ENABLED", "false").lower()
+        in {"1", "true", "yes", "on"},
+        terminal_host=effective_env.get("TERMINAL_HOST", "127.0.0.1").strip() or "127.0.0.1",
+        terminal_ws_port=int(effective_env.get("TERMINAL_WS_PORT", "8770")),
+        terminal_shell=effective_env.get("TERMINAL_SHELL", "").strip(),
+        terminal_workdir_override=effective_env.get("TERMINAL_WORKDIR", "").strip(),
+        terminal_session_ttl_seconds=int(effective_env.get("TERMINAL_SESSION_TTL_SECONDS", "1800")),
+        terminal_max_output_bytes=int(effective_env.get("TERMINAL_MAX_OUTPUT_BYTES", "1048576")),
+        terminal_user_workspace_enabled=effective_env.get("TERMINAL_USER_WORKSPACE_ENABLED", "false").lower()
+        in {"1", "true", "yes", "on"},
+        terminal_sandbox_shell=effective_env.get("TERMINAL_SANDBOX_SHELL", "/bin/bash").strip() or "/bin/bash",
+        pbs_auto_create_namespace=effective_env.get("PBS_AUTO_CREATE_NAMESPACE", "false").lower()
+        in {"1", "true", "yes", "on"},
+        pbs_namespace_mode=effective_env.get("PBS_NAMESPACE_MODE", "disabled").strip().lower() or "disabled",
+        pbs_max_active_workspaces=int(effective_env.get("PBS_MAX_ACTIVE_WORKSPACES", "0") or "0"),
         scm_github_client_id=effective_env.get("SCM_GITHUB_CLIENT_ID", "").strip(),
         scm_github_client_secret=effective_env.get("SCM_GITHUB_CLIENT_SECRET", "").strip(),
         scm_gitlab_client_id=effective_env.get("SCM_GITLAB_CLIENT_ID", "").strip(),

@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import fields
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Callable
 
 from play_book_studio.config.settings import Settings
-from play_book_studio.config.validation import read_jsonl
 
 from .collector import collect_entry
 from .curated_gold import (
@@ -21,10 +19,8 @@ from .curated_gold import (
     apply_curated_monitoring_gold,
     apply_curated_operators_gold,
 )
-from .embedding import EmbeddingClient
 from .manifest import read_manifest
-from .models import ChunkRecord, SourceManifestEntry
-from .qdrant_store import upsert_chunks
+from .models import SourceManifestEntry
 from .synthesis_lane import synthesis_lane_report_path, write_synthesis_lane_outputs
 
 
@@ -134,40 +130,12 @@ def promote_curated_source_bundle(
     return dossier
 
 
-def _chunk_records_for_slug(settings: Settings, slug: str) -> list[ChunkRecord]:
-    allowed = {field.name for field in fields(ChunkRecord)}
-    records: list[ChunkRecord] = []
-    for row in read_jsonl(settings.chunks_path):
-        if str(row.get("book_slug", "")) != slug:
-            continue
-        payload = {key: value for key, value in row.items() if key in allowed}
-        payload["section_path"] = tuple(payload.get("section_path", []))
-        payload["cli_commands"] = tuple(payload.get("cli_commands", []))
-        payload["error_strings"] = tuple(payload.get("error_strings", []))
-        payload["k8s_objects"] = tuple(payload.get("k8s_objects", []))
-        payload["operator_names"] = tuple(payload.get("operator_names", []))
-        payload["verification_hints"] = tuple(payload.get("verification_hints", []))
-        records.append(ChunkRecord(**payload))
-    return records
-
-
-def sync_curated_slug_to_qdrant(settings: Settings, slug: str) -> int:
-    chunks = _chunk_records_for_slug(settings, slug)
-    if not chunks:
-        return 0
-    client = EmbeddingClient(settings)
-    vectors = client.embed_texts(chunk.text for chunk in chunks)
-    return upsert_chunks(settings, chunks, vectors)
-
-
 def apply_all_curated_gold(
     settings: Settings,
     *,
     refresh_synthesis_report: bool = True,
-    sync_qdrant: bool = False,
 ) -> dict[str, object]:
     reports: list[dict[str, object]] = []
-    total_qdrant_upserts = 0
     dossier_promoted_count = 0
 
     for slug, applier in CURATED_GOLD_APPLIERS:
@@ -177,9 +145,6 @@ def apply_all_curated_gold(
         dossier = promote_curated_source_bundle(settings, entry)
         if dossier is not None:
             dossier_promoted_count += 1
-        qdrant_upserted = sync_curated_slug_to_qdrant(settings, slug) if sync_qdrant else 0
-        total_qdrant_upserts += qdrant_upserted
-        report["qdrant_upserted_count"] = qdrant_upserted
         report["dossier_promoted"] = dossier is not None
         reports.append(report)
 
@@ -195,7 +160,6 @@ def apply_all_curated_gold(
             "requested_count": len(CURATED_GOLD_APPLIERS),
             "promoted_count": len(reports),
             "dossier_promoted_count": dossier_promoted_count,
-            "qdrant_upserted_count": total_qdrant_upserts,
         },
         "books": reports,
         "synthesis_report_path": None if synthesis_report_path is None else str(synthesis_report_path),

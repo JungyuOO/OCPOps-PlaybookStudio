@@ -1,0 +1,5 @@
+{"id":"v007-command-namespace-list","query":"네임스페이스 목록 확인하는 명령어가 뭐야?","route_kind":"official","mode":"ops","query_type":"command_lookup","must_include_terms":["oc get"],"expected_citation_terms":["CLI"]}
+{"id":"v007-command-current-project","query":"현재 선택된 프로젝트 확인하는 명령어 알려줘","route_kind":"official","mode":"ops","query_type":"command_lookup","must_include_terms":["oc project"],"expected_citation_terms":["project"]}
+{"id":"v007-command-cluster-operators","query":"클러스터 오퍼레이터 상태 확인하는 명령어 뭐부터 보면 돼?","route_kind":"official","mode":"ops","query_type":"command_lookup","must_include_terms":["oc get"],"expected_citation_terms":["operator"]}
+{"id":"v007-command-pod-logs","query":"pod 이전 로그 확인하려면 무슨 명령어를 써?","route_kind":"official","mode":"ops","query_type":"command_lookup","must_include_terms":["oc logs"],"expected_citation_terms":["log"]}
+{"id":"v007-command-can-i","query":"alice가 pods delete 권한 있는지 can-i로 확인하는 명령어 뭐야?","route_kind":"official","mode":"ops","query_type":"command_lookup","must_include_terms":["oc auth can-i"],"expected_citation_terms":["auth"]}

@@ -1,0 +1,62 @@
+{
+  "architecture": {
+    "start_here": [
+      "architecture--DSGN-005-001--default--none--design-summary--summary--3e8f3baf",
+      "architecture--DSGN-005-202--default--none--design-summary--summary--ec8ba198",
+      "architecture--DSGN-005-209--default--none--design-summary--summary--39f5045a"
+    ],
+    "then_open": [
+      "architecture--DSGN-005-030--default--none--design-summary--summary--7c8d4892",
+      "architecture--DSGN-005-401--default--none--design-summary--summary--7a897e89"
+    ],
+    "why_this_order": "기반 구성도를 먼저 보고, 서비스 흐름과 URL 매핑을 이어서 읽은 뒤, 저장소와 CI/CD 설계를 여는 순서로 전체 구조를 이해합니다."
+  },
+  "unit_test": {
+    "start_here": [
+      "unit-test--TEST-UN-OCP-01-01--plan--none--test-case-summary--summary--ca27205f",
+      "unit-test--TEST-UN-OCP-01-02--plan--none--test-case-summary--summary--cf2b56d2",
+      "unit-test--TEST-UN-OCP-02-01--plan--none--test-case-summary--summary--fc98845b"
+    ],
+    "then_open": [
+      "unit-test--TEST-UN-OCP-08-01--plan--none--test-case-summary--summary--a40613ed",
+      "unit-test--TEST-UN-OCP-24-01--plan--none--test-case-summary--summary--bd4ef710"
+    ],
+    "why_this_order": "기본 구성 확인에서 시작해 핵심 플랫폼 기능 검증으로 넘어가고, 이후 라우트·스토리지 같은 운영 핵심 항목을 읽도록 정리합니다."
+  },
+  "integration_test": {
+    "start_here": [
+      "integrat-fce72e--1--default--none--integration-s-76fdd8--summary--d6e2c5ce",
+      "integrat-fce72e--2--default--none--integration-s-76fdd8--summary--8936f619",
+      "integrat-fce72e--3--default--none--integration-s-76fdd8--summary--46ae2d9a"
+    ],
+    "then_open": [
+      "integrat-fce72e--KMSC-COCP-RTER-002-OCP-PLAN-FRONT--default--none--integration-s-76fdd8--summary--065ba83e",
+      "integrat-fce72e--KMSC-COCP-RTER-002-OCP-RESU-674952--default--none--integration-s-76fdd8--summary--3703b307"
+    ],
+    "why_this_order": "대표 통합 시나리오를 먼저 읽고, 그 다음 계획서 커버와 상세 자료를 열어 테스트 배경과 범위를 함께 이해합니다."
+  },
+  "perf_test": {
+    "start_here": [
+      "perf-test--4--default--none--perf-section-summary--summary--10bd6950",
+      "perf-test--3--default--none--perf-section-summary--summary--f90f298e",
+      "perf-test--5--default--none--perf-section-summary--summary--9cc052ae"
+    ],
+    "then_open": [
+      "perf-test--2--default--none--perf-section-summary--summary--c54d0c02",
+      "perf-test--9--default--none--perf-section-summary--summary--7a01cf8c"
+    ],
+    "why_this_order": "핵심 성능 결과와 병목 구간을 먼저 보고, 뒤이어 계획/보조 섹션을 열어 측정 조건과 주변 맥락을 이해합니다."
+  },
+  "completion": {
+    "start_here": [
+      "completion--CH-01--default--none--chapter-summary--summary--600eca28",
+      "completion--CH-02--default--none--chapter-summary--summary--54364cf6",
+      "completion--CH-03--default--none--chapter-summary--summary--52615f5f"
+    ],
+    "then_open": [
+      "completion--CH-04--default--none--chapter-summary--summary--89ca412e",
+      "completion--CH-05--default--none--chapter-summary--summary--fe825e06"
+    ],
+    "why_this_order": "완료보고의 앞 챕터에서 사업 배경과 결과를 먼저 잡고, 이후 챕터로 넘어가 세부 산출물과 마무리 내용을 따라갑니다."
+  }
+}

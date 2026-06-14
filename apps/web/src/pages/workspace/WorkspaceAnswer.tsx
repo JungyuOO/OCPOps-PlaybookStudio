@@ -1,0 +1,1129 @@
+import { ArrowRight, Bot, Check, Copy, Link as LinkIcon, WrapText } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import type { ChatCitation, ChatRelatedLink } from '../../lib/runtimeApi';
+import type { VisionMode } from '../../lib/wikiVision';
+
+type TruthSurfacePayload = {
+  boundary_truth?: string;
+  runtime_truth_label?: string;
+  boundary_badge?: string;
+  source_lane?: string;
+  approval_state?: string;
+  publication_state?: string;
+  parser_backend?: string;
+  pack_label?: string;
+} | null | undefined;
+
+type InlineToken =
+  | { kind: 'text'; value: string }
+  | { kind: 'code'; value: string }
+  | { kind: 'strong'; value: string }
+  | { kind: 'citation'; index: number; citation?: ChatCitation };
+
+type AnswerBlock =
+  | { type: 'paragraph'; parts: InlineToken[] }
+  | { type: 'heading'; level: number; parts: InlineToken[] }
+  | { type: 'table'; header: InlineToken[][]; rows: InlineToken[][][] }
+  | { type: 'unordered-list'; items: InlineToken[][] }
+  | { type: 'step'; number: number; paragraphs: InlineToken[][]; codeBlocks: { code: string; language: string }[] };
+
+export function normalizeRouteKey(link: ChatRelatedLink): string {
+  return [
+    String(link.kind || '').trim(),
+    String(link.href || '').trim(),
+    String(link.label || '').trim(),
+    String(link.summary || '').trim(),
+  ]
+    .filter(Boolean)
+    .join('::');
+}
+
+export function truthSurfaceCopy(payload?: TruthSurfacePayload): {
+  label: string;
+  meta: string[];
+} {
+  if (!payload) {
+    return { label: '', meta: [] };
+  }
+  const boundaryTruth = String(payload.boundary_truth || '').trim();
+  const sourceLane = String(payload.source_lane || '').trim();
+  const runtimeTruthLabel = String(payload.runtime_truth_label || '').trim();
+  const packLabel = String(payload.pack_label || '').trim();
+
+  if (boundaryTruth === 'private_customer_pack_runtime' || sourceLane === 'customer_source_first_pack') {
+    return {
+      label: 'Private Runtime',
+      meta: [
+        runtimeTruthLabel || 'Customer Source-First Pack',
+        payload.approval_state ? `approval ${payload.approval_state}` : '',
+        payload.publication_state ? `publication ${payload.publication_state}` : '',
+        payload.parser_backend ? `parser ${payload.parser_backend}` : '',
+      ].filter(Boolean),
+    };
+  }
+
+  if (boundaryTruth === 'official_gold_playbook_runtime') {
+    return {
+      label: 'Gold Playbook',
+      meta: [
+        runtimeTruthLabel || (packLabel ? `${packLabel} Gold Playbook` : 'Gold Playbook'),
+        packLabel || '',
+      ].filter(Boolean),
+    };
+  }
+
+  if (boundaryTruth === 'official_validated_runtime') {
+    return {
+      label: 'Validated Runtime',
+      meta: [
+        runtimeTruthLabel || (packLabel ? `${packLabel} Runtime` : 'Validated Pack Runtime'),
+        packLabel || '',
+      ].filter(Boolean),
+    };
+  }
+
+  if (boundaryTruth === 'official_candidate_runtime' || sourceLane.includes('candidate')) {
+    const isLegacyArchiveLane =
+      sourceLane === 'legacy_gold_candidate_archive'
+      || sourceLane === 'gold_candidate_archive';
+    return {
+      label: isLegacyArchiveLane ? 'Archived Runtime' : 'Candidate Runtime',
+      meta: [
+        runtimeTruthLabel || (packLabel ? `${packLabel} Candidate` : 'Validated Pack Candidate'),
+      ].filter(Boolean),
+    };
+  }
+
+  if (boundaryTruth === 'mixed_runtime_bridge' || sourceLane.includes('mixed')) {
+    return {
+      label: 'Mixed Runtime',
+      meta: [
+        runtimeTruthLabel || 'Official + Private Runtime',
+      ].filter(Boolean),
+    };
+  }
+
+  const isOpenShiftLightspeed =
+    boundaryTruth === 'external_openshift_lightspeed'
+    || sourceLane === 'openshift_lightspeed'
+    || sourceLane.includes('lightspeed')
+    || runtimeTruthLabel.toLowerCase().includes('openshift lightspeed')
+    || String(payload.boundary_badge || '').trim().toLowerCase().includes('lightspeed');
+
+  if (isOpenShiftLightspeed) {
+    return {
+      label: 'OpenShift Lightspeed',
+      meta: [
+        runtimeTruthLabel || 'OpenShift Lightspeed',
+      ].filter(Boolean),
+    };
+  }
+
+  return {
+    label: payload.boundary_badge || runtimeTruthLabel || sourceLane || '',
+    meta: [
+      payload.approval_state ? `approval ${payload.approval_state}` : '',
+      payload.publication_state ? `publication ${payload.publication_state}` : '',
+      payload.parser_backend ? `parser ${payload.parser_backend}` : '',
+    ].filter(Boolean),
+  };
+}
+
+function formatCitationLabel(citation: ChatCitation): string {
+  const base = citation.source_label || citation.book_title || citation.section;
+  const truth = truthSurfaceCopy(citation);
+  if (truth.label) {
+    return `${truth.label} · ${base}`;
+  }
+  return base;
+}
+
+function citationSurfaceCopy(citation: ChatCitation): {
+  badge: string;
+  title: string;
+  meta: string[];
+} {
+  const truth = truthSurfaceCopy(citation);
+  const title = citation.source_label || citation.book_title || citation.section || citation.book_slug;
+  const meta = [...truth.meta];
+  if (!meta.length && citation.section && citation.section !== title) {
+    meta.push(citation.section);
+  }
+  return {
+    badge: truth.label || 'Runtime',
+    title,
+    meta,
+  };
+}
+
+function truthBlockCopy(payload?: TruthSurfacePayload): {
+  badge: string;
+  meta: string[];
+} {
+  const truth = truthSurfaceCopy(payload);
+  return {
+    badge: truth.label || 'Runtime',
+    meta: truth.meta,
+  };
+}
+
+export function TruthBadgeBlock({
+  payload,
+  badgeClassName = 'truth-badge',
+  metaClassName = 'truth-meta',
+  showMeta = true,
+}: {
+  payload?: TruthSurfacePayload;
+  badgeClassName?: string;
+  metaClassName?: string;
+  showMeta?: boolean;
+}) {
+  const truth = truthBlockCopy(payload);
+  return (
+    <>
+      <span className={badgeClassName}>{truth.badge}</span>
+      {showMeta && truth.meta.length > 0 && (
+        <span className={metaClassName}>{truth.meta.join(' · ')}</span>
+      )}
+    </>
+  );
+}
+
+function isOpenShiftLightspeedPayload(payload?: TruthSurfacePayload): boolean {
+  if (!payload) {
+    return false;
+  }
+  const boundaryTruth = String(payload.boundary_truth || '').trim().toLowerCase();
+  const sourceLane = String(payload.source_lane || '').trim().toLowerCase();
+  const runtimeTruthLabel = String(payload.runtime_truth_label || '').trim().toLowerCase();
+  const boundaryBadge = String(payload.boundary_badge || '').trim().toLowerCase();
+  return boundaryTruth === 'external_openshift_lightspeed'
+    || sourceLane === 'openshift_lightspeed'
+    || sourceLane.includes('lightspeed')
+    || runtimeTruthLabel.includes('openshift lightspeed')
+    || boundaryBadge.includes('lightspeed');
+}
+
+function relatedLinkSubject(link: ChatRelatedLink, isLightspeedSource: boolean): string {
+  if (isLightspeedSource) {
+    const rawDate = String(link.created_at || '').trim();
+    const dateMatch = rawDate.match(/\d{4}-\d{2}-\d{2}/);
+    return dateMatch ? dateMatch[0] : '응답 생성일 확인 불가';
+  }
+  const label = String(link.label || '').trim();
+  if (!label) {
+    return '관련 문서';
+  }
+  return label.split('>').map((part) => part.trim()).filter(Boolean)[0] || label;
+}
+
+function buildCitationMap(citations: ChatCitation[]): Map<number, ChatCitation> {
+  return new Map(citations.map((citation) => [Number(citation.index), citation]));
+}
+
+function normalizeAssistantAnswer(text: string): string {
+  const stripped = String(text || '').trim().replace(/^답변:\s*/u, '');
+  const lines = stripped.split('\n');
+  let nextStep = 1;
+  return lines
+    .map((line) => {
+      const match = line.match(/^(\s*)(\d+)\.\s+(.*)$/);
+      if (!match || match[1].length > 0) {
+        return line;
+      }
+      return `${match[1]}${nextStep++}. ${match[3]}`;
+    })
+    .join('\n');
+}
+
+function parseInlineTokens(text: string, citationsByIndex: Map<number, ChatCitation>): InlineToken[] {
+  const chunks = String(text || '').split(/(`[^`]+`|\*\*[^*]+\*\*|\[\d+(?:\s*,\s*\d+)*\])/g);
+  const tokens: InlineToken[] = [];
+  chunks.forEach((chunk) => {
+    if (!chunk) {
+      return;
+    }
+    if (chunk.startsWith('`') && chunk.endsWith('`') && chunk.length >= 2) {
+      tokens.push({ kind: 'code', value: chunk.slice(1, -1) });
+      return;
+    }
+    if (chunk.startsWith('**') && chunk.endsWith('**') && chunk.length >= 4) {
+      tokens.push({ kind: 'strong', value: chunk.slice(2, -2) });
+      return;
+    }
+    const citationMatch = chunk.match(/^\[(\d+(?:\s*,\s*\d+)*)\]$/);
+    if (citationMatch) {
+      citationMatch[1].split(',').forEach((value) => {
+        const index = Number(value.trim());
+        if (!Number.isFinite(index)) {
+          return;
+        }
+        tokens.push({
+          kind: 'citation',
+          index,
+          citation: citationsByIndex.get(index),
+        });
+      });
+      return;
+    }
+    tokens.push({ kind: 'text', value: chunk });
+  });
+  return tokens;
+}
+
+function isMarkdownTableLine(line: string): boolean {
+  const stripped = String(line || '').trim();
+  return stripped.startsWith('|') && stripped.endsWith('|') && stripped.split('|').length >= 3;
+}
+
+function isMarkdownTableSeparator(line: string): boolean {
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(String(line || ''));
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  return String(line || '')
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim().replace(/\\\|/g, '|'));
+}
+
+function standaloneCliCommand(line: string): string {
+  const trimmed = String(line || '').trim();
+  const inline = trimmed.match(/^`((?:oc|kubectl)\s+[^`]+)`$/i);
+  if (inline) {
+    return inline[1].trim();
+  }
+  const plain = trimmed.match(/^((?:\$?\s*)?(?:oc|kubectl)\s+\S.*)$/i);
+  if (!plain) {
+    return '';
+  }
+  return plain[1].replace(/^\$\s*/, '').trim();
+}
+
+function parseAnswerBlocks(text: string, citations: ChatCitation[]): AnswerBlock[] {
+  const normalized = normalizeAssistantAnswer(text).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const citationsByIndex = buildCitationMap(citations);
+  const lines = normalized.split('\n');
+  const blocks: AnswerBlock[] = [];
+
+  let currentStep: Extract<AnswerBlock, { type: 'step' }> | null = null;
+  let stepBuffer: string[] = [];
+  let paragraphBuffer: string[] = [];
+  let listBuffer: InlineToken[][] = [];
+  let inCode = false;
+  let codeLanguage = '';
+  let codeLines: string[] = [];
+  let skipLineUntil = -1;
+
+  const flushParagraph = (): void => {
+    if (!paragraphBuffer.length) {
+      return;
+    }
+    const textValue = paragraphBuffer.join('\n').trim();
+    if (textValue) {
+      blocks.push({ type: 'paragraph', parts: parseInlineTokens(textValue, citationsByIndex) });
+    }
+    paragraphBuffer = [];
+  };
+
+  const flushList = (): void => {
+    if (!listBuffer.length) {
+      return;
+    }
+    blocks.push({ type: 'unordered-list', items: [...listBuffer] });
+    listBuffer = [];
+  };
+
+  const flushStepParagraph = (): void => {
+    if (!currentStep || !stepBuffer.length) {
+      return;
+    }
+    const textValue = stepBuffer.join('\n').trim();
+    if (textValue) {
+      currentStep.paragraphs.push(parseInlineTokens(textValue, citationsByIndex));
+    }
+    stepBuffer = [];
+  };
+
+  const flushStep = (): void => {
+    if (!currentStep) {
+      return;
+    }
+    flushStepParagraph();
+    blocks.push(currentStep);
+    currentStep = null;
+  };
+
+  const flushCode = (): void => {
+    const code = codeLines.join('\n').trimEnd();
+    if (!code) {
+      codeLines = [];
+      codeLanguage = '';
+      return;
+    }
+    if (currentStep) {
+      flushStepParagraph();
+      currentStep.codeBlocks.push({ code, language: codeLanguage || 'text' });
+    } else {
+      blocks.push({
+        type: 'paragraph',
+        parts: [{ kind: 'code', value: code }],
+      });
+    }
+    codeLines = [];
+    codeLanguage = '';
+  };
+
+  lines.forEach((line, lineIndex) => {
+    if (lineIndex <= skipLineUntil) {
+      return;
+    }
+    const fence = line.match(/^```([\w.+-]*)\s*$/);
+    if (fence) {
+      if (inCode) {
+        flushCode();
+        inCode = false;
+      } else {
+        flushParagraph();
+        flushList();
+        codeLanguage = fence[1] || 'text';
+        inCode = true;
+      }
+      return;
+    }
+
+    if (inCode) {
+      codeLines.push(line);
+      return;
+    }
+
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      flushStepParagraph();
+      return;
+    }
+
+    if (isMarkdownTableLine(trimmed) && isMarkdownTableSeparator(lines[lineIndex + 1] ?? '')) {
+      flushParagraph();
+      flushList();
+      flushStep();
+      const tableRows: string[][] = [splitMarkdownTableRow(trimmed)];
+      let cursor = lineIndex + 2;
+      while (cursor < lines.length && isMarkdownTableLine(lines[cursor] ?? '')) {
+        tableRows.push(splitMarkdownTableRow(lines[cursor] ?? ''));
+        cursor += 1;
+      }
+      skipLineUntil = cursor - 1;
+      if (tableRows.length >= 2) {
+        blocks.push({
+          type: 'table',
+          header: tableRows[0].map((cell) => parseInlineTokens(cell, citationsByIndex)),
+          rows: tableRows.slice(1).map((row) => row.map((cell) => parseInlineTokens(cell, citationsByIndex))),
+        });
+      }
+      return;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,3})\s+(.*)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      flushStep();
+      blocks.push({
+        type: 'heading',
+        level: headingMatch[1].length,
+        parts: parseInlineTokens(headingMatch[2], citationsByIndex),
+      });
+      return;
+    }
+
+    const orderedMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+    if (orderedMatch) {
+      flushParagraph();
+      flushList();
+      flushStep();
+      currentStep = {
+        type: 'step',
+        number: Number(orderedMatch[1]),
+        paragraphs: [],
+        codeBlocks: [],
+      };
+      stepBuffer.push(orderedMatch[2]);
+      return;
+    }
+
+    const unorderedMatch = trimmed.match(/^[-*]\s+(.*)$/);
+    if (unorderedMatch && currentStep) {
+      flushStepParagraph();
+      currentStep.paragraphs.push(parseInlineTokens(unorderedMatch[1], citationsByIndex));
+      return;
+    }
+    if (unorderedMatch && !currentStep) {
+      flushParagraph();
+      listBuffer.push(parseInlineTokens(unorderedMatch[1], citationsByIndex));
+      return;
+    }
+
+    const cliCommand = standaloneCliCommand(trimmed);
+    if (cliCommand && currentStep) {
+      flushStepParagraph();
+      currentStep.codeBlocks.push({ code: cliCommand, language: 'bash' });
+      return;
+    }
+
+    if (currentStep) {
+      stepBuffer.push(trimmed);
+      return;
+    }
+
+    paragraphBuffer.push(trimmed);
+  });
+
+  flushParagraph();
+  flushList();
+  flushStep();
+
+  if (blocks.length === 0 && normalized.trim()) {
+    blocks.push({
+      type: 'paragraph',
+      parts: parseInlineTokens(normalized.trim(), citationsByIndex),
+    });
+  }
+
+  return blocks;
+}
+
+function AnswerTable({
+  header,
+  rows,
+  onCitationClick,
+}: {
+  header: InlineToken[][];
+  rows: InlineToken[][][];
+  onCitationClick: (citation: ChatCitation) => void;
+}) {
+  const columnCount = Math.max(header.length, ...rows.map((row) => row.length), 0);
+  if (columnCount === 0) {
+    return null;
+  }
+  const columns = Array.from({ length: columnCount });
+  return (
+    <div className="assistant-table-wrap">
+      <table className="assistant-table">
+        {header.length > 0 && (
+          <thead>
+            <tr>
+              {columns.map((_, columnIndex) => (
+                <th key={`head-${columnIndex}`}>
+                  <InlineParts parts={header[columnIndex] ?? []} onCitationClick={onCitationClick} />
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={`row-${rowIndex}`}>
+              {columns.map((_, columnIndex) => (
+                <td key={`cell-${rowIndex}-${columnIndex}`}>
+                  <InlineParts parts={row[columnIndex] ?? []} onCitationClick={onCitationClick} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function InlineParts({
+  parts,
+  onCitationClick,
+}: {
+  parts: InlineToken[];
+  onCitationClick: (citation: ChatCitation) => void;
+}) {
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.kind === 'code') {
+          return <code key={`code-${index}`} className="inline-code">{part.value}</code>;
+        }
+        if (part.kind === 'strong') {
+          return <strong key={`strong-${index}`}>{part.value}</strong>;
+        }
+        if (part.kind === 'citation' && part.citation) {
+          const citation = part.citation;
+          return (
+            <button
+              key={`citation-${index}`}
+              type="button"
+              className="inline-citation"
+              onClick={() => onCitationClick(citation)}
+            >
+              {part.index}
+            </button>
+          );
+        }
+        if (part.kind === 'citation') {
+          return (
+            <span
+              key={`citation-text-${index}`}
+              className="inline-citation inline-citation-pending"
+              title="근거 정보를 불러오는 중입니다."
+            >
+              {part.index}
+            </span>
+          );
+        }
+        return <span key={`text-${index}`}>{part.value}</span>;
+      })}
+    </>
+  );
+}
+
+export function copyableCommandTextFromCodeBlock(code: string): string {
+  return String(code || '')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => {
+      const trimmed = line.trim();
+      return trimmed.length > 0 && !trimmed.startsWith('#');
+    })
+    .join('\n')
+    .trim();
+}
+
+type CommandCard = {
+  note: string;
+  code: string;
+};
+
+function isShellCommandLine(line: string): boolean {
+  return /^(?:\$?\s*)?(?:oc|kubectl)\s+\S/i.test(String(line || '').trim());
+}
+
+export function splitAnnotatedCommandCards(code: string): CommandCard[] {
+  const lines = String(code || '').split('\n');
+  const cards: CommandCard[] = [];
+  let pendingNote: string[] = [];
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return;
+    }
+    if (trimmed.startsWith('#')) {
+      pendingNote.push(trimmed.replace(/^#\s?/, '').trim());
+      return;
+    }
+    if (isShellCommandLine(trimmed)) {
+      cards.push({
+        note: pendingNote.filter(Boolean).join(' '),
+        code: trimmed.replace(/^\$\s*/, ''),
+      });
+      pendingNote = [];
+      return;
+    }
+    pendingNote.push(trimmed);
+  });
+
+  return cards;
+}
+
+function SingleAnswerCodeBlock({
+  code,
+  languageLabel,
+  note = '',
+}: {
+  code: string;
+  languageLabel: string;
+  note?: string;
+}) {
+  const [wrapped, setWrapped] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copyText = useMemo(() => {
+    const executable = copyableCommandTextFromCodeBlock(code);
+    return executable || code.trim();
+  }, [code]);
+
+  async function handleCopy(): Promise<void> {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(copyText);
+      } else {
+        const helper = document.createElement('textarea');
+        helper.value = copyText;
+        helper.setAttribute('readonly', 'true');
+        helper.style.position = 'fixed';
+        helper.style.opacity = '0';
+        document.body.appendChild(helper);
+        helper.select();
+        document.execCommand('copy');
+        document.body.removeChild(helper);
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <section className={`answer-code-block ${wrapped ? 'is-wrapped' : ''}`}>
+      <div className="answer-code-header">
+        <span className="answer-code-lang">{languageLabel}</span>
+        <div className="answer-code-actions">
+          <button type="button" className="answer-code-action" onClick={() => { void handleCopy(); }} title={copied ? '복사됨' : '복사'}>
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+          </button>
+          <button type="button" className={`answer-code-action ${wrapped ? 'active' : ''}`} onClick={() => setWrapped((value) => !value)} title={wrapped ? '줄바꿈 해제' : '줄바꿈'}>
+            <WrapText size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="answer-code-body">
+        {note && <p className="answer-code-note">{note}</p>}
+        <pre className="answer-code-pre"><code>{code.trim()}</code></pre>
+      </div>
+    </section>
+  );
+}
+
+function AnswerCodeBlock({ code, language }: { code: string; language: string }) {
+  const languageLabel = useMemo(() => {
+    const normalized = String(language || 'text').trim().toLowerCase();
+    if ((normalized === 'text' || !normalized) && /\b(?:oc|kubectl)\s+\S/i.test(code)) {
+      return 'SHELL';
+    }
+    return (language || 'text').toUpperCase();
+  }, [code, language]);
+  const commandCards = useMemo(() => splitAnnotatedCommandCards(code), [code]);
+
+  if (commandCards.length > 0) {
+    return (
+      <>
+        {commandCards.map((card, index) => (
+          <SingleAnswerCodeBlock
+            key={`${card.code}-${index}`}
+            code={card.code}
+            languageLabel={languageLabel}
+            note={card.note}
+          />
+        ))}
+      </>
+    );
+  }
+
+  return (
+    <SingleAnswerCodeBlock
+      code={code}
+      languageLabel={languageLabel}
+    />
+  );
+}
+
+export function ThinkingIndicator({ status = '답변 준비 중' }: { status?: string }) {
+  return (
+    <div className="message-row assistant animate-in">
+      <div className="message-bubble glass-panel thinking-bubble">
+        <div className="assistant-head thinking-head">
+          <div className="assistant-avatar small">
+            <Bot size={14} />
+          </div>
+          <div className="thinking-status" aria-live="polite">
+            {status}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function AssistantAnswer({
+  content,
+  citations,
+  relatedLinks,
+  relatedSections,
+  visionMode,
+  primarySourceLane,
+  primaryBoundaryTruth,
+  primaryRuntimeTruthLabel,
+  primaryBoundaryBadge,
+  primaryPublicationState,
+  primaryApprovalState,
+  onCitationClick,
+  onRelatedLinkClick,
+  onToggleFavoriteLink,
+  onCheckSectionLink,
+  isFavoriteLink,
+  isCheckedSectionLink,
+}: {
+  content: string;
+  citations: ChatCitation[];
+  relatedLinks: ChatRelatedLink[];
+  relatedSections: ChatRelatedLink[];
+  visionMode: VisionMode;
+  primarySourceLane?: string;
+  primaryBoundaryTruth?: string;
+  primaryRuntimeTruthLabel?: string;
+  primaryBoundaryBadge?: string;
+  primaryPublicationState?: string;
+  primaryApprovalState?: string;
+  onCitationClick: (citation: ChatCitation) => void;
+  onRelatedLinkClick: (link: ChatRelatedLink) => void;
+  onToggleFavoriteLink: (link: ChatRelatedLink) => void;
+  onCheckSectionLink: (link: ChatRelatedLink) => void;
+  isFavoriteLink: (link: ChatRelatedLink) => boolean;
+  isCheckedSectionLink: (link: ChatRelatedLink) => boolean;
+}) {
+  const blocks = useMemo(() => parseAnswerBlocks(content, citations), [content, citations]);
+  const isGuidedTour = visionMode === 'guided_tour';
+  const isCourseStopLink = (link: ChatRelatedLink): boolean => (
+    link.kind === 'course_stop'
+    || link.source_lane === 'study_docs_course_runtime'
+    || link.boundary_truth === 'internal_course_runtime'
+  );
+  const guidedTourSteps = useMemo(() => {
+    const unique: ChatRelatedLink[] = [];
+    const seen = new Set<string>();
+    const courseCurrentLinks = relatedLinks.filter(isCourseStopLink);
+    const candidateLinks = courseCurrentLinks.length > 0
+      ? [...courseCurrentLinks, ...relatedSections]
+      : relatedSections;
+    for (const link of candidateLinks) {
+      const key = normalizeRouteKey(link);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(link);
+      if (unique.length >= 2) {
+        break;
+      }
+    }
+    return unique;
+  }, [relatedLinks, relatedSections]);
+  const guidedTourDocs = useMemo(() => {
+    const unique: ChatRelatedLink[] = [];
+    const seen = new Set<string>(guidedTourSteps.map((link) => normalizeRouteKey(link)));
+    for (const link of relatedLinks) {
+      if (isCourseStopLink(link)) {
+        continue;
+      }
+      const key = normalizeRouteKey(link);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(link);
+      if (unique.length >= 2) {
+        break;
+      }
+    }
+    return unique;
+  }, [guidedTourSteps, relatedLinks]);
+  const hasGuidedTour = isGuidedTour && (guidedTourSteps.length > 0 || guidedTourDocs.length > 0);
+  const guidedTourLead = useMemo(() => {
+    if (!hasGuidedTour) {
+      return null;
+    }
+    const firstStep = guidedTourSteps[0];
+    const secondStep = guidedTourSteps[1];
+    const firstDoc = guidedTourDocs[0];
+    return {
+      start: firstStep?.label,
+      then: secondStep?.label ?? firstDoc?.label,
+      why: firstDoc?.summary ?? secondStep?.summary ?? firstStep?.summary,
+    };
+  }, [guidedTourDocs, guidedTourSteps, hasGuidedTour]);
+  const hasTruth = Boolean(
+    primaryBoundaryTruth ||
+    primarySourceLane ||
+    primaryRuntimeTruthLabel ||
+    primaryBoundaryBadge,
+  );
+
+  return (
+    <div className="assistant-answer">
+      <div className="assistant-head">
+        <div className="assistant-avatar">
+          <Bot size={18} />
+        </div>
+        <div className="assistant-head-copy">
+          <span className="assistant-label">Playbot</span>
+          {hasTruth && (
+            <div className="assistant-truth-row">
+              <TruthBadgeBlock
+                payload={{
+                  boundary_truth: primaryBoundaryTruth,
+                  runtime_truth_label: primaryRuntimeTruthLabel,
+                  boundary_badge: primaryBoundaryBadge,
+                  source_lane: primarySourceLane,
+                  approval_state: primaryApprovalState,
+                  publication_state: primaryPublicationState,
+                }}
+                badgeClassName="assistant-truth-chip"
+                metaClassName="assistant-truth-meta"
+                showMeta={false}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+      {guidedTourLead && (
+        <div className="guided-tour-lead">
+          <div className="guided-tour-lead-kicker">Route First</div>
+          <div className="guided-tour-lead-title">
+            {guidedTourLead.start ? `${guidedTourLead.start}부터 여세요.` : '이 경로부터 따라가면 됩니다.'}
+          </div>
+          {guidedTourLead.then && (
+            <p className="guided-tour-lead-copy">
+              이어서 <strong>{guidedTourLead.then}</strong>로 이동합니다.
+            </p>
+          )}
+          {guidedTourLead.why && (
+            <p className="guided-tour-lead-copy subdued">{guidedTourLead.why}</p>
+          )}
+        </div>
+      )}
+      <div className="assistant-copy">
+        {blocks.map((block, index) => {
+          if (block.type === 'heading') {
+            const Tag = block.level === 1 ? 'h2' : 'h3';
+            return (
+              <Tag key={`heading-${index}`} className="assistant-heading">
+                <InlineParts parts={block.parts} onCitationClick={onCitationClick} />
+              </Tag>
+            );
+          }
+          if (block.type === 'unordered-list') {
+            return (
+              <ul key={`unordered-${index}`} className="assistant-list">
+                {block.items.map((item, itemIndex) => (
+                  <li key={`unordered-item-${itemIndex}`} className="assistant-list-item">
+                    <InlineParts parts={item} onCitationClick={onCitationClick} />
+                  </li>
+                ))}
+              </ul>
+            );
+          }
+          if (block.type === 'table') {
+            return (
+              <AnswerTable
+                key={`table-${index}`}
+                header={block.header}
+                rows={block.rows}
+                onCitationClick={onCitationClick}
+              />
+            );
+          }
+          if (block.type === 'step') {
+            return (
+              <div key={`step-${index}`} className="assistant-step">
+                <div className="assistant-step-badge">{block.number}</div>
+                <div className="assistant-step-body">
+                  {block.paragraphs.map((paragraph, paragraphIndex) => (
+                    <p key={`step-paragraph-${paragraphIndex}`} className="assistant-step-paragraph">
+                      <InlineParts parts={paragraph} onCitationClick={onCitationClick} />
+                    </p>
+                  ))}
+                  {block.codeBlocks.map((codeBlock, codeIndex) => (
+                    <AnswerCodeBlock
+                      key={`step-code-${codeIndex}`}
+                      code={codeBlock.code}
+                      language={codeBlock.language}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          }
+          const paragraphClasses = ['assistant-paragraph'];
+          if (index === 0) {
+            paragraphClasses.push('assistant-lead');
+          }
+          const singleCodePart = block.parts.length === 1 && block.parts[0]?.kind === 'code'
+            ? block.parts[0]
+            : null;
+          if (singleCodePart) {
+            return (
+              <AnswerCodeBlock
+                key={`code-only-${index}`}
+                code={singleCodePart.value}
+                language="text"
+              />
+            );
+          }
+          return (
+            <p key={`paragraph-${index}`} className={paragraphClasses.join(' ')}>
+              <InlineParts parts={block.parts} onCitationClick={onCitationClick} />
+            </p>
+          );
+        })}
+      </div>
+      {hasGuidedTour && (
+        <div className="guided-tour-group">
+          <div className="suggested-query-label">Guided Tour</div>
+          <div className="guided-tour-header">
+            <div>
+              <div className="guided-tour-title">이 순서로 따라가면 됩니다</div>
+              <p className="guided-tour-summary">
+                핵심 절차 {guidedTourSteps.length}개와 관련 문서 {guidedTourDocs.length}개만 먼저 엽니다.
+              </p>
+            </div>
+          </div>
+          <div className="guided-tour-route">
+            {guidedTourSteps.length > 0 && (
+              <div className="guided-tour-lane">
+                <div className="guided-tour-lane-label">Start Here</div>
+                {guidedTourSteps.map((link, index) => (
+                  <button
+                    key={`guided-step-${link.href}-${index}`}
+                    className="guided-tour-card guided-tour-card-step"
+                    type="button"
+                    onClick={() => onRelatedLinkClick(link)}
+                    title={link.summary ?? ''}
+                  >
+                    <span className="guided-tour-kicker">Step {index + 1}</span>
+                    <strong>{link.label}</strong>
+                    <span>{link.summary || '지금 바로 확인해야 할 절차입니다.'}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {guidedTourDocs.length > 0 && (
+              <div className="guided-tour-lane">
+                <div className="guided-tour-lane-label">Then Open</div>
+                {guidedTourDocs.map((link, index) => (
+                  <button
+                    key={`guided-doc-${link.href}-${index}`}
+                    className="guided-tour-card guided-tour-card-doc"
+                    type="button"
+                    onClick={() => onRelatedLinkClick(link)}
+                    title={link.summary ?? ''}
+                  >
+                    <span className="guided-tour-kicker">Document {index + 1}</span>
+                    <strong>{link.label}</strong>
+                    <span>{link.summary || '이 절차를 따라간 뒤 이어서 참고할 문서입니다.'}</span>
+                    <span className="guided-tour-arrow">
+                      <ArrowRight size={14} />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {!isGuidedTour && relatedLinks.length > 0 && (
+        <div className="assistant-related-group">
+          <div className="suggested-query-label">관련 문서</div>
+          <div className="suggested-query-list">
+            {relatedLinks.map((link, index) => (
+              <div key={`${link.href}-${index}`} className="overlay-chip-row">
+                <RelatedLinkCard link={link} onOpen={onRelatedLinkClick} />
+                <button
+                  type="button"
+                  className={`overlay-mini-action ${isFavoriteLink(link) ? 'active' : ''}`}
+                  onClick={() => onToggleFavoriteLink(link)}
+                  title={isFavoriteLink(link) ? '즐겨찾기 해제' : '즐겨찾기'}
+                >
+                  <Check size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {!isGuidedTour && relatedSections.length > 0 && (
+        <div className="assistant-related-group">
+          <div className="suggested-query-label">바로 볼 절차</div>
+          <div className="suggested-query-list">
+            {relatedSections.map((link, index) => (
+              <div key={`${link.href}-${index}`} className="overlay-chip-row">
+                <button
+                  className="suggested-query-chip"
+                  type="button"
+                  onClick={() => onRelatedLinkClick(link)}
+                  title={link.summary ?? ''}
+                >
+                  섹션 · {link.label}
+                </button>
+                <button
+                  type="button"
+                  className={`overlay-mini-action ${isCheckedSectionLink(link) ? 'active' : ''}`}
+                  onClick={() => onCheckSectionLink(link)}
+                  title={isCheckedSectionLink(link) ? '체크 해제' : '체크 완료'}
+                >
+                  <Check size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function CitationTag({
+  citation,
+  onOpen,
+}: {
+  citation: ChatCitation;
+  onOpen: (citation: ChatCitation) => void;
+}) {
+  const surface = citationSurfaceCopy(citation);
+  return (
+    <button
+      className="citation-tag"
+      onClick={() => { onOpen(citation); }}
+      type="button"
+      title={formatCitationLabel(citation)}
+    >
+      <div className="citation-tag-topline">
+        <span className="citation-tag-badge">{surface.badge}</span>
+        <span className="citation-tag-link">
+          <LinkIcon size={12} />
+        </span>
+      </div>
+      <div className="citation-tag-title">{surface.title}</div>
+      {surface.meta.length > 0 && (
+        <div className="citation-tag-meta">{surface.meta.join(' · ')}</div>
+      )}
+    </button>
+  );
+}
+
+export function RelatedLinkCard({
+  link,
+  onOpen,
+}: {
+  link: ChatRelatedLink;
+  onOpen: (link: ChatRelatedLink) => void;
+}) {
+  const truth = truthBlockCopy(link);
+  const isLightspeedSource = link.kind !== 'entity' && isOpenShiftLightspeedPayload(link);
+  const subject = relatedLinkSubject(link, isLightspeedSource);
+  return (
+    <button
+      className="related-link-card related-link-card--source-line"
+      type="button"
+      onClick={() => onOpen(link)}
+      title={isLightspeedSource ? `OpenShift Lightspeed 응답 보기 · ${subject}` : subject}
+      aria-label={`${link.kind === 'entity' ? 'Entity' : truth.badge} ${subject}`}
+    >
+      <span className="related-link-badge">{link.kind === 'entity' ? 'Entity' : truth.badge}</span>
+      <span className="related-link-title">{subject}</span>
+      <span className="related-link-link">
+        <LinkIcon size={12} />
+      </span>
+    </button>
+  );
+}

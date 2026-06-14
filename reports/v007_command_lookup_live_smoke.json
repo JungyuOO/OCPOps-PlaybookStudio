@@ -1,0 +1,258 @@
+{
+  "schema": "studio_live_smoke_v1",
+  "base_url": "http://127.0.0.1:8080",
+  "case_count": 5,
+  "pass_count": 3,
+  "fail_count": 2,
+  "pass_rate": 0.6,
+  "failure_counts": {
+    "command_query_missing_grounded_command": 1,
+    "low_confidence_for_seeded_question": 1,
+    "missing_citation_term:CLI": 1,
+    "missing_citation_term:operator": 1,
+    "missing_required_term:oc get": 1,
+    "unexpected_clarification": 1
+  },
+  "duration_sec": 30.599,
+  "details": [
+    {
+      "case_id": "v007-command-namespace-list",
+      "parent_id": "",
+      "query": "네임스페이스 목록 확인하는 명령어가 뭐야?",
+      "source": "spec\\v0.0.7\\command_lookup_cases.jsonl",
+      "query_type": "command_lookup",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc get"
+      ],
+      "expected_citation_terms": [
+        "CLI"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 323,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [
+        "missing_citation_term:CLI"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 실행 예시는 아래 명령을 기준으로 보면 됩니다. [1]\n\n2.6.1.32. oc config unset 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다. [1]\n\n```bash\noc config unset current-context # Unset namespace in foo context oc config unset contexts.foo.namespace\n```\n\n```bash\noc config unset current-context\n`",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "cli_tools",
+          "section": "oc config unset",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#oc-config-unset",
+          "cli_commands": [
+            "oc config unset current-context # Unset namespace in foo context oc config unset contexts.foo.namespace",
+            "oc config unset current-context",
+            "oc config unset contexts.foo.namespace"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc config unset current-context # Unset namespace in foo context oc config un...` 결과에서 현재 프로젝트를 어떻게 판단해?",
+        "특정 namespace로 전환하려면 어떤 명령을 써야 해?",
+        "현재 kubeconfig context까지 같이 확인하려면 뭘 보면 돼?"
+      ]
+    },
+    {
+      "case_id": "v007-command-current-project",
+      "parent_id": "",
+      "query": "현재 선택된 프로젝트 확인하는 명령어 알려줘",
+      "source": "spec\\v0.0.7\\command_lookup_cases.jsonl",
+      "query_type": "command_lookup",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc project"
+      ],
+      "expected_citation_terms": [
+        "project"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 118,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 실행 예시는 아래 명령을 기준으로 보면 됩니다. [1]\n\n2.1.5.5. 현재 프로젝트 보기 절차 기준으로 먼저 아래 명령부터 확인하거나 실행하면 됩니다. [1]\n\n```bash\noc project\n```",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "cli_tools",
+          "section": "현재 프로젝트 보기",
+          "viewer_path": "/docs/ocp/4.20/ko/cli_tools/index.html#viewing-the-current-project",
+          "cli_commands": [
+            "oc project"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "특정 namespace로 전환하려면 어떤 명령을 써야 해?",
+        "현재 kubeconfig context까지 같이 확인하려면 뭘 보면 돼?",
+        "현재 프로젝트 보기 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    },
+    {
+      "case_id": "v007-command-cluster-operators",
+      "parent_id": "",
+      "query": "클러스터 오퍼레이터 상태 확인하는 명령어 뭐부터 보면 돼?",
+      "source": "spec\\v0.0.7\\command_lookup_cases.jsonl",
+      "query_type": "command_lookup",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc get"
+      ],
+      "expected_citation_terms": [
+        "operator"
+      ],
+      "response_kind": "clarification",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 308,
+      "citation_count": 0,
+      "cited_indices": [],
+      "warning_count": 2,
+      "suggestion_count": 3,
+      "failures": [
+        "command_query_missing_grounded_command",
+        "low_confidence_for_seeded_question",
+        "missing_citation_term:operator",
+        "missing_required_term:oc get",
+        "unexpected_clarification"
+      ],
+      "pass": false,
+      "answer_preview": "답변: 지금 질문은 현재 공식 문서 근거와 정확히 맞물리는 점수가 낮습니다.\n엉뚱한 절차를 단정하지 않도록, 대상 리소스나 증상, 하고 싶은 작업을 한 단계만 더 좁혀 주세요.\n\n이런 식으로 물어보면 더 정확히 안내할 수 있습니다.\n- VMware vSphere용 레지스트리 스토리지 구성 기준으로 먼저 확인할 절차를 알려줘\n- VMware vSphere용 레지스트리 스토리지 구성에서 상태 확인 명령과 판단 기준을 알려줘\n- Ingress Operator는 게이트",
+      "citation_preview": [],
+      "suggested_queries": [
+        "클러스터 버전, 상태 및 업데이트 세부 정보 가져오기 기준으로 설명해줘",
+        "VMware vSphere용 레지스트리 스토리지 구성 기준으로 설명해줘",
+        "Nutanix의 레지스트리 스토리지 구성 기준으로 설명해줘"
+      ]
+    },
+    {
+      "case_id": "v007-command-pod-logs",
+      "parent_id": "",
+      "query": "pod 이전 로그 확인하려면 무슨 명령어를 써?",
+      "source": "spec\\v0.0.7\\command_lookup_cases.jsonl",
+      "query_type": "command_lookup",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc logs"
+      ],
+      "expected_citation_terms": [
+        "log"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 152,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 재시작한 컨테이너의 이전 로그는 `oc logs --previous`로 확인합니다. [1]\n\n멀티 컨테이너 Pod이면 `-c <container-name>`을 꼭 붙이고, 현재 로그와 이전 로그를 나눠 비교하면 재시작 직전 오류를 더 빨리 찾을 수 있습니다. [1]",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "support",
+          "section": "etcd 설치 문제 조사",
+          "viewer_path": "/docs/ocp/4.20/ko/support/index.html#investigating-etcd-installation-issues_troubleshooting-installations",
+          "cli_commands": [
+            "oc logs pod/<pod_name> -n <namespace>",
+            "oc logs pod/<pod_name> -c <container_name> -n <namespace>",
+            "oc\n[/CODE]",
+            "oc get pods -n openshift-etcd",
+            "oc get pods -n openshift-etcd-operator",
+            "oc describe pod/<pod_name> -n <namespace>",
+            "oc adm must gather"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "로그 다음에는 이벤트와 describe 중 무엇을 먼저 봐야 해?",
+        "CrashLoopBackOff이면 어떤 로그를 추가로 확인해야 해?",
+        "`oc logs pod/<pod_name> -c <container_name> -n <namespace>`에서 이전 컨테이너 로그까지 보려면 어떤 옵션을 써?"
+      ]
+    },
+    {
+      "case_id": "v007-command-can-i",
+      "parent_id": "",
+      "query": "alice가 pods delete 권한 있는지 can-i로 확인하는 명령어 뭐야?",
+      "source": "spec\\v0.0.7\\command_lookup_cases.jsonl",
+      "query_type": "command_lookup",
+      "route_kind": "official",
+      "must_include_terms": [
+        "oc auth can-i"
+      ],
+      "expected_citation_terms": [
+        "auth"
+      ],
+      "response_kind": "rag",
+      "event_types": [
+        "answer_delta",
+        "result",
+        "trace"
+      ],
+      "answer_len": 304,
+      "citation_count": 1,
+      "cited_indices": [
+        1
+      ],
+      "warning_count": 0,
+      "suggestion_count": 3,
+      "failures": [],
+      "pass": true,
+      "answer_preview": "답변: 현재 사용자의 namespace 권한은 `oc auth can-i`로 먼저 확인하면 됩니다. [1]\n\nPod 삭제 권한을 확인할 때는 이 명령의 verb/resource 자리에 `delete pods`를, namespace 범위에는 `-n <namespace>`를 적용해서 판단하면 됩니다. [1]\n\n`yes`면 현재 사용자에게 해당 namespace의 Pod 삭제 권한이 있고, `no`면 RoleBinding/ClusterRoleBinding 또는 Sub",
+      "citation_preview": [
+        {
+          "index": 1,
+          "book_slug": "authentication_and_authorization",
+          "section": "사용자 역할 추가",
+          "viewer_path": "/docs/ocp/4.20/ko/authentication_and_authorization/index.html#adding-roles_using-rbac",
+          "cli_commands": [
+            "oc describe rolebinding.rbac -n <project>",
+            "oc adm",
+            "oc adm policy",
+            "oc adm policy add-role-to-user <role> <user> -n <project>",
+            "oc adm policy add-role-to-user admin alice -n joe",
+            "oc describe rolebinding.rbac -n joe"
+          ]
+        }
+      ],
+      "suggested_queries": [
+        "`oc adm` 결과에서 무엇을 확인해야 해?",
+        "`oc adm`가 실패하면 다음에 어떤 근거를 봐야 해?",
+        "사용자 역할 추가 기준으로 다음 확인 단계는 뭐야?"
+      ]
+    }
+  ]
+}

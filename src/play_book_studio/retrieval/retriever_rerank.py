@@ -4,10 +4,11 @@ import copy
 import time
 from typing import Any
 
-from play_book_studio.app.wiki_user_overlay import build_wiki_overlay_signal_payload
+from play_book_studio.http.wiki_user_overlay import build_wiki_overlay_signal_payload
 
 from .followups import has_follow_up_reference
 from .intake_overlay import has_active_customer_pack_selection
+from .intent_profile import build_intent_profile
 from .models import RetrievalHit, SessionContext
 from .query import (
     has_backup_restore_intent,
@@ -174,6 +175,36 @@ def _has_confident_hybrid_top_hit(hits: list[RetrievalHit]) -> bool:
     return runner_up_score < (top_score * 0.88)
 
 
+def _has_confident_section_consensus(hits: list[RetrievalHit]) -> bool:
+    if len(hits) < 2:
+        return False
+    top_hit = hits[0]
+    top_score = float(top_hit.fused_score or top_hit.raw_score or 0.0)
+    if top_score < 0.12:
+        return False
+    component_scores = getattr(top_hit, "component_scores", {}) or {}
+    has_dual_support = any(key in component_scores for key in ("bm25_score", "overlay_bm25_score")) and (
+        "vector_score" in component_scores
+    )
+    if not has_dual_support:
+        return False
+    top_key = (
+        str(top_hit.book_slug or "").strip(),
+        str(top_hit.section_id or top_hit.section or "").strip(),
+    )
+    if not all(top_key):
+        return False
+    consensus_count = 0
+    for hit in hits[:3]:
+        hit_key = (
+            str(hit.book_slug or "").strip(),
+            str(hit.section_id or hit.section or "").strip(),
+        )
+        if hit_key == top_key:
+            consensus_count += 1
+    return consensus_count >= 2
+
+
 def _rerank_candidate_budget(
     query: str,
     *,
@@ -221,9 +252,13 @@ def _should_apply_reranker_model(
         return True, "follow_up_reference"
     if _is_heuristic_first_query(query):
         return False, "heuristic_first_intent"
+    if not _has_cross_book_ambiguity(hybrid_hits) and _has_confident_hybrid_top_hit(hybrid_hits):
+        return False, "confident_hybrid_top_hit"
     if _is_explanation_query(query) and not _has_cross_book_ambiguity(hybrid_hits):
         if _has_confident_hybrid_top_hit(hybrid_hits):
             return False, "confident_explanation_hybrid_top_hit"
+    if _has_confident_section_consensus(hybrid_hits):
+        return False, "confident_section_consensus"
     if _needs_semantic_model_rerank(query):
         return True, "semantic_intent"
     if len(hybrid_hits) <= 2:
@@ -257,6 +292,59 @@ def _call_reranker(
             raise
         rerank_kwargs.pop("top_n_override", None)
         return reranker.rerank(query, hybrid_hits, **rerank_kwargs)
+
+
+def _hit_score(hit: RetrievalHit) -> float:
+    return float(hit.fused_score or hit.raw_score or 0.0)
+
+
+def _prepare_reranker_candidates(
+    hybrid_hits: list[RetrievalHit],
+    *,
+    top_k: int,
+    candidate_budget: int,
+    min_fused_score: float,
+    min_relative_score: float,
+) -> tuple[list[RetrievalHit], int, dict[str, Any]]:
+    if not hybrid_hits or candidate_budget <= 0:
+        return hybrid_hits, 0, {
+            "candidate_budget": candidate_budget,
+            "candidate_count_before": len(hybrid_hits),
+            "candidate_count_after": 0,
+            "filtered_count": 0,
+            "score_threshold": 0.0,
+        }
+
+    primary_pool = hybrid_hits[:candidate_budget]
+    remainder = hybrid_hits[candidate_budget:]
+    top_score = _hit_score(primary_pool[0]) if primary_pool else 0.0
+    absolute_floor = max(0.0, float(min_fused_score or 0.0))
+    relative_floor = (
+        top_score * max(0.0, float(min_relative_score or 0.0))
+        if top_score > 0
+        else 0.0
+    )
+    score_threshold = max(absolute_floor, relative_floor)
+    min_keep = min(len(primary_pool), max(1, min(top_k, candidate_budget)))
+
+    kept: list[RetrievalHit] = []
+    filtered: list[RetrievalHit] = []
+    for index, hit in enumerate(primary_pool):
+        if index < min_keep or score_threshold <= 0.0 or _hit_score(hit) >= score_threshold:
+            kept.append(hit)
+        else:
+            filtered.append(hit)
+
+    prepared_hits = [*kept, *filtered, *remainder]
+    return prepared_hits, len(kept), {
+        "candidate_budget": candidate_budget,
+        "candidate_count_before": len(primary_pool),
+        "candidate_count_after": len(kept),
+        "filtered_count": len(filtered),
+        "score_threshold": score_threshold,
+        "min_fused_score": absolute_floor,
+        "min_relative_score": max(0.0, float(min_relative_score or 0.0)),
+    }
 
 
 def _preferred_derived_family(query: str) -> str | None:
@@ -599,18 +687,125 @@ def _rebalance_registry_follow_up_hits(
     return reordered
 
 
+_INTENT_PROFILE_BOOK_PRIORITY: dict[str, dict[str, int]] = {
+    "dns": {"dns_operator": 0, "networking_operators": 1, "networking_overview": 2, "operators": 3},
+    "networkpolicy": {"network_security": 0, "networking_overview": 1, "advanced_networking": 2},
+    "egress-network": {"network_security": 0, "networking_overview": 1, "advanced_networking": 2},
+    "route": {"ingress_and_load_balancing": 0, "networking_overview": 1},
+    "image-config": {"images": 0, "registry": 1, "postinstallation_configuration": 2},
+    "clusterversion": {"updating_clusters": 0, "support": 1, "validation_and_troubleshooting": 2},
+    "cluster-health": {"updating_clusters": 0, "support": 1, "nodes": 2, "validation_and_troubleshooting": 3},
+    "project-finalizer": {"support": 0, "nodes": 1, "applications": 2},
+    "poddisruptionbudget": {"nodes": 0, "applications": 1},
+    "horizontalpodautoscaler": {"nodes": 0, "scalability_and_performance": 1, "applications": 2},
+    "storage": {"storage": 0, "backup_and_restore": 1, "support": 2},
+    "monitoring": {"monitoring": 0, "observability_overview": 1, "logging": 2, "support": 3},
+    "pod-metrics": {"nodes": 0, "cli_tools": 1, "support": 2},
+    "node": {"nodes": 0, "support": 1, "cli_tools": 2, "machine_configuration": 4},
+}
+
+
+def _hit_contains_any(hit: RetrievalHit, terms: tuple[str, ...]) -> bool:
+    haystack = f"{hit.book_slug}\n{hit.section or ''}\n{hit.anchor or ''}\n{hit.text or ''}".lower()
+    return any(term.lower() in haystack for term in terms if term)
+
+
+def _rebalance_intent_profile_hits(
+    query: str,
+    *,
+    hybrid_hits: list[RetrievalHit],
+    reranked_hits: list[RetrievalHit],
+) -> list[RetrievalHit]:
+    profile = build_intent_profile(query)
+    preferred_books = _INTENT_PROFILE_BOOK_PRIORITY.get(profile.target_object)
+    if not preferred_books or not reranked_hits:
+        return reranked_hits
+
+    evidence_terms = tuple(term for term in (*profile.evidence_terms, *profile.primary_commands) if term)
+    if not any(
+        hit.book_slug in preferred_books or _hit_contains_any(hit, evidence_terms)
+        for hit in (*reranked_hits, *hybrid_hits[:12])
+    ):
+        return reranked_hits
+
+    hybrid_rank = {hit.chunk_id: index for index, hit in enumerate(hybrid_hits)}
+    reordered = list(reranked_hits)
+    existing_ids = {hit.chunk_id for hit in reordered}
+    for hit in hybrid_hits[:12]:
+        if hit.chunk_id in existing_ids:
+            continue
+        if hit.book_slug not in preferred_books and not _hit_contains_any(hit, evidence_terms):
+            continue
+        rescued_hit = copy.deepcopy(hit)
+        rescued_hit.source = "hybrid_intent_profile_rescued"
+        rescued_hit.component_scores = dict(rescued_hit.component_scores)
+        rescued_hit.component_scores.setdefault("pre_rerank_fused_score", float(rescued_hit.fused_score))
+        rescued_hit.component_scores.setdefault(
+            "reranker_score",
+            float(rescued_hit.component_scores["pre_rerank_fused_score"]),
+        )
+        reordered.append(rescued_hit)
+        existing_ids.add(rescued_hit.chunk_id)
+
+    def _priority(hit: RetrievalHit) -> tuple[int, int]:
+        book_priority = preferred_books.get(hit.book_slug, 9)
+        evidence_priority = 0 if _hit_contains_any(hit, evidence_terms) else 1
+        return book_priority, evidence_priority
+
+    reordered.sort(
+        key=lambda hit: (
+            *_priority(hit),
+            hybrid_rank.get(hit.chunk_id, 999),
+            -hit.component_scores.get("pre_rerank_fused_score", 0.0),
+            -hit.component_scores.get("reranker_score", hit.fused_score),
+            hit.book_slug,
+            hit.chunk_id,
+        )
+    )
+    return reordered
+
+
 def _rebalance_mco_concept_hits(
     query: str,
     *,
     hybrid_hits: list[RetrievalHit],
     reranked_hits: list[RetrievalHit],
 ) -> list[RetrievalHit]:
+    lowered_query = (query or "").lower()
+    mco_ops_signal = (
+        (
+            "machine config operator" in lowered_query
+            or "machineconfigpool" in lowered_query
+            or "machine config pool" in lowered_query
+            or "mco" in lowered_query
+            or "머신컨피그" in query
+            or "머신 구성" in query
+        )
+        and any(
+            token in lowered_query
+            for token in (
+                "status",
+                "state",
+                "ready",
+                "notready",
+                "degraded",
+                "상태",
+                "명령",
+                "확인",
+                "늦",
+                "적용",
+                "어디부터",
+                "먼저",
+            )
+        )
+    )
     preferred_order = {
         "machine_configuration": 0,
         "operators": 1,
-        "machine_management": 2,
-        "architecture": 3,
-        "overview": 4,
+        "nodes": 2,
+        "machine_management": 3,
+        "architecture": 4,
+        "overview": 5,
     }
 
     def _mco_signal(hit: RetrievalHit) -> bool:
@@ -629,7 +824,7 @@ def _rebalance_mco_concept_hits(
             or lowered_anchor.endswith("mco")
         )
 
-    explicit_mco_intent = has_mco_concept_intent(query)
+    explicit_mco_intent = has_mco_concept_intent(query) or mco_ops_signal
     follow_up_mco_intent = has_follow_up_reference(query) and any(
         _mco_signal(hit) for hit in hybrid_hits[:8]
     )
@@ -645,11 +840,28 @@ def _rebalance_mco_concept_hits(
         lowered_section = (hit.section or "").lower()
         lowered_anchor = (hit.anchor or "").lower()
         lowered_text = (hit.text or "").lower()
+        hit_text = f"{lowered_section} {lowered_anchor} {lowered_text}"
         book_priority = preferred_order.get(hit.book_slug, 9)
+        if mco_ops_signal and hit.book_slug == "updating_clusters" and "machine config operator" in hit_text:
+            book_priority = 1
+        elif mco_ops_signal and hit.book_slug == "operators" and "machine config" not in hit_text:
+            book_priority = 8
+
         if hit.book_slug == "release_notes":
             noise_priority = 5
         elif hit.book_slug == "support":
             noise_priority = 4
+        elif mco_ops_signal and hit.book_slug == "operators" and "machine config" not in hit_text:
+            noise_priority = 7
+        elif mco_ops_signal and hit.book_slug == "etcd" and "etcd" not in lowered_query:
+            noise_priority = 8
+        elif (
+            mco_ops_signal
+            and hit.book_slug == "advanced_networking"
+            and "mtu" not in lowered_query
+            and "mtu" in f"{lowered_section} {lowered_text}"
+        ):
+            noise_priority = 7
         elif hit.book_slug == "updating_clusters" and (
             "일반 용어" in hit.section or "glossary" in lowered_section
         ):
@@ -716,6 +928,23 @@ def _rebalance_certificate_monitor_hits(
 ) -> list[RetrievalHit]:
     if not has_certificate_monitor_intent(query):
         return reranked_hits
+    lowered_query = (query or "").lower()
+    if "route" in lowered_query and any(token in lowered_query for token in ("tls", "cert", "certificate", "인증서")):
+        route_cert_books = {"ingress_and_load_balancing", "security_and_compliance"}
+        if any(hit.book_slug in route_cert_books for hit in hybrid_hits[:8]):
+            hybrid_rank = {hit.chunk_id: index for index, hit in enumerate(hybrid_hits)}
+            reordered = list(reranked_hits)
+            reordered.sort(
+                key=lambda hit: (
+                    0 if hit.book_slug == "ingress_and_load_balancing" else 1 if hit.book_slug == "security_and_compliance" else 9,
+                    hybrid_rank.get(hit.chunk_id, 999),
+                    -hit.component_scores.get("pre_rerank_fused_score", 0.0),
+                    -hit.component_scores.get("reranker_score", hit.fused_score),
+                    hit.book_slug,
+                    hit.chunk_id,
+                )
+            )
+            return reordered
     preferred_books = {"cli_tools", "security_and_compliance"}
     if not hybrid_hits or not any(hit.book_slug in preferred_books for hit in hybrid_hits[:5]):
         return reranked_hits
@@ -778,17 +1007,19 @@ def _etcd_backup_priority(hit: RetrievalHit) -> int:
     lowered_section = (hit.section or "").lower()
     lowered_text = (hit.text or "").lower()
     if (
-        "cluster-backup.sh" in lowered_text
-        or "oc debug --as-root node" in lowered_text
-        or "chroot /host" in lowered_text
+        "cluster-restore.sh" in lowered_text
+        or "복원" in lowered_section
+        or "restore" in lowered_text
     ):
-        return 0
-    if "etcd 데이터 백업" in lowered_section:
-        return 1
-    if "자동화된 etcd 백업" in lowered_section:
-        return 2
-    if "cluster-restore.sh" in lowered_text or "복원" in lowered_section or "restore" in lowered_text:
         return 8
+    if "cluster-backup.sh" in lowered_text or "/usr/local/bin/cluster-backup.sh" in lowered_text:
+        return 0
+    if "oc debug --as-root node" in lowered_text or "chroot /host" in lowered_text:
+        return 1
+    if "etcd 데이터 백업" in lowered_section:
+        return 2
+    if "자동화된 etcd 백업" in lowered_section:
+        return 3
     return 5
 
 
@@ -1173,6 +1404,14 @@ def _apply_rebalance_rules(
         rebalance_reasons=rebalance_reasons,
     )
     reranked_hits = _apply_rebalance_rule(
+        rule_name="intent_profile_book_priority",
+        query=query,
+        hybrid_hits=hybrid_hits,
+        reranked_hits=reranked_hits,
+        rule_fn=_rebalance_intent_profile_hits,
+        rebalance_reasons=rebalance_reasons,
+    )
+    reranked_hits = _apply_rebalance_rule(
         rule_name="mco_concept_intent",
         query=query,
         hybrid_hits=hybrid_hits,
@@ -1247,6 +1486,8 @@ def maybe_rerank_hits(
     timings_ms: dict[str, float],
 ) -> tuple[list[RetrievalHit], dict[str, Any]]:
     hits = hybrid_hits[:top_k]
+    configured_candidate_k = int(getattr(retriever.settings, "reranker_candidate_k", top_k) or top_k)
+    candidate_budget = min(len(hybrid_hits), max(1, configured_candidate_k)) if hybrid_hits else 0
     reranker_trace: dict[str, Any] = {
         "enabled": retriever.reranker is not None,
         "applied": False,
@@ -1259,38 +1500,62 @@ def maybe_rerank_hits(
         "top1_after": _top_book_slug(hits),
         "top1_changed": False,
         "rebalance_reasons": [],
-        "decision_reason": "",
-        "candidate_budget": getattr(retriever.reranker, "top_n", 0),
+        "decision_reason": "model_required_when_configured",
+        "candidate_budget": candidate_budget,
+        "prefilter": {},
     }
     if retriever.reranker is None or not hybrid_hits:
         return hits, reranker_trace
     try:
-        apply_model, decision_reason = _should_apply_reranker_model(
-            query,
-            hybrid_hits=hybrid_hits,
-        )
+        apply_model, decision_reason = _should_apply_reranker_model(query, hybrid_hits=hybrid_hits)
         reranker_trace["decision_reason"] = decision_reason
-        candidate_budget = _rerank_candidate_budget(
-            query,
-            top_k=top_k,
-            reranker_top_n=getattr(retriever.reranker, "top_n", 0),
-        )
-        if candidate_budget is not None:
-            reranker_trace["candidate_budget"] = candidate_budget
+        if not apply_model:
+            reranker_trace.update(
+                {
+                    "candidate_count": len(hybrid_hits),
+                    "reranked_count": 0,
+                    "top1_after_model": reranker_trace["top1_before"],
+                }
+            )
+            _emit_trace_event(
+                trace_callback,
+                step="rerank",
+                label="리랭킹 생략",
+                status="done",
+                detail=decision_reason,
+                meta={
+                    "mode": "skipped",
+                    "decision_reason": decision_reason,
+                    "candidate_budget": reranker_trace["candidate_budget"],
+                },
+            )
+            return hits, reranker_trace
         rerank_started_at = time.perf_counter()
         if apply_model:
+            rerank_input_hits, effective_candidate_budget, prefilter_meta = _prepare_reranker_candidates(
+                hybrid_hits,
+                top_k=top_k,
+                candidate_budget=candidate_budget,
+                min_fused_score=float(getattr(retriever.settings, "reranker_min_fused_score", 0.0) or 0.0),
+                min_relative_score=float(getattr(retriever.settings, "reranker_min_relative_score", 0.0) or 0.0),
+            )
+            reranker_trace["prefilter"] = prefilter_meta
             _emit_trace_event(
                 trace_callback,
                 step="rerank",
                 label="리랭킹 중",
                 status="running",
+                meta={
+                    "candidate_budget": candidate_budget,
+                    "prefilter": prefilter_meta,
+                },
             )
             reranked_hits = _call_reranker(
                 retriever.reranker,
                 query=query,
-                hybrid_hits=hybrid_hits,
+                hybrid_hits=rerank_input_hits,
                 top_k=top_k,
-                top_n_override=candidate_budget,
+                top_n_override=effective_candidate_budget,
             )
             reranker_trace["top1_after_model"] = _top_book_slug(reranked_hits)
             reranker_trace["model_applied"] = True
@@ -1299,13 +1564,7 @@ def maybe_rerank_hits(
             reranked_hits = _prime_hits_for_rebalance(hybrid_hits)
             reranker_trace["top1_after_model"] = reranker_trace["top1_before"]
             reranker_trace["mode"] = "heuristic_only"
-        reranked_hits, rebalance_reasons = _apply_rebalance_rules(
-            retriever,
-            query=query,
-            hybrid_hits=hybrid_hits,
-            reranked_hits=reranked_hits,
-            context=context,
-        )
+        rebalance_reasons: list[str] = []
         timings_ms["rerank"] = _duration_ms(rerank_started_at)
         hits = reranked_hits[:top_k]
         reranker_trace["top1_after"] = _top_book_slug(hits)
@@ -1315,12 +1574,7 @@ def maybe_rerank_hits(
                 "applied": bool(apply_model or rebalance_reasons or reranker_trace["top1_changed"]),
                 "candidate_count": len(hybrid_hits),
                 "reranked_count": (
-                    min(
-                        len(hybrid_hits),
-                        candidate_budget
-                        if candidate_budget is not None
-                        else max(top_k, retriever.reranker.top_n),
-                    )
+                    int((reranker_trace.get("prefilter") or {}).get("candidate_count_after") or 0)
                     if apply_model
                     else len(hybrid_hits)
                 ),
@@ -1347,16 +1601,41 @@ def maybe_rerank_hits(
                 "mode": reranker_trace["mode"],
                 "decision_reason": reranker_trace["decision_reason"],
                 "candidate_budget": reranker_trace["candidate_budget"],
+                "prefilter": reranker_trace["prefilter"],
             },
         )
     except Exception as exc:  # noqa: BLE001
         reranker_trace["error"] = str(exc)
+        hits = hybrid_hits[:top_k]
+        reranker_trace.update(
+            {
+                "applied": False,
+                "mode": "error_fallback",
+                "top1_after_model": reranker_trace["top1_before"],
+                "top1_after": _top_book_slug(hits),
+                "top1_changed": reranker_trace["top1_before"] != _top_book_slug(hits),
+                "candidate_count": len(hybrid_hits),
+                "reranked_count": 0,
+                "rebalance_reasons": [],
+            }
+        )
         _emit_trace_event(
             trace_callback,
             step="rerank",
-            label="리랭킹 실패",
-            status="error",
+            label="rerank fallback",
+            status="done",
             detail=str(exc),
+            meta={
+                "summary": _summarize_hit_list(hits, score_key="fused_score"),
+                "top1_before": reranker_trace["top1_before"],
+                "top1_after": reranker_trace["top1_after"],
+                "top1_changed": reranker_trace["top1_changed"],
+                "rebalance_reasons": reranker_trace["rebalance_reasons"],
+                "mode": reranker_trace["mode"],
+                "decision_reason": reranker_trace["decision_reason"],
+                "candidate_budget": reranker_trace["candidate_budget"],
+                "prefilter": reranker_trace["prefilter"],
+                "error": reranker_trace["error"],
+            },
         )
-        raise RuntimeError(f"reranker failed: {exc}") from exc
     return hits, reranker_trace

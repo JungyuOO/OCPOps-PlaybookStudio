@@ -98,6 +98,7 @@ def build_retrieval_trace(
     use_bm25: bool = True,
     use_vector: bool = True,
     vector_runtime: dict[str, Any] | None = None,
+    query_signal_debug: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     bm25_summary = summarize_hit_list(bm25_hits)
     overlay_bm25_summary = summarize_hit_list(overlay_bm25_hits or [])
@@ -129,7 +130,9 @@ def build_retrieval_trace(
             "rewrite_reason": rewrite_reason,
             "follow_up_detected": follow_up_detected,
             "decomposed_query_count": len(decomposed_queries),
+            "query_signal_debug": query_signal_debug or {},
         },
+        "query_signal_debug": query_signal_debug or {},
         "vector_runtime": vector_runtime or {},
         "ablation": {
             "bm25_requested": use_bm25,

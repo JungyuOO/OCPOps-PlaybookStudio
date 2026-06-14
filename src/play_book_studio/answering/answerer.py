@@ -1,4 +1,4 @@
-"""grounded answer 전체를 오케스트레이션한다.
+﻿"""grounded answer 전체를 오케스트레이션한다.
 
 이 모듈이 채팅 제품의 런타임 spine이다:
 retrieve -> assemble context -> prompt -> LLM -> answer shaping -> citations
@@ -7,36 +7,46 @@ retrieve -> assemble context -> prompt -> LLM -> answer shaping -> citations
 from __future__ import annotations
 
 import json
+import re
+import hashlib
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from play_book_studio.config.settings import Settings
+from play_book_studio.integrations.lightspeed import (
+    OpenShiftLightspeedApiError,
+    OpenShiftLightspeedClient,
+    OpenShiftLightspeedResult,
+    is_openshift_operation_question,
+    normalize_lightspeed_query,
+)
 from play_book_studio.retrieval import ChatRetriever, SessionContext
 from play_book_studio.retrieval.query import (
     has_backup_restore_intent,
-    has_cluster_node_usage_intent,
     has_command_request,
     has_corrective_follow_up,
-    has_deployment_scaling_intent,
     has_doc_locator_intent,
     has_follow_up_entity_ambiguity,
     has_follow_up_reference,
     has_mco_concept_intent,
-    has_node_drain_intent,
     has_openshift_kubernetes_compare_intent,
     has_operator_concept_intent,
     has_pod_lifecycle_concept_intent,
+    has_crash_loop_troubleshooting_intent,
+    has_pod_pending_troubleshooting_intent,
     has_rbac_intent,
     has_route_ingress_compare_intent,
     is_explainer_query,
     is_generic_intro_query,
 )
+from play_book_studio.retrieval.korean_text import normalized_token_set
+from play_book_studio.retrieval.query_understanding import has_beginner_troubleshooting_intent
 
 from .answer_text_commands import (
-    build_deployment_scaling_answer,
-    build_grounded_command_guide_answer,
     has_sufficient_command_grounding,
-    shape_etcd_backup_answer,
+    preserve_grounded_commands,
+    strip_ungrounded_code_blocks,
 )
 from .answer_text_formatting import summarize_session_context
 from .citations import (
@@ -48,16 +58,23 @@ from .citations import (
     summarize_selected_citations,
 )
 from .context import assemble_context
+from .doc_locator_intent import is_document_sequence_query as _shared_is_document_sequence_query
 from .llm import LLMClient
 from .models import AnswerResult, Citation
 from .pipeline_helpers import (
     build_answer_result,
     build_follow_up_clarification_answer,
-    finalize_deployment_scaling_answer,
     generate_grounded_answer_text,
 )
 from .prompt import build_messages
 from .router import route_non_rag
+
+
+OPENSHIFT_CONTEXT_FOLLOW_UP_RE = re.compile(
+    r"(실패|실패\s*지점|오류|에러|문제|장애|주의|주의사항|점검|확인|"
+    r"상태|로그|원인|트러블|trouble|fail|failure|error|check|verify)",
+    re.IGNORECASE,
+)
 
 
 def _looks_like_missing_coverage_answer(answer: str) -> bool:
@@ -82,6 +99,346 @@ def _looks_like_missing_coverage_answer(answer: str) -> bool:
             "만 설명",
         )
     )
+
+
+def _retrieval_command_hints(retrieval_trace: dict) -> tuple[str, ...]:
+    query_signal_debug = retrieval_trace.get("query_signal_debug")
+    if not isinstance(query_signal_debug, dict):
+        return ()
+    validated_plan = query_signal_debug.get("validated_plan")
+    if not isinstance(validated_plan, dict):
+        return ()
+    search_signals = validated_plan.get("search_signals")
+    if not isinstance(search_signals, dict):
+        return ()
+    commands = search_signals.get("commands") or ()
+    if isinstance(commands, str):
+        candidates = [commands]
+    else:
+        candidates = [str(command) for command in commands if str(command).strip()]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for command in candidates:
+        key = command.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(command)
+    return tuple(deduped[:3])
+
+
+def _lightspeed_context_text(context: SessionContext | None) -> str:
+    if context is None:
+        return ""
+    parts = [
+        str(getattr(context, "current_topic", "") or ""),
+        str(getattr(context, "user_goal", "") or ""),
+        str(getattr(context, "unresolved_question", "") or ""),
+        *[str(entity) for entity in (getattr(context, "open_entities", []) or [])],
+    ]
+    return " ".join(part.strip() for part in parts if part and part.strip())
+
+
+def _should_query_openshift_lightspeed(query: str, context: SessionContext | None) -> bool:
+    normalized = str(query or "").strip()
+    if is_openshift_operation_question(normalized):
+        return True
+    context_text = _lightspeed_context_text(context)
+    if not context_text or not is_openshift_operation_question(context_text):
+        return False
+    return bool(
+        has_follow_up_reference(normalized)
+        or OPENSHIFT_CONTEXT_FOLLOW_UP_RE.search(normalized)
+    )
+
+
+_CONFIDENCE_STOPWORDS = {
+    "어떻게",
+    "어떤",
+    "먼저",
+    "확인",
+    "알려줘",
+    "설명해줘",
+    "기준",
+    "순서",
+    "문제",
+    "상태",
+    "방법",
+    "where",
+    "what",
+    "how",
+    "the",
+    "and",
+    "for",
+}
+
+
+def _confidence_tokens(*texts: str) -> set[str]:
+    return {
+        token
+        for token in normalized_token_set(*texts)
+        if token not in _CONFIDENCE_STOPWORDS
+    }
+
+
+def _selected_hit_score(selected_hits: list[dict] | None, key: str) -> float:
+    if not selected_hits:
+        return 0.0
+    values = []
+    for item in selected_hits:
+        value = item.get(key)
+        if isinstance(value, int | float):
+            values.append(float(value))
+    return max(values, default=0.0)
+
+
+def _citation_token_coverage(query: str, citations: list[Citation]) -> float:
+    query_tokens = _confidence_tokens(query)
+    if len(query_tokens) < 3 or not citations:
+        return 1.0
+    citation_tokens = _confidence_tokens(
+        *[
+            " ".join(
+                [
+                    citation.book_slug,
+                    citation.section,
+                    citation.excerpt,
+                    " ".join(citation.section_path),
+                    " ".join(citation.cli_commands),
+                    " ".join(citation.k8s_objects),
+                    " ".join(citation.operator_names),
+                ]
+            )
+            for citation in citations
+        ]
+    )
+    if not citation_tokens:
+        return 0.0
+    overlap = query_tokens & citation_tokens
+    return len(overlap) / max(1, min(len(query_tokens), 8))
+
+
+def _low_confidence_example_questions(selected_hits: list[dict] | None) -> list[str]:
+    examples: list[str] = []
+    seen: set[str] = set()
+    for item in selected_hits or []:
+        section = _clean_low_confidence_subject(str(item.get("section") or "").strip())
+        book_slug = str(item.get("book_slug") or "").strip()
+        if not section or section.lower() in {"additional resources", "추가 리소스", "릴리스 노트"}:
+            continue
+        subject = section
+        if book_slug and book_slug not in section:
+            subject = f"{section}"
+        for candidate in (
+            f"{subject} 기준으로 먼저 확인할 절차를 알려줘",
+            f"{subject}에서 상태 확인 명령과 판단 기준을 알려줘",
+        ):
+            if candidate not in seen:
+                seen.add(candidate)
+                examples.append(candidate)
+        if len(examples) >= 3:
+            break
+    return examples[:3]
+
+
+def _clean_low_confidence_subject(section: str) -> str:
+    subject = re.sub(r"\s+", " ", str(section or "").strip())
+    subject = re.sub(r"^\d+(?:\.\d+)*\.?\s*", "", subject)
+    subject = re.sub(r"^\d+\s*장\.\s*", "", subject)
+    subject = re.sub(r"^(chapter|section)\s+\d+(?:\.\d+)*\.?\s*", "", subject, flags=re.IGNORECASE)
+    subject = subject.strip(" .>-")
+    if not subject or re.match(r"^\d", subject):
+        return ""
+    return subject
+
+
+_GUIDED_LEARNING_QUESTION_RE = re.compile(
+    r"("
+    r"OCP를\s*처음\s*시작|"
+    r"Installation\s+overview|"
+    r"단계에서는.*(?:기준|문서).*(?:학습|이해|순서)|"
+    r"(?:학습|입문).*(?:순서|로드맵|단계)|"
+    r"(?:무엇부터|어디부터).*(?:이해|학습)"
+    r")",
+    re.IGNORECASE,
+)
+V016_LOW_CONFIDENCE_BYPASS_RE = re.compile(
+    r"(?<![a-z0-9])(?:pdb|poddisruptionbudget|hpa|horizontalpodautoscaler|vpa|verticalpodautoscaler|hsts|localvolume|localvolumeset|localvolumediscovery)(?![a-z0-9])|"
+    r"Local\s*Storage\s*Operator|Vertical\s*Pod\s*Autoscaler\s*Operator|로컬\s*스토리지|중단\s*예산|스케일링\s*정책|도메인별\s*HSTS",
+    re.IGNORECASE,
+)
+
+
+def _is_guided_learning_question(query: str) -> bool:
+    return bool(_GUIDED_LEARNING_QUESTION_RE.search(query or ""))
+
+
+def _is_install_overview_question(query: str) -> bool:
+    lowered = str(query or "").lower()
+    has_product = (
+        "ocp" in lowered
+        or "openshift" in lowered
+        or "오픈시프트" in str(query or "")
+        or "오픈 시프트" in str(query or "")
+    )
+    has_install = (
+        "설치" in str(query or "")
+        or "구축" in str(query or "")
+        or "install" in lowered
+        or "installation" in lowered
+        or "installer" in lowered
+    )
+    return has_product and has_install
+
+
+def _retrieval_hits_for_clarification(hits: list) -> list[dict]:
+    rows: list[dict] = []
+    for hit in hits[:3]:
+        row = {
+            "section": str(getattr(hit, "section", "") or "").strip(),
+            "book_slug": str(getattr(hit, "book_slug", "") or "").strip(),
+            "fused_score": float(getattr(hit, "fused_score", 0.0) or 0.0),
+        }
+        component_scores = getattr(hit, "component_scores", {}) or {}
+        if isinstance(component_scores, dict):
+            for key in ("pre_rerank_fused_score", "vector_score", "bm25_score"):
+                value = component_scores.get(key)
+                if isinstance(value, int | float):
+                    row[key] = float(value)
+        rows.append(row)
+    return rows
+
+
+def _low_confidence_clarification_answer(
+    *,
+    selected_hits: list[dict] | None,
+) -> str:
+    examples = _low_confidence_example_questions(selected_hits)
+    lines = [
+        "답변: 지금 질문은 현재 공식 문서 근거와 정확히 맞물리는 점수가 낮습니다.",
+        "엉뚱한 절차를 단정하지 않도록, 대상 리소스나 증상, 하고 싶은 작업을 한 단계만 더 좁혀 주세요.",
+    ]
+    if examples:
+        lines.extend(["", "이런 식으로 물어보면 더 정확히 안내할 수 있습니다."])
+        lines.extend([f"- {example}" for example in examples])
+    return "\n".join(lines)
+
+
+def _is_low_confidence_retrieval(
+    *,
+    query: str,
+    citations: list[Citation],
+    selected_hits: list[dict] | None,
+) -> bool:
+    if not citations:
+        return False
+    normalized_query = (query or "").lower()
+    if V016_LOW_CONFIDENCE_BYPASS_RE.search(query or ""):
+        return False
+    citation_haystack = " ".join(
+        " ".join(
+            str(value or "")
+            for value in (
+                citation.book_slug,
+                citation.section,
+                citation.section_path_label,
+                citation.excerpt,
+            )
+        )
+        for citation in citations
+    ).lower()
+    if has_backup_restore_intent(query) and any(token in citation_haystack for token in ("etcd", "backup", "restore", "백업", "복원")):
+        return False
+    if ("route" in normalized_query or "ingress" in normalized_query) and any(
+        token in citation_haystack
+        for token in ("ingress_and_load_balancing", "ingress", "route", "networking")
+    ):
+        return False
+    if any(token in normalized_query for token in ("ocp-certificates", "인증서", "certificate", "cert")) and any(
+        token in citation_haystack
+        for token in ("certificate", "인증서", "security_and_compliance", "authentication")
+    ):
+        return False
+    if (
+        has_doc_locator_intent(query)
+        or is_generic_intro_query(query)
+        or is_explainer_query(query)
+        or _is_guided_learning_question(query)
+        or _is_supported_ops_learning_question(query)
+    ):
+        return False
+    if has_beginner_troubleshooting_intent(query) and any(
+        token in citation_haystack
+        for token in (
+            "troubleshooting",
+            "events",
+            "describe",
+            "logs",
+            "secret",
+            "configmap",
+            "configuration",
+            "pod",
+            "workloads",
+            "applications",
+            "상태",
+            "오류",
+        )
+    ):
+        return False
+    operational_token_pairs = (
+        ("imagepullbackoff", ("imagepullbackoff", "errimagepull", "pull secret", "registry")),
+        ("errimagepull", ("imagepullbackoff", "errimagepull", "pull secret", "registry")),
+        ("networkpolicy", ("networkpolicy", "network policy", "ingress", "egress")),
+        ("machine config", ("machine config", "machineconfigpool", "mco")),
+        ("machineconfigpool", ("machine config", "machineconfigpool", "mco")),
+        ("cluster version", ("clusterversion", "cluster version", "cvo")),
+        ("clusterversion", ("clusterversion", "cluster version", "cvo")),
+        ("must-gather", ("must-gather", "must gather", "support", "diagnostic")),
+        ("oc adm inspect", ("oc adm inspect", "inspect", "namespace", "resource")),
+        ("finalizer", ("finalizer", "finalizers", "terminating", "namespace")),
+        ("observability", ("observability", "monitoring", "logging")),
+        ("리소스", ("oc adm top pod", "top pod", "metrics", "cpu", "memory")),
+        ("사용량", ("oc adm top pod", "top pod", "metrics", "cpu", "memory")),
+        ("잡아먹", ("oc adm top pod", "top pod", "metrics", "cpu", "memory")),
+    )
+    if any(
+        query_token in normalized_query and any(citation_token in citation_haystack for citation_token in citation_tokens)
+        for query_token, citation_tokens in operational_token_pairs
+    ):
+        return False
+    coverage = _citation_token_coverage(query, citations)
+    max_fused = _selected_hit_score(selected_hits, "fused_score")
+    max_pre_rerank = _selected_hit_score(selected_hits, "pre_rerank_fused_score")
+    max_vector = _selected_hit_score(selected_hits, "vector_score")
+    has_command_grounding = any(citation.cli_commands for citation in citations)
+    if has_command_request(query) and has_command_grounding and coverage >= 0.2:
+        return False
+    if has_command_request(query) and has_command_grounding and max(max_fused, max_pre_rerank, max_vector) >= 0.02:
+        return False
+    if any(token in normalized_query for token in ("bootstrap", "부트스트랩")) and any(
+        token in citation_haystack
+        for token in ("bootstrap-complete", "wait-for bootstrap", "openshift-install", "waiting for the bootstrap")
+    ):
+        return False
+    if _is_install_overview_question(query) and any(
+        token in citation_haystack
+        for token in (
+            "installation_overview",
+            "install_modes",
+            "installing_on_any_platform",
+            "installing_on_bare_metal",
+            "installing_with_agent_based_installer",
+            "assisted installer",
+            "agent-based installer",
+            "single-node",
+            "single node",
+            "openshift-install",
+            "설치",
+        )
+    ):
+        return False
+    weighted_score = (coverage * 0.62) + (max(max_pre_rerank, max_vector) * 1.8) + (0.12 if max_fused > 0 else 0)
+    return coverage < 0.28 and weighted_score < 0.46
 
 
 def _citation_matches_keywords(citations: list, keywords: tuple[str, ...]) -> bool:
@@ -135,6 +492,9 @@ def _citations_match_rbac_intent(citations: list) -> bool:
             "rolebinding",
             "role binding",
             "authorization",
+            "auth can-i",
+            "oc auth can-i",
+            "can-i",
             "권한",
             "사용자 역할",
             "clusterrole",
@@ -157,115 +517,50 @@ def _citations_match_console_intent(citations: list) -> bool:
     return False
 
 
-def _build_doc_locator_answer(*, query: str, citations: list) -> str | None:
-    if not citations or not has_doc_locator_intent(query):
-        return None
+def _is_document_sequence_query(query: str) -> bool:
+    return _shared_is_document_sequence_query(query)
+
+
+def _is_supported_ops_learning_question(query: str) -> bool:
+    normalized = (query or "").lower()
     if any(
         (
-            has_command_request(query),
-            has_corrective_follow_up(query),
-            has_backup_restore_intent(query),
-            has_cluster_node_usage_intent(query),
-            has_node_drain_intent(query),
+            has_crash_loop_troubleshooting_intent(query),
+            has_pod_pending_troubleshooting_intent(query),
             has_rbac_intent(query),
-            has_deployment_scaling_intent(query),
             has_openshift_kubernetes_compare_intent(query),
+            has_mco_concept_intent(query),
+            has_operator_concept_intent(query),
         )
     ):
-        return None
-    if _requires_console_grounding(query) and not _citations_match_console_intent(citations):
-        return None
-    if _requires_rbac_grounding(query) and not _citations_match_rbac_intent(citations):
-        return None
-    primary = citations[0]
-    section_label = str(getattr(primary, "section_path_label", "") or getattr(primary, "section", "") or "").strip()
-    if not section_label:
-        return None
-    lowered = str(query or "").lower()
-    follow_up = ""
-    if any(token in lowered for token in ("시작", "먼저", "first")):
-        follow_up = " 이 경로를 먼저 열고 같은 문서 안의 절차를 순서대로 따라가면 됩니다 [1]."
-    elif any(token in lowered for token in ("순서", "이동", "흐름", "route")):
-        follow_up = " 이 경로를 먼저 열고 문제 해결 섹션을 순서대로 따라가면 됩니다 [1]."
-    elif any(token in lowered for token in ("경로", "path", "route")):
-        follow_up = " 이 경로를 기준으로 연결 문서와 다음 절차를 이어가면 됩니다 [1]."
-    return f"답변: 먼저 `{section_label}` 문서를 여는 것이 맞습니다 [1].{follow_up}"
-
-
-INTRO_PLAYBOOK_ROUTE = (
-    {
-        "book_slug": "overview",
-        "book_title": "개요",
-        "viewer_path": "/playbooks/wiki-runtime/active/overview/index.html",
-        "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/overview/index",
-        "source_label": "개요",
-        "section": "개요",
-    },
-    {
-        "book_slug": "architecture",
-        "book_title": "아키텍처",
-        "viewer_path": "/playbooks/wiki-runtime/active/architecture/index.html",
-        "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/architecture/index",
-        "source_label": "아키텍처",
-        "section": "아키텍처",
-    },
-    {
-        "book_slug": "operators",
-        "book_title": "Operator 운영 플레이북",
-        "viewer_path": "/playbooks/wiki-runtime/active/operators/index.html",
-        "source_url": "https://docs.redhat.com/ko/documentation/openshift_container_platform/4.20/html-single/operators/index",
-        "source_label": "Operator 운영 플레이북",
-        "section": "Operator 운영 플레이북",
-    },
-)
-
-
-def _has_intro_playbook_route_intent(query: str) -> bool:
-    normalized = " ".join(str(query or "").split()).lower()
-    if not normalized:
-        return False
-    has_pack_target = any(token in normalized for token in ("플레이북", "playbook", "문서"))
-    has_intro_signal = any(token in normalized for token in ("입문", "처음", "먼저", "start"))
-    has_count_signal = any(token in normalized for token in ("3개", "세 개", "3권", "세 권", "top 3"))
-    has_route_signal = any(token in normalized for token in ("봐야", "읽", "추천", "알려줘", "추천해"))
-    return has_pack_target and has_intro_signal and has_count_signal and has_route_signal
-
-
-def _build_intro_playbook_route_citations() -> list[Citation]:
-    citations: list[Citation] = []
-    for index, item in enumerate(INTRO_PLAYBOOK_ROUTE, start=1):
-        citations.append(
-            Citation(
-                index=index,
-                chunk_id=f"intro-playbook-route-{item['book_slug']}",
-                book_slug=item["book_slug"],
-                section=item["section"],
-                anchor="",
-                source_url=item["source_url"],
-                viewer_path=item["viewer_path"],
-                excerpt="운영 입문용 기본 Playbook route",
-                section_path=(item["section"],),
-                section_path_label=item["section"],
-                chunk_type="concept",
-                semantic_role="guide",
-                source_collection="core",
-            )
+        return True
+    return any(
+        token in normalized
+        for token in (
+            "oc auth can-i",
+            "delete 할 수",
+            "pods를 delete",
+            "pod를 delete",
+            "특정 namespace",
+            "securitycontextconstraints",
+            "scc",
+            "machineconfigpool",
+            "machine config pool",
+            "clusteroperator",
+            "cluster operator",
+            "image registry",
+            "internal registry",
+            "openshift와 kubernetes",
+            "kubernetes 차이",
+            "pending 상태",
+            "crashloopbackoff",
+            "view 권한",
+            "권한만",
+            "업데이트 전에",
+            "paused 상태",
+            "권한 문제",
         )
-    return citations
-
-
-def _build_intro_playbook_route_answer(query: str) -> tuple[str, list[Citation]] | None:
-    if not _has_intro_playbook_route_intent(query):
-        return None
-    citations = _build_intro_playbook_route_citations()
-    answer = (
-        "답변: 운영 입문이면 아래 3권 순서로 시작하는 게 가장 자연스럽습니다.\n\n"
-        "1. `개요`부터 엽니다. 제품 범위와 기본 용어를 먼저 잡는 단계입니다 [1].\n"
-        "2. `아키텍처`로 넘어갑니다. 클러스터 구성과 핵심 컴포넌트가 어떻게 맞물리는지 이해하는 단계입니다 [2].\n"
-        "3. `Operator 운영 플레이북`으로 마무리합니다. 실제 운영 흐름을 붙이기 좋은 출발점입니다 [3].\n\n"
-        "읽는 순서도 그대로 `개요 -> 아키텍처 -> Operator 운영 플레이북`으로 가면 됩니다 [1] [2] [3]."
     )
-    return answer, citations
 
 
 def _allow_single_citation_fallback(*, query: str, citations: list) -> bool:
@@ -294,6 +589,28 @@ def _is_standard_etcd_backup_query(query: str) -> bool:
         and any(token in query for token in ("표준", "표준적", "정석"))
         and not any(token in lowered for token in ("복원", "restore", "recovery"))
     )
+
+
+def _is_image_pull_registry_secret_query(query: str) -> bool:
+    lowered = str(query or "").lower()
+    return (
+        any(token in lowered for token in ("imagepullbackoff", "errimagepull"))
+        and (
+            any(token in lowered for token in ("pull secret", "registry"))
+            or any(token in str(query or "") for token in ("풀 시크릿", "레지스트리", "시크릿"))
+        )
+    )
+
+
+def _is_control_plane_etcd_query(query: str) -> bool:
+    lowered = str(query or "").lower()
+    has_control_plane = (
+        "control plane" in lowered
+        or "control-plane" in lowered
+        or "controlplane" in lowered
+        or "컨트롤 플레인" in str(query or "")
+    )
+    return has_control_plane and "etcd" in lowered
 
 
 def _prune_provenance_noise_citations(*, query: str, citations: list) -> list:
@@ -334,23 +651,17 @@ def _prune_provenance_noise_citations(*, query: str, citations: list) -> list:
         if any(citation.book_slug in preferred_books for citation in pruned):
             pruned = [citation for citation in pruned if citation.book_slug in preferred_books]
 
+    if _is_image_pull_registry_secret_query(query):
+        preferred_books = {"images", "registry"}
+        if any(citation.book_slug in preferred_books for citation in pruned):
+            pruned = [citation for citation in pruned if citation.book_slug in preferred_books]
+
+    if _is_control_plane_etcd_query(query):
+        preferred_books = {"etcd", "architecture", "overview"}
+        if any(citation.book_slug == "etcd" for citation in pruned):
+            pruned = [citation for citation in pruned if citation.book_slug in preferred_books]
+
     return pruned or citations
-
-
-def _deterministic_llm_runtime_meta(*, provider: str) -> dict[str, object]:
-    return {
-        "preferred_provider": provider,
-        "fallback_enabled": False,
-        "last_provider": provider,
-        "last_fallback_used": False,
-        "last_attempted_providers": [provider],
-        "last_requested_max_tokens": 0,
-        "provider_round_trip_ms": 0.0,
-        "post_process_ms": 0.0,
-        "raw_output_chars": 0,
-        "final_output_chars": 0,
-        "requested_max_tokens": 0,
-    }
 
 
 def _is_explanation_query(query: str) -> bool:
@@ -373,7 +684,75 @@ def _llm_max_tokens_override(*, query: str, default_max_tokens: int) -> int | No
     lowered = str(query or "").lower()
     if any(token in lowered for token in ("한 문단", "한문단", "one paragraph", "single paragraph")):
         return min(default_max_tokens, 192)
-    return min(default_max_tokens, 256)
+    return min(default_max_tokens, 560)
+
+
+def _lightspeed_internal_status_message(status: str) -> str:
+    if status == "disabled":
+        return "OpenShift Lightspeed 연결이 설정되지 않아 현재 PBS 내부 근거로 답변합니다."
+    if status == "error":
+        return "OpenShift Lightspeed 호출에 실패해 현재 PBS 내부 근거로 답변합니다."
+    if status == "empty":
+        return "OpenShift Lightspeed 응답이 비어 있어 현재 PBS 내부 근거로 답변합니다."
+    return ""
+
+
+def _prepend_status_note(answer_text: str, note: str) -> str:
+    clean_note = " ".join(str(note or "").split()).strip()
+    if not clean_note:
+        return answer_text
+    answer = str(answer_text or "").strip()
+    if clean_note in answer:
+        return answer
+    if answer.startswith("답변:"):
+        return f"답변: {clean_note}\n\n{answer[len('답변:'):].lstrip()}"
+    return f"{clean_note}\n\n{answer}"
+
+
+def _lightspeed_answer_for_chat(answer_text: str) -> str:
+    answer = str(answer_text or "").strip()
+    if not answer:
+        return ""
+    answer = re.sub(r"\[\d+\]", "[1]", answer)
+    if not answer.startswith("답변:"):
+        answer = f"답변: {answer}"
+    if "[1]" not in answer:
+        answer = inject_single_citation(answer, citation_index=1)
+    return answer
+
+
+def _is_customer_context_citation(citation: Citation) -> bool:
+    viewer_path = str(citation.viewer_path or "").strip()
+    source_collection = str(citation.source_collection or "").strip()
+    source_scope = str(getattr(citation, "source_scope", "") or "").strip()
+    book_slug = str(citation.book_slug or "").strip()
+    return (
+        viewer_path.startswith("/uploads/documents/")
+        or viewer_path.startswith("/playbooks/customer-packs/")
+        or source_collection in {"uploads", "uploaded", "customer_docs", "customer_data"}
+        or source_scope in {"user_upload", "study_docs"}
+        or book_slug in {"uploaded-documents", "study_docs", "customer-data-documents"}
+    )
+
+
+def _customer_context_bridge_meta(citations: list[Citation]) -> dict[str, object]:
+    customer_citations = [
+        citation
+        for citation in citations
+        if _is_customer_context_citation(citation)
+    ]
+    if not customer_citations:
+        return {}
+    return {
+        "customer_context_applied": True,
+        "customer_context_citation_count": len(customer_citations),
+        "customer_context_viewer_paths": [
+            str(citation.viewer_path or "")
+            for citation in customer_citations[:5]
+            if str(citation.viewer_path or "").strip()
+        ],
+        "bridge_label": "OpenShift Lightspeed + Customer Context",
+    }
 
 
 class ChatAnswerer:
@@ -384,17 +763,23 @@ class ChatAnswerer:
         settings: Settings,
         retriever: ChatRetriever,
         llm_client: LLMClient,
+        lightspeed_client: OpenShiftLightspeedClient | None = None,
     ) -> None:
         self.settings = settings
         self.retriever = retriever
         self.llm_client = llm_client
+        self.lightspeed_client = lightspeed_client or OpenShiftLightspeedClient(settings)
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "ChatAnswerer":
+        llm_client = LLMClient(settings)
+        retriever = ChatRetriever.from_settings(settings, enable_vector=True)
+        if settings.query_signal_llm_enabled:
+            retriever.query_signal_llm_client = llm_client
         return cls(
             settings=settings,
-            retriever=ChatRetriever.from_settings(settings, enable_vector=True),
-            llm_client=LLMClient(settings),
+            retriever=retriever,
+            llm_client=llm_client,
         )
 
     def default_log_path(self) -> Path:
@@ -406,6 +791,241 @@ class ChatAnswerer:
         with target.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(result.to_dict(), ensure_ascii=False) + "\n")
         return target
+
+    def _query_openshift_lightspeed(
+        self,
+        query: str,
+        *,
+        context: SessionContext | None = None,
+        emit,
+    ) -> tuple[OpenShiftLightspeedResult | None, dict[str, object]]:
+        meta: dict[str, object] = {
+            "provider": "openshift_lightspeed",
+            "status": "not_applicable",
+        }
+        direct_lightspeed_route = is_openshift_operation_question(query)
+        if not (direct_lightspeed_route or _should_query_openshift_lightspeed(query, context)):
+            return None, meta
+        if not direct_lightspeed_route:
+            meta["routing_reason"] = "contextual_openshift_follow_up"
+            context_text = _lightspeed_context_text(context)
+            if context_text:
+                meta["context_topic"] = context_text[:180]
+        if not getattr(self.lightspeed_client, "is_configured", False):
+            meta["status"] = "disabled"
+            meta["reason"] = "OPENSHIFT_LIGHTSPEED_BASE_URL not configured"
+            emit(
+                {
+                    "step": "openshift_lightspeed",
+                    "label": "OpenShift Lightspeed 미설정",
+                    "status": "warning",
+                    "detail": "OPENSHIFT_LIGHTSPEED_BASE_URL not configured",
+                }
+            )
+            return None, meta
+
+        lightspeed_query = normalize_lightspeed_query(query)
+        if lightspeed_query != str(query or "").strip():
+            meta["normalized_query"] = lightspeed_query
+        started_at = time.perf_counter()
+        emit(
+            {
+                "step": "openshift_lightspeed",
+                "label": "OpenShift Lightspeed 호출 중",
+                "status": "running",
+                "meta": {"normalized_query": lightspeed_query} if "normalized_query" in meta else {},
+            }
+        )
+        try:
+            result = self.lightspeed_client.query(lightspeed_query)
+            if (
+                str(result.request_metadata.get("request_profile") or "") == "console_parity"
+                and isinstance(result.quality, dict)
+                and int(result.quality.get("internal_tool_name_count") or 0) > 0
+            ):
+                emit(
+                    {
+                        "step": "openshift_lightspeed_quality_retry",
+                        "label": "OpenShift Lightspeed 품질 프로파일 재호출",
+                        "status": "running",
+                        "detail": "internal tool names detected in console_parity answer",
+                        "meta": {"initial_quality": result.quality},
+                    }
+                )
+                try:
+                    retry_result = self.lightspeed_client.query(
+                        lightspeed_query,
+                        request_profile="operator_cli_quality",
+                    )
+                except Exception as retry_exc:
+                    meta["quality_retry"] = {
+                        "from_profile": "console_parity",
+                        "to_profile": "operator_cli_quality",
+                        "initial_quality": result.quality,
+                        "retry_error_type": type(retry_exc).__name__,
+                    }
+                else:
+                    if retry_result.answer:
+                        meta["quality_retry"] = {
+                            "from_profile": "console_parity",
+                            "to_profile": "operator_cli_quality",
+                            "initial_quality": result.quality,
+                            "retry_quality": retry_result.quality,
+                        }
+                        result = retry_result
+        except Exception as exc:
+            duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+            meta.update(
+                {
+                    "status": "error",
+                    "error_type": type(exc).__name__,
+                    "duration_ms": duration_ms,
+                }
+            )
+            if isinstance(exc, OpenShiftLightspeedApiError):
+                meta["status_code"] = exc.status_code
+                if exc.detail:
+                    meta["error_detail"] = exc.detail
+            emit(
+                {
+                    "step": "openshift_lightspeed",
+                    "label": "OpenShift Lightspeed 호출 실패",
+                    "status": "warning",
+                    "detail": (
+                        f"{type(exc).__name__} {exc.status_code}"
+                        if isinstance(exc, OpenShiftLightspeedApiError)
+                        else type(exc).__name__
+                    ),
+                    "duration_ms": duration_ms,
+                }
+            )
+            return None, meta
+
+        duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+        if not result.answer:
+            meta.update(
+                {
+                    "status": "empty",
+                    "duration_ms": duration_ms,
+                    "referenced_documents": len(result.referenced_documents),
+                    "truncated": result.truncated,
+                    "conversation_id": result.conversation_id,
+                    "input_tokens": result.input_tokens,
+                    "output_tokens": result.output_tokens,
+                    "tool_calls": len(result.tool_calls),
+                    "tool_results": len(result.tool_results),
+                }
+            )
+            emit(
+                {
+                    "step": "openshift_lightspeed",
+                    "label": "OpenShift Lightspeed 빈 응답",
+                    "status": "warning",
+                    "duration_ms": duration_ms,
+                }
+            )
+            return None, meta
+
+        meta.update(
+            {
+                "status": "used",
+                "duration_ms": duration_ms,
+                "answer_chars": len(result.answer),
+                "referenced_documents": len(result.referenced_documents),
+                "truncated": result.truncated,
+                "conversation_id": result.conversation_id,
+                "input_tokens": result.input_tokens,
+                "output_tokens": result.output_tokens,
+                "tool_calls": len(result.tool_calls),
+                "tool_results": len(result.tool_results),
+                "request_profile": result.request_metadata.get("request_profile", ""),
+                "payload_keys": result.request_metadata.get("payload_keys", []),
+                "query_augmented": result.request_metadata.get("query_augmented", False),
+                "provider_present": result.request_metadata.get("provider_present", False),
+                "model_present": result.request_metadata.get("model_present", False),
+                "system_prompt_present": result.request_metadata.get("system_prompt_present", False),
+                "system_prompt_hash": result.request_metadata.get("system_prompt_hash", ""),
+                "quality": result.quality,
+            }
+        )
+        artifact_id, artifact_created_at = self._write_lightspeed_artifact(
+            query=query,
+            normalized_query=lightspeed_query,
+            result=result,
+        )
+        if artifact_id:
+            meta.update(
+                {
+                    "artifact_id": artifact_id,
+                    "created_at": artifact_created_at,
+                    "viewer_path": f"/external/lightspeed/{artifact_id}",
+                    "label": "OpenShift Lightspeed 공식 답변",
+                    "boundary_truth": "external_openshift_lightspeed",
+                    "runtime_truth_label": "OpenShift Lightspeed",
+                    "boundary_badge": "Lightspeed",
+                    "source_lane": "openshift_lightspeed",
+                }
+            )
+        emit(
+            {
+                "step": "openshift_lightspeed",
+                "label": "OpenShift Lightspeed 호출 완료",
+                "status": "done",
+                "detail": f"answer_chars={len(result.answer)}",
+                "duration_ms": duration_ms,
+                "meta": {
+                    "referenced_documents": len(result.referenced_documents),
+                    "truncated": result.truncated,
+                    "conversation_id": result.conversation_id,
+                    "input_tokens": result.input_tokens,
+                    "output_tokens": result.output_tokens,
+                    "tool_calls": len(result.tool_calls),
+                    "tool_results": len(result.tool_results),
+                    "request_profile": result.request_metadata.get("request_profile", ""),
+                    "query_augmented": result.request_metadata.get("query_augmented", False),
+                    "quality": result.quality,
+                },
+            }
+        )
+        return result, meta
+
+    def _write_lightspeed_artifact(
+        self,
+        *,
+        query: str,
+        normalized_query: str,
+        result: OpenShiftLightspeedResult,
+    ) -> tuple[str, str]:
+        created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        digest = hashlib.sha256(
+            f"{created_at}\n{query}\n{result.answer}".encode("utf-8", errors="replace")
+        ).hexdigest()[:20]
+        artifact_dir = self.settings.artifacts_dir / "external_answers" / "lightspeed"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema": "pbs.external_answer.lightspeed.v1",
+            "artifact_id": digest,
+            "created_at": created_at,
+            "provider": "OpenShift Lightspeed",
+            "query": query,
+            "normalized_query": normalized_query if normalized_query != query else "",
+            "answer": result.answer,
+            "conversation_id": result.conversation_id,
+            "referenced_documents": result.referenced_documents,
+            "truncated": result.truncated,
+            "input_tokens": result.input_tokens,
+            "output_tokens": result.output_tokens,
+            "available_quotas": result.available_quotas,
+            "tool_call_count": len(result.tool_calls),
+            "tool_result_count": len(result.tool_results),
+            "request_metadata": result.request_metadata,
+            "quality": result.quality,
+        }
+        (artifact_dir / f"{digest}.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return digest, created_at
 
     def _build_grounding_blocked_result(
         self,
@@ -420,11 +1040,14 @@ class ChatAnswerer:
         pipeline_timings_ms: dict[str, float],
         selected_hits: list[dict] | None = None,
         llm_runtime_meta: dict | None = None,
+        answer_source: str = "",
+        external_answer_meta: dict[str, object] | None = None,
+        status_note: str = "",
     ) -> AnswerResult:
         return build_answer_result(
             query=query,
             mode=mode,
-            answer=answer,
+            answer=_prepend_status_note(answer, status_note),
             rewritten_query=rewritten_query,
             response_kind="no_answer",
             citations=[],
@@ -435,6 +1058,8 @@ class ChatAnswerer:
             pipeline_timings_ms=pipeline_timings_ms,
             selected_hits=selected_hits,
             llm_runtime_meta=llm_runtime_meta,
+            answer_source=answer_source,
+            external_answer_meta=external_answer_meta,
         )
 
     def answer(
@@ -444,7 +1069,7 @@ class ChatAnswerer:
         mode: str = "chat",
         context: SessionContext | None = None,
         top_k: int = 5,
-        candidate_k: int = 20,
+        candidate_k: int = 10,
         max_context_chunks: int = 6,
         trace_callback=None,
     ) -> AnswerResult:
@@ -477,10 +1102,18 @@ class ChatAnswerer:
         is_follow_up = has_follow_up_reference(query)
         routed_response = None
         if not is_follow_up:
+            allow_unsupported_product = bool(
+                context
+                and (
+                    str(getattr(context, "active_document_id", "") or "").strip()
+                    or str(getattr(context, "active_repository_id", "") or "").strip()
+                )
+            )
             routed_response = route_non_rag(
                 query,
                 corpus_label=self.settings.active_pack.product_label,
                 corpus_version=self.settings.active_pack.version,
+                allow_unsupported_product=allow_unsupported_product,
             )
         pipeline_timings_ms["route_query"] = round(
             (time.perf_counter() - route_started_at) * 1000,
@@ -570,6 +1203,19 @@ class ChatAnswerer:
                 "duration_ms": pipeline_timings_ms["route_query"],
             }
         )
+        warnings: list[str] = []
+        lightspeed_result, external_answer_meta = self._query_openshift_lightspeed(
+            query,
+            context=context,
+            emit=emit,
+        )
+        lightspeed_used = external_answer_meta.get("status") == "used"
+        answer_source = "lightspeed_with_pbs_rag" if lightspeed_used else "pbs_rag"
+        status_note = _lightspeed_internal_status_message(str(external_answer_meta.get("status") or ""))
+        if external_answer_meta.get("status") == "error":
+            warnings.append("openshift lightspeed call failed")
+        if isinstance(external_answer_meta.get("duration_ms"), (float, int)):
+            pipeline_timings_ms["openshift_lightspeed"] = float(external_answer_meta["duration_ms"])
         emit(
             {
                 "step": "retrieval",
@@ -611,6 +1257,7 @@ class ChatAnswerer:
         context_bundle = assemble_context(
             retrieval.hits,
             query=query,
+            command_hints=_retrieval_command_hints(retrieval.trace),
             session_context=context,
             root_dir=self.settings.root_dir,
             max_chunks=max_context_chunks,
@@ -635,15 +1282,136 @@ class ChatAnswerer:
                 },
             }
         )
-        warnings: list[str] = []
         if not context_bundle.citations:
             warnings.append("no context citations assembled")
+            if lightspeed_used:
+                warnings.append("pbs citations unavailable for lightspeed answer")
+                emit(
+                    {
+                        "step": "lightspeed_answer_passthrough",
+                        "label": "Lightspeed 원문 답변 사용",
+                        "status": "done",
+                        "detail": "PBS citation 없이 OpenShift Lightspeed 원문을 반환합니다",
+                    }
+                )
+                pipeline_timings_ms["total"] = round(
+                    (time.perf_counter() - answer_started_at) * 1000,
+                    1,
+                )
+                emit(
+                    {
+                        "step": "pipeline_complete",
+                        "label": "답변 생성 완료",
+                        "status": "done",
+                        "detail": f"총 {pipeline_timings_ms['total']}ms",
+                        "duration_ms": pipeline_timings_ms["total"],
+                    }
+                )
+                return build_answer_result(
+                    query=query,
+                    mode=mode,
+                    answer=_lightspeed_answer_for_chat(
+                        lightspeed_result.answer if lightspeed_result else ""
+                    ),
+                    rewritten_query=retrieval.rewritten_query,
+                    response_kind="rag",
+                    citations=[],
+                    cited_indices=[1],
+                    warnings=warnings,
+                    retrieval_trace=retrieval.trace,
+                    pipeline_events=pipeline_events,
+                    pipeline_timings_ms=pipeline_timings_ms,
+                    selected_hits=[],
+                    answer_source=answer_source,
+                    external_answer_meta=external_answer_meta,
+                )
+            else:
+                if status_note:
+                    warnings.append("openshift lightspeed unavailable")
+                clarification_hits = _retrieval_hits_for_clarification(retrieval.hits)
+                emit(
+                    {
+                        "step": "grounding_guard",
+                        "label": "근거 검증 차단",
+                        "status": "error",
+                        "detail": "선택된 citation이 없습니다",
+                    }
+                )
+                pipeline_timings_ms["total"] = round(
+                    (time.perf_counter() - answer_started_at) * 1000,
+                    1,
+                )
+                emit(
+                    {
+                        "step": "pipeline_complete",
+                        "label": "답변 생성 중단",
+                        "status": "done",
+                        "detail": f"총 {pipeline_timings_ms['total']}ms",
+                        "duration_ms": pipeline_timings_ms["total"],
+                    }
+                )
+                if clarification_hits and not _is_guided_learning_question(query):
+                    warnings.append("low retrieval confidence")
+                    return build_answer_result(
+                        query=query,
+                        mode=mode,
+                        answer=_prepend_status_note(
+                            _low_confidence_clarification_answer(selected_hits=clarification_hits),
+                            status_note,
+                        ),
+                        rewritten_query=retrieval.rewritten_query,
+                        response_kind="clarification",
+                        citations=[],
+                        cited_indices=[],
+                        warnings=warnings,
+                        retrieval_trace=retrieval.trace,
+                        pipeline_events=pipeline_events,
+                        pipeline_timings_ms=pipeline_timings_ms,
+                        selected_hits=clarification_hits,
+                        answer_source=answer_source,
+                        external_answer_meta=external_answer_meta,
+                    )
+                return self._build_grounding_blocked_result(
+                    query=query,
+                    mode=mode,
+                    rewritten_query=retrieval.rewritten_query,
+                    answer=(
+                        "답변: 현재 Playbook Library에 해당 자료가 없습니다. "
+                        "자료 추가가 필요합니다."
+                    ),
+                    warnings=warnings,
+                    retrieval_trace=retrieval.trace,
+                    pipeline_events=pipeline_events,
+                    pipeline_timings_ms=pipeline_timings_ms,
+                    answer_source=answer_source,
+                    external_answer_meta=external_answer_meta,
+                    status_note=status_note,
+                )
+        selected_hits = summarize_selected_citations(
+            context_bundle.citations,
+            retrieval.hits,
+        )
+        if not context_bundle.citations:
+            selected_hits = []
+        if lightspeed_used:
+            context_bridge = _customer_context_bridge_meta(context_bundle.citations)
+            if context_bridge:
+                external_answer_meta["context_bridge"] = context_bridge
+                emit(
+                    {
+                        "step": "customer_context_bridge",
+                        "label": "고객문서 맥락 결합",
+                        "status": "done",
+                        "detail": f"customer citations={context_bridge['customer_context_citation_count']}",
+                        "meta": context_bridge,
+                    }
+                )
             emit(
                 {
-                    "step": "grounding_guard",
-                    "label": "근거 검증 차단",
-                    "status": "error",
-                    "detail": "선택된 citation이 없습니다",
+                    "step": "lightspeed_answer_passthrough",
+                    "label": "Lightspeed 원문 답변 사용",
+                    "status": "done",
+                    "detail": "PBS LLM 재작성 없이 OpenShift Lightspeed 원문을 반환합니다",
                 }
             )
             pipeline_timings_ms["total"] = round(
@@ -653,33 +1421,41 @@ class ChatAnswerer:
             emit(
                 {
                     "step": "pipeline_complete",
-                    "label": "답변 생성 중단",
+                    "label": "답변 생성 완료",
                     "status": "done",
                     "detail": f"총 {pipeline_timings_ms['total']}ms",
                     "duration_ms": pipeline_timings_ms["total"],
                 }
             )
-            return self._build_grounding_blocked_result(
+            return build_answer_result(
                 query=query,
                 mode=mode,
-                rewritten_query=retrieval.rewritten_query,
-                answer=(
-                    "답변: 현재 Playbook Library에 해당 자료가 없습니다. "
-                    "자료 추가가 필요합니다."
+                answer=_lightspeed_answer_for_chat(
+                    lightspeed_result.answer if lightspeed_result else ""
                 ),
+                rewritten_query=retrieval.rewritten_query,
+                response_kind="rag",
+                citations=context_bundle.citations,
+                cited_indices=[1],
                 warnings=warnings,
                 retrieval_trace=retrieval.trace,
                 pipeline_events=pipeline_events,
                 pipeline_timings_ms=pipeline_timings_ms,
+                selected_hits=selected_hits,
+                answer_source=answer_source,
+                external_answer_meta=external_answer_meta,
             )
-        selected_hits = summarize_selected_citations(
-            context_bundle.citations,
-            retrieval.hits,
+        actionable_command_query = (
+            (has_command_request(query) or has_corrective_follow_up(query))
+            and not _requires_console_grounding(query)
         )
-        actionable_command_query = has_command_request(query) or has_corrective_follow_up(query)
-        if actionable_command_query and not has_sufficient_command_grounding(
-            query=query,
-            citations=context_bundle.citations,
+        if (
+            not lightspeed_used
+            and actionable_command_query
+            and not has_sufficient_command_grounding(
+                query=query,
+                citations=context_bundle.citations,
+            )
         ):
             warnings.append("insufficient command grounding coverage")
             emit(
@@ -716,10 +1492,17 @@ class ChatAnswerer:
                 pipeline_events=pipeline_events,
                 pipeline_timings_ms=pipeline_timings_ms,
                 selected_hits=selected_hits,
+                answer_source=answer_source,
+                external_answer_meta=external_answer_meta,
+                status_note=status_note,
             )
-        if _requires_monitoring_backup_grounding(query) and not _citation_matches_keywords(
-            context_bundle.citations,
-            ("monitoring", "모니터링", "backup_and_restore", "백업", "복원"),
+        if (
+            not lightspeed_used
+            and _requires_monitoring_backup_grounding(query)
+            and not _citation_matches_keywords(
+                context_bundle.citations,
+                ("monitoring", "모니터링", "backup_and_restore", "백업", "복원"),
+            )
         ):
             warnings.append("insufficient monitoring/backup grounding coverage")
             emit(
@@ -756,68 +1539,33 @@ class ChatAnswerer:
                 pipeline_events=pipeline_events,
                 pipeline_timings_ms=pipeline_timings_ms,
                 selected_hits=selected_hits,
+                answer_source=answer_source,
+                external_answer_meta=external_answer_meta,
+                status_note=status_note,
             )
 
-        intro_playbook_route = _build_intro_playbook_route_answer(query)
-        if intro_playbook_route is not None:
-            answer_text, route_citations = intro_playbook_route
-            answer_text, final_citations, cited_indices = finalize_citations(
-                answer_text,
-                route_citations,
-            )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
-            emit(
-                {
-                    "step": "deterministic_answer",
-                    "label": "입문 Playbook route 정리 완료",
-                    "status": "done",
-                    "detail": f"추천 3권, 총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
-                }
-            )
-            return build_answer_result(
-                query=query,
-                mode=mode,
-                answer=answer_text,
-                rewritten_query=retrieval.rewritten_query,
-                response_kind="rag",
-                citations=final_citations,
-                cited_indices=cited_indices,
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
-            )
-
-        doc_locator_answer = _build_doc_locator_answer(
+        if not lightspeed_used and _is_low_confidence_retrieval(
             query=query,
             citations=context_bundle.citations,
-        )
-        if doc_locator_answer is not None:
-            answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
-                doc_locator_answer,
-                context_bundle.citations,
+            selected_hits=selected_hits,
+        ):
+            warnings.append("low retrieval confidence")
+            emit(
+                {
+                    "step": "grounding_guard",
+                    "label": "근거 점수 낮음",
+                    "status": "warning",
+                    "detail": "질문과 선택 citation의 토큰/점수 결합 신뢰도가 낮습니다",
+                }
             )
             pipeline_timings_ms["total"] = round(
                 (time.perf_counter() - answer_started_at) * 1000,
                 1,
-            )
-            emit(
-                {
-                    "step": "deterministic_answer",
-                    "label": "문서 경로 답변 생성 완료",
-                    "status": "done",
-                    "detail": "doc locator",
-                }
             )
             emit(
                 {
                     "step": "pipeline_complete",
-                    "label": "답변 생성 완료",
+                    "label": "구체화 요청으로 전환",
                     "status": "done",
                     "detail": f"총 {pipeline_timings_ms['total']}ms",
                     "duration_ms": pipeline_timings_ms["total"],
@@ -826,219 +1574,86 @@ class ChatAnswerer:
             return build_answer_result(
                 query=query,
                 mode=mode,
-                answer=answer_text,
+                answer=_prepend_status_note(
+                    _low_confidence_clarification_answer(selected_hits=selected_hits),
+                    status_note,
+                ),
                 rewritten_query=retrieval.rewritten_query,
-                response_kind="rag",
-                citations=final_citations,
-                cited_indices=cited_indices,
+                response_kind="clarification",
+                citations=[],
+                cited_indices=[],
                 warnings=warnings,
                 retrieval_trace=retrieval.trace,
                 pipeline_events=pipeline_events,
                 pipeline_timings_ms=pipeline_timings_ms,
                 selected_hits=selected_hits,
-            )
-
-        deployment_scaling_answer = build_deployment_scaling_answer(
-            query=query,
-            context=context,
-            citations=context_bundle.citations,
-        )
-        if deployment_scaling_answer is not None:
-            answer_text = deployment_scaling_answer
-            answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
-                answer_text,
-                context_bundle.citations,
-            )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
-            emit(
-                {
-                    "step": "deterministic_answer",
-                    "label": "전용 명령 답변 생성 완료",
-                    "status": "done",
-                    "detail": "deployment scaling",
-                }
-            )
-            emit(
-                {
-                    "step": "pipeline_complete",
-                    "label": "답변 생성 완료",
-                    "status": "done",
-                    "detail": f"총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
-                }
-            )
-            return build_answer_result(
-                query=query,
-                mode=mode,
-                answer=answer_text,
-                rewritten_query=retrieval.rewritten_query,
-                response_kind="clarification" if "숫자가 현재 질문에 없습니다" in answer_text else "rag",
-                citations=final_citations,
-                cited_indices=cited_indices,
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
-            )
-
-        grounded_command_answer = build_grounded_command_guide_answer(
-            query=query,
-            citations=context_bundle.citations,
-        )
-        if grounded_command_answer is not None:
-            answer_text, final_citations, cited_indices = finalize_deployment_scaling_answer(
-                grounded_command_answer,
-                context_bundle.citations,
-            )
-            pipeline_timings_ms["total"] = round(
-                (time.perf_counter() - answer_started_at) * 1000,
-                1,
-            )
-            emit(
-                {
-                    "step": "deterministic_answer",
-                    "label": "명령 우선 답변 생성 완료",
-                    "status": "done",
-                    "detail": "grounded command guide",
-                }
-            )
-            emit(
-                {
-                    "step": "pipeline_complete",
-                    "label": "답변 생성 완료",
-                    "status": "done",
-                    "detail": f"총 {pipeline_timings_ms['total']}ms",
-                    "duration_ms": pipeline_timings_ms["total"],
-                }
-            )
-            return build_answer_result(
-                query=query,
-                mode=mode,
-                answer=answer_text,
-                rewritten_query=retrieval.rewritten_query,
-                response_kind="rag",
-                citations=final_citations,
-                cited_indices=cited_indices,
-                warnings=warnings,
-                retrieval_trace=retrieval.trace,
-                pipeline_events=pipeline_events,
-                pipeline_timings_ms=pipeline_timings_ms,
-                selected_hits=selected_hits,
+                answer_source=answer_source,
+                external_answer_meta=external_answer_meta,
             )
 
         answer_text = ""
         llm_runtime_meta: dict[str, object]
-        etcd_fast_path_answer = ""
-        if has_backup_restore_intent(query):
-            etcd_fast_path_answer = shape_etcd_backup_answer(
-                "",
-                query=query,
-                citations=context_bundle.citations,
-            )
+        prompt_started_at = time.perf_counter()
+        emit(
+            {
+                "step": "prompt_build",
+                "label": "프롬프트 조립 중",
+                "status": "running",
+            }
+        )
+        messages = build_messages(
+            query=query,
+            mode=mode,
+            context_bundle=context_bundle,
+            session_summary=summarize_session_context(context),
+            openshift_lightspeed_answer=lightspeed_result.answer if lightspeed_result else "",
+        )
+        pipeline_timings_ms["prompt_build"] = round(
+            (time.perf_counter() - prompt_started_at) * 1000,
+            1,
+        )
+        emit(
+            {
+                "step": "prompt_build",
+                "label": "프롬프트 조립 완료",
+                "status": "done",
+                "detail": f"messages {len(messages)}개",
+                "duration_ms": pipeline_timings_ms["prompt_build"],
+            }
+        )
 
-        if etcd_fast_path_answer:
-            answer_text = etcd_fast_path_answer
-            pipeline_timings_ms["prompt_build"] = 0.0
-            pipeline_timings_ms["llm_generate_total"] = 0.0
-            pipeline_timings_ms["llm_provider_round_trip"] = 0.0
-            pipeline_timings_ms["llm_post_process"] = 0.0
-            llm_runtime_meta = _deterministic_llm_runtime_meta(
-                provider="deterministic-fast-path",
-            )
-            emit(
-                {
-                    "step": "deterministic_answer",
-                    "label": "전용 절차 답변 생성 완료",
-                    "status": "done",
-                    "detail": "pre-llm etcd backup/restore fast path",
-                }
-            )
-            emit(
-                {
-                    "step": "prompt_build",
-                    "label": "프롬프트 조립 생략",
-                    "status": "done",
-                    "detail": "deterministic etcd backup/restore fast path",
-                    "duration_ms": pipeline_timings_ms["prompt_build"],
-                }
-            )
-            emit(
-                {
-                    "step": "llm_runtime",
-                    "label": "LLM 호출 생략",
-                    "status": "done",
-                    "detail": (
-                        f"provider={llm_runtime_meta.get('last_provider') or llm_runtime_meta.get('preferred_provider')} "
-                        f"fallback={str(bool(llm_runtime_meta.get('last_fallback_used', False))).lower()}"
-                    ),
-                    "meta": llm_runtime_meta,
-                }
-            )
-        else:
-            prompt_started_at = time.perf_counter()
-            emit(
-                {
-                    "step": "prompt_build",
-                    "label": "프롬프트 조립 중",
-                    "status": "running",
-                }
-            )
-            messages = build_messages(
-                query=query,
-                mode=mode,
-                context_bundle=context_bundle,
-                session_summary=summarize_session_context(context),
-            )
-            pipeline_timings_ms["prompt_build"] = round(
-                (time.perf_counter() - prompt_started_at) * 1000,
-                1,
-            )
-            emit(
-                {
-                    "step": "prompt_build",
-                    "label": "프롬프트 조립 완료",
-                    "status": "done",
-                    "detail": f"messages {len(messages)}개",
-                    "duration_ms": pipeline_timings_ms["prompt_build"],
-                }
-            )
-
-            llm_started_at = time.perf_counter()
-            max_tokens_override = _llm_max_tokens_override(
-                query=query,
-                default_max_tokens=self.settings.llm_max_tokens,
-            )
-            answer_text, llm_runtime_meta, llm_phase_timings = generate_grounded_answer_text(
-                self.llm_client,
-                messages,
-                query=query,
-                mode=mode,
-                citations=context_bundle.citations,
-                trace_callback=emit,
-                max_tokens_override=max_tokens_override,
-            )
-            pipeline_timings_ms["llm_generate_total"] = round(
-                (time.perf_counter() - llm_started_at) * 1000,
-                1,
-            )
-            pipeline_timings_ms["llm_provider_round_trip"] = llm_phase_timings["llm_provider_round_trip"]
-            pipeline_timings_ms["llm_post_process"] = llm_phase_timings["llm_post_process"]
-            emit(
-                {
-                    "step": "llm_runtime",
-                    "label": "LLM 런타임 확인",
-                    "status": "done",
-                    "detail": (
-                        f"provider={llm_runtime_meta.get('last_provider') or llm_runtime_meta.get('preferred_provider')} "
-                        f"fallback={str(bool(llm_runtime_meta.get('last_fallback_used', False))).lower()}"
-                    ),
-                    "meta": llm_runtime_meta,
-                }
-            )
+        llm_started_at = time.perf_counter()
+        max_tokens_override = _llm_max_tokens_override(
+            query=query,
+            default_max_tokens=self.settings.llm_max_tokens,
+        )
+        answer_text, llm_runtime_meta, llm_phase_timings = generate_grounded_answer_text(
+            self.llm_client,
+            messages,
+            query=query,
+            mode=mode,
+            citations=context_bundle.citations,
+            trace_callback=emit,
+            max_tokens_override=max_tokens_override,
+        )
+        pipeline_timings_ms["llm_generate_total"] = round(
+            (time.perf_counter() - llm_started_at) * 1000,
+            1,
+        )
+        pipeline_timings_ms["llm_provider_round_trip"] = llm_phase_timings["llm_provider_round_trip"]
+        pipeline_timings_ms["llm_post_process"] = llm_phase_timings["llm_post_process"]
+        emit(
+            {
+                "step": "llm_runtime",
+                "label": "LLM 런타임 확인",
+                "status": "done",
+                "detail": (
+                    f"provider={llm_runtime_meta.get('last_provider') or llm_runtime_meta.get('preferred_provider')} "
+                    f"fallback={str(bool(llm_runtime_meta.get('last_fallback_used', False))).lower()}"
+                ),
+                "meta": llm_runtime_meta,
+            }
+        )
 
         finalize_started_at = time.perf_counter()
         emit(
@@ -1098,8 +1713,31 @@ class ChatAnswerer:
                     answer_text,
                     fallback_citations,
                 )
+        command_preserved_answer_text = preserve_grounded_commands(
+            answer_text,
+            query=query,
+            citations=final_citations or context_bundle.citations,
+        )
+        if command_preserved_answer_text != answer_text:
+            answer_text = command_preserved_answer_text
+            answer_text, final_citations, cited_indices = finalize_citations(
+                answer_text,
+                final_citations or context_bundle.citations,
+            )
+        guarded_answer_text = strip_ungrounded_code_blocks(
+            answer_text,
+            citations=final_citations or context_bundle.citations,
+        )
+        if guarded_answer_text != answer_text:
+            answer_text = guarded_answer_text
+            answer_text, final_citations, cited_indices = finalize_citations(
+                answer_text,
+                final_citations or context_bundle.citations,
+            )
         if not cited_indices:
             warnings.append("answer has no inline citations")
+        if status_note:
+            answer_text = _prepend_status_note(answer_text, status_note)
         pipeline_timings_ms["citation_finalize"] = round(
             (time.perf_counter() - finalize_started_at) * 1000,
             1,
@@ -1113,7 +1751,7 @@ class ChatAnswerer:
                 "duration_ms": pipeline_timings_ms["citation_finalize"],
             }
         )
-        if not cited_indices:
+        if not cited_indices and not lightspeed_used:
             emit(
                 {
                     "step": "grounding_guard",
@@ -1149,8 +1787,15 @@ class ChatAnswerer:
                 pipeline_timings_ms=pipeline_timings_ms,
                 selected_hits=selected_hits,
                 llm_runtime_meta=llm_runtime_meta,
+                answer_source=answer_source,
+                external_answer_meta=external_answer_meta,
+                status_note=status_note,
             )
-        if _requires_console_grounding(query) and not _citations_match_console_intent(final_citations):
+        if (
+            not lightspeed_used
+            and _requires_console_grounding(query)
+            and not _citations_match_console_intent(final_citations)
+        ):
             warnings.append("insufficient web console grounding coverage")
             emit(
                 {
@@ -1187,8 +1832,15 @@ class ChatAnswerer:
                 pipeline_timings_ms=pipeline_timings_ms,
                 selected_hits=selected_hits,
                 llm_runtime_meta=llm_runtime_meta,
+                answer_source=answer_source,
+                external_answer_meta=external_answer_meta,
+                status_note=status_note,
             )
-        if _requires_rbac_grounding(query) and not _citations_match_rbac_intent(final_citations):
+        if (
+            not lightspeed_used
+            and _requires_rbac_grounding(query)
+            and not _citations_match_rbac_intent(final_citations)
+        ):
             warnings.append("insufficient rbac grounding coverage")
             emit(
                 {
@@ -1225,9 +1877,12 @@ class ChatAnswerer:
                 pipeline_timings_ms=pipeline_timings_ms,
                 selected_hits=selected_hits,
                 llm_runtime_meta=llm_runtime_meta,
+                answer_source=answer_source,
+                external_answer_meta=external_answer_meta,
+                status_note=status_note,
             )
 
-        if _looks_like_missing_coverage_answer(answer_text):
+        if not lightspeed_used and _looks_like_missing_coverage_answer(answer_text):
             warnings.append("answer indicates missing corpus coverage")
             emit(
                 {
@@ -1264,6 +1919,9 @@ class ChatAnswerer:
                 pipeline_timings_ms=pipeline_timings_ms,
                 selected_hits=selected_hits,
                 llm_runtime_meta=llm_runtime_meta,
+                answer_source=answer_source,
+                external_answer_meta=external_answer_meta,
+                status_note=status_note,
             )
 
         pipeline_timings_ms["total"] = round(
@@ -1294,5 +1952,7 @@ class ChatAnswerer:
             pipeline_timings_ms=pipeline_timings_ms,
             selected_hits=selected_hits,
             llm_runtime_meta=llm_runtime_meta,
+            answer_source=answer_source,
+            external_answer_meta=external_answer_meta,
         )
         return result

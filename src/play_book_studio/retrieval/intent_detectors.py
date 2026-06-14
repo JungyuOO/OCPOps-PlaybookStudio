@@ -189,8 +189,116 @@ def has_deployment_scaling_intent(query: str) -> bool:
     )
 
 
+_KOREAN_COMMAND_REQUEST_TOKENS = (
+    "명령",
+    "명령어",
+    "커맨드",
+    "어떤 명령",
+    "무슨 명령",
+    "뭐 입력",
+    "뭘 입력",
+    "옵션",
+    "jsonpath",
+)
+_KOREAN_OPERATIONAL_CHECK_TOKENS = (
+    "어떻게 확인",
+    "어디서 확인",
+    "확인하려면",
+    "확인하나요",
+    "확인해",
+    "확인하는 방법",
+    "빠르게 확인",
+    "목록",
+    "상태",
+    "로그",
+    "이벤트",
+    "리소스",
+    "전환",
+)
+_OPERATIONAL_RESOURCE_TOKENS = (
+    "pod",
+    "node",
+    "route",
+    "service",
+    "endpointslice",
+    "storageclass",
+    "serviceaccount",
+    "operator",
+    "installplan",
+    "subscription",
+    "csv",
+    "clusteroperator",
+    "alertmanager",
+    "prometheus",
+    "thanos",
+    "daemonset",
+    "volumesnapshot",
+    "oauth",
+    "secret",
+    "pvc",
+    "pv",
+    "namespace",
+    "project",
+    "api",
+    "etcd",
+    "oadp",
+    "odf",
+    "ovn",
+    "kubelet",
+    "journal",
+    "oc-mirror",
+    "프로젝트",
+    "네임스페이스",
+    "노드",
+    "서비스",
+    "라우트",
+    "이벤트",
+    "로그",
+    "스토리지",
+    "권한",
+    "인증",
+    "중단 예산",
+    "프로젝트",
+    "네임스페이스",
+    "노드",
+    "서비스",
+    "이벤트",
+    "로그",
+    "스토리지",
+    "권한",
+    "인증서",
+    "라우트",
+)
+
+
 def has_command_request(query: str) -> bool:
     normalized = query or ""
+    lowered = normalized.lower()
+    if any(token in lowered for token in _KOREAN_COMMAND_REQUEST_TOKENS):
+        return True
+    if any(token in lowered for token in _KOREAN_OPERATIONAL_CHECK_TOKENS) and any(
+        token in lowered for token in _OPERATIONAL_RESOURCE_TOKENS
+    ):
+        return True
+    if any(
+        token in lowered
+        for token in (
+            "명령",
+            "명령어",
+            "커맨드",
+            "cli",
+            "command",
+            "what command",
+            "which command",
+            "어떤 명령",
+            "무슨 명령",
+            "뭐 쳐",
+            "뭘 쳐",
+            "뭐 입력",
+            "뭘 입력",
+        )
+    ):
+        return True
     return bool(
         re.search(
             r"(명령어|커맨드|cli|oc\s|kubectl\s|yaml|예시|예제로|어떤 명령|뭐라고 쳐|입력하면)",
@@ -239,6 +347,60 @@ def is_generic_intro_query(query: str) -> bool:
             return True
     return has_ocp_topic and bool(
         ARCHITECTURE_RE.search(query or "") or has_intro_ask
+    )
+
+
+def is_openshift_product_intro_query(query: str) -> bool:
+    normalized = " ".join(str(query or "").split())
+    lowered = normalized.lower()
+    compact = re.sub(r"\s+", "", lowered)
+    if not (OPENSHIFT_RE.search(normalized) or OCP_RE.search(normalized)):
+        return False
+    specific_topic_tokens = (
+        "설치",
+        "install",
+        "backup",
+        "백업",
+        "restore",
+        "복원",
+        "route",
+        "ingress",
+        "operator",
+        "오퍼레이터",
+        "node",
+        "노드",
+        "pod",
+        "파드",
+        "권한",
+        "rbac",
+        "로그인",
+        "login",
+        "etcd",
+        "oc ",
+        "yaml",
+    )
+    if any(token in lowered for token in specific_topic_tokens):
+        return False
+    return any(
+        token in compact
+        for token in (
+            "뭐야",
+            "뭔데",
+            "뭐지",
+            "무엇",
+            "무슨용도",
+            "어디에써",
+            "언제써",
+            "왜써",
+            "소개",
+            "개요",
+            "정의",
+            "요약",
+            "정리",
+            "한줄",
+            "세줄",
+            "3줄",
+        )
     )
 
 
@@ -420,6 +582,7 @@ __all__ = [
     "has_deployment_scaling_intent",
     "has_command_request",
     "is_generic_intro_query",
+    "is_openshift_product_intro_query",
     "has_openshift_kubernetes_compare_intent",
     "has_route_ingress_compare_intent",
     "is_explainer_query",

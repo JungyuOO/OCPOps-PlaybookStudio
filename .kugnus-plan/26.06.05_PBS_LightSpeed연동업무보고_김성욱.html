@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PBS OpenShift Lightspeed 연동 작업 내역 보고</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --ink: #0f172a;
+      --muted: #475569;
+      --line: #d8e0ec;
+      --blue: #0369a1;
+      --teal: #0f766e;
+      --green: #15803d;
+      --amber: #b45309;
+      --red: #b91c1c;
+      --soft-blue: #e0f2fe;
+      --soft-teal: #ccfbf1;
+      --soft-green: #dcfce7;
+      --soft-amber: #fef3c7;
+      --code: #111827;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Malgun Gothic", Arial, sans-serif;
+      line-height: 1.62;
+    }
+
+    main {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 34px 0 56px;
+    }
+
+    header {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 30px 32px;
+      border-radius: 10px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      letter-spacing: 0;
+      line-height: 1.25;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    .meta-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: #f8fafc;
+    }
+
+    .meta-label {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .meta-value {
+      display: block;
+      margin-top: 4px;
+      font-size: 14px;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    section {
+      margin-top: 20px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 10px;
+      padding: 24px 26px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 21px;
+      line-height: 1.35;
+    }
+
+    h3 {
+      margin: 22px 0 10px;
+      font-size: 16px;
+    }
+
+    p {
+      margin: 8px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 4px;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: #eef2f7;
+      font-weight: 800;
+    }
+
+    ul,
+    ol {
+      margin: 10px 0 0 20px;
+      padding: 0;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    code {
+      border-radius: 5px;
+      background: #eef2f7;
+      color: #0f172a;
+      padding: 2px 5px;
+      font-family: "Cascadia Mono", "Consolas", monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      margin: 12px 0 0;
+      overflow-x: auto;
+      border-radius: 8px;
+      background: var(--code);
+      color: #e5e7eb;
+      padding: 14px 16px;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      border: 1px solid transparent;
+    }
+
+    .badge.blue {
+      background: var(--soft-blue);
+      color: var(--blue);
+      border-color: #bae6fd;
+    }
+
+    .badge.teal {
+      background: var(--soft-teal);
+      color: var(--teal);
+      border-color: #99f6e4;
+    }
+
+    .badge.green {
+      background: var(--soft-green);
+      color: var(--green);
+      border-color: #bbf7d0;
+    }
+
+    .badge.amber {
+      background: var(--soft-amber);
+      color: var(--amber);
+      border-color: #fde68a;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .summary-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 15px;
+      background: #f8fafc;
+    }
+
+    .summary-card strong {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .flow-step {
+      min-height: 90px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 10px;
+    }
+
+    .flow-step span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      margin-bottom: 7px;
+      background: #0f172a;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .flow-step p {
+      margin: 0;
+      font-size: 13px;
+      color: #1f2937;
+    }
+
+    .status-pass {
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .status-watch {
+      color: var(--amber);
+      font-weight: 800;
+    }
+
+    .note {
+      border-left: 4px solid var(--blue);
+      background: #f0f9ff;
+      padding: 12px 14px;
+      border-radius: 8px;
+      color: #0f172a;
+    }
+
+    @media (max-width: 900px) {
+      .meta-grid,
+      .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .flow {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 560px) {
+      main {
+        width: min(100% - 24px, 1120px);
+        padding-top: 18px;
+      }
+
+      header,
+      section {
+        padding: 18px;
+      }
+
+      .meta-grid,
+      .summary-grid,
+      .flow {
+        grid-template-columns: 1fr;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>PBS OpenShift Lightspeed 연동 작업 내역 보고</h1>
+      <p class="subtitle">PBS 챗봇에서 OpenShift 운영 질문을 처리할 때 OpenShift Lightspeed 공식 답변과 PBS 내부 근거를 함께 제공하도록 정리한 작업 내역입니다.</p>
+      <div class="meta-grid">
+        <div class="meta-item">
+          <span class="meta-label">Repository</span>
+          <span class="meta-value">OCPOps-PlaybookStudio</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Branch</span>
+          <span class="meta-value">feat/kugnus-dev2.2</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Latest Commit</span>
+          <span class="meta-value">0d96653</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">작성일</span>
+          <span class="meta-value">2026-06-05</span>
+        </div>
+      </div>
+      <div class="badge-row">
+        <span class="badge blue">OpenShift Lightspeed 연동</span>
+        <span class="badge teal">PBS Viewer 연결</span>
+        <span class="badge green">PostgreSQL + pgvector</span>
+        <span class="badge amber">시연 검증 기준 포함</span>
+      </div>
+    </header>
+
+    <section>
+      <h2>1. 요약</h2>
+      <div class="summary-grid">
+        <div class="summary-card">
+          <strong>OpenShift 운영 질문 처리</strong>
+          <p>운영 질문으로 판단되면 PBS Backend가 OpenShift Lightspeed API를 먼저 호출하도록 구성했습니다.</p>
+        </div>
+        <div class="summary-card">
+          <strong>공식 답변 근거 고정</strong>
+          <p>Lightspeed 응답은 별도 artifact로 저장하고, 본문 citation <code>[1]</code>과 Viewer를 같은 경로로 연결했습니다.</p>
+        </div>
+        <div class="summary-card">
+          <strong>PBS 내부 근거 유지</strong>
+          <p>Gold Playbook, 고객 문서, 사용자 업로드 문서는 <code>[2]</code> 이후 보조 근거로 함께 제공합니다.</p>
+        </div>
+      </div>
+      <p class="note">
+        화면에서 <code>LIGHTSPEED</code> 배지가 표시되면 OpenShift Lightspeed 호출, 응답 저장, Viewer 연결, 감사 로그 기록이 함께 발생한 상태입니다.
+      </p>
+    </section>
+
+    <section>
+      <h2>2. 작업 범위</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>구분</th>
+            <th>작업 내용</th>
+            <th>커밋</th>
+            <th>상태</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>RAG 저장소</td>
+            <td>Qdrant 런타임 의존성을 제거하고 PostgreSQL + pgvector 기준으로 embedding 저장과 검색 경로를 통합했습니다.</td>
+            <td><code>7dde93d</code></td>
+            <td class="status-pass">완료</td>
+          </tr>
+          <tr>
+            <td>Lightspeed 연동</td>
+            <td>PBS Backend에서 OpenShift Lightspeed <code>/v1/query</code>를 호출하고 응답 artifact, badge, related link를 생성했습니다.</td>
+            <td><code>ab94c44</code></td>
+            <td class="status-pass">완료</td>
+          </tr>
+          <tr>
+            <td>질문 라우팅</td>
+            <td>권한, 로그, 네임스페이스, 시크릿 등 OpenShift 운영 질문이 Lightspeed 호출 대상으로 분류되도록 보강했습니다.</td>
+            <td><code>6e18685</code></td>
+            <td class="status-pass">완료</td>
+          </tr>
+          <tr>
+            <td>참조 문서</td>
+            <td>Lightspeed 답변을 변형하지 않도록 추가 요청문은 제거하고, API가 실제 반환한 <code>referenced_documents</code>만 Viewer 하단에 표시하도록 정리했습니다.</td>
+            <td>후속 수정</td>
+            <td class="status-pass">완료</td>
+          </tr>
+          <tr>
+            <td>citation 매핑</td>
+            <td>Lightspeed 답변을 사용한 경우 본문 <code>[1]</code>이 Gold Playbook이 아니라 Lightspeed Viewer로 열리도록 수정했습니다.</td>
+            <td><code>0d96653</code></td>
+            <td class="status-pass">완료</td>
+          </tr>
+          <tr>
+            <td>원문 보존</td>
+            <td>Lightspeed 호출 성공 시 PBS LLM 재작성 단계를 건너뛰고 OpenShift Lightspeed 원문 답변을 채팅 본문으로 반환하도록 보강했습니다.</td>
+            <td>후속 수정</td>
+            <td class="status-pass">완료</td>
+          </tr>
+          <tr>
+            <td>오타 보정</td>
+            <td><code>잇</code>처럼 흔한 한글 입력 오타는 Lightspeed 호출 전 내부 요청문에서 <code>있</code>으로 보정하도록 추가했습니다.</td>
+            <td>후속 수정</td>
+            <td class="status-pass">완료</td>
+          </tr>
+          <tr>
+            <td>문서 정리</td>
+            <td>민감정보 또는 공유 계정으로 오해될 수 있는 예시 표현을 제거했습니다.</td>
+            <td><code>e4b362e</code></td>
+            <td class="status-pass">완료</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>3. 현재 동작 흐름</h2>
+      <div class="flow" aria-label="PBS Lightspeed answer flow">
+        <div class="flow-step">
+          <span>1</span>
+          <p>사용자가 PBS 챗봇에 OpenShift 운영 질문 입력</p>
+        </div>
+        <div class="flow-step">
+          <span>2</span>
+          <p>PBS Backend가 운영 질문 여부 판별</p>
+        </div>
+        <div class="flow-step">
+          <span>3</span>
+          <p>OpenShift Lightspeed API 호출</p>
+        </div>
+        <div class="flow-step">
+          <span>4</span>
+          <p>공식 답변과 참조 문서 목록 수신</p>
+        </div>
+        <div class="flow-step">
+          <span>5</span>
+          <p>PBS RAG로 내부 문서 근거 검색</p>
+        </div>
+        <div class="flow-step">
+          <span>6</span>
+          <p>최종 답변과 citation 생성</p>
+        </div>
+        <div class="flow-step">
+          <span>7</span>
+          <p>Viewer, badge, 감사 로그로 증명</p>
+        </div>
+      </div>
+      <h3>화면 기준</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>화면 요소</th>
+            <th>정상 동작</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>답변 배지</td>
+            <td><code>LIGHTSPEED</code> 표시</td>
+          </tr>
+          <tr>
+            <td>본문 citation <code>[1]</code></td>
+            <td><code>OpenShift Lightspeed 공식 답변</code> Viewer로 연결</td>
+          </tr>
+          <tr>
+            <td>본문 citation <code>[2]</code> 이후</td>
+            <td>Gold Playbook 또는 PBS 내부 근거 문서로 연결</td>
+          </tr>
+          <tr>
+            <td>관련 문서 첫 번째</td>
+            <td><code>LIGHTSPEED</code> 항목 표시</td>
+          </tr>
+          <tr>
+            <td>Lightspeed Viewer 하단</td>
+            <td>OpenShift Lightspeed가 반환한 공식 문서 제목과 URL 표시</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>4. 주요 구현 파일</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>파일</th>
+            <th>역할</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>src/play_book_studio/integrations/lightspeed.py</code></td>
+            <td>OpenShift Lightspeed API client, 운영 질문 판별, 한글 오타 보정, API 반환 참조문서 파싱</td>
+          </tr>
+          <tr>
+            <td><code>src/play_book_studio/answering/answerer.py</code></td>
+            <td>Lightspeed 호출, PBS RAG 검색, Lightspeed 원문 답변 반환, fallback 흐름 통합</td>
+          </tr>
+          <tr>
+            <td><code>src/play_book_studio/http/server_support.py</code></td>
+            <td>응답 payload 생성, Lightspeed related link, citation <code>[1]</code> 주입</td>
+          </tr>
+          <tr>
+            <td><code>src/play_book_studio/http/server_chat.py</code></td>
+            <td>Lightspeed 호출 감사 로그 저장 및 터미널 JSON 출력</td>
+          </tr>
+          <tr>
+            <td><code>src/play_book_studio/http/server_routes_viewer.py</code></td>
+            <td>Lightspeed artifact Viewer 생성, 코드블록/제목/목록 렌더링, 참조 문서 표시</td>
+          </tr>
+          <tr>
+            <td><code>src/play_book_studio/config/settings.py</code></td>
+            <td>Lightspeed endpoint, token, provider, model, timeout, TLS 설정 로드</td>
+          </tr>
+          <tr>
+            <td><code>docker-compose.yml</code>, <code>deploy/*</code></td>
+            <td>Lightspeed timeout 기본값과 배포 설정 반영</td>
+          </tr>
+          <tr>
+            <td><code>tests/test_lightspeed_client.py</code>, <code>tests/test_app_server.py</code>, <code>tests/test_lightspeed_viewer.py</code></td>
+            <td>API 호출, 응답 payload, Viewer, citation 매핑 회귀 테스트</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>5. 검증 결과</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>검증 항목</th>
+            <th>결과</th>
+            <th>확인 내용</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Python 전체 테스트</td>
+            <td class="status-pass">pass</td>
+            <td><code>606 passed, 1 skipped, 10 subtests passed</code></td>
+          </tr>
+          <tr>
+            <td>프론트 WorkspaceAnswer 테스트</td>
+            <td class="status-pass">pass</td>
+            <td><code>1 file passed, 2 tests passed</code></td>
+          </tr>
+          <tr>
+            <td>프론트 빌드</td>
+            <td class="status-pass">pass</td>
+            <td><code>npm --prefix apps/web run build</code> 완료</td>
+          </tr>
+          <tr>
+            <td>Docker runtime</td>
+            <td class="status-pass">pass</td>
+            <td><code>app</code>, <code>postgres</code>, <code>web</code> healthy 확인</td>
+          </tr>
+          <tr>
+            <td>실제 Lightspeed 호출</td>
+            <td class="status-pass">pass</td>
+            <td><code>answer_source=lightspeed_with_pbs_rag</code>, <code>status=used</code>, <code>badge_applied=true</code></td>
+          </tr>
+          <tr>
+            <td>참조 문서 반환</td>
+            <td class="status-pass">pass</td>
+            <td>API가 반환한 <code>referenced_documents</code>만 표시하며, 답변을 바꾸는 추가 요청문은 제거</td>
+          </tr>
+          <tr>
+            <td>citation 매핑</td>
+            <td class="status-pass">pass</td>
+            <td>노드 점검 질문에서 <code>[1]</code>은 Lightspeed Viewer, <code>[2]</code>는 Gold Playbook으로 확인</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>실제 확인된 대표 케이스</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>질문</th>
+            <th>확인 결과</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>네임스페이스내 시크릿 평문으로 디코딩하는 명령어가 있냐</code></td>
+            <td><code>answer_source=lightspeed_with_pbs_rag</code>, Lightspeed 원문 답변 반환, Viewer artifact 생성 확인</td>
+          </tr>
+          <tr>
+            <td><code>노드 점검을 위해 새로운 포드가 배치되지 않도록 하는 명령어가 뭐야?</code></td>
+            <td><code>[1]</code> Lightspeed Viewer, <code>[2]</code> Gold Playbook, 관련 문서 첫 번째 Lightspeed 확인</td>
+          </tr>
+          <tr>
+            <td><code>사용자 권한은 어떤 명령으로 확인해?</code></td>
+            <td>OpenShift 운영 질문으로 분류되어 Lightspeed 호출 경로 사용</td>
+          </tr>
+          <tr>
+            <td><code>특정 네임스페이스 에러 포드 로그보는 명령어</code></td>
+            <td>Lightspeed 호출 및 Viewer artifact 생성 확인</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>6. 감사 로그와 증명 방식</h2>
+      <p>화면 배지는 단독 표시가 아니라 호출 결과와 같은 artifact를 기준으로 연결됩니다.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>증명 값</th>
+            <th>의미</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>answer_source=lightspeed_with_pbs_rag</code></td>
+            <td>최종 답변 생성에 OpenShift Lightspeed 응답이 사용됨</td>
+          </tr>
+          <tr>
+            <td><code>status=used</code></td>
+            <td>OpenShift Lightspeed API 호출 성공</td>
+          </tr>
+          <tr>
+            <td><code>badge_applied=true</code></td>
+            <td>화면에 Lightspeed 배지를 표시할 조건 충족</td>
+          </tr>
+          <tr>
+            <td><code>viewer_path=/external/lightspeed/{artifact_id}</code></td>
+            <td>Lightspeed 응답 원문 artifact를 PBS Viewer에서 열 수 있음</td>
+          </tr>
+          <tr>
+            <td><code>conversation_id</code></td>
+            <td>OpenShift Lightspeed 응답 식별값</td>
+          </tr>
+          <tr>
+            <td><code>referenced_documents</code></td>
+            <td>OpenShift Lightspeed가 반환한 공식 문서 목록 수</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <pre><code>docker compose logs -f app | Select-String "openshift_lightspeed_call_audit"</code></pre>
+    </section>
+
+    <section>
+      <h2>7. 시연 전 확인 기준</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>확인</th>
+            <th>정상 기준</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>웹 접속</td>
+            <td><code>http://127.0.0.1:8080/</code> 접속 가능</td>
+          </tr>
+          <tr>
+            <td>질문 입력</td>
+            <td><code>노드 점검을 위해 새로운 포드가 배치되지 않도록 하는 명령어가 뭐야?</code></td>
+          </tr>
+          <tr>
+            <td>답변 배지</td>
+            <td><code>LIGHTSPEED</code> 표시</td>
+          </tr>
+          <tr>
+            <td>본문 <code>[1]</code></td>
+            <td>OpenShift Lightspeed 공식 답변 Viewer로 연결</td>
+          </tr>
+          <tr>
+            <td>Viewer 하단</td>
+            <td>OpenShift Lightspeed API가 반환한 참조 문서만 표시하며, 없으면 0개로 표시</td>
+          </tr>
+          <tr>
+            <td>로그</td>
+            <td><code>status=used</code>, <code>badge_applied=true</code>, <code>referenced_documents</code>는 API 반환값 그대로 기록</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>8. 개선 항목</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>항목</th>
+            <th>현재 상태</th>
+            <th>개선 방향</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>긴 범위 질의 처리</td>
+            <td>
+              모니터링 설치 조건처럼 공식 문서 탐색 범위가 넓은 질문은 Lightspeed 응답이 설정된 timeout을 초과할 수 있습니다.
+              현재는 답변 중단을 방지하기 위해 PBS 내부 근거로 fallback합니다.
+            </td>
+            <td>
+              질문 정규화와 비동기 보강을 통해 Lightspeed 응답 확보율을 높입니다.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>9. 보고 문장</h2>
+      <p>
+        PBS는 OpenShift 운영 질문에 대해 OpenShift Lightspeed 공식 답변을 우선 호출하고,
+        그 결과를 citation <code>[1]</code>과 Viewer artifact로 보여줍니다.
+        PBS 내부 Gold Playbook(공식문서)과 유저업로드 문서 근거는 <code>[2]</code> 이후 보조 근거로 함께 제공됩니다.
+      </p>
+      <p>
+        Lightspeed를 통해 가져온 답변에는 Lightspeed 배지가 표시됩니다. <code>artifact_id</code>, <code>conversation_id</code>,
+        <code>viewer_path</code>, <code>lightspeed_calls.jsonl</code> 감사 로그로 검증 가능한 호출 결과를 의미합니다.
+      </p>
+    </section>
+  </main>
+</body>
+</html>

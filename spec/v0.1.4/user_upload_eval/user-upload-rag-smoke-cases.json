@@ -1,0 +1,32 @@
+{
+  "suite_id": "user-upload-rag-smoke-v1",
+  "title": "User upload RAG smoke cases",
+  "defaults": {
+    "min_citations": 1,
+    "min_answer_chars": 60,
+    "require_upload_citation": true
+  },
+  "cases": [
+    {
+      "id": "upload-ci-sequence",
+      "topic": "ci",
+      "question": "업로드 문서 기준 CI 순서 핵심을 알려줘",
+      "expected_source_keywords": ["CI"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-scc-overview",
+      "topic": "scc",
+      "question": "업로드 문서 기준 SCC가 뭔지 핵심만 알려줘",
+      "expected_source_keywords": ["SCC"],
+      "required_answer_terms": []
+    },
+    {
+      "id": "upload-imagestream-overview",
+      "topic": "imagestream",
+      "question": "업로드 문서 기준 ImageStream 핵심을 알려줘",
+      "expected_source_keywords": ["ImageStream"],
+      "required_answer_terms": []
+    }
+  ]
+}

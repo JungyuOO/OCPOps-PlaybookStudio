@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PBS 고객데이터 RAG 연결 및 운영 답변 경계 보고</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #60708a;
+      --line: #dce4ef;
+      --paper: #f7f9fc;
+      --brand: #0369a1;
+      --warn: #92400e;
+      --risk: #991b1b;
+      --ok: #166534;
+    }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Segoe UI", "Malgun Gothic", Arial, sans-serif;
+      line-height: 1.65;
+    }
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 38px 28px 60px;
+    }
+    header, section {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 26px 30px;
+      margin-bottom: 18px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+    }
+    h1, h2, h3 { line-height: 1.25; margin: 0 0 14px; }
+    h1 { font-size: 30px; }
+    h2 { font-size: 22px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+    h3 { font-size: 17px; margin-top: 22px; }
+    p { margin: 8px 0; }
+    ul { margin: 8px 0 0 20px; padding: 0; }
+    li { margin: 6px 0; }
+    code {
+      background: #eef6ff;
+      border: 1px solid #d6e8ff;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.94em;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th { background: #eef3f9; }
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .meta div {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 9px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin-right: 6px;
+    }
+    .ok { background: #dcfce7; color: var(--ok); }
+    .warn { background: #fef3c7; color: var(--warn); }
+    .risk { background: #fee2e2; color: var(--risk); }
+    .info { background: #dbeafe; color: var(--brand); }
+    .callout {
+      border-left: 5px solid var(--brand);
+      background: #f0f8ff;
+      padding: 14px 16px;
+      margin: 14px 0;
+      border-radius: 8px;
+    }
+    .callout.warn { border-left-color: #d97706; background: #fff7ed; color: var(--ink); }
+    .callout.risk { border-left-color: #dc2626; background: #fff1f2; color: var(--ink); }
+    .small { color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>PBS 고객데이터 RAG 연결 및 운영 답변 경계 보고</h1>
+    <p>
+      고객 PPT 자료를 PBS 고객데이터로 노출하고 챗봇 citation/viewer까지 연결한 작업의 결과와,
+      운영 답변에 고객데이터를 어디까지 반영해야 하는지에 대한 제품 판단을 정리한다.
+    </p>
+    <div class="meta">
+      <div><strong>작성일</strong><br />2026-06-08</div>
+      <div><strong>작업 브랜치</strong><br /><code>feat/kugnus-dev2.3</code></div>
+      <div><strong>기준 HEAD</strong><br /><code>bdc7427</code></div>
+      <div><strong>범위</strong><br />고객데이터 PPT, RAG 경계, viewer/source-meta/UI 계약</div>
+    </div>
+  </header>
+
+  <section>
+    <h2>1. 현재 판단</h2>
+    <div class="callout risk">
+      <strong>결론:</strong> 고객 PPT는 PBS RAG 경로에 연결되었지만, 원본 PPT가 바로 고품질 운영 RAG 코퍼스가 되는 상태는 아니다.
+      따라서 고객데이터를 일반 운영 질문에 자동으로 넓게 섞는 방식은 위험하며, 고객자료를 명시한 질문에만 제한적으로 사용해야 한다.
+    </div>
+    <ul>
+      <li>고객데이터 연결성은 확인됐다. 챗봇 citation, source-meta, viewer가 <code>Customer Data</code>로 이어진다.</li>
+      <li>그러나 고객 PPT의 <code>parsed_documents.markdown</code>은 모든 study_docs 문서에서 0자였다.</li>
+      <li>RAG 검색에 쓰이는 <code>document_chunks</code>는 존재하지만, 슬라이드 이미지 설명/요약/중복 텍스트가 섞여 있어 품질 편차가 크다.</li>
+      <li>OpenShift Lightspeed는 고객 PPT를 직접 알지 못하므로, 고객자료 명시 질문에서 Lightspeed 원문을 그대로 반환하면 고객데이터와 충돌하는 답변이 나올 수 있다.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>2. 확인된 현상</h2>
+    <h3>사용자 테스트 질문</h3>
+    <p><code>성능 테스트 결과 기준으로 현재 OCP 운영 준비 리스크를 정리해줘</code></p>
+    <h3>관찰된 답변 문제</h3>
+    <ul>
+      <li>답변은 <code>LIGHTSPEED</code> badge로 반환됐다.</li>
+      <li>Lightspeed는 “제공된 문서에는 성능 테스트 결과 데이터가 포함되어 있지 않다”고 답했다.</li>
+      <li>이후 실제 질문과 무관한 <code>Compliance Operator</code>, <code>oc-compliance</code> 중심 답변으로 흘렀다.</li>
+    </ul>
+    <div class="callout warn">
+      이 현상은 고객데이터 검색 연결이 완전히 없어서라기보다,
+      고객자료 명시 질문에서 답변 생성 주체가 Lightspeed passthrough로 유지된 것이 핵심 문제다.
+      Lightspeed는 고객 PPT를 보지 못하므로 “성능 테스트 결과 없음”이라고 말할 수 있다.
+    </div>
+  </section>
+
+  <section>
+    <h2>3. 고객 PPT 코퍼스 품질 점검</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>문서</th>
+          <th>상태</th>
+          <th>운영 답변 활용 가능성</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>완료보고_20260112_완료본.pptx</code></td>
+          <td>31 chunks, 48.4%가 120자 미만, markdown 0자</td>
+          <td>WBS, 구성 기술, 테스트 결과 요약 등은 활용 가능하나 리스크 판단에는 정제 필요</td>
+        </tr>
+        <tr>
+          <td><code>CICD 아키텍처설계서</code></td>
+          <td>3 chunks, 상대적으로 텍스트 밀도 높음</td>
+          <td>Tekton, ArgoCD, GitLab, Quay, MR 승인 흐름 확인에 적합</td>
+        </tr>
+        <tr>
+          <td><code>OCP 단위테스트계획</code></td>
+          <td>360 chunks, command/점검 항목 다수</td>
+          <td>ODF, Service Mesh, Monitoring 등 고객 기준 점검 항목 테스트에 적합</td>
+        </tr>
+        <tr>
+          <td><code>통합테스트 계획서</code></td>
+          <td>1 chunk, 158자</td>
+          <td>RAG 근거로 거의 부적합</td>
+        </tr>
+        <tr>
+          <td><code>성능테스트 결과서</code></td>
+          <td>43 chunks, 성능 결과/개선 사항 포함</td>
+          <td>DB Connection Pool, HPA, 부하 테스트 리스크 질문에 활용 가능</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="small">
+      뷰어 경고 “파싱된 본문이 비어 있습니다”는 실제 <code>parsed_markdown</code>이 비어 있을 때 표시되는 품질 노트다.
+      chunk가 있어도 full document body가 없는 상태이므로 제품상 품질 리스크로 취급해야 한다.
+    </p>
+  </section>
+
+  <section>
+    <h2>4. 이번 작업 내용</h2>
+    <h3>구현된 연결성</h3>
+    <ul>
+      <li>Wiki Library에 <code>고객 데이터</code> surface를 추가해 study_docs PPT 목록을 볼 수 있게 했다.</li>
+      <li>고객 PPT viewer/source-meta가 <code>Customer Data</code>, <code>study_docs</code>, <code>customer_data</code>로 표시되게 정리했다.</li>
+      <li>챗봇 citation 모델에 <code>source_scope</code>를 보존해 고객자료 출처가 프론트까지 유지되게 했다.</li>
+      <li><code>완료보고서</code>, <code>고객 데이터</code>, <code>PPT</code>, <code>설계서</code>, <code>성능 테스트</code> 등의 신호를 고객자료 검색 신호로 감지하도록 했다.</li>
+      <li>고객자료가 명시된 질문에서 원문 검색어를 보존해, 재작성된 공식문서 검색어 때문에 고객자료가 밀리지 않도록 했다.</li>
+    </ul>
+
+    <h3>검증된 연결성</h3>
+    <ul>
+      <li><code>/api/chat</code>에서 고객자료가 잡히는 경우 <code>Lightspeed + Customer</code> 및 <code>Customer Data</code> citation이 반환됨을 확인했다.</li>
+      <li><code>/api/source-meta</code>가 <code>boundary_badge=Customer Data</code>, <code>runtime_truth_label=Customer Data Document</code>로 응답함을 확인했다.</li>
+      <li><code>/api/viewer-document</code>가 고객 PPT viewer HTML과 완료보고 텍스트를 반환함을 확인했다.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>5. 제품 경계 결정</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>질문 유형</th>
+          <th>권장 라우팅</th>
+          <th>이유</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>일반 OCP 운영 질문</td>
+          <td><span class="badge info">Lightspeed 우선</span></td>
+          <td>공식 OpenShift 운영 지식은 Lightspeed/Gold가 더 안정적이다. 고객 PPT를 억지로 섞으면 오답 리스크가 커진다.</td>
+        </tr>
+        <tr>
+          <td><code>고객 데이터 기준</code>, <code>완료보고서 기준</code>, <code>성능 테스트 결과 기준</code> 등</td>
+          <td><span class="badge warn">Customer-first PBS RAG</span></td>
+          <td>질문자가 고객자료를 기준으로 요구했으므로 Lightspeed passthrough가 아니라 PBS가 고객자료를 읽고 답해야 한다.</td>
+        </tr>
+        <tr>
+          <td>고객자료 검색 결과가 빈약한 질문</td>
+          <td><span class="badge risk">근거 부족/범위 제한</span></td>
+          <td>고객 PPT chunk 품질이 낮으면 억지 합성을 피하고 확인 가능한 범위를 명시해야 한다.</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      향후 고도화 방향은 “고객자료 자동 매칭 확대”가 아니라 “고객자료 명시 질문의 customer-first RAG 경로 분리”다.
+      이 경로에서는 Lightspeed 답변을 그대로 반환하지 않고, 고객자료 citation을 중심으로 PBS가 답변을 생성해야 한다.
+    </div>
+  </section>
+
+  <section>
+    <h2>6. 검증 결과</h2>
+    <ul>
+      <li><span class="badge ok">PASS</span><code>python -m pytest tests/test_app_viewers_routes.py tests/test_answer_context_metadata.py tests/test_retrieval_plan_expansion.py tests/test_study_docs_rag_scope.py tests/test_uploaded_viewer_source_meta.py tests/test_lightspeed_viewer.py -q</code></li>
+      <li>결과: <code>66 passed, 10 subtests passed</code></li>
+      <li><span class="badge ok">PASS</span><code>npm --prefix apps/web run build</code></li>
+      <li>비고: Vite chunk size warning은 존재하나 build 실패는 아님</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>7. 다음 행동 제안</h2>
+    <ol>
+      <li>현재 수준에서 고객데이터 자동 매칭 확장은 중단한다.</li>
+      <li>고객자료 명시 질문에 한해 <code>customer-first</code> route를 별도로 설계한다.</li>
+      <li>PPT 원본을 바로 RAG 본문으로 쓰지 말고, 문서별 “운영 지식 카드”를 생성한다.</li>
+      <li>운영 지식 카드는 환경 사실, 운영 절차, 테스트 근거, 리스크/제약으로 분해한다.</li>
+      <li>문서 품질 게이트를 두어 <code>markdown=0</code>, tiny chunk 비율, image-only 비율을 표시하고 낮은 품질 문서는 답변 합성에서 제한한다.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>8. 변경 파일 요약</h2>
+    <ul>
+      <li><code>apps/web/src/pages/PlaybookLibraryPage.tsx</code>: 고객 데이터 surface 및 문서 열기 흐름 추가</li>
+      <li><code>apps/web/src/pages/PlaybookLibraryPage.css</code>: 고객 데이터 badge 스타일 추가</li>
+      <li><code>apps/web/src/lib/runtimeApi.ts</code>: citation <code>source_scope</code> 타입 보존</li>
+      <li><code>src/play_book_studio/http/server_routes_viewer.py</code>: study_docs viewer/source-meta를 Customer Data로 계약화</li>
+      <li><code>src/play_book_studio/http/presenters.py</code>: 고객자료 citation serialization 보강</li>
+      <li><code>src/play_book_studio/answering/models.py</code>, <code>context.py</code>, <code>answerer.py</code>: 고객자료 citation scope 보존 및 bridge 판단</li>
+      <li><code>src/play_book_studio/retrieval/retriever_pipeline.py</code>, <code>retriever_plan.py</code>: 고객자료 명시 신호 및 원문 질의 보존</li>
+      <li><code>tests/*</code>: viewer/source-meta/RAG scope/context selection 회귀 테스트 추가</li>
+    </ul>
+    <p class="small">
+      참고: 현재 작업 트리에는 이전 산출물 <code>.kugnus-plan/file-change-handoff-report.html</code>,
+      <code>.kugnus-plan/lightspeed-work-history-report.html</code> 삭제 상태와 별도 untracked HTML 보고서가 남아 있다.
+      본 문서는 새 파일로만 추가했으며 해당 변경은 건드리지 않았다.
+    </p>
+  </section>
+</main>
+</body>
+</html>

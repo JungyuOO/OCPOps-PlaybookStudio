@@ -7,6 +7,25 @@ from typing import Any
 from .text_utils import strip_section_prefix
 
 
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        value = [
+            item.strip()
+            for item in value.replace(";", ",").split(",")
+            if item.strip()
+        ]
+    if not isinstance(value, list):
+        return []
+    seen: set[str] = set()
+    items: list[str] = []
+    for item in value:
+        normalized = str(item).strip()
+        if normalized and normalized not in seen:
+            items.append(normalized)
+            seen.add(normalized)
+    return items
+
+
 @dataclass(slots=True)
 class SessionContext:
     mode: str | None = None
@@ -17,7 +36,16 @@ class SessionContext:
     ocp_version: str | None = None
     selected_draft_ids: list[str] = field(default_factory=list)
     restrict_uploaded_sources: bool = True
+    owner_user_id: str | None = None
+    active_repository_id: str | None = None
+    active_document_id: str | None = None
     unresolved_question: str | None = None
+    preferred_source_scope: str | None = None
+    enabled_source_scopes: list[str] = field(default_factory=list)
+    enabled_official_book_slugs: list[str] = field(default_factory=list)
+    enabled_customer_draft_ids: list[str] = field(default_factory=list)
+    enabled_customer_document_ids: list[str] = field(default_factory=list)
+    enabled_upload_document_ids: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any] | None) -> "SessionContext":
@@ -27,8 +55,7 @@ class SessionContext:
         if isinstance(open_entities, str):
             open_entities = [open_entities]
         selected_draft_ids = payload.get("selected_draft_ids") or []
-        if isinstance(selected_draft_ids, str):
-            selected_draft_ids = [selected_draft_ids]
+        enabled_source_scopes = payload.get("enabled_source_scopes") or []
         return cls(
             mode=payload.get("mode"),
             user_id=(str(payload.get("user_id") or "").strip() or None),
@@ -39,11 +66,18 @@ class SessionContext:
             ),
             open_entities=list(open_entities),
             ocp_version=payload.get("ocp_version"),
-            selected_draft_ids=[
-                str(item).strip() for item in selected_draft_ids if str(item).strip()
-            ],
+            selected_draft_ids=_string_list(selected_draft_ids),
             restrict_uploaded_sources=bool(payload.get("restrict_uploaded_sources", True)),
+            owner_user_id=(str(payload.get("owner_user_id") or "").strip() or None),
+            active_repository_id=(str(payload.get("active_repository_id") or "").strip() or None),
+            active_document_id=(str(payload.get("active_document_id") or "").strip() or None),
             unresolved_question=payload.get("unresolved_question"),
+            preferred_source_scope=(str(payload.get("preferred_source_scope") or "").strip() or None),
+            enabled_source_scopes=_string_list(enabled_source_scopes),
+            enabled_official_book_slugs=_string_list(payload.get("enabled_official_book_slugs")),
+            enabled_customer_draft_ids=_string_list(payload.get("enabled_customer_draft_ids")),
+            enabled_customer_document_ids=_string_list(payload.get("enabled_customer_document_ids")),
+            enabled_upload_document_ids=_string_list(payload.get("enabled_upload_document_ids")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -65,6 +99,10 @@ class RetrievalHit:
     fused_score: float = 0.0
     section_id: str = ""
     section_path: tuple[str, ...] = field(default_factory=tuple)
+    section_number: str = ""
+    heading_title: str = ""
+    source_anchor: str = ""
+    toc_path: tuple[str, ...] = field(default_factory=tuple)
     chunk_type: str = "reference"
     source_id: str = ""
     source_lane: str = "official_ko"
@@ -81,6 +119,21 @@ class RetrievalHit:
     operator_names: tuple[str, ...] = field(default_factory=tuple)
     verification_hints: tuple[str, ...] = field(default_factory=tuple)
     graph_relations: tuple[str, ...] = field(default_factory=tuple)
+    asset_ids: tuple[str, ...] = field(default_factory=tuple)
+    chunk_role: str = "leaf"
+    parent_chunk_id: str = ""
+    child_chunk_ids: tuple[str, ...] = field(default_factory=tuple)
+    navigation_only: bool = False
+    beginner_narrative: str = ""
+    starter_question_candidates: tuple[str, ...] = field(default_factory=tuple)
+    followup_question_candidates: tuple[str, ...] = field(default_factory=tuple)
+    question_candidates_version: int = 0
+    repository_id: str = ""
+    document_source_id: str = ""
+    owner_user_id: str = ""
+    visibility: str = ""
+    source_scope: str = ""
+    learning: dict[str, Any] = field(default_factory=dict)
     component_scores: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

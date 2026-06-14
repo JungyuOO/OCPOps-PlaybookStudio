@@ -3,21 +3,30 @@ __pycache__/
 *.py[cod]
 .env
 .pytest_cache/
+.pytest-tmp/
+.pytest-tmp-*/
+.tmp_pytest/
+.tmp/
+tests/_tmp*/
+pytest-cache-files-*/
 .mypy_cache/
 .ruff_cache/
+.tmp_tests/
 node_modules/
-presentation-ui/dist/
-presentation-ui/node_modules/
+apps/web/dist/
+apps/web/node_modules/
 artifacts/
+storage/*
+!storage/.gitignore
 /archive/
 /_quarantine/
-data/bronze/raw_html/
-data/bronze/source_bundles/
-data/silver/normalized_docs.jsonl
+corpus/data/bronze/raw_html/
+corpus/data/bronze/source_bundles/
+corpus/data/silver/normalized_docs.jsonl
 # incorporation baseline keeps the three curated datasets below in Git:
-# - data/silver_ko
-# - data/gold_corpus_ko
-# - data/gold_manualbook_ko
+# - corpus/sources/official/imported-gold/silver_ko
+# - corpus/sources/official/imported-gold/gold_corpus_ko
+# - corpus/sources/official/imported-gold/gold_manualbook_ko
 reports/build_logs/
 reports/build_logs/ui_server_stdout.log
 reports/build_logs/ui_server_stderr.log
@@ -30,6 +39,7 @@ reports/multiturn/
 reports/technical_notes/
 reports/execution_harness/**/chrome-headless-profile*/
 validation_report.json
+validation/
 tmp_customer_pack_live/
 #
 # local source mirrors for rebuild/materialization are intentionally unmanaged
@@ -47,7 +57,6 @@ study.md
 src/ocp_rag_v2.egg-info/
 C:/
 tmp/
-tmp_qdrant_smoke_chunks.jsonl
 PRD.md
 CANONICAL_AST_DESIGN.md
 CODE_READING_GUIDE.md
@@ -67,11 +76,25 @@ docs/arrange_26.04.18*.md
 docs/ocp420_assignment_*.md
 docs/pipeline_toolchain_detail.md
 docs/retrieval_flow.md
-
+reports
 .omx
 .venv
 __pycache__
 
+# Personal HTML handoff artifacts.
+spec/v0.1.4/kugnus_only/
+
 .playwright-cli
 output/*
-study-docs/*
+.kugnus-plan/rag-foundation/*.json
+corpus/sources/kmsc/raw/*
+corpus/sources/kmsc/parsed-preview/course_pbs/*
+!corpus/sources/kmsc/parsed-preview/course_pbs/assets/
+!corpus/sources/kmsc/parsed-preview/course_pbs/assets/**
+!corpus/sources/kmsc/parsed-preview/course_pbs/manifests/
+!corpus/sources/kmsc/parsed-preview/course_pbs/manifests/course_v1.json
+!corpus/sources/kmsc/parsed-preview/course_pbs/manifests/ops_learning_chunks_v1.jsonl
+!corpus/sources/kmsc/parsed-preview/course_pbs/manifests/ops_learning_guides_v1.json
+!corpus/sources/kmsc/parsed-preview/course_pbs/chunks.jsonl
+corpus/sources/official/imported-gold/gold_corpus_ko/embeddings/
+corpus/sources/official/imported-gold/gold_corpus_ko/text-layers/

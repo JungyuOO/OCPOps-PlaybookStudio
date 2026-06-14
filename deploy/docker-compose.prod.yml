@@ -1,0 +1,206 @@
+name: ocpops-playbookstudio
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    env_file:
+      - ${APP_ENV_FILE:-../.env.production}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-playbookstudio}
+      POSTGRES_USER: ${POSTGRES_USER:-playbookstudio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_BIND:-127.0.0.1:5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-playbookstudio} -d $${POSTGRES_DB:-playbookstudio}"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    restart: unless-stopped
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - ${APP_ENV_FILE:-../.env.production}
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
+      COURSE_CHAT_LLM_REWRITE: "${COURSE_CHAT_LLM_REWRITE:-true}"
+      ARTIFACTS_DIR: /app/artifacts
+      OBJECT_STORAGE_ROOT: /app/storage
+      OPENSHIFT_LIGHTSPEED_BASE_URL: ${OPENSHIFT_LIGHTSPEED_BASE_URL:-}
+      OPENSHIFT_LIGHTSPEED_API_TOKEN: ${OPENSHIFT_LIGHTSPEED_API_TOKEN:-}
+      OPENSHIFT_LIGHTSPEED_PROVIDER: ${OPENSHIFT_LIGHTSPEED_PROVIDER:-}
+      OPENSHIFT_LIGHTSPEED_MODEL: ${OPENSHIFT_LIGHTSPEED_MODEL:-}
+      OPENSHIFT_LIGHTSPEED_SYSTEM_PROMPT: ${OPENSHIFT_LIGHTSPEED_SYSTEM_PROMPT:-}
+      OPENSHIFT_LIGHTSPEED_REQUEST_PROFILE: ${OPENSHIFT_LIGHTSPEED_REQUEST_PROFILE:-console_parity}
+      OPENSHIFT_LIGHTSPEED_FORCE_PROVIDER_MODEL: ${OPENSHIFT_LIGHTSPEED_FORCE_PROVIDER_MODEL:-false}
+      OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS: ${OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS:-90}
+      OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY: ${OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../artifacts:/app/artifacts
+      - ../storage:/app/storage
+      - ../reports:/app/reports
+      - app_tmp:/app/tmp
+    ports:
+      - "${TERMINAL_WS_BIND:-0.0.0.0:8770}:8770"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 90s
+    restart: unless-stopped
+
+  db-migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - ${APP_ENV_FILE:-../.env.production}
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "play_book_studio.cli", "db-migrate", "--root-dir", "/app"]
+    restart: "no"
+
+  course-runtime-seed:
+    profiles:
+      - seed
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - ${APP_ENV_FILE:-../.env.production}
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ../corpus:/app/corpus:ro
+    command: ["python", "-m", "play_book_studio.cli", "course-chunk-import", "--root-dir", "/app", "--course-dir", "/app/corpus/sources/kmsc/parsed-preview/course_pbs"]
+    restart: "no"
+
+  official-corpus-seed:
+    profiles:
+      - seed
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - ${APP_ENV_FILE:-../.env.production}
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
+      ARTIFACTS_DIR: /app/artifacts
+      OBJECT_STORAGE_ROOT: /app/storage
+      CORPUS_SEED_DIR: /app/corpus
+      SOURCE_MANIFEST_PATH: /app/corpus/manifests/official/ocp_ko_4_20_approved_ko.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../data:/app/data:ro
+      - ../corpus:/app/corpus:ro
+      - ../artifacts:/app/artifacts
+      - ../storage:/app/storage
+      - ../reports:/app/reports
+      - app_tmp:/app/tmp
+    command:
+      - bash
+      - -lc
+      - >
+        python -m play_book_studio.cli official-gold-import
+        --root-dir /app
+        --index
+        --index-limit ${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}
+        &&
+        python -m play_book_studio.cli kmsc-course-import
+        --root-dir /app
+        --course-dir ${KMSC_COURSE_SOURCE_DIR:-/app/corpus/sources/kmsc/parsed-preview/course_pbs}
+        --index
+    restart: "no"
+
+  kmsc-corpus-seed:
+    profiles:
+      - seed
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - ${APP_ENV_FILE:-../.env.production}
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
+      ARTIFACTS_DIR: /app/artifacts
+      OBJECT_STORAGE_ROOT: /app/storage
+      CORPUS_SEED_DIR: /app/corpus
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../corpus:/app/corpus:ro
+      - ../artifacts:/app/artifacts
+      - ../storage:/app/storage
+      - ../reports:/app/reports
+      - app_tmp:/app/tmp
+    command: ["python", "-m", "play_book_studio.cli", "kmsc-course-import", "--root-dir", "/app", "--course-dir", "${KMSC_COURSE_SOURCE_DIR:-/app/corpus/sources/kmsc/parsed-preview/course_pbs}", "--index"]
+    restart: "no"
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: web
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "${WEB_BIND:-0.0.0.0:8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: ${POSTGRES_VOLUME_NAME:-ocpops_playbookstudio_postgres_data}
+  app_artifacts:
+  app_storage:
+  app_reports:
+  app_tmp:

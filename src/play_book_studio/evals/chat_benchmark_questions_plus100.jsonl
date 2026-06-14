@@ -1,0 +1,205 @@
+{"id": "starter-001", "category": "starter_faq", "query": "ocp 로그인 어떻게 함", "route_kind": "official", "mode": "ops"}
+{"id": "starter-002", "category": "starter_faq", "query": "Node 상태는 어떤 명령으로 먼저 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-003", "category": "starter_faq", "query": "모든 프로젝트에서 pod 중단 예산 확인 어떻게해?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-004", "category": "starter_faq", "query": "Pod가 CrashLoopBackOff일 때 먼저 어떤 명령을 봐야 하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-005", "category": "starter_faq", "query": "PVC가 Pending이면 어떤 순서로 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-006", "category": "starter_faq", "query": "Route가 접속 안 될 때 상태를 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-007", "category": "starter_faq", "query": "Operator가 Available이 아닐 때 무엇부터 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-008", "category": "starter_faq", "query": "ClusterOperator 상태는 어떤 명령으로 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-009", "category": "starter_faq", "query": "이벤트는 전체 네임스페이스에서 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-010", "category": "starter_faq", "query": "OpenShift 버전은 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-001", "category": "step_learning", "query": "OpenShift 설치 방식과 준비 항목은 어떻게 구분하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-002", "category": "step_learning", "query": "IPI와 UPI 설치 방식은 무엇이 다른가요?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-003", "category": "step_learning", "query": "Agent 기반 설치는 어떤 상황에서 쓰나요?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-004", "category": "step_learning", "query": "Assisted Installer는 어떤 장점이 있나요?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-005", "category": "step_learning", "query": "Disconnected 설치를 준비할 때 무엇을 먼저 확인해야 하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-006", "category": "step_learning", "query": "설치 전에 pull secret과 SSH 키는 왜 필요한가요?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-007", "category": "step_learning", "query": "install-config.yaml은 언제 직접 만들어야 하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-008", "category": "step_learning", "query": "bootstrap 단계가 멈추면 어떤 로그를 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-009", "category": "step_learning", "query": "설치 검증 실패 시 어떤 로그와 상태를 먼저 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-010", "category": "step_learning", "query": "설치 후 클러스터 작업은 어떤 순서로 진행하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "node-001", "category": "node_ops", "query": "Node가 NotReady일 때 원인을 어떻게 좁히나요?", "route_kind": "official", "mode": "ops"}
+{"id": "node-002", "category": "node_ops", "query": "특정 노드의 자세한 상태는 어떻게 봐요?", "route_kind": "official", "mode": "ops"}
+{"id": "node-003", "category": "node_ops", "query": "노드에 올라간 Pod 목록을 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "node-004", "category": "node_ops", "query": "노드 cordon과 drain은 어떤 차이가 있나요?", "route_kind": "official", "mode": "ops"}
+{"id": "node-005", "category": "node_ops", "query": "노드 재부팅 전에 어떤 상태를 확인해야 하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "node-006", "category": "node_ops", "query": "MachineConfigPool이 업데이트 중인지 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "node-007", "category": "node_ops", "query": "MCP가 Degraded면 무엇을 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "node-008", "category": "node_ops", "query": "노드 디스크 압박 상태는 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "node-009", "category": "node_ops", "query": "kubelet 문제가 의심될 때 어떤 로그를 보나요?", "route_kind": "official", "mode": "ops"}
+{"id": "node-010", "category": "node_ops", "query": "노드에 taint가 걸렸는지 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-001", "category": "workload", "query": "Pod가 Pending일 때 어떤 항목을 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-002", "category": "workload", "query": "Pod 로그는 현재 컨테이너와 이전 컨테이너를 어떻게 구분해서 보나요?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-003", "category": "workload", "query": "Pod 이벤트만 빠르게 확인하는 방법은?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-004", "category": "workload", "query": "ImagePullBackOff가 나면 pull secret을 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-005", "category": "workload", "query": "Deployment rollout 상태는 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-006", "category": "workload", "query": "ReplicaSet과 Deployment 상태를 같이 보려면?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-007", "category": "workload", "query": "Pod 리소스 요청과 제한은 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-008", "category": "workload", "query": "OOMKilled 원인은 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-009", "category": "workload", "query": "컨테이너 readiness probe 실패는 어디서 봐야 하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-010", "category": "workload", "query": "네임스페이스 안의 모든 리소스를 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "network-001", "category": "network", "query": "Service가 Pod로 트래픽을 못 보내면 무엇을 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "network-002", "category": "network", "query": "EndpointSlice가 비어 있는지 확인하는 방법은?", "route_kind": "official", "mode": "ops"}
+{"id": "network-003", "category": "network", "query": "Route의 host와 admitted 상태는 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "network-004", "category": "network", "query": "IngressController 상태는 어떤 명령으로 봐요?", "route_kind": "official", "mode": "ops"}
+{"id": "network-005", "category": "network", "query": "DNS 문제가 의심되면 어떤 Pod와 로그를 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "network-006", "category": "network", "query": "NetworkPolicy 때문에 통신이 막혔는지 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "network-007", "category": "network", "query": "클러스터 내부에서 서비스 DNS를 테스트하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "network-008", "category": "network", "query": "라우터 Pod 상태와 로그를 확인하는 방법은?", "route_kind": "official", "mode": "ops"}
+{"id": "network-009", "category": "network", "query": "MetalLB가 동작 중인지 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "network-010", "category": "network", "query": "Egress IP 설정 상태는 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-001", "category": "storage", "query": "PVC Pending 원인을 StorageClass부터 확인하는 순서를 알려줘", "route_kind": "official", "mode": "ops"}
+{"id": "storage-002", "category": "storage", "query": "PV와 PVC 바인딩 상태를 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-003", "category": "storage", "query": "StorageClass 목록과 기본값은 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-004", "category": "storage", "query": "CSI 드라이버 상태는 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-005", "category": "storage", "query": "볼륨 마운트 실패 이벤트는 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-006", "category": "storage", "query": "ODF 클러스터 상태를 확인하는 기본 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-007", "category": "storage", "query": "Ceph 상태가 안 좋을 때 어떤 리소스를 봐야 하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-008", "category": "storage", "query": "기본 StorageClass를 바꾸는 절차를 알려줘", "route_kind": "official", "mode": "ops"}
+{"id": "storage-009", "category": "storage", "query": "PVC 용량 확장이 가능한지 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-010", "category": "storage", "query": "노드 종료 후 볼륨 분리 문제는 어떻게 처리하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "security-001", "category": "security", "query": "사용자 권한은 어떤 명령으로 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "security-002", "category": "security", "query": "ServiceAccount가 어떤 권한을 갖는지 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "security-003", "category": "security", "query": "SCC 때문에 Pod가 생성 안 될 때 무엇을 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "security-004", "category": "security", "query": "OAuth Pod 상태와 로그를 확인하는 방법은?", "route_kind": "official", "mode": "ops"}
+{"id": "security-005", "category": "security", "query": "인증서 만료 상태는 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "security-006", "category": "security", "query": "클러스터 인증서 갱신 관련 상태를 어디서 보나요?", "route_kind": "official", "mode": "ops"}
+{"id": "security-007", "category": "security", "query": "RoleBinding과 ClusterRoleBinding 차이를 알려줘", "route_kind": "official", "mode": "ops"}
+{"id": "security-008", "category": "security", "query": "특정 사용자가 get pods 권한이 있는지 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "security-009", "category": "security", "query": "이미지 레지스트리 pull secret은 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "security-010", "category": "security", "query": "FIPS 설치 프로그램은 어떻게 가져오나요?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-001", "category": "operators", "query": "Operator 설치 상태는 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-002", "category": "operators", "query": "CSV가 Pending이면 어떤 정보를 봐야 하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-003", "category": "operators", "query": "Subscription 상태와 InstallPlan은 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-004", "category": "operators", "query": "OLM 관련 Pod 로그는 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-005", "category": "operators", "query": "OperatorHub가 안 보이면 어떤 리소스를 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-006", "category": "operators", "query": "CatalogSource 상태를 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-007", "category": "operators", "query": "OperatorGroup은 왜 필요한가요?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-008", "category": "operators", "query": "설치된 Operator 목록을 CLI로 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-009", "category": "operators", "query": "ClusterServiceVersion이 Failed일 때 이벤트를 어떻게 보나요?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-010", "category": "operators", "query": "수동 승인 InstallPlan은 어떻게 승인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-001", "category": "monitoring", "query": "클러스터 알람은 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-002", "category": "monitoring", "query": "Prometheus Pod 상태와 로그를 확인하는 방법은?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-003", "category": "monitoring", "query": "Alertmanager 상태는 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-004", "category": "monitoring", "query": "사용자 워크로드 모니터링이 켜져 있는지 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-005", "category": "monitoring", "query": "메트릭 수집이 안 될 때 ServiceMonitor를 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-006", "category": "monitoring", "query": "노드 CPU와 메모리 사용량은 어떤 명령으로 봐요?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-007", "category": "monitoring", "query": "Pod 리소스 사용량은 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-008", "category": "monitoring", "query": "모니터링 Operator 상태는 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-009", "category": "monitoring", "query": "Thanos Querier 문제가 의심되면 어떤 로그를 보나요?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-010", "category": "monitoring", "query": "클러스터 대시보드에서 상태를 보는 기준은?", "route_kind": "official", "mode": "ops"}
+{"id": "logging-001", "category": "logging", "query": "OpenShift Logging Operator 상태를 확인하는 방법은?", "route_kind": "official", "mode": "ops"}
+{"id": "logging-002", "category": "logging", "query": "로그 수집기가 동작하지 않으면 어떤 Pod를 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "logging-003", "category": "logging", "query": "must-gather는 어떤 명령으로 수집하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "logging-004", "category": "logging", "query": "특정 네임스페이스의 이벤트와 로그를 같이 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "logging-005", "category": "logging", "query": "감사 로그는 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "backup-001", "category": "backup_restore", "query": "etcd 백업은 어떤 순서로 수행하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "backup-002", "category": "backup_restore", "query": "etcd 복구 전에 어떤 조건을 확인해야 하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "backup-003", "category": "backup_restore", "query": "OADP 백업 상태는 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "backup-004", "category": "backup_restore", "query": "Velero 백업 로그는 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "backup-005", "category": "backup_restore", "query": "클러스터 장애 분석에서 증상과 근거는 어떤 순서로 정리하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "install-001", "category": "install", "query": "openshift-install 버전 확인 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "install-002", "category": "install", "query": "설치 프로그램을 release image에서 추출하는 방법은?", "route_kind": "official", "mode": "ops"}
+{"id": "install-003", "category": "install", "query": "이미지 저장소 미러링은 어떤 명령으로 하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "install-004", "category": "install", "query": "RHCOS ISO 설치에서 kernel argument는 어떻게 넣나요?", "route_kind": "official", "mode": "ops"}
+{"id": "install-005", "category": "install", "query": "bootstrap complete까지 기다리는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-011", "category": "starter_faq", "query": "현재 로그인한 oc 사용자는 어떻게 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-012", "category": "starter_faq", "query": "지금 선택된 프로젝트가 뭔지 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-013", "category": "starter_faq", "query": "프로젝트 목록은 어떤 명령으로 봐?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-014", "category": "starter_faq", "query": "특정 프로젝트로 전환하려면 어떻게 해야 해?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-015", "category": "starter_faq", "query": "oc 명령어 도움말은 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-016", "category": "starter_faq", "query": "현재 클러스터 API 주소는 어떻게 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-017", "category": "starter_faq", "query": "전체 리소스를 네임스페이스 기준으로 한 번에 보려면?", "route_kind": "official", "mode": "ops"}
+{"id": "starter-018", "category": "starter_faq", "query": "리소스 상세 내용을 YAML로 확인하려면 어떤 옵션을 써?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-011", "category": "step_learning", "query": "OpenShift에서 프로젝트와 네임스페이스는 어떻게 구분해서 이해하면 돼?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-012", "category": "step_learning", "query": "ClusterOperator의 Available, Progressing, Degraded는 각각 무슨 의미야?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-013", "category": "step_learning", "query": "MachineConfigPool의 UPDATED와 UPDATING 차이는 어떻게 봐야 해?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-014", "category": "step_learning", "query": "Pod 이벤트와 컨테이너 로그는 어떤 상황에서 각각 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-015", "category": "step_learning", "query": "Route, Service, Pod 연결 흐름은 어떤 순서로 확인하면 이해돼?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-016", "category": "step_learning", "query": "PVC와 PV가 바인딩되는 흐름을 쉽게 설명해줘", "route_kind": "official", "mode": "ops"}
+{"id": "learning-017", "category": "step_learning", "query": "Operator 설치에서 Subscription, CSV, OperatorGroup은 어떤 관계야?", "route_kind": "official", "mode": "ops"}
+{"id": "learning-018", "category": "step_learning", "query": "must-gather와 inspect는 어떤 상황에서 다르게 쓰나요?", "route_kind": "official", "mode": "ops"}
+{"id": "install-006", "category": "install", "query": "install-config.yaml 백업은 왜 미리 해둬야 하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "install-007", "category": "install", "query": "설치 자산 파일을 만드는 명령은 뭐야?", "route_kind": "official", "mode": "ops"}
+{"id": "install-008", "category": "install", "query": "클러스터 설치 완료까지 기다리는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "install-009", "category": "install", "query": "설치 중 로그를 debug 수준으로 보려면 어떻게 실행해?", "route_kind": "official", "mode": "ops"}
+{"id": "install-010", "category": "install", "query": "클러스터 기능(capabilities)은 어떤 명령으로 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "install-011", "category": "install", "query": "Disconnected 환경에서 이미지 미러링 결과는 어떻게 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "install-012", "category": "install", "query": "oc-mirror가 만든 리소스가 적용됐는지 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "install-013", "category": "install", "query": "설치 실패 후 클러스터 상태를 먼저 어떤 순서로 봐야 해?", "route_kind": "official", "mode": "ops"}
+{"id": "node-011", "category": "node_ops", "query": "노드별 role과 상태를 한 번에 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "node-012", "category": "node_ops", "query": "특정 노드에 debug shell로 들어가려면 어떻게 해?", "route_kind": "official", "mode": "ops"}
+{"id": "node-013", "category": "node_ops", "query": "노드 재부팅을 MachineConfigPool 단위로 진행하려면 어떤 명령을 써?", "route_kind": "official", "mode": "ops"}
+{"id": "node-014", "category": "node_ops", "query": "모든 노드 재부팅이 끝날 때까지 기다리는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "node-015", "category": "node_ops", "query": "CSR이 Pending으로 남아 있으면 어떤 명령으로 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "node-016", "category": "node_ops", "query": "보류 중인 CSR을 승인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "node-017", "category": "node_ops", "query": "노드의 kubelet 서비스 로그를 role 기준으로 보는 방법은?", "route_kind": "official", "mode": "ops"}
+{"id": "node-018", "category": "node_ops", "query": "MachineConfig가 적용됐는지 MCP에서 어떤 컬럼을 봐야 하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "node-019", "category": "node_ops", "query": "노드를 삭제해야 할 때 Node 리소스와 Machine 리소스는 어떻게 구분해?", "route_kind": "official", "mode": "ops"}
+{"id": "node-020", "category": "node_ops", "query": "특정 노드의 journal 로그를 oc로 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-011", "category": "workload", "query": "Pod 안의 특정 컨테이너 로그만 보려면 어떻게 해?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-012", "category": "workload", "query": "재시작된 컨테이너의 이전 로그를 확인하는 옵션은?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-013", "category": "workload", "query": "Pod 상태를 watch로 계속 보려면 어떤 명령을 써?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-014", "category": "workload", "query": "Deployment를 YAML 파일로 배포할 때 기본 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-015", "category": "workload", "query": "Deployment 복제본 수를 늘리거나 줄이는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-016", "category": "workload", "query": "실행 중인 Pod 안으로 접속하려면 어떤 명령을 사용해?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-017", "category": "workload", "query": "Pod의 환경변수나 마운트 설정은 어디서 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-018", "category": "workload", "query": "Job이나 CronJob 상태는 어떤 식으로 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-019", "category": "workload", "query": "DaemonSet이 노드마다 떠 있는지 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "pod-020", "category": "workload", "query": "Pod가 특정 노드에 스케줄됐는지 출력에서 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "network-011", "category": "network", "query": "Service의 selector와 targetPort는 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "network-012", "category": "network", "query": "Service에 연결된 Endpoint가 있는지 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "network-013", "category": "network", "query": "Route가 어떤 Service로 연결되는지 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "network-014", "category": "network", "query": "IngressController 조건만 jsonpath로 확인하는 방법은?", "route_kind": "official", "mode": "ops"}
+{"id": "network-015", "category": "network", "query": "OVN Kubernetes Pod 상태는 어떤 네임스페이스에서 봐야 해?", "route_kind": "official", "mode": "ops"}
+{"id": "network-016", "category": "network", "query": "OVN 노드 Pod 로그는 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "network-017", "category": "network", "query": "NetworkPolicy 목록을 프로젝트에서 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "network-018", "category": "network", "query": "클러스터 네트워크 설정은 어떤 리소스를 describe해서 봐?", "route_kind": "official", "mode": "ops"}
+{"id": "network-019", "category": "network", "query": "MTU 변경 후 노드 로그에서 적용 여부를 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "network-020", "category": "network", "query": "OAuth route host는 어떤 명령으로 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-011", "category": "storage", "query": "StorageClass 목록을 확인하는 기본 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-012", "category": "storage", "query": "기본 StorageClass가 어떤 건지 출력에서 어떻게 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-013", "category": "storage", "query": "PV 목록과 상태를 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-014", "category": "storage", "query": "PVC 상세 이벤트를 보려면 어떤 명령을 써?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-015", "category": "storage", "query": "PVC가 어떤 PV에 바인딩됐는지 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-016", "category": "storage", "query": "이미지 레지스트리 스토리지 설정은 어떤 리소스에서 봐?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-017", "category": "storage", "query": "OpenShift Data Foundation Pod들은 어느 네임스페이스에서 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-018", "category": "storage", "query": "BackupStorageLocation 상태는 어떤 명령으로 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-019", "category": "storage", "query": "VolumeSnapshot 관련 리소스 목록은 어떻게 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "storage-020", "category": "storage", "query": "PVC를 사용하는 Pod가 없을 때 Pending으로 보일 수 있는지 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "security-011", "category": "security", "query": "내 계정이 특정 리소스를 만들 수 있는지 바로 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "security-012", "category": "security", "query": "다른 사용자 기준으로 권한을 테스트하려면 oc auth can-i에 뭘 붙여?", "route_kind": "official", "mode": "ops"}
+{"id": "security-013", "category": "security", "query": "특정 ServiceAccount가 pod 목록을 볼 수 있는지 확인하려면?", "route_kind": "official", "mode": "ops"}
+{"id": "security-014", "category": "security", "query": "어떤 사용자가 특정 리소스를 사용할 수 있는지 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "security-015", "category": "security", "query": "SCC를 사용할 수 있는 주체를 확인하려면 어떻게 해?", "route_kind": "official", "mode": "ops"}
+{"id": "security-016", "category": "security", "query": "RoleBinding 대상 사용자와 ServiceAccount는 어디서 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "security-017", "category": "security", "query": "OAuth 클러스터 설정을 수정하거나 확인하려면 어떤 리소스를 봐?", "route_kind": "official", "mode": "ops"}
+{"id": "security-018", "category": "security", "query": "cert-manager 인증서 READY 상태는 어떻게 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "security-019", "category": "security", "query": "라우터 기본 인증서 Secret은 어떻게 추출해서 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "security-020", "category": "security", "query": "이미지 pull secret을 ServiceAccount에 연결할 때 쓰는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-011", "category": "operators", "query": "패키지 매니페스트 목록은 어떤 명령으로 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-012", "category": "operators", "query": "특정 Operator의 PackageManifest 상세 정보는 어떻게 봐?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-013", "category": "operators", "query": "OperatorGroup YAML을 적용하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-014", "category": "operators", "query": "Subscription YAML을 적용한 뒤 상태는 어떻게 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-015", "category": "operators", "query": "CSV phase만 간단히 확인하는 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-016", "category": "operators", "query": "Operator 설치 네임스페이스의 Subscription 목록은 어떻게 봐?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-017", "category": "operators", "query": "CatalogSource Pod 로그를 보려면 어떤 순서로 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "operator-018", "category": "operators", "query": "Operator 설치가 Pending이면 CSV와 Subscription 중 무엇부터 봐야 해?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-011", "category": "monitoring", "query": "클러스터 버전과 업데이트 상태는 어떤 명령으로 봐?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-012", "category": "monitoring", "query": "업데이트 가능한 채널이나 현재 채널은 어디서 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-013", "category": "monitoring", "query": "Pod별 CPU 메모리 사용량을 네임스페이스 기준으로 보려면?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-014", "category": "monitoring", "query": "특정 Pod의 컨테이너별 리소스 사용량은 어떻게 봐?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-015", "category": "monitoring", "query": "이미지별 리소스 사용량을 확인하는 oc adm top 명령은?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-016", "category": "monitoring", "query": "사용자 워크로드 모니터링 Pod 목록은 어디서 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-017", "category": "monitoring", "query": "Alertmanager route가 있는지 확인하려면 어떤 명령을 써?", "route_kind": "official", "mode": "ops"}
+{"id": "monitoring-018", "category": "monitoring", "query": "ServiceMonitor가 붙은 Service 설정은 어떤 순서로 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "logging-006", "category": "logging", "query": "특정 Pod 로그를 실시간으로 따라가려면 어떤 옵션을 써?", "route_kind": "official", "mode": "ops"}
+{"id": "logging-007", "category": "logging", "query": "노드의 systemd unit 로그를 oc adm node-logs로 보려면?", "route_kind": "official", "mode": "ops"}
+{"id": "logging-008", "category": "logging", "query": "감사 로그를 must-gather로 수집하려면 어떤 명령을 써?", "route_kind": "official", "mode": "ops"}
+{"id": "logging-009", "category": "logging", "query": "이전 컨테이너 로그와 현재 로그를 비교하려면 어떻게 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "logging-010", "category": "logging", "query": "Operator Pod 로그를 볼 때 네임스페이스와 Pod 이름은 어떤 순서로 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "backup-006", "category": "backup_restore", "query": "etcd 백업 전에 proxy 설정은 어떤 명령으로 확인하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "backup-007", "category": "backup_restore", "query": "etcd Pod 목록은 어떤 라벨로 조회하나요?", "route_kind": "official", "mode": "ops"}
+{"id": "backup-008", "category": "backup_restore", "query": "etcd 멤버 상태를 확인하려면 어느 Pod에 rsh로 들어가?", "route_kind": "official", "mode": "ops"}
+{"id": "backup-009", "category": "backup_restore", "query": "OADP 설치 후 전체 리소스 상태는 어떤 명령으로 확인해?", "route_kind": "official", "mode": "ops"}
+{"id": "backup-010", "category": "backup_restore", "query": "DPA 리소스 상태를 YAML이나 jsonpath로 확인하려면?", "route_kind": "official", "mode": "ops"}

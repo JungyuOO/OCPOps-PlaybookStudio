@@ -103,6 +103,7 @@ from .intents import (
     has_hosted_control_plane_signal,
     is_explainer_query,
     is_generic_intro_query,
+    is_openshift_product_intro_query,
 )
 
 # ambiguity / subquery 분해는 별도 모듈 구현을 그대로 재노출한다.
@@ -114,4 +115,3 @@ from .ambiguity import (
     has_security_doc_locator_ambiguity,
     has_update_doc_locator_ambiguity,
 )
-from .decompose import decompose_retrieval_queries

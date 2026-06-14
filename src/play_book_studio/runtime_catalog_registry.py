@@ -38,7 +38,11 @@ def _docs_viewer_path(settings: Settings, slug: str) -> str:
 
 
 def _active_manifest_path(root_dir: Path) -> Path:
-    return root_dir / "data" / "wiki_runtime_books" / "active_manifest.json"
+    corpus_path = root_dir / "corpus" / "data" / "wiki_runtime_books" / "active_manifest.json"
+    runtime_path = root_dir / "data" / "wiki_runtime_books" / "active_manifest.json"
+    if corpus_path.exists():
+        return corpus_path
+    return runtime_path
 
 
 def _is_customer_or_private_payload(payload: dict[str, Any], *, source_metadata: dict[str, Any] | None = None) -> bool:
@@ -272,7 +276,7 @@ def _load_registry_cached(
     for entry in active_entries:
         if not isinstance(entry, dict):
             continue
-        slug = str(entry.get("slug") or "").strip()
+        slug = str(entry.get("book_slug") or entry.get("slug") or "").strip()
         if not slug:
             continue
         active_manifest_slugs.append(slug)
@@ -346,6 +350,14 @@ def _load_registry_cached(
                 **source_provenance_payload(row),
             },
         )
+
+    if active_manifest_slugs:
+        active_slug_set = set(active_manifest_slugs)
+        registry = {
+            slug: payload
+            for slug, payload in registry.items()
+            if slug in active_slug_set
+        }
 
     sorted_registry = {
         slug: registry[slug]

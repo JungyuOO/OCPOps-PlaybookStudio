@@ -1,0 +1,232 @@
+# OpenShift Deployment
+
+This directory deploys PlayBookStudio into OpenShift namespace `pbs-ocpops`.
+
+`PBS-OCPOps` is used as a display label only because Kubernetes namespace names
+must be lowercase DNS labels.
+
+## Git-Sourced Deployment
+
+This deployment directory is Kustomize-compatible. Do not download each YAML
+file manually for normal operations. Apply the Git source directly from the
+OCP-connected server after the `dev` branch and GHCR `:dev` images are updated.
+
+Login:
+
+```bash
+oc login https://api.ocp.cywell.local:6443 \
+  -u <ocp-user> \
+  -p <ocp-password-or-token> \
+  --insecure-skip-tls-verify=true
+```
+
+Create or update the runtime secret. Keep these values out of Git:
+
+```bash
+oc create namespace pbs-ocpops --dry-run=client -o yaml | oc apply -f -
+
+export POSTGRES_PASSWORD="<set-strong-password>"
+export OPENSHIFT_LIGHTSPEED_API_TOKEN="<set-if-lightspeed-route-requires-token>"
+
+oc create secret generic playbookstudio-secret \
+  -n pbs-ocpops \
+  --from-literal=POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+  --from-literal=OCP_API_TOKEN="$(oc whoami -t)" \
+  --from-literal=OPENSHIFT_LIGHTSPEED_API_TOKEN="${OPENSHIFT_LIGHTSPEED_API_TOKEN}" \
+  --dry-run=client -o yaml | oc apply -f -
+
+oc adm policy add-scc-to-user anyuid -z playbookstudio -n pbs-ocpops
+oc adm policy add-scc-to-user anyuid -z terminal-broker -n pbs-ocpops
+```
+
+Apply the Git source:
+
+```bash
+oc apply -k "https://github.com/JungyuOO/OCPOps-PlaybookStudio//deploy/openshift?ref=dev"
+```
+
+Set the OpenShift Lightspeed endpoint after the route or internal service URL is confirmed:
+
+```bash
+oc patch configmap playbookstudio-config \
+  -n pbs-ocpops \
+  --type merge \
+  -p '{"data":{"OPENSHIFT_LIGHTSPEED_BASE_URL":"https://<lightspeed-route-or-service>"}}'
+
+oc rollout restart deploy/app -n pbs-ocpops
+oc rollout status deploy/app -n pbs-ocpops
+```
+
+If the company route uses an internal certificate that the app container cannot verify, enable TLS skip only for that route test:
+
+```bash
+oc patch configmap playbookstudio-config \
+  -n pbs-ocpops \
+  --type merge \
+  -p '{"data":{"OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY":"true"}}'
+
+oc rollout restart deploy/app -n pbs-ocpops
+oc rollout status deploy/app -n pbs-ocpops
+```
+
+Confirm PBS sees the setting:
+
+```bash
+oc exec deploy/app -n pbs-ocpops -- \
+  python - <<'PY'
+import json, urllib.request
+payload = json.load(urllib.request.urlopen("http://127.0.0.1:8765/api/health", timeout=10))
+print(json.dumps(payload["runtime"]["openshift_lightspeed"], ensure_ascii=False, indent=2))
+PY
+```
+
+Confirm the app container can validate OpenShift Lightspeed access:
+
+```bash
+oc exec deploy/app -n pbs-ocpops -- \
+  python -m play_book_studio.cli lightspeed-auth-smoke --root-dir /app
+```
+
+Confirm the app container can call OpenShift Lightspeed query:
+
+```bash
+oc exec deploy/app -n pbs-ocpops -- \
+  python -m play_book_studio.cli lightspeed-smoke --root-dir /app
+```
+
+Confirm PBS chat stream uses OpenShift Lightspeed in the final payload:
+
+```bash
+oc exec deploy/app -n pbs-ocpops -- \
+  python -m play_book_studio.cli lightspeed-chat-smoke --ui-base-url http://127.0.0.1:8765
+```
+
+Run the full integration smoke after the three checks above pass:
+
+```bash
+oc exec deploy/app -n pbs-ocpops -- \
+  python -m play_book_studio.cli lightspeed-integration-smoke \
+  --root-dir /app \
+  --ui-base-url http://127.0.0.1:8765
+```
+
+For one-shot seed Jobs, delete completed Jobs before re-applying if the seed
+must run again:
+
+```bash
+oc delete job db-migrate official-corpus-seed kmsc-corpus-seed learning-seed course-runtime-seed \
+  -n pbs-ocpops \
+  --ignore-not-found=true
+
+oc apply -k "https://github.com/JungyuOO/OCPOps-PlaybookStudio//deploy/openshift?ref=dev"
+```
+
+## Scripted Local Checkout Deployment
+
+Use this only when remote Kustomize is unavailable in the installed `oc`
+client. Keep a checkout or artifact directory on the OCP-connected server, then
+run `./apply-playbookstudio.sh`.
+
+## Stop Previous Ubuntu Docker Deployment
+
+```bash
+curl -L -O https://raw.githubusercontent.com/JungyuOO/OCPOps-PlaybookStudio/dev/deploy/openshift/cleanup-ubuntu-compose.sh
+chmod +x cleanup-ubuntu-compose.sh
+./cleanup-ubuntu-compose.sh
+```
+
+The cleanup script stops containers but preserves Docker volumes.
+
+## Verify
+
+```bash
+oc get pods -n pbs-ocpops
+oc get route -n pbs-ocpops
+oc logs job/official-corpus-seed -n pbs-ocpops --tail=80
+oc logs job/kmsc-corpus-seed -n pbs-ocpops --tail=80
+oc logs job/learning-seed -n pbs-ocpops --tail=80
+```
+
+Open the `playbookstudio` Route host in a browser.
+
+## Verify BGE Reranker
+
+The reranker runs on the Ubuntu host as Docker container `bge-reranker` and is
+published to OpenShift through Service `bge-reranker` plus EndpointSlice
+`bge-reranker-external`. This keeps the large model out of the single-node
+OpenShift resource pool.
+
+Host-side container:
+
+```bash
+docker run -d \
+  --name bge-reranker \
+  --restart no \
+  --memory=6g \
+  --memory-swap=8g \
+  --cpus=2 \
+  -p 8082:80 \
+  -v ~/bge-reranker-cache:/data \
+  ghcr.io/huggingface/text-embeddings-inference:cpu-latest \
+  --model-id dragonkue/bge-reranker-v2-m3-ko \
+  --max-client-batch-size 16 \
+  --max-batch-tokens 4096
+```
+
+OpenShift batches reranker candidates into a single request by default
+(`RERANKER_BATCH_SIZE=16`) after pre-filtering low fused-score candidates. Keep
+the Docker client batch size aligned with the app batch size unless the
+host-side latency and memory profile have been measured again.
+
+Check host health before applying the OpenShift app:
+
+```bash
+curl -v --max-time 5 http://127.0.0.1:8082/health
+docker inspect bge-reranker --format 'Memory={{.HostConfig.Memory}} MemorySwap={{.HostConfig.MemorySwap}} Restart={{.HostConfig.RestartPolicy.Name}}'
+docker stats --no-stream bge-reranker
+```
+
+Then verify from inside the namespace:
+
+```bash
+oc -n pbs-ocpops run reranker-smoke --rm -it --restart=Never \
+  --image=curlimages/curl:latest \
+  -- curl -sS -X POST http://bge-reranker/rerank \
+    -H 'Content-Type: application/json' \
+    --data '{"query":"Route timeout 어디서 확인해?","texts":["OpenShift Route timeout is configured on HAProxy router annotations.","HSTS policy configures strict transport security for routes."],"raw_scores":true,"return_text":false,"truncate":true}'
+```
+
+## Local RAG Quality Eval Through OCP Reranker
+
+Local CLI eval can use the in-cluster reranker after the service is deployed.
+Keep one terminal on the OCP-connected Ubuntu server:
+
+```bash
+oc -n pbs-ocpops port-forward svc/bge-reranker 8081:80 --address 127.0.0.1
+```
+
+From Windows, open an SSH tunnel to that server-side port:
+
+```powershell
+ssh -L 8081:127.0.0.1:8081 cywell@192.168.119.23
+```
+
+Then run the local smoke and answer-quality eval:
+
+```powershell
+.\deploy\local-reranker-quality-eval.ps1
+```
+
+Use a wider case set when the quick v0.1.2 beginner set is clean:
+
+```powershell
+.\deploy\local-reranker-quality-eval.ps1 `
+  -Cases corpus/manifests/eval/pbs_chat_quality_extended_cases.jsonl `
+  -TopK 5 `
+  -CandidateK 24 `
+  -MaxContextChunks 8
+```
+
+This verifies local RAG quality with the same `/rerank` API shape. It does not
+replace in-cluster performance testing because local eval still uses the local
+runtime, local database settings, and SSH/port-forward networking.

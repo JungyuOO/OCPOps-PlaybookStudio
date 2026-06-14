@@ -5,6 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
+from .corpus_paths import (
+    OFFICIAL_GOLD_CORPUS_DIR,
+    OFFICIAL_GOLD_MANUALBOOK_DIR,
+    OFFICIAL_MANIFESTS_DIR,
+    OFFICIAL_SILVER_KO_DIR,
+    official_gold_bm25_candidates,
+    official_gold_chunks_candidates,
+    official_manualbook_documents_candidates,
+    official_manualbook_playbook_dir_candidates,
+)
 from .packs import GLOBAL_SOURCE_CATALOG_NAME
 
 
@@ -17,6 +27,7 @@ class SettingsPathMixin:
             self.data_dir,
             self.bronze_dir,
             self.artifacts_dir,
+            self.object_storage_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)
 
@@ -66,11 +77,25 @@ class SettingsPathMixin:
 
     @property
     def manifest_dir(self) -> Path:
-        return self.root_dir / "manifests"
+        return self.root_dir / OFFICIAL_MANIFESTS_DIR
 
     @property
     def data_dir(self) -> Path:
         return self.root_dir / "data"
+
+    @property
+    def corpus_seed_dir(self) -> Path:
+        return self._resolve_optional_dir(
+            self.corpus_seed_dir_override,
+            self.root_dir / "corpus",
+        )
+
+    @property
+    def object_storage_dir(self) -> Path:
+        return self._resolve_optional_dir(
+            self.object_storage_root_override,
+            self.root_dir / "storage",
+        )
 
     @property
     def bronze_dir(self) -> Path:
@@ -82,15 +107,15 @@ class SettingsPathMixin:
 
     @property
     def silver_ko_dir(self) -> Path:
-        return self.data_dir / "silver_ko"
+        return self.root_dir / OFFICIAL_SILVER_KO_DIR
 
     @property
     def gold_corpus_ko_dir(self) -> Path:
-        return self.data_dir / "gold_corpus_ko"
+        return self.root_dir / OFFICIAL_GOLD_CORPUS_DIR
 
     @property
     def gold_manualbook_ko_dir(self) -> Path:
-        return self.data_dir / "gold_manualbook_ko"
+        return self.root_dir / OFFICIAL_GOLD_MANUALBOOK_DIR
 
     @property
     def source_manifest_path(self) -> Path:
@@ -201,58 +226,78 @@ class SettingsPathMixin:
     @property
     def chunks_path(self) -> Path:
         return self._prefer_existing_file(
-            self.official_lane_repo_wide_dir / "chunks.jsonl",
-            self.gold_corpus_ko_dir / "chunks.jsonl",
+            *official_gold_chunks_candidates(
+                self.root_dir,
+                self.official_lane_repo_wide_dir / "chunks.jsonl",
+            ),
         )
 
     @property
     def bm25_corpus_path(self) -> Path:
         return self._prefer_existing_file(
-            self.official_lane_repo_wide_dir / "bm25_corpus.jsonl",
-            self.gold_corpus_ko_dir / "bm25_corpus.jsonl",
+            *official_gold_bm25_candidates(
+                self.root_dir,
+                self.official_lane_repo_wide_dir / "bm25_corpus.jsonl",
+            ),
         )
 
     @property
     def retrieval_chunks_path(self) -> Path:
         return self._prefer_existing_file(
-            self.gold_corpus_ko_dir / "chunks.jsonl",
-            self.official_lane_repo_wide_dir / "chunks.jsonl",
+            *official_gold_chunks_candidates(
+                self.root_dir,
+                self.gold_corpus_ko_dir / "chunks.jsonl",
+                self.official_lane_repo_wide_dir / "chunks.jsonl",
+            ),
         )
 
     @property
     def retrieval_bm25_corpus_path(self) -> Path:
         return self._prefer_existing_file(
-            self.gold_corpus_ko_dir / "bm25_corpus.jsonl",
-            self.official_lane_repo_wide_dir / "bm25_corpus.jsonl",
+            *official_gold_bm25_candidates(
+                self.root_dir,
+                self.gold_corpus_ko_dir / "bm25_corpus.jsonl",
+                self.official_lane_repo_wide_dir / "bm25_corpus.jsonl",
+            ),
         )
 
     @property
     def playbook_documents_path(self) -> Path:
         return self._prefer_existing_file(
-            self.official_lane_repo_wide_dir / "playbook_documents.jsonl",
-            self.gold_manualbook_ko_dir / "playbook_documents.jsonl",
+            *official_manualbook_documents_candidates(
+                self.root_dir,
+                self.official_lane_repo_wide_dir / "playbook_documents.jsonl",
+            ),
         )
 
     @property
     def retrieval_playbook_documents_path(self) -> Path:
         return self._prefer_existing_file(
-            self.gold_manualbook_ko_dir / "playbook_documents.jsonl",
-            self.official_lane_repo_wide_dir / "playbook_documents.jsonl",
+            *official_manualbook_documents_candidates(
+                self.root_dir,
+                self.gold_manualbook_ko_dir / "playbook_documents.jsonl",
+                self.official_lane_repo_wide_dir / "playbook_documents.jsonl",
+            ),
         )
 
     @property
     def playbook_books_dir(self) -> Path:
         return self._prefer_nonempty_dir(
-            self.official_lane_repo_wide_dir / "playbooks",
-            self.gold_manualbook_ko_dir / "playbooks",
+            *official_manualbook_playbook_dir_candidates(
+                self.root_dir,
+                self.official_lane_repo_wide_dir / "playbooks",
+            ),
         )
 
     @property
     def playbook_book_dirs(self) -> tuple[Path, ...]:
         return self._unique_paths(
             self.playbook_books_dir,
-            self.gold_manualbook_ko_dir / "playbooks",
-            self.official_lane_repo_wide_dir / "playbooks",
+            *official_manualbook_playbook_dir_candidates(
+                self.root_dir,
+                self.gold_manualbook_ko_dir / "playbooks",
+                self.official_lane_repo_wide_dir / "playbooks",
+            ),
         )
 
     @property
@@ -326,6 +371,10 @@ class SettingsPathMixin:
     @property
     def chat_markdown_log_path(self) -> Path:
         return self.runtime_dir / "chat_turns.md"
+
+    @property
+    def lightspeed_call_log_path(self) -> Path:
+        return self.runtime_dir / "lightspeed_calls.jsonl"
 
     @property
     def runtime_sessions_dir(self) -> Path:

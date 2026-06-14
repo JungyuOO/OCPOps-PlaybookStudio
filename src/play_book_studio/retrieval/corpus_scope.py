@@ -9,9 +9,13 @@ VERSION_RE = re.compile(r"(?<!\d)4\.(\d+)(?!\d)")
 OCP_RE = re.compile(r"(?<![a-z0-9])ocp(?![a-z0-9])", re.IGNORECASE)
 OPENSHIFT_RE = re.compile(r"(오픈시프트|openshift)", re.IGNORECASE)
 UNSUPPORTED_PRODUCTS = (
+    "aws alb ingress controller",
+    "alb ingress controller",
     "argo cd",
     "argocd",
     "harbor",
+    "istio virtualservice",
+    "virtualservice",
     "eks",
     "aks",
     "gke",
@@ -19,7 +23,7 @@ UNSUPPORTED_PRODUCTS = (
     "rancher",
 )
 UNSUPPORTED_INTENT_RE = re.compile(
-    r"(설치|install|비교|compare|가격|요금|cost|비용|방법|어떻게)",
+    r"(설치|install|비교|compare|가격|요금|cost|비용|방법|어떻게|설정|예시|example|yaml|만들)",
     re.IGNORECASE,
 )
 

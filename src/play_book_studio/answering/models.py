@@ -17,18 +17,28 @@ class Citation:
     excerpt: str
     section_path: tuple[str, ...] = field(default_factory=tuple)
     section_path_label: str = ""
+    section_number: str = ""
+    heading_title: str = ""
+    source_anchor: str = ""
+    toc_path: tuple[str, ...] = field(default_factory=tuple)
     chunk_type: str = "reference"
     semantic_role: str = "unknown"
     source_collection: str = "core"
+    source_scope: str = ""
     block_kinds: tuple[str, ...] = field(default_factory=tuple)
     cli_commands: tuple[str, ...] = field(default_factory=tuple)
     error_strings: tuple[str, ...] = field(default_factory=tuple)
     k8s_objects: tuple[str, ...] = field(default_factory=tuple)
     operator_names: tuple[str, ...] = field(default_factory=tuple)
     verification_hints: tuple[str, ...] = field(default_factory=tuple)
+    asset_ids: tuple[str, ...] = field(default_factory=tuple)
+    learning: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        if self.asset_ids and "asset_id" not in payload:
+            payload["asset_id"] = self.asset_ids[0]
+        return payload
 
 
 @dataclass(slots=True)

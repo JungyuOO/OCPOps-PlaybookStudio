@@ -3,24 +3,39 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from play_book_studio.answering.answerer import ChatAnswerer
 from play_book_studio.retrieval.models import SessionContext
+
+if TYPE_CHECKING:
+    from play_book_studio.answering.answerer import ChatAnswerer
 
 
 HANGUL_RE = re.compile(r"[\uac00-\ud7a3]")
-ANSWER_PREFIX_RE = re.compile(r"^\s*답변:")
+ANSWER_PREFIX_RE = re.compile(r"^\s*(?:답변|요약):")
 CLARIFICATION_RE = re.compile(
     r"(불명확|모호|어느 .*말씀|어떤 .*말씀|무슨 .*말씀|확인해 주시겠|알고 싶으신가요|말씀하시는 건가요|의미하시는 건가요|\?$)"
 )
 NO_ANSWER_RE = re.compile(
     r"(근거에 .*없습니다|근거가 없습니다|정보가 없습니다|답변할 수 없습니다|답할 수 없습니다|찾을 수 없습니다|포함되어 있지 않습니다)"
 )
+TERM_ALIASES: dict[str, tuple[str, ...]] = {
+    "web console": ("web console", "web_console", "웹 콘솔"),
+}
 
 
 def _normalize_for_contains(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").strip()).lower()
+
+
+def _term_variants(term: str) -> tuple[str, ...]:
+    normalized = _normalize_for_contains(term)
+    aliases = TERM_ALIASES.get(normalized, (term,))
+    return tuple(dict.fromkeys(_normalize_for_contains(alias) for alias in aliases if str(alias).strip()))
+
+
+def _contains_expected_term(search_text: str, term: str) -> bool:
+    return any(variant in search_text for variant in _term_variants(term))
 
 
 def _ordered_unique_books(rows: list[dict[str, Any]]) -> list[str]:
@@ -35,8 +50,42 @@ def _ordered_unique_books(rows: list[dict[str, Any]]) -> list[str]:
     return ordered
 
 
+def _citation_search_text(citation: Any) -> str:
+    if isinstance(citation, dict):
+        values = [
+            citation.get("book_slug"),
+            citation.get("section"),
+            citation.get("section_path_label"),
+            citation.get("excerpt"),
+            " ".join(str(item) for item in citation.get("cli_commands", []) if str(item).strip()),
+            " ".join(str(item) for item in citation.get("verification_hints", []) if str(item).strip()),
+            " ".join(str(item) for item in citation.get("k8s_objects", []) if str(item).strip()),
+            " ".join(str(item) for item in citation.get("operator_names", []) if str(item).strip()),
+        ]
+    else:
+        values = [
+            getattr(citation, "book_slug", ""),
+            getattr(citation, "section", ""),
+            getattr(citation, "section_path_label", ""),
+            getattr(citation, "excerpt", ""),
+            " ".join(str(item) for item in (getattr(citation, "cli_commands", ()) or ()) if str(item).strip()),
+            " ".join(str(item) for item in (getattr(citation, "verification_hints", ()) or ()) if str(item).strip()),
+            " ".join(str(item) for item in (getattr(citation, "k8s_objects", ()) or ()) if str(item).strip()),
+            " ".join(str(item) for item in (getattr(citation, "operator_names", ()) or ()) if str(item).strip()),
+        ]
+    return _normalize_for_contains(" ".join(str(value or "") for value in values))
+
+
+def _payload_search_text(value: Any) -> str:
+    if isinstance(value, dict):
+        return " ".join(_payload_search_text(item) for item in value.values())
+    if isinstance(value, list | tuple | set):
+        return " ".join(_payload_search_text(item) for item in value)
+    return _normalize_for_contains(str(value or ""))
+
+
 def evaluate_case(
-    answerer: ChatAnswerer,
+    answerer: "ChatAnswerer",
     case: dict[str, Any],
     *,
     top_k: int,
@@ -63,7 +112,20 @@ def evaluate_case(
     forbidden_books = list(case.get("forbidden_book_slugs", []))
     must_include_terms = [str(term) for term in case.get("must_include_terms", [])]
     must_not_include_terms = [str(term) for term in case.get("must_not_include_terms", [])]
+    expected_citation_terms = [str(term) for term in case.get("expected_citation_terms", [])]
+    forbidden_citation_terms = [str(term) for term in case.get("forbidden_citation_terms", [])]
+    expected_primary_books = [str(book_slug) for book_slug in case.get("expected_primary_book_slugs", [])]
+    expected_answer_source = str(case.get("expected_answer_source", "")).strip()
+    forbidden_reference_fragments = [
+        str(fragment) for fragment in case.get("forbidden_reference_fragments", [])
+    ]
+    if (
+        expected_answer_source == "pbs_rag"
+        and "/external/lightspeed" not in forbidden_reference_fragments
+    ):
+        forbidden_reference_fragments.append("/external/lightspeed")
     expected_book_set = set(expected_books)
+    expected_primary_book_set = set(expected_primary_books)
     forbidden_book_set = set(forbidden_books)
     clarification_expected = bool(case.get("clarification_expected", False))
     no_answer_expected = bool(case.get("no_answer_expected", False))
@@ -82,15 +144,59 @@ def evaluate_case(
     )
     normalized_answer = _normalize_for_contains(result.answer)
     missing_required_terms = [
-        term for term in must_include_terms if _normalize_for_contains(term) not in normalized_answer
+        term for term in must_include_terms if not _contains_expected_term(normalized_answer, term)
     ]
     forbidden_answer_terms = [
-        term for term in must_not_include_terms if _normalize_for_contains(term) in normalized_answer
+        term for term in must_not_include_terms if _contains_expected_term(normalized_answer, term)
     ]
     must_include_pass = not missing_required_terms
     must_exclude_pass = not forbidden_answer_terms
+    citation_search_text = "\n".join(_citation_search_text(citation) for citation in result.citations)
+    missing_citation_terms = [
+        term for term in expected_citation_terms if not _contains_expected_term(citation_search_text, term)
+    ]
+    forbidden_citation_term_hits = [
+        term for term in forbidden_citation_terms if _contains_expected_term(citation_search_text, term)
+    ]
+    citation_terms_pass = not missing_citation_terms
+    citation_forbidden_terms_pass = not forbidden_citation_term_hits
+    pipeline_trace = result.pipeline_trace if isinstance(result.pipeline_trace, dict) else {}
+    answer_source = str(pipeline_trace.get("answer_source", "")).strip()
+    external_answer = (
+        pipeline_trace.get("external_answer")
+        if isinstance(pipeline_trace.get("external_answer"), dict)
+        else {}
+    )
+    external_answer_status = str(external_answer.get("status", "")).strip()
+    reference_search_blob = _payload_search_text(
+        {
+            "answer": result.answer,
+            "citations": final_citations,
+            "pipeline_trace": pipeline_trace,
+        }
+    )
+    forbidden_reference_hits = [
+        fragment
+        for fragment in forbidden_reference_fragments
+        if _normalize_for_contains(fragment) in reference_search_blob
+    ]
+    forbidden_references_pass = not forbidden_reference_hits
+    pbs_external_boundary_pass = not (
+        answer_source == "pbs_rag" and "/external/lightspeed" in reference_search_blob
+    )
+    answer_source_pass = (
+        answer_source == expected_answer_source
+        if expected_answer_source
+        else True
+    )
 
     cited_expected_book = any(book_slug in expected_book_set for book_slug in cited_books)
+    primary_cited_book = cited_books[0] if cited_books else ""
+    primary_expected_book = (
+        primary_cited_book in expected_primary_book_set
+        if expected_primary_book_set
+        else True
+    )
     unexpected_cited_books = [
         book_slug for book_slug in cited_books if book_slug not in expected_book_set
     ]
@@ -125,6 +231,12 @@ def evaluate_case(
             not forbidden_cited_books,
             must_include_pass,
             must_exclude_pass,
+            citation_terms_pass,
+            citation_forbidden_terms_pass,
+            primary_expected_book,
+            answer_source_pass,
+            forbidden_references_pass,
+            pbs_external_boundary_pass,
         ]
     )
     clarification_pass = all(
@@ -137,6 +249,12 @@ def evaluate_case(
             not forbidden_cited_books,
             must_include_pass,
             must_exclude_pass,
+            citation_terms_pass,
+            citation_forbidden_terms_pass,
+            primary_expected_book,
+            answer_source_pass,
+            forbidden_references_pass,
+            pbs_external_boundary_pass,
         ]
     )
     no_answer_pass = all(
@@ -150,6 +268,12 @@ def evaluate_case(
             not forbidden_cited_books,
             must_include_pass,
             must_exclude_pass,
+            citation_terms_pass,
+            citation_forbidden_terms_pass,
+            primary_expected_book,
+            answer_source_pass,
+            forbidden_references_pass,
+            pbs_external_boundary_pass,
         ]
     )
     pass_all = standard_pass or clarification_pass or no_answer_pass
@@ -167,9 +291,20 @@ def evaluate_case(
         "question": case["query"],
         "query": case["query"],
         "expected_book_slugs": expected_books,
+        "expected_primary_book_slugs": expected_primary_books,
         "forbidden_book_slugs": forbidden_books,
+        "expected_answer_source": expected_answer_source,
+        "answer_source": answer_source,
+        "answer_source_pass": answer_source_pass,
+        "external_answer_status": external_answer_status,
+        "forbidden_reference_fragments": forbidden_reference_fragments,
+        "forbidden_reference_hits": forbidden_reference_hits,
+        "forbidden_references_pass": forbidden_references_pass,
+        "pbs_external_boundary_pass": pbs_external_boundary_pass,
         "must_include_terms": must_include_terms,
         "must_not_include_terms": must_not_include_terms,
+        "expected_citation_terms": expected_citation_terms,
+        "forbidden_citation_terms": forbidden_citation_terms,
         "clarification_expected": clarification_expected,
         "no_answer_expected": no_answer_expected,
         "rewritten_query": result.rewritten_query,
@@ -187,6 +322,12 @@ def evaluate_case(
         "must_exclude_pass": must_exclude_pass,
         "missing_required_terms": missing_required_terms,
         "forbidden_answer_terms": forbidden_answer_terms,
+        "citation_terms_pass": citation_terms_pass,
+        "citation_forbidden_terms_pass": citation_forbidden_terms_pass,
+        "missing_citation_terms": missing_citation_terms,
+        "forbidden_citation_term_hits": forbidden_citation_term_hits,
+        "primary_expected_book": primary_expected_book,
+        "primary_cited_book": primary_cited_book,
         "cited_expected_book": cited_expected_book,
         "unexpected_cited_books": unexpected_cited_books,
         "forbidden_cited_books": forbidden_cited_books,
@@ -237,6 +378,10 @@ def _classify_failure_root_cause(detail: dict[str, Any]) -> tuple[str, str]:
         return ("generation", "clarification gate missed and the answer overcommitted")
     if detail.get("no_evidence_but_asserted"):
         return ("generation", "no-answer case still produced an asserted answer")
+    if detail.get("expected_answer_source") and not detail.get("answer_source_pass"):
+        return ("routing", "answer came from a source outside the expected answer-source contract")
+    if not detail.get("forbidden_references_pass", True) or not detail.get("pbs_external_boundary_pass", True):
+        return ("routing", "answer payload leaked a forbidden external reference")
     expected_books = set(detail.get("expected_book_slugs", []))
     retrieved_books = set(detail.get("retrieved_books", []))
     cited_books = set(detail.get("cited_books", []))
@@ -250,6 +395,10 @@ def _classify_failure_root_cause(detail: dict[str, Any]) -> tuple[str, str]:
         return ("provenance", "retrieval found the right family but final citations did not preserve it")
     if detail.get("missing_required_terms") or detail.get("forbidden_answer_terms"):
         return ("generation", "answer text violated the required or forbidden term contract")
+    if detail.get("missing_citation_terms") or detail.get("forbidden_citation_term_hits"):
+        return ("provenance", "final citation chunks did not satisfy the expected grounding terms")
+    if detail.get("primary_expected_book") is False:
+        return ("provenance", "primary citation came from an unexpected playbook family")
     return ("generation", "answer quality failed after retrieval without a provenance miss")
 
 
@@ -308,6 +457,12 @@ def summarize_case_results(details: list[dict[str, Any]]) -> dict[str, Any]:
             ),
             "must_include_rate": _rate(bucket, "must_include_pass"),
             "must_exclude_rate": _rate(bucket, "must_exclude_pass"),
+            "citation_terms_rate": _rate(bucket, "citation_terms_pass"),
+            "citation_forbidden_terms_rate": _rate(bucket, "citation_forbidden_terms_pass"),
+            "primary_expected_book_rate": _rate(bucket, "primary_expected_book"),
+            "answer_source_expected_rate": _rate(bucket, "answer_source_pass"),
+            "forbidden_references_rate": _rate(bucket, "forbidden_references_pass"),
+            "pbs_external_boundary_rate": _rate(bucket, "pbs_external_boundary_pass"),
             "warning_free_rate": _rate(bucket, "warning_free"),
             "pass_rate": _rate(bucket, "pass"),
         }
@@ -330,9 +485,18 @@ def summarize_case_results(details: list[dict[str, Any]]) -> dict[str, Any]:
             "question": detail["question"],
             "rewritten_query": detail.get("rewritten_query", ""),
             "expected_book_slugs": detail["expected_book_slugs"],
+            "expected_primary_book_slugs": detail.get("expected_primary_book_slugs", []),
             "forbidden_book_slugs": detail.get("forbidden_book_slugs", []),
+            "expected_answer_source": detail.get("expected_answer_source", ""),
+            "answer_source": detail.get("answer_source", ""),
+            "external_answer_status": detail.get("external_answer_status", ""),
+            "forbidden_reference_fragments": detail.get("forbidden_reference_fragments", []),
+            "forbidden_reference_hits": detail.get("forbidden_reference_hits", []),
+            "pbs_external_boundary_pass": detail.get("pbs_external_boundary_pass", True),
             "must_include_terms": detail.get("must_include_terms", []),
             "must_not_include_terms": detail.get("must_not_include_terms", []),
+            "expected_citation_terms": detail.get("expected_citation_terms", []),
+            "forbidden_citation_terms": detail.get("forbidden_citation_terms", []),
             "clarification_expected": detail.get("clarification_expected", False),
             "no_answer_expected": detail.get("no_answer_expected", False),
             "retrieved_books": detail.get("retrieved_books", []),
@@ -341,6 +505,9 @@ def summarize_case_results(details: list[dict[str, Any]]) -> dict[str, Any]:
             "forbidden_cited_books": detail.get("forbidden_cited_books", []),
             "missing_required_terms": detail.get("missing_required_terms", []),
             "forbidden_answer_terms": detail.get("forbidden_answer_terms", []),
+            "missing_citation_terms": detail.get("missing_citation_terms", []),
+            "forbidden_citation_term_hits": detail.get("forbidden_citation_term_hits", []),
+            "primary_cited_book": detail.get("primary_cited_book", ""),
             "citation_precision": detail.get("citation_precision", 0.0),
             "cited_indices": detail.get("cited_indices", []),
             "warnings": detail.get("warnings", []),

@@ -1,5 +1,13 @@
-# retrieval 패키지의 대표 진입점을 외부에 노출한다.
-from .retriever import ChatRetriever
+from __future__ import annotations
+
 from .models import SessionContext
 
 __all__ = ["ChatRetriever", "SessionContext"]
+
+
+def __getattr__(name: str):
+    if name == "ChatRetriever":
+        from .retriever import ChatRetriever
+
+        return ChatRetriever
+    raise AttributeError(name)

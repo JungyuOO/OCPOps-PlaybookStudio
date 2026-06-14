@@ -7,30 +7,17 @@ from typing import Any
 
 from play_book_studio.retrieval import SessionContext
 
-from .answer_text import (
-    align_answer_to_grounded_commands,
+from .answer_text_commands import strip_ungrounded_code_blocks
+from .answer_text_formatting import (
     ensure_korean_product_terms,
-    guard_first_step_grounding,
     normalize_answer_markup_blocks,
     normalize_answer_text,
     restore_readable_paragraphs,
     reshape_ops_answer_text,
-    shape_actionable_ops_answer,
-    shape_rbac_follow_up_answer,
-    shape_certificate_monitor_answer,
-    shape_etcd_backup_answer,
-    shape_project_termination_answer,
-    shape_pod_lifecycle_explainer,
-    shape_pod_pending_troubleshooting,
     strip_intro_offtopic_noise,
     strip_structured_key_extra_guidance,
     strip_weak_additional_guidance,
     trim_productization_noise,
-)
-from .citations import (
-    finalize_citations,
-    inject_single_citation,
-    select_fallback_citations,
 )
 from .models import AnswerResult
 
@@ -76,57 +63,12 @@ def generate_grounded_answer_text(
 
     post_process_started_at = time.perf_counter()
     answer_text = reshape_ops_answer_text(
-        normalize_answer_text(
-            normalize_answer_markup_blocks(raw_answer_text)
-        ),
+        normalize_answer_text(normalize_answer_markup_blocks(raw_answer_text)),
         mode=mode,
     )
     answer_text = ensure_korean_product_terms(answer_text, query=query)
-    answer_text = align_answer_to_grounded_commands(
+    answer_text = strip_ungrounded_code_blocks(
         answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = shape_rbac_follow_up_answer(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = shape_etcd_backup_answer(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = shape_project_termination_answer(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = shape_certificate_monitor_answer(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = shape_actionable_ops_answer(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = guard_first_step_grounding(
-        answer_text,
-        query=query,
-        citations=citations,
-    )
-    answer_text = shape_pod_lifecycle_explainer(
-        answer_text,
-        query=query,
-        mode=mode,
-        citations=citations,
-    )
-    answer_text = shape_pod_pending_troubleshooting(
-        answer_text,
-        query=query,
-        mode=mode,
         citations=citations,
     )
     answer_text = strip_weak_additional_guidance(
@@ -175,24 +117,6 @@ def generate_grounded_answer_text(
     }
 
 
-def finalize_deployment_scaling_answer(
-    answer_text: str,
-    citations: list[dict],
-) -> tuple[str, list[dict], list[int]]:
-    final_citations = select_fallback_citations(citations, limit=1)
-    answer_text, final_citations, cited_indices = finalize_citations(
-        answer_text,
-        final_citations,
-    )
-    if not cited_indices and final_citations:
-        answer_text = inject_single_citation(answer_text, citation_index=1)
-        answer_text, final_citations, cited_indices = finalize_citations(
-            answer_text,
-            final_citations,
-        )
-    return answer_text, final_citations, cited_indices
-
-
 def build_answer_result(
     *,
     query: str,
@@ -208,6 +132,8 @@ def build_answer_result(
     pipeline_timings_ms: dict[str, float],
     selected_hits: list[dict[str, Any]] | None = None,
     llm_runtime_meta: dict[str, Any] | None = None,
+    answer_source: str = "",
+    external_answer_meta: dict[str, Any] | None = None,
 ) -> AnswerResult:
     trace = retrieval_trace or {}
     pipeline_trace: dict[str, Any] = {
@@ -221,6 +147,10 @@ def build_answer_result(
         pipeline_trace["selection"] = {"selected_hits": selected_hits}
     if llm_runtime_meta is not None:
         pipeline_trace["llm"] = llm_runtime_meta
+    if answer_source:
+        pipeline_trace["answer_source"] = answer_source
+    if external_answer_meta is not None:
+        pipeline_trace["external_answer"] = external_answer_meta
     return AnswerResult(
         query=query,
         mode=mode,

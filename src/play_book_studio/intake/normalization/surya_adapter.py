@@ -178,6 +178,21 @@ def _surya_ocr_bytes(
     return _surya_payload_text(payload)
 
 
+def ocr_image_bytes(
+    *,
+    filename: str,
+    content: bytes,
+    content_type: str = "image/png",
+    settings: Settings | None = None,
+) -> str:
+    return _surya_ocr_bytes(
+        filename=filename,
+        content=content,
+        content_type=content_type,
+        settings=settings,
+    )
+
+
 def _surya_payload_text(payload: Any) -> str:
     pages = payload.get("pages") if isinstance(payload, dict) else None
     collected_pages: list[str] = []
@@ -208,5 +223,6 @@ def _surya_payload_text(payload: Any) -> str:
 __all__ = [
     "extract_image_markdown_with_surya",
     "extract_pdf_markdown_with_surya",
+    "ocr_image_bytes",
     "probe_surya_health",
 ]

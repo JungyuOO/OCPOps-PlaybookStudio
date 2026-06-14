@@ -24,16 +24,16 @@ from _support_app_ui import (
     _serialize_citation,
     _viewer_path_to_local_html,
 )
-from play_book_studio.app.server_routes import (
+from play_book_studio.http.server_routes import (
     _build_viewer_document_payload,
     _canonicalize_viewer_path,
     handle_source_meta,
     handle_viewer_document,
     _viewer_source_meta,
 )
-import play_book_studio.app.presenters as presenters_module
-from play_book_studio.app.presenters import _build_citation_presentation_context
-from play_book_studio.app.viewer_page import _render_study_viewer_html
+import play_book_studio.http.presenters as presenters_module
+from play_book_studio.http.presenters import _build_citation_presentation_context
+from play_book_studio.http.viewer_page import _render_study_viewer_html
 from play_book_studio.config.settings import load_settings
 
 
@@ -532,6 +532,64 @@ class AppViewersTestSupport(unittest.TestCase):
         self.assertIn('href="#install-overview"', multi_html)
         self.assertIn(">이전<", multi_html)
         self.assertNotIn(">다음<", multi_html)
+
+    def test_active_runtime_viewer_document_caches_gold_runtime_payload(self) -> None:
+        with self._workspace() as root:
+            runtime_dir = root / "data" / "wiki_runtime_books" / "full_rebuild"
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+            runtime_path = runtime_dir / "support.md"
+            runtime_path.write_text(
+                (
+                    "# 지원\n\n"
+                    "## CRI-O 스토리지 정리\n\n"
+                    "노드 점검 시 `oc adm cordon` 명령으로 새 Pod 배치를 차단합니다.\n"
+                ),
+                encoding="utf-8",
+            )
+            active_manifest_path = root / "data" / "wiki_runtime_books" / "active_manifest.json"
+            active_manifest_path.parent.mkdir(parents=True, exist_ok=True)
+            active_manifest_path.write_text(
+                json.dumps(
+                    {
+                        "generated_at_utc": "2026-06-05T08:00:00+00:00",
+                        "active_group": "full_rebuild",
+                        "entries": [
+                            {
+                                "slug": "support",
+                                "title": "지원",
+                                "runtime_path": str(runtime_path),
+                                "source_lane": "official_ko",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            first_handler = self._capture_json_response()
+            handle_viewer_document(
+                first_handler,
+                urlencode({"viewer_path": "/playbooks/wiki-runtime/active/support/index.html"}),
+                root_dir=root,
+            )
+            second_handler = self._capture_json_response()
+            handle_viewer_document(
+                second_handler,
+                urlencode({"viewer_path": "/playbooks/wiki-runtime/active/support/index.html"}),
+                root_dir=root,
+            )
+
+        self.assertEqual(HTTPStatus.OK, first_handler.calls[0][0])
+        self.assertEqual(HTTPStatus.OK, second_handler.calls[0][0])
+        first_payload = first_handler.calls[0][1]
+        second_payload = second_handler.calls[0][1]
+        self.assertEqual("miss", first_payload["viewer_cache_status"])
+        self.assertEqual("hit", second_payload["viewer_cache_status"])
+        self.assertEqual(first_payload["html"], second_payload["html"])
+        self.assertIn("active_runtime_render_cards", first_payload["viewer_timings_ms"])
+        self.assertIn("active_runtime_supplementary_blocks", first_payload["viewer_timings_ms"])
+        self.assertIn("viewer_cache_lookup", second_payload["viewer_timings_ms"])
 
     def test_active_runtime_viewer_uses_local_asciidoc_overlay_for_missing_link_metadata(self) -> None:
         with self._workspace() as root:
@@ -1057,7 +1115,7 @@ class AppViewersTestSupport(unittest.TestCase):
             (relation_dir / "entity_hubs.json").write_text("{}", encoding="utf-8")
             (relation_dir / "chat_navigation_aliases.json").write_text("{}", encoding="utf-8")
 
-            with patch("play_book_studio.app.wiki_relations.WIKI_RELATIONS_DIR", relation_dir):
+            with patch("play_book_studio.http.wiki_relations.WIKI_RELATIONS_DIR", relation_dir):
                 advanced_handler = self._capture_json_response()
                 handle_viewer_document(
                     advanced_handler,
@@ -1745,7 +1803,7 @@ class AppViewersTestSupport(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch("play_book_studio.app.presenters.load_settings", wraps=load_settings) as load_settings_spy:
+            with patch("play_book_studio.http.presenters.load_settings", wraps=load_settings) as load_settings_spy:
                 presentation_context = _build_citation_presentation_context(root)
                 first = _serialize_citation(
                     root,
@@ -1797,7 +1855,7 @@ class AppViewersTestSupport(unittest.TestCase):
             )
             presentation_context = _build_citation_presentation_context(root)
             with patch(
-                "play_book_studio.app.presenters._resolve_normalized_row_for_viewer_path",
+                "play_book_studio.http.presenters._resolve_normalized_row_for_viewer_path",
                 side_effect=AssertionError("normalized lookup should not run"),
             ):
                 payload = _serialize_citation(
@@ -1857,7 +1915,7 @@ class AppViewersTestSupport(unittest.TestCase):
             )
             presenters_module._serialize_citation_cached.cache_clear()
             with patch(
-                "play_book_studio.app.presenters._serialize_citation_uncached",
+                "play_book_studio.http.presenters._serialize_citation_uncached",
                 wraps=presenters_module._serialize_citation_uncached,
             ) as uncached_spy:
                 first = _serialize_citation(root, _citation(1))
@@ -2506,9 +2564,10 @@ class AppViewersTestSupport(unittest.TestCase):
 
         self.assertIsNotNone(html)
         assert html is not None
-        self.assertIn('class="code-block is-collapsible overflow-toggle is-wrapped"', html)
+        self.assertIn('class="code-block is-collapsible is-collapsed overflow-toggle is-wrapped"', html)
         self.assertIn('class="collapse-button"', html)
-        self.assertIn('Show less', html)
+        self.assertIn('전체 보기', html)
+        self.assertIn('aria-expanded="false"', html)
         self.assertIn('&nbsp;&nbsp;<span class="code-token code-key">schedule:</span>', html)
         self.assertIn('class="code-token code-key">spec:</span>', html)
         self.assertIn('class="code-token code-string">&quot;True&quot;</span>', html)

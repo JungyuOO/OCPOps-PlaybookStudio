@@ -24,6 +24,13 @@ def apply_troubleshooting_adjustments(
             1.22,
         )
         boosts["nodes"] = max(boosts.get("nodes", 1.0), 1.12)
+        if has_pod_pending_troubleshooting_intent(normalized):
+            boosts["nodes"] = max(boosts.get("nodes", 1.0), 1.28)
+            penalties["cli_tools"] = min(penalties.get("cli_tools", 1.0), 0.72)
+            penalties["backup_and_restore"] = min(
+                penalties.get("backup_and_restore", 1.0),
+                0.72,
+            )
         penalties["workloads_apis"] = min(penalties.get("workloads_apis", 1.0), 0.58)
         penalties["monitoring_apis"] = min(penalties.get("monitoring_apis", 1.0), 0.74)
         penalties["schedule_and_quota_apis"] = min(

@@ -627,6 +627,142 @@ def build_graph_sidecar_compact_payload_from_artifacts(
     }
 
 
+def build_graph_sidecar_compact_payload_from_chunk_rows(
+    chunk_rows: list[dict[str, Any]],
+    *,
+    graph_backend: str = "local",
+    app_id: str = "",
+    pack_id: str = "",
+) -> dict[str, Any]:
+    source_type_counts: Counter[str] = Counter()
+    book_index: dict[str, dict[str, Any]] = {}
+    signal_book_map: dict[tuple[str, str], set[str]] = defaultdict(set)
+    raw_value_index: dict[tuple[str, str], str] = {}
+
+    for row in chunk_rows:
+        slug = str(row.get("book_slug") or "").strip()
+        if not slug:
+            continue
+        metadata = book_index.get(slug)
+        if metadata is None:
+            metadata = {
+                "book_slug": slug,
+                "title": str(row.get("book_title") or row.get("chapter") or slug).strip(),
+                "source_uri": str(row.get("source_url") or "").strip(),
+                "viewer_path": str(row.get("viewer_path") or "").strip(),
+                "source_type": str(row.get("source_type") or "").strip(),
+                "source_lane": str(row.get("source_lane") or "").strip(),
+                "source_collection": str(row.get("source_collection") or "core").strip() or "core",
+                "derived_from_book_slug": str(row.get("derived_from_book_slug") or "").strip(),
+                "topic_key": str(row.get("topic_key") or "").strip(),
+                "review_status": str(row.get("review_status") or "").strip(),
+                "quality_status": str(row.get("quality_status") or "").strip(),
+                "chunk_count": 0,
+            }
+            book_index[slug] = metadata
+            source_type = str(metadata.get("source_type") or "").strip()
+            if source_type:
+                source_type_counts[source_type] += 1
+        metadata["chunk_count"] = int(metadata.get("chunk_count") or 0) + 1
+        for field_name, group_name in _SIGNAL_FIELDS:
+            for raw_value in row.get(field_name) or []:
+                normalized = _normalize_signal(raw_value)
+                rendered = _render_signal(raw_value)
+                if not normalized or not rendered:
+                    continue
+                key = (group_name, normalized)
+                signal_book_map[key].add(slug)
+                raw_value_index.setdefault(key, rendered)
+
+    edge_map: dict[tuple[str, str], dict[str, Any]] = {}
+    for metadata in book_index.values():
+        derived_from_book_slug = str(metadata.get("derived_from_book_slug") or "").strip()
+        if not derived_from_book_slug:
+            continue
+        _append_book_relation(
+            edge_map,
+            source_book_slug=str(metadata.get("book_slug") or "").strip(),
+            target_book_slug=derived_from_book_slug,
+            relation_type="derived_from_book",
+            signal_value=derived_from_book_slug,
+        )
+
+    relation_group_counts = {group_name: 0 for _, group_name in _SIGNAL_FIELDS}
+    for (group_name, normalized), related_book_slugs in sorted(signal_book_map.items()):
+        if len(related_book_slugs) < 2:
+            continue
+        relation_group_counts[group_name] += 1
+        signal_value = raw_value_index[(group_name, normalized)]
+        ordered_book_slugs = sorted(related_book_slugs)
+        for index, source_book_slug in enumerate(ordered_book_slugs):
+            for target_book_slug in ordered_book_slugs[index + 1 :]:
+                _append_book_relation(
+                    edge_map,
+                    source_book_slug=source_book_slug,
+                    target_book_slug=target_book_slug,
+                    relation_type=group_name,
+                    signal_value=signal_value,
+                )
+
+    books = [dict(book_index[slug]) for slug in sorted(book_index)]
+    relations = [
+        {
+            "source_book_slug": edge["source_book_slug"],
+            "target_book_slug": edge["target_book_slug"],
+            "relation_types": sorted(edge["relation_types"]),
+            "signal_values": sorted(edge["signal_values"]),
+            "weight": int(edge["weight"]),
+        }
+        for _, edge in sorted(edge_map.items())
+    ]
+    return {
+        "schema": GRAPH_SIDECAR_COMPACT_SCHEMA_VERSION,
+        "schema_version": GRAPH_SIDECAR_COMPACT_SCHEMA_VERSION,
+        "app_id": app_id,
+        "pack_id": pack_id,
+        "pack_scope": {
+            "app_id": app_id,
+            "pack_id": pack_id,
+        },
+        "graph_backend": graph_backend,
+        "book_count": len(books),
+        "relation_count": len(relations),
+        "summary": {
+            "book_count": len(books),
+            "relation_count": len(relations),
+            "relation_group_counts": relation_group_counts,
+            "source_type_counts": dict(sorted(source_type_counts.items())),
+        },
+        "books": books,
+        "relations": relations,
+    }
+
+
+def build_graph_sidecar_compact_payload_from_postgres(
+    database_url: str,
+    *,
+    graph_backend: str = "local",
+    app_id: str = "",
+    pack_id: str = "",
+) -> dict[str, Any]:
+    if not database_url.strip():
+        raise ValueError("database_url is required")
+    import psycopg
+
+    from play_book_studio.retrieval.bm25 import load_bm25_rows_from_connection
+
+    with psycopg.connect(database_url) as connection:
+        rows = load_bm25_rows_from_connection(connection)
+    if not rows:
+        raise ValueError("PostgreSQL document_chunks corpus is empty")
+    return build_graph_sidecar_compact_payload_from_chunk_rows(
+        rows,
+        graph_backend=graph_backend,
+        app_id=app_id,
+        pack_id=pack_id,
+    )
+
+
 def write_graph_sidecar_compact_from_artifacts(
     settings: Settings,
     *,
@@ -635,6 +771,23 @@ def write_graph_sidecar_compact_from_artifacts(
     payload = build_graph_sidecar_compact_payload_from_artifacts(
         chunks_path=settings.chunks_path,
         playbook_documents_path=settings.playbook_documents_path,
+        graph_backend=settings.graph_backend,
+        app_id=settings.app_id,
+        pack_id=settings.active_pack_id,
+    )
+    target_path = output_path or settings.graph_sidecar_compact_path
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return target_path, payload
+
+
+def write_graph_sidecar_compact_from_postgres(
+    settings: Settings,
+    *,
+    output_path: Path | None = None,
+) -> tuple[Path, dict[str, Any]]:
+    payload = build_graph_sidecar_compact_payload_from_postgres(
+        settings.database_url,
         graph_backend=settings.graph_backend,
         app_id=settings.app_id,
         pack_id=settings.active_pack_id,
@@ -702,7 +855,10 @@ def refresh_active_runtime_graph_artifacts(
         }
 
     try:
-        output_path, payload = write_graph_sidecar_compact_from_artifacts(settings)
+        if settings.database_url.strip():
+            output_path, payload = write_graph_sidecar_compact_from_postgres(settings)
+        else:
+            output_path, payload = write_graph_sidecar_compact_from_artifacts(settings)
     except Exception as exc:  # noqa: BLE001
         if not allow_compact_degrade:
             raise

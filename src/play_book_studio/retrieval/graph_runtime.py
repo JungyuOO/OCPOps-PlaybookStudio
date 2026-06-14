@@ -394,9 +394,9 @@ class LocalGraphSidecar:
     def _load_book_index(self) -> dict[str, dict[str, Any]]:
         if self._book_index is not None:
             return self._book_index
-        index = _book_index_from_playbook_documents(self.settings.retrieval_playbook_documents_path)
+        index = _book_index_from_sidecar_payload(self._load_compact_payload())
         if not index:
-            index = _book_index_from_sidecar_payload(self._load_compact_payload())
+            index = _book_index_from_playbook_documents(self.settings.retrieval_playbook_documents_path)
         if not index:
             index = _book_index_from_sidecar_payload(self._load_payload())
         self._book_index = index

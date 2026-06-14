@@ -1,0 +1,162 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from play_book_studio.cli import build_parser
+from play_book_studio.db.corpus_status import disabled_corpus_status, load_corpus_status
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+class FakeCursor:
+    def __init__(self, result_sets):
+        self.result_sets = list(result_sets)
+        self.current = []
+        self.calls = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def execute(self, sql, params=None):
+        self.calls.append((str(sql), params))
+        self.current = self.result_sets.pop(0)
+
+    def fetchall(self):
+        return self.current
+
+    def fetchone(self):
+        return self.current[0] if self.current else None
+
+
+class FakeConnection:
+    def __init__(self, result_sets):
+        self.cursor_obj = FakeCursor(result_sets)
+
+    def cursor(self):
+        return self.cursor_obj
+
+
+def test_disabled_corpus_status_is_not_ready():
+    payload = disabled_corpus_status()
+
+    assert payload["database"] == "disabled"
+    assert payload["ready"] is False
+    assert payload["total_chunks"] == 0
+
+
+def test_load_corpus_status_reports_ready_when_chunks_and_embedding_entries_match():
+    connection = FakeConnection(
+        [
+            [("official_docs", 29), ("study_docs", 10)],
+            [("official_docs", 27907), ("study_docs", 602)],
+            [(28509,)],
+            [(28509,)],
+            [(28509,)],
+            [(0,)],
+            [(0,)],
+        ]
+    )
+
+    payload = load_corpus_status(connection, embedding_model="bge-m3")
+
+    assert payload["database"] == "postgres"
+    assert payload["vector_backend"] == "pgvector"
+    assert payload["embedding_model"] == "bge-m3"
+    assert payload["source_counts"] == {"official_docs": 29, "study_docs": 10}
+    assert payload["chunk_counts"] == {"official_docs": 27907, "study_docs": 602}
+    assert payload["total_sources"] == 39
+    assert payload["total_chunks"] == 28509
+    assert payload["indexable_chunks"] == 28509
+    assert payload["non_indexable_chunks"] == 0
+    assert payload["embedding_index_entries"] == 28509
+    assert payload["missing_embedding_index_entries"] == 0
+    assert payload["stale_embedding_index_entries"] == 0
+    assert payload["embedding_index_parity"] is True
+    assert payload["ready"] is True
+
+
+def test_load_corpus_status_reports_not_ready_when_embedding_entries_are_missing():
+    connection = FakeConnection(
+        [
+            [("official_docs", 29), ("study_docs", 10)],
+            [("official_docs", 27907), ("study_docs", 602)],
+            [(28509,)],
+            [(28509,)],
+            [(100,)],
+            [(28409,)],
+            [(0,)],
+        ]
+    )
+
+    payload = load_corpus_status(connection, embedding_model="bge-m3")
+
+    assert payload["embedding_index_parity"] is False
+    assert payload["ready"] is False
+    assert payload["missing_embedding_index_entries"] == 28409
+
+
+def test_load_corpus_status_allows_non_indexable_chunks_when_indexable_chunks_match():
+    connection = FakeConnection(
+        [
+            [("official_docs", 29), ("study_docs", 10)],
+            [("official_docs", 27907), ("study_docs", 602)],
+            [(28599,)],
+            [(28509,)],
+            [(28509,)],
+            [(0,)],
+            [(0,)],
+        ]
+    )
+
+    payload = load_corpus_status(connection, embedding_model="bge-m3")
+
+    assert payload["total_chunks"] == 28599
+    assert payload["indexable_chunks"] == 28509
+    assert payload["non_indexable_chunks"] == 90
+    assert payload["embedding_index_parity"] is True
+    assert payload["ready"] is True
+
+
+def test_load_corpus_status_uses_latest_user_upload_policy_for_index_readiness():
+    connection = FakeConnection(
+        [
+            [("official_docs", 29), ("study_docs", 10), ("user_upload", 2)],
+            [("official_docs", 27907), ("study_docs", 602), ("user_upload", 103)],
+            [(28612,)],
+            [(28509,)],
+            [(28509,)],
+            [(0,)],
+            [(0,)],
+        ]
+    )
+
+    payload = load_corpus_status(connection, embedding_model="bge-m3")
+
+    indexable_sql = connection.cursor_obj.calls[3][0]
+    missing_sql = connection.cursor_obj.calls[5][0]
+    assert "c.source_scope <> 'user_upload'" in indexable_sql
+    assert "SELECT latest_pd.id" in indexable_sql
+    assert "c.source_scope <> 'user_upload'" in missing_sql
+    assert "SELECT latest_pd.id" in missing_sql
+    assert payload["indexable_chunks"] == 28509
+    assert payload["missing_embedding_index_entries"] == 0
+    assert payload["embedding_index_parity"] is True
+    assert payload["ready"] is True
+
+
+def test_db_corpus_status_parser_accepts_args():
+    args = build_parser().parse_args(
+        [
+            "db-corpus-status",
+            "--root-dir",
+            str(REPO_ROOT),
+            "--embedding-model",
+            "bge-m3",
+        ]
+    )
+
+    assert args.command == "db-corpus-status"
+    assert args.embedding_model == "bge-m3"

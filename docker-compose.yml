@@ -1,38 +1,72 @@
 name: ocpops-playbookstudio
 
 services:
-  qdrant:
-    image: qdrant/qdrant:latest
-    volumes:
-      - qdrant_storage:/qdrant/storage
-    restart: unless-stopped
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-playbookstudio}
+      POSTGRES_USER: ${POSTGRES_USER:-playbookstudio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     ports:
-      - "6335:6333"
-      - "6336:6334"
+      - "${POSTGRES_BIND:-127.0.0.1:5432}:5432"
+    volumes:
+      - postgres_storage:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
 
   app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       target: app
     env_file:
       - .env
     environment:
       PYTHONPATH: /app/src
-      QDRANT_URL: http://qdrant:6333
-      GRAPH_URI: bolt://host.docker.internal:7687
+      COURSE_CHAT_LLM_REWRITE: "true"
+      RERANKER_ENABLED: "false"
+      RERANKER_CANDIDATE_K: "5"
+      VECTOR_MAX_PARALLEL_REQUESTS: "4"
+      VECTOR_DOMAIN_FILTER_ENABLED: "false"
+      QUERY_SIGNAL_LLM_ENABLED: "true"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
+      PBS_SINGLE_USER_OWNER: ${PBS_SINGLE_USER_OWNER:-local-playbookstudio-user}
+      TERMINAL_ENABLED: ${TERMINAL_ENABLED:-false}
+      TERMINAL_HOST: 0.0.0.0
+      TERMINAL_WS_PORT: ${TERMINAL_WS_PORT:-8770}
+      TERMINAL_SHELL: ${TERMINAL_SHELL:-/app/scripts/terminal-entrypoint.sh}
+      OPENSHIFT_LIGHTSPEED_BASE_URL: ${OPENSHIFT_LIGHTSPEED_BASE_URL:-}
+      OPENSHIFT_LIGHTSPEED_API_TOKEN: ${OPENSHIFT_LIGHTSPEED_API_TOKEN:-}
+      OPENSHIFT_LIGHTSPEED_PROVIDER: ${OPENSHIFT_LIGHTSPEED_PROVIDER:-}
+      OPENSHIFT_LIGHTSPEED_MODEL: ${OPENSHIFT_LIGHTSPEED_MODEL:-}
+      OPENSHIFT_LIGHTSPEED_SYSTEM_PROMPT: ${OPENSHIFT_LIGHTSPEED_SYSTEM_PROMPT:-}
+      OPENSHIFT_LIGHTSPEED_REQUEST_PROFILE: ${OPENSHIFT_LIGHTSPEED_REQUEST_PROFILE:-console_parity}
+      OPENSHIFT_LIGHTSPEED_FORCE_PROVIDER_MODEL: ${OPENSHIFT_LIGHTSPEED_FORCE_PROVIDER_MODEL:-false}
+      OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS: ${OPENSHIFT_LIGHTSPEED_TIMEOUT_SECONDS:-90}
+      OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY: ${OPENSHIFT_LIGHTSPEED_INSECURE_SKIP_TLS_VERIFY:-false}
     depends_on:
-      - qdrant
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "${APP_HTTP_PORT:-8765}:8765"
+      - "${TERMINAL_WS_PORT:-8770}:8770"
     volumes:
       - ./src:/app/src
       - ./artifacts:/app/artifacts
-      - ./data:/app/data
-      - ./manifests:/app/manifests
+      - ./corpus:/app/corpus
       - ./reports:/app/reports
+      - ./storage:/app/storage
       - ./tmp:/app/tmp
-      - ./tmp_source:/app/tmp_source
+      - ./.kugnus-plan:/app/.kugnus-plan
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=5)"]
       interval: 15s
@@ -41,18 +75,120 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  db-migrate:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./db:/app/db
+    command: ["python", "-m", "play_book_studio.cli", "db-migrate", "--root-dir", "/app"]
+    restart: "no"
+
+  course-runtime-seed:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./src:/app/src
+      - ./corpus:/app/corpus
+    command: ["python", "-m", "play_book_studio.cli", "course-chunk-import", "--root-dir", "/app", "--course-dir", "/app/corpus/sources/kmsc/parsed-preview/course_pbs"]
+    restart: "no"
+
+  official-corpus-seed:
+    profiles:
+      - seed
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./corpus:/app/corpus
+    command:
+      - bash
+      - -lc
+      - >
+        python -m play_book_studio.cli official-gold-import
+        --root-dir /app
+        --index
+        --index-limit ${OFFICIAL_CORPUS_INDEX_LIMIT:-50000}
+        &&
+        python -m play_book_studio.cli kmsc-course-import
+        --root-dir /app
+        --course-dir ${KMSC_COURSE_SOURCE_DIR:-/app/corpus/sources/kmsc/parsed-preview/course_pbs}
+        --index
+    restart: "no"
+
+  kmsc-corpus-seed:
+    profiles:
+      - seed
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: app
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-playbookstudio}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-playbookstudio}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./src:/app/src
+      - ./corpus:/app/corpus
+    command: ["python", "-m", "play_book_studio.cli", "kmsc-course-import", "--root-dir", "/app", "--course-dir", "${KMSC_COURSE_SOURCE_DIR:-/app/corpus/sources/kmsc/parsed-preview/course_pbs}", "--index"]
+    restart: "no"
+
   web:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
       target: web
     depends_on:
       app:
         condition: service_healthy
     ports:
-      - "8080:80"
+      - "8080:8080"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/"]
       interval: 15s
       timeout: 10s
       retries: 8
@@ -60,5 +196,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  qdrant_storage:
-    name: ocp-rag-chatbot_qdrant_storage
+  postgres_storage:
+    name: ${POSTGRES_VOLUME_NAME:-ocp-rag-chatbot_postgres_storage}

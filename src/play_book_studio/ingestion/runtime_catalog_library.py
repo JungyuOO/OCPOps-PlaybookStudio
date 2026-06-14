@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import fields, replace
 import json
 from pathlib import Path
 from typing import Any
@@ -10,14 +9,12 @@ from play_book_studio.config.settings import Settings
 
 from .chunking import chunk_sections
 from .collector import collect_entry, entry_with_collected_metadata, raw_html_path
-from .embedding import EmbeddingClient
 from .graph_sidecar import refresh_active_runtime_graph_artifacts
 from .manifest import read_manifest, runtime_catalog_entries
 from .metadata_extraction import extract_section_metadata
-from .models import ChunkRecord, NormalizedSection, SourceManifestEntry
+from .models import NormalizedSection, SourceManifestEntry
 from .normalize import extract_document_ast, project_normalized_sections
 from .pipeline import _entry_with_inferred_runtime_status
-from .qdrant_store import ensure_collection, upsert_chunks
 from .topic_playbooks import (
     DERIVED_PLAYBOOK_SOURCE_TYPES,
     approved_materialized_derived_playbooks,
@@ -133,21 +130,6 @@ def _bm25_row(chunk_row: dict[str, Any]) -> dict[str, Any]:
         "operator_names": list(chunk_row.get("operator_names", [])),
         "verification_hints": list(chunk_row.get("verification_hints", [])),
     }
-
-
-def _chunk_records(rows: list[dict[str, Any]]) -> list[ChunkRecord]:
-    allowed = {field.name for field in fields(ChunkRecord)}
-    records: list[ChunkRecord] = []
-    for row in rows:
-        payload = {key: value for key, value in row.items() if key in allowed}
-        payload["section_path"] = tuple(payload.get("section_path", []))
-        payload["cli_commands"] = tuple(payload.get("cli_commands", []))
-        payload["error_strings"] = tuple(payload.get("error_strings", []))
-        payload["k8s_objects"] = tuple(payload.get("k8s_objects", []))
-        payload["operator_names"] = tuple(payload.get("operator_names", []))
-        payload["verification_hints"] = tuple(payload.get("verification_hints", []))
-        records.append(ChunkRecord(**payload))
-    return records
 
 
 def _stringify(value: Any) -> str:
@@ -390,9 +372,6 @@ def _runtime_catalog_entries(settings: Settings) -> list[SourceManifestEntry]:
 
 def materialize_runtime_corpus_from_playbooks(
     settings: Settings,
-    *,
-    sync_qdrant: bool = False,
-    recreate_qdrant: bool = False,
 ) -> dict[str, Any]:
     official_normalized_rows = [
         dict(row)
@@ -425,23 +404,6 @@ def materialize_runtime_corpus_from_playbooks(
     )
     full_sidecar = dict(graph_refresh.get("full_sidecar", {}))
 
-    qdrant_upserted_count = 0
-    if sync_qdrant and merged_chunk_rows:
-        chunk_records = _chunk_records(merged_chunk_rows)
-        embedding_settings = replace(
-            settings,
-            qdrant_recreate_collection=(recreate_qdrant or settings.qdrant_recreate_collection),
-        )
-        vectors = EmbeddingClient(embedding_settings).embed_texts(
-            (chunk.text for chunk in chunk_records),
-        )
-        ensure_collection(embedding_settings)
-        qdrant_upserted_count = upsert_chunks(
-            embedding_settings,
-            chunk_records,
-            vectors,
-        )
-
     return {
         "official_section_count": len(official_normalized_rows),
         "official_chunk_count": len(official_chunk_rows),
@@ -456,7 +418,6 @@ def materialize_runtime_corpus_from_playbooks(
             }
         ),
         "runtime_chunk_count": len(merged_chunk_rows),
-        "qdrant_upserted_count": qdrant_upserted_count,
         "derived_summary": derived_summary,
         "graph_book_count": int(full_sidecar.get("book_count", 0) or 0),
         "graph_relation_count": int(full_sidecar.get("relation_count", 0) or 0),
